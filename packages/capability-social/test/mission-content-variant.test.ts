@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   ClaimMissionContentVariantGeneration,
   CompleteMissionContentVariantGeneration,
+  FailMissionContentVariantGeneration,
+  ListMissionContentVariantQualityAudits,
   ListMissionContentVariants,
   SelectMissionContentVariant,
   type MissionContentVariantRepository,
@@ -29,6 +31,39 @@ const variant = {
   latencyMs: 100,
   createdAt: new Date('2026-09-07T00:00:00Z'),
   selectedAt: null,
+  photoFirst: null,
+};
+
+const qualityAudit = {
+  verdict: 'PASS' as const,
+  score: 90,
+  issueCodes: ['PHOTO_FIRST_UNCONFIRMED_FACT'],
+  repairCount: 1,
+};
+
+const photoFirst = {
+  photoMemoryId: 'photo-1',
+  analysis: {
+    imageType: ' product ',
+    subjects: [' 商品 '],
+    objects: [],
+    scene: ' 店内 ',
+    visibleText: [],
+    possibleContentAngles: [' 使い方 '],
+    qualityNotes: [],
+    uncertainElements: [],
+    safetyFlags: [],
+  },
+  planning: {
+    theme: ' 商品の使い方 ',
+    angle: ' 初めての方向け ',
+    recommendationReason: ' 目的と写真が合うため ',
+    photoUsage: ' 主役として使う ',
+    imageEditPrompt: ' 明るさを整える ',
+    confirmationQuestion: null,
+  },
+  analyzerModel: ' test-model ',
+  analyzerPromptVersion: ' photo-first-analysis-v1 ',
 };
 
 function repository(overrides: Partial<MissionContentVariantRepository> = {}) {
@@ -42,6 +77,10 @@ function repository(overrides: Partial<MissionContentVariantRepository> = {}) {
         status: 'PROCESSING',
         variantId: null,
         errorCategory: null,
+        qualityVerdict: null,
+        qualityScore: null,
+        qualityIssueCodes: [],
+        qualityRepairCount: 0,
         createdAt: variant.createdAt,
         updatedAt: variant.createdAt,
       },
@@ -49,6 +88,21 @@ function repository(overrides: Partial<MissionContentVariantRepository> = {}) {
     complete: vi.fn().mockResolvedValue(variant),
     fail: vi.fn().mockResolvedValue(true),
     list: vi.fn().mockResolvedValue([variant]),
+    listQualityAudits: vi.fn().mockResolvedValue([
+      {
+        generationId: 'generation-1',
+        status: 'SUCCEEDED',
+        variantId: variant.id,
+        errorCategory: null,
+        promptVersion: variant.promptVersion,
+        qualityVerdict: 'PASS',
+        qualityScore: 90,
+        qualityIssueCodes: ['PHOTO_FIRST_UNCONFIRMED_FACT'],
+        qualityRepairCount: 1,
+        createdAt: variant.createdAt,
+        updatedAt: variant.createdAt,
+      },
+    ]),
     select: vi.fn().mockResolvedValue({ ...variant, selectedAt: variant.createdAt }),
     ...overrides,
   } satisfies MissionContentVariantRepository;
@@ -72,6 +126,7 @@ describe('mission content variants', () => {
       format: 'TEXT',
       content: { body: ' 別案 ', threadParts: [], cta: null, caption: null, hashtags: [] },
       qualityScore: 90,
+      qualityAudit,
       model: 'test-model',
       promptVersion: 'variant-v1',
       inputTokens: 10,
@@ -98,11 +153,180 @@ describe('mission content variants', () => {
     );
   });
 
+  it('normalizes bounded Photo First metadata before atomic completion', async () => {
+    const repo = repository();
+    await new CompleteMissionContentVariantGeneration(repo).execute({
+      ...scope,
+      generationId: 'generation-1',
+      format: 'TEXT',
+      content: variant.content,
+      qualityScore: 90,
+      qualityAudit,
+      model: 'test-model',
+      promptVersion: 'variant-v1',
+      inputTokens: 10,
+      outputTokens: 20,
+      estimatedCostMicros: 30n,
+      latencyMs: 100,
+      photoFirst,
+    });
+    expect(repo.complete).toHaveBeenCalledWith(
+      expect.objectContaining({
+        photoFirst: expect.objectContaining({
+          analyzerModel: 'test-model',
+          analysis: expect.objectContaining({ imageType: 'product', subjects: ['商品'] }),
+          planning: expect.objectContaining({ theme: '商品の使い方' }),
+        }),
+      }),
+    );
+  });
+
+  it('preserves a bounded confirmation answer and source variant for append-only history', async () => {
+    const repo = repository();
+    await new CompleteMissionContentVariantGeneration(repo).execute({
+      ...scope,
+      generationId: 'generation-2',
+      sourceVariantId: ' variant-1 ',
+      format: 'TEXT',
+      content: variant.content,
+      qualityScore: 90,
+      qualityAudit,
+      model: 'test-model',
+      promptVersion: 'variant-v2',
+      inputTokens: 10,
+      outputTokens: 20,
+      estimatedCostMicros: 30n,
+      latencyMs: 100,
+      photoFirst: {
+        ...photoFirst,
+        planning: {
+          ...photoFirst.planning,
+          confirmationAnswer: ' 公開可能な予定表です ',
+          confirmationSourceVariantId: ' variant-1 ',
+        },
+      },
+    });
+
+    expect(repo.complete).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sourceVariantId: 'variant-1',
+        photoFirst: expect.objectContaining({
+          planning: expect.objectContaining({
+            confirmationAnswer: '公開可能な予定表です',
+            confirmationSourceVariantId: 'variant-1',
+          }),
+        }),
+      }),
+    );
+  });
+
+  it('rejects oversized Photo First metadata before repository writes', async () => {
+    const repo = repository();
+    await expect(
+      new CompleteMissionContentVariantGeneration(repo).execute({
+        ...scope,
+        generationId: 'generation-1',
+        format: 'TEXT',
+        content: variant.content,
+        qualityScore: 90,
+        qualityAudit,
+        model: 'test-model',
+        promptVersion: 'variant-v1',
+        inputTokens: 10,
+        outputTokens: 20,
+        estimatedCostMicros: 30n,
+        latencyMs: 100,
+        photoFirst: {
+          ...photoFirst,
+          analysis: { ...photoFirst.analysis, subjects: Array.from({ length: 13 }, () => '商品') },
+        },
+      }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+    expect(repo.complete).not.toHaveBeenCalled();
+  });
+
+  it('rejects a completed variant whose final quality audit is not PASS', async () => {
+    const repo = repository();
+    await expect(
+      new CompleteMissionContentVariantGeneration(repo).execute({
+        ...scope,
+        generationId: 'generation-1',
+        format: 'TEXT',
+        content: variant.content,
+        qualityScore: 80,
+        qualityAudit: {
+          verdict: 'REVISE',
+          score: 80,
+          issueCodes: ['PHOTO_FIRST_UNCONFIRMED_FACT'],
+          repairCount: 1,
+        },
+        model: 'test-model',
+        promptVersion: 'variant-v1',
+        inputTokens: 10,
+        outputTokens: 20,
+        estimatedCostMicros: 30n,
+        latencyMs: 100,
+      }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+    expect(repo.complete).not.toHaveBeenCalled();
+  });
+
+  it('preserves the last quality verdict and observed issue codes when generation fails', async () => {
+    const repo = repository();
+    await new FailMissionContentVariantGeneration(repo).execute({
+      ...scope,
+      generationId: 'generation-1',
+      errorCategory: 'CONTENT_REJECTED',
+      qualityAudit: {
+        verdict: 'REVISE',
+        score: 65,
+        issueCodes: ['PHOTO_FIRST_UNCONFIRMED_FACT'],
+        repairCount: 1,
+      },
+    });
+    expect(repo.fail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        qualityAudit: {
+          verdict: 'REVISE',
+          score: 65,
+          issueCodes: ['PHOTO_FIRST_UNCONFIRMED_FACT'],
+          repairCount: 1,
+        },
+      }),
+    );
+  });
+
   it('does not turn an inaccessible mission into an empty list', async () => {
     await expect(
       new ListMissionContentVariants(repository({ list: vi.fn().mockResolvedValue(null) })).execute(
         scope,
       ),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+
+  it('queries bounded quality issue codes without exposing another mission as empty', async () => {
+    const repo = repository();
+    await expect(
+      new ListMissionContentVariantQualityAudits(repo).execute({
+        ...scope,
+        issueCode: ' PHOTO_FIRST_UNCONFIRMED_FACT ',
+      }),
+    ).resolves.toMatchObject([
+      {
+        generationId: 'generation-1',
+        qualityVerdict: 'PASS',
+        qualityRepairCount: 1,
+      },
+    ]);
+    expect(repo.listQualityAudits).toHaveBeenCalledWith({
+      ...scope,
+      issueCode: 'PHOTO_FIRST_UNCONFIRMED_FACT',
+    });
+
+    await expect(
+      new ListMissionContentVariantQualityAudits(
+        repository({ listQualityAudits: vi.fn().mockResolvedValue(null) }),
+      ).execute(scope),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 });

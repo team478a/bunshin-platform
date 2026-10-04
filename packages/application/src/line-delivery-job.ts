@@ -1,4 +1,5 @@
 import { ApplicationError } from '@bunshin/shared';
+import { assertUserJob } from './job-runtime';
 import type { CompleteJob, FailJob, Job } from './index';
 import type { LineDeliveryExecutionResult } from './line-message-delivery';
 
@@ -23,6 +24,7 @@ export class ExecuteLineDeliveryJob {
   ) {}
 
   async execute(job: Job, workerId: string) {
+    assertUserJob(job);
     const reference = deliveryReference.exec(job.payloadReference);
     if (
       job.jobType !== LINE_DELIVERY_JOB_TYPE ||

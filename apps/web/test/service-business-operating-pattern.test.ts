@@ -5,7 +5,15 @@ import {
   buildBusinessOperatingPattern,
 } from '../app/s/[serviceSlug]/bunshins/[bunshinId]/business-operating-pattern';
 
-const zero = { inquiries: 0, reservations: 0, visits: 0, orders: 0, other: 0 };
+const zero = {
+  inquiries: 0,
+  reservations: 0,
+  visits: 0,
+  repeatReservations: 0,
+  repeatVisits: 0,
+  orders: 0,
+  other: 0,
+};
 
 describe('business operating pattern', () => {
   it('finds frequent posting weekdays and the topic with the strongest response', () => {

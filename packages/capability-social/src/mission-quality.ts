@@ -19,6 +19,12 @@ import type {
 } from './mission-generation';
 import type { SocialPlatform } from './social-profile';
 
+export interface PhotoFirstQualityGrounding {
+  uncertainElements: string[];
+  pendingQuestion: string | null;
+  answeredConfirmation: { question: string; answer: string } | null;
+}
+
 export interface MissionQualityCheckerInput {
   platform: SocialPlatform;
   brief: DailyMissionBrief;
@@ -35,6 +41,7 @@ export interface MissionQualityCheckerInput {
     contentExcerpt: string;
   }>;
   personalization?: MissionPersonalizationContext;
+  photoFirstGrounding?: PhotoFirstQualityGrounding;
 }
 
 export interface MissionQualityCheckerProviderInput extends Omit<
@@ -72,6 +79,34 @@ export interface MissionQualityCheckerOutput {
   issues: MissionQualityIssue[];
 }
 
+export interface MissionContentVariantQualityAudit {
+  verdict: MissionQualityVerdict | null;
+  score: number | null;
+  issueCodes: string[];
+  repairCount: number;
+}
+
+export const missionContentVariantQualityAudit = (
+  attempts: readonly MissionQualityCheckerOutput[],
+  repairCount: number,
+): MissionContentVariantQualityAudit => {
+  if (!Number.isInteger(repairCount) || repairCount < 0 || repairCount > 1)
+    throw new ApplicationError('VALIDATION_ERROR', 'invalid quality repair count');
+  const final = attempts.at(-1);
+  return {
+    verdict: final?.verdict ?? null,
+    score: final?.score ?? null,
+    issueCodes: [
+      ...new Set(
+        attempts.flatMap(({ issues }) =>
+          issues.map(({ code }) => missionString(code, 80, 'issue code')),
+        ),
+      ),
+    ].slice(0, 20),
+    repairCount,
+  };
+};
+
 export interface MissionQualityCheckerResult {
   output: MissionQualityCheckerOutput;
   model: string;
@@ -90,6 +125,40 @@ const carouselComparableText = (value: string) =>
     .normalize('NFKC')
     .replace(/[\s、。！？!?,.・「」『』（）()【】]/gu, '')
     .toLowerCase();
+
+const normalizePhotoFirstGrounding = (
+  value: PhotoFirstQualityGrounding | undefined,
+): PhotoFirstQualityGrounding | undefined => {
+  if (value === undefined) return undefined;
+  const grounding = strict(
+    value,
+    ['uncertainElements', 'pendingQuestion', 'answeredConfirmation'],
+    'photo first grounding',
+  );
+  if (!Array.isArray(grounding['uncertainElements']) || grounding['uncertainElements'].length > 12)
+    throw new ApplicationError('VALIDATION_ERROR', 'invalid photo first uncertain elements');
+  const uncertainElements = grounding['uncertainElements'].map((item) =>
+    missionString(item, 500, 'photo first uncertain element'),
+  );
+  const pendingQuestion =
+    grounding['pendingQuestion'] === null
+      ? null
+      : missionString(grounding['pendingQuestion'], 500, 'photo first pending question');
+  const rawConfirmation = grounding['answeredConfirmation'];
+  let answeredConfirmation: PhotoFirstQualityGrounding['answeredConfirmation'] = null;
+  if (rawConfirmation !== null) {
+    const confirmation = strict(
+      rawConfirmation,
+      ['question', 'answer'],
+      'photo first answered confirmation',
+    );
+    answeredConfirmation = {
+      question: missionString(confirmation['question'], 500, 'photo first answered question'),
+      answer: missionString(confirmation['answer'], 500, 'photo first confirmation answer'),
+    };
+  }
+  return { uncertainElements, pendingQuestion, answeredConfirmation };
+};
 
 const deterministicImageCarouselIssues = (content: MissionContent): MissionQualityIssue[] => {
   const slides = content['slides'];
@@ -191,8 +260,11 @@ export class CheckMissionQuality {
         selectionReason,
       }),
     );
+    const photoFirstGrounding = normalizePhotoFirstGrounding(input.photoFirstGrounding);
+    const providerInput = { ...input };
+    delete providerInput.photoFirstGrounding;
     const result = await this.checker.check({
-      ...input,
+      ...providerInput,
       brief: {
         missionDate,
         format,
@@ -206,6 +278,7 @@ export class CheckMissionQuality {
       },
       content,
       selectedMemories,
+      ...(photoFirstGrounding ? { photoFirstGrounding } : {}),
     });
     const score = missionInteger(result.output.score, 0, 100, 'quality score');
     if (!Array.isArray(result.output.issues) || result.output.issues.length > 10)
@@ -244,7 +317,7 @@ export class CheckMissionQuality {
       )
       .slice(0, 10);
     const deterministicVerdict = deterministicIssues.length > 0 ? 'REVISE' : 'PASS';
-    const verdict =
+    const verdict: MissionQualityVerdict =
       score < 70
         ? 'REJECT'
         : result.output.verdict === 'REJECT'

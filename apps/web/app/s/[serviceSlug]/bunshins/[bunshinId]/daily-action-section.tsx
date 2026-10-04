@@ -15,6 +15,73 @@ export type DailyActionView = {
   createdAt: string;
 };
 
+export type PhotoFirstResult = {
+  variant: {
+    id: string;
+    dailyMissionId: string;
+    content: Record<string, unknown>;
+  };
+  photoFirst: null | {
+    photoMemoryId: string;
+    analysis: {
+      imageType: string;
+      qualityNotes: string[];
+      uncertainElements: string[];
+      safetyFlags: string[];
+    };
+    planning: {
+      theme: string;
+      angle: string;
+      recommendationReason: string;
+      photoUsage: string;
+      imageEditPrompt: string | null;
+      confirmationQuestion: string | null;
+      confirmationAnswer?: string | null;
+      confirmationSourceVariantId?: string | null;
+    };
+  };
+};
+
+function contentText(content: Record<string, unknown>) {
+  const parts: string[] = [];
+  for (const key of ['body', 'caption']) {
+    const value = content[key];
+    if (typeof value === 'string' && value.trim()) {
+      parts.push(value.trim());
+      break;
+    }
+  }
+  if (!parts.length) {
+    const slides = content['slides'];
+    if (Array.isArray(slides))
+      parts.push(
+        slides
+          .map((slide) => {
+            const value =
+              slide && typeof slide === 'object' ? (slide as Record<string, unknown>) : null;
+            return value
+              ? [value['headline'], value['body']]
+                  .filter((value): value is string => typeof value === 'string' && Boolean(value))
+                  .join('\n')
+              : '';
+          })
+          .filter(Boolean)
+          .join('\n\n'),
+      );
+  }
+  const cta = content['cta'];
+  if (typeof cta === 'string' && cta.trim() && !parts.some((part) => part.includes(cta.trim())))
+    parts.push(cta.trim());
+  const hashtags = content['hashtags'];
+  if (Array.isArray(hashtags)) {
+    const values = hashtags
+      .filter((value): value is string => typeof value === 'string' && Boolean(value.trim()))
+      .map((value) => (value.startsWith('#') ? value : `#${value}`));
+    if (values.length) parts.push(values.join(' '));
+  }
+  return parts.filter(Boolean).join('\n\n');
+}
+
 const choices: Array<{
   type: DailyActionType;
   icon: string;
@@ -85,11 +152,20 @@ const extraQuestions: Record<DailyActionType, string> = {
 export function DailyActionSection({
   endpoint,
   initialActions,
+  initialPhotoFirstResult,
   suggestedReuseTopic,
+  todayMissionId,
+  photoFirstMissionSeed,
 }: {
   endpoint: string;
   initialActions: DailyActionView[];
+  initialPhotoFirstResult?: PhotoFirstResult | null;
   suggestedReuseTopic?: string | null;
+  todayMissionId?: string | null;
+  photoFirstMissionSeed?: {
+    missionDate: string;
+    socialProfileId: string;
+  } | null;
 }) {
   const [actions, setActions] = useState(initialActions);
   const [selected, setSelected] = useState<DailyActionType | null>(null);
@@ -98,6 +174,13 @@ export function DailyActionSection({
   const [selectedPhotoName, setSelectedPhotoName] = useState('');
   const [saving, setSaving] = useState(false);
   const [updatingPhotoId, setUpdatingPhotoId] = useState<string | null>(null);
+  const [photoFirstActionId, setPhotoFirstActionId] = useState<string | null>(null);
+  const [photoFirstResult, setPhotoFirstResult] = useState<PhotoFirstResult | null>(
+    initialPhotoFirstResult ?? null,
+  );
+  const [confirmationAnswer, setConfirmationAnswer] = useState('');
+  const [resolvedTodayMissionId, setResolvedTodayMissionId] = useState(todayMissionId ?? null);
+  const photoFirstAvailable = Boolean(resolvedTodayMissionId || photoFirstMissionSeed);
   const formRef = useRef<HTMLFormElement>(null);
   const choice = choices.find((item) => item.type === selected) ?? null;
   const question = useMemo(() => {
@@ -231,6 +314,89 @@ export function DailyActionSection({
     }
   }
 
+  async function createFromPhoto(action: DailyActionView) {
+    if ((!resolvedTodayMissionId && !photoFirstMissionSeed) || photoFirstActionId) return;
+    setPhotoFirstActionId(action.id);
+    setMessage('写真と今日の発信目的から、投稿案を考えています…');
+    try {
+      const response = await fetch(`${endpoint}/${encodeURIComponent(action.id)}/photo-first`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-request-id': createClientRequestId() },
+        body: JSON.stringify({
+          ...(resolvedTodayMissionId
+            ? { dailyMissionId: resolvedTodayMissionId }
+            : photoFirstMissionSeed),
+          idempotencyKey: createClientRequestId(),
+        }),
+      });
+      const payload = (await response.json()) as {
+        data?: PhotoFirstResult;
+        error?: { message?: string };
+      };
+      if (!response.ok || !payload.data)
+        throw new Error(payload.error?.message ?? '写真から投稿案を作れませんでした。');
+      setResolvedTodayMissionId(payload.data.variant.dailyMissionId);
+      setPhotoFirstResult(payload.data);
+      setMessage('写真に合わせた投稿案ができました。');
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : '写真を読み取れませんでした。今日の通常の提案はそのまま使えます。',
+      );
+    } finally {
+      setPhotoFirstActionId(null);
+    }
+  }
+
+  async function answerPhotoFirstConfirmation(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const photoFirst = photoFirstResult?.photoFirst;
+    const answer = confirmationAnswer.trim();
+    if (!photoFirst || !photoFirst.planning.confirmationQuestion || !answer || photoFirstActionId)
+      return;
+    setPhotoFirstActionId(photoFirst.photoMemoryId);
+    setMessage('回答をもとに、投稿案を見直しています…');
+    try {
+      const requestId = createClientRequestId();
+      const response = await fetch(
+        `${endpoint}/${encodeURIComponent(photoFirst.photoMemoryId)}/photo-first`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', 'x-request-id': requestId },
+          body: JSON.stringify({
+            dailyMissionId: photoFirstResult.variant.dailyMissionId,
+            sourceVariantId: photoFirstResult.variant.id,
+            confirmationAnswer: answer,
+            idempotencyKey: createClientRequestId(),
+          }),
+        },
+      );
+      const payload = (await response.json()) as {
+        data?: PhotoFirstResult;
+        error?: { message?: string };
+      };
+      if (!response.ok || !payload.data)
+        throw new Error(payload.error?.message ?? '回答を反映できませんでした。');
+      setPhotoFirstResult(payload.data);
+      setConfirmationAnswer('');
+      setMessage('回答を反映した投稿案ができました。前の案も履歴に残っています。');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '回答を反映できませんでした。');
+    } finally {
+      setPhotoFirstActionId(null);
+    }
+  }
+
+  async function copyValue(value: string, label: string) {
+    try {
+      await navigator.clipboard.writeText(value);
+      setMessage(`${label}をコピーしました。`);
+    } catch {
+      setMessage('コピーできませんでした。文章を長押ししてコピーしてください。');
+    }
+  }
+
   return (
     <section className="daily-action">
       <header className="daily-action__header">
@@ -351,6 +517,100 @@ export function DailyActionSection({
           {message}
         </p>
       ) : null}
+      {photoFirstResult ? (
+        <section className="daily-action__photo-first" aria-labelledby="photo-first-result-title">
+          <p className="eyebrow">写真から考えた投稿</p>
+          <h3 id="photo-first-result-title">
+            {photoFirstResult.photoFirst?.planning.theme ?? '写真を活かす投稿案'}
+          </h3>
+          {photoFirstResult.photoFirst ? (
+            <>
+              <p>{photoFirstResult.photoFirst.planning.recommendationReason}</p>
+              <dl>
+                <div>
+                  <dt>写真の活かし方</dt>
+                  <dd>{photoFirstResult.photoFirst.planning.photoUsage}</dd>
+                </div>
+                <div>
+                  <dt>切り口</dt>
+                  <dd>{photoFirstResult.photoFirst.planning.angle}</dd>
+                </div>
+              </dl>
+              {actions.some(
+                (action) =>
+                  action.id === photoFirstResult.photoFirst?.photoMemoryId && action.hasPhoto,
+              ) ? (
+                <a
+                  href={`${endpoint}/${encodeURIComponent(photoFirstResult.photoFirst.photoMemoryId)}/photo`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  元の写真を確認する
+                </a>
+              ) : null}
+              {photoFirstResult.photoFirst.planning.confirmationQuestion ? (
+                <form onSubmit={(event) => void answerPhotoFirstConfirmation(event)}>
+                  <label>
+                    <strong>
+                      投稿前の確認：{photoFirstResult.photoFirst.planning.confirmationQuestion}
+                    </strong>
+                    <textarea
+                      name="confirmationAnswer"
+                      rows={3}
+                      maxLength={500}
+                      required
+                      value={confirmationAnswer}
+                      onChange={(event) => setConfirmationAnswer(event.currentTarget.value)}
+                      placeholder="分かる範囲で答えてください"
+                    />
+                  </label>
+                  <button
+                    className="button button--secondary button--full"
+                    type="submit"
+                    disabled={!confirmationAnswer.trim() || photoFirstActionId !== null}
+                  >
+                    {photoFirstActionId === photoFirstResult.photoFirst.photoMemoryId
+                      ? '見直しています…'
+                      : '回答を反映して投稿案を見直す'}
+                  </button>
+                </form>
+              ) : null}
+            </>
+          ) : null}
+          <textarea
+            aria-label="写真から作った投稿文"
+            readOnly
+            rows={10}
+            value={contentText(photoFirstResult.variant.content)}
+            onFocus={(event) => event.currentTarget.select()}
+          />
+          <button
+            className="button button--primary button--full"
+            type="button"
+            onClick={() => void copyValue(contentText(photoFirstResult.variant.content), '投稿文')}
+          >
+            投稿文をコピー
+          </button>
+          {photoFirstResult.photoFirst?.planning.imageEditPrompt ? (
+            <details>
+              <summary>写真も少し整えたい場合</summary>
+              <p>{photoFirstResult.photoFirst.planning.imageEditPrompt}</p>
+              <button
+                className="button button--secondary button--full"
+                type="button"
+                onClick={() =>
+                  void copyValue(
+                    photoFirstResult.photoFirst!.planning.imageEditPrompt!,
+                    '画像編集用の指示文',
+                  )
+                }
+              >
+                画像編集用の指示文をコピー
+              </button>
+            </details>
+          ) : null}
+        </section>
+      ) : null}
       <p className="daily-action__privacy">
         この記録は、あなたのこの投稿パートナーだけが使います。
       </p>
@@ -388,6 +648,22 @@ export function DailyActionSection({
                             ? '毎日の画像に使用中（やめる）'
                             : '毎日の画像に使う'}
                       </button>
+                      {photoFirstAvailable ? (
+                        <button
+                          type="button"
+                          className="button button--primary"
+                          disabled={photoFirstActionId !== null}
+                          onClick={() => void createFromPhoto(action)}
+                        >
+                          {photoFirstActionId === action.id
+                            ? '考えています…'
+                            : 'この写真から投稿を考える'}
+                        </button>
+                      ) : (
+                        <p className="daily-action__photo-first-waiting">
+                          今日の投稿予定ができると、この写真から投稿を考えられます。
+                        </p>
+                      )}
                     </>
                   ) : null}
                   <button type="button" onClick={() => void remove(action)}>

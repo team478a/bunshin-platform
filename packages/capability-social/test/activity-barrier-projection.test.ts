@@ -4,6 +4,7 @@ import {
   isSocialActivityBarrierProjectionDue,
   socialActivityBarrierObservationWindow,
 } from '../src/activity-barrier-projection';
+import { buildSocialActivityBarrierGoalMetrics } from '../src/activity-barrier';
 
 const scope = {
   workspaceId: 'workspace',
@@ -48,6 +49,31 @@ describe('social activity barrier projection', () => {
             positiveResponseRecorded: 0,
             conversionActionRecorded: 0,
           },
+          goalAttribution: {
+            missionCounts: {
+              FOLLOWERS: 0,
+              LINE_REGISTRATION: 0,
+              INQUIRY: 7,
+              VISIT_RESERVATION: 0,
+              SALES: 0,
+              RECRUIT: 0,
+              REPEAT: 0,
+              BRAND_AWARENESS: 0,
+              TRUST_EXPERTISE: 0,
+              BLOG_TRAFFIC: 0,
+              OTHER: 0,
+              UNATTRIBUTED: 0,
+            },
+            observedMissionCount: 7,
+            attributedMissionCount: 7,
+            unattributedMissionCount: 0,
+            distinctAttributedGoalCount: 1,
+            mixedAttributedGoals: false,
+          },
+          goalMetrics: buildSocialActivityBarrierGoalMetrics([], {
+            insightRecorded: 0,
+            positiveResponseRecorded: 0,
+          }),
         })
         .mockRejectedValueOnce(new Error('one member failed')),
     };

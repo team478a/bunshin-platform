@@ -5,6 +5,7 @@ import { ApplicationError } from '@bunshin/shared';
 import type { ContentPillar } from './content-pillars';
 import { missionInteger, missionString, PLATFORM_FORMATS } from './mission-content';
 import type { SocialAccountStrategy } from './social-account-strategy';
+import { socialGoalPlanningProfile, type SocialGoalPlanningProfile } from './social-goal';
 import {
   SOCIAL_PREFERRED_FORMATS,
   type SocialPlatform,
@@ -150,6 +151,8 @@ export interface DailyMissionPlannerProviderInput {
   recentTopics?: Array<{ missionDate: string; topic: string; angle: string }>;
   bunshin: DailyMissionPlannerInput['bunshin'];
   approvedStrategy: {
+    goal: SocialAccountStrategy['goal'];
+    goalPlanning: SocialGoalPlanningProfile;
     concept: string;
     positioning: string;
     targetSummary: string;
@@ -229,7 +232,12 @@ export class GenerateDailyMissionBrief {
       input.approvedStrategy.bunshinId !== input.bunshinId ||
       input.approvedStrategy.socialProfileId !== input.socialProfile.id ||
       input.approvedStrategy.platform !== input.socialProfile.platform ||
-      input.approvedStrategy.status !== 'APPROVED'
+      (input.approvedStrategy.status !== 'APPROVED' &&
+        !(
+          input.approvedStrategy.status === 'SUPERSEDED' &&
+          input.weeklyPlan.strategyId === input.approvedStrategy.id &&
+          input.weeklyPlan.strategyGoal === input.approvedStrategy.goal
+        ))
     )
       throw new ApplicationError('NOT_FOUND', 'approved strategy not found');
     if (
@@ -284,6 +292,8 @@ export class GenerateDailyMissionBrief {
       ...(input.recentTopics ? { recentTopics: input.recentTopics } : {}),
       bunshin: input.bunshin,
       approvedStrategy: {
+        goal: input.approvedStrategy.goal,
+        goalPlanning: socialGoalPlanningProfile(input.approvedStrategy.goal),
         concept: input.approvedStrategy.concept,
         positioning: input.approvedStrategy.positioning,
         targetSummary: input.approvedStrategy.targetSummary,

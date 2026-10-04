@@ -1,4 +1,5 @@
 import type { CompleteJob, FailJob, Job } from './job-runtime';
+import { assertUserJob } from './job-runtime';
 
 export const FORTUNE_GENERATION_JOB_TYPE = 'FORTUNE_READING_GENERATE';
 export const fortuneGenerationPayloadReference = (serviceSettingId: string, readingId: string) =>
@@ -37,6 +38,7 @@ export class ExecuteFortuneGenerationJob {
   ) {}
 
   async execute(job: Job, workerId: string): Promise<Job> {
+    assertUserJob(job);
     const uuid = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
     const match = new RegExp(`^fortune-generation:(${uuid}):(${uuid})$`, 'u').exec(
       job.payloadReference,

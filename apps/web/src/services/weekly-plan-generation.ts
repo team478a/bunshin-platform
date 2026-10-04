@@ -18,11 +18,13 @@ import {
   ListWeeklyPlans,
   type ContentPillarRepository,
   type SocialAccountStrategyRepository,
+  type SocialAccountStrategyGoal,
   type SocialProfileRepository,
   type WeeklyPlannerInput,
   type WeeklyPlannerOutput,
   type WeeklyPlannerPort,
   type WeeklyPlanRepository,
+  weeklySocialGoalPlanningProfile,
 } from '@bunshin/capability-social';
 import { ApplicationError } from '@bunshin/shared';
 import { createLogger } from '@bunshin/observability';
@@ -41,6 +43,12 @@ import {
   readPostPerformance,
   type PostPerformanceView,
 } from './post-performance';
+import {
+  readSnapshotStrategyGoal,
+  readSocialGoalOutcome,
+  summarizeSocialGoalOutcomes,
+} from './social-goal-outcomes';
+export { readSnapshotStrategyGoal } from './social-goal-outcomes';
 import {
   OpenAIWeeklyPlanner,
   WEEKLY_PLANNER_PROMPT_VERSION,
@@ -72,6 +80,27 @@ interface UsageEvent {
 interface RecentOutcomeRecord {
   topic: string;
   manualMetrics: unknown;
+  strategyGoal?: string | null;
+}
+
+const primaryOutcomeKeysByGoal = {
+  FOLLOWERS: [],
+  LINE_REGISTRATION: [],
+  INQUIRY: ['inquiries'],
+  VISIT_RESERVATION: ['reservations', 'visits'],
+  SALES: ['orders'],
+  RECRUIT: [],
+  REPEAT: ['repeatReservations', 'repeatVisits'],
+  BRAND_AWARENESS: [],
+  TRUST_EXPERTISE: [],
+  BLOG_TRAFFIC: [],
+  OTHER: [],
+} as const satisfies Record<SocialAccountStrategyGoal, readonly (keyof BusinessOutcomes)[]>;
+
+function hasRecordedBusinessOutcomes(value: unknown) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const nested = (value as Record<string, unknown>)['businessOutcomes'];
+  return Boolean(nested && typeof nested === 'object' && !Array.isArray(nested));
 }
 
 export function buildBusinessOutcomePlanningContext(records: RecentOutcomeRecord[]) {
@@ -100,6 +129,75 @@ export function buildBusinessOutcomePlanningContext(records: RecentOutcomeRecord
   };
 }
 
+export function buildGoalOutcomePlanningContext(
+  goal: SocialAccountStrategyGoal,
+  records: RecentOutcomeRecord[],
+) {
+  const primaryOutcomeKeys = [...primaryOutcomeKeysByGoal[goal]];
+  const goalReports = records.filter((record) => {
+    const outcome = readSocialGoalOutcome(record.manualMetrics);
+    return record.strategyGoal === goal && outcome?.strategyGoal === goal;
+  });
+  const reportedProgress = summarizeSocialGoalOutcomes(
+    goalReports.map(({ manualMetrics }) => manualMetrics),
+  );
+  const reportedPositiveTopics = goalReports
+    .flatMap(({ topic, manualMetrics }) => {
+      const result = readSocialGoalOutcome(manualMetrics)?.result;
+      return result === 'ACHIEVED' || result === 'SOME_PROGRESS' ? [{ topic, result }] : [];
+    })
+    .slice(0, 3);
+  const recorded = records.filter(
+    (record) =>
+      primaryOutcomeKeys.length > 0 &&
+      record.strategyGoal === goal &&
+      hasRecordedBusinessOutcomes(record.manualMetrics),
+  );
+  const selected = recorded.map((record) => {
+    const outcomes = readBusinessOutcomes(record.manualMetrics);
+    const relevant = emptyBusinessOutcomes();
+    for (const key of primaryOutcomeKeys) relevant[key] = outcomes[key];
+    return { topic: record.topic, manualMetrics: { businessOutcomes: relevant } };
+  });
+  const planning = buildBusinessOutcomePlanningContext(selected);
+  const recordedPostCount = records.filter((record) => {
+    const outcome = readSocialGoalOutcome(record.manualMetrics);
+    return (
+      record.strategyGoal === goal &&
+      (hasRecordedBusinessOutcomes(record.manualMetrics) || outcome?.strategyGoal === goal)
+    );
+  }).length;
+  return {
+    ...planning,
+    goalEvaluation: {
+      goal,
+      status:
+        recorded.length > 0
+          ? ('MEASURED' as const)
+          : goalReports.length > 0
+            ? ('SELF_REPORTED' as const)
+            : ('NO_DATA' as const),
+      primaryOutcomeKeys,
+      recordedPostCount,
+      primaryOutcomeTotal: primaryOutcomeKeys.reduce(
+        (total, key) => total + planning.businessOutcomes[key],
+        0,
+      ),
+      reportedProgress,
+      reportedPositiveTopics,
+      feedbackMeaning: 'CONTENT_PREFERENCE_NOT_GOAL_ACHIEVEMENT' as const,
+      limitations: [
+        '同じGoalで生成され、本人が記録した投稿成果だけを集計します。',
+        '目的への手応えは本人の自己申告であり、外部KPIや投稿との因果関係を証明しません。',
+        ...(primaryOutcomeKeys.length === 0
+          ? ['このGoalを直接確認する外部KPIは現在取得していません。']
+          : []),
+        '記録された件数は投稿との因果関係を証明しません。',
+      ],
+    },
+  };
+}
+
 export interface WeeklyPlanGenerationDependencies {
   assignments: BunshinCapabilityAssignmentRepository;
   plans: WeeklyPlanRepository;
@@ -113,7 +211,7 @@ export interface WeeklyPlanGenerationDependencies {
   providerModel: string;
   resolveTimezone(scope: Scope): Promise<string | null>;
   loadRecentPerformance?(
-    scope: Scope,
+    scope: Scope & { goal: SocialAccountStrategyGoal },
   ): Promise<NonNullable<WeeklyPlannerInput['recentPerformance']>>;
   recordUsage(event: UsageEvent): Promise<void>;
   runWithQuota<T>(input: {
@@ -196,7 +294,10 @@ export class WeeklyPlanGenerationService {
             })
           : [];
       stage = 'RECENT_PERFORMANCE';
-      const recentPerformance = await this.dependencies.loadRecentPerformance?.(input);
+      const recentPerformance = await this.dependencies.loadRecentPerformance?.({
+        ...input,
+        goal: strategy.goal,
+      });
       stage = 'AI_GENERATION';
       providerAttempted = true;
       const result = await this.dependencies.runWithQuota({
@@ -216,6 +317,8 @@ export class WeeklyPlanGenerationService {
               personalitySummary: bunshin.personalitySummary,
             },
             approvedStrategy: {
+              goal: strategy.goal,
+              goalPlanning: weeklySocialGoalPlanningProfile(strategy.goal),
               concept: strategy.concept,
               positioning: strategy.positioning,
               targetSummary: strategy.targetSummary,
@@ -255,6 +358,9 @@ export class WeeklyPlanGenerationService {
         this.dependencies.assignments,
       ).execute({
         ...input,
+        socialProfileId: profile.id,
+        strategyId: strategy.id,
+        strategyGoal: strategy.goal,
         weekStartDate: input.weekStartDate,
         timezone,
         ...generatedOutput,
@@ -340,6 +446,7 @@ export async function createWeeklyPlanGenerationService() {
           topic: true,
           feedback: { select: { rating: true } },
           postRecord: { select: { manualMetrics: true, postedAt: true } },
+          generationContext: { select: { payload: true } },
         },
       });
       const formats = [...new Set(missions.map(({ format }) => format))].sort().map((format) => {
@@ -375,10 +482,12 @@ export async function createWeeklyPlanGenerationService() {
           bad: missions.filter(({ feedback }) => feedback?.rating === 'BAD').length,
         },
         formats,
-        ...buildBusinessOutcomePlanningContext(
-          missions.map(({ topic, postRecord }) => ({
+        ...buildGoalOutcomePlanningContext(
+          scope.goal,
+          missions.map(({ topic, postRecord, generationContext }) => ({
             topic,
             manualMetrics: postRecord?.manualMetrics,
+            strategyGoal: readSnapshotStrategyGoal(generationContext?.payload),
           })),
         ),
         postPerformance,

@@ -30,8 +30,10 @@ export interface JobDispatcher {
   enqueue(input: EnqueueJobInput): Promise<JobReference>;
 }
 
-export interface Job extends Required<
-  Omit<EnqueueJobInput, 'bunshinId' | 'capabilityType' | 'scheduledAt'>
+export const FEEDBACK_PURGE_JOB_TYPE = 'IMPROVEMENT_FEEDBACK_PURGE';
+
+interface StoredJob extends Required<
+  Omit<EnqueueJobInput, 'bunshinId' | 'capabilityType' | 'scheduledAt' | 'requestedBy'>
 > {
   id: string;
   bunshinId: string | null;
@@ -47,6 +49,20 @@ export interface Job extends Required<
   cancelledAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
+}
+export type UserJob = StoredJob & { requestedBy: string };
+export type FeedbackMaintenanceJob = StoredJob & {
+  requestedBy: null;
+  jobType: typeof FEEDBACK_PURGE_JOB_TYPE;
+  bunshinId: null;
+  capabilityType: null;
+};
+export type Job = UserJob | FeedbackMaintenanceJob;
+
+/** User handlers must fail closed, including when called outside the worker router. */
+export function assertUserJob(job: Job): asserts job is UserJob {
+  if (!job.requestedBy || job.jobType === FEEDBACK_PURGE_JOB_TYPE)
+    throw new ApplicationError('FORBIDDEN', 'user job actor is required');
 }
 export interface JobFailure {
   errorCategory: string;
@@ -81,6 +97,8 @@ const assertJobText = (value: string, field: string, maximum: number) => {
 export class EnqueueJob implements JobDispatcher {
   constructor(private readonly repository: JobRepository) {}
   async enqueue(input: EnqueueJobInput): Promise<JobReference> {
+    if (input.jobType === FEEDBACK_PURGE_JOB_TYPE || !input.requestedBy?.trim())
+      throw new ApplicationError('FORBIDDEN', 'maintenance job cannot use user enqueue');
     assertJobText(input.jobType, 'jobType', 80);
     assertJobText(input.idempotencyKey, 'idempotencyKey', 200);
     assertJobText(input.payloadReference, 'payloadReference', 500);

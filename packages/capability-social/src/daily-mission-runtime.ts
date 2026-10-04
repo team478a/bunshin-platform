@@ -13,6 +13,11 @@ import {
   type MissionContent,
 } from './mission-content';
 import {
+  MISSION_QUALITY_VERDICTS,
+  type MissionContentVariantQualityAudit,
+  type MissionQualityVerdict,
+} from './mission-quality';
+import {
   DEFAULT_CONTENT_ASSISTANCE_LEVEL,
   parseContentAssistanceLevel,
   type ContentAssistanceLevel,
@@ -155,6 +160,37 @@ export const MISSION_CONTENT_VARIANT_GENERATION_STATUSES = [
 export type MissionContentVariantGenerationStatus =
   (typeof MISSION_CONTENT_VARIANT_GENERATION_STATUSES)[number];
 
+export interface PhotoFirstAnalysis {
+  imageType: string;
+  subjects: string[];
+  objects: string[];
+  scene: string;
+  visibleText: string[];
+  possibleContentAngles: string[];
+  qualityNotes: string[];
+  uncertainElements: string[];
+  safetyFlags: string[];
+}
+
+export interface PhotoFirstPlanning {
+  theme: string;
+  angle: string;
+  recommendationReason: string;
+  photoUsage: string;
+  imageEditPrompt: string | null;
+  confirmationQuestion: string | null;
+  confirmationAnswer?: string | null;
+  confirmationSourceVariantId?: string | null;
+}
+
+export interface MissionContentVariantPhotoFirstMetadata {
+  photoMemoryId: string;
+  analysis: PhotoFirstAnalysis;
+  planning: PhotoFirstPlanning;
+  analyzerModel: string;
+  analyzerPromptVersion: string;
+}
+
 export interface MissionContentVariant {
   id: string;
   workspaceId: string;
@@ -173,9 +209,11 @@ export interface MissionContentVariant {
   latencyMs: number;
   createdAt: Date;
   selectedAt: Date | null;
+  photoFirst: MissionContentVariantPhotoFirstMetadata | null;
 }
 
 export interface MissionContentVariantGeneration {
+  initiatingSource?: string | null;
   id: string;
   workspaceId: string;
   bunshinId: string;
@@ -185,13 +223,36 @@ export interface MissionContentVariantGeneration {
   status: MissionContentVariantGenerationStatus;
   variantId: string | null;
   errorCategory: string | null;
+  qualityVerdict: MissionQualityVerdict | null;
+  qualityScore: number | null;
+  qualityIssueCodes: string[];
+  qualityRepairCount: number;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface MissionContentVariantQualityAuditRecord {
+  generationId: string;
+  status: MissionContentVariantGenerationStatus;
+  variantId: string | null;
+  errorCategory: string | null;
+  promptVersion: string | null;
+  qualityVerdict: MissionQualityVerdict | null;
+  qualityScore: number | null;
+  qualityIssueCodes: string[];
+  qualityRepairCount: number;
   createdAt: Date;
   updatedAt: Date;
 }
 
 export interface MissionContentVariantRepository {
   claim(
-    input: DailyMissionScope & { dailyMissionId: string; idempotencyKey: string },
+    input: DailyMissionScope & {
+      dailyMissionId: string;
+      idempotencyKey: string;
+      sourceVariantId?: string;
+      initiatingSource?: 'STANDARD' | 'PHOTO_FIRST';
+    },
   ): Promise<{ acquired: boolean; generation: MissionContentVariantGeneration } | null>;
   complete(
     input: DailyMissionScope & {
@@ -206,6 +267,9 @@ export interface MissionContentVariantRepository {
       outputTokens: number | null;
       estimatedCostMicros: bigint | null;
       latencyMs: number;
+      qualityAudit: MissionContentVariantQualityAudit;
+      photoFirst?: MissionContentVariantPhotoFirstMetadata;
+      sourceVariantId?: string;
     },
   ): Promise<MissionContentVariant | null>;
   fail(
@@ -219,11 +283,15 @@ export interface MissionContentVariantRepository {
       outputTokens?: number | null;
       estimatedCostMicros?: bigint | null;
       latencyMs?: number;
+      qualityAudit: MissionContentVariantQualityAudit;
     },
   ): Promise<boolean | null>;
   list(
     input: DailyMissionScope & { dailyMissionId: string },
   ): Promise<MissionContentVariant[] | null>;
+  listQualityAudits(
+    input: DailyMissionScope & { dailyMissionId: string; issueCode?: string },
+  ): Promise<MissionContentVariantQualityAuditRecord[] | null>;
   select(
     input: DailyMissionScope & {
       dailyMissionId: string;
@@ -243,14 +311,52 @@ function variantIdempotencyKey(value: string) {
 export class ClaimMissionContentVariantGeneration {
   constructor(private readonly repository: MissionContentVariantRepository) {}
 
-  async execute(input: DailyMissionScope & { dailyMissionId: string; idempotencyKey: string }) {
+  async execute(
+    input: DailyMissionScope & {
+      dailyMissionId: string;
+      idempotencyKey: string;
+      sourceVariantId?: string;
+      initiatingSource?: 'STANDARD' | 'PHOTO_FIRST';
+    },
+  ) {
+    if (
+      input.initiatingSource !== undefined &&
+      !['STANDARD', 'PHOTO_FIRST'].includes(input.initiatingSource)
+    )
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid generation source');
     const result = await this.repository.claim({
       ...input,
       idempotencyKey: variantIdempotencyKey(input.idempotencyKey),
+      ...(input.sourceVariantId
+        ? { sourceVariantId: missionString(input.sourceVariantId, 120, 'source variant id') }
+        : {}),
     });
     if (!result) throw new ApplicationError('NOT_FOUND', 'daily mission not found');
     return result;
   }
+}
+
+function normalizeMissionContentVariantQualityAudit(
+  value: MissionContentVariantQualityAudit,
+): MissionContentVariantQualityAudit {
+  const verdict =
+    value.verdict === null
+      ? null
+      : (missionString(value.verdict, 20, 'quality verdict') as MissionQualityVerdict);
+  if (verdict !== null && !MISSION_QUALITY_VERDICTS.includes(verdict))
+    throw new ApplicationError('VALIDATION_ERROR', 'invalid quality verdict');
+  const score = value.score === null ? null : missionInteger(value.score, 0, 100, 'quality score');
+  if ((verdict === null) !== (score === null))
+    throw new ApplicationError('VALIDATION_ERROR', 'incomplete quality audit');
+  if (
+    !Array.isArray(value.issueCodes) ||
+    value.issueCodes.length > 20 ||
+    new Set(value.issueCodes).size !== value.issueCodes.length
+  )
+    throw new ApplicationError('VALIDATION_ERROR', 'invalid quality issue codes');
+  const issueCodes = value.issueCodes.map((code) => missionString(code, 80, 'quality issue code'));
+  const repairCount = missionInteger(value.repairCount, 0, 1, 'quality repair count');
+  return { verdict, score, issueCodes, repairCount };
 }
 
 export class CompleteMissionContentVariantGeneration {
@@ -259,6 +365,101 @@ export class CompleteMissionContentVariantGeneration {
   async execute(input: Parameters<MissionContentVariantRepository['complete']>[0]) {
     const nullableCount = (value: number | null, field: string) =>
       value === null ? null : missionInteger(value, 0, 2_000_000_000, field);
+    const stringList = (value: string[], maxItems: number, maxLength: number, field: string) => {
+      if (value.length > maxItems)
+        throw new ApplicationError('VALIDATION_ERROR', `invalid ${field}`);
+      return value.map((item) => missionString(item, maxLength, field));
+    };
+    const photoFirst = input.photoFirst
+      ? {
+          photoMemoryId: missionString(input.photoFirst.photoMemoryId, 120, 'photo memory id'),
+          analysis: {
+            imageType: missionString(input.photoFirst.analysis.imageType, 120, 'image type'),
+            subjects: stringList(input.photoFirst.analysis.subjects, 12, 300, 'photo subject'),
+            objects: stringList(input.photoFirst.analysis.objects, 20, 300, 'photo object'),
+            scene: missionString(input.photoFirst.analysis.scene, 500, 'photo scene'),
+            visibleText: stringList(input.photoFirst.analysis.visibleText, 20, 300, 'visible text'),
+            possibleContentAngles: stringList(
+              input.photoFirst.analysis.possibleContentAngles,
+              8,
+              500,
+              'content angle',
+            ),
+            qualityNotes: stringList(
+              input.photoFirst.analysis.qualityNotes,
+              8,
+              500,
+              'quality note',
+            ),
+            uncertainElements: stringList(
+              input.photoFirst.analysis.uncertainElements,
+              12,
+              500,
+              'uncertain element',
+            ),
+            safetyFlags: stringList(input.photoFirst.analysis.safetyFlags, 12, 500, 'safety flag'),
+          },
+          planning: {
+            theme: missionString(input.photoFirst.planning.theme, 500, 'photo theme'),
+            angle: missionString(input.photoFirst.planning.angle, 500, 'photo angle'),
+            recommendationReason: missionString(
+              input.photoFirst.planning.recommendationReason,
+              1000,
+              'photo recommendation reason',
+            ),
+            photoUsage: missionString(input.photoFirst.planning.photoUsage, 1000, 'photo usage'),
+            imageEditPrompt:
+              input.photoFirst.planning.imageEditPrompt === null
+                ? null
+                : missionString(
+                    input.photoFirst.planning.imageEditPrompt,
+                    1500,
+                    'image edit prompt',
+                  ),
+            confirmationQuestion:
+              input.photoFirst.planning.confirmationQuestion === null
+                ? null
+                : missionString(
+                    input.photoFirst.planning.confirmationQuestion,
+                    500,
+                    'confirmation question',
+                  ),
+            ...(input.photoFirst.planning.confirmationAnswer === undefined
+              ? {}
+              : {
+                  confirmationAnswer:
+                    input.photoFirst.planning.confirmationAnswer === null
+                      ? null
+                      : missionString(
+                          input.photoFirst.planning.confirmationAnswer,
+                          500,
+                          'confirmation answer',
+                        ),
+                }),
+            ...(input.photoFirst.planning.confirmationSourceVariantId === undefined
+              ? {}
+              : {
+                  confirmationSourceVariantId:
+                    input.photoFirst.planning.confirmationSourceVariantId === null
+                      ? null
+                      : missionString(
+                          input.photoFirst.planning.confirmationSourceVariantId,
+                          120,
+                          'confirmation source variant id',
+                        ),
+                }),
+          },
+          analyzerModel: missionString(input.photoFirst.analyzerModel, 120, 'analyzer model'),
+          analyzerPromptVersion: missionString(
+            input.photoFirst.analyzerPromptVersion,
+            120,
+            'analyzer prompt version',
+          ),
+        }
+      : undefined;
+    const qualityAudit = normalizeMissionContentVariantQualityAudit(input.qualityAudit);
+    if (qualityAudit.verdict !== 'PASS' || qualityAudit.score !== input.qualityScore)
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid completed quality audit');
     if (input.estimatedCostMicros !== null && input.estimatedCostMicros < 0n)
       throw new ApplicationError('VALIDATION_ERROR', 'invalid estimated cost');
     const variant = await this.repository.complete({
@@ -270,6 +471,11 @@ export class CompleteMissionContentVariantGeneration {
       inputTokens: nullableCount(input.inputTokens, 'input tokens'),
       outputTokens: nullableCount(input.outputTokens, 'output tokens'),
       latencyMs: missionInteger(input.latencyMs, 0, 2_000_000_000, 'latency'),
+      qualityAudit,
+      ...(input.sourceVariantId
+        ? { sourceVariantId: missionString(input.sourceVariantId, 120, 'source variant id') }
+        : {}),
+      ...(photoFirst ? { photoFirst } : {}),
     });
     if (!variant) throw new ApplicationError('NOT_FOUND', 'variant generation not found');
     return variant;
@@ -280,6 +486,7 @@ export class FailMissionContentVariantGeneration {
   constructor(private readonly repository: MissionContentVariantRepository) {}
 
   async execute(input: Parameters<MissionContentVariantRepository['fail']>[0]) {
+    const qualityAudit = normalizeMissionContentVariantQualityAudit(input.qualityAudit);
     const failed = await this.repository.fail({
       ...input,
       errorCategory: missionString(input.errorCategory, 80, 'error category'),
@@ -298,6 +505,7 @@ export class FailMissionContentVariantGeneration {
       ...(input.latencyMs === undefined
         ? {}
         : { latencyMs: missionInteger(input.latencyMs, 0, 2_000_000_000, 'latency') }),
+      qualityAudit,
     });
     if (failed === null) throw new ApplicationError('NOT_FOUND', 'variant generation not found');
     return failed;
@@ -311,6 +519,22 @@ export class ListMissionContentVariants {
     const variants = await this.repository.list(input);
     if (!variants) throw new ApplicationError('NOT_FOUND', 'daily mission not found');
     return variants;
+  }
+}
+
+export class ListMissionContentVariantQualityAudits {
+  constructor(private readonly repository: MissionContentVariantRepository) {}
+
+  async execute(input: DailyMissionScope & { dailyMissionId: string; issueCode?: string }) {
+    const issueCode = input.issueCode
+      ? missionString(input.issueCode, 80, 'quality issue code')
+      : undefined;
+    const audits = await this.repository.listQualityAudits({
+      ...input,
+      ...(issueCode ? { issueCode } : {}),
+    });
+    if (!audits) throw new ApplicationError('NOT_FOUND', 'daily mission not found');
+    return audits;
   }
 }
 

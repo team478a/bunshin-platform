@@ -7,6 +7,8 @@ import {
 import { ApplicationError } from '@bunshin/shared';
 
 import type { SocialPlatform, SocialPreferredFormat } from './social-profile';
+import type { SocialAccountStrategyGoal } from './social-account-strategy';
+import type { WeeklySocialGoalPlanningProfile } from './social-goal';
 import { validateEnum } from './social-validation';
 import {
   localDate,
@@ -47,6 +49,9 @@ export interface WeeklyPlan {
   id: string;
   workspaceId: string;
   bunshinId: string;
+  socialProfileId: string | null;
+  strategyId: string | null;
+  strategyGoal: SocialAccountStrategyGoal | null;
   weekStartDate: string;
   timezone: string;
   strategySummary: string | null;
@@ -73,6 +78,9 @@ export interface WeeklyPlanRepository {
   ): Promise<WeeklyPlan | null>;
   createGeneratedPlan(
     input: WeeklyPlanScope & {
+      socialProfileId: string;
+      strategyId: string;
+      strategyGoal: SocialAccountStrategyGoal;
       weekStartDate: string;
       timezone: string;
       strategySummary: string;
@@ -136,6 +144,8 @@ export interface WeeklyPlannerInput {
     personalitySummary: string;
   };
   approvedStrategy: {
+    goal: SocialAccountStrategyGoal;
+    goalPlanning: WeeklySocialGoalPlanningProfile;
     concept: string;
     positioning: string;
     targetSummary: string;
@@ -156,10 +166,39 @@ export interface WeeklyPlannerInput {
       goodFeedbackCount: number;
       badFeedbackCount: number;
     }>;
+    goalEvaluation?: {
+      goal: SocialAccountStrategyGoal;
+      status: 'MEASURED' | 'SELF_REPORTED' | 'NO_DATA' | 'UNAVAILABLE';
+      primaryOutcomeKeys: Array<
+        | 'inquiries'
+        | 'reservations'
+        | 'visits'
+        | 'repeatReservations'
+        | 'repeatVisits'
+        | 'orders'
+        | 'other'
+      >;
+      recordedPostCount: number;
+      primaryOutcomeTotal: number;
+      reportedProgress?: {
+        achieved: number;
+        someProgress: number;
+        noChange: number;
+        unknown: number;
+      };
+      reportedPositiveTopics?: Array<{
+        topic: string;
+        result: 'ACHIEVED' | 'SOME_PROGRESS';
+      }>;
+      feedbackMeaning: 'CONTENT_PREFERENCE_NOT_GOAL_ACHIEVEMENT';
+      limitations: string[];
+    };
     businessOutcomes?: {
       inquiries: number;
       reservations: number;
       visits: number;
+      repeatReservations: number;
+      repeatVisits: number;
       orders: number;
       other: number;
     };
@@ -170,6 +209,8 @@ export interface WeeklyPlannerInput {
         inquiries: number;
         reservations: number;
         visits: number;
+        repeatReservations: number;
+        repeatVisits: number;
         orders: number;
         other: number;
       };

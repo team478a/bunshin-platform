@@ -2,8 +2,13 @@ import { describe, expect, it } from 'vitest';
 import {
   buildSocialActivityBarrierLineMessage,
   buildSocialActivityBarrierQuestion,
+  selectSocialActivitySupport,
   socialActivitySupportFor,
 } from '../src/activity-barrier-support';
+import {
+  buildSocialActivityBarrierGoalAttribution,
+  buildSocialActivityBarrierGoalMetrics,
+} from '../src/activity-barrier';
 import type { SocialActivityBarrierCase } from '../src/activity-barrier-persistence';
 
 function barrierCase(
@@ -35,6 +40,8 @@ function barrierCase(
         excludedSystemIncidentDays: 0,
       },
       metrics: { lineDelivered: 7, missionViewed: 0 },
+      goalAttribution: null,
+      goalMetrics: null,
       thresholds: { minimumDelivered: 5, maximumViewed: 1 },
       ruleVersion: 'social-activity-barrier-v1',
     },
@@ -79,5 +86,256 @@ describe('social activity barrier confirmation', () => {
   it('maps every confirmed category to free support', () => {
     expect(socialActivitySupportFor('TIME')).toMatchObject({ key: 'FIVE_MINUTE_ACTION' });
     expect(socialActivitySupportFor('UNKNOWN')).toMatchObject({ key: 'MEASUREMENT_SETUP' });
+  });
+
+  it.each([
+    {
+      name: 'legacy evidence',
+      attribution: null,
+      reason: 'ATTRIBUTION_UNAVAILABLE',
+    },
+    {
+      name: 'no observed missions',
+      attribution: buildSocialActivityBarrierGoalAttribution([]),
+      reason: 'NO_OBSERVED_MISSIONS',
+    },
+    {
+      name: 'unattributed missions',
+      attribution: buildSocialActivityBarrierGoalAttribution(['INQUIRY', null]),
+      reason: 'UNATTRIBUTED_MISSIONS',
+    },
+    {
+      name: 'mixed goals',
+      attribution: buildSocialActivityBarrierGoalAttribution(['INQUIRY', 'RECRUIT']),
+      reason: 'MIXED_GOALS',
+    },
+  ])('keeps common support for $name', ({ attribution, reason }) => {
+    const value = barrierCase('case_1', 'TIME');
+    value.evidence.goalAttribution = attribution;
+
+    expect(
+      selectSocialActivitySupport({ category: value.category, evidence: value.evidence }),
+    ).toMatchObject({
+      support: { key: 'FIVE_MINUTE_ACTION' },
+      mode: 'COMMON',
+      eligibleGoal: null,
+      fallbackReason: reason,
+    });
+  });
+
+  it('selects inquiry-specific LEAD support only for a matching fully attributed signal', () => {
+    const value = barrierCase('case_1', 'LEAD');
+    value.evidence.evidenceCode = 'RESPONSE_WITHOUT_NEXT_STEP';
+    value.evidence.thresholds = { minimumPositiveResponses: 2, maximumConversionActions: 0 };
+    value.evidence.goalAttribution = buildSocialActivityBarrierGoalAttribution([
+      'INQUIRY',
+      'INQUIRY',
+    ]);
+    value.evidence.goalMetrics = buildSocialActivityBarrierGoalMetrics(
+      [
+        {
+          goal: 'INQUIRY',
+          postCompleted: true,
+          positiveResponseRecorded: true,
+          conversionActionRecorded: false,
+        },
+        {
+          goal: 'INQUIRY',
+          postCompleted: true,
+          positiveResponseRecorded: true,
+          conversionActionRecorded: false,
+        },
+      ],
+      { insightRecorded: 0, positiveResponseRecorded: 0 },
+    );
+
+    expect(
+      selectSocialActivitySupport({ category: value.category, evidence: value.evidence }),
+    ).toMatchObject({
+      support: { key: 'INQUIRY_LEAD_FOLLOW_UP' },
+      mode: 'GOAL_SPECIFIC',
+      eligibleGoal: 'INQUIRY',
+      fallbackReason: null,
+    });
+  });
+
+  it('allows UNKNOWN policy only when the same goal has enough posted missions and no insights', () => {
+    const value = barrierCase('case_1', 'UNKNOWN');
+    value.evidence.evidenceCode = 'POSTED_WITHOUT_MEASUREMENT';
+    value.evidence.thresholds = { minimumPosted: 2, maximumInsights: 0 };
+    value.evidence.goalAttribution = buildSocialActivityBarrierGoalAttribution([
+      'BRAND_AWARENESS',
+      'BRAND_AWARENESS',
+    ]);
+    value.evidence.goalMetrics = buildSocialActivityBarrierGoalMetrics(
+      [
+        {
+          goal: 'BRAND_AWARENESS',
+          postCompleted: true,
+          positiveResponseRecorded: false,
+          conversionActionRecorded: false,
+        },
+        {
+          goal: 'BRAND_AWARENESS',
+          postCompleted: true,
+          positiveResponseRecorded: false,
+          conversionActionRecorded: false,
+        },
+      ],
+      { insightRecorded: 0, positiveResponseRecorded: 0 },
+    );
+
+    expect(
+      selectSocialActivitySupport({ category: value.category, evidence: value.evidence }),
+    ).toMatchObject({
+      support: { key: 'AWARENESS_MEASUREMENT_SETUP' },
+      mode: 'GOAL_SPECIFIC',
+      eligibleGoal: 'BRAND_AWARENESS',
+      fallbackReason: null,
+    });
+  });
+
+  it('selects recruitment-specific RESPONSE support only for a matching signal', () => {
+    const value = barrierCase('case_1', 'RESPONSE');
+    value.evidence.evidenceCode = 'RESPONSE_WITHOUT_NEXT_STEP';
+    value.evidence.thresholds = { minimumPositiveResponses: 2, maximumConversionActions: 0 };
+    value.evidence.goalAttribution = buildSocialActivityBarrierGoalAttribution([
+      'RECRUIT',
+      'RECRUIT',
+    ]);
+    value.evidence.goalMetrics = buildSocialActivityBarrierGoalMetrics(
+      [
+        {
+          goal: 'RECRUIT',
+          postCompleted: true,
+          positiveResponseRecorded: true,
+          conversionActionRecorded: false,
+        },
+        {
+          goal: 'RECRUIT',
+          postCompleted: true,
+          positiveResponseRecorded: true,
+          conversionActionRecorded: false,
+        },
+      ],
+      { insightRecorded: 0, positiveResponseRecorded: 0 },
+    );
+
+    expect(
+      selectSocialActivitySupport({ category: value.category, evidence: value.evidence }),
+    ).toMatchObject({
+      support: { key: 'RECRUIT_RESPONSE_GUIDE' },
+      mode: 'GOAL_SPECIFIC',
+      eligibleGoal: 'RECRUIT',
+      fallbackReason: null,
+    });
+  });
+
+  it('keeps common support when policy passes but the exact Goal and Barrier pair is not configured', () => {
+    const value = barrierCase('case_1', 'LEAD');
+    value.evidence.evidenceCode = 'RESPONSE_WITHOUT_NEXT_STEP';
+    value.evidence.thresholds = { minimumPositiveResponses: 2, maximumConversionActions: 0 };
+    value.evidence.goalAttribution = buildSocialActivityBarrierGoalAttribution([
+      'RECRUIT',
+      'RECRUIT',
+    ]);
+    value.evidence.goalMetrics = buildSocialActivityBarrierGoalMetrics(
+      [
+        {
+          goal: 'RECRUIT',
+          postCompleted: true,
+          positiveResponseRecorded: true,
+          conversionActionRecorded: false,
+        },
+        {
+          goal: 'RECRUIT',
+          postCompleted: true,
+          positiveResponseRecorded: true,
+          conversionActionRecorded: false,
+        },
+      ],
+      { insightRecorded: 0, positiveResponseRecorded: 0 },
+    );
+
+    expect(
+      selectSocialActivitySupport({ category: value.category, evidence: value.evidence }),
+    ).toMatchObject({
+      support: { key: 'LEAD_FOLLOW_UP' },
+      mode: 'COMMON',
+      eligibleGoal: 'RECRUIT',
+      fallbackReason: 'GOAL_SPECIFIC_SUPPORT_NOT_CONFIGURED',
+    });
+  });
+
+  it.each([
+    ['EFFECT', 'ATTRIBUTED_INSIGHTS_REQUIRED'],
+    ['TIME', 'GOAL_POLICY_COMMON_ONLY'],
+  ] as const)(
+    'keeps %s on common support when policy cannot use Goal metrics',
+    (category, reason) => {
+      const value = barrierCase('case_1', category);
+      value.evidence.goalAttribution = buildSocialActivityBarrierGoalAttribution(['INQUIRY']);
+      value.evidence.goalMetrics = buildSocialActivityBarrierGoalMetrics(
+        [
+          {
+            goal: 'INQUIRY',
+            postCompleted: true,
+            positiveResponseRecorded: false,
+            conversionActionRecorded: false,
+          },
+        ],
+        { insightRecorded: 0, positiveResponseRecorded: 0 },
+      );
+
+      expect(
+        selectSocialActivitySupport({ category: value.category, evidence: value.evidence }),
+      ).toMatchObject({ eligibleGoal: null, fallbackReason: reason });
+    },
+  );
+
+  it('keeps RESPONSE and LEAD common when Goal-scoped counts do not match the aggregate signal', () => {
+    const value = barrierCase('case_1', 'RESPONSE');
+    value.evidence.evidenceCode = 'RESPONSE_WITHOUT_NEXT_STEP';
+    value.evidence.thresholds = { minimumPositiveResponses: 2, maximumConversionActions: 0 };
+    value.evidence.goalAttribution = buildSocialActivityBarrierGoalAttribution(['RECRUIT']);
+    value.evidence.goalMetrics = buildSocialActivityBarrierGoalMetrics(
+      [
+        {
+          goal: 'RECRUIT',
+          postCompleted: true,
+          positiveResponseRecorded: true,
+          conversionActionRecorded: false,
+        },
+      ],
+      { insightRecorded: 0, positiveResponseRecorded: 0 },
+    );
+
+    expect(
+      selectSocialActivitySupport({ category: value.category, evidence: value.evidence }),
+    ).toMatchObject({ eligibleGoal: null, fallbackReason: 'GOAL_SIGNAL_MISMATCH' });
+  });
+
+  it('keeps common support when account-level insights cannot be assigned to a goal', () => {
+    const value = barrierCase('case_1', 'EFFECT');
+    value.evidence.goalAttribution = buildSocialActivityBarrierGoalAttribution(['INQUIRY']);
+    value.evidence.goalMetrics = buildSocialActivityBarrierGoalMetrics(
+      [
+        {
+          goal: 'INQUIRY',
+          postCompleted: true,
+          positiveResponseRecorded: false,
+          conversionActionRecorded: false,
+        },
+      ],
+      { insightRecorded: 1, positiveResponseRecorded: 1 },
+    );
+
+    expect(
+      selectSocialActivitySupport({ category: value.category, evidence: value.evidence }),
+    ).toMatchObject({
+      mode: 'COMMON',
+      eligibleGoal: null,
+      fallbackReason: 'UNATTRIBUTED_ACCOUNT_METRICS',
+    });
   });
 });

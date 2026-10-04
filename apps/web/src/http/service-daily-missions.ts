@@ -11,6 +11,7 @@ export {
   recordServiceBusinessOutcomeResponse,
   recordServiceMissionFeedbackResponse,
   recordServicePostResponse,
+  recordServiceSocialGoalOutcomeResponse,
 } from './service-daily-mission-outcomes';
 export {
   generateServiceMissionContentVariantResponse,

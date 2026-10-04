@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   CheckMissionQuality,
   GenerateMissionContent,
+  missionContentVariantQualityAudit,
+  socialGoalPlanningProfile,
   type DailyMissionBrief,
   type MissionContent,
   type SocialPreferredFormat,
@@ -30,6 +32,8 @@ const context = {
     personality: null,
   },
   approvedStrategy: {
+    goal: 'INQUIRY' as const,
+    goalPlanning: socialGoalPlanningProfile('INQUIRY'),
     concept: '専門家型',
     positioning: '実践者',
     targetSummary: '初心者',
@@ -254,6 +258,83 @@ describe('CheckMissionQuality', () => {
     expect(result.output).toEqual({ verdict: 'PASS', score: 85, issues: [] });
     expect(JSON.stringify(checker.check.mock.calls[0]?.[0])).not.toContain('secret-id');
     expect(JSON.stringify(checker.check.mock.calls[0]?.[0])).toContain('毎日5分続けた');
+  });
+
+  it('forwards bounded Photo First uncertainty separately from an answered confirmation', async () => {
+    const checker = {
+      check: vi.fn().mockResolvedValue({
+        output: {
+          verdict: 'REVISE',
+          score: 82,
+          issues: [
+            {
+              code: 'PHOTO_FIRST_UNCONFIRMED_FACT',
+              severity: 'ERROR',
+              field: 'body',
+              message: '未確認の商品名を断定しています。',
+              repairInstruction: '確認済みの用途だけを記載する。',
+            },
+          ],
+        },
+        model: 'gpt-5.2',
+        promptVersion: 'mission-quality-checker-v13-photo-first-grounding',
+        inputTokens: null,
+        outputTokens: null,
+        latencyMs: 1,
+      }),
+    };
+    const result = await new CheckMissionQuality(checker).execute({
+      platform: context.platform,
+      brief,
+      content: contents.TEXT,
+      bunshin: context.bunshin,
+      approvedStrategy: context.approvedStrategy,
+      selectedMemories: context.selectedMemories,
+      photoFirstGrounding: {
+        uncertainElements: ['  容器の商品名は判読できない  '],
+        pendingQuestion: '  商品名を教えてください。  ',
+        answeredConfirmation: {
+          question: '  写真は販売中の商品ですか？  ',
+          answer: '  店内で使用している備品です。  ',
+        },
+      },
+    });
+    expect(checker.check).toHaveBeenCalledWith(
+      expect.objectContaining({
+        photoFirstGrounding: {
+          uncertainElements: ['容器の商品名は判読できない'],
+          pendingQuestion: '商品名を教えてください。',
+          answeredConfirmation: {
+            question: '写真は販売中の商品ですか？',
+            answer: '店内で使用している備品です。',
+          },
+        },
+      }),
+    );
+    expect(result.output).toMatchObject({
+      verdict: 'REVISE',
+      issues: [{ code: 'PHOTO_FIRST_UNCONFIRMED_FACT' }],
+    });
+  });
+
+  it('rejects oversized Photo First grounding before calling the provider', async () => {
+    const checker = { check: vi.fn() };
+    await expect(
+      new CheckMissionQuality(checker).execute({
+        platform: context.platform,
+        brief,
+        content: contents.TEXT,
+        bunshin: context.bunshin,
+        approvedStrategy: context.approvedStrategy,
+        selectedMemories: context.selectedMemories,
+        photoFirstGrounding: {
+          uncertainElements: Array.from({ length: 13 }, (_, index) => `未確認${index}`),
+          pendingQuestion: null,
+          answeredConfirmation: null,
+        },
+      }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+    expect(checker.check).not.toHaveBeenCalled();
   });
 
   it('forces scores below 70 to fail even when provider approves', async () => {
@@ -507,5 +588,45 @@ describe('CheckMissionQuality', () => {
       },
     });
     expect(result.output).toEqual({ verdict: 'PASS', score: 91, issues: [] });
+  });
+});
+
+describe('missionContentVariantQualityAudit', () => {
+  it('keeps observed issue codes after a successful repair', () => {
+    expect(
+      missionContentVariantQualityAudit(
+        [
+          {
+            verdict: 'REVISE',
+            score: 72,
+            issues: [
+              {
+                code: 'PHOTO_FIRST_UNCONFIRMED_FACT',
+                severity: 'ERROR',
+                field: 'body',
+                message: '未確認です',
+                repairInstruction: '断定を削除する',
+              },
+            ],
+          },
+          { verdict: 'PASS', score: 92, issues: [] },
+        ],
+        1,
+      ),
+    ).toEqual({
+      verdict: 'PASS',
+      score: 92,
+      issueCodes: ['PHOTO_FIRST_UNCONFIRMED_FACT'],
+      repairCount: 1,
+    });
+  });
+
+  it('returns an empty audit when generation failed before quality checking', () => {
+    expect(missionContentVariantQualityAudit([], 0)).toEqual({
+      verdict: null,
+      score: null,
+      issueCodes: [],
+      repairCount: 0,
+    });
   });
 });

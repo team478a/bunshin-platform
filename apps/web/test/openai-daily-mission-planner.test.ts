@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { socialGoalPlanningProfile } from '@bunshin/capability-social';
 import { OpenAIDailyMissionPlanner } from '../src/providers/openai-daily-mission-planner';
 
 const input = {
@@ -28,6 +29,8 @@ const input = {
     },
   },
   approvedStrategy: {
+    goal: 'RECRUIT' as const,
+    goalPlanning: socialGoalPlanningProfile('RECRUIT'),
     concept: '専門家型',
     positioning: '実践者',
     targetSummary: '初心者',
@@ -90,7 +93,7 @@ describe('OpenAIDailyMissionPlanner', () => {
 
     expect(result).toMatchObject({
       model: 'gpt-5.2',
-      promptVersion: 'daily-mission-planner-v10-feedback-loop',
+      promptVersion: 'daily-mission-planner-v11-goal-planning',
       inputTokens: 90,
       outputTokens: 30,
     });
@@ -121,14 +124,16 @@ describe('OpenAIDailyMissionPlanner', () => {
     expect(request.text.format.schema.properties.personalizationSourceTypes).not.toHaveProperty(
       'uniqueItems',
     );
-    expect(request.input[1]?.content).toContain('10年の経験');
-    expect(request.input[1]?.content).toContain('personality-version-2');
-    expect(request.input[1]?.content).toContain('いっしょに');
-    expect(request.input[1]?.content).toContain('初心者向け抽出教室');
-    expect(request.input[1]?.content).toContain('HELPFUL_EXPERTISE');
-    expect(request.input[1]?.content).toContain('前日のテーマ');
-    expect(request.input[0]?.content).toContain('言い換えだけの企画を避け');
-    expect(request.input[0]?.content).toContain('一般的な生活・自己啓発テーマへ逸らしません');
+    expect(request.input[2]?.content).toContain('10年の経験');
+    expect(request.input[2]?.content).toContain('personality-version-2');
+    expect(request.input[2]?.content).toContain('いっしょに');
+    expect(request.input[2]?.content).toContain('初心者向け抽出教室');
+    expect(request.input[2]?.content).toContain('HELPFUL_EXPERTISE');
+    expect(request.input[2]?.content).toContain('前日のテーマ');
+    expect(request.input[2]?.content).toContain('職場環境');
+    expect(request.input[0]?.content).toContain('CTAの末尾だけで作らず');
+    expect(request.input[1]?.content).toContain('言い換えだけの企画を避け');
+    expect(request.input[1]?.content).toContain('一般的な生活・自己啓発テーマへ逸らしません');
   });
 
   it.each([

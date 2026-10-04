@@ -20,10 +20,13 @@ describe('daily mission content runtime boundary', () => {
   it('keeps the generation orchestrator dependent on the content runtime contract', () => {
     const generation = read('src/services/daily-mission-generation.ts');
 
-    expect(generation).toContain('await runDailyMissionContentGeneration({');
+    expect(generation).toContain('runDailyMissionContentGeneration({');
+    expect(generation).toContain('runDailyMissionDecisionContentOrchestration({');
     expect(generation).toContain(
       'terminologyPolicy: serviceKnowledge?.contentTerminologyPolicy ?? null',
     );
+    expect(generation).toContain("? 'REQUIRE_REBRIEF'");
+    expect(generation).toContain(": 'ALLOW_CONTENT_REPAIR'");
     expect(generation).not.toContain('new OpenAIMissionContentGenerator');
     expect(generation).not.toContain('new OpenAIMissionQualityChecker');
     expect(generation).not.toContain('applyServiceContentTerminology(');

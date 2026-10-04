@@ -1,12 +1,14 @@
 import 'server-only';
 import { MissionAutomationHandlerError, type MissionAutomationHandler } from '@bunshin/application';
 import { ApplicationError } from '@bunshin/shared';
+import { assertUserJob } from '@bunshin/application';
 import { TrendSearchProviderError } from '../providers/trend-research-provider';
 import { WeeklyTrendResearchGenerationService } from '../services/weekly-trend-research';
 
 export function createTrendResearchJobHandler(): MissionAutomationHandler {
   return {
     async execute({ job, localDate }) {
+      assertUserJob(job);
       if (!job.bunshinId) return;
       const match = /^trend-research:([0-9a-f-]{36}):/.exec(job.payloadReference);
       if (!match) throw new MissionAutomationHandlerError('INVALID_JOB_REFERENCE', false);

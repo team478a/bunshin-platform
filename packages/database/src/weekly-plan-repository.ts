@@ -102,6 +102,18 @@ export class PrismaWeeklyPlanRepository implements WeeklyPlanRepository {
     try {
       return await this.client.$transaction(async (tx) => {
         if (!(await this.authorized(tx, input, true))) return null;
+        const strategy = await tx.socialAccountStrategy.findFirst({
+          where: {
+            id: input.strategyId,
+            workspaceId: input.workspaceId,
+            bunshinId: input.bunshinId,
+            socialProfileId: input.socialProfileId,
+            goal: input.strategyGoal,
+            status: 'APPROVED',
+          },
+          select: { id: true },
+        });
+        if (!strategy) return null;
         const active = await tx.contentPillar.findMany({
           where: {
             workspaceId: input.workspaceId,
@@ -163,6 +175,9 @@ export class PrismaWeeklyPlanRepository implements WeeklyPlanRepository {
           data: {
             workspaceId: input.workspaceId,
             bunshinId: input.bunshinId,
+            socialProfileId: input.socialProfileId,
+            strategyId: input.strategyId,
+            strategyGoal: input.strategyGoal,
             weekStartDate: new Date(`${input.weekStartDate}T00:00:00Z`),
             timezone: input.timezone,
             strategySummary: input.strategySummary,

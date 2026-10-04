@@ -222,7 +222,7 @@ export default async function ManagedWeeklyReportPage({
                         <dt>今週のお客様の反応</dt>
                         <dd>
                           {report.businessProgress.outcomeTotal > 0
-                            ? `${report.businessProgress.outcomeTotal}件（問い合わせ${report.businessProgress.outcomes.inquiries}・予約${report.businessProgress.outcomes.reservations}・来店${report.businessProgress.outcomes.visits}・購入申込${report.businessProgress.outcomes.orders}・その他${report.businessProgress.outcomes.other}）`
+                            ? `${report.businessProgress.outcomeTotal}件（問い合わせ${report.businessProgress.outcomes.inquiries}・予約${report.businessProgress.outcomes.reservations}・来店${report.businessProgress.outcomes.visits}・再予約${report.businessProgress.outcomes.repeatReservations}・再来店${report.businessProgress.outcomes.repeatVisits}・購入申込${report.businessProgress.outcomes.orders}・その他${report.businessProgress.outcomes.other}）`
                             : '記録なし'}
                         </dd>
                       </div>

@@ -17,6 +17,21 @@ const valid = {
 };
 
 describe('RecordAiUsage', () => {
+  it('validates the optional explicit reference without requiring it for other callers', async () => {
+    const record = vi.fn();
+    const useCase = new RecordAiUsage({ record });
+    const reference = '00000000-0000-4000-8000-000000000001';
+    await useCase.execute({ ...valid, contentVariantGenerationId: reference });
+    expect(record).toHaveBeenCalledWith(
+      expect.objectContaining({ contentVariantGenerationId: reference }),
+    );
+    for (const invalid of [
+      { ...valid, contentVariantGenerationId: 'invalid' },
+      { ...valid, bunshinId: null, contentVariantGenerationId: reference },
+    ])
+      await expect(useCase.execute(invalid)).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+    expect(record).toHaveBeenCalledOnce();
+  });
   it('records non-sensitive provider measurements', async () => {
     const record = vi.fn().mockResolvedValue(undefined);
     const repository: AiUsageEventRepository = { record };

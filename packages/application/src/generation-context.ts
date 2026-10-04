@@ -12,13 +12,56 @@ export interface SelectedMemoryReference extends GenerationContextReference {
   selectionReason: string;
 }
 
+export interface GenerationDecisionMetadata {
+  schemaVersion: 1;
+  decisionEngineVersion: string;
+  plannerPromptVersion: string;
+  contextVersion: string;
+  decisionStage: 'DAILY' | 'REVISED_BRIEF';
+  status: 'READY';
+  evidenceCompleteness: 'HIGH' | 'MEDIUM' | 'LOW';
+  eligibleSignalTypes: string[];
+  ignoredSignals: Array<{
+    type: string;
+    reason: 'OTHER_GOAL' | 'UNKNOWN_GOAL' | 'NO_OBSERVATION';
+    count: number;
+  }>;
+  missingInputs: string[];
+  limitations: string[];
+  revision?: GenerationDecisionRevisionMetadata;
+}
+
+export interface GenerationDecisionRevisionMetadata {
+  schemaVersion: 1;
+  policyVersion: string;
+  orchestrationPolicyVersion: string;
+  attempt: 1;
+  maximumAttempts: 1;
+  revisionOfDecisionRef: string;
+  decisionRef: string;
+  trigger: {
+    reason: 'QUALITY_REVISE' | 'CONTENT_INSPECTION_FAILED';
+    qualityIssueCodes: string[];
+    contentInspectionIssue:
+      'INSTRUCTION_AS_POST' | 'EXACT_RECENT_CONTENT' | 'SUBSTANTIAL_RECENT_OVERLAP' | null;
+  };
+  initialPlannerModel: string;
+  initialPlannerPromptVersion: string;
+  rebriefModel: string;
+  rebriefPlannerPromptVersion: string;
+  finalQuality: {
+    verdict: 'PASS';
+    issueCodes: string[];
+  };
+}
+
 export interface GenerationContextSnapshotPayload {
   personality: GenerationContextReference | null;
   selectedMemories: SelectedMemoryReference[];
   knowledge: GenerationContextReference[];
   groupKnowledge?: GenerationContextReference[];
   socialProfile: GenerationContextReference;
-  strategy: GenerationContextReference;
+  strategy: GenerationContextReference & { goal?: string };
   weeklyPlan: GenerationContextReference;
   contentPillar: GenerationContextReference;
   productPack: GenerationContextReference | null;
@@ -33,10 +76,12 @@ export interface GenerationContextSnapshotPayload {
     issueCodes: string[];
     repairCount: number;
   };
+  decision?: GenerationDecisionMetadata;
   personalization?: {
     mode: 'AI' | 'FALLBACK';
     sourceTypes: string[];
     availableSourceTypes?: string[];
+    reason?: string;
     onboardingResponse: GenerationContextReference | null;
     businessProfile: GenerationContextReference | null;
     weeklyPlanItem: GenerationContextReference;
@@ -87,6 +132,22 @@ function requireText(value: string, field: string) {
   }
 }
 
+function requireBoundedText(value: string, field: string, maximum: number) {
+  requireText(value, field);
+  if (value.length > maximum) throw new ApplicationError('VALIDATION_ERROR', `invalid ${field}`);
+}
+
+function requireUniqueText(values: string[], field: string, allowEmpty = false, maximum = 100) {
+  if (
+    (!allowEmpty && values.length === 0) ||
+    values.length > maximum ||
+    values.some((value) => value.trim().length === 0) ||
+    values.some((value) => value.length > 200) ||
+    new Set(values).size !== values.length
+  )
+    throw new ApplicationError('VALIDATION_ERROR', `invalid ${field}`);
+}
+
 function requireUniqueReferences(values: GenerationContextReference[], field: string) {
   const ids = values.map(({ id }) => id);
   if (ids.some((id) => id.trim().length === 0) || new Set(ids).size !== ids.length) {
@@ -97,6 +158,7 @@ function requireUniqueReferences(values: GenerationContextReference[], field: st
 export function validateGenerationContextSnapshot(payload: GenerationContextSnapshotPayload) {
   requireText(payload.socialProfile.id, 'socialProfile.id');
   requireText(payload.strategy.id, 'strategy.id');
+  if (payload.strategy.goal !== undefined) requireText(payload.strategy.goal, 'strategy.goal');
   requireText(payload.weeklyPlan.id, 'weeklyPlan.id');
   requireText(payload.contentPillar.id, 'contentPillar.id');
   requireText(payload.promptVersion, 'promptVersion');
@@ -152,6 +214,92 @@ export function validateGenerationContextSnapshot(payload: GenerationContextSnap
         'VALIDATION_ERROR',
         'invalid personalization.availableSourceTypes',
       );
+    if (payload.personalization.reason !== undefined) {
+      requireBoundedText(payload.personalization.reason, 'personalization.reason', 500);
+    }
+  }
+  if (payload.decision) {
+    const decision = payload.decision;
+    if (decision.schemaVersion !== 1)
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid decision.schemaVersion');
+    requireBoundedText(decision.decisionEngineVersion, 'decision.decisionEngineVersion', 200);
+    requireBoundedText(decision.plannerPromptVersion, 'decision.plannerPromptVersion', 200);
+    requireBoundedText(decision.contextVersion, 'decision.contextVersion', 200);
+    if (
+      !['DAILY', 'REVISED_BRIEF'].includes(decision.decisionStage) ||
+      decision.status !== 'READY' ||
+      !['HIGH', 'MEDIUM', 'LOW'].includes(decision.evidenceCompleteness)
+    )
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid decision state');
+    requireUniqueText(decision.eligibleSignalTypes, 'decision.eligibleSignalTypes', false, 20);
+    requireUniqueText(decision.missingInputs, 'decision.missingInputs', true, 20);
+    requireUniqueText(decision.limitations, 'decision.limitations', true, 20);
+    if (decision.ignoredSignals.length > 20)
+      throw new ApplicationError('VALIDATION_ERROR', 'too many decision ignored signals');
+    const ignoredKeys = decision.ignoredSignals.map(({ type, reason, count }) => {
+      requireBoundedText(type, 'decision.ignoredSignals.type', 100);
+      if (!['OTHER_GOAL', 'UNKNOWN_GOAL', 'NO_OBSERVATION'].includes(reason))
+        throw new ApplicationError('VALIDATION_ERROR', 'invalid decision ignored reason');
+      if (!Number.isInteger(count) || count < 1)
+        throw new ApplicationError('VALIDATION_ERROR', 'invalid decision ignored count');
+      return `${type}:${reason}`;
+    });
+    if (new Set(ignoredKeys).size !== ignoredKeys.length)
+      throw new ApplicationError('VALIDATION_ERROR', 'duplicate decision ignored signal');
+    if (decision.missingInputs.length > 0)
+      throw new ApplicationError('VALIDATION_ERROR', 'ready decision has missing inputs');
+    if (!payload.personalization?.reason)
+      throw new ApplicationError('VALIDATION_ERROR', 'decision personalization reason is required');
+    if (
+      (decision.decisionStage === 'DAILY' && decision.revision !== undefined) ||
+      (decision.decisionStage === 'REVISED_BRIEF' && decision.revision === undefined)
+    )
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid decision revision state');
+    if (decision.revision) {
+      const revision = decision.revision;
+      if (
+        revision.schemaVersion !== 1 ||
+        revision.attempt !== 1 ||
+        revision.maximumAttempts !== 1 ||
+        revision.finalQuality.verdict !== 'PASS'
+      )
+        throw new ApplicationError('VALIDATION_ERROR', 'invalid decision revision');
+      for (const [field, value] of [
+        ['policyVersion', revision.policyVersion],
+        ['orchestrationPolicyVersion', revision.orchestrationPolicyVersion],
+        ['initialPlannerModel', revision.initialPlannerModel],
+        ['initialPlannerPromptVersion', revision.initialPlannerPromptVersion],
+        ['rebriefModel', revision.rebriefModel],
+        ['rebriefPlannerPromptVersion', revision.rebriefPlannerPromptVersion],
+      ] as const)
+        requireBoundedText(value, `decision.revision.${field}`, 200);
+      if (
+        !/^sha256:[0-9a-f]{64}$/.test(revision.revisionOfDecisionRef) ||
+        !/^sha256:[0-9a-f]{64}$/.test(revision.decisionRef)
+      )
+        throw new ApplicationError('VALIDATION_ERROR', 'invalid decision revision reference');
+      if (!['QUALITY_REVISE', 'CONTENT_INSPECTION_FAILED'].includes(revision.trigger.reason))
+        throw new ApplicationError('VALIDATION_ERROR', 'invalid decision revision trigger');
+      if (
+        revision.trigger.contentInspectionIssue !== null &&
+        !['INSTRUCTION_AS_POST', 'EXACT_RECENT_CONTENT', 'SUBSTANTIAL_RECENT_OVERLAP'].includes(
+          revision.trigger.contentInspectionIssue,
+        )
+      )
+        throw new ApplicationError('VALIDATION_ERROR', 'invalid decision revision inspection');
+      requireUniqueText(
+        revision.trigger.qualityIssueCodes,
+        'decision.revision.trigger.qualityIssueCodes',
+        true,
+        20,
+      );
+      requireUniqueText(
+        revision.finalQuality.issueCodes,
+        'decision.revision.finalQuality.issueCodes',
+        true,
+        20,
+      );
+    }
   }
   for (const memory of payload.selectedMemories) {
     requireText(memory.summary, 'selectedMemory.summary');

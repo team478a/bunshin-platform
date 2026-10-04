@@ -12,6 +12,8 @@ import {
   ListSocialAccountStrategies,
   ListSocialProfiles,
   ListWeeklyPlans,
+  type SocialAccountStrategy,
+  type WeeklyPlan,
 } from '@bunshin/capability-social';
 import { ApplicationError } from '@bunshin/shared';
 
@@ -22,6 +24,24 @@ interface GenerationScope {
   groupId?: string | null;
   bunshinId: string;
   actorUserId: string;
+}
+
+export function strategyForWeeklyPlan(
+  plan: Pick<WeeklyPlan, 'strategyId' | 'strategyGoal'>,
+  strategies: SocialAccountStrategy[],
+) {
+  if (!plan.strategyId) {
+    const current = strategies.find(({ status }) => status === 'APPROVED');
+    if (!current) throw new ApplicationError('CONFLICT', 'approved strategy is required');
+    return current;
+  }
+  const snapshotStrategy = strategies.find(
+    ({ id, status }) =>
+      id === plan.strategyId && (status === 'APPROVED' || status === 'SUPERSEDED'),
+  );
+  if (!snapshotStrategy || snapshotStrategy.goal !== plan.strategyGoal)
+    throw new ApplicationError('CONFLICT', 'weekly plan strategy is unavailable');
+  return snapshotStrategy;
 }
 
 export async function loadDailyMissionPlanningContext(input: {
@@ -41,25 +61,6 @@ export async function loadDailyMissionPlanningContext(input: {
   const profiles = await new ListSocialProfiles(new db.PrismaSocialProfileRepository()).execute(
     input.scope,
   );
-  const profile = input.socialProfileId
-    ? profiles.find(({ id, status }) => id === input.socialProfileId && status === 'ACTIVE')
-    : profiles.find(({ status }) => status === 'ACTIVE');
-  if (!profile) throw new ApplicationError('NOT_FOUND', 'active social profile not found');
-
-  const strategies = await new ListSocialAccountStrategies(
-    new db.PrismaSocialAccountStrategyRepository(),
-  ).execute({ ...input.scope, socialProfileId: profile.id });
-  const strategy = strategies.find(({ status }) => status === 'APPROVED');
-  if (!strategy) throw new ApplicationError('CONFLICT', 'approved strategy is required');
-
-  // Trend candidates remain scoped to the workspace, Bunshin and selected social profile.
-  const trendIdeas = await new ListActiveTrendIdeas(new db.PrismaTrendResearchRepository()).execute(
-    {
-      ...input.scope,
-      socialProfileId: profile.id,
-      at: new Date(),
-    },
-  );
   const weeklyPlans = await new ListWeeklyPlans(new db.PrismaWeeklyPlanRepository()).execute(
     input.scope,
   );
@@ -70,6 +71,30 @@ export async function loadDailyMissionPlanningContext(input: {
   );
   if (!weeklyPlan)
     throw new ApplicationError('NOT_FOUND', 'confirmed weekly plan item not found for date');
+  if (
+    input.socialProfileId &&
+    weeklyPlan.socialProfileId &&
+    input.socialProfileId !== weeklyPlan.socialProfileId
+  )
+    throw new ApplicationError('CONFLICT', 'weekly plan belongs to another social profile');
+  const profileId = weeklyPlan.socialProfileId ?? input.socialProfileId;
+  const profile = profileId
+    ? profiles.find(({ id, status }) => id === profileId && status === 'ACTIVE')
+    : profiles.find(({ status }) => status === 'ACTIVE');
+  if (!profile) throw new ApplicationError('NOT_FOUND', 'active social profile not found');
+  const strategies = await new ListSocialAccountStrategies(
+    new db.PrismaSocialAccountStrategyRepository(),
+  ).execute({ ...input.scope, socialProfileId: profile.id });
+  const strategy = strategyForWeeklyPlan(weeklyPlan, strategies);
+
+  // Trend candidates remain scoped to the workspace, Bunshin and selected social profile.
+  const trendIdeas = await new ListActiveTrendIdeas(new db.PrismaTrendResearchRepository()).execute(
+    {
+      ...input.scope,
+      socialProfileId: profile.id,
+      at: new Date(),
+    },
+  );
   const weeklyItem = weeklyPlan.items.find(
     ({ scheduledDate }) => scheduledDate === input.missionDate,
   );

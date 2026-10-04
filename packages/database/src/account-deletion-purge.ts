@@ -1,6 +1,7 @@
 import type { AccountDeletionPurgeRepository } from '@bunshin/application';
 import { purgeAccountMedia, type AccountDeletionMediaStorage } from './account-deletion-media';
 import { Prisma, type PrismaClient, prisma } from './client';
+import { eraseAccountImprovementFeedback } from './improvement-feedback-retention';
 
 export class PrismaAccountDeletionPurgeRepository implements AccountDeletionPurgeRepository {
   constructor(
@@ -74,6 +75,7 @@ export class PrismaAccountDeletionPurgeRepository implements AccountDeletionPurg
           ? []
           : await tx.bunshin.findMany({ where: scope, select: { id: true } });
       const bunshinIds = personalBunshins.map(({ id }) => id);
+      await eraseAccountImprovementFeedback(tx, input.userId);
 
       const [identities, lineConnections, linePreferences, deepLinks, posts, activities] =
         await Promise.all([

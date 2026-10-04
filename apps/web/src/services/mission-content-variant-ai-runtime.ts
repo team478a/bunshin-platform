@@ -4,6 +4,7 @@ import {
   GenerateMissionContent,
   type DailyMission,
   type DailyMissionScope,
+  type MissionQualityCheckerOutput,
 } from '@bunshin/capability-social';
 import { ApplicationError } from '@bunshin/shared';
 import { resolveOpenAiRuntimeConfiguration } from '../ai/runtime-provider-configuration';
@@ -12,10 +13,16 @@ import { withOrganizationAiGenerationQuota } from '../organization-ai-generation
 import { OpenAIMissionContentGenerator } from '../providers/openai-mission-content-generator';
 import { OpenAIMissionQualityChecker } from '../providers/openai-mission-quality-checker';
 import {
+  OpenAiPhotoFirstAnalyzer,
+  PhotoFirstAnalysisError,
+  type PhotoFirstAnalysisResult,
+} from '../providers/openai-photo-first-analyzer';
+import {
   recentMissionQualityContext,
   type RecentDailyMissionContent,
 } from './daily-mission-content-quality';
 import type { MissionContentVariantContext } from './mission-content-variant-context';
+import { photoFirstVariantInstructions } from './photo-first-variant-instructions';
 import { applyServiceContentTerminology } from './service-content-terminology';
 
 export interface MissionContentVariantUsageState {
@@ -27,6 +34,8 @@ export interface MissionContentVariantUsageState {
   hasOutputTokens: boolean;
   estimatedCostMicros: number;
   requestCount: number;
+  qualityAttempts: MissionQualityCheckerOutput[];
+  qualityRepairCount: number;
 }
 
 export const createMissionContentVariantUsageState = (): MissionContentVariantUsageState => ({
@@ -37,15 +46,24 @@ export const createMissionContentVariantUsageState = (): MissionContentVariantUs
   hasOutputTokens: false,
   estimatedCostMicros: 0,
   requestCount: 0,
+  qualityAttempts: [],
+  qualityRepairCount: 0,
 });
 
 export async function generateMissionContentVariantWithAi(input: {
+  generationId: string;
   scope: DailyMissionScope;
   mission: DailyMission;
   recentMissions: RecentDailyMissionContent[];
   context: MissionContentVariantContext;
   usageIdempotencyPrefix: string;
   variantInstructions?: string[];
+  photoFirst?: {
+    bytes: Uint8Array;
+    mimeType: 'image/jpeg' | 'image/png' | 'image/webp';
+    sourceNote: string;
+  };
+  photoFirstConfirmation?: { question: string; answer: string };
   usageState: MissionContentVariantUsageState;
 }) {
   const runtime = await resolveOpenAiRuntimeConfiguration();
@@ -73,6 +91,7 @@ export async function generateMissionContentVariantWithAi(input: {
     input.usageState.estimatedCostMicros += runtime.requestCostUsdMicros;
     input.usageState.requestCount += 1;
     await recordAiUsageSafely({
+      contentVariantGenerationId: input.generationId,
       ...input.scope,
       taskType,
       provider: 'openai',
@@ -95,6 +114,46 @@ export async function generateMissionContentVariantWithAi(input: {
       generate,
     });
   const { context, mission } = input;
+  let photoFirst: PhotoFirstAnalysisResult | null = null;
+  if (input.photoFirst) {
+    try {
+      photoFirst = await generateWithQuota('photo-first-analysis', () =>
+        new OpenAiPhotoFirstAnalyzer({ apiKey: runtime.apiKey, model: runtime.model }).analyze({
+          ...input.photoFirst!,
+          company: {
+            name: context.bunshinContext.name,
+            objectiveSummary: context.bunshinContext.objectiveSummary,
+            audienceSummary: context.bunshinContext.audienceSummary,
+            personalitySummary: context.bunshinContext.personalitySummary,
+            businessProfile: context.businessProfile,
+          },
+          strategy: {
+            goal: context.strategyContext.goal,
+            goalPlanning: context.strategyContext.goalPlanning,
+            concept: context.strategyContext.concept,
+            positioning: context.strategyContext.positioning,
+            targetSummary: context.strategyContext.targetSummary,
+            ctaStrategy: context.strategyContext.ctaStrategy,
+          },
+          platform: context.profile.platform,
+          mission: { topic: mission.topic, angle: mission.angle, reason: mission.reason },
+          recentPosts: input.recentMissions
+            .slice(-12)
+            .map(({ topic, angle }) => ({ topic, angle })),
+          ...(input.photoFirstConfirmation ? { confirmation: input.photoFirstConfirmation } : {}),
+        }),
+      );
+    } catch (error) {
+      if (error instanceof PhotoFirstAnalysisError)
+        throw new ApplicationError(
+          error.retryable ? 'AI_PROVIDER_UNAVAILABLE' : 'CONTENT_REJECTED',
+          '写真を読み取れませんでした',
+          error,
+        );
+      throw error;
+    }
+    await usage('photo-first-analysis', 'PHOTO_FIRST_ANALYSIS', photoFirst);
+  }
   const brief = {
     missionDate: mission.missionDate,
     socialProfileId: context.profile.id,
@@ -124,6 +183,12 @@ export async function generateMissionContentVariantWithAi(input: {
       '原案と同じ目的、確認済み事実、CTA、開示、許可済みURLを維持する',
       '導入のフック、文章構成、具体例、言葉選びを明確に変える',
       '原案の表面的な言い換えにせず、同じユーザーが比較して選べる別案にする',
+      ...(photoFirst
+        ? photoFirstVariantInstructions({
+            ...photoFirst,
+            ...(input.photoFirstConfirmation ? { confirmation: input.photoFirstConfirmation } : {}),
+          })
+        : []),
       ...(input.variantInstructions ?? []),
     ],
   };
@@ -148,10 +213,21 @@ export async function generateMissionContentVariantWithAi(input: {
     businessProfile: context.businessProfile,
     selectedMemories: context.selectedMemories,
     groupKnowledge: context.groupKnowledge,
+    ...(photoFirst
+      ? {
+          photoFirstGrounding: {
+            uncertainElements: photoFirst.analysis.uncertainElements,
+            pendingQuestion: photoFirst.planning.confirmationQuestion,
+            answeredConfirmation: input.photoFirstConfirmation ?? null,
+          },
+        }
+      : {}),
   });
   let quality = await generateWithQuota('variant-quality:0', () => checker.execute(qualityInput()));
+  input.usageState.qualityAttempts.push(quality.output);
   await usage('variant-quality:0', 'QUALITY_CHECKER', quality);
   if (quality.output.verdict === 'REVISE') {
+    input.usageState.qualityRepairCount += 1;
     content = await generateWithQuota('variant-content:1', () =>
       generator.execute({
         ...contentInput,
@@ -164,10 +240,11 @@ export async function generateMissionContentVariantWithAi(input: {
     };
     await usage('variant-content:1', 'MISSION_CONTENT_VARIANT_REPAIR', content);
     quality = await generateWithQuota('variant-quality:1', () => checker.execute(qualityInput()));
+    input.usageState.qualityAttempts.push(quality.output);
     await usage('variant-quality:1', 'QUALITY_CHECKER', quality);
   }
   if (quality.output.verdict !== 'PASS')
     throw new ApplicationError('CONTENT_REJECTED', 'generated variant failed quality check');
 
-  return { content, quality };
+  return { content, quality, photoFirst };
 }

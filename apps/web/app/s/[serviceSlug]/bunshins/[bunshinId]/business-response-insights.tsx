@@ -12,6 +12,8 @@ const outcomeLabels: Array<[keyof BusinessOutcomes, string]> = [
   ['inquiries', '問い合わせ'],
   ['reservations', '予約'],
   ['visits', '来店'],
+  ['repeatReservations', '再予約'],
+  ['repeatVisits', '再来店'],
   ['orders', '購入・申込'],
   ['other', 'その他'],
 ];
@@ -28,6 +30,8 @@ export function buildBusinessResponseInsight(missions: BusinessResponseMission[]
     inquiries: 0,
     reservations: 0,
     visits: 0,
+    repeatReservations: 0,
+    repeatVisits: 0,
     orders: 0,
     other: 0,
   };
@@ -58,7 +62,12 @@ export function buildBusinessResponseInsight(missions: BusinessResponseMission[]
     };
   }
 
-  const actionCount = totals.reservations + totals.visits + totals.orders;
+  const actionCount =
+    totals.reservations +
+    totals.visits +
+    totals.repeatReservations +
+    totals.repeatVisits +
+    totals.orders;
   if (actionCount > 0) {
     return {
       postedCount: posted.length,

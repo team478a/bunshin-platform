@@ -1,5 +1,155 @@
 # BUNSHIN Platform Decision Log
 
+## Feedback maintenanceの非互換移行は停止証明を本番gateにする
+
+- 2026-10-03、PR #1095 merge後main `6fd55288a47faee12f4379fc5a384d4b538265d5`。次のゴールはリリースRunbookのみ。本番停止/DB操作/deployを承認済みと扱わない。
+- `jobs/run`はworker前にretention.schedule/履歴cleanupを実行する。scheduleだけの停止、lease5分待機、health readinessだけでは安全な移行を証明できない。
+- production buildは新アプリ公開前にDBを移行する。既存機能で旧deployment/手動起動を含む停止を証明できない場合はNO-GOとし、停止guardの先行PRを別判断にする。secret変更や新Workerへ先回りしない。
+- DB移行後は旧アプリpromoteを一般rollback手順として使わない。新契約対応版を維持し、不可逆削除/backup復元後の再削除を別承認する。`docs/improvement/IMPROVEMENT_MAINTENANCE_RELEASE_RUNBOOK.md`が対象移行の運用条件。
+
+## Feedback purge Job限定のmaintenance主体と終端履歴保持
+
+- 2026-10-03、PR #1094 merge後main `f1bb8f9b2d5c4d606fd7cae4f2ec9fbcf635917e`。ユーザーはpurge限定の本人参照なし、既存対象の限定移行、終端後180日保持、稼働中Job非削除、通常Jobへの非横展開を「はい」で承認した。
+- 通常JobはrequestedBy必須を維持。purge専用のnull主体はJob種/payload/key/CapabilityなしをDB制約とApplication境界で限定し、公開enqueueは予約種を拒否する。System Userや他Workspaceの主体を借りない。
+- 移行は既存Groupに所有scopeが一致し、正規v1 payload/日次key・逆参照なしのpurge Jobだけ。想定外のpurge行はmigrationを停止し、内容をログへ出さず別途確認する。通常Jobの本人参照/退会規則は変更しない。
+- purgeの終端日時を固定する。旧DEADや終端日時不明は移行日時から保守的に180日保持。新規終端後の復帰/時刻書換を拒否する。内部Cronだけが環境限定・最大100行・逆参照なし・期限超過終端Jobを削除し、稼働中/通常Jobや同日keyを消さない。不可逆cleanupの本番適用は実施しない。
+- schema変更と旧workerは同時稼働非互換。承認済みリリースではCron/workerを停止しmigration→新アプリ→再開する。rollbackは旧アプリだけを戻さず、新契約を維持してcleanup停止を先に行う。本人参照の復元は推測しない。
+
+## 期限処理の孤立scope: 検出とJob履歴の現行契約を先に確定する
+
+- 2026-10-03、PR #1093 merge後main `f135b2e73ce7292d19aeeef0edde6fbe87598c32`。既存退会計画はUserをsoft DELETEDとし、Generic Jobのpseudonymous参照を保持する。Feedback/auditの90/180日承認だけで全Job履歴の削除期限が承認されたとは扱わない。
+- 今回は内部Cronに「期限超過かつWorkspaceMembershipなしのscopeがあるか」のbooleanだけを追加し、失敗時はnull（未確認）とする。個人/Service ID・件数・原本を返さず、RepeatableReadの同じsnapshotで検出と登録候補を読む。別WorkspaceのUser、勝手なSystem Account、権限変更で孤立を隠さない。
+- 実Repositoryの退会取消/完了、Job requester FK、翌日の再登録と履歴保持を隔離DBでcharacterizationする。Job nullable化・既存履歴消去・日数・停止時の取消規則は今回変更しない。後続の最小案は専用maintenance Job主体と限定保持契約の設計で、通常User Jobを巻き込まない。運用承認前に不可逆削除へ進めない。
+
+## Feedback期限処理: 既存Jobで削除と継続を原子的に確定する
+
+- 2026-10-03、PR #1092 merge後 `38a04b86e5e468f85ab4249ede469542390fce8c`。承認済み90/90/180日を変更しない。
+- Cron認証後の既存Job workerへ内部schedulerと専用executorを接続する。新Worker/キュー/公開操作口/schemaは作らない。通常enqueueのACTIVE所属制約は緩めず、期限処理専用のtrusted DB経路で停止済みService/Workspaceも扱う。
+- Job行→Service行の順にlockし、保存済みpayload/scope/environment・leaseを照合してbounded purgeとSUCCEEDED/継続を同txで確定する。commit直前の時計でlease切れなら全rollback。正常なbatch継続は障害試行を消費せず、失敗は既存FailJobの有限backoffへ渡す。
+- 日次key、同scope未完Job除外、期限の古いscope優先で登録を限定する。requestedByは既存Workspace所属の本人参照を利用するが、本人の能動操作/権限委譲とは扱わない。所属自体がない孤立scopeは登録できず運用条件として報告する。本番適用/周期/負荷/バックアップ削除保証は別途確認する。
+
+## Improvement Candidate保存: 承認された保持方針と削除を同じ境界へ接続
+
+- 日付: 2026-10-03。基準main `4d9bfaa1d2316a62b11cee71726e2f9228903648`。ユーザーは原本受付90日、候補週終了90日、限定監査操作180日、本人削除/退会完了時の原本削除・候補失効・監査本人参照除去、組織所有の手動確認維持を提示後「進めてください」と承認した。
+- 固定版 `feedback-retention-v1` をサーバー内部で使用。原本は期限超過時に読取対象外、候補も保存/再送で期限延長しない。新表はCandidateと最小操作監査のみ。原本リンクやEvidence JSON/count/本人情報を複製しない。
+- 同Service行のTransaction lockと原本変更DB triggerにより書込・原本削除を直列化し、直接削除/cascadeでも週全体hashを消去・STALE化する。管理者/User/Workspace/Service設定の行lockで失効と操作の順序を固定する。DB失敗は全rollbackし自動再実行しない。
+- 既存退会完了Transaction内で本人原本削除と監査actor消去を実施。組織資産のmanual reviewを迂回しない。HTTP/UI書込・承認・自動修正・Provider・本番接続/デプロイは今回対象外。隔離Postgres CIの検証と本番適用を分ける。
+
+## Improvement Candidate純粋契約: Repositoryの原子性をPortとして要求し、DB実証と分ける
+
+- 日付: 2026-10-03。PR #1090 merge後の基準main `50523d5fbcc7530a7bb9ecb6e612e0d9faa0069b`。
+- 初回は既存Candidateの人手確認/対象外操作契約のみ。作成・STALE再開・承認・保存DB・HTTP/UIは追加しない。domainの状態/CASとApplicationの限定Feedback検証を分離し、SNS/Providerを共通domainに埋め込まない。
+- 原子的Portに現行認可・最新Evidence・候補・再送記録・CAS/audit一体commitを要求する。fakeはこの契約を検証するだけで、現行Prisma Adapterの別tx読取を原子的保存へ接続した証拠にはしない。
+- trustedな承認済み方針がない場合は操作拒否。保持日数のdefaultを設けず、仮の90/180日を実設定にしない。同一操作再送も権限・期限・最新週全体/bucket根拠・表示条件を再確認し、後続更新後の古い再送は競合とする。
+- 結果はopaque候補ID・CAS版・確認状態だけ。原本ID/hash/自由文は結果に出さない。確認済みは実装承認ではない。本番/schema/削除連携は別条件。
+
+## Improvement人手確認候補: 保存より先に削除とRevision失効の契約を固定する
+
+- 日付: 2026-10-03、状態: 設計提案（保持日数/削除方針は未承認）。基準main `f50f1ee5d58f02f0e9abfc309f8de31f405e963d`、PR #1089 merge後。
+- `docs/improvement/IMPROVEMENT_TRIAGE_CANDIDATE_DESIGN.md`を参照。本人Feedbackの限定bucketを人手トリアージ候補として分離し、REVIEWEDを確定BUG/APPROVEDへ自動昇格させない。既存OEM支援CandidateやPlatform Admin監査を保存/認可の代替にしない。
+- 原本cascadeはBunshin物理削除時だけで、既存退会purgeのsoft deleteはFeedback削除を保証しない。永続化前に保持・原本削除・候補失効・限定audit消去の連携をレビューする。原本ID/旧Evidence/hashを監査へ複製しない。
+- 同Service owner/admin再認可、週全体/対象bucket Evidence版、Candidate CAS版、操作再送UUIDを分離する。読取後に別txで保存するだけでは競合を解決せず、削除/所属失効も含むTransaction/lock順序を後続で検証する。少数セル/不完全は作成操作からも迂回させない。
+- 次はschema/HTTP/UIなしの純粋契約・fake否定テスト。原本/候補90日、限定audit180日の値は運用提案であって確定方針ではない。実装承認・自動修正・通知・新Worker/Providerは別判断。今回は文書だけ。
+
+## Improvement Feedback確認画面: 少人数と原本参照をサーバー側で伏せる
+
+- 日付: 2026-10-03、状態: 実装PRで検証。
+- PR #1088のEvidenceを同ServiceのADMINISTRATION管理Resolver＋既存AdapterのDB再認可で読み取り専用表示する。Content Editor/参加者/本部の暗黙横断権限を許可しない。公開状態には依存せず、SOCIAL能力のあるBunshinまたは既存SOCIAL報告がある自Serviceだけに接続する。
+- 表示窓は日本時間の完了済み月曜〜日曜、直近12週から選ぶ。任意期間・User/Bunshin/Package/上限の指定は拒否する。固定非重複窓は細分化を減らすが差分攻撃/再識別防止の完全な保証ではない。
+- 表示の仮の少数セル基準は各bucketで5報告者以上。1つでも未達なら全bucketのラベル・件数と全体件数を一括で伏せ、部分合計からの逆算を避ける。読取不完全も詳細/件数を表示しない。5は匿名化保証ではなく運用前レビュー対象。Engineの3報告/2人の人手確認ルールは変更しない。
+- UI向けmodelをサーバー側で明示projectionし、sourceRefs、scope ID、User/Bunshin、clusterRef、Evidence revision、選択digestを除く。CSS非表示やClient componentへraw Evidenceを渡す方式にしない。CSV/コピー/個票/承認/自動修正は追加しない。
+- DB障害/原本不一致は取得不能として扱い、0件にしない。認可失効は404。原因/母集団/率/原価が未確認であることを表示する。Schema/原本書込/依存/本番/配信は変更しない。
+
+## Improvement Feedback Evidence: 決定的な要確認候補を確定Issueから分離する
+
+- 日付: 2026-10-03、状態: 実装PRで検証。
+- PR #1087の管理者読取とCollect契約を再利用し、非永続の選択コード別EvidenceをApplicationへ追加する。DBの原本・認可・入力保存は変更しない。HTTP/管理UI/Job/Candidate永続化・承認・指示案生成は含めない。
+- 同じ種類/場面/困り具合で束ねるが、受付IDの重複と別報告の意味的重複を混同しない。distinct報告者はUser単位とし、複数Bunshinを複数人にしない。V1の仮の確認対象基準は3報告以上かつ2人以上、完全な読取。満たさなければ原本参照・観測件数を保持したまま保留する。この値は統計的有意性/表示匿名化の保証ではなく、モニター運用前にレビューする。
+- UNKNOWN/自己申告を維持し、機械障害・原因・再現率・外部Provider帰属は未確認。保留解除は人の確認対象にするだけでBUGやAPPROVEDへ遷移しない。外部障害除外・技術的相関・他Adapter統合は別の証拠が必要。
+- scope/期間/subject選択/Adapter版/rule版/コードから決定的なクラスタ参照を作り、根拠の内容・人数・完全性が変わればEvidence revisionを変更する。入力順や同じ受付IDの再読取でrevisionを変えない。原文/写真/Memoryや直接User IDを返却Evidenceへ複製しない。内部参照とhashは匿名化保証ではない。
+- 母集団・率・原価は未取得のまま。保存/削除/保持期限の設計レビュー前に永続Issueを追加しない。最初のbounded batchのみ、本番実行口は追加しない。
+
+## Improvement Feedback観測: 自己申告を確定BUGや発生率へ昇格させない
+
+- 日付: 2026-10-03、状態: 実装PRで検証。
+- PR #1086の専用原本を既存CollectImprovementObservationsへ接続する。共通Applicationに選択コードのprojectionを置き、databaseに固定scope＋DB管理者再認可を持つ独立読取Adapterを追加する。SOCIAL入口の報告だけを対象とし、ハッシー名やOEM名で分類しない。
+- 運営者は同Workspace/ServiceのACTIVE SERVICE_OWNER/SERVICE_ADMINだけ。参加者や編集者、本部/Workspace管理者へ暗黙の横断権限を与えない。本人書込の認可を緩めず、HTTP/UI/Jobを追加しない。
+- 原本のWorkspace/Service/Package/actor/Bunshinを正本にし、現在のBunshinの所有範囲との不一致は安全側で読取失敗とする。別Serviceへ付け替えたり、移動/譲渡を日時やkeyから推定しない。退会済み報告者や無効能力を理由に過去の報告を黙って除外しない。
+- SELF_REPORTED_TROUBLE、共通分類UNKNOWNで渡す。OPERATIONをBUG、CONTENTをAI_QUALITY、WAITINGをPERFORMANCEへ自動認定しない。報告件数とdistinct報告者を別計測し、実際の困りごとの母集団/発生率/解決率/原価はUNKNOWN/null。
+- limit+1と半開期間で最初のbounded batchを取得し、打切りはPARTIAL。保存原本の読取完全性と現実の捕捉率を分離する。自由文・素材・Memory・送信キーを取得しない。Schema/書込/Provider/設定/本番は変更しない。
+
+## Improvement Feedback: 本人の選択式原本を投稿評価・支援ケースから分離する
+
+- 日付: 2026-10-03、状態: 実装PRで検証。
+- 共通「困った」報告は自己申告信号であり、BUG認定・Mission評価・SNS障壁・運営者SupportCaseへ直接置換しない。専用原本には限定コード、本人Workspace/Service/Bunshin/Package、送信キー、受付時刻だけを保存する。自由文/写真/会話/Memoryを取得しない。
+- 初回入口はSOCIAL能力が有効なサービスの本人ホーム。ハッシー名やOEM名を共通Applicationへハードコードせず、研修・占いへ暗黙拡張しない。Service管理権限は他人のBunshinへの書込み権限にしない。
+- 保存Transaction内で所有・参加・能力を再検証。Workspace/actorのlockとuniqueで同時再送を直列化し、同じキー・同じ内容だけを元の受付結果へ戻す。内容/scope変更は競合、所属失効後は再送も拒否。新規24時間10件の上限と保存済み再送を分ける。
+- 原本の限定コードを将来Adapterで読める境界まで。検知/管理画面/承認/自動指示実行、本番Migration、実通知は含めない。保持期限、退会後削除、他Package入口、実機/E2Eは後続の確認事項として残す。
+
+## Photo First観測: 開始経路と工程利用を明示参照で残す
+
+- 日付: 2026-10-03
+- 状態: Accepted（調査・最小記録補完・回帰検証を同一ゴールとする）
+- Generationのclaim時にSTANDARD / PHOTO_FIRSTをnullable列へ保存する。既存行・未指定の旧呼出しはnull（不明）のまま。成功Metadataやkeyの文字列から開始経路を補完しない。
+- AiUsageEventには既存Generationへの任意の明示FKを追加する。RepositoryでWorkspace/Bunshin/actorとMission所有権を照合し、同一利用keyの参照付け替えを拒否する。Serviceは本人のみ、個人Workspaceは既存claim同様の明示OWNER/ADMIN管理権限も維持する（単なるMEMBERには許可しない）。利用原価は既存欄を維持し、欠測を0として補完しない。
+- Generation削除時は参照のみnullへ戻し、利用イベントの費用記録を連鎖削除しない。利用記録は従来どおりbest effortで、全工程の完全性は保証しない。claim以前の拒否・失敗は今回の母集団外。
+- 品質読取は開始経路の明示群を追加し、旧Metadata/品質signal/未帰属とは分ける。全Photo First成功率のUNKNOWNは維持する。生の本文・写真・解析・個人メモリーは観測へ追加しない。
+- 新Worker/Provider/Job、管理UI、Feedback、検知・候補生成、本番migration、実生成・送信は含めない。schema追加はnullable2列とFK/index/checkのみで、既存業務判定や課金を変更しない。
+
+## Improvement Engine: Photo First品質は確定素材Relationと未帰属を分けて観測する
+
+- 日付: 2026-10-03
+- 状態: Accepted（PR #1083マージ後の独立読取作業）
+- 既存本人Mission単位のlistQualityAuditsの認可を緩めず、別のService管理者読取Adapterを追加する。固定scope照合とDBでのACTIVE owner/admin再認可を行い、原写真・本文・解析JSON・回答・秘密値を取得しない。
+- 専用Photo First Metadataとの明示RelationはPHOTO_METADATA、既知品質codeだけはPHOTO_ISSUE_SIGNAL、その他はUNATTRIBUTED。Metadataなしを通常生成と断定しない。idempotency keyや時刻の近さから失敗の発生経路を推測しない。
+- 生成開始時刻の期間cohortを読み、PASS/修正後PASS/最終REVISE/REJECTと検査未実行/処理中/不正監査/期間後更新を分ける。検査未実行をchecked分母に含めず、欠損がある群の率はnull。品質PASSと動画/投稿案の保存成功は別。
+- limit+1で取得打切りを検知し、完全な母集団と見なさない。全Photo First開始試行の帰属と欠測が未解決なので、全Photo First成功率は常にnull/UNKNOWN。成功Metadataだけで全試行の成功率を作らない。
+- 保存Prompt Versionはusage()の最後の工程版であり、生成版や品質ruleの完全な履歴ではない。既知版のcode分類と未知版を保持する。複数版混合の集計を修正前後の因果評価へ転用しない。
+- schema・既存生成/品質検査/Job/Provider・HTTP/UI・設定は変更しない。次は未帰属・工程間相関の不足を実証し、必要な最小記録補完の候補を別PRで検討する。
+
+## Improvement Engine: Hassy支援結果は提供期間cohortと提供時Goalから読む
+
+- 日付: 2026-10-03
+- 状態: Accepted（Phase 1マージ後の次の最小読取作業）
+- SOCIAL capabilityにSnapshotのGoal分類とcohort集計を置き、databaseに既存支援行の読取Adapterを置く。共通EngineへSNS Goalを追加しない。schema・Provider・Job・HTTP/UIを変更しない。
+- 信頼されたcompositionが固定scopeを渡す。Adapter自身が同じTransaction内でACTIVEのSERVICE_OWNER/SERVICE_ADMINを再検証する。tenant/Service/環境の入力から認可を推定しない。管理UIへの公開と本部横断権限は後続作業。
+- offeredAtの半開期間を母集団にし、toExclusive以前の実acceptedAt/completedAt/skippedAtで集計する。現在のstatusから過去の状態や未記録のACCEPTを再現しない。退会済み参加者を母集団から黙って除外しない。
+- COMMON、MIXED、UNATTRIBUTED、LEGACY、INVALIDはGoal固有支援と別bucket。現在Goal・最新Evidence・再発回数から補完しない。Snapshot全文はDB読取後に破棄し、文面・自由文・原素材をEngineへ渡さない。
+- bounded読取はlimit+1で打切りを検知し、PARTIALなら完了率をnullにする。欠損/矛盾する結果時刻も率を保留する。未取得原価はnull。非再発や事業成果への因果効果は評価しない。
+- 初回はcursorなしの最大1,000件/90日間。ページング、管理画面、少数セル表示抑止、Photo First品質は別PR。取り消しは本Adapterの呼出しを外すだけで、既存支援記録を変更しない。
+
+## Improvement Engine Phase 1: 共通契約は非永続の収集と純粋domainから始める
+
+- 日付: 2026-10-02
+- 状態: Accepted（ユーザー承認済みPhase 0の最小実装単位）
+- 共通分類、scope、観測Envelope、集計完全性、原価欠損、状態遷移、承認Revision照合をplatform-domainへ置く。SNS Goal・Photo First・研修難易度は共通型へ追加しない。
+- applicationの認可Portを通過した後だけAdapterを呼び、出力もtenant/Workspace/Service/Package/環境・指定時のUser/Bunshinを再検証する。各Adapterは元記録の認可とprivacy projectionを担当し、共通収集もmetadata allowlistで防御する。
+- 同じsource kind/IDは重複排除する。内容の不整合は失敗とし、時刻の近さや現在Goalから相関を推定しない。欠損・打切りがある集計を完全な母集団として扱わない。未確定原価はnullと件数で残す。
+- 本変更は非永続の型・関数・Portとfake入力テストのみ。実Adapter、DB、HTTP/UI、Candidate永続化、管理者RBAC、実Codex指示案は後続作業。domainの承認適格性関数は認可そのものを保証しない。
+- 次は既存Hassy読取経路へ限定Adapterを追加する。大規模schema・外部サービスの必要性が判明した場合は選択肢と影響を報告する。
+
+## D-163: Photo Firstの解析・企画は投稿案と同一Transactionの専用Metadataに保存する
+
+- 日付: 2026-10-01
+- 状態: Accepted（D-162の再読込・履歴対応）
+
+- Photo Firstの元写真ID、構造化解析、企画、解析モデル、Prompt Versionは、完成本文の`contentJson`へ混在させず、`MissionContentVariant`に対する1対1の専用Metadataとして保存する。通常の投稿本文処理やSNS投稿先へ内部Metadataを流さない。
+- Metadata作成は投稿案の完成処理と同じDB Transactionで行う。Metadataだけ、または投稿案だけを成功扱いにしない。同じ生成冪等キーの再送は、保存済み投稿案とMetadataを返し、Vision解析を再実行しない。
+- 元写真との関係はWorkspace・Bunshin・Memory IDの複合外部キー、投稿案との関係はWorkspace・Bunshin・Daily Mission・Variant IDの複合外部キーで制約する。他Workspace・他Bunshinの写真を関連付けられないようDBでも保証する。
+- 投稿案削除時はMetadataを連動削除する。参照中の元写真は物理削除を制限するが、既存の利用者削除はsoft deleteのため画面から除外できる。履歴Metadataから秘密のStorage URLや画像bytesを返さない。
+- Service画面の再読込では、認可済みRepositoryが返す最新のPhoto First投稿案と企画だけを復元する。LINE画像直接受信、Photo First単独Mission、自動画像編集、実Provider E2Eは本変更に含めない。
+
+## D-162: ハッシー Photo First V1は既存の非公開写真と投稿案生成経路を再利用する
+
+- 日付: 2026-10-01
+- 状態: Accepted（Photo First V1の最小縦断実装）
+
+- Photo FirstはPlan Firstを置き換えず、既存のDaily Action写真、確定済みDaily Mission、MissionContentVariant生成・品質検査・利用枠・AI利用記録へ接続する。別の公開Storage、独立Job、別履歴基盤はV1で追加しない。
+- 写真は本人・Workspace・Service・Bunshin・READY状態を再検証してprivate Storageから読み、回転補正・長辺1600px以内への縮小・JPEG再符号化後だけVision解析へ渡す。画像内文字は命令として扱わず、人物特定・センシティブ属性推定・画像だけでは分からない事実の断定を禁止する。
+- 写真分析にはSNS Goal、Goal Planning、企業・対象顧客・承認済みStrategy、今日と直近のMissionを渡し、CTAだけではなくテーマ・切り口・写真の使い方を変える。完成本文は既存の品質検査付き生成工程で作る。
+- 投稿本文は既存MissionContentVariantとして履歴に残す。解析・企画MetadataはV1ではレスポンス表示だけで、再読込時の復元は部分対応とする。Metadata永続化とPhoto First単独入口は、所有境界・削除・冪等性を設計した別PRとする。
+- V1はWeb写真Uploadから利用し、LINEへ送った写真の直接受信、自動画像編集、SNS自動投稿は行わない。実Provider、実Storage、スマートフォン、本番環境のE2Eを完了するまで本番利用確認済みとは扱わない。
+
 ## D-161: 千ノ国メディアの禁止招待URLはスキーム有無に関係なくホスト単位で除去する
 
 - 日付: 2026-09-30
@@ -3267,7 +3417,7 @@
 - PreflightではTransaction、状態更新、評価停止、監査Event、Provider、LINEを実行しない。productionで利用可能でも、期限終了のproduction停止とCron未登録は維持する。
 - 本番有効化はPreflight結果、Migration適用、停止/復旧手順、運営承認を別作業で確認する。Preflight成功を自動期限終了の稼働済み証拠として扱わない。
 
-## D-139: AI研修の期限終了Preflightを自Serviceの管理画面から確認する
+## D-164: AI研修の期限終了Preflightを自Serviceの管理画面から確認する
 
 - 日付: 2026-10-01
 - 状態: Accepted（本番運用前の対象件数確認）
@@ -3275,3 +3425,151 @@
 - Service Slugとログイン本人からScopeを解決し、DBの同一RepeatableRead Transaction内でACTIVEなSERVICE_OWNER/ADMIN、User、Group、Workspaceを再検証する。CONTENT_EDITOR、一般参加者、所属失効、別Scopeは拒否する。
 - Cron Secretをブラウザーや管理者Sessionへ渡さず、既存の内部API認証契約も変更しない。DB障害は0件とせず、詳細を表示・ログせず取得不可と表示する。
 - 受講状態変更、評価停止、Provider、LINE、Cron登録、保持期限削除、production実行停止の解除は含めない。
+
+## D-139: SNSの事業目的を導線・中間指標から分離する
+
+- 日付: 2026-10-01
+- 状態: Accepted（Goal伝播監査の最小Foundation）
+- SOCIAL capabilityの正規Goalは、認知、来店・予約、問い合わせ、リピート、採用、販売、信頼・専門性、その他の8種類とする。フォロワー、LINE登録、ブログ流入は事業目的そのものではなく、中間指標または導線として分離する。
+- 既存の`ServiceMemberBusinessProfile.primaryPurpose`と`SocialAccountStrategy.goal`は直ちに削除・書換えず、純粋な変換境界を追加する。一意に変換できる値だけを`RESOLVED`とし、広い「集客」やフォロワー、LINE登録、ブログ流入は候補と理由を持つ`REVIEW_REQUIRED`にする。
+- 曖昧値へ既定Goalを暗黙適用しない。次のUI・初回設定接続では、Service設定または利用者確認により解決し、異なるService、User、Bunshin、SocialProfileの目的を共有しない。
+- 本判断は契約と既存語彙の変換までとする。DB、onboarding、Strategy、Weekly、Daily、Prompt、CTA、KPI、本番設定は別の小さな変更で接続し、ハッシー名やOEM名を共通基盤へハードコードしない。
+
+## D-140: 初回SNS Strategyは事業目的から決定し、広い「集客」は利用者が成果を選ぶ
+
+- 日付: 2026-10-01
+- 状態: Accepted（D-139の初回Strategy接続）
+- Service会員の初回SNS Strategyは`ServiceMemberBusinessProfile.primaryPurpose`から決定し、固定の`BRAND_AWARENESS`を使わない。認知、来店・予約、販売、採用、リピートは対応するGoalを保存し、明示されていない遷移先URLは推測しない。
+- 広い`ATTRACT`は来店・予約、問い合わせ、販売のどれかへ暗黙変換せず、初回設定で利用者に最優先成果を確認する。事業目的を使用するServiceで目的が欠損・未知の場合は、認知へフォールバックせず初回Strategy作成を停止する。
+- 既存Strategyとの互換性を保つため既存Goalは削除せず、`VISIT_RESERVATION`、`REPEAT`、`TRUST_EXPERTISE`を追加する。正規Goalと中間指標・導線の区別はD-139を維持する。
+- この変更は初回Strategyまでとし、Weekly Plan、Daily、投稿本文、CTA、結果評価、次回提案への目的差は後続PRで段階的に接続する。ハッシー名や特定OEM名を共通SOCIAL capabilityへハードコードしない。
+
+## D-141: Weekly Planは承認済みSNS Goalと目的別の企画方針を型付きで受け取る
+
+- 日付: 2026-10-01
+- 状態: Accepted（D-140のWeekly Plan接続）
+- Weekly Plannerへ承認済みStrategyのGoalを明示的に渡し、SOCIAL capability内の純粋な変換で、週全体の重点、題材候補、CTA候補を導出する。認知、来店・予約、問い合わせ、リピート、採用、販売、信頼・専門性は互いに異なる企画方針を持つ。
+- Goal変更時はCTAの末尾だけでなく、週間要約、各日の目的、テーマ、切り口を変えるようProvider契約へ明記する。フォロワー、LINE登録、ブログ流入は事業成果へ昇格させず、中間指標または導線として扱う。
+- 目的別定義は特定サービス名・OEM名を共通基盤へ直書きせず、SOCIAL capabilityに閉じる。所有権、承認済みStrategy、Bunshin、Serviceの既存境界は維持する。
+- 自動テストはGoalと目的別方針がWeekly Planner入力へ届くこと、7つの主要目的で方針が異なることを保証する。実Providerによる生成品質、Daily、投稿本文、写真・動画案、結果評価、次回提案への差は本変更では確認済みとせず、後続の小さな変更と承認済み検証で確認する。
+
+## D-142: Daily Missionと投稿生成は承認済みSNS Goalの企画方針を継承する
+
+- 日付: 2026-10-01
+- 状態: Accepted（D-141のDaily・Content接続）
+- Daily Planner、投稿本文・写真/動画案Generator、品質Checkerへ、承認済みStrategyのGoalとD-141で定義した型付き企画方針を渡す。Goal差はCTA末尾だけでなく、当日のtopic、angle、reason、本文、視覚案、読者価値へ反映する。
+- 投稿の作り直しでも新しいStrategyへ暗黙に差し替えず、元の生成Snapshotが指す承認済みStrategyを読み直し、そのGoalの企画方針を維持する。異なるWorkspace、User、Bunshin、SocialProfileのGoalは共有しない。
+- 品質Checkerは、題材や読者価値が別GoalのままCTAだけを変えた候補、または承認済みの具体的なCTA方針と矛盾する候補を`GOAL_MISMATCH`として修正対象にする。
+- 自動テストは型付きGoal方針がDaily・Content・Qualityへ届くことと、Goalだけを認知から採用へ変えたとき企画方針が変わることを保証する。実Provider出力の品質優位性、結果のGoal別評価、次回提案への学習は未確認であり、実績として扱わない。
+
+## D-143: SNS成果は生成時Goalへ帰属し、取得できないGoal達成を推測しない
+
+- 日付: 2026-10-01
+- 状態: Accepted（Goal別結果評価と次週反映の最小実装）
+- 新しく生成するDaily MissionのGeneration Context Snapshotへ、承認済みStrategyのGoalを保存する。通常AI生成と安全フォールバックの双方を対象とし、Goal変更後も過去投稿の成果を新しいGoalへ暗黙に付け替えない。既存Snapshotは書き換えず、Goalを持たない過去記録はGoal別集計から除外する。
+- 次週計画へ渡す手入力成果は、同じGoalで生成された投稿だけに限定する。問い合わせは問い合わせ件数、来店・予約は予約・来店件数、販売は注文件数を主要成果として扱い、それ以外の成果項目を当該Goalの成功へ混ぜない。
+- 認知、採用、リピート、信頼・専門性等は、現在取得している手入力成果だけでは達成判定できないため`UNAVAILABLE`とする。成果未入力は`NO_DATA`であり失敗と判定しない。投稿との因果関係も推定しない。
+- `GOOD`、`NEUTRAL`、`BAD`は投稿内容に対する本人の好み・使いやすさのFeedbackであり、Goal達成の証拠ではない。Weekly Plannerへこの意味と測定制約を型付きで渡し、測定不能な成果を作らせない。
+- 本変更はGoal帰属と次週入力の安全化までとする。認知・採用・リピート等のKPI入力UI、外部SNS分析連携、因果推定、本番データ補完は含めない。
+
+## D-144: 目的別成果は生成時Goalに結び付けた自己申告として次週へ渡す
+
+- 日付: 2026-10-01
+- 状態: Accepted（D-143で未取得だった目的別成果のV1入力）
+- 投稿済みのサービス会員は、今回の目的に対して「目的につながった」「手応えがあった」「変化はなかった」「まだ分からない」を回答できる。`GOOD`・`NEUTRAL`・`BAD`は投稿内容の本人らしさであり、本回答と分離する。
+- クライアントからGoalを受け取らず、Daily Mission生成時SnapshotのGoalを正本としてPostRecordの既存`manualMetrics`へ結果と回答時刻を保存する。SnapshotにGoalがない過去Missionには暗黙のGoalを補完せず、入力を止める。DB schemaは追加しない。
+- 次週計画は現在のGoalと、生成時Goal・保存時Goalが一致する自己申告だけを参照する。自己申告しかない場合は`SELF_REPORTED`とし、外部KPI達成、投稿との因果関係、採用・認知等の実績として断定しない。問い合わせ・来店予約・販売の既存件数がある場合は`MEASURED`を優先する。
+- 本変更はV1の簡易入力と同一Goalへの次週反映までとする。外部SNS分析、予約・応募・売上システム連携、複数Goalの重み付け、因果推定、過去Snapshotの補完は含めない。
+
+## D-146: Feedbackの人手確認UIは暗号化短期handleで既存CASへ接続する
+
+- 日付: 2026-10-03
+- 状態: Accepted（ユーザー承認の改善候補確認・却下ゴール）
+- 画面GETでは候補を保存しない。明示的な準備POSTと確認/対象外確定POSTを分離し、既存Repositoryの管理者再認可・Evidence再検証・CAS・監査を再利用する。
+- 個人由来の根拠hashや内部IDを平文でClientへ渡さない。用途分離鍵によるAES-GCMの10分handleにactor/Service/Workspace/environment/週/根拠/Revisionを固定し、APIは同Origin・strict入力・サイズ制限・no-storeを必須とする。
+- 応答喪失後は同operation UUID・同判断で再送する。期限/根拠/権限変更は再読取を必要とし、再発注や判断の自動変更をしない。候補作成後の失敗は未判断OPENが残り得るが、確認成功とは扱わない。
+- schema/依存/Provider/本番設定は変更しない。REVIEWEDは修正済みや開発承認を意味せず、STALE再開・自動実装へ接続しない。非互換migrationの本番公開gateは別途維持する。
+
+## D-145: SNS Goal変更は次に作るWeekly Planから有効にする
+
+- 日付: 2026-10-01
+- 状態: Accepted（Goal変更時のWeekly・Daily混在防止）
+- AI生成Weekly Planは、生成に使用したSocial Profile、Strategy ID、Strategy GoalをSnapshotとして保持する。新しいStrategyを承認して旧Strategyが`SUPERSEDED`になっても、確定済みWeekly Planとその残りのDaily Missionは生成時Strategyで完走する。
+- 新しいGoalは、承認後に新しく生成するWeekly Planから有効にする。同じ週の確定済み計画を暗黙に書き換えたり、過去Mission・成果のGoalを付け替えたりしない。画面にも反映時期を明示する。
+- Daily Mission生成はWeekly Planに保存されたStrategyを読み、現在の承認済みStrategyと混在させない。保存したStrategyが欠損、別Profile、Goal不一致の場合は生成を停止する。Goalを持たない既存Weekly Planだけは互換性のため現在の承認済みStrategyを使用し、過去データを推測更新しない。
+- Workspace、Service、User、Bunshin、Social Profileの既存境界を維持し、Weekly Plan作成時にStrategyの所有範囲・Profile・Goal・承認状態をDBで再検証する。本変更は即時の週途中切替、複数Goal、期間指定、既存Planの一括補完を含めない。
+
+## 2026-10-04: SOCIAL Decision metadataは既存生成Snapshotへ最小・任意・版付きで保存する
+
+- 状態: Accepted（Brief直前接続後の監査可能性）
+- 新しいDecision、Analytics、Historyテーブルは作らず、既存 `GenerationContextSnapshot.payload` の任意 `decision` blockを再利用する。旧payloadはblockなしで引き続き有効とし、backfillや現在値からの補完を行わない。
+- 保存するのはDecision契約版、Context版、Planner Prompt版、DAILY stage、READY状態、材料充足度、利用可能signal種別、Goal不明・別Goal・観測なしで無視したsignalの種別別件数、missing inputs、既知の制約に限定する。
+- Workspace、User、Bunshin、履歴行ID、投稿本文、URL、Memory全文、観測値、自由入力はdecision blockへ複製しない。Plannerが実際に使用したpersonalization source種別と500文字以内の理由は既存personalization blockに保存し、利用可能sourceの部分集合である既存検証を維持する。
+- `decision` blockを保存するのは、既存認可・Capability・所有権・Service参加／法的同意precheckを通過し、Decision ContextがREADYとなった対象経路だけ。対象外Serviceとdeterministic fallbackのSnapshot契約は変更しない。
+- Daily MissionとGeneration Context Snapshotの既存同一transaction保存を維持する。本文品質repair後のtopic／angle／action変更とreasonの再判断は別PRで扱い、本記録だけで最終本文との意味整合を保証しない。
+
+## 2026-10-04: Decision Context対象はreBriefなしの本文repairを保存前に停止する
+
+- 状態: Accepted（自動reBrief／decision revision導入前の安全guard）
+- Decision ContextがREADYとなったDaily Missionでは、初回の本文品質判定がREVISE、または初回本文の検査で直近本文との重複・作成指示の露出を検出した場合、既存の本文だけのrepair／variant retryを行わず `CONTENT_REJECTED` で停止する。
+- 現行repairはBriefのtopic、angle、personalization reasonを再判断せず本文だけを変更するため、意味変更を確実に検出できない段階で旧reasonを最終本文へ流用しない。MissionとSnapshotの保存前に停止し、不完全な生成物を公開しない。
+- Decision Context対象外のServiceは既存repairを維持する。初回品質PASSかつ意味重複なしの対象生成も変更しない。
+- 自動reBriefまたは版付きdecision revisionは本変更へ含めない。Provider呼出し回数、quota、失敗復旧、revision参照の契約を別途レビューしてから追加する。
+
+## 2026-10-04: Decision repairの次動作を版付きpure contractで固定する
+
+- 状態: Accepted（自動reBrief接続前の契約）
+- 品質判定と既存本文検査の結果を、`KEEP_DECISION`、`REBRIEF_REQUIRED`、`REJECT_CONTENT` のいずれかへ正規化する。policy versionは `social-decision-repair-v1` とする。
+- PASSかつ本文検査issueなしだけ同じ `DAILY` decisionを維持する。REVISEまたは本文検査issueは `REVISED_BRIEF` stageを要求し、REJECTはrevisionを提案せず生成物を拒否する。
+- 入力は品質verdict、重複排除したissue code、本文検査issueだけとする。本文、Memory、Workspace／User／Bunshin識別子、Provider Promptは契約へ渡さない。
+- 本契約は次動作を決めるだけで、自動reBrief、追加Provider呼出し、quota消費、Snapshot保存、UI表示を行わない。既存fail-closed guardは契約結果を使用する。
+
+## 2026-10-04: reBrief入力は安全境界を再確認し1回だけ許可する
+
+- 状態: Accepted（実Provider接続前の入力契約）
+- `REBRIEF_REQUIRED` だけを `REVISED_BRIEF` 入力へ変換し、試行上限は1回とする。REJECTをreBrief可能と読み替えず、2回目以降も拒否する。
+- authorization、Capability、ownership、safety/legalはreBrief時点で全てPASSEDを要求する。UNKNOWNをPASSEDで補完しない。
+- Goal、Strategy version、Weekly goal/angle、日付、timezone、platform、format、利用可能時間、Campaign、classificationを固定する。変更可能なのはtopic、angle、reason、estimatedMinutes、personalization source/reasonだけとする。
+- Providerへ渡せる準備結果からWorkspace／User／Bunshin／Profile／Weekly item等の内部識別子と生成本文を除外する。本変更ではProvider呼出し、quota消費、revision保存を行わない。
+
+## 2026-10-04: reBriefは通常Briefと別の未接続Provider adapterを使う
+
+- 状態: Accepted（本番composition接続前のadapter境界）
+- reBriefは通常BriefのPromptへrepair指示を追加せず、`daily-mission-rebrief-v1` の別adapterとstrict schemaを使用する。通常Briefの挙動とPrompt Versionは変更しない。
+- adapterはreBrief準備時の固定条件とPlanner Contextを照合し、差分があればProvider呼出し前に拒否する。
+- Campaign、Product Pack、Group、Personality等の内部参照とasset URLを明示投影で除外する。前Briefの判断要素は渡すが、生成済み投稿本文は入力型に持たない。
+- Provider出力は変更許可済みの6項目だけ受け付け、利用可能時間と提供済みpersonalization sourceを再検証する。本変更ではDaily Mission生成経路への接続、quota消費、Usage記録、revision保存を行わない。
+
+## 2026-10-04: reBrief結果は元Briefへ明示投影して固定参照を復元する
+
+- 状態: Accepted（本番composition接続前のpure finalize境界）
+- Provider結果を元Briefへspreadせず、topic、angle、reason、estimatedMinutes、personalization source/reasonの6項目だけを明示コピーする。
+- socialProfile、Weekly item、Campaign、trendの内部参照とmission date、format、classificationは元Briefから復元し、Provider出力では変更できない。
+- finalize前に準備結果と元Briefを再照合し、別Briefとの取り違え、固定条件の変化、余分なfield、時間超過、不正または重複したpersonalization sourceを拒否する。
+- 本変更はpure関数とfixtureだけであり、Provider呼出し、Daily Mission生成経路、quota／Usage、永続化、revision snapshotには接続しない。
+
+## 2026-10-04: reBrief lifecycleは最大1回のversioned state machineで制御する
+
+- 状態: Accepted（Provider接続前のorchestration契約）
+- 初回DecisionはPASSなら受理、REJECTならfail-closed、REVISEまたは本文検査issueなら1回だけ `REVISED_BRIEF` へ進める。
+- `REVISED_BRIEF` は終端stageとし、再品質検査がPASSかつ本文検査issueなしの場合だけ受理する。REVISE、REJECT、重複等は二度目のreBriefを行わずfail-closedとする。
+- stageと試行回数、repair dispositionのstageが一致しない入力を拒否し、最大回数をcallerの慣習に依存させない。
+- 既存品質pipelineの未接続guardはこのstate machineが返す `RUN_REBRIEF` を記録して停止する。本変更ではProvider呼出し、quota／Usage、保存、通知を開始しない。
+
+## 2026-10-04: reBriefは既存Daily Mission生成内で1回だけ実行し既存Snapshotへrevisionを保存する
+
+- 状態: Accepted（PR #1119をbaseとする本番生成境界接続）
+- READYなDecision Context対象だけ、初回品質結果が `RUN_REBRIEF` の場合に専用reBrief adapterを1回呼ぶ。初回REJECTと、改訂後のREVISE／REJECT／本文検査issueはProviderを再度呼ばずfail-closedとする。
+- 初回本文・品質は既存suffix、reBriefは `decision-rebrief:1`、改訂本文・品質は `rebrief:1:*` を使う。同じusage prefix内でquota operation keyとAI Usage idempotency keyを一致させ、段階間の衝突を防ぐ。
+- reBrief直前に、最初のtrusted precheckから得たauthorization、Capability、ownership、safety/legalをpure契約で再照合する。UNKNOWNやBLOCKEDをPASSEDへ変換しない。
+- 改訂後はMemory選択、personalization、本文入力、品質入力を最終Briefから再構築する。初回Brief向けの選択結果を黙って流用しない。
+- 新テーブルは追加せず、既存 `GenerationContextSnapshot.payload.decision.revision` に最大回数、policy版、trigger、初回／改訂Prompt・model、元／改訂decisionのSHA-256参照、最終品質をDaily Missionと同一transactionで保存する。digestは匿名化保証ではなく、原Brief本文や内部IDをSnapshotへ複製しないための同一性参照である。
+- 改訂後の最終失敗は `DECISION_REBRIEF_FAILED` として既存Daily Mission Generation失敗状態へ残し、Mission／Snapshotを保存しない。本変更は実AI、実課金API、deploy、自動投稿を実行しない。
+
+## 2026-10-04: Decision Contextの停止理由は既存Generationの固定分類で区別する
+
+- 状態: Accepted（reBrief接続後の運用準備）
+- 証跡不足のUNKNOWNまたは安全境界以外の要レビューは `DECISION_CONTEXT_REVIEW_REQUIRED`、入力で明示されたBLOCKEDは `DECISION_CONTEXT_BLOCKED` を既存 `DailyMissionGeneration.errorCategory` へ残す。どちらもProvider呼出し前にfail-closedとし、normalizerの公開statusは変更しない。
+- 境界のUNKNOWN値はUNKNOWNのまま保持し、PASSEDへ推測変換しない。aggregate statusでは安全側のBLOCKEDとして停止するが、明示的なBLOCKEDとは運用分類を分ける。自動再試行、自動解除、通知は追加しない。
+- 分類は固定文字列だけとし、missing input、review reason、自由入力、内部ID、本文をerror categoryへ保存しない。新しいAnalytics、テーブル、migration、UIは追加しない。
+- これは既存レコードで停止理由を数え分けるための境界であり、本番の発生率、品質改善、成功率を示すものではない。実AI評価と本番反映は別承認とする。

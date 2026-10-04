@@ -21,6 +21,8 @@
 
 ## 本番障害時
 
+非互換migration適用後は「既知正常deployment」の旧DB互換性を再確認する。特にFeedback maintenanceのNULL主体移行後、旧アプリだけのpromoteは安全なrollbackではない。[専用Runbook](improvement/IMPROVEMENT_MAINTENANCE_RELEASE_RUNBOOK.md)に従い、runを含む起動停止と新契約対応版の維持を優先する。復元は消去済みFeedback/本人参照を復活させ得るため、復元元日時以降の本人削除・退会・保持期限超過の再適用を確認するまで公開/自動処理を再開しない。再適用根拠が不足する場合は推測せず停止する。
+
 1. 書き込み停止またはVercel Production pauseの必要性を判断する。
 2. 直前deployment、migration run、Supabase statusを確認する。
 3. code rollbackで解消可能ならVercelの既知正常deploymentをpromoteする。
