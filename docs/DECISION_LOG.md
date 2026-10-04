@@ -3573,3 +3573,11 @@
 - 境界のUNKNOWN値はUNKNOWNのまま保持し、PASSEDへ推測変換しない。aggregate statusでは安全側のBLOCKEDとして停止するが、明示的なBLOCKEDとは運用分類を分ける。自動再試行、自動解除、通知は追加しない。
 - 分類は固定文字列だけとし、missing input、review reason、自由入力、内部ID、本文をerror categoryへ保存しない。新しいAnalytics、テーブル、migration、UIは追加しない。
 - これは既存レコードで停止理由を数え分けるための境界であり、本番の発生率、品質改善、成功率を示すものではない。実AI評価と本番反映は別承認とする。
+
+## 2026-10-05: Codexは外部CapabilityのProvider候補として段階的に検証する
+
+- 2026-10-05の長期事業方針を現行Repositoryへ照合し、`docs/CODEX_CAPABILITY_ARCHITECTURE_GAP_ANALYSIS.md`へGapと順序を記録した。
+- Codexを商品価値、Coreの主体、または自動改善の実行者として直接組み込まない。Coding / Skill Development等のCapabilityを要求し、必要性が確認された場合だけProvider Adapterとして検証する。
+- 最初にArchitecture PrinciplesとGenspark Testを人間レビューし、その後AI研修の一つの具体的ProblemでProblem、Feasibility、Skill、Artifact、Validationの最小契約を設計する。
+- 自動Skill生成、顧客データ送信、コード自動変更、PRの自動merge、本番Deployは延期する。UNKNOWNなFeasibilityをPASSEDへ補完しない。
+- AI研修で価値・品質・原価・人間確認工数を確認する前に、共通Coreやハッシーへ横展開しない。
