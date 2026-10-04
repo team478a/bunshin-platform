@@ -34,6 +34,7 @@ export async function generateQualityCheckedMissionContent(input: {
   recordUsage: RecordUsage;
   applyTerminology: (result: MissionContentGeneratorResult) => MissionContentGeneratorResult;
   setStage: (stage: string) => void;
+  decisionRepairPolicy: 'ALLOW_CONTENT_REPAIR' | 'REQUIRE_REBRIEF';
 }) {
   input.setStage('content:0');
   let content = input.applyTerminology(
@@ -62,6 +63,20 @@ export async function generateQualityCheckedMissionContent(input: {
           })
         : null;
     if (currentQuality.output.verdict === 'PASS' && !noveltyIssue) break;
+    if (
+      input.decisionRepairPolicy === 'REQUIRE_REBRIEF' &&
+      (currentQuality.output.verdict === 'REVISE' || noveltyIssue !== null)
+    )
+      throw new ApplicationError(
+        'CONTENT_REJECTED',
+        'decision-aligned mission requires a new brief before semantic repair',
+        {
+          reason: 'DECISION_REBRIEF_REQUIRED',
+          issueCodes: [...qualityIssueCodes],
+          noveltyIssue,
+          attempts: attempt + 1,
+        },
+      );
     if (currentQuality.output.verdict === 'REJECT' || attempt === 2)
       throw new ApplicationError('CONTENT_REJECTED', 'generated mission failed quality check', {
         issueCodes: [...qualityIssueCodes],

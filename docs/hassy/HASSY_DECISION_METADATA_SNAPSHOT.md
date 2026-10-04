@@ -48,7 +48,7 @@
 
 ## 5. 未解決事項
 
-- 本文品質repairがtopic、angle、actionを変えた場合のBrief reason再判断またはdecision revision。
+- Decision Context対象の本文品質repairは、後続の `HASSY_DECISION_REPAIR_GUARD.md` でreBrief未実装時のfail-closed guardを扱う。自動reBriefまたはdecision revision自体は引き続き未解決。
 - Photo Firstや別案生成を `DAILY` と異なるdecision stageとして保存する契約。
 - 運営画面での表示は追加していない。metadataに自由文や個人データを増やさず別途レビューする。
 
