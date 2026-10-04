@@ -1,5 +1,9 @@
 import 'server-only';
-import { GenerateDailyMissionBrief } from '@bunshin/capability-social';
+import {
+  GenerateDailyMissionBrief,
+  type DailyMissionPlannerProviderInput,
+} from '@bunshin/capability-social';
+import { ApplicationError } from '@bunshin/shared';
 import { OpenAIDailyMissionPlanner } from '../providers/openai-daily-mission-planner';
 import type { createDailyMissionAiRuntime } from './daily-mission-ai-runtime';
 
@@ -12,11 +16,19 @@ export async function runDailyMissionBriefGeneration(input: {
   generateWithQuota: DailyMissionAiRuntime['generateWithQuota'];
   recordUsage: DailyMissionAiRuntime['recordUsage'];
 }) {
+  const planningContexts: DailyMissionPlannerProviderInput[] = [];
+  const provider = new OpenAIDailyMissionPlanner({ apiKey: input.apiKey, model: input.model });
   const brief = await input.generateWithQuota('daily-brief', () =>
-    new GenerateDailyMissionBrief(
-      new OpenAIDailyMissionPlanner({ apiKey: input.apiKey, model: input.model }),
-    ).execute(input.plannerInput),
+    new GenerateDailyMissionBrief({
+      generate: (value) => {
+        planningContexts.push(structuredClone(value));
+        return provider.generate(value);
+      },
+    }).execute(input.plannerInput),
   );
   await input.recordUsage('daily-brief', 'DAILY_MISSION_PLANNER', brief);
-  return brief;
+  const planningContext = planningContexts[0];
+  if (!planningContext)
+    throw new ApplicationError('INTERNAL_ERROR', 'daily mission planning context was not captured');
+  return { ...brief, planningContext };
 }

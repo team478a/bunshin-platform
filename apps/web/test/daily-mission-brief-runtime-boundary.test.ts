@@ -19,7 +19,7 @@ describe('daily mission brief runtime boundary', () => {
 
     expect(generation).toContain('await runDailyMissionBriefGeneration({');
     expect(generation).toContain('const plannerInput: DailyMissionPlannerInput = {');
-    expect(generation).toContain('plannerInput: prepared.plannerInput');
+    expect(generation).toContain('plannerInput: decisionPreparation.plannerInput');
     expect(generation).not.toContain('new OpenAIDailyMissionPlanner');
     expect(generation).not.toContain('new GenerateDailyMissionBrief');
   });
