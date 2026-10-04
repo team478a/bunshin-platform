@@ -138,7 +138,7 @@ describe('daily mission decision context connection', () => {
     const input = planner();
     expect(
       prepareDailyMissionDecisionPlannerInput({ scope, plannerInput: input, source: null }),
-    ).toEqual({ context: null, plannerInput: input });
+    ).toEqual({ context: null, plannerInput: input, boundary: null });
   });
 
   it('fails before Brief preparation when the current legal consent precheck is unknown', () => {
@@ -231,5 +231,11 @@ describe('daily mission decision context connection', () => {
     expect(JSON.stringify(metadata)).not.toContain('workspace-1');
     expect(JSON.stringify(metadata)).not.toContain('owner-1');
     expect(JSON.stringify(metadata)).not.toContain('performance:post-1');
+    expect(prepared.boundary).toEqual({
+      authorization: 'PASSED',
+      capability: 'PASSED',
+      ownership: 'PASSED',
+      safetyLegal: 'PASSED',
+    });
   });
 });

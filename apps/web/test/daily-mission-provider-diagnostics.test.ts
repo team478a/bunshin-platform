@@ -56,4 +56,12 @@ describe('Daily Mission provider diagnostics', () => {
     expect(dailyMissionProviderFailureDetails(error)).toBeNull();
     expect(dailyMissionErrorCategory(error)).toBe('CONTENT_REJECTED');
   });
+
+  it('keeps the bounded final rebrief failure category for operations', () => {
+    const error = new ApplicationError('CONTENT_REJECTED', 'final rebrief quality failed', {
+      category: 'DECISION_REBRIEF_FAILED',
+      privateContent: 'must not become the category',
+    });
+    expect(dailyMissionErrorCategory(error)).toBe('DECISION_REBRIEF_FAILED');
+  });
 });

@@ -3,11 +3,15 @@ import 'server-only';
 import {
   prepareSocialDecisionPlannerInput,
   type DailyMissionPlannerInput,
+  type SocialDecisionBoundary,
   type SocialDecisionBoundaryStatus,
   type SocialDecisionObservation,
   type SocialDecisionScope,
 } from '@bunshin/capability-social';
-import type { GenerationDecisionMetadata } from '@bunshin/application';
+import type {
+  GenerationDecisionMetadata,
+  GenerationDecisionRevisionMetadata,
+} from '@bunshin/application';
 import { ApplicationError } from '@bunshin/shared';
 
 import { buildGoalOutcomePlanningContext } from './weekly-plan-generation';
@@ -26,6 +30,7 @@ export interface DailyMissionDecisionContextSource {
 export function buildDailyMissionDecisionMetadata(input: {
   context: ReturnType<typeof prepareSocialDecisionPlannerInput>['context'] | null;
   plannerPromptVersion: string;
+  revision?: GenerationDecisionRevisionMetadata | null;
 }): GenerationDecisionMetadata | null {
   if (!input.context) return null;
   if (input.context.status !== 'READY')
@@ -46,13 +51,14 @@ export function buildDailyMissionDecisionMetadata(input: {
     decisionEngineVersion: SOCIAL_DAILY_DECISION_VERSION,
     plannerPromptVersion: input.plannerPromptVersion,
     contextVersion: input.context.version,
-    decisionStage: 'DAILY',
+    decisionStage: input.revision ? 'REVISED_BRIEF' : 'DAILY',
     status: 'READY',
     evidenceCompleteness: input.context.evidenceCompleteness,
     eligibleSignalTypes: [...new Set(input.context.orderedSignals.map(({ type }) => type))],
     ignoredSignals: [...ignored.values()],
     missingInputs: [...input.context.missingInputs],
     limitations: [...input.context.limitations],
+    ...(input.revision ? { revision: structuredClone(input.revision) } : {}),
   };
 }
 
@@ -77,7 +83,8 @@ export function prepareDailyMissionDecisionPlannerInput(input: {
   plannerInput: DailyMissionPlannerInput;
   source: DailyMissionDecisionContextSource | null;
 }) {
-  if (!input.source?.enabled) return { context: null, plannerInput: input.plannerInput };
+  if (!input.source?.enabled)
+    return { context: null, plannerInput: input.plannerInput, boundary: null };
   const scope: SocialDecisionScope = {
     workspaceId: input.scope.workspaceId,
     groupId: input.scope.groupId ?? null,
@@ -89,22 +96,26 @@ export function prepareDailyMissionDecisionPlannerInput(input: {
   const goalEvaluation = buildGoalOutcomePlanningContext(goal, [
     ...input.source.outcomeRecords,
   ]).goalEvaluation;
-  return prepareSocialDecisionPlannerInput({
-    scope,
-    boundary: {
-      authorization: 'PASSED',
-      capability: 'PASSED',
-      ownership: 'PASSED',
-      safetyLegal: input.source.safetyLegal,
-    },
-    currentGoal: goal,
-    observations: [
-      ...input.source.observations.map((observation) => source(observation)),
-      source({ id: `goal-outcome:${goal}`, type: 'OUTCOME' as const, data: goalEvaluation }),
-    ],
-    plannerInput: {
-      ...input.plannerInput,
-      weeklyPlan: effectiveWeeklyPlan(input.plannerInput),
-    },
-  });
+  const boundary: SocialDecisionBoundary = {
+    authorization: 'PASSED',
+    capability: 'PASSED',
+    ownership: 'PASSED',
+    safetyLegal: input.source.safetyLegal,
+  };
+  return {
+    ...prepareSocialDecisionPlannerInput({
+      scope,
+      boundary,
+      currentGoal: goal,
+      observations: [
+        ...input.source.observations.map((observation) => source(observation)),
+        source({ id: `goal-outcome:${goal}`, type: 'OUTCOME' as const, data: goalEvaluation }),
+      ],
+      plannerInput: {
+        ...input.plannerInput,
+        weeklyPlan: effectiveWeeklyPlan(input.plannerInput),
+      },
+    }),
+    boundary,
+  };
 }

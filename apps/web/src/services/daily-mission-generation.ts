@@ -29,6 +29,8 @@ import { runDailyMissionBriefGeneration } from './daily-mission-brief-runtime';
 import { prepareDailyMissionDecisionPlannerInput } from './daily-mission-decision-context';
 import { loadDailyMissionGenerationEnvironment } from './daily-mission-generation-environment';
 import { persistDailyMissionGenerationResult } from './daily-mission-result-persistence';
+import { runDailyMissionDecisionContentOrchestration } from './daily-mission-decision-content-orchestration';
+import { runDailyMissionRebriefGeneration } from './daily-mission-rebrief-runtime';
 
 interface Input {
   workspaceId: string;
@@ -195,7 +197,7 @@ export class DailyMissionGenerationService {
         personalization: plannerPersonalization,
       };
       stage = 'daily-decision-context';
-      const prepared = prepareDailyMissionDecisionPlannerInput({
+      const decisionPreparation = prepareDailyMissionDecisionPlannerInput({
         scope,
         plannerInput,
         source: serviceKnowledge?.decisionContext ?? null,
@@ -206,81 +208,114 @@ export class DailyMissionGenerationService {
         model,
         generateWithQuota,
         recordUsage,
-        plannerInput: prepared.plannerInput,
+        plannerInput: decisionPreparation.plannerInput,
       });
       const pillarId = weeklyPlan.items.find(
         ({ id }) => id === brief.output.weeklyPlanItemId,
       )?.contentPillarId;
       const pillar = pillars.find(({ id }) => id === pillarId);
       if (!pillar) throw new ApplicationError('NOT_FOUND', 'active content pillar not found');
-      const selectedMemories = await selectDailyMissionMemories({
-        scope,
-        serviceSafeMode: input.serviceSafeMode ?? false,
-        allowServiceOwnerMemories: input.allowServiceOwnerMemories ?? false,
-        memoryRepository,
-        ownerMemories,
-        brief: brief.output,
-        pillar,
-        strategyTargetSummary: strategy.targetSummary,
+      const generation = await runDailyMissionDecisionContentOrchestration({
+        initialBrief: brief,
+        decisionBoundary: decisionPreparation.context ? decisionPreparation.boundary : null,
+        prepareContent: async (currentBrief) => {
+          const selectedMemories = await selectDailyMissionMemories({
+            scope,
+            serviceSafeMode: input.serviceSafeMode ?? false,
+            allowServiceOwnerMemories: input.allowServiceOwnerMemories ?? false,
+            memoryRepository,
+            ownerMemories,
+            brief: currentBrief.output,
+            pillar,
+            strategyTargetSummary: strategy.targetSummary,
+          });
+          const personalization = buildMissionPersonalizationContext({
+            bunshin: bunshinContext,
+            socialProfile: profile,
+            strategy,
+            businessProfile: serviceKnowledge?.businessProfile ?? null,
+            onboardingContext: serviceKnowledge?.personalization.onboardingContext ?? null,
+            behaviorSummary: serviceKnowledge?.personalization.behaviorSummary ?? null,
+            feedbackSummary: serviceKnowledge?.personalization.feedbackSummary ?? null,
+            performanceSummary: serviceKnowledge?.personalization.performanceSummary ?? null,
+            selectedMemories,
+          });
+          const contentInput = {
+            platform: profile.platform,
+            brief: currentBrief.output,
+            bunshin: bunshinContext,
+            approvedStrategy: strategyContext,
+            contentPillar: { title: pillar.title, description: pillar.description },
+            grantedKnowledge: knowledge,
+            businessProfile: serviceKnowledge?.businessProfile ?? null,
+            groupKnowledge,
+            selectedMemories,
+            campaign,
+            personalization,
+          };
+          const qualityInput = (generatedContent: MissionContent) => ({
+            platform: profile.platform,
+            brief: currentBrief.output,
+            content: generatedContent,
+            bunshin: bunshinContext,
+            approvedStrategy: strategyContext,
+            businessProfile: serviceKnowledge?.businessProfile ?? null,
+            selectedMemories,
+            groupKnowledge,
+            recentContent: recentMissionQualityContext(recentMissions),
+            personalization,
+          });
+          return { selectedMemories, personalization, contentInput, qualityInput };
+        },
+        generateContent: (contentPreparation, attempt) =>
+          runDailyMissionContentGeneration({
+            apiKey,
+            model,
+            contentInput: contentPreparation.contentInput,
+            qualityInput: contentPreparation.qualityInput,
+            recentMissions,
+            generateWithQuota,
+            recordUsage,
+            terminologyPolicy: serviceKnowledge?.contentTerminologyPolicy ?? null,
+            decisionRepairPolicy: decisionPreparation.context
+              ? 'REQUIRE_REBRIEF'
+              : 'ALLOW_CONTENT_REPAIR',
+            decisionStage: attempt.decisionStage,
+            rebriefAttemptsUsed: attempt.rebriefAttemptsUsed,
+            ...(attempt.operationPrefix ? { operationPrefix: attempt.operationPrefix } : {}),
+            setStage: (value) => {
+              stage = value;
+            },
+          }),
+        reviseBrief: ({ initialBrief, disposition, boundary }) =>
+          runDailyMissionRebriefGeneration({
+            apiKey,
+            model,
+            initialBrief,
+            strategyVersion: strategy.version,
+            boundary,
+            disposition,
+            generateWithQuota,
+            recordUsage,
+            setStage: (value) => {
+              stage = value;
+            },
+          }),
       });
-      const personalization = buildMissionPersonalizationContext({
-        bunshin: bunshinContext,
-        socialProfile: profile,
-        strategy,
-        businessProfile: serviceKnowledge?.businessProfile ?? null,
-        onboardingContext: serviceKnowledge?.personalization.onboardingContext ?? null,
-        behaviorSummary: serviceKnowledge?.personalization.behaviorSummary ?? null,
-        feedbackSummary: serviceKnowledge?.personalization.feedbackSummary ?? null,
-        performanceSummary: serviceKnowledge?.personalization.performanceSummary ?? null,
-        selectedMemories,
-      });
-      const contentInput = {
-        platform: profile.platform,
-        brief: brief.output,
-        bunshin: bunshinContext,
-        approvedStrategy: strategyContext,
-        contentPillar: { title: pillar.title, description: pillar.description },
-        grantedKnowledge: knowledge,
-        businessProfile: serviceKnowledge?.businessProfile ?? null,
-        groupKnowledge,
-        selectedMemories,
-        campaign,
-        personalization,
-      };
-      const qualityInput = (generatedContent: MissionContent) => ({
-        platform: profile.platform,
-        brief: brief.output,
-        content: generatedContent,
-        bunshin: bunshinContext,
-        approvedStrategy: strategyContext,
-        businessProfile: serviceKnowledge?.businessProfile ?? null,
-        selectedMemories,
-        groupKnowledge,
-        recentContent: recentMissionQualityContext(recentMissions),
-        personalization,
-      });
-      const { content, quality, repairCount, qualityIssueCodes } =
-        await runDailyMissionContentGeneration({
-          apiKey,
-          model,
-          contentInput,
-          qualityInput,
-          recentMissions,
-          generateWithQuota,
-          recordUsage,
-          terminologyPolicy: serviceKnowledge?.contentTerminologyPolicy ?? null,
-          decisionRepairPolicy: prepared.context ? 'REQUIRE_REBRIEF' : 'ALLOW_CONTENT_REPAIR',
-          setStage: (value) => {
-            stage = value;
-          },
-        });
+      const {
+        brief: finalBrief,
+        prepared: contentPreparation,
+        contentResult,
+        revision,
+      } = generation;
+      const { content } = contentResult;
       const finalizedContent = await finalizeDailyMissionContent({
         scope,
         missionDate: input.missionDate,
         generationIdempotencyKey: input.generationIdempotencyKey,
         campaign,
         platform: profile.platform,
-        format: brief.output.format,
+        format: finalBrief.output.format,
         classification: weeklyItem.classification,
         content: content.output,
         terminologyPolicy: serviceKnowledge?.contentTerminologyPolicy ?? null,
@@ -292,13 +327,14 @@ export class DailyMissionGenerationService {
         assignments,
         scope,
         planning: planningContext,
-        brief,
+        brief: finalBrief,
         pillar,
-        selectedMemories,
-        personalization,
-        decisionContext: prepared.context,
+        selectedMemories: contentPreparation.selectedMemories,
+        personalization: contentPreparation.personalization,
+        decisionContext: decisionPreparation.context,
+        decisionRevision: revision,
         recentMissionIds: recentMissions.map(({ id }) => id),
-        contentResult: { content, quality, repairCount, qualityIssueCodes },
+        contentResult,
         finalizedContent: {
           ...finalizedContent,
           groupKnowledgeIds: groupKnowledge.map(({ chunkId }) => chunkId),
