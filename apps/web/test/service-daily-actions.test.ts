@@ -11,6 +11,13 @@ const state = vi.hoisted(() => ({
   remove: vi.fn(),
   member: vi.fn(),
   bunshin: vi.fn(),
+  executePhotoFirst: vi.fn(),
+  executeDailyMission: vi.fn(),
+  usage: vi.fn(),
+  notification: vi.fn(),
+  sourceVariant: null as null | {
+    photoFirstMetadata: { photoMemoryId: string; planningJson: Record<string, unknown> };
+  },
 }));
 
 vi.mock('../src/auth/current-user', () => ({
@@ -38,7 +45,24 @@ vi.mock('../src/daily-actions/daily-action-storage', () => ({
   },
 }));
 
+vi.mock('../src/services/mission-content-variant-generation', () => ({
+  createMissionContentVariantGenerationService: () => ({
+    executePhotoFirst: state.executePhotoFirst,
+  }),
+}));
+
+vi.mock('../src/services/daily-mission-generation', () => ({
+  createDailyMissionGenerationService: () => ({ execute: state.executeDailyMission }),
+}));
+
+vi.mock('../src/services/commercial-usage', () => ({
+  recordCommercialUsageSafely: state.usage,
+}));
+
 vi.mock('@bunshin/database', () => ({
+  PrismaLineNotificationPreferenceRepository: class {
+    getScoped = state.notification;
+  },
   prisma: {
     bunshin: { findFirst: state.bunshin },
     bunshinMemory: {
@@ -54,6 +78,9 @@ vi.mock('@bunshin/database', () => ({
       update: state.update,
       updateMany: state.updateMany,
     },
+    missionContentVariant: {
+      findFirst: vi.fn(() => Promise.resolve(state.sourceVariant)),
+    },
     $transaction: (operation: (tx: unknown) => Promise<unknown>) =>
       operation({
         bunshinMemory: { update: state.update, updateMany: state.updateMany },
@@ -64,6 +91,7 @@ vi.mock('@bunshin/database', () => ({
 import {
   createServiceDailyActionResponse,
   deleteServiceDailyActionResponse,
+  generateServicePhotoFirstResponse,
   listServiceDailyActionsResponse,
   updateServiceDailyActionPhotoPreferenceResponse,
 } from '../src/http/service-daily-actions';
@@ -124,6 +152,72 @@ describe('service Daily Action HTTP', () => {
     state.update.mockImplementation(({ data }: { data: Record<string, unknown> }) =>
       Promise.resolve(memory(data)),
     );
+    state.executePhotoFirst.mockResolvedValue({
+      variant: {
+        id: '77777777-7777-4777-8777-777777777777',
+        dailyMissionId: '88888888-8888-4888-8888-888888888888',
+        sequence: 1,
+        format: 'TEXT',
+        content: { body: '写真から考えた投稿です', cta: '保存してご覧ください' },
+        qualityScore: 91,
+        createdAt: new Date('2026-10-01T00:00:00.000Z'),
+        selectedAt: null,
+        photoFirst: {
+          photoMemoryId: actionId,
+          analysis: {
+            imageType: 'product',
+            subjects: ['商品'],
+            objects: [],
+            scene: '店内',
+            visibleText: [],
+            possibleContentAngles: ['使い方'],
+            qualityNotes: [],
+            uncertainElements: [],
+            safetyFlags: [],
+          },
+          planning: {
+            theme: '商品の使い方',
+            angle: '初めての方向け',
+            recommendationReason: '今日の認知目的に合うため',
+            photoUsage: '主役として使う',
+            imageEditPrompt: '明るさだけを自然に整える',
+            confirmationQuestion: null,
+          },
+          analyzerModel: 'test-model',
+          analyzerPromptVersion: 'photo-first-analysis-v1',
+        },
+      },
+      photoFirst: {
+        photoMemoryId: actionId,
+        analysis: {
+          imageType: 'product',
+          subjects: ['商品'],
+          objects: [],
+          scene: '店内',
+          visibleText: [],
+          possibleContentAngles: ['使い方'],
+          qualityNotes: [],
+          uncertainElements: [],
+          safetyFlags: [],
+        },
+        planning: {
+          theme: '商品の使い方',
+          angle: '初めての方向け',
+          recommendationReason: '今日の認知目的に合うため',
+          photoUsage: '主役として使う',
+          imageEditPrompt: '明るさだけを自然に整える',
+          confirmationQuestion: null,
+        },
+        analyzerModel: 'test-model',
+        analyzerPromptVersion: 'photo-first-analysis-v1',
+      },
+    });
+    state.executeDailyMission.mockResolvedValue({
+      id: '88888888-8888-4888-8888-888888888888',
+    });
+    state.usage.mockResolvedValue(undefined);
+    state.notification.mockResolvedValue({ preference: { timezone: 'Asia/Tokyo' } });
+    state.sourceVariant = null;
   });
 
   it('creates an owner-scoped question as a Bunshin memory', async () => {
@@ -253,6 +347,183 @@ describe('service Daily Action HTTP', () => {
     expect(body.data.useForAutomaticImages).toBe(true);
   });
 
+  it('starts Photo First generation with the authenticated service scope', async () => {
+    const dailyMissionId = '88888888-8888-4888-8888-888888888888';
+    const response = await generateServicePhotoFirstResponse(
+      request(`/daily-actions/${actionId}/photo-first`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-request-id': key },
+        body: JSON.stringify({ dailyMissionId, idempotencyKey: key }),
+      }),
+      serviceSlug,
+      bunshinId,
+      actionId,
+    );
+
+    expect(response.status).toBe(201);
+    expect(state.member).toHaveBeenCalledWith(serviceSlug, state.actor?.userId);
+    expect(state.executePhotoFirst).toHaveBeenCalledWith({
+      workspaceId: '22222222-2222-4222-8222-222222222222',
+      groupId: '33333333-3333-4333-8333-333333333333',
+      bunshinId,
+      actorUserId: state.actor?.userId,
+      dailyMissionId,
+      photoActionId: actionId,
+      generationIdempotencyKey: key,
+      usageIdempotencyPrefix: key,
+      serviceSafeMode: true,
+      allowServiceOwnerMemories: true,
+    });
+    const body = (await response.json()) as {
+      data: { photoFirst: { photoMemoryId: string; planning: { theme: string } } };
+    };
+    expect(body.data.photoFirst.photoMemoryId).toBe(actionId);
+    expect(body.data.photoFirst.planning.theme).toBe('商品の使い方');
+  });
+
+  it('regenerates from a scoped Photo First question with the owner answer', async () => {
+    const dailyMissionId = '88888888-8888-4888-8888-888888888888';
+    const sourceVariantId = '77777777-7777-4777-8777-777777777777';
+    state.sourceVariant = {
+      photoFirstMetadata: {
+        photoMemoryId: actionId,
+        planningJson: {
+          confirmationQuestion: 'この用紙は公開してよい焼き上がり予定表ですか？',
+        },
+      },
+    };
+
+    const response = await generateServicePhotoFirstResponse(
+      request(`/daily-actions/${actionId}/photo-first`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-request-id': key },
+        body: JSON.stringify({
+          dailyMissionId,
+          sourceVariantId,
+          confirmationAnswer: 'はい。公開可能な焼き上がり予定表です。',
+          idempotencyKey: key,
+        }),
+      }),
+      serviceSlug,
+      bunshinId,
+      actionId,
+    );
+
+    expect(response.status).toBe(201);
+    expect(state.executePhotoFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceId: '22222222-2222-4222-8222-222222222222',
+        groupId: '33333333-3333-4333-8333-333333333333',
+        bunshinId,
+        actorUserId: state.actor?.userId,
+        dailyMissionId,
+        photoActionId: actionId,
+        sourceVariantId,
+        photoConfirmation: {
+          question: 'この用紙は公開してよい焼き上がり予定表ですか？',
+          answer: 'はい。公開可能な焼き上がり予定表です。',
+        },
+      }),
+    );
+  });
+
+  it('does not accept a confirmation answer without a scoped source question', async () => {
+    const response = await generateServicePhotoFirstResponse(
+      request(`/daily-actions/${actionId}/photo-first`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-request-id': key },
+        body: JSON.stringify({
+          dailyMissionId: '88888888-8888-4888-8888-888888888888',
+          sourceVariantId: '77777777-7777-4777-8777-777777777777',
+          confirmationAnswer: 'はい',
+          idempotencyKey: key,
+        }),
+      }),
+      serviceSlug,
+      bunshinId,
+      actionId,
+    );
+
+    expect(response.status).toBe(404);
+    expect(state.executePhotoFirst).not.toHaveBeenCalled();
+  });
+
+  it('creates todays planned mission before Photo First when automatic delivery has not created it', async () => {
+    const missionDate = new Intl.DateTimeFormat('sv-SE', {
+      timeZone: 'Asia/Tokyo',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date());
+    const socialProfileId = '99999999-9999-4999-8999-999999999999';
+    const response = await generateServicePhotoFirstResponse(
+      request(`/daily-actions/${actionId}/photo-first`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-request-id': key },
+        body: JSON.stringify({
+          missionDate,
+          socialProfileId,
+          idempotencyKey: key,
+        }),
+      }),
+      serviceSlug,
+      bunshinId,
+      actionId,
+    );
+
+    expect(response.status).toBe(201);
+    expect(state.notification).toHaveBeenCalledWith({
+      workspaceId: '22222222-2222-4222-8222-222222222222',
+      bunshinId,
+      actorUserId: state.actor?.userId,
+    });
+    expect(state.executeDailyMission).toHaveBeenCalledWith({
+      workspaceId: '22222222-2222-4222-8222-222222222222',
+      groupId: '33333333-3333-4333-8333-333333333333',
+      bunshinId,
+      actorUserId: state.actor?.userId,
+      missionDate,
+      timezone: 'Asia/Tokyo',
+      socialProfileId,
+      generationIdempotencyKey: key,
+      usageIdempotencyPrefix: key,
+      existingPolicy: 'RETURN',
+      serviceSafeMode: true,
+      allowServiceOwnerMemories: true,
+    });
+    expect(state.executePhotoFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ dailyMissionId: '88888888-8888-4888-8888-888888888888' }),
+    );
+    expect(state.usage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: 'service_photo_first_mission',
+        idempotencyKey: 'POST_GENERATE:mission:88888888-8888-4888-8888-888888888888',
+      }),
+    );
+  });
+
+  it('rejects a mission bootstrap date that is not today', async () => {
+    const response = await generateServicePhotoFirstResponse(
+      request(`/daily-actions/${actionId}/photo-first`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-request-id': key },
+        body: JSON.stringify({
+          missionDate: '2020-01-01',
+          socialProfileId: '99999999-9999-4999-8999-999999999999',
+          idempotencyKey: key,
+        }),
+      }),
+      serviceSlug,
+      bunshinId,
+      actionId,
+    );
+
+    expect(response.status).toBe(400);
+    expect(state.executeDailyMission).not.toHaveBeenCalled();
+    expect(state.executePhotoFirst).not.toHaveBeenCalled();
+    expect(state.usage).not.toHaveBeenCalled();
+  });
+
   it('requires same-origin before creating or deleting material', async () => {
     const create = await createServiceDailyActionResponse(
       new Request('http://localhost:3000/daily-actions', {
@@ -286,10 +557,25 @@ describe('service Daily Action HTTP', () => {
       bunshinId,
       actionId,
     );
+    const photoFirst = await generateServicePhotoFirstResponse(
+      new Request(`http://localhost:3000/daily-actions/${actionId}/photo-first`, {
+        method: 'POST',
+        headers: { origin: 'https://attacker.test', 'content-type': 'application/json' },
+        body: JSON.stringify({
+          dailyMissionId: '88888888-8888-4888-8888-888888888888',
+          idempotencyKey: key,
+        }),
+      }),
+      serviceSlug,
+      bunshinId,
+      actionId,
+    );
     expect(create.status).toBe(403);
     expect(remove.status).toBe(403);
     expect(updatePhoto.status).toBe(403);
+    expect(photoFirst.status).toBe(403);
     expect(state.create).not.toHaveBeenCalled();
     expect(state.update).not.toHaveBeenCalled();
+    expect(state.executePhotoFirst).not.toHaveBeenCalled();
   });
 });

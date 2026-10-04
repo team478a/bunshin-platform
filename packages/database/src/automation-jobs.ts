@@ -9,25 +9,20 @@ import type {
 } from '@bunshin/application';
 import { ApplicationError } from '@bunshin/shared';
 import { type Prisma, type PrismaClient, prisma } from './client';
+import { FEEDBACK_PURGE_JOB_TYPE } from '@bunshin/application';
+import { platformJob } from './job-mapping';
 
 function lineNotificationPreference(
   row: Prisma.LineNotificationPreferenceGetPayload<object>,
 ): LineNotificationPreference {
   return row;
 }
-function platformJob(row: Prisma.JobGetPayload<object>): Job {
-  return {
-    ...row,
-    capabilityType: row.capabilityType,
-    environment: row.environment,
-    status: row.status,
-  };
-}
-
 export class PrismaJobRepository implements JobRepository {
   constructor(private readonly client: PrismaClient | Prisma.TransactionClient = prisma) {}
 
   async enqueue(input: EnqueueJobInput): Promise<Job> {
+    if (input.jobType === FEEDBACK_PURGE_JOB_TYPE || !input.requestedBy?.trim())
+      throw new ApplicationError('FORBIDDEN', 'maintenance job cannot use user enqueue');
     const scope = await this.client.workspace.findFirst({
       where: {
         id: input.workspaceId,

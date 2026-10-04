@@ -37,6 +37,8 @@ SOCIAL Intelligenceを有効にする場合は、Productionだけにserver-only�
 
 ## Deployment Order
 
+Feedback maintenance migration `20261003050000_feedback_maintenance_job`を含むリリースは、[専用Runbook](improvement/IMPROVEMENT_MAINTENANCE_RELEASE_RUNBOOK.md)の停止/drain/preflightをbuild開始前に満たす。build先頭でDBが変わり、旧アプリのworkerが動いている状態は非互換。jobs/scheduleだけ止めてもjobs/runのcleanupは止まらない。停止を証明できない場合は公開を開始しない。
+
 1. `main`でCIのtypecheck/lint/test/buildが成功していることを確認する。
 2. migrationがある場合はbackupと互換性を確認する。
 3. `main`から`production`へのPull Requestを作成し、公開差分を確認する。

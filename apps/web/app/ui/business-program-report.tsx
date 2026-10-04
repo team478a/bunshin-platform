@@ -87,6 +87,14 @@ export function BusinessProgramReportView({ report }: { report: BusinessProgramR
             <span>来店</span>
           </article>
           <article>
+            <strong>{report.totals.outcomes.repeatReservations}</strong>
+            <span>再予約</span>
+          </article>
+          <article>
+            <strong>{report.totals.outcomes.repeatVisits}</strong>
+            <span>再来店</span>
+          </article>
+          <article>
             <strong>{report.totals.outcomes.orders}</strong>
             <span>購入・申込</span>
           </article>

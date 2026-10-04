@@ -1,9 +1,15 @@
 import { ApplicationError } from '@bunshin/shared';
 
 import type { SocialActivityBarrierCase } from './activity-barrier-persistence';
-import type { SocialActivityBarrierCategory, SocialActivityBarrierScope } from './activity-barrier';
+import {
+  socialActivityBarrierGoalMetricsMatchAttribution,
+  type SocialActivityBarrierCategory,
+  type SocialActivityBarrierEvidence,
+  type SocialActivityBarrierScope,
+} from './activity-barrier';
+import type { SocialAccountStrategyGoal } from './social-account-strategy';
 
-export const SOCIAL_ACTIVITY_SUPPORT_RULE_VERSION = 'social-activity-support-v1' as const;
+export const SOCIAL_ACTIVITY_SUPPORT_RULE_VERSION = 'social-activity-support-v3' as const;
 export const SOCIAL_ACTIVITY_BARRIER_DISMISSAL_DAYS = 30;
 
 export const SOCIAL_ACTIVITY_SUPPORT_KEYS = [
@@ -17,6 +23,9 @@ export const SOCIAL_ACTIVITY_SUPPORT_KEYS = [
   'RESPONSE_GUIDE',
   'LEAD_FOLLOW_UP',
   'MEASUREMENT_SETUP',
+  'AWARENESS_MEASUREMENT_SETUP',
+  'INQUIRY_LEAD_FOLLOW_UP',
+  'RECRUIT_RESPONSE_GUIDE',
 ] as const;
 export type SocialActivitySupportKey = (typeof SOCIAL_ACTIVITY_SUPPORT_KEYS)[number];
 
@@ -34,6 +43,37 @@ export type SocialActivitySupport = {
   reason: string;
   steps: readonly string[];
 };
+
+export const SOCIAL_ACTIVITY_SUPPORT_GOAL_FALLBACK_REASONS = [
+  'ATTRIBUTION_UNAVAILABLE',
+  'NO_OBSERVED_MISSIONS',
+  'UNATTRIBUTED_MISSIONS',
+  'MIXED_GOALS',
+  'NO_SINGLE_GOAL',
+  'METRICS_UNAVAILABLE',
+  'METRICS_INCONSISTENT',
+  'UNATTRIBUTED_ACCOUNT_METRICS',
+  'GOAL_POLICY_COMMON_ONLY',
+  'GOAL_SIGNAL_MISMATCH',
+  'ATTRIBUTED_INSIGHTS_REQUIRED',
+  'GOAL_SPECIFIC_SUPPORT_NOT_CONFIGURED',
+] as const;
+export type SocialActivitySupportGoalFallbackReason =
+  (typeof SOCIAL_ACTIVITY_SUPPORT_GOAL_FALLBACK_REASONS)[number];
+
+export type SocialActivitySupportSelection =
+  | {
+      support: SocialActivitySupport;
+      mode: 'COMMON';
+      eligibleGoal: SocialAccountStrategyGoal | null;
+      fallbackReason: SocialActivitySupportGoalFallbackReason;
+    }
+  | {
+      support: SocialActivitySupport;
+      mode: 'GOAL_SPECIFIC';
+      eligibleGoal: SocialAccountStrategyGoal;
+      fallbackReason: null;
+    };
 
 export const SOCIAL_ACTIVITY_SUPPORT_ACTIONS = ['ACCEPT', 'COMPLETE', 'SKIP'] as const;
 export type SocialActivitySupportAction = (typeof SOCIAL_ACTIVITY_SUPPORT_ACTIONS)[number];
@@ -181,6 +221,50 @@ const supportByCategory: Record<SocialActivityBarrierCategory, SocialActivitySup
   },
 };
 
+const goalSpecificSupport: Partial<
+  Record<
+    SocialAccountStrategyGoal,
+    Partial<Record<SocialActivityBarrierCategory, SocialActivitySupport>>
+  >
+> = {
+  BRAND_AWARENESS: {
+    UNKNOWN: {
+      key: 'AWARENESS_MEASUREMENT_SETUP',
+      title: '認知の変化を確認できる数字を一つ記録する',
+      reason: '問い合わせ件数だけで判断せず、知ってもらえた変化を確認できる状態にします。',
+      steps: [
+        '最近の投稿を一つ開く',
+        '閲覧・リーチ・プロフィール閲覧から確認できる数字を一つ選ぶ',
+        '数字と確認日を記録する',
+      ],
+    },
+  },
+  INQUIRY: {
+    LEAD: {
+      key: 'INQUIRY_LEAD_FOLLOW_UP',
+      title: '問い合わせ先を一つに絞って確認する',
+      reason: '反応した方が相談先で迷わないよう、問い合わせまでの案内を明確にします。',
+      steps: [
+        'LINE・フォーム・電話から案内先を一つ選ぶ',
+        '案内先が開けることを確認する',
+        '次の投稿で使う問い合わせ案内を一文にする',
+      ],
+    },
+  },
+  RECRUIT: {
+    RESPONSE: {
+      key: 'RECRUIT_RESPONSE_GUIDE',
+      title: '採用について届いた反応へ1件返信する',
+      reason: '応募を急がせず、仕事や見学について知りたい方が次へ進める返答を作ります。',
+      steps: [
+        '採用に関する未返信の反応を一つ選ぶ',
+        '質問への回答またはお礼を一文書く',
+        '採用情報・見学・問い合わせから合う案内を一つ添える',
+      ],
+    },
+  },
+};
+
 export function buildSocialActivityBarrierQuestion(
   cases: readonly SocialActivityBarrierCase[],
 ): SocialActivityBarrierQuestion {
@@ -220,4 +304,164 @@ export function buildSocialActivityBarrierQuestion(
 
 export function socialActivitySupportFor(category: SocialActivityBarrierCategory) {
   return supportByCategory[category];
+}
+
+function numericThreshold(evidence: SocialActivityBarrierEvidence, key: string) {
+  const value = evidence.thresholds[key];
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null;
+}
+
+export function socialActivityBarrierGoalDecisionPolicy(input: {
+  category: SocialActivityBarrierCategory;
+  evidence: SocialActivityBarrierEvidence;
+  goal: SocialAccountStrategyGoal;
+}):
+  | { mode: 'GOAL_SCOPED'; goal: SocialAccountStrategyGoal }
+  | {
+      mode: 'COMMON_ONLY' | 'INCONCLUSIVE';
+      goal: null;
+      reason: 'GOAL_POLICY_COMMON_ONLY' | 'GOAL_SIGNAL_MISMATCH' | 'ATTRIBUTED_INSIGHTS_REQUIRED';
+    } {
+  const segmentedMetrics = input.evidence.goalMetrics;
+  const goalMetrics = segmentedMetrics?.missionMetrics[input.goal];
+  if (segmentedMetrics === null || goalMetrics === undefined) {
+    return { mode: 'INCONCLUSIVE', goal: null, reason: 'GOAL_SIGNAL_MISMATCH' };
+  }
+
+  if (input.category === 'EFFECT') {
+    return { mode: 'INCONCLUSIVE', goal: null, reason: 'ATTRIBUTED_INSIGHTS_REQUIRED' };
+  }
+
+  if (input.category === 'UNKNOWN') {
+    const minimumPosted = numericThreshold(input.evidence, 'minimumPosted');
+    const maximumInsights = numericThreshold(input.evidence, 'maximumInsights');
+    return input.evidence.evidenceCode === 'POSTED_WITHOUT_MEASUREMENT' &&
+      minimumPosted !== null &&
+      maximumInsights !== null &&
+      goalMetrics.postCompleted >= minimumPosted &&
+      segmentedMetrics.unattributedAccountMetrics.insightRecorded <= maximumInsights
+      ? { mode: 'GOAL_SCOPED', goal: input.goal }
+      : { mode: 'INCONCLUSIVE', goal: null, reason: 'GOAL_SIGNAL_MISMATCH' };
+  }
+
+  if (input.category === 'RESPONSE' || input.category === 'LEAD') {
+    const minimumPositiveResponses = numericThreshold(input.evidence, 'minimumPositiveResponses');
+    const maximumConversionActions = numericThreshold(input.evidence, 'maximumConversionActions');
+    return input.evidence.evidenceCode === 'RESPONSE_WITHOUT_NEXT_STEP' &&
+      minimumPositiveResponses !== null &&
+      maximumConversionActions !== null &&
+      goalMetrics.positiveResponseRecorded >= minimumPositiveResponses &&
+      goalMetrics.conversionActionRecorded <= maximumConversionActions
+      ? { mode: 'GOAL_SCOPED', goal: input.goal }
+      : { mode: 'INCONCLUSIVE', goal: null, reason: 'GOAL_SIGNAL_MISMATCH' };
+  }
+
+  return { mode: 'COMMON_ONLY', goal: null, reason: 'GOAL_POLICY_COMMON_ONLY' };
+}
+
+export function selectSocialActivitySupport(input: {
+  category: SocialActivityBarrierCategory;
+  evidence: SocialActivityBarrierEvidence;
+}): SocialActivitySupportSelection {
+  const support = socialActivitySupportFor(input.category);
+  const attribution = input.evidence.goalAttribution;
+  if (attribution === null) {
+    return {
+      support,
+      mode: 'COMMON',
+      eligibleGoal: null,
+      fallbackReason: 'ATTRIBUTION_UNAVAILABLE',
+    };
+  }
+  if (attribution.observedMissionCount === 0) {
+    return {
+      support,
+      mode: 'COMMON',
+      eligibleGoal: null,
+      fallbackReason: 'NO_OBSERVED_MISSIONS',
+    };
+  }
+  if (attribution.unattributedMissionCount > 0) {
+    return {
+      support,
+      mode: 'COMMON',
+      eligibleGoal: null,
+      fallbackReason: 'UNATTRIBUTED_MISSIONS',
+    };
+  }
+  if (attribution.mixedAttributedGoals) {
+    return {
+      support,
+      mode: 'COMMON',
+      eligibleGoal: null,
+      fallbackReason: 'MIXED_GOALS',
+    };
+  }
+  const goalMetrics = input.evidence.goalMetrics;
+  if (goalMetrics === null) {
+    return {
+      support,
+      mode: 'COMMON',
+      eligibleGoal: null,
+      fallbackReason: 'METRICS_UNAVAILABLE',
+    };
+  }
+  if (!socialActivityBarrierGoalMetricsMatchAttribution(goalMetrics, attribution)) {
+    return {
+      support,
+      mode: 'COMMON',
+      eligibleGoal: null,
+      fallbackReason: 'METRICS_INCONSISTENT',
+    };
+  }
+  if (
+    goalMetrics.unattributedAccountMetrics.insightRecorded > 0 ||
+    goalMetrics.unattributedAccountMetrics.positiveResponseRecorded > 0
+  ) {
+    return {
+      support,
+      mode: 'COMMON',
+      eligibleGoal: null,
+      fallbackReason: 'UNATTRIBUTED_ACCOUNT_METRICS',
+    };
+  }
+  const goals = Object.entries(attribution.missionCounts)
+    .filter(([goal, count]) => goal !== 'UNATTRIBUTED' && count > 0)
+    .map(([goal]) => goal as SocialAccountStrategyGoal);
+  if (goals.length !== 1) {
+    return {
+      support,
+      mode: 'COMMON',
+      eligibleGoal: null,
+      fallbackReason: 'NO_SINGLE_GOAL',
+    };
+  }
+  const policy = socialActivityBarrierGoalDecisionPolicy({
+    category: input.category,
+    evidence: input.evidence,
+    goal: goals[0]!,
+  });
+  if (policy.mode !== 'GOAL_SCOPED') {
+    return {
+      support,
+      mode: 'COMMON',
+      eligibleGoal: null,
+      fallbackReason: policy.reason,
+    };
+  }
+  const configuredSupport = goalSpecificSupport[policy.goal]?.[input.category];
+  if (configuredSupport) {
+    return {
+      support: configuredSupport,
+      mode: 'GOAL_SPECIFIC',
+      eligibleGoal: policy.goal,
+      fallbackReason: null,
+    };
+  }
+  return {
+    support,
+    mode: 'COMMON',
+    eligibleGoal: policy.goal,
+    fallbackReason: 'GOAL_SPECIFIC_SUPPORT_NOT_CONFIGURED',
+  };
 }

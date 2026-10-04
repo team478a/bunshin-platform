@@ -1,11 +1,14 @@
 import type {
   MissionContentVariant,
+  MissionContentVariantGeneration,
   MissionContentVariantRepository,
 } from '@bunshin/capability-social';
 import { canManageBunshin } from '@bunshin/platform-domain';
 import { ApplicationError } from '@bunshin/shared';
 import type { Prisma } from './client';
 import { type PrismaClient, prisma } from './client';
+
+const MAX_PHOTO_FIRST_CONFIRMATION_VARIANTS = 5;
 
 export class PrismaMissionContentVariantRepository implements MissionContentVariantRepository {
   constructor(private readonly client: PrismaClient = prisma) {}
@@ -78,32 +81,57 @@ export class PrismaMissionContentVariantRepository implements MissionContentVari
     latencyMs: number;
     createdAt: Date;
     selections: Array<{ selectedAt: Date }>;
+    photoFirstMetadata: null | {
+      photoMemoryId: string;
+      analysisJson: Prisma.JsonValue;
+      planningJson: Prisma.JsonValue;
+      analyzerModel: string;
+      analyzerPromptVersion: string;
+    };
   }): MissionContentVariant {
     return {
       ...row,
       content: row.contentJson as Record<string, unknown>,
       selectedAt: row.selections[0]?.selectedAt ?? null,
+      photoFirst: row.photoFirstMetadata
+        ? {
+            photoMemoryId: row.photoFirstMetadata.photoMemoryId,
+            analysis: row.photoFirstMetadata.analysisJson as unknown as NonNullable<
+              MissionContentVariant['photoFirst']
+            >['analysis'],
+            planning: row.photoFirstMetadata.planningJson as unknown as NonNullable<
+              MissionContentVariant['photoFirst']
+            >['planning'],
+            analyzerModel: row.photoFirstMetadata.analyzerModel,
+            analyzerPromptVersion: row.photoFirstMetadata.analyzerPromptVersion,
+          }
+        : null,
     };
   }
 
   private variantInclude = {
     selections: { orderBy: { selectedAt: 'desc' as const }, take: 1 },
+    photoFirstMetadata: true,
   } as const;
 
+  private generation(
+    row: Prisma.MissionContentVariantGenerationGetPayload<object>,
+  ): MissionContentVariantGeneration {
+    return {
+      ...row,
+      qualityVerdict: row.qualityVerdict as 'PASS' | 'REVISE' | 'REJECT' | null,
+    };
+  }
+
   async claim(input: Parameters<MissionContentVariantRepository['claim']>[0]) {
+    if (
+      input.initiatingSource !== undefined &&
+      !['STANDARD', 'PHOTO_FIRST'].includes(input.initiatingSource)
+    )
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid generation source');
     return this.client.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`${input.workspaceId}:${input.bunshinId}:${input.dailyMissionId}`}::text, 0))`;
       if (!(await this.authorizedMission(tx, input))) return null;
-      const existingVariant = await tx.missionContentVariant.findFirst({
-        where: {
-          workspaceId: input.workspaceId,
-          bunshinId: input.bunshinId,
-          dailyMissionId: input.dailyMissionId,
-        },
-        select: { id: true },
-      });
-      if (existingVariant)
-        throw new ApplicationError('CONFLICT', 'mission content variant limit reached');
       const existing = await tx.missionContentVariantGeneration.findFirst({
         where: {
           workspaceId: input.workspaceId,
@@ -112,7 +140,40 @@ export class PrismaMissionContentVariantRepository implements MissionContentVari
           idempotencyKey: input.idempotencyKey,
         },
       });
-      if (existing) return { acquired: false, generation: existing };
+      if (existing) {
+        if (
+          existing.dailyMissionId !== input.dailyMissionId ||
+          (input.initiatingSource !== undefined &&
+            existing.initiatingSource !== null &&
+            existing.initiatingSource !== input.initiatingSource)
+        )
+          throw new ApplicationError('CONFLICT', 'generation key belongs to another request');
+        return { acquired: false, generation: this.generation(existing) };
+      }
+      const latestVariant = await tx.missionContentVariant.findFirst({
+        where: {
+          workspaceId: input.workspaceId,
+          bunshinId: input.bunshinId,
+          dailyMissionId: input.dailyMissionId,
+        },
+        orderBy: { sequence: 'desc' },
+        select: { id: true, sequence: true, photoFirstMetadata: { select: { id: true } } },
+      });
+      if (!input.sourceVariantId && latestVariant)
+        throw new ApplicationError('CONFLICT', 'mission content variant limit reached');
+      if (
+        input.sourceVariantId &&
+        (!latestVariant ||
+          latestVariant.id !== input.sourceVariantId ||
+          !latestVariant.photoFirstMetadata)
+      )
+        throw new ApplicationError('CONFLICT', 'photo confirmation source is no longer current');
+      if (
+        input.sourceVariantId &&
+        latestVariant &&
+        latestVariant.sequence >= MAX_PHOTO_FIRST_CONFIRMATION_VARIANTS
+      )
+        throw new ApplicationError('CONFLICT', 'photo confirmation limit reached');
       const active = await tx.missionContentVariantGeneration.findFirst({
         where: {
           workspaceId: input.workspaceId,
@@ -131,9 +192,10 @@ export class PrismaMissionContentVariantRepository implements MissionContentVari
           dailyMissionId: input.dailyMissionId,
           actorUserId: input.actorUserId,
           idempotencyKey: input.idempotencyKey,
+          initiatingSource: input.initiatingSource ?? null,
         },
       });
-      return { acquired: true, generation };
+      return { acquired: true, generation: this.generation(generation) };
     });
   }
 
@@ -152,24 +214,37 @@ export class PrismaMissionContentVariantRepository implements MissionContentVari
         },
       });
       if (!generation) return null;
-      if (
-        await tx.missionContentVariant.findFirst({
-          where: {
-            workspaceId: input.workspaceId,
-            bunshinId: input.bunshinId,
-            dailyMissionId: input.dailyMissionId,
-          },
-          select: { id: true },
-        })
-      )
+      const latestVariant = await tx.missionContentVariant.findFirst({
+        where: {
+          workspaceId: input.workspaceId,
+          bunshinId: input.bunshinId,
+          dailyMissionId: input.dailyMissionId,
+        },
+        orderBy: { sequence: 'desc' },
+        select: { id: true, sequence: true, photoFirstMetadata: { select: { id: true } } },
+      });
+      if (!input.sourceVariantId && latestVariant)
         throw new ApplicationError('CONFLICT', 'mission content variant limit reached');
+      if (
+        input.sourceVariantId &&
+        (!latestVariant ||
+          latestVariant.id !== input.sourceVariantId ||
+          !latestVariant.photoFirstMetadata)
+      )
+        throw new ApplicationError('CONFLICT', 'photo confirmation source is no longer current');
+      if (
+        input.sourceVariantId &&
+        latestVariant &&
+        latestVariant.sequence >= MAX_PHOTO_FIRST_CONFIRMATION_VARIANTS
+      )
+        throw new ApplicationError('CONFLICT', 'photo confirmation limit reached');
       const variant = await tx.missionContentVariant.create({
         data: {
           workspaceId: input.workspaceId,
           bunshinId: input.bunshinId,
           dailyMissionId: input.dailyMissionId,
           actorUserId: input.actorUserId,
-          sequence: 1,
+          sequence: (latestVariant?.sequence ?? 0) + 1,
           format: input.format,
           contentJson: input.content as Prisma.InputJsonValue,
           qualityScore: input.qualityScore,
@@ -182,6 +257,21 @@ export class PrismaMissionContentVariantRepository implements MissionContentVari
         },
         include: this.variantInclude,
       });
+      if (input.photoFirst)
+        await tx.missionContentVariantPhotoFirstMetadata.create({
+          data: {
+            workspaceId: input.workspaceId,
+            bunshinId: input.bunshinId,
+            dailyMissionId: input.dailyMissionId,
+            variantId: variant.id,
+            photoMemoryId: input.photoFirst.photoMemoryId,
+            actorUserId: input.actorUserId,
+            analysisJson: input.photoFirst.analysis as unknown as Prisma.InputJsonValue,
+            planningJson: input.photoFirst.planning as unknown as Prisma.InputJsonValue,
+            analyzerModel: input.photoFirst.analyzerModel,
+            analyzerPromptVersion: input.photoFirst.analyzerPromptVersion,
+          },
+        });
       await tx.missionContentVariantGeneration.update({
         where: { id: generation.id },
         data: {
@@ -194,9 +284,17 @@ export class PrismaMissionContentVariantRepository implements MissionContentVari
           estimatedCostMicros: input.estimatedCostMicros,
           latencyMs: input.latencyMs,
           errorCategory: null,
+          qualityVerdict: input.qualityAudit.verdict,
+          qualityScore: input.qualityAudit.score,
+          qualityIssueCodes: input.qualityAudit.issueCodes,
+          qualityRepairCount: input.qualityAudit.repairCount,
         },
       });
-      return this.variant(variant);
+      const completed = await tx.missionContentVariant.findUnique({
+        where: { id: variant.id },
+        include: this.variantInclude,
+      });
+      return completed ? this.variant(completed) : null;
     });
   }
 
@@ -223,6 +321,10 @@ export class PrismaMissionContentVariantRepository implements MissionContentVari
             ? {}
             : { estimatedCostMicros: input.estimatedCostMicros }),
           ...(input.latencyMs === undefined ? {} : { latencyMs: input.latencyMs }),
+          qualityVerdict: input.qualityAudit.verdict,
+          qualityScore: input.qualityAudit.score,
+          qualityIssueCodes: input.qualityAudit.issueCodes,
+          qualityRepairCount: input.qualityAudit.repairCount,
         },
       });
       return result.count === 1;
@@ -242,6 +344,51 @@ export class PrismaMissionContentVariantRepository implements MissionContentVari
         include: this.variantInclude,
       })
     ).map((row) => this.variant(row));
+  }
+
+  async listQualityAudits(
+    input: Parameters<MissionContentVariantRepository['listQualityAudits']>[0],
+  ) {
+    if (!(await this.authorizedMission(this.client, input))) return null;
+    return this.client.missionContentVariantGeneration
+      .findMany({
+        where: {
+          workspaceId: input.workspaceId,
+          bunshinId: input.bunshinId,
+          dailyMissionId: input.dailyMissionId,
+          ...(input.issueCode ? { qualityIssueCodes: { has: input.issueCode } } : {}),
+        },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        take: 100,
+        select: {
+          id: true,
+          status: true,
+          variantId: true,
+          errorCategory: true,
+          promptVersion: true,
+          qualityVerdict: true,
+          qualityScore: true,
+          qualityIssueCodes: true,
+          qualityRepairCount: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      })
+      .then((rows) =>
+        rows.map((row) => ({
+          generationId: row.id,
+          status: row.status,
+          variantId: row.variantId,
+          errorCategory: row.errorCategory,
+          promptVersion: row.promptVersion,
+          qualityVerdict: row.qualityVerdict as 'PASS' | 'REVISE' | 'REJECT' | null,
+          qualityScore: row.qualityScore,
+          qualityIssueCodes: row.qualityIssueCodes,
+          qualityRepairCount: row.qualityRepairCount,
+          createdAt: row.createdAt,
+          updatedAt: row.updatedAt,
+        })),
+      );
   }
 
   async select(input: Parameters<MissionContentVariantRepository['select']>[0]) {

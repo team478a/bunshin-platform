@@ -13,6 +13,13 @@ const migration = readFileSync(
   ),
   'utf8',
 );
+const qualityAuditMigration = readFileSync(
+  new URL(
+    '../prisma/migrations/20261002070000_add_mission_variant_quality_audit/migration.sql',
+    import.meta.url,
+  ),
+  'utf8',
+);
 
 describe('mission content variant persistence boundary', () => {
   it('keeps the original daily mission unique while variants are append-only', () => {
@@ -27,6 +34,10 @@ describe('mission content variant persistence boundary', () => {
     expect(schema).toContain('model MissionContentVariantSelection');
     expect(schema).toContain('estimatedCostMicros');
     expect(migration).toContain('"MissionContentVariantGenerationStatus"');
+    expect(schema).toContain('qualityIssueCodes');
+    expect(schema).toContain('qualityRepairCount');
+    expect(qualityAuditMigration).toContain('"quality_issue_codes" TEXT[] NOT NULL');
+    expect(qualityAuditMigration).toContain('"quality_repair_count" INTEGER NOT NULL');
   });
 
   it('rechecks workspace, Bunshin, user and service scope before every operation', () => {
@@ -37,6 +48,9 @@ describe('mission content variant persistence boundary', () => {
       "memberships: { some: { userId: input.actorUserId, status: 'ACTIVE' } }",
     );
     expect(repository).toContain('mission content variant limit reached');
+    expect(repository).toContain('photo confirmation source is no longer current');
+    expect(repository).toContain('MAX_PHOTO_FIRST_CONFIRMATION_VARIANTS');
+    expect(repository).toContain('sequence: (latestVariant?.sequence ?? 0) + 1');
   });
 
   it('does not pass service-only scope fields into generation persistence', () => {

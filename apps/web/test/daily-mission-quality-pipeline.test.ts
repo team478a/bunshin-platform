@@ -44,6 +44,8 @@ const inputFor = (options: {
   generate: ReturnType<typeof vi.fn>;
   check: ReturnType<typeof vi.fn>;
   stages?: string[];
+  quotaSuffixes?: string[];
+  usageSuffixes?: string[];
 }) => ({
   generator: { execute: options.generate } as unknown as GenerateMissionContent,
   checker: { execute: options.check } as unknown as CheckMissionQuality,
@@ -52,9 +54,16 @@ const inputFor = (options: {
     content: Record<string, unknown>,
   ) => MissionQualityCheckerInput,
   recentMissions: [],
-  generateWithQuota: <T>(_suffix: string, generate: () => Promise<T>) => generate(),
-  recordUsage: vi.fn().mockResolvedValue(undefined),
+  generateWithQuota: <T>(suffix: string, generate: () => Promise<T>) => {
+    options.quotaSuffixes?.push(suffix);
+    return generate();
+  },
+  recordUsage: vi.fn().mockImplementation((suffix: string) => {
+    options.usageSuffixes?.push(suffix);
+    return Promise.resolve();
+  }),
   applyTerminology: <T>(result: T) => result,
+  decisionRepairPolicy: 'ALLOW_CONTENT_REPAIR' as const,
   setStage: (stage: string) => options.stages?.push(stage),
 });
 
@@ -91,5 +100,131 @@ describe('daily mission quality pipeline', () => {
     ).rejects.toMatchObject({ code: 'CONTENT_REJECTED' });
     expect(generate).toHaveBeenCalledTimes(3);
     expect(check).toHaveBeenCalledTimes(3);
+  });
+
+  it('fails closed before repairing content that requires a new decision brief', async () => {
+    const generate = vi
+      .fn()
+      .mockResolvedValue(generationResult('判断理由と一致するか未確認の投稿'));
+    const check = vi.fn().mockResolvedValue(qualityResult('REVISE'));
+
+    await expect(
+      generateQualityCheckedMissionContent({
+        ...inputFor({ generate, check }),
+        decisionRepairPolicy: 'REQUIRE_REBRIEF',
+      }),
+    ).rejects.toMatchObject({
+      code: 'CONTENT_REJECTED',
+      cause: {
+        reason: 'DECISION_REBRIEF_REQUIRED',
+        decisionRepair: {
+          policyVersion: 'social-decision-repair-v1',
+          action: 'REBRIEF_REQUIRED',
+          reason: 'QUALITY_REVISE',
+          nextDecisionStage: 'REVISED_BRIEF',
+        },
+        rebriefNextStep: {
+          policyVersion: 'social-decision-rebrief-orchestration-v1',
+          action: 'RUN_REBRIEF',
+          nextDecisionStage: 'REVISED_BRIEF',
+          rebriefAttempt: 1,
+        },
+        issueCodes: ['NEEDS_DETAIL'],
+        attempts: 1,
+      },
+    });
+    expect(generate).toHaveBeenCalledTimes(1);
+    expect(check).toHaveBeenCalledTimes(1);
+  });
+
+  it('fails closed before replacing a passed but duplicated decision-aligned proposal', async () => {
+    const generate = vi.fn().mockResolvedValue(generationResult('以前と同じ投稿'));
+    const check = vi.fn().mockResolvedValue(qualityResult('PASS'));
+
+    await expect(
+      generateQualityCheckedMissionContent({
+        ...inputFor({ generate, check }),
+        decisionRepairPolicy: 'REQUIRE_REBRIEF',
+        recentMissions: [
+          {
+            missionDate: '2026-10-03',
+            topic: '以前のテーマ',
+            angle: '以前の切り口',
+            content: { body: '以前と同じ投稿' },
+          },
+        ],
+      }),
+    ).rejects.toMatchObject({
+      code: 'CONTENT_REJECTED',
+      cause: {
+        reason: 'DECISION_REBRIEF_REQUIRED',
+        decisionRepair: {
+          policyVersion: 'social-decision-repair-v1',
+          action: 'REBRIEF_REQUIRED',
+          reason: 'CONTENT_INSPECTION_FAILED',
+          nextDecisionStage: 'REVISED_BRIEF',
+        },
+        rebriefNextStep: {
+          action: 'RUN_REBRIEF',
+          rebriefAttempt: 1,
+        },
+        noveltyIssue: { code: 'EXACT_RECENT_CONTENT' },
+        attempts: 1,
+      },
+    });
+    expect(generate).toHaveBeenCalledTimes(1);
+    expect(check).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses a separate operation namespace for a revised brief that passes reinspection', async () => {
+    const generate = vi.fn().mockResolvedValue(generationResult('改訂Briefに沿う投稿'));
+    const check = vi.fn().mockResolvedValue(qualityResult('PASS'));
+    const stages: string[] = [];
+    const quotaSuffixes: string[] = [];
+    const usageSuffixes: string[] = [];
+
+    const result = await generateQualityCheckedMissionContent({
+      ...inputFor({ generate, check, stages, quotaSuffixes, usageSuffixes }),
+      decisionRepairPolicy: 'REQUIRE_REBRIEF',
+      decisionStage: 'REVISED_BRIEF',
+      rebriefAttemptsUsed: 1,
+      operationPrefix: 'rebrief:1',
+    });
+
+    expect(result).toMatchObject({
+      decisionStage: 'REVISED_BRIEF',
+      rebriefAttemptsUsed: 1,
+    });
+    expect(stages).toEqual(['rebrief:1:content:0', 'rebrief:1:quality:0']);
+    expect(quotaSuffixes).toEqual(['rebrief:1:content:0', 'rebrief:1:quality:0']);
+    expect(usageSuffixes).toEqual(['rebrief:1:content:0', 'rebrief:1:quality:0']);
+  });
+
+  it('fails closed after revised content fails quality without attempting content repair', async () => {
+    const generate = vi.fn().mockResolvedValue(generationResult('再検査で不合格の投稿'));
+    const check = vi.fn().mockResolvedValue(qualityResult('REVISE'));
+
+    await expect(
+      generateQualityCheckedMissionContent({
+        ...inputFor({ generate, check }),
+        decisionRepairPolicy: 'REQUIRE_REBRIEF',
+        decisionStage: 'REVISED_BRIEF',
+        rebriefAttemptsUsed: 1,
+        operationPrefix: 'rebrief:1',
+      }),
+    ).rejects.toMatchObject({
+      code: 'CONTENT_REJECTED',
+      cause: {
+        reason: 'DECISION_REBRIEF_FAILED',
+        category: 'DECISION_REBRIEF_FAILED',
+        rebriefNextStep: {
+          action: 'FAIL_CLOSED',
+          reason: 'REBRIEF_ATTEMPT_FAILED',
+          rebriefAttemptsUsed: 1,
+        },
+      },
+    });
+    expect(generate).toHaveBeenCalledTimes(1);
+    expect(check).toHaveBeenCalledTimes(1);
   });
 });

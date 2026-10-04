@@ -1,5 +1,11 @@
 export * from './social-profile';
 export * from './social-account-strategy';
+export * from './social-goal';
+export * from './social-decision-context';
+export * from './social-decision-planner';
+export * from './social-decision-repair';
+export * from './social-decision-rebrief';
+export * from './social-decision-rebrief-orchestration';
 export * from './content-pillars';
 export * from './weekly-plan';
 export * from './mission-generation';
@@ -19,3 +25,13 @@ export {
 export * from './trend-research';
 export * from './trend-provider-benchmark';
 export * from './golden-dataset';
+export {
+  HASSY_SUPPORT_IMPROVEMENT_DEFINITION,
+  supportGoalAtOffer,
+  summarizeHassySupportOutcomes,
+} from './improvement-support-outcomes';
+export {
+  HASSY_PHOTO_QUALITY_DEFINITION,
+  projectHassyPhotoQuality,
+  summarizeHassyPhotoQuality,
+} from './improvement-photo-quality';

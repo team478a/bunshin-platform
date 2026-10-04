@@ -1,6 +1,9 @@
 import 'server-only';
-import type { BunshinCapabilityAssignmentRepository } from '@bunshin/application';
-import type { DailyMissionRepository } from '@bunshin/capability-social';
+import type {
+  BunshinCapabilityAssignmentRepository,
+  GenerationDecisionRevisionMetadata,
+} from '@bunshin/application';
+import type { DailyMissionRepository, SocialDecisionContext } from '@bunshin/capability-social';
 import type { DailyMissionAiScope } from './daily-mission-ai-runtime';
 import type { runDailyMissionBriefGeneration } from './daily-mission-brief-runtime';
 import type { runDailyMissionContentGeneration } from './daily-mission-content-runtime';
@@ -11,6 +14,7 @@ import {
   type selectDailyMissionMemories,
 } from './daily-mission-personalization';
 import { persistGeneratedDailyMission } from './daily-mission-persistence';
+import { buildDailyMissionDecisionMetadata } from './daily-mission-decision-context';
 import type { loadDailyMissionPlanningContext } from './daily-mission-planning-context';
 
 type PlanningContext = Awaited<ReturnType<typeof loadDailyMissionPlanningContext>>;
@@ -29,6 +33,8 @@ export function persistDailyMissionGenerationResult(input: {
   pillar: PlanningContext['pillars'][number];
   selectedMemories: SelectedMemories;
   personalization: Personalization;
+  decisionContext: SocialDecisionContext | null;
+  decisionRevision: GenerationDecisionRevisionMetadata | null;
   recentMissionIds: string[];
   contentResult: ContentResult;
   finalizedContent: FinalizedContent & { groupKnowledgeIds: string[] };
@@ -76,7 +82,7 @@ export function persistDailyMissionGenerationResult(input: {
       knowledgeIds: granted.map(({ id }) => id),
       groupKnowledgeIds: input.finalizedContent.groupKnowledgeIds,
       socialProfileId: profile.id,
-      strategy: { id: strategy.id, version: strategy.version },
+      strategy: { id: strategy.id, version: strategy.version, goal: strategy.goal },
       weeklyPlanId: weeklyPlan.id,
       contentPillarId: input.pillar.id,
       productPack: campaign
@@ -93,9 +99,15 @@ export function persistDailyMissionGenerationResult(input: {
       model: content.model,
       qualityIssueCodes,
       repairCount,
+      decision: buildDailyMissionDecisionMetadata({
+        context: input.decisionContext,
+        plannerPromptVersion: input.brief.promptVersion,
+        revision: input.decisionRevision,
+      }),
       personalization: {
         sourceTypes: input.brief.output.personalizationSourceTypes ?? [],
         availableSourceTypes: personalizationSourceTypes(input.personalization),
+        reason: input.decisionContext ? (input.brief.output.personalizationReason ?? null) : null,
         onboardingResponseId:
           serviceKnowledge?.personalization.references.onboardingResponseId ?? null,
         businessProfileId: serviceKnowledge?.personalization.references.businessProfileId ?? null,

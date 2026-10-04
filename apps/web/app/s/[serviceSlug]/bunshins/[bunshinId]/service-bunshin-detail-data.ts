@@ -17,6 +17,8 @@ import {
   type SocialActivityBarrierQuestion,
   type SocialActivitySupportProgress,
   type SocialProfile,
+  type ServiceBusinessPurpose,
+  isServiceBusinessPurpose,
 } from '@bunshin/capability-social';
 import type { CSSProperties } from 'react';
 import { notFound } from 'next/navigation';
@@ -29,6 +31,10 @@ import { localDateInTimezone } from '../../../../../src/activity-progress';
 import { resolveDeliveryScheduleStatus } from '../../../../../src/services/delivery-schedule-status';
 import { missionDecisionOrPending } from '../../../../../src/mission-decision-fallback';
 import { readBusinessOutcomes } from '../../../../../src/services/business-outcomes';
+import {
+  readSnapshotStrategyGoal,
+  readSocialGoalOutcome,
+} from '../../../../../src/services/social-goal-outcomes';
 import {
   readPostPerformance,
   type PostPerformanceView,
@@ -43,6 +49,7 @@ import { resolveServiceBunshinBusinessDetail } from './service-bunshin-detail-bu
 import { loadServiceImageCreationAvailability } from './service-bunshin-detail-image-access';
 import { loadServiceDedicatedLineConnection } from './service-bunshin-detail-line';
 import { loadServiceBunshinSocialInsights } from './service-bunshin-detail-social-insights';
+import type { PhotoFirstResult } from './daily-action-section';
 
 export async function loadServiceBunshinDetail({
   serviceSlug,
@@ -73,9 +80,11 @@ export async function loadServiceBunshinDetail({
   let variantPointCost: number | null = null;
   let rewardsPilotActive = false;
   let businessProgramStartedAt: Date | null = null;
+  let businessPrimaryPurpose: ServiceBusinessPurpose | null = null;
   let postPerformances: PostPerformanceView[] = [];
   let activityBarrierQuestion: SocialActivityBarrierQuestion | null = null;
   let activityBarrierSupport: SocialActivitySupportProgress | null = null;
+  let latestPhotoFirstResult: PhotoFirstResult | null = null;
   const videos: Record<string, { href: string; status: string }> = {};
   try {
     const scope = {
@@ -92,10 +101,14 @@ export async function loadServiceBunshinDetail({
             userId: actor.userId,
             groupMembership: { status: 'ACTIVE' },
           },
-          select: { createdAt: true },
+          select: { createdAt: true, primaryPurpose: true },
         })
       : null;
     businessProgramStartedAt = businessProgramProfile?.createdAt ?? null;
+    businessPrimaryPurpose =
+      businessProgramProfile && isServiceBusinessPurpose(businessProgramProfile.primaryPurpose)
+        ? businessProgramProfile.primaryPurpose
+        : null;
     bunshin = await new GetBunshin(new db.PrismaBunshinRepository()).execute(scope);
     const membership = await db.prisma.groupMembership.findFirst({
       where: {
@@ -181,6 +194,17 @@ export async function loadServiceBunshinDetail({
         videos[mission.id] = { href: `/s/${serviceSlug}/videos/${video.id}`, status: video.status };
     }
     const outcomeRepository = new db.PrismaMissionOutcomeRepository();
+    const generationContexts = await db.prisma.generationContextSnapshot.findMany({
+      where: {
+        workspaceId: service.workspaceId,
+        bunshinId,
+        dailyMissionId: { in: missionRecords.map(({ id }) => id) },
+      },
+      select: { dailyMissionId: true, payload: true },
+    });
+    const generationContextByMission = new Map(
+      generationContexts.map(({ dailyMissionId, payload }) => [dailyMissionId, payload]),
+    );
     const missionStates = await Promise.all(
       missionRecords.map(async (mission) => ({
         decision: await missionDecisionOrPending(() =>
@@ -223,6 +247,33 @@ export async function loadServiceBunshinDetail({
         }),
       ),
     );
+    latestPhotoFirstResult =
+      missionVariants
+        .flat()
+        .flatMap((variant) =>
+          variant.photoFirst
+            ? [
+                {
+                  variant: {
+                    id: variant.id,
+                    dailyMissionId: variant.dailyMissionId,
+                    content: applyServiceContentTerminology(
+                      variant.content,
+                      contentTerminologyPolicy,
+                    ),
+                  },
+                  photoFirst: {
+                    photoMemoryId: variant.photoFirst.photoMemoryId,
+                    analysis: variant.photoFirst.analysis,
+                    planning: variant.photoFirst.planning,
+                  },
+                  createdAt: variant.createdAt,
+                },
+              ]
+            : [],
+        )
+        .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
+        .map(({ variant, photoFirst }) => ({ variant, photoFirst }))[0] ?? null;
     variantPointCost = isBusinessDailyService
       ? null
       : await new ListPointRewardCatalog(new db.PrismaPointRedemptionRepository())
@@ -292,7 +343,11 @@ export async function loadServiceBunshinDetail({
           }
         : {}),
       ...(isBusinessDailyService
-        ? { businessOutcomes: readBusinessOutcomes(missionStates[index]!.post?.manualMetrics) }
+        ? {
+            businessOutcomes: readBusinessOutcomes(missionStates[index]!.post?.manualMetrics),
+            strategyGoal: readSnapshotStrategyGoal(generationContextByMission.get(mission.id)),
+            goalOutcome: readSocialGoalOutcome(missionStates[index]!.post?.manualMetrics),
+          }
         : {}),
       copyAuthorization: missionStates[index]!.copyAuthorization,
       trendContext: mission.trendContext
@@ -351,6 +406,22 @@ export async function loadServiceBunshinDetail({
     missionDates: dailyMissions.map(({ missionDate }) => missionDate),
   });
   const generationProfile = socialProfiles.find(({ status }) => status === 'ACTIVE');
+  const photoFirstWeeklyPlan = weeklyPlans.find(
+    ({ status, items }) =>
+      status === 'CONFIRMED' && items.some(({ scheduledDate }) => scheduledDate === today),
+  );
+  const photoFirstProfile = photoFirstWeeklyPlan?.socialProfileId
+    ? socialProfiles.find(
+        ({ id, status }) => id === photoFirstWeeklyPlan.socialProfileId && status === 'ACTIVE',
+      )
+    : generationProfile;
+  const photoFirstMissionSeed =
+    photoFirstWeeklyPlan && photoFirstProfile
+      ? {
+          missionDate: today,
+          socialProfileId: photoFirstProfile.id,
+        }
+      : null;
   const imageCreationAvailable = await loadServiceImageCreationAvailability({
     db,
     serviceSlug: service.configuration.slug,
@@ -411,10 +482,12 @@ export async function loadServiceBunshinDetail({
     today,
     deliverySchedule,
     generationProfile,
+    photoFirstMissionSeed,
     imageCreationAvailable,
     dedicatedLine,
     dedicatedLineConnection,
     dailyActions,
+    latestPhotoFirstResult,
     socialInsightSnapshots,
     successfulBusinessTopic,
     businessProgram,
@@ -422,6 +495,7 @@ export async function loadServiceBunshinDetail({
     approvedBusinessStrategy,
     activityBarrierQuestion,
     activityBarrierSupport,
+    businessPrimaryPurpose,
   };
 }
 

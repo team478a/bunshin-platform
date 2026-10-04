@@ -1,6 +1,7 @@
 'use client';
 
 import { emptyBusinessOutcomes } from '../../../../../src/services/business-outcomes';
+import { socialGoalOutcomeCopy } from '../../../../../src/services/social-goal-outcome-copy';
 import {
   copyOptions,
   missionWithSelectedVariant,
@@ -22,6 +23,28 @@ const businessOutcomeOptions = [
   ['other', 'その他の反応'],
 ] as const;
 
+const repeatBusinessOutcomeOptions = [
+  ['inquiries', '問い合わせ'],
+  ['repeatReservations', '再予約'],
+  ['repeatVisits', '再来店'],
+  ['orders', '購入・申込'],
+  ['other', 'その他の反応'],
+] as const;
+
+const strategyGoalLabels = {
+  FOLLOWERS: 'フォロワー',
+  LINE_REGISTRATION: 'LINE登録',
+  INQUIRY: '問い合わせ',
+  VISIT_RESERVATION: '来店・予約',
+  SALES: '販売',
+  RECRUIT: '採用',
+  REPEAT: '再来店・リピート',
+  BRAND_AWARENESS: '認知',
+  TRUST_EXPERTISE: '信頼・専門性',
+  BLOG_TRAFFIC: 'ブログ閲覧',
+  OTHER: '設定した目的',
+} as const;
+
 export function ServiceDailyMissionAccepted({
   mission,
   serviceSlug,
@@ -34,6 +57,11 @@ export function ServiceDailyMissionAccepted({
   businessFree: boolean;
 }) {
   const outcomes = controller.businessOutcomes[mission.id] ?? emptyBusinessOutcomes();
+  const outcomeOptions =
+    mission.strategyGoal === 'REPEAT' ? repeatBusinessOutcomeOptions : businessOutcomeOptions;
+  const goalOutcomeCopy = mission.strategyGoal
+    ? socialGoalOutcomeCopy(mission.strategyGoal, strategyGoalLabels[mission.strategyGoal])
+    : null;
 
   return (
     <div className="mission-accepted">
@@ -88,42 +116,64 @@ export function ServiceDailyMissionAccepted({
             </button>
           ))}
           {businessFree ? (
-            <section className="mission-business-outcomes">
-              <h4>この投稿から、お客様の反応はありましたか？</h4>
-              <p>なければ0のままで大丈夫です。お客様の名前は入力しません。</p>
-              {businessOutcomeOptions.map(([key, label]) => (
-                <label key={key}>
-                  {label}の件数
-                  <input
-                    type="number"
-                    inputMode="numeric"
-                    min={0}
-                    max={999}
-                    value={outcomes[key]}
-                    onChange={(event) => {
-                      const count = Math.max(
-                        0,
-                        Math.min(999, Number.parseInt(event.target.value || '0', 10) || 0),
-                      );
-                      controller.setBusinessOutcomes((current) => ({
-                        ...current,
-                        [mission.id]: {
-                          ...(current[mission.id] ?? emptyBusinessOutcomes()),
-                          [key]: count,
-                        },
-                      }));
-                    }}
-                  />
-                </label>
-              ))}
-              <button
-                type="button"
-                disabled={controller.pendingAction !== null}
-                onClick={() => void controller.saveBusinessOutcomes(mission.id)}
-              >
-                お客様の反応を保存する
-              </button>
-            </section>
+            <>
+              {goalOutcomeCopy ? (
+                <section className="mission-business-outcomes mission-goal-outcome">
+                  <h4>{goalOutcomeCopy.question}</h4>
+                  <p>{goalOutcomeCopy.description}</p>
+                  {goalOutcomeCopy.options.map(({ result, label }) => (
+                    <button
+                      key={result}
+                      type="button"
+                      aria-pressed={controller.goalOutcomes[mission.id] === result}
+                      disabled={
+                        controller.pendingAction !== null ||
+                        controller.goalOutcomes[mission.id] === result
+                      }
+                      onClick={() => void controller.saveGoalOutcome(mission.id, result)}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </section>
+              ) : null}
+              <section className="mission-business-outcomes">
+                <h4>この投稿から、お客様の反応はありましたか？</h4>
+                <p>なければ0のままで大丈夫です。お客様の名前は入力しません。</p>
+                {outcomeOptions.map(([key, label]) => (
+                  <label key={key}>
+                    {label}の件数
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      min={0}
+                      max={999}
+                      value={outcomes[key]}
+                      onChange={(event) => {
+                        const count = Math.max(
+                          0,
+                          Math.min(999, Number.parseInt(event.target.value || '0', 10) || 0),
+                        );
+                        controller.setBusinessOutcomes((current) => ({
+                          ...current,
+                          [mission.id]: {
+                            ...(current[mission.id] ?? emptyBusinessOutcomes()),
+                            [key]: count,
+                          },
+                        }));
+                      }}
+                    />
+                  </label>
+                ))}
+                <button
+                  type="button"
+                  disabled={controller.pendingAction !== null}
+                  onClick={() => void controller.saveBusinessOutcomes(mission.id)}
+                >
+                  お客様の反応を保存する
+                </button>
+              </section>
+            </>
           ) : null}
         </div>
       )}

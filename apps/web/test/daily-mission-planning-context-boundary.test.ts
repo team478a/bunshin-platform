@@ -32,5 +32,8 @@ describe('daily mission planning context boundary', () => {
     expect(planningContext).toContain('active social profile not found');
     expect(planningContext).toContain('approved strategy is required');
     expect(planningContext).toContain('confirmed weekly plan item not found for date');
+    expect(planningContext).toContain('strategyForWeeklyPlan(weeklyPlan, strategies)');
+    expect(planningContext).toContain("status === 'SUPERSEDED'");
+    expect(planningContext).toContain('weekly plan belongs to another social profile');
   });
 });

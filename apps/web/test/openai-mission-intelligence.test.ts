@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { socialGoalPlanningProfile } from '@bunshin/capability-social';
 import { OpenAIMissionContentGenerator } from '../src/providers/openai-mission-content-generator';
 import { OpenAIMissionQualityChecker } from '../src/providers/openai-mission-quality-checker';
 
@@ -34,6 +35,8 @@ const base = {
     },
   },
   approvedStrategy: {
+    goal: 'INQUIRY' as const,
+    goalPlanning: socialGoalPlanningProfile('INQUIRY'),
     concept: '専門家型',
     positioning: '実践者',
     targetSummary: '初心者',
@@ -125,7 +128,7 @@ describe('OpenAIMissionContentGenerator', () => {
       ],
     });
     expect(result).toMatchObject({
-      promptVersion: 'mission-content-generator-v14-bounded-reasoning',
+      promptVersion: 'mission-content-generator-v18-photo-first-unconfirmed-facts',
       inputTokens: 100,
       outputTokens: 50,
     });
@@ -201,14 +204,17 @@ describe('OpenAIMissionContentGenerator', () => {
     expect(request.text.format.schema.properties.slides.items.properties).toHaveProperty(
       'visualScene',
     );
-    expect(request.input[0]?.content).toContain('①HOOK:具体的な題材と読む利益');
-    expect(request.input[0]?.content).toContain('⑤CTA:要点のまとめと今すぐする一つの行動');
-    expect(request.input[0]?.content).toContain('同じ写真やほぼ同じ構図を繰り返さず');
-    expect(request.input[0]?.content).toContain('初心者や年配の人が一読で分かる');
-    expect(request.input[0]?.content).toContain('headlineは20文字以内');
+    expect(request.input[0]?.content).toContain('CTAの末尾だけで作らず');
+    expect(request.input[2]?.content).toContain('対象顧客の課題を具体化し');
+    expect(request.input[2]?.content).toContain('問い合わせる');
+    expect(request.input[1]?.content).toContain('①HOOK:具体的な題材と読む利益');
+    expect(request.input[1]?.content).toContain('⑤CTA:要点のまとめと今すぐする一つの行動');
+    expect(request.input[1]?.content).toContain('同じ写真やほぼ同じ構図を繰り返さず');
+    expect(request.input[1]?.content).toContain('初心者や年配の人が一読で分かる');
+    expect(request.input[1]?.content).toContain('headlineは20文字以内');
   });
 
-  it('sends the original content and rewrite constraints when generating a variant', async () => {
+  it('grounds a Photo First variant in the uploaded photo instead of requesting a retake', async () => {
     const fetcher = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -244,12 +250,24 @@ describe('OpenAIMissionContentGenerator', () => {
         caption: null,
         hashtags: [],
       },
-      variantInstructions: ['導入と構成を変える'],
+      variantInstructions: [
+        '写真解析: {"objects":["チェックリスト","ペン"]}',
+        '投稿設計: {"photoUsage":"アップロード済み写真を表紙に使う"}',
+        '未確定事実は断定せず本文では使わない: この用紙は公開してよい焼き上がり予定表ですか？',
+        '導入と構成を変える',
+      ],
     });
     const requestBody = fetcher.mock.calls[0]?.[1]?.body as string;
     expect(requestBody).toContain('原案本文');
     expect(requestBody).toContain('導入と構成を変える');
     expect(requestBody).toContain('原案の言い換えだけにしません');
+    expect(requestBody).toContain('アップロード済み写真を使います');
+    expect(requestBody).toContain('新しく撮り直す指示にはしません');
+    expect(requestBody).toContain('確認できない文字、個数、人物、動作を追加しません');
+    expect(requestBody).toContain('確認質問が残っている場合');
+    expect(requestBody).toContain('確認済みの事実として断定しません');
+    expect(requestBody).toContain('「例」「たとえば」');
+    expect(requestBody).toContain('公開してよい焼き上がり予定表ですか');
   });
 
   it('surfaces provider failures without returning partial content', async () => {
@@ -361,7 +379,7 @@ describe('OpenAIMissionQualityChecker', () => {
     });
     expect(result).toMatchObject({
       output: { verdict: 'PASS', score: 90, issues: [] },
-      promptVersion: 'mission-quality-checker-v10-output-contract',
+      promptVersion: 'mission-quality-checker-v13-photo-first-grounding',
     });
     const request = JSON.parse(fetcher.mock.calls[0]?.[1]?.body as string) as {
       store: boolean;
@@ -372,6 +390,14 @@ describe('OpenAIMissionQualityChecker', () => {
     expect(JSON.stringify(request)).toContain('REPEATED_VISUAL_SCENE');
     expect(JSON.stringify(request)).toContain('CAROUSEL_NO_SOLUTION');
     expect(JSON.stringify(request)).toContain('CAROUSEL_HARD_TO_UNDERSTAND');
+    expect(JSON.stringify(request)).toContain('GOAL_MISMATCH');
+    expect(JSON.stringify(request)).toContain('対象顧客の課題を具体化し');
+    expect(JSON.stringify(request)).toContain('具体的な商品・サービス');
+    expect(JSON.stringify(request)).toContain('購入前に問い合わせる');
+    expect(JSON.stringify(request)).toContain('INQUIRY寄り');
+    expect(JSON.stringify(request)).toContain('PHOTO_FIRST_UNCONFIRMED_FACT');
+    expect(JSON.stringify(request)).toContain('uncertainElementsとpendingQuestionは未確認');
+    expect(JSON.stringify(request)).toContain('answeredConfirmation');
     expect(request).toMatchObject({
       text: {
         format: {
@@ -394,6 +420,76 @@ describe('OpenAIMissionQualityChecker', () => {
       },
     });
     expect(JSON.stringify(request)).toContain('REJECTでもrepairInstructionを省略せず');
+  });
+
+  it('sends Photo First uncertainty and owner confirmation as separate grounding data', async () => {
+    const fetcher = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          output: [
+            {
+              content: [
+                {
+                  type: 'output_text',
+                  text: JSON.stringify({
+                    verdict: 'REVISE',
+                    score: 82,
+                    issues: [
+                      {
+                        code: 'PHOTO_FIRST_UNCONFIRMED_FACT',
+                        severity: 'ERROR',
+                        field: 'body',
+                        message: '写真だけでは確認できない商品名を断定しています。',
+                        repairInstruction: '商品名を断定せず、確認済みの用途だけを記載する。',
+                      },
+                    ],
+                  }),
+                },
+              ],
+            },
+          ],
+        }),
+      ),
+    );
+    const result = await new OpenAIMissionQualityChecker({
+      apiKey: 'test-key',
+      fetch: fetcher,
+    }).check({
+      ...base,
+      content: {
+        body: '新商品の美容オイルです。',
+        threadParts: [],
+        cta: null,
+        caption: null,
+        hashtags: [],
+      },
+      photoFirstGrounding: {
+        uncertainElements: ['容器の商品名は判読できない'],
+        pendingQuestion: '商品名を教えてください。',
+        answeredConfirmation: {
+          question: '写真は販売中の商品ですか？',
+          answer: '店内で使用している備品です。',
+        },
+      },
+    });
+    const request = JSON.parse(fetcher.mock.calls[0]?.[1]?.body as string) as {
+      input: Array<{ role: string; content: string }>;
+    };
+    const userInput = JSON.parse(request.input.at(-1)?.content ?? '{}') as {
+      photoFirstGrounding?: unknown;
+    };
+    expect(userInput.photoFirstGrounding).toEqual({
+      uncertainElements: ['容器の商品名は判読できない'],
+      pendingQuestion: '商品名を教えてください。',
+      answeredConfirmation: {
+        question: '写真は販売中の商品ですか？',
+        answer: '店内で使用している備品です。',
+      },
+    });
+    expect(result.output).toMatchObject({
+      verdict: 'REVISE',
+      issues: [{ code: 'PHOTO_FIRST_UNCONFIRMED_FACT' }],
+    });
   });
 
   it('surfaces provider failures without an approval result', async () => {
