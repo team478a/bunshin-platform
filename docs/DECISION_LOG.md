@@ -3593,3 +3593,16 @@
 - Genspark Testを、新機能の独自価値、Provider依存、コモディティ化リスクを人間がレビューするGateとする。自動スコアや実装・本番提供の承認として扱わない。
 - 外部Providerの性能向上をPlatformのCapability向上として吸収し、Provider変更でPlatform資産や既存Isolation原則が変わらない構造を優先する。
 - 本DecisionはCodex採用、Codex API接続、Problem / Feasibility / Skill / Artifact契約の実装、新Provider追加を承認するものではない。
+
+## 2026-10-05: AI研修Skill Factory V1は「困った」Mission支援の設計から始める
+
+- 状態: Proposed（設計PRの人間レビュー待ち）
+- 最初のProblemを、有効なAI研修Enrollmentの受講者が本人へ割り当て済みの現在Missionで`HELP_REQUESTED`を記録した場合に限定する。別Package、別Enrollment、自由入力からProblemを推定しない。
+- 期待Outcomeは、承認済みの限定情報から、元Missionのlearning objectiveを変えずに次の一歩を小さくする支援Skill / Workflow案を担当者がレビューできることとする。自動採用、自動配信、外部実行はOutcomeに含めない。
+- Problem、Feasibility、Skill Draft、Artifact、Validationの最小契約案は`docs/ai-training/AI_TRAINING_SKILL_FACTORY_V1_DESIGN.md`を正本候補とする。最初のPure Contractは`@bunshin/capability-training`内へ限定し、共通Coreへ先行昇格しない。
+- 既存`ProgramTemplateVersion`、`ProgramMissionAssignment`、`ProgramActionEvent`、Mission Catalog、Barrier、Skill評価、Program Runtimeを再利用し、SNS Daily Mission、Bunshin Memory、他Packageの履歴へ接続しない。
+- 回答本文、自由文、写真、会話、Memory、Token、secret、Provider raw response、直接User/Bunshin IDをProblem projectionとportable Artifactへ含めない。内部scope IDは認可・所有・revision照合だけに使用する。
+- Feasibilityは`PASSED / BLOCKED / UNKNOWN`を保持し、全項目PASSEDの場合だけDraft準備可能とする。UNKNOWNをPASSEDへ補完しない。
+- 設計と次のPure Contract段階の外部AI費用上限は0円。Provider、Codex API、DB、schema、migration、UI、LINE、Skill自動生成、自動PR、Merge、Deployは追加しない。
+- Problem採用、Draft作成、Validation、Skill採用、Delivery、外部実行、PR作成、Merge、Deployを別段階・別権限とする。`HELP_REQUESTED`の記録やValidation成功を人間承認とみなさない。
+- 有効期限、承認権限、サイズ上限、Barrier必須性は未決定であり、Pure Contract PRの前に人間レビューで確定する。
