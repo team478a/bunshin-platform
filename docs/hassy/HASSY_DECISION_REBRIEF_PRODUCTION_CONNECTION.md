@@ -2,7 +2,7 @@
 
 ## 状態
 
-2026-10-04 JST。PR #1119は未マージだがverify／database CI成功・merge可能であり、本変更は#1119をbaseにした積み重ねPRとして開始した。reBriefを最大1回、再品質検査、最終fail-closed、quota／Usage冪等suffix、revision snapshot付きで既存Daily Mission生成境界へ接続する。
+2026-10-04 JST。積み重ね元のPR #1119と、接続変更をmainへ回収したPR #1121はマージ済み。mainのmerge commitは `c3c0a7571dedf0ca4851e635681d65abb0c7e3a0` で、post-mergeのverify／database CIも成功した。reBriefを最大1回、再品質検査、最終fail-closed、quota／Usage冪等suffix、revision snapshot付きで既存Daily Mission生成境界へ接続済み。
 
 新しいAgent、Memory、Analytics、テーブル、migration、UI、課金、画像・動画生成、SNS自動投稿は追加しない。merge、本番deploy、実課金API、実AIは実施しない。
 
@@ -58,8 +58,8 @@ fake Providerとin-memory fixtureだけを使用した。実AI、実DB接続、S
 
 ## 6. 次Phaseへ進める条件
 
-1. #1119と本積み重ねPRの人間レビュー・CI成功を確認する。自動mergeしない。
-2. 合成fixtureで最大1回、再品質検査、最終失敗状態、段階別quota／Usage key、Snapshot atomicityを維持する。
+1. 後続変更でも、合成fixtureによる最大1回、再品質検査、最終失敗状態、段階別quota／Usage key、Snapshot atomicityを維持する。
+2. 既存Generationの失敗分類だけを使い、Decision Contextの要レビュー／明示ブロックとreBrief最終失敗を運用上区別できるようにする。新しいAnalyticsやUIは追加しない。
 3. 実AI品質評価、本番反映、課金変更が必要な場合は別途明示承認を得る。
 
 ## 停止・切り戻し

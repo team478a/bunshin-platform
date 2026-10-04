@@ -3556,3 +3556,11 @@
 - 改訂後はMemory選択、personalization、本文入力、品質入力を最終Briefから再構築する。初回Brief向けの選択結果を黙って流用しない。
 - 新テーブルは追加せず、既存 `GenerationContextSnapshot.payload.decision.revision` に最大回数、policy版、trigger、初回／改訂Prompt・model、元／改訂decisionのSHA-256参照、最終品質をDaily Missionと同一transactionで保存する。digestは匿名化保証ではなく、原Brief本文や内部IDをSnapshotへ複製しないための同一性参照である。
 - 改訂後の最終失敗は `DECISION_REBRIEF_FAILED` として既存Daily Mission Generation失敗状態へ残し、Mission／Snapshotを保存しない。本変更は実AI、実課金API、deploy、自動投稿を実行しない。
+
+## 2026-10-04: Decision Contextの停止理由は既存Generationの固定分類で区別する
+
+- 状態: Accepted（reBrief接続後の運用準備）
+- 証跡不足のUNKNOWNまたは安全境界以外の要レビューは `DECISION_CONTEXT_REVIEW_REQUIRED`、入力で明示されたBLOCKEDは `DECISION_CONTEXT_BLOCKED` を既存 `DailyMissionGeneration.errorCategory` へ残す。どちらもProvider呼出し前にfail-closedとし、normalizerの公開statusは変更しない。
+- 境界のUNKNOWN値はUNKNOWNのまま保持し、PASSEDへ推測変換しない。aggregate statusでは安全側のBLOCKEDとして停止するが、明示的なBLOCKEDとは運用分類を分ける。自動再試行、自動解除、通知は追加しない。
+- 分類は固定文字列だけとし、missing input、review reason、自由入力、内部ID、本文をerror categoryへ保存しない。新しいAnalytics、テーブル、migration、UIは追加しない。
+- これは既存レコードで停止理由を数え分けるための境界であり、本番の発生率、品質改善、成功率を示すものではない。実AI評価と本番反映は別承認とする。
