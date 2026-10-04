@@ -73,6 +73,11 @@ export function TrainingAdminDashboard({
               研修データの保持期限を確認（読み取り専用）
             </Link>
           </p>
+          <p>
+            <Link href={`/s/${serviceSlug}/manage/training/expiry` as Route} prefetch={false}>
+              無料・手動登録の期限終了対象を確認（読み取り専用）
+            </Link>
+          </p>
         </header>
 
         {programs.length === 0 ? (
