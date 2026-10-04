@@ -1,19 +1,21 @@
-import { AI_TRAINING_V1_MODULE_KEY } from '@bunshin/capability-training';
+import {
+  AI_TRAINING_V1_MODULE_KEY,
+  type TrainingEnrollmentExpiryAdminPreviewRepository,
+  type TrainingEnrollmentExpiryAdminPreviewResult,
+  type TrainingEnrollmentExpiryPreviewScope,
+  type TrainingEnrollmentExpiryPreviewSummary,
+} from '@bunshin/capability-training';
 import { ApplicationError } from '@bunshin/shared';
 import { Prisma, type PrismaClient } from '@prisma/client';
+import { prisma } from './client';
 import { lockTrainingEnrollmentData } from './training-data-lock';
 import { stopTrainingEnrollmentEvaluations } from './training-evaluation-stop';
 import { TRAINING_ENROLLMENT_EXPIRED_EVENT } from './training-audit-events';
 
 export const TRAINING_ENROLLMENT_EXPIRY_BATCH_LIMIT = 100;
-export type TrainingEnrollmentExpiryInput = { workspaceId: string; groupId: string; now: Date };
-export type TrainingEnrollmentExpiryPreview = {
-  eligible: number;
-  batchLimit: number;
-  requiredBatches: number;
-  hasMore: boolean;
-  cutoffAt: string;
-};
+export type TrainingEnrollmentExpiryInput = TrainingEnrollmentExpiryPreviewScope;
+export type TrainingEnrollmentExpiryPreview = TrainingEnrollmentExpiryPreviewSummary;
+type TrainingEnrollmentExpiryReadClient = Pick<PrismaClient, '$queryRaw'>;
 type Candidate = {
   id: string;
   groupMembershipId: string;
@@ -40,7 +42,7 @@ const expiryScopePredicate = (input: TrainingEnrollmentExpiryInput) => Prisma.sq
 `;
 
 export async function previewUnpurchasedTrainingEnrollmentExpiry(
-  client: PrismaClient,
+  client: TrainingEnrollmentExpiryReadClient,
   input: TrainingEnrollmentExpiryInput,
 ): Promise<TrainingEnrollmentExpiryPreview> {
   assertValidExpiryClock(input.now);
@@ -62,6 +64,37 @@ export async function previewUnpurchasedTrainingEnrollmentExpiry(
     hasMore: eligible > TRAINING_ENROLLMENT_EXPIRY_BATCH_LIMIT,
     cutoffAt: input.now.toISOString(),
   };
+}
+
+export class PrismaTrainingEnrollmentExpiryAdminPreviewRepository implements TrainingEnrollmentExpiryAdminPreviewRepository {
+  constructor(private readonly client: PrismaClient = prisma) {}
+
+  preview(
+    input: TrainingEnrollmentExpiryPreviewScope & { actorUserId: string },
+  ): Promise<TrainingEnrollmentExpiryAdminPreviewResult> {
+    return this.client.$transaction(
+      async (tx): Promise<TrainingEnrollmentExpiryAdminPreviewResult> => {
+        const manager = await tx.groupMembership.findFirst({
+          where: {
+            workspaceId: input.workspaceId,
+            groupId: input.groupId,
+            userId: input.actorUserId,
+            status: 'ACTIVE',
+            serviceRole: { in: ['SERVICE_OWNER', 'SERVICE_ADMIN'] },
+            user: { status: 'ACTIVE' },
+            group: { status: 'ACTIVE', workspace: { status: 'ACTIVE' } },
+          },
+          select: { id: true },
+        });
+        if (!manager) return { outcome: 'FORBIDDEN' };
+        return {
+          outcome: 'PREVIEW',
+          summary: await previewUnpurchasedTrainingEnrollmentExpiry(tx, input),
+        };
+      },
+      { isolationLevel: 'RepeatableRead', timeout: 40_000 },
+    );
+  }
 }
 
 export async function expireUnpurchasedTrainingEnrollments(

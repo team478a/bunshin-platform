@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client';
 import { describe, expect, it, vi } from 'vitest';
 import {
   expireUnpurchasedTrainingEnrollments,
+  PrismaTrainingEnrollmentExpiryAdminPreviewRepository,
   previewUnpurchasedTrainingEnrollmentExpiry,
 } from '../src';
 
@@ -33,8 +34,59 @@ function fixture() {
     $transaction: vi.fn((callback: (value: typeof tx) => unknown) => Promise.resolve(callback(tx))),
   };
   const expire = () => expireUnpurchasedTrainingEnrollments(db as never, input);
-  return { db, tx, expire };
+  const adminPreview = new PrismaTrainingEnrollmentExpiryAdminPreviewRepository(db as never);
+  return { db, tx, expire, adminPreview };
 }
+
+describe('service admin unpurchased training expiry preview', () => {
+  const adminInput = { ...input, actorUserId: 'manager' };
+
+  it('authorizes the active service manager in the same snapshot as the exact count', async () => {
+    const { adminPreview, db, tx } = fixture();
+    tx.groupMembership.findFirst.mockResolvedValueOnce({ id: 'manager-membership' });
+    tx.$queryRaw.mockResolvedValueOnce([{ eligible: 4 }]);
+    expect(await adminPreview.preview(adminInput)).toEqual({
+      outcome: 'PREVIEW',
+      summary: {
+        eligible: 4,
+        batchLimit: 100,
+        requiredBatches: 1,
+        hasMore: false,
+        cutoffAt: now.toISOString(),
+      },
+    });
+    expect(tx.groupMembership.findFirst).toHaveBeenCalledWith({
+      where: {
+        workspaceId: 'workspace',
+        groupId: 'group',
+        userId: 'manager',
+        status: 'ACTIVE',
+        serviceRole: { in: ['SERVICE_OWNER', 'SERVICE_ADMIN'] },
+        user: { status: 'ACTIVE' },
+        group: { status: 'ACTIVE', workspace: { status: 'ACTIVE' } },
+      },
+      select: { id: true },
+    });
+    expect(db.$transaction).toHaveBeenCalledWith(expect.any(Function), {
+      isolationLevel: 'RepeatableRead',
+      timeout: 40_000,
+    });
+  });
+
+  it('does not read eligible counts when the service role or scope is unauthorized', async () => {
+    const { adminPreview, tx } = fixture();
+    tx.groupMembership.findFirst.mockResolvedValueOnce(null);
+    expect(await adminPreview.preview(adminInput)).toEqual({ outcome: 'FORBIDDEN' });
+    expect(tx.$queryRaw).not.toHaveBeenCalled();
+  });
+
+  it('propagates count failures instead of reporting a successful zero', async () => {
+    const { adminPreview, tx } = fixture();
+    tx.groupMembership.findFirst.mockResolvedValueOnce({ id: 'manager-membership' });
+    tx.$queryRaw.mockRejectedValueOnce(new Error('database unavailable'));
+    await expect(adminPreview.preview(adminInput)).rejects.toThrow('database unavailable');
+  });
+});
 
 describe('unpurchased training expiry', () => {
   it('previews the exact eligible count without starting a write transaction', async () => {

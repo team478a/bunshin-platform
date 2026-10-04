@@ -82,6 +82,8 @@ AI研修の無料・手動登録受講の期限終了バッチは`docs/ai-traini
 
 AI研修の無料・手動登録受講の期限終了Preflightは`docs/ai-training/AI_TRAINING_EXPIRY_PREFLIGHT_IMPLEMENTATION_REPORT.md`を参照。本番を含むCron認証済みの明示Service Scopeで、実行処理と同じ条件に合う件数・必要バッチ数だけを読み取り専用で確認する。本番の期限終了、保持データ消去、Cron登録、通知は引き続き停止する。
 
+AI研修の期限終了対象の管理画面確認は`docs/ai-training/AI_TRAINING_EXPIRY_ADMIN_PREVIEW_IMPLEMENTATION_REPORT.md`を参照。既存Preflightと同じ条件と件数を、自ServiceのSERVICE_OWNER/ADMINが読み取り専用で確認する。DB内で同一Snapshotの管理権限を再検証し、Cron Secretを画面へ渡さない。期限終了実行・Cron・通知・削除は追加しない。
+
 複数Service同時ログインの復帰分離は`docs/AUTH_RETURN_ATTEMPTS_IMPLEMENTATION_REPORT.md`を参照。試行別proof・PKCE flowId・単回DB記録・本人に束ねた同意を実装する。初期値は無効で、本番有効化にはSupabase Redirect URL/メールテンプレートと実端末の確認が必要。マージだけで本番稼働済みとは扱わない。
 
 サービス認証・LINE再連携の混在防止は`docs/SERVICE_AUTH_FLOW_ISOLATION_REPORT.md`を参照。認証/同意後にサービスへ復帰し、共通業種登録は挟まない。サービス固有の参加・事業プロフィール・研修・占いの判定は維持する。管理入口/操作・画像閲覧の類似ケースも修正し、既存ページ一覧の回帰テストで許可リストの漏れを確認する。本番実端末/リッチメニュー確認と複数同時認証の復帰情報は未確認・後続作業。
