@@ -26,23 +26,25 @@ vi.mock('@bunshin/config', () => ({
   getServerEnvironment: () => ({ APP_URL: 'https://example.com' }),
 }));
 vi.mock('../src/auth/current-user', () => ({
-  currentUserProvider: async () => ({ getCurrentUser: m.actor }),
+  currentUserProvider: () => Promise.resolve({ getCurrentUser: m.actor }),
 }));
 vi.mock('../src/services/public-service', () => ({ resolveManagedServiceContext: m.manager }));
 vi.mock('@bunshin/database', () => ({
   prisma: {
-    $transaction: async (fn: (tx: unknown) => unknown) =>
-      fn({
-        platformAdmin: { findFirst: m.admin },
-        workspace: { findFirst: m.workspace },
-        programTemplate: { create: m.templateCreate, findFirst: m.templateFind },
-        programTemplateVersion: { create: m.versionCreate, findFirst: m.versionFind },
-        serviceProgram: { findFirst: m.programFind, create: m.programCreate },
-        programOffering: { create: m.offeringCreate, findFirst: m.offeringFind },
-        groupMembership: { findFirst: m.membership },
-        programEnrollment: { findFirst: m.enrollmentFind, create: m.enrollmentCreate },
-        programAuditLog: { createMany: m.audit, create: m.audit },
-      }),
+    $transaction: (fn: (tx: unknown) => unknown) =>
+      Promise.resolve(
+        fn({
+          platformAdmin: { findFirst: m.admin },
+          workspace: { findFirst: m.workspace },
+          programTemplate: { create: m.templateCreate, findFirst: m.templateFind },
+          programTemplateVersion: { create: m.versionCreate, findFirst: m.versionFind },
+          serviceProgram: { findFirst: m.programFind, create: m.programCreate },
+          programOffering: { create: m.offeringCreate, findFirst: m.offeringFind },
+          groupMembership: { findFirst: m.membership },
+          programEnrollment: { findFirst: m.enrollmentFind, create: m.enrollmentCreate },
+          programAuditLog: { createMany: m.audit, create: m.audit },
+        }),
+      ),
   },
 }));
 import {
@@ -82,8 +84,12 @@ beforeEach(() => {
   m.manager.mockResolvedValue({ workspaceId, serviceId: 'service' });
   m.admin.mockResolvedValue({ id: 'admin' });
   m.workspace.mockResolvedValue({ id: workspaceId });
-  m.templateCreate.mockImplementation(async ({ data }) => ({ id: 'template', ...data }));
-  m.versionCreate.mockImplementation(async ({ data }) => ({ id: versionId, ...data }));
+  m.templateCreate.mockImplementation(({ data }: { data: Record<string, unknown> }) =>
+    Promise.resolve({ id: 'template', ...data }),
+  );
+  m.versionCreate.mockImplementation(({ data }: { data: Record<string, unknown> }) =>
+    Promise.resolve({ id: versionId, ...data }),
+  );
   m.versionFind.mockResolvedValue({
     id: versionId,
     programTemplateId: 'template',
@@ -91,8 +97,12 @@ beforeEach(() => {
   });
   m.templateFind.mockResolvedValue({ id: 'template' });
   m.programFind.mockResolvedValue(null);
-  m.programCreate.mockImplementation(async ({ data }) => ({ id: 'program', ...data }));
-  m.offeringCreate.mockImplementation(async ({ data }) => ({ id: 'offering', ...data }));
+  m.programCreate.mockImplementation(({ data }: { data: Record<string, unknown> }) =>
+    Promise.resolve({ id: 'program', ...data }),
+  );
+  m.offeringCreate.mockImplementation(({ data }: { data: Record<string, unknown> }) =>
+    Promise.resolve({ id: 'offering', ...data }),
+  );
 });
 
 describe('AI training program provisioning', () => {
@@ -233,7 +243,9 @@ describe('AI training program provisioning', () => {
       termsSnapshot: { participation: 'INVITATION_ONLY', supportModes: ['GUIDED'] },
     });
     m.enrollmentFind.mockResolvedValue(null);
-    m.enrollmentCreate.mockImplementation(async ({ data }) => ({ id: 'enrollment', ...data }));
+    m.enrollmentCreate.mockImplementation(({ data }: { data: Record<string, unknown> }) =>
+      Promise.resolve({ id: 'enrollment', ...data }),
+    );
     const value = {
       groupMembershipId: versionId,
       programOfferingId: versionId,

@@ -1,9 +1,10 @@
 import { renderToStaticMarkup } from 'react-dom/server';
+import type * as React from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
 const state = vi.hoisted(() => ({ preset: 'AI_TRAINING_V1' }));
 vi.mock('react', async (original) => {
-  const react = await original<typeof import('react')>();
+  const react = await original<typeof React>();
   return {
     ...react,
     useState: (initial: unknown) => [
