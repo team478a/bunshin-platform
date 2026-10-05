@@ -133,6 +133,10 @@ export type TrainingSupportSkillRollbackCompatibilityV1 = Record<
 >;
 
 export interface TrainingSupportSkillLifecycleRepositoryPort {
+  listByService(input: {
+    workspaceId: string;
+    serviceId: string;
+  }): Promise<readonly TrainingSupportSkillLifecycleStateV1[]>;
   findByScopeAndKey(input: {
     scope: TrainingSupportSkillScopeV1;
     skillKey: string;
