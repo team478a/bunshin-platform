@@ -242,10 +242,10 @@ Pure Contractで確定した事項:
 - Artifact本文は最大5 steps、1 step 200文字、全体4 KiB以内
 - Barrier reasonは任意。未入力は`null`を維持し、入力時は既存固定codeだけを許可
 
-後続へ残す未解決事項:
+後続設計:
 
-- 採用後Skillの保存先と廃止・rollback契約
-- 実利用Outcomeをどの既存Eventで測るか
+- 採用後Skillの保存先、廃止・rollback契約、Outcome測定は`AI_TRAINING_SKILL_LIFECYCLE_V1_DESIGN.md`で設計する
+- Lifecycle設計の人間承認とPR #1132のmain取り込み前に永続化へ進まない
 
 これらを未確認のままPASSEDへ補完しない。Pure Contractでは未確定値を`UNKNOWN`または明示入力として扱う。
 
