@@ -279,6 +279,18 @@ export function registerTrainingSupportSkillLifecycleIntegrationCases(client: Pr
           skillKey: state.skill.skillKey,
         }),
       ).resolves.toBeNull();
+      await expect(
+        repository.listByService({
+          workspaceId: state.skill.scope.workspaceId,
+          serviceId: state.skill.scope.serviceId,
+        }),
+      ).resolves.toEqual([state]);
+      await expect(
+        repository.listByService({
+          workspaceId: state.skill.scope.workspaceId,
+          serviceId: randomUUID(),
+        }),
+      ).resolves.toEqual([]);
     });
 
     it('allows exactly one concurrent CAS transition', async () => {

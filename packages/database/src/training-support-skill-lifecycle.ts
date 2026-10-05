@@ -466,6 +466,17 @@ const eventData = (event: TrainingSupportSkillLifecycleEventV1, skill: TrainingS
 export class PrismaTrainingSupportSkillLifecycleRepository implements TrainingSupportSkillLifecycleRepositoryPort {
   constructor(private readonly client: PrismaClient = prisma) {}
 
+  async listByService(input: { workspaceId: string; serviceId: string }) {
+    const skills = await this.client.trainingSupportSkill.findMany({
+      where: {
+        workspaceId: input.workspaceId,
+        groupId: input.serviceId,
+      },
+      orderBy: [{ updatedAt: 'desc' }, { id: 'asc' }],
+    });
+    return Promise.all(skills.map((skill) => readState(this.client, skill)));
+  }
+
   async findByScopeAndKey(input: { scope: TrainingSupportSkillScopeV1; skillKey: string }) {
     const skill = await this.client.trainingSupportSkill.findFirst({
       where: {

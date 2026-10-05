@@ -2,7 +2,7 @@
 
 日付: 2026-10-05（Asia/Tokyo）
 
-状態: Approved design / Persistence implemented
+状態: Approved design / Admin Adoption implemented
 
 ## 1. 目的と結論
 
@@ -136,6 +136,14 @@ Skill本体のcurrent version更新、旧versionの`DEPRECATED`化、Activation�
 
 Persistence実装は、Serviceと管理Membershipをlockして現在のACTIVE権限を再確認し、Skill revisionのCAS、version更新、append-only監査をSerializable Transactionへまとめる。`contentDigest`はRepositoryがcanonicalな保存projectionからSHA-256を再計算し、外部入力値をそのまま信頼しない。rollback互換性5軸はLifecycle EventとDB監査へ保存し、全軸PASSED以外をPure ContractとDB制約の両方で拒否する。
 
+### 4.5 Admin Adoption実装
+
+Service管理者向けに、review packageの読み取り専用preview、人間承認、明示activation、suspend、rollbackのAPI / UIを追加した。承認とactivationは別操作であり、承認直後は`SUSPENDED + currentVersionId null`を維持する。この管理境界からDelivery、Exposure、Provider呼出しは行わない。
+
+review packageのWorkspace / Service、Program Enrollment、Mission Assignment、`HELP_REQUESTED` Event、Program版、Mission、rule、variantは、認証済みService scope内の実レコードからサーバー側で再構築する。クライアントが指定したscope、event種別、Program版を信用しない。learning objective等、現行DBから独立検証できない内容は人間review packageに残し、Pure ContractでDraft / Artifact間の不変条件を再検証する。Problem / Draft専用tableは追加しない。
+
+rollback互換性5軸のUI初期値は全て`UNKNOWN`とし、全軸を人間が`PASSED`へ変更した場合だけ要求を送信できる。API、Pure Contract、DB制約も全軸`PASSED`以外を拒否する。未確認条件を自動で`PASSED`へ補完しない。
+
 ## 5. 採用条件
 
 採用は次の全条件を満たす場合だけ可能とする。
@@ -263,7 +271,7 @@ Provider性能が向上してもDraft候補の品質向上として吸収し、R
 
 1. Persistence Contract: package内の状態遷移、Repository Port、認可・revision・idempotencyのPure Contract。DBなし。実装済み。
 2. Persistence: additive schema / migration / Prisma Repository / 実DBIsolation・競合・rollbackテスト。HTTP/UIなし。実装済み。
-3. Admin Adoption: 明示的なreview・approve・activate・suspend・rollback API/UI。Deliveryなし。
+3. Admin Adoption: 明示的なreview・approve・activate・suspend・rollback API/UI。Deliveryなし。実装済み。
 4. Exposure Pilot: 限定Serviceでの提示と`TRAINING_SUPPORT_SKILL_PRESENTED`記録。Providerなし。
 5. Outcome Review: 最小件数と期間を人間承認後、既存Eventからread-only集計。自動改善なし。
 
@@ -271,14 +279,13 @@ Provider性能が向上してもDraft候補の品質向上として吸収し、R
 
 ## 12. 停止条件と次Phaseへ進める条件
 
-本Persistence PRで停止する。次は実装しない。
+本Admin Adoption PRで停止する。次は実装しない。
 
-- API / UI
 - Problem / Draftの永続化
-- Skill採用・activationのDB保存、Delivery、Exposure Event
+- Delivery、Exposure Event
 - Provider、Codex API、外部実行、課金
 - 自動生成、自動採用、自動rollback、自動改善
 - 共通Core、ハッシー、他Packageへの横展開
 - Merge、Deploy
 
-次Phaseは、本Persistence実装を人間が承認した後、Admin Adoptionのreview / approve / activate / suspend / rollback API・UIを独立PRとして設計・実装する。Delivery、Exposure Event、Providerはさらに後続とする。
+次Phaseは、本Admin Adoption実装を人間が承認した後、限定ServiceでのExposure Pilotを独立PRとして設計・実装する。Provider接続、外部AI実行、課金、自動改善、Outcome集計はさらに後続とする。

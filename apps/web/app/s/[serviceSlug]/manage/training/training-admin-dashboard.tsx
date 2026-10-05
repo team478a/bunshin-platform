@@ -78,6 +78,11 @@ export function TrainingAdminDashboard({
               無料・手動登録の期限終了対象を確認（読み取り専用）
             </Link>
           </p>
+          <p>
+            <Link href={`/s/${serviceSlug}/manage/training/skills` as Route} prefetch={false}>
+              支援Skillの人間承認・停止・rollbackを管理
+            </Link>
+          </p>
         </header>
 
         {programs.length === 0 ? (
