@@ -98,10 +98,10 @@ beforeEach(() => {
 describe('AI training program provisioning', () => {
   it('publishes the existing canonical training definition without provider calls', async () => {
     expect((await createOfficialProgramResponse(request(body))).status).toBe(201);
-    expect(m.versionCreate.mock.calls[0][0].data.definition).toEqual(
+    expect(m.versionCreate.mock.calls[0]![0].data.definition).toEqual(
       createAiTrainingV1Definition(),
     );
-    expect(m.versionCreate.mock.calls[0][0].data.status).toBe('PUBLISHED');
+    expect(m.versionCreate.mock.calls[0]![0].data.status).toBe('PUBLISHED');
     expect(m.audit).toHaveBeenCalledOnce();
   });
   it.each([
@@ -134,19 +134,19 @@ describe('AI training program provisioning', () => {
   });
   it('adopts canonical training with invitation-only settings and no Skill exposure configuration', async () => {
     expect((await adoptProgramResponse(request(adoption), 'manaberu-style')).status).toBe(201);
-    expect(m.programCreate.mock.calls[0][0].data.settings).toEqual({
+    expect(m.programCreate.mock.calls[0]![0].data.settings).toEqual({
       supportModes: ['GUIDED'],
       participation: 'INVITATION_ONLY',
       moduleKey: 'AI_TRAINING_V1',
     });
-    expect(m.offeringCreate.mock.calls[0][0].data.isFree).toBe(true);
-    expect(m.audit.mock.calls[0][0].data[0].afterData.settings.moduleKey).toBe('AI_TRAINING_V1');
-    expect(m.versionFind.mock.calls[0][0].where).toEqual({
+    expect(m.offeringCreate.mock.calls[0]![0].data.isFree).toBe(true);
+    expect(m.audit.mock.calls[0]![0].data[0].afterData.settings.moduleKey).toBe('AI_TRAINING_V1');
+    expect(m.versionFind.mock.calls[0]![0].where).toEqual({
       id: versionId,
       workspaceId,
       status: 'PUBLISHED',
     });
-    expect(m.templateFind.mock.calls[0][0].where.OR).toEqual([
+    expect(m.templateFind.mock.calls[0]![0].where.OR).toEqual([
       { visibility: 'PLATFORM' },
       { ownerGroupId: 'service' },
     ]);
@@ -243,7 +243,7 @@ describe('AI training program provisioning', () => {
     expect((await enrollProgramResponse(request(value), 'manaberu-style', versionId)).status).toBe(
       201,
     );
-    expect(m.membership.mock.calls[0][0].where).toMatchObject({
+    expect(m.membership.mock.calls[0]![0].where).toMatchObject({
       workspaceId,
       groupId: 'service',
       status: 'ACTIVE',
