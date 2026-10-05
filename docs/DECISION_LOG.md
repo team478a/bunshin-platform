@@ -1,5 +1,13 @@
 # BUNSHIN Platform Decision Log
 
+## 2026-10-05: Skill Exposure Pilotの運用条件を提示設定とOutcome実装から分離する
+
+- 状態: Proposed（文書レビュー対象。本番開始未承認）
+- `docs/ai-training/AI_TRAINING_SKILL_EXPOSURE_PILOT_OPERATIONS.md`に単一scope・Skill版、提示14日 / 追跡最大7日、成熟した10 Assignmentかつdistinct参加者5人以上の探索的レビュー条件を提案する。統計的有意性や匿名化を保証する閾値ではない。
+- Exposure設定はServiceProgram単位であり、個人allowlist、人数制限、自動終了を実装済みと扱わない。既存招待限定Programで範囲を固定できなければ開始保留。終了・異常時は人間がSkill停止とbinding解除を行う。
+- Outcomeは同一Assignmentの最初の提示を起点にし、再提示で分母を増やさず、欠測・読取不完全・少数セルを保留する。因果効果を断定せず、Provider、自動改善、他Package接続を承認しない。
+- この文書のマージは運用条件のレビューであり、実対象・担当者・日時の確定、非本番通し確認、本番有効化、read-only集計実装を実施した証拠ではない。
+
 ## Feedback maintenanceの非互換移行は停止証明を本番gateにする
 
 - 2026-10-03、PR #1095 merge後main `6fd55288a47faee12f4379fc5a384d4b538265d5`。次のゴールはリリースRunbookのみ。本番停止/DB操作/deployを承認済みと扱わない。
