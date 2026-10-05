@@ -261,3 +261,4 @@ export * from './enrollment-expiry';
 export * from './skill-factory';
 export * from './skill-lifecycle';
 export * from './skill-exposure';
+export * from './learning-scope';
