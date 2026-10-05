@@ -2,7 +2,7 @@
 
 日付: 2026-10-05（Asia/Tokyo）
 
-状態: Approved design / Admin Adoption implemented
+状態: Production deployed / Exposure Pilot default disabled / Outcome Review pending
 
 ## 1. 目的と結論
 
@@ -287,13 +287,17 @@ Provider性能が向上してもDraft候補の品質向上として吸収し、R
 
 ## 12. 停止条件と次Phaseへ進める条件
 
-本Exposure Pilot PRで停止する。次は実装しない。
+PR #1137のExposure Pilot実装と、release PR #1138による本番反映まで完了した。Production commitは`28782a5f27bd22a62f0e1f101330913a041a7844`であり、migration、schema readiness、公開health、Production Health Smokeの成功を確認した。ただし、Exposure Pilotは既定無効であり、この本番反映だけを参加者への提供開始とは扱わない。
+
+本Exposure Pilotの本番反映で停止する。次は実装しない。
 
 - Problem / Draftの永続化
 - Outcome集計、Outcome判定
 - Provider、Codex API、外部実行、課金
 - 自動生成、自動採用、自動rollback、自動改善
 - 共通Core、ハッシー、他Packageへの横展開
-- Merge、Deploy
+- Outcome Review等の後続変更の自動PR、Merge、Deploy
 
-次Phaseは、本Exposure Pilotを人間が承認し、本番で十分な観測期間と最小件数を満たした後、既存Eventからのread-only Outcome Reviewを独立PRとして検討する。Provider接続、外部AI実行、課金、自動改善には進まない。
+次Phaseへ進む前に、対象Service / Program / Mission、運用担当者、観測期間、最小件数、少数データの非表示条件、停止条件を人間が承認する。承認後も、管理者によるSkillのapprove / activateとExposure bindingの有効化を別操作として実施し、設定直後にscope、Program版、Mission、learning objective、assignment variantを再確認する。
+
+十分な観測期間と最小件数を満たした後だけ、既存Eventからのread-only Outcome Reviewを独立PRとして検討する。Provider接続、外部AI実行、課金、自動改善には進まない。
