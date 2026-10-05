@@ -206,6 +206,8 @@ MS-1とMS-2を完了する前に、第一号サービスを一般公開しない
 
 ## AI研修
 
+AI研修のSkill Lifecycle V1 Persistenceは`docs/ai-training/AI_TRAINING_SKILL_LIFECYCLE_V1_PERSISTENCE_IMPLEMENTATION.md`を参照。Service-ownedの論理Skill、immutable version、append-only操作監査をadditive migrationとPrisma Repositoryへ実装し、現管理権限、Program版、完全scope、canonical digest、CAS、idempotencyをTransaction内で再確認する。rollbackは互換性5軸が全てPASSEDの場合だけ保存する。API、UI、Delivery、Exposure Event、Provider、自動採用・自動改善は未実装。
+
 状態: 個別化コアループ、実務利用結果、Barrier理由、1分版、Practice / Work表示、非同期回答評価、失敗回復、Service管理画面の評価運用指標までコード実装済み。詳細は`docs/ai-training/AI_TRAINING_CURRENT_STATE_AUDIT.md`と最新の同ディレクトリ内実装報告を正本とする。
 
 - 仕事内容と時間がかかる仕事を使う定型Personalizationは、Mission key、learning objective、criteriaを変更しない。

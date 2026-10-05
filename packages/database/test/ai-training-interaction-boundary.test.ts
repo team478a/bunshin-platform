@@ -29,4 +29,25 @@ describe('AI training interaction boundary', () => {
     expect(source).toContain('.postponedReminderHours');
     expect(source).toContain('remindAt: new Date(');
   });
+
+  it('fails closed unless the limited-service skill scope and active version match', () => {
+    expect(source).toContain('parseTrainingSupportSkillExposurePilotSettings(input.settings)');
+    expect(source).toContain('if (!pilot.enabled) return null');
+    expect(source).toContain('programTemplateVersionId: input.programTemplateVersionId');
+    expect(source).toContain('missionDefinitionKey: input.missionDefinitionKey');
+    expect(source).toContain('assignmentVariant: input.assignmentVariant');
+    expect(source).toContain("operationalStatus: 'ACTIVE'");
+    expect(source).toContain("disposition: 'ACTIVE'");
+    expect(source).toContain('if (candidates.length !== 1');
+  });
+
+  it('records presentation provenance without copying support content into metadata', () => {
+    expect(source).toContain('TRAINING_SUPPORT_SKILL_PRESENTED_EVENT');
+    expect(source).toContain("sourceResourceType: 'PROGRAM_ACTION_EVENT'");
+    expect(source).toContain('trainingSupportSkillId: skill.id');
+    expect(source).toContain('skillVersionId: version.id');
+    expect(source).toContain('activationId: activation.id');
+    expect(source).not.toContain('steps: steps');
+    expect(source).not.toContain('expectedOutput: version.expectedOutput,\n        presentedAt');
+  });
 });

@@ -1,6 +1,7 @@
 import {
   TRAINING_BARRIER_REASONS,
   TRAINING_BARRIER_REASON_LABELS,
+  type TrainingSupportSkillPresentationV1,
 } from '@bunshin/capability-training';
 import { useState, type Dispatch, type FormEvent, type SetStateAction } from 'react';
 import type {
@@ -25,6 +26,7 @@ export function AiTrainingMissionCard({
   setHintVisible,
   helpVisible,
   setHelpVisible,
+  supportSkill,
   postponed,
   setPostponed,
   interactionSaving,
@@ -45,6 +47,7 @@ export function AiTrainingMissionCard({
   setHintVisible: Dispatch<SetStateAction<boolean>>;
   helpVisible: boolean;
   setHelpVisible: Dispatch<SetStateAction<boolean>>;
+  supportSkill: TrainingSupportSkillPresentationV1 | null;
   postponed: boolean;
   setPostponed: Dispatch<SetStateAction<boolean>>;
   interactionSaving: TrainingInteractionType | null;
@@ -207,8 +210,21 @@ export function AiTrainingMissionCard({
       ) : null}
       {helpVisible ? (
         <div className="notice training-help" role="status">
-          <strong>小さく分けて進めましょう</strong>
-          <p>上のヒントを使って最初の1文だけ書いてください。短い回答でもAIが改善点を伝えます。</p>
+          <strong>
+            {supportSkill ? 'この手順で進めてみましょう' : '小さく分けて進めましょう'}
+          </strong>
+          {supportSkill ? (
+            <>
+              <ol>
+                {supportSkill.steps.map((step) => (
+                  <li key={step}>{step}</li>
+                ))}
+              </ol>
+              <p>目指す形: {supportSkill.expectedOutput}</p>
+            </>
+          ) : (
+            <p>上のヒントを使って最初の1文だけ書いてください。短い回答でもAIが改善点を伝えます。</p>
+          )}
         </div>
       ) : null}
       {postponed ? (

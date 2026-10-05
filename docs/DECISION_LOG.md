@@ -3573,3 +3573,51 @@
 - 境界のUNKNOWN値はUNKNOWNのまま保持し、PASSEDへ推測変換しない。aggregate statusでは安全側のBLOCKEDとして停止するが、明示的なBLOCKEDとは運用分類を分ける。自動再試行、自動解除、通知は追加しない。
 - 分類は固定文字列だけとし、missing input、review reason、自由入力、内部ID、本文をerror categoryへ保存しない。新しいAnalytics、テーブル、migration、UIは追加しない。
 - これは既存レコードで停止理由を数え分けるための境界であり、本番の発生率、品質改善、成功率を示すものではない。実AI評価と本番反映は別承認とする。
+
+## 2026-10-05: Codexは外部CapabilityのProvider候補として段階的に検証する
+
+- 2026-10-05の長期事業方針を現行Repositoryへ照合し、`docs/CODEX_CAPABILITY_ARCHITECTURE_GAP_ANALYSIS.md`へGapと順序を記録した。
+- Codexを商品価値、Coreの主体、または自動改善の実行者として直接組み込まない。Coding / Skill Development等のCapabilityを要求し、必要性が確認された場合だけProvider Adapterとして検証する。
+- 最初にArchitecture PrinciplesとGenspark Testを人間レビューし、その後AI研修の一つの具体的ProblemでProblem、Feasibility、Skill、Artifact、Validationの最小契約を設計する。
+- 自動Skill生成、顧客データ送信、コード自動変更、PRの自動merge、本番Deployは延期する。UNKNOWNなFeasibilityをPASSEDへ補完しない。
+- AI研修で価値・品質・原価・人間確認工数を確認する前に、共通Coreやハッシーへ横展開しない。
+
+## 2026-10-05: 外部AIは交換可能Capabilityとして利用しOutcomeとPlatform資産を中心にする
+
+- 状態: Accepted（Architecture Principlesへの正式反映）
+- AIの単機能や特定Providerを商品価値・Domain Modelの中心に置かず、ユーザーのProblemから実際のOutcomeへ到達することを価値とする。
+- Reasoning、Coding、Skill Development、Image Generation、Video Generation、Voice、Search / Research等をPlatformが要求するCapabilityとして表し、ChatGPT、Codex等はそれを実現する交換可能なProvider候補として扱う。
+- Context、Memory、Problem / Intent、Judgment、Skill、Workflow、Execution History、Outcome、ImprovementをPlatform側の重要資産とする。ただしPackage、Tenant、Workspace、User、Bunshin、Service間で暗黙共有せず、既存の所有・認可・Grant・同意境界を維持する。
+- 長期ループを `Problem -> Context -> Feasibility -> Judgment -> Skill / Workflow -> Capability -> Artifact -> Validation -> Delivery -> Outcome -> Memory -> Improvement` とするが、MVP Firstを維持し、具体的なPackageで必要性が確認された契約だけを段階的に共通化する。
+- Draft、Validation、Human Approval、外部実行、PR作成、Merge、Deployを別段階・別権限とする。ログやFeedbackからの自動コード変更、自動Merge、自動Deployは採用しない。
+- Genspark Testを、新機能の独自価値、Provider依存、コモディティ化リスクを人間がレビューするGateとする。自動スコアや実装・本番提供の承認として扱わない。
+- 外部Providerの性能向上をPlatformのCapability向上として吸収し、Provider変更でPlatform資産や既存Isolation原則が変わらない構造を優先する。
+- 本DecisionはCodex採用、Codex API接続、Problem / Feasibility / Skill / Artifact契約の実装、新Provider追加を承認するものではない。
+
+## 2026-10-05: AI研修Skill Factory V1は「困った」Mission支援の設計から始める
+
+- 状態: Accepted（PR #1131で設計承認、Pure Contract実装）
+- 最初のProblemを、有効なAI研修Enrollmentの受講者が本人へ割り当て済みの現在Missionで`HELP_REQUESTED`を記録した場合に限定する。別Package、別Enrollment、自由入力からProblemを推定しない。
+- 期待Outcomeは、承認済みの限定情報から、元Missionのlearning objectiveを変えずに次の一歩を小さくする支援Skill / Workflow案を担当者がレビューできることとする。自動採用、自動配信、外部実行はOutcomeに含めない。
+- Problem、Feasibility、Skill Draft、Artifact、Validationの最小契約案は`docs/ai-training/AI_TRAINING_SKILL_FACTORY_V1_DESIGN.md`を正本候補とする。最初のPure Contractは`@bunshin/capability-training`内へ限定し、共通Coreへ先行昇格しない。
+- 既存`ProgramTemplateVersion`、`ProgramMissionAssignment`、`ProgramActionEvent`、Mission Catalog、Barrier、Skill評価、Program Runtimeを再利用し、SNS Daily Mission、Bunshin Memory、他Packageの履歴へ接続しない。
+- 回答本文、自由文、写真、会話、Memory、Token、secret、Provider raw response、直接User/Bunshin IDをProblem projectionとportable Artifactへ含めない。内部scope IDは認可・所有・revision照合だけに使用する。
+- Feasibilityは`PASSED / BLOCKED / UNKNOWN`を保持し、全項目PASSEDの場合だけDraft準備可能とする。UNKNOWNをPASSEDへ補完しない。
+- 設計と次のPure Contract段階の外部AI費用上限は0円。Provider、Codex API、DB、schema、migration、UI、LINE、Skill自動生成、自動PR、Merge、Deployは追加しない。
+- Problem採用、Draft作成、Validation、Skill採用、Delivery、外部実行、PR作成、Merge、Deployを別段階・別権限とする。`HELP_REQUESTED`の記録やValidation成功を人間承認とみなさない。
+- Problem / Skill Draftは`HELP_REQUESTED`から7日以内かつEnrollment終了日時まで有効とする。Human ApproverはACTIVEな`SERVICE_OWNER`または`SERVICE_ADMIN`に限定する。
+- Artifactは最大5 steps、1 step 200文字、全体4 KiB以内とする。Barrier reasonは任意で、未入力は`null`、入力時は既存固定codeだけを許可する。
+- Pure Contractは`@bunshin/capability-training`の型・validation・fixtureだけとし、DB、HTTP、UI、Job、LINE、Providerへ接続しない。採用後Skillの永続化・廃止・rollback・Outcome測定は後続の人間レビューへ残す。
+
+## 2026-10-05: AI研修の採用済みSkillはService-ownedのversioned Registry候補として分離する
+
+- 状態: Accepted（PR #1132でLifecycle設計承認、PR #1134でPersistence Contract承認、Persistence実装）
+- 採用済みSkillの保存先はAI研修Package専用の`Workspace + Service`所有Registry候補とし、共通Core、Bunshin Memory、参加者Toolkit、`ProgramActionEvent.metadata`へSkill本文を保存しない。
+- 適用範囲はProgram Template Version、Mission Definition、learning objective、assignment variantの完全一致に限定し、別Workspace、別Service、別Program版へ暗黙共有しない。
+- Skill versionはimmutableとし、修正は新versionを作る。`SUSPENDED`で新規適用をfail-closed停止し、廃止・revoke後も履歴を削除しない。
+- rollbackは過去行への書換や削除ではなく、非`REVOKED`の過去versionを現行Policyで再検証し、新しいActivationとして明示選択する。権限、scope、expected revision、互換性のいずれかがUNKNOWNなら実行しない。
+- 既存EventだけではSkill versionの提示を識別できないため効果を断定しない。将来のDeliveryでは既存`ProgramActionEvent`へ本文を含まない`TRAINING_SUPPORT_SKILL_PRESENTED`を記録し、同一Assignment内の完了、再HELP、skip、work result、Skill評価を人間レビュー用Evidenceとする。
+- Outcomeは自動採用、自動rollback、自動改善の権限にしない。少数データ、別tenant合算、回答本文・自由文のAnalytics利用を行わない。
+- Persistence Contractは`@bunshin/capability-training`内の型、純粋な状態遷移、Repository Port、否定テストに限定する。ACTIVEな`SERVICE_OWNER / SERVICE_ADMIN`、expected revision、固定reason code、idempotencyを必須にし、UNKNOWNなrollback互換性では実行しない。
+- PersistenceはAI研修Package専用の3 table、additive migration、Prisma Repository、実DBテストに限定する。Service・管理Membership lock、現権限再確認、CAS、canonical digest再計算、immutable version、append-only監査を同一Transactionで扱い、rollback互換性5軸は全PASSEDのsnapshotだけを保存する。
+- 本DecisionはAPI、UI、Delivery、Exposure Event、Provider、共通Skill Registryの実装を承認しない。

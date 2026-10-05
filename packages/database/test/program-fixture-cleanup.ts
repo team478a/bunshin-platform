@@ -2,6 +2,9 @@ import type { PrismaClient } from '@prisma/client/index';
 
 /** Test-only: caller must pass live disposable DB preflight before invoking this. */
 export async function cleanupProgramFixtures(client: PrismaClient): Promise<void> {
+  await client.$executeRawUnsafe(
+    'TRUNCATE TABLE training_support_skill_activations, training_support_skill_versions, training_support_skills CASCADE',
+  );
   // Some training tables have no FK: delete them explicitly, not by assumed cascade.
   await client.trainingToolkitItem.deleteMany();
   await client.trainingMissionAnswer.deleteMany();
