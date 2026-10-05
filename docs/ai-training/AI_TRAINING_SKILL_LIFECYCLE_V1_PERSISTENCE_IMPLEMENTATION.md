@@ -2,7 +2,7 @@
 
 日付: 2026-10-05（Asia/Tokyo）
 
-状態: Code implemented / Production未反映
+状態: Production reflected as part of Skill Lifecycle V1 release / Exposure Pilot default disabled
 
 ## 1. 調査した内容
 
@@ -21,7 +21,7 @@
 - rollback互換性snapshotをLifecycle Eventへ追加
 - schema境界テストと実PostgreSQLテスト
 
-API、UI、Job、LINE、Delivery、Exposure Event、Provider、外部API、課金は追加していない。
+本Persistence PRでは、API、UI、Job、LINE、Delivery、Exposure Event、Provider、外部API、課金は追加していない。API / UIと限定Exposureは後続のPR #1136、#1137で追加した。
 
 ## 3. 主要な設計判断
 
@@ -48,13 +48,17 @@ API、UI、Job、LINE、Delivery、Exposure Event、Provider、外部API、課�
 
 最終隔離DB run IDは`c78128244b93`。loopbackだけへ公開したtask専用コンテナを試験後に削除した。本番・共有DBは使用していない。
 
-## 5. 未解決事項
+## 5. 実装時点の未解決事項と後続状況
 
-- 管理者review / approve / activate / suspend / rollback API・UI
-- Skill提示と`TRAINING_SUPPORT_SKILL_PRESENTED` Exposure Event
+- 管理者review / approve / activate / suspend / rollback API・UI: PR #1136で実装済み
+- Skill提示と`TRAINING_SUPPORT_SKILL_PRESENTED` Exposure Event: PR #1137で限定Service Pilotとして実装済み
 - Outcomeのread-only集計とPilot最小件数・期間
-- 本番migration適用と本番確認
+- 本番migration適用と本番確認: release PR #1138で完了
 
 ## 6. 次Phaseへ進める条件
 
-本Persistence PRを人間が確認・承認した後、Admin Adoptionを独立PRで開始する。Delivery、Exposure、Provider、自動採用、自動rollback、自動改善は同PRへ混在させない。
+Persistence、Admin Adoption、限定Exposure Pilotは、それぞれ独立PRで人間レビュー後にマージされ、本番へ反映された。Production commit `28782a5f27bd22a62f0e1f101330913a041a7844`でmigrationとschema readinessに成功し、公開healthとProduction Health Smokeも成功した。
+
+Exposure Pilotは既定無効であり、Skillのapprove / activateだけでは参加者へ提示しない。次Phaseへ進むには、対象Service / Program / Mission、観測期間、最小件数、少数データの非表示条件、停止条件を人間が承認し、限定運用で十分な観測を得る必要がある。その後だけ、既存Eventを使うread-only Outcome Reviewを独立PRとして検討する。
+
+Provider、外部AI実行、課金、自動採用、自動rollback、自動改善、共通Core化、ハッシーや他Packageへの横展開には進まない。

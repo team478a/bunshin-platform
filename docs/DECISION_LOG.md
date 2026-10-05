@@ -1,5 +1,22 @@
 # BUNSHIN Platform Decision Log
 
+## 2026-10-05: AI研修の作成・採用は既存Package定義を正本にして接続する
+
+- 状態: Proposed（独立PRレビュー対象。本番設定変更は含めない）
+- 公式プログラム作成画面にAI研修V1を追加し、`@bunshin/capability-training`の既存30日・25課題・招待限定定義だけを公開する。共通applicationのPresetへ研修依存を追加しない。
+- 採用時に認可済みWorkspaceの公開済み定義を検証し、既存研修定義と完全一致する場合だけ`ServiceProgram.settings.moduleKey = AI_TRAINING_V1`を設定する。名前・category・クライアント入力でModuleを判定しない。改変された研修定義は拒否し、将来版の対応は別レビューとする。
+- 作成・採用・無料受講登録の権限、tenant、支援mode、重複、監査境界を維持する。採用・受講登録ではJSON本文の解決後に検証し、不正入力は400として扱う。
+- Service非公開と招待限定運用、Skill Exposure既定無効を維持する。本PRは本番Template登録、採用、Enrollment登録、LINE配信、Provider実行、DB変更、Migration、Merge、Deployを行わない。
+- 運用手順と未実施事項: `docs/ai-training/AI_TRAINING_PROGRAM_PROVISIONING_IMPLEMENTATION.md`。
+
+## 2026-10-05: Skill Exposure Pilotの運用条件を提示設定とOutcome実装から分離する
+
+- 状態: Proposed（文書レビュー対象。本番開始未承認）
+- `docs/ai-training/AI_TRAINING_SKILL_EXPOSURE_PILOT_OPERATIONS.md`に単一scope・Skill版、提示14日 / 追跡最大7日、成熟した10 Assignmentかつdistinct参加者5人以上の探索的レビュー条件を提案する。統計的有意性や匿名化を保証する閾値ではない。
+- Exposure設定はServiceProgram単位であり、個人allowlist、人数制限、自動終了を実装済みと扱わない。既存招待限定Programで範囲を固定できなければ開始保留。終了・異常時は人間がSkill停止とbinding解除を行う。
+- Outcomeは同一Assignmentの最初の提示を起点にし、再提示で分母を増やさず、欠測・読取不完全・少数セルを保留する。因果効果を断定せず、Provider、自動改善、他Package接続を承認しない。
+- この文書のマージは運用条件のレビューであり、実対象・担当者・日時の確定、非本番通し確認、本番有効化、read-only集計実装を実施した証拠ではない。
+
 ## Feedback maintenanceの非互換移行は停止証明を本番gateにする
 
 - 2026-10-03、PR #1095 merge後main `6fd55288a47faee12f4379fc5a384d4b538265d5`。次のゴールはリリースRunbookのみ。本番停止/DB操作/deployを承認済みと扱わない。

@@ -12,6 +12,7 @@ import {
   defineTrainingSupportDraftArtifactV1,
   evaluateTrainingSkillDraftFeasibilityV1,
   rollbackTrainingSupportSkillVersionV1,
+  suspendTrainingSupportSkillV1,
   validateTrainingSupportDraftV1,
   type TrainingSkillDraftFeasibilityCheckV1,
   type TrainingSkillFactoryFeasibilityAxis,
@@ -485,8 +486,8 @@ export function registerTrainingSupportSkillLifecycleIntegrationCases(client: Pr
           goalSnapshot: {},
           offeringSnapshot: {},
           invitedByUserId: f.owner.id,
-          startsAt: new Date('2026-10-04T00:00:00.000Z'),
-          endsAt: new Date('2026-10-06T00:00:00.000Z'),
+          startsAt: new Date(Date.now() - 86_400_000),
+          endsAt: new Date(Date.now() + 86_400_000),
         },
       });
       const assignment = await client.programMissionAssignment.create({
@@ -571,6 +572,120 @@ export function registerTrainingSupportSkillLifecycleIntegrationCases(client: Pr
       });
       expect(exposure.metadata).not.toHaveProperty('steps');
       expect(exposure.metadata).not.toHaveProperty('expectedOutput');
+
+      const recordNewHelp = (overrides: Partial<Parameters<typeof interactions.record>[0]> = {}) =>
+        interactions.record({
+          workspaceId: f.workspace.id,
+          groupId: f.group.id,
+          actorUserId: participant.id,
+          programEnrollmentId: enrollment.id,
+          missionAssignmentId: assignment.id,
+          interactionType: 'HELP_REQUESTED',
+          idempotencyKey: randomUUID(),
+          occurredAt: new Date(),
+          ...overrides,
+        });
+      const exposureCount = () =>
+        client.programActionEvent.count({
+          where: {
+            programEnrollmentId: enrollment.id,
+            eventType: 'TRAINING_SUPPORT_SKILL_PRESENTED',
+          },
+        });
+      expect(await exposureCount()).toBe(1);
+
+      // The disabled binding preserves ordinary HELP, without another presentation.
+      await client.serviceProgram.update({
+        where: { id: f.serviceProgram.id },
+        data: {
+          settings: {
+            moduleKey: 'AI_TRAINING_V1',
+            trainingSupportSkillExposurePilot: { schemaVersion: 1, enabled: false, bindings: [] },
+          },
+        },
+      });
+      expect(await recordNewHelp()).toMatchObject({ outcome: 'RECORDED', supportSkill: null });
+      expect(await exposureCount()).toBe(1);
+
+      await client.serviceProgram.update({
+        where: { id: f.serviceProgram.id },
+        data: {
+          settings: {
+            moduleKey: 'AI_TRAINING_V1',
+            trainingSupportSkillExposurePilot: {
+              schemaVersion: 1,
+              enabled: true,
+              bindings: [
+                {
+                  trainingSupportSkillId: state.skill.skillId,
+                  learningObjectiveKey: state.skill.scope.learningObjectiveKey,
+                },
+              ],
+            },
+          },
+        },
+      });
+      await client.programMissionAssignment.update({
+        where: { id: assignment.id },
+        data: { variantKey: 'SHORT' },
+      });
+      expect(await recordNewHelp()).toMatchObject({ outcome: 'RECORDED', supportSkill: null });
+      await client.programMissionAssignment.update({
+        where: { id: assignment.id },
+        data: { variantKey: 'STANDARD' },
+      });
+      expect(await recordNewHelp({ groupId: randomUUID() })).toEqual({ outcome: 'NOT_FOUND' });
+      expect(await recordNewHelp({ actorUserId: f.owner.id })).toEqual({ outcome: 'NOT_FOUND' });
+      expect(await exposureCount()).toBe(1);
+      expect(await recordNewHelp()).toMatchObject({
+        outcome: 'RECORDED',
+        supportSkill: { skillVersionId: state.skill.currentVersionId },
+      });
+      expect(await exposureCount()).toBe(2);
+
+      // Use the actual lifecycle transaction; a still-enabled binding cannot override SUSPEND.
+      const suspendRevision = state.skill.revision;
+      state = suspendTrainingSupportSkillV1({
+        state,
+        expectedSkillRevision: suspendRevision,
+        operationId: randomUUID(),
+        idempotencyKey: randomUUID(),
+        reasonCode: 'MANUAL_OPERATIONAL_STOP',
+        actor: { userId: f.owner.id, serviceRole: 'SERVICE_OWNER', active: true },
+        now: new Date(),
+      });
+      expect(await lifecycle.saveTransition({ previousRevision: suspendRevision, state })).toBe(
+        'UPDATED',
+      );
+      expect(await recordNewHelp()).toMatchObject({ outcome: 'RECORDED', supportSkill: null });
+      expect(await exposureCount()).toBe(2);
+
+      const resumeRevision = state.skill.revision;
+      state = activateTrainingSupportSkillVersionV1({
+        state,
+        skillVersionId: state.versions[0]!.skillVersionId,
+        expectedSkillRevision: resumeRevision,
+        operationId: randomUUID(),
+        idempotencyKey: randomUUID(),
+        reasonCode: 'HUMAN_APPROVED_ACTIVATION',
+        actor: { userId: f.owner.id, serviceRole: 'SERVICE_OWNER', active: true },
+        now: new Date(),
+      });
+      expect(await lifecycle.saveTransition({ previousRevision: resumeRevision, state })).toBe(
+        'UPDATED',
+      );
+      expect(await recordNewHelp()).toMatchObject({
+        outcome: 'RECORDED',
+        supportSkill: { skillVersionId: state.skill.currentVersionId },
+      });
+      expect(await exposureCount()).toBe(3);
+
+      await client.programEnrollment.update({
+        where: { id: enrollment.id },
+        data: { endsAt: new Date(Date.now() - 60_000) },
+      });
+      expect(await recordNewHelp()).toEqual({ outcome: 'NOT_FOUND' });
+      expect(await exposureCount()).toBe(3);
     });
   });
 }

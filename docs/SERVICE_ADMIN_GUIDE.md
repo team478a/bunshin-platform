@@ -4,6 +4,8 @@
 
 ## 最初に行う設定
 
+AI研修の作成・採用は[AI研修プログラムの作成・接続導線](ai-training/AI_TRAINING_PROGRAM_PROVISIONING_IMPLEMENTATION.md)を参照してください。公式Template公開、Service採用、参加者登録、Skill提示の開始は別操作です。
+
 サービス管理画面は `/s/{サービスURL}/manage` です。
 
 1. **設定**でサービス名、説明、連絡先、表示色、ロゴ、利用規約・プライバシーポリシーを確認します。
