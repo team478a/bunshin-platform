@@ -101,6 +101,7 @@ export interface TrainingSupportSkillLifecycleEventV1 {
   idempotencyKey: string;
   actorUserId: string;
   actorServiceRole: 'SERVICE_OWNER' | 'SERVICE_ADMIN';
+  rollbackCompatibility: TrainingSupportSkillRollbackCompatibilityV1 | null;
   occurredAt: Date;
 }
 
@@ -221,7 +222,11 @@ const cloneState = (
     deprecatedAt: version.deprecatedAt ? new Date(version.deprecatedAt) : null,
     revokedAt: version.revokedAt ? new Date(version.revokedAt) : null,
   })),
-  events: state.events.map((event) => ({ ...event, occurredAt: new Date(event.occurredAt) })),
+  events: state.events.map((event) => ({
+    ...event,
+    rollbackCompatibility: event.rollbackCompatibility ? { ...event.rollbackCompatibility } : null,
+    occurredAt: new Date(event.occurredAt),
+  })),
 });
 
 const replay = (
@@ -232,6 +237,7 @@ const replay = (
     skillVersionId: string | null;
     reasonCode: TrainingSupportSkillReasonCode;
     actorUserId: string;
+    rollbackCompatibility?: TrainingSupportSkillRollbackCompatibilityV1;
   },
 ) => {
   const prior = state.events.find((event) => event.idempotencyKey === input.idempotencyKey);
@@ -240,7 +246,9 @@ const replay = (
     prior.operation !== input.operation ||
     prior.skillVersionId !== input.skillVersionId ||
     prior.reasonCode !== input.reasonCode ||
-    prior.actorUserId !== input.actorUserId
+    prior.actorUserId !== input.actorUserId ||
+    JSON.stringify(prior.rollbackCompatibility) !==
+      JSON.stringify(input.rollbackCompatibility ?? null)
   )
     throw new Error('idempotency key conflict');
   return cloneState(state);
@@ -258,10 +266,12 @@ const event = (input: {
   idempotencyKey: string;
   actorUserId: string;
   actorServiceRole: 'SERVICE_OWNER' | 'SERVICE_ADMIN';
+  rollbackCompatibility?: TrainingSupportSkillRollbackCompatibilityV1;
   occurredAt: Date;
 }): TrainingSupportSkillLifecycleEventV1 => ({
   contractVersion: AI_TRAINING_SKILL_LIFECYCLE_V1,
   ...input,
+  rollbackCompatibility: input.rollbackCompatibility ? { ...input.rollbackCompatibility } : null,
   occurredAt: new Date(input.occurredAt),
 });
 
@@ -523,6 +533,7 @@ const activate = (
     skillVersionId: input.skillVersionId,
     reasonCode: input.reasonCode,
     actorUserId: input.actor.userId,
+    ...(input.compatibility ? { rollbackCompatibility: input.compatibility } : {}),
   });
   if (replayed) return replayed;
   assertExpectedRevision(input.state, input.expectedSkillRevision);
@@ -576,6 +587,7 @@ const activate = (
       idempotencyKey: input.idempotencyKey,
       actorUserId: input.actor.userId,
       actorServiceRole,
+      ...(input.compatibility ? { rollbackCompatibility: input.compatibility } : {}),
       occurredAt: input.now,
     }),
   ];

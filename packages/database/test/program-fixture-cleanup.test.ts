@@ -24,19 +24,25 @@ const order = [
 
 function fakeClient(failingModel?: (typeof order)[number]) {
   const events: string[] = [];
-  const client = Object.fromEntries(
-    order.map((name) => [
-      name,
-      {
-        deleteMany: vi.fn(() => {
-          events.push(name);
-          return name === failingModel
-            ? Promise.reject(new Error('synthetic cleanup fault'))
-            : Promise.resolve({ count: 0 });
-        }),
-      },
-    ]),
-  ) as unknown as PrismaClient;
+  const client = {
+    $executeRawUnsafe: vi.fn(() => {
+      events.push('trainingSupportSkillLifecycle');
+      return Promise.resolve(0);
+    }),
+    ...Object.fromEntries(
+      order.map((name) => [
+        name,
+        {
+          deleteMany: vi.fn(() => {
+            events.push(name);
+            return name === failingModel
+              ? Promise.reject(new Error('synthetic cleanup fault'))
+              : Promise.resolve({ count: 0 });
+          }),
+        },
+      ]),
+    ),
+  } as unknown as PrismaClient;
   return { client, events };
 }
 
@@ -44,20 +50,25 @@ describe('program fixture cleanup dependency order', () => {
   it('deletes explicit training residue and RESTRICT children before their parents', async () => {
     const { client, events } = fakeClient();
     await cleanupProgramFixtures(client);
-    expect(events).toEqual(order);
+    expect(events).toEqual(['trainingSupportSkillLifecycle', ...order]);
   });
 
   it('keeps the same order when already empty rather than hiding failures', async () => {
     const { client, events } = fakeClient();
     await cleanupProgramFixtures(client);
     await cleanupProgramFixtures(client);
-    expect(events).toEqual([...order, ...order]);
+    expect(events).toEqual([
+      'trainingSupportSkillLifecycle',
+      ...order,
+      'trainingSupportSkillLifecycle',
+      ...order,
+    ]);
   });
 
   it('propagates a child deletion failure without proceeding to parent deletion', async () => {
     const { client, events } = fakeClient('programProgressSnapshot');
     await expect(cleanupProgramFixtures(client)).rejects.toThrow('synthetic cleanup fault');
-    expect(events).toEqual(order.slice(0, 6));
+    expect(events).toEqual(['trainingSupportSkillLifecycle', ...order.slice(0, 6)]);
     expect(events).not.toContain('programEnrollment');
   });
 });
