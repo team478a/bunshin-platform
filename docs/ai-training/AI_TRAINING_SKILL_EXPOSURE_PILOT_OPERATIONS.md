@@ -83,3 +83,20 @@ Primary Outcomeは観測終端までのMISSION_COMPLETED数 / 観測終端に達
 十分な観測期間と最低件数を満たし、完全な読取・少数データ保護を確認できた後、Outcome Reviewのread-only集計を独立PRで検討する。Provider / Codex API、課金、自動生成・採用・改善、共通Core化、ハッシー横展開は対象外とする。
 
 参照: [Skill Lifecycle V1設計](AI_TRAINING_SKILL_LIFECYCLE_V1_DESIGN.md)。
+
+## 8. 非本番Repository停止検証（2026-10-05）
+
+PR #1140マージ後のmain `4c83499907ea672d69b0763dde443f8f800851f2`を基準に、既存実DBテストへ新規HELPの停止・境界拒否assertionを追加した。実アプリの挙動、schema、Provider、本番設定は変更していない。
+
+- Node 24.19.0 / pnpm 10.10.0 / PostgreSQL 16
+- 専用run ID `740becdcc35b`、loopback専用の使い捨てDBへ全227 migrationを適用
+- 実Prisma RepositoryのSkill lifecycle関連5テスト成功（全体92件のうち87件は対象外としてskip）
+- 契約、管理HTTP、参加者UIの関連26テスト成功
+- activationだけでは非提示、binding有効で提示・provenance保存、解除後は汎用HELPかつ提示Event増加なし
+- variant不一致で非提示、別Service / 別UserはNOT_FOUND
+- SUSPEND後はbindingが残っても新規提示なし、明示再activate後は再提示、期間終了後は新規HELP拒否
+- 停止前・再開後の正常提示も確認し、無関係な不具合による偽の停止成功を避けた
+
+使い捨てコンテナとDBは試験後に削除した。本番・共有DB、Provider資格情報は使用していない。
+
+この検証はRepositoryと既存HTTP / UIテストの証拠であり、管理画面を実ブラウザから操作した通し検証や実端末表示の証拠ではない。Exposure bindingはテストFixtureから変更し、SUSPEND / activateは実Lifecycle Repository経由で保存した。停止時の実管理画面操作、監査保存失敗、並行停止、開始対象のProgram / 担当者 / 日時の確認は引き続き必要である。本番開始やOutcome測定の完了とは扱わない。
