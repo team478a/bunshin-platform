@@ -40,6 +40,15 @@ type SkillState = {
 };
 
 type Preview = { expectedRevision: number; nextVersion: number; scope: unknown };
+type ExposureProgram = {
+  serviceProgramId: string;
+  displayName: string;
+  programTemplateVersionId: string;
+  settings: {
+    enabled: boolean;
+    bindings: readonly { trainingSupportSkillId: string; learningObjectiveKey: string }[];
+  };
+};
 
 async function request(endpoint: string, payload: unknown) {
   const response = await fetch(endpoint, {
@@ -55,10 +64,12 @@ async function request(endpoint: string, payload: unknown) {
 function SkillCard({
   endpoint,
   state,
+  exposurePrograms,
   onChanged,
 }: {
   endpoint: string;
   state: SkillState;
+  exposurePrograms: ExposureProgram[];
   onChanged: () => void;
 }) {
   const [busy, setBusy] = useState(false);
@@ -72,6 +83,9 @@ function SkillCard({
     Object.fromEntries(
       TRAINING_SUPPORT_SKILL_ROLLBACK_AXES.map((axis) => [axis, 'UNKNOWN']),
     ) as Record<(typeof TRAINING_SUPPORT_SKILL_ROLLBACK_AXES)[number], string>,
+  );
+  const matchingPrograms = exposurePrograms.filter(
+    (program) => program.programTemplateVersionId === state.skill.scope.programTemplateVersionId,
   );
 
   async function mutate(payload: Record<string, unknown>, prompt: string) {
@@ -160,6 +174,45 @@ function SkillCard({
         </button>
       ) : null}
 
+      {matchingPrograms.map((program) => {
+        const exposed = program.settings.bindings.some(
+          (binding) => binding.trainingSupportSkillId === state.skill.skillId,
+        );
+        return (
+          <section key={program.serviceProgramId} className="training-admin__participant">
+            <h3>限定提示: {program.displayName}</h3>
+            <p>
+              {exposed
+                ? 'このSkillは、完全一致する研修Missionの「困った」で提示されます。'
+                : '現在は提示されません。ACTIVEだけでは参加者へ提示されません。'}
+            </p>
+            <button
+              className="button button--secondary"
+              disabled={busy || (!exposed && state.skill.operationalStatus !== 'ACTIVE')}
+              onClick={() =>
+                void mutate(
+                  {
+                    action: exposed ? 'DISABLE_EXPOSURE' : 'ENABLE_EXPOSURE',
+                    skillId: state.skill.skillId,
+                    serviceProgramId: program.serviceProgramId,
+                    idempotencyKey: crypto.randomUUID(),
+                    confirmation: exposed
+                      ? 'DISABLE_LIMITED_SERVICE_EXPOSURE'
+                      : 'ENABLE_LIMITED_SERVICE_EXPOSURE',
+                  },
+                  exposed
+                    ? 'このServiceProgramでの新規提示を停止しますか？履歴は残ります。'
+                    : 'このServiceProgramに限り、完全一致するMissionでの提示を許可しますか？',
+                )
+              }
+              type="button"
+            >
+              {exposed ? '限定提示を停止' : '限定提示を許可'}
+            </button>
+          </section>
+        );
+      })}
+
       {candidates.length > 0 && state.skill.operationalStatus !== 'RETIRED' ? (
         <section>
           <h3>Rollback互換性レビュー</h3>
@@ -230,9 +283,11 @@ function SkillCard({
 export function TrainingSupportSkillAdmin({
   serviceSlug,
   initialSkills,
+  exposurePrograms,
 }: {
   serviceSlug: string;
   initialSkills: SkillState[];
+  exposurePrograms: ExposureProgram[];
 }) {
   const router = useRouter();
   const endpoint = `/api/services/${encodeURIComponent(serviceSlug)}/training-support-skills`;
@@ -353,6 +408,7 @@ export function TrainingSupportSkillAdmin({
               endpoint={endpoint}
               key={state.skill.skillId}
               state={state}
+              exposurePrograms={exposurePrograms}
               onChanged={() => router.refresh()}
             />
           ))

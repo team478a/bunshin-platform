@@ -5,6 +5,7 @@ import type {
   TrainingGoalKey,
   TrainingTopicKey,
   TrainingUseCaseKey,
+  TrainingSupportSkillPresentationV1,
 } from '@bunshin/capability-training';
 import { useRef, useState, type FormEvent } from 'react';
 import { AiTrainingEvaluationCard } from './ai-training-evaluation-card';
@@ -67,6 +68,7 @@ export function AiTrainingCard({
   const [evaluation, setEvaluation] = useState<Evaluation | null>(null);
   const [hintVisible, setHintVisible] = useState(false);
   const [helpVisible, setHelpVisible] = useState(false);
+  const [supportSkill, setSupportSkill] = useState<TrainingSupportSkillPresentationV1 | null>(null);
   const [postponed, setPostponed] = useState(false);
   const [interactionSaving, setInteractionSaving] = useState<TrainingInteractionType | null>(null);
   const [barrierSaving, setBarrierSaving] = useState(false);
@@ -234,9 +236,10 @@ export function AiTrainingCard({
     if (!action || action.mode !== 'WORK') return;
     setInteractionSaving(interactionType);
     setError('');
+    if (interactionType === 'HELP_REQUESTED') setSupportSkill(null);
     interactionKeys.current[interactionType] ??= crypto.randomUUID();
     try {
-      await readPayload(
+      const result = (await readPayload(
         await fetch(`${endpoint}/actions`, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
@@ -246,7 +249,8 @@ export function AiTrainingCard({
             idempotencyKey: interactionKeys.current[interactionType],
           }),
         }),
-      );
+      )) as { supportSkill: TrainingSupportSkillPresentationV1 | null };
+      if (interactionType === 'HELP_REQUESTED') setSupportSkill(result.supportSkill);
     } catch (cause) {
       delete interactionKeys.current[interactionType];
       setError(cause instanceof Error ? cause.message : '操作を記録できませんでした。');
@@ -353,6 +357,7 @@ export function AiTrainingCard({
       setEvaluation(null);
       setHintVisible(false);
       setHelpVisible(false);
+      setSupportSkill(null);
       setPostponed(false);
       setWorkResult(null);
       workResultKey.current = null;
@@ -450,6 +455,7 @@ export function AiTrainingCard({
       setHintVisible={setHintVisible}
       helpVisible={helpVisible}
       setHelpVisible={setHelpVisible}
+      supportSkill={supportSkill}
       postponed={postponed}
       setPostponed={setPostponed}
       interactionSaving={interactionSaving}

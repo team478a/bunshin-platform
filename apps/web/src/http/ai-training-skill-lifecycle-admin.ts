@@ -136,6 +136,24 @@ const command = z.discriminatedUnion('action', [
       confirmation: z.literal('ROLLBACK_SKILL_VERSION'),
     })
     .strict(),
+  z
+    .object({
+      action: z.literal('ENABLE_EXPOSURE'),
+      skillId: z.uuid(),
+      serviceProgramId: z.uuid(),
+      idempotencyKey: z.uuid(),
+      confirmation: z.literal('ENABLE_LIMITED_SERVICE_EXPOSURE'),
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal('DISABLE_EXPOSURE'),
+      skillId: z.uuid(),
+      serviceProgramId: z.uuid(),
+      idempotencyKey: z.uuid(),
+      confirmation: z.literal('DISABLE_LIMITED_SERVICE_EXPOSURE'),
+    })
+    .strict(),
 ]);
 
 const headers = { 'cache-control': 'private, no-store', 'x-content-type-options': 'nosniff' };

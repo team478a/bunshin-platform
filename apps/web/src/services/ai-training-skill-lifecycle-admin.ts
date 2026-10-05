@@ -10,6 +10,7 @@ import {
   defineTrainingSupportDraftArtifactV1,
   evaluateTrainingSkillDraftFeasibilityV1,
   rollbackTrainingSupportSkillVersionV1,
+  parseTrainingSupportSkillExposurePilotSettings,
   suspendTrainingSupportSkillV1,
   validateTrainingSupportDraftV1,
   type TrainingBarrierReason,
@@ -96,6 +97,20 @@ export type TrainingSupportSkillAdminCommand =
         'CURRENT_VERSION_REGRESSION' | 'CURRENT_VERSION_INCOMPATIBLE' | 'MANUAL_VERSION_RESTORE';
       compatibility: TrainingSupportSkillRollbackCompatibilityV1;
       confirmation: 'ROLLBACK_SKILL_VERSION';
+    }
+  | {
+      action: 'ENABLE_EXPOSURE';
+      skillId: string;
+      serviceProgramId: string;
+      idempotencyKey: string;
+      confirmation: 'ENABLE_LIMITED_SERVICE_EXPOSURE';
+    }
+  | {
+      action: 'DISABLE_EXPOSURE';
+      skillId: string;
+      serviceProgramId: string;
+      idempotencyKey: string;
+      confirmation: 'DISABLE_LIMITED_SERVICE_EXPOSURE';
     };
 
 const invalid = (message: string): never => {
@@ -159,6 +174,121 @@ export async function listTrainingSupportSkillsForAdmin(input: {
   const db = await import('@bunshin/database');
   const repository = new db.PrismaTrainingSupportSkillLifecycleRepository(db.prisma);
   return (await repository.listByService(input)).map(serialize);
+}
+
+export async function listTrainingSupportSkillExposurePilotsForAdmin(input: {
+  workspaceId: string;
+  serviceId: string;
+}) {
+  const db = await import('@bunshin/database');
+  const programs = await db.prisma.serviceProgram.findMany({
+    where: {
+      workspaceId: input.workspaceId,
+      groupId: input.serviceId,
+      status: 'ACTIVE',
+      settings: { path: ['moduleKey'], equals: 'AI_TRAINING_V1' },
+    },
+    select: { id: true, displayName: true, programTemplateVersionId: true, settings: true },
+    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+  });
+  return programs.map((program) => ({
+    serviceProgramId: program.id,
+    displayName: program.displayName,
+    programTemplateVersionId: program.programTemplateVersionId,
+    settings: parseTrainingSupportSkillExposurePilotSettings(program.settings),
+  }));
+}
+
+async function updateTrainingSupportSkillExposurePilot(input: {
+  workspaceId: string;
+  serviceId: string;
+  actorUserId: string;
+  command: Extract<
+    TrainingSupportSkillAdminCommand,
+    { action: 'ENABLE_EXPOSURE' | 'DISABLE_EXPOSURE' }
+  >;
+}) {
+  const db = await import('@bunshin/database');
+  return db.prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM service_programs
+      WHERE id = ${input.command.serviceProgramId}::uuid
+        AND workspace_id = ${input.workspaceId}::uuid
+        AND group_id = ${input.serviceId}::uuid
+      FOR UPDATE`;
+    await tx.$queryRaw`SELECT id FROM training_support_skills
+      WHERE id = ${input.command.skillId}::uuid
+        AND workspace_id = ${input.workspaceId}::uuid
+        AND group_id = ${input.serviceId}::uuid
+      FOR UPDATE`;
+    const [program, skill] = await Promise.all([
+      tx.serviceProgram.findFirst({
+        where: {
+          id: input.command.serviceProgramId,
+          workspaceId: input.workspaceId,
+          groupId: input.serviceId,
+          status: 'ACTIVE',
+          settings: { path: ['moduleKey'], equals: 'AI_TRAINING_V1' },
+        },
+      }),
+      tx.trainingSupportSkill.findFirst({
+        where: {
+          id: input.command.skillId,
+          workspaceId: input.workspaceId,
+          groupId: input.serviceId,
+        },
+      }),
+    ]);
+    if (!program || !skill || program.programTemplateVersionId !== skill.programTemplateVersionId)
+      throw new ApplicationError('NOT_FOUND', 'exposure scope unavailable');
+    if (
+      input.command.action === 'ENABLE_EXPOSURE' &&
+      (skill.operationalStatus !== 'ACTIVE' || !skill.currentVersionId)
+    )
+      throw new ApplicationError('CONFLICT', 'only an active skill can be exposed');
+    const before = parseTrainingSupportSkillExposurePilotSettings(program.settings);
+    const retained = before.bindings.filter(
+      (binding) => binding.trainingSupportSkillId !== skill.id,
+    );
+    const bindings =
+      input.command.action === 'ENABLE_EXPOSURE'
+        ? [
+            ...retained,
+            {
+              trainingSupportSkillId: skill.id,
+              learningObjectiveKey: skill.learningObjectiveKey,
+            },
+          ]
+        : retained;
+    const after = { schemaVersion: 1 as const, enabled: bindings.length > 0, bindings };
+    if (JSON.stringify(before) === JSON.stringify(after))
+      return { outcome: 'REPLAYED' as const, settings: after };
+    const root =
+      typeof program.settings === 'object' &&
+      program.settings !== null &&
+      !Array.isArray(program.settings)
+        ? program.settings
+        : {};
+    await tx.serviceProgram.update({
+      where: { id: program.id },
+      data: { settings: { ...root, trainingSupportSkillExposurePilot: after } },
+    });
+    await tx.programAuditLog.create({
+      data: {
+        workspaceId: input.workspaceId,
+        groupId: input.serviceId,
+        resourceType: 'SERVICE_PROGRAM',
+        resourceId: program.id,
+        action:
+          input.command.action === 'ENABLE_EXPOSURE'
+            ? 'TRAINING_SKILL_EXPOSURE_ENABLED'
+            : 'TRAINING_SKILL_EXPOSURE_DISABLED',
+        beforeData: before,
+        afterData: { ...after, idempotencyKey: input.command.idempotencyKey },
+        performedByUserId: input.actorUserId,
+      },
+    });
+    return { outcome: 'UPDATED' as const, settings: after };
+  });
 }
 
 async function buildReviewEvidence(input: {
@@ -315,6 +445,15 @@ export async function executeTrainingSupportSkillAdmin(input: {
     serviceRole: input.actorServiceRole,
     active: true,
   };
+
+  if (input.command.action === 'ENABLE_EXPOSURE' || input.command.action === 'DISABLE_EXPOSURE') {
+    return updateTrainingSupportSkillExposurePilot({
+      workspaceId: input.workspaceId,
+      serviceId: input.serviceId,
+      actorUserId: input.actorUserId,
+      command: input.command,
+    });
+  }
 
   if (input.command.action === 'PREVIEW' || input.command.action === 'APPROVE') {
     const approvalCommand = input.command;
