@@ -2,7 +2,7 @@
 
 日付: 2026-10-05（Asia/Tokyo）
 
-状態: Design only / Human review required
+状態: Approved design / Persistence Contract implemented
 
 ## 1. 目的と結論
 
@@ -10,7 +10,7 @@
 
 V1では、AI研修Package専用のService-owned Registryを推奨する。共通Core、Bunshin Memory、参加者Toolkit、`ProgramActionEvent.metadata`をSkill本文の保存先にしない。
 
-今回の作業は設計だけである。DB、schema、migration、Repository、HTTP、UI、Job、LINE、Provider、外部API、課金、Skill自動採用、自動Deliveryを追加しない。
+本設計に基づくPersistence Contractは`@bunshin/capability-training`内の型、純粋な状態遷移、Repository Port、否定テストだけを追加する。DB、schema、migration、Repository実装、HTTP、UI、Job、LINE、Provider、外部API、課金、Skill自動採用、自動Deliveryは追加しない。
 
 ## 2. 調査した既存資産と不適合
 
@@ -120,6 +120,18 @@ occurredAt
 ```
 
 Skill本体のcurrent version更新、旧versionの`DEPRECATED`化、Activation追加を一つのtransactionで行う。監査保存に失敗した場合は全体をrollbackする。同一Service行とSkill行をlockし、権限失効や同時承認とのcommit順序を固定する。
+
+### 4.4 Persistence Contract実装
+
+`@bunshin/capability-training`の`skill-lifecycle.ts`に、永続実装へ依存しない次を追加する。
+
+- Service-owned scope、Skill、immutable version、Lifecycle Eventの型
+- 初回採用と同一scopeへの次version承認
+- 明示activation、suspend、全互換軸PASSED時だけのrollback、revoke、retire
+- ACTIVEな`SERVICE_OWNER / SERVICE_ADMIN`、expected revision、固定reason code、idempotency keyの検査
+- find、adoption保存、CAS transition保存のRepository Port
+
+承認済みversionは自動で有効化せず、初期状態を`SUSPENDED + currentVersionId null`とする。Repository Portはinterfaceだけであり、transaction、lock、unique制約、digest計算、DB auditが実装済みであることを意味しない。`contentDigest`はSHA-256形式を要求するが、将来のApplication / Adapterがcanonical Artifactから計算し、外部入力値をそのまま信頼しないことをPersistence実装の受入条件とする。
 
 ## 5. 採用条件
 
@@ -246,7 +258,7 @@ Provider性能が向上してもDraft候補の品質向上として吸収し、R
 
 ## 11. 後続PRの分割案
 
-1. Persistence Contract: package内の状態遷移、Repository Port、認可・revision・idempotencyのPure Contract。DBなし。
+1. Persistence Contract: package内の状態遷移、Repository Port、認可・revision・idempotencyのPure Contract。DBなし。実装済み。
 2. Persistence: additive schema / migration / Prisma Repository / 実DBIsolation・競合・rollbackテスト。HTTP/UIなし。
 3. Admin Adoption: 明示的なreview・approve・activate・suspend・rollback API/UI。Deliveryなし。
 4. Exposure Pilot: 限定Serviceでの提示と`TRAINING_SUPPORT_SKILL_PRESENTED`記録。Providerなし。
@@ -256,14 +268,14 @@ Provider性能が向上してもDraft候補の品質向上として吸収し、R
 
 ## 12. 停止条件と次Phaseへ進める条件
 
-本設計PRで停止する。次は実装しない。
+本Persistence Contract PRで停止する。次は実装しない。
 
-- schema / migration / Repository / API / UI
+- schema / migration / Repository実装 / API / UI
 - Problem / Draftの永続化
-- Skill採用、activation、Delivery、Exposure Event
+- Skill採用・activationのDB保存、Delivery、Exposure Event
 - Provider、Codex API、外部実行、課金
 - 自動生成、自動採用、自動rollback、自動改善
 - 共通Core、ハッシー、他Packageへの横展開
 - Merge、Deploy
 
-次Phaseは、本設計の保存境界、状態遷移、rollback、Outcome定義を人間が承認し、PR #1132が`main`へ取り込まれた後、独立PRで開始する。
+次Phaseは、本Persistence Contractを人間が承認した後、additive schema / migration / Prisma Repository / 実DBIsolation・競合・rollbackテストを独立PRとして設計・実装する。HTTP、UI、Delivery、Providerはさらに後続とする。
