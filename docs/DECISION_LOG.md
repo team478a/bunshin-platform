@@ -3611,7 +3611,7 @@
 
 ## 2026-10-05: AI研修の採用済みSkillはService-ownedのversioned Registry候補として分離する
 
-- 状態: Accepted（PR #1132でLifecycle設計承認、Persistence Contract実装）
+- 状態: Accepted（PR #1132でLifecycle設計承認、PR #1134でPersistence Contract承認、Persistence実装）
 - 採用済みSkillの保存先はAI研修Package専用の`Workspace + Service`所有Registry候補とし、共通Core、Bunshin Memory、参加者Toolkit、`ProgramActionEvent.metadata`へSkill本文を保存しない。
 - 適用範囲はProgram Template Version、Mission Definition、learning objective、assignment variantの完全一致に限定し、別Workspace、別Service、別Program版へ暗黙共有しない。
 - Skill versionはimmutableとし、修正は新versionを作る。`SUSPENDED`で新規適用をfail-closed停止し、廃止・revoke後も履歴を削除しない。
@@ -3619,4 +3619,5 @@
 - 既存EventだけではSkill versionの提示を識別できないため効果を断定しない。将来のDeliveryでは既存`ProgramActionEvent`へ本文を含まない`TRAINING_SUPPORT_SKILL_PRESENTED`を記録し、同一Assignment内の完了、再HELP、skip、work result、Skill評価を人間レビュー用Evidenceとする。
 - Outcomeは自動採用、自動rollback、自動改善の権限にしない。少数データ、別tenant合算、回答本文・自由文のAnalytics利用を行わない。
 - Persistence Contractは`@bunshin/capability-training`内の型、純粋な状態遷移、Repository Port、否定テストに限定する。ACTIVEな`SERVICE_OWNER / SERVICE_ADMIN`、expected revision、固定reason code、idempotencyを必須にし、UNKNOWNなrollback互換性では実行しない。
-- 本DecisionはDB、schema、migration、Repository実装、API、UI、Delivery、Provider、共通Skill Registryの実装を承認しない。
+- PersistenceはAI研修Package専用の3 table、additive migration、Prisma Repository、実DBテストに限定する。Service・管理Membership lock、現権限再確認、CAS、canonical digest再計算、immutable version、append-only監査を同一Transactionで扱い、rollback互換性5軸は全PASSEDのsnapshotだけを保存する。
+- 本DecisionはAPI、UI、Delivery、Exposure Event、Provider、共通Skill Registryの実装を承認しない。

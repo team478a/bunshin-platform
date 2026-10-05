@@ -364,6 +364,8 @@ describe('AI training Skill Lifecycle V1 persistence contract', () => {
     });
     expect(rolledBack.skill.currentVersionId).toBe('skill-version-1');
     expect(rolledBack.events.at(-1)?.operation).toBe('ROLLBACK');
+    expect(rolledBack.events.at(-1)?.rollbackCompatibility).toEqual(passedCompatibility());
+    expect(activeV2.events.at(-1)?.rollbackCompatibility).toBeNull();
   });
 
   it('revokes an active version fail-closed and never permits ordinary rollback', () => {

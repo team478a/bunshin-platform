@@ -289,6 +289,28 @@ enum ServiceCustomDomainStatus {
   DISABLED
 }
 
+enum TrainingSupportSkillOperationalStatus {
+  ACTIVE
+  SUSPENDED
+  RETIRED
+}
+
+enum TrainingSupportSkillVersionDisposition {
+  APPROVED
+  ACTIVE
+  DEPRECATED
+  REVOKED
+}
+
+enum TrainingSupportSkillOperation {
+  ADOPT
+  ACTIVATE
+  SUSPEND
+  ROLLBACK
+  REVOKE
+  RETIRE
+}
+
 model ProgramTemplate {
   id              String                    @id @default(uuid()) @db.Uuid
   workspaceId     String                    @map("workspace_id") @db.Uuid
@@ -587,6 +609,88 @@ model TrainingToolkitItem {
   @@index([workspaceId, groupId, programEnrollmentId, createdAt])
   @@index([workspaceId, groupId, userId, createdAt])
   @@map("training_toolkit_items")
+}
+
+/// AI研修Package専用。Serviceが人間承認した支援Skillの論理identity。
+model TrainingSupportSkill {
+  id                       String                                @id @db.Uuid
+  workspaceId              String                                @map("workspace_id") @db.Uuid
+  groupId                  String                                @map("group_id") @db.Uuid
+  skillKey                 String                                @map("skill_key") @db.VarChar(120)
+  programTemplateVersionId String                                @map("program_template_version_id") @db.Uuid
+  missionDefinitionKey     String                                @map("mission_definition_key") @db.VarChar(80)
+  learningObjectiveKey     String                                @map("learning_objective_key") @db.VarChar(80)
+  assignmentVariant        String                                @map("assignment_variant") @db.VarChar(16)
+  currentVersionId         String?                               @map("current_version_id") @db.Uuid
+  operationalStatus        TrainingSupportSkillOperationalStatus @default(SUSPENDED) @map("operational_status")
+  revision                 Int                                   @default(1)
+  createdAt                DateTime                              @map("created_at") @db.Timestamptz(3)
+  updatedAt                DateTime                              @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([workspaceId, groupId, skillKey], map: "training_support_skills_scope_key")
+  @@unique([workspaceId, groupId, id], map: "training_support_skills_scope_id_key")
+  @@index([workspaceId, groupId, operationalStatus], map: "training_support_skills_scope_status_idx")
+  @@map("training_support_skills")
+}
+
+/// 採用済み支援Skillのimmutable本文。更新は新versionとして追加する。
+model TrainingSupportSkillVersion {
+  id                       String                                 @id @db.Uuid
+  workspaceId              String                                 @map("workspace_id") @db.Uuid
+  groupId                  String                                 @map("group_id") @db.Uuid
+  trainingSupportSkillId   String                                 @map("training_support_skill_id") @db.Uuid
+  version                  Int
+  disposition              TrainingSupportSkillVersionDisposition
+  artifactContractVersion  String                                 @map("artifact_contract_version") @db.VarChar(80)
+  validationPolicyVersion  String                                 @map("validation_policy_version") @db.VarChar(80)
+  sourceProblemId          String                                 @map("source_problem_id") @db.VarChar(160)
+  sourceProblemRevision    Int                                    @map("source_problem_revision")
+  sourceSkillDraftId       String                                 @map("source_skill_draft_id") @db.VarChar(160)
+  sourceSkillDraftRevision Int                                    @map("source_skill_draft_revision")
+  sourceArtifactId         String                                 @map("source_artifact_id") @db.VarChar(160)
+  sourceArtifactRevision   Int                                    @map("source_artifact_revision")
+  scopeFingerprint         String                                 @map("scope_fingerprint") @db.VarChar(160)
+  contentDigest            String                                 @map("content_digest") @db.Char(71)
+  steps                    Json
+  expectedOutput           String                                 @map("expected_output") @db.Text
+  successCriteriaKeys      Json                                   @map("success_criteria_keys")
+  barrierReasonCode        String?                                @map("barrier_reason_code") @db.VarChar(80)
+  approvedByUserId         String                                 @map("approved_by_user_id") @db.Uuid
+  approvedAt               DateTime                               @map("approved_at") @db.Timestamptz(3)
+  deprecatedAt             DateTime?                              @map("deprecated_at") @db.Timestamptz(3)
+  revokedAt                DateTime?                              @map("revoked_at") @db.Timestamptz(3)
+  createdAt                DateTime                               @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@unique([trainingSupportSkillId, version], map: "training_support_skill_versions_number_key")
+  @@unique([workspaceId, groupId, id], map: "training_support_skill_versions_scope_id_key")
+  @@unique([workspaceId, groupId, trainingSupportSkillId, id], map: "training_support_skill_versions_scope_skill_id_key")
+  @@index([workspaceId, groupId, trainingSupportSkillId, disposition], map: "training_support_skill_versions_scope_status_idx")
+  @@map("training_support_skill_versions")
+}
+
+/// 採用・有効化・停止・rollback・revoke・廃止のappend-only監査。
+model TrainingSupportSkillActivation {
+  id                     String                        @id @db.Uuid
+  workspaceId            String                        @map("workspace_id") @db.Uuid
+  groupId                String                        @map("group_id") @db.Uuid
+  trainingSupportSkillId String                        @map("training_support_skill_id") @db.Uuid
+  skillVersionId         String?                       @map("skill_version_id") @db.Uuid
+  priorSkillVersionId    String?                       @map("prior_skill_version_id") @db.Uuid
+  operation              TrainingSupportSkillOperation
+  reasonCode             String                        @map("reason_code") @db.VarChar(80)
+  expectedSkillRevision  Int                           @map("expected_skill_revision")
+  resultingSkillRevision Int                           @map("resulting_skill_revision")
+  idempotencyKey         String                        @map("idempotency_key") @db.VarChar(200)
+  actorUserId            String                        @map("actor_user_id") @db.Uuid
+  actorServiceRole       ServiceRole                   @map("actor_service_role")
+  rollbackCompatibility  Json?                         @map("rollback_compatibility")
+  occurredAt             DateTime                      @map("occurred_at") @db.Timestamptz(3)
+  createdAt              DateTime                      @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@unique([workspaceId, groupId, idempotencyKey], map: "training_support_skill_activations_idempotency_key")
+  @@unique([workspaceId, groupId, id], map: "training_support_skill_activations_scope_id_key")
+  @@index([workspaceId, groupId, trainingSupportSkillId, occurredAt], map: "training_support_skill_activations_scope_skill_idx")
+  @@map("training_support_skill_activations")
 }
 
 model ResaleItem {

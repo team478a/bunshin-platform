@@ -2,7 +2,7 @@
 
 日付: 2026-10-05（Asia/Tokyo）
 
-状態: Approved design / Persistence Contract implemented
+状態: Approved design / Persistence implemented
 
 ## 1. 目的と結論
 
@@ -10,7 +10,7 @@
 
 V1では、AI研修Package専用のService-owned Registryを推奨する。共通Core、Bunshin Memory、参加者Toolkit、`ProgramActionEvent.metadata`をSkill本文の保存先にしない。
 
-本設計に基づくPersistence Contractは`@bunshin/capability-training`内の型、純粋な状態遷移、Repository Port、否定テストだけを追加する。DB、schema、migration、Repository実装、HTTP、UI、Job、LINE、Provider、外部API、課金、Skill自動採用、自動Deliveryは追加しない。
+本設計に基づくPersistence Contractと、AI研修Package専用schema / migration / Prisma Repository / 実DBテストを実装した。HTTP、UI、Job、LINE、Provider、外部API、課金、Skill自動採用、自動Deliveryは追加しない。
 
 ## 2. 調査した既存資産と不適合
 
@@ -48,7 +48,7 @@ V1では、AI研修Package専用のService-owned Registryを推奨する。共�
 
 ## 4. 推奨保存モデル
 
-次の永続モデルは後続のschema PRで改めて承認する。本書は名前と責務の設計であり、table作成を承認しない。
+次の永続モデルをPersistence PRで追加する。共通Coreや他PackageのRegistryへ昇格させない。
 
 ### 4.1 `TrainingSupportSkill`
 
@@ -116,6 +116,7 @@ reasonCode
 expectedSkillRevision
 idempotencyKey
 actorUserId
+rollbackCompatibility nullable（ROLLBACK時だけ全5軸PASSED）
 occurredAt
 ```
 
@@ -131,7 +132,9 @@ Skill本体のcurrent version更新、旧versionの`DEPRECATED`化、Activation�
 - ACTIVEな`SERVICE_OWNER / SERVICE_ADMIN`、expected revision、固定reason code、idempotency keyの検査
 - find、adoption保存、CAS transition保存のRepository Port
 
-承認済みversionは自動で有効化せず、初期状態を`SUSPENDED + currentVersionId null`とする。Repository Portはinterfaceだけであり、transaction、lock、unique制約、digest計算、DB auditが実装済みであることを意味しない。`contentDigest`はSHA-256形式を要求するが、将来のApplication / Adapterがcanonical Artifactから計算し、外部入力値をそのまま信頼しないことをPersistence実装の受入条件とする。
+承認済みversionは自動で有効化せず、初期状態を`SUSPENDED + currentVersionId null`とする。
+
+Persistence実装は、Serviceと管理Membershipをlockして現在のACTIVE権限を再確認し、Skill revisionのCAS、version更新、append-only監査をSerializable Transactionへまとめる。`contentDigest`はRepositoryがcanonicalな保存projectionからSHA-256を再計算し、外部入力値をそのまま信頼しない。rollback互換性5軸はLifecycle EventとDB監査へ保存し、全軸PASSED以外をPure ContractとDB制約の両方で拒否する。
 
 ## 5. 採用条件
 
@@ -259,7 +262,7 @@ Provider性能が向上してもDraft候補の品質向上として吸収し、R
 ## 11. 後続PRの分割案
 
 1. Persistence Contract: package内の状態遷移、Repository Port、認可・revision・idempotencyのPure Contract。DBなし。実装済み。
-2. Persistence: additive schema / migration / Prisma Repository / 実DBIsolation・競合・rollbackテスト。HTTP/UIなし。
+2. Persistence: additive schema / migration / Prisma Repository / 実DBIsolation・競合・rollbackテスト。HTTP/UIなし。実装済み。
 3. Admin Adoption: 明示的なreview・approve・activate・suspend・rollback API/UI。Deliveryなし。
 4. Exposure Pilot: 限定Serviceでの提示と`TRAINING_SUPPORT_SKILL_PRESENTED`記録。Providerなし。
 5. Outcome Review: 最小件数と期間を人間承認後、既存Eventからread-only集計。自動改善なし。
@@ -268,9 +271,9 @@ Provider性能が向上してもDraft候補の品質向上として吸収し、R
 
 ## 12. 停止条件と次Phaseへ進める条件
 
-本Persistence Contract PRで停止する。次は実装しない。
+本Persistence PRで停止する。次は実装しない。
 
-- schema / migration / Repository実装 / API / UI
+- API / UI
 - Problem / Draftの永続化
 - Skill採用・activationのDB保存、Delivery、Exposure Event
 - Provider、Codex API、外部実行、課金
@@ -278,4 +281,4 @@ Provider性能が向上してもDraft候補の品質向上として吸収し、R
 - 共通Core、ハッシー、他Packageへの横展開
 - Merge、Deploy
 
-次Phaseは、本Persistence Contractを人間が承認した後、additive schema / migration / Prisma Repository / 実DBIsolation・競合・rollbackテストを独立PRとして設計・実装する。HTTP、UI、Delivery、Providerはさらに後続とする。
+次Phaseは、本Persistence実装を人間が承認した後、Admin Adoptionのreview / approve / activate / suspend / rollback API・UIを独立PRとして設計・実装する。Delivery、Exposure Event、Providerはさらに後続とする。
