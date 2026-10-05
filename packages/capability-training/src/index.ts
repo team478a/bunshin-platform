@@ -258,3 +258,4 @@ export * from './personal-data-retention';
 export * from './enrollment-lifecycle';
 export * from './end-date-confirmation';
 export * from './enrollment-expiry';
+export * from './skill-factory';
