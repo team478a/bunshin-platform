@@ -1,5 +1,15 @@
 # BUNSHIN Platform Decision Log
 
+## 2026-10-06: Learning FirstのPersonal Learning監査と3層設計を実装から分離する
+
+- 状態: Proposed（人間レビュー対象。実装/共通Core化/本番変更の開始承認ではない）
+- 基準main: `9e063dd8ebc905b91b005bc317c43797e22a6931`。AI研修のOutcomeは本人が自分でAIを使えること。PlatformのOutcome Firstを維持し、実務代行/個社コンサル/完成成果物納品と学習を区別する。
+- Personal Learning Core候補、AI Training Package、Service / Operator / OEMの3層を責務として整理する。既存Program Runtimeを実行正本にし、AIで必要かつ非AIでも意味不変な最小責務だけ共通候補にする。今回MOVE/リファクタリングをしない。
+- Learner習熟SkillとService-owned支援手順Skillを区別する。AI固有Skill/Rubric/Policy/Tool経験をCoreへ混在させず、Bunshin Memoryや他Serviceへ暗黙共有しない。
+- 旧30日V1/公開済みTemplate/既存受講は変更しない。Goal型学習、期間/契約/Retention分離、Privacy inventory、新Plan保存先は人間レビュー後に小さなPRで判断する。マナベルスタイル採用・招待・LINE・Exposureは開始しない。
+- 仮想Sales Packageは契約の設計検証だけ。実第二Package、教材Factory/Codex連携、SDK/Marketplace/Plugin/汎用Frameworkは先行実装しない。
+- 成果物は`docs/ai-training/01_AI_TRAINING_PERSONAL_LEARNING_CURRENT_STATE.md`から`04_AI_TRAINING_PERSONAL_LEARNING_IMPLEMENTATION_PLAN.md`までの4文書。調査・文書PR完成で停止し、最初の実装PRも別承認を待つ。
+
 ## 2026-10-05: AI研修の作成・採用は既存Package定義を正本にして接続する
 
 - 状態: Proposed（独立PRレビュー対象。本番設定変更は含めない）
