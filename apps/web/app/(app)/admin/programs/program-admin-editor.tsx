@@ -5,7 +5,9 @@ import { useState, type FormEvent } from 'react';
 export function ProgramAdminEditor({ workspaces }: { workspaces: { id: string; name: string }[] }) {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
-  const [preset, setPreset] = useState<'SIDE_HUSTLE_90_DAY' | 'SIMPLE'>('SIDE_HUSTLE_90_DAY');
+  const [preset, setPreset] = useState<'SIDE_HUSTLE_90_DAY' | 'SIMPLE' | 'AI_TRAINING_V1'>(
+    'SIDE_HUSTLE_90_DAY',
+  );
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -97,8 +99,13 @@ export function ProgramAdminEditor({ workspaces }: { workspaces: { id: string; n
           >
             <option value="SIDE_HUSTLE_90_DAY">副業・SNS集客の90日プログラム</option>
             <option value="SIMPLE">シンプルな毎日実践プログラム</option>
+            <option value="AI_TRAINING_V1">AI研修（30日・個別化実務実践）</option>
           </select>
-          <small>90日プログラムには、4つの段階と曜日ごとの行動、成果の確認項目が入ります。</small>
+          <small>
+            {preset === 'AI_TRAINING_V1'
+              ? '既存のAI研修課題・基礎／実務練習／活用の3段階を使います。サービスでの採用・受講登録は別操作です。Skill提示やLINE配信は開始しません。'
+              : '90日プログラムには、4つの段階と曜日ごとの行動、成果の確認項目が入ります。'}
+          </small>
         </label>
         <label className="field">
           <span className="field__label">標準の日数</span>
@@ -110,21 +117,31 @@ export function ProgramAdminEditor({ workspaces }: { workspaces: { id: string; n
             max={365}
             key={preset}
             defaultValue={preset === 'SIDE_HUSTLE_90_DAY' ? 90 : 30}
-            readOnly={preset === 'SIDE_HUSTLE_90_DAY'}
+            readOnly={preset !== 'SIMPLE'}
             required
           />
         </label>
         <fieldset>
           <legend>参加者へ渡せる内容</legend>
-          <label>
-            <input name="IDEA_ONLY" type="checkbox" defaultChecked /> 企画だけ
-          </label>
-          <label>
-            <input name="GUIDED" type="checkbox" defaultChecked /> 作り方・台本・プロンプト
-          </label>
-          <label>
-            <input name="READY_TO_USE" type="checkbox" defaultChecked /> そのまま使える完成品
-          </label>
+          {preset === 'AI_TRAINING_V1' ? (
+            <>
+              <input name="GUIDED" type="hidden" value="on" />
+              <input name="READY_TO_USE" type="hidden" value="on" />
+              <p>作り方・台本・プロンプト／そのまま使える完成品（既存研修定義）</p>
+            </>
+          ) : (
+            <>
+              <label>
+                <input name="IDEA_ONLY" type="checkbox" defaultChecked /> 企画だけ
+              </label>
+              <label>
+                <input name="GUIDED" type="checkbox" defaultChecked /> 作り方・台本・プロンプト
+              </label>
+              <label>
+                <input name="READY_TO_USE" type="checkbox" defaultChecked /> そのまま使える完成品
+              </label>
+            </>
+          )}
         </fieldset>
         <button className="button button--primary" type="submit" disabled={saving}>
           {saving ? '保存中…' : '第1版を公開する'}

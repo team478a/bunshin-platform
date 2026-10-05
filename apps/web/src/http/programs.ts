@@ -1,4 +1,5 @@
 import 'server-only';
+import { createAiTrainingV1Definition } from '@bunshin/capability-training';
 import { requestIdFromHeader } from '@bunshin/observability';
 import {
   createProgramDefinition,
@@ -11,6 +12,9 @@ import { z } from 'zod';
 import { currentUserProvider } from '../auth/current-user';
 import { requireSameOrigin } from '../auth/request-security';
 import { resolveManagedServiceContext } from '../services/public-service';
+import { adoptedProgramSettings } from '../services/training-program-definition';
+
+const OFFICIAL_PROGRAM_PRESETS = [...PROGRAM_DEFINITION_PRESETS, 'AI_TRAINING_V1'] as const;
 
 const uuid = z.string().uuid();
 const supportMode = z.enum(['IDEA_ONLY', 'GUIDED', 'READY_TO_USE']);
@@ -21,7 +25,7 @@ const officialProgramSchema = z
     description: z.string().trim().min(1).max(2000),
     category: z.string().trim().min(1).max(80),
     targetAudience: z.string().trim().min(1).max(500),
-    definitionPreset: z.enum(PROGRAM_DEFINITION_PRESETS),
+    definitionPreset: z.enum(OFFICIAL_PROGRAM_PRESETS),
     standardDurationDays: z.number().int().min(1).max(365),
     supportModes: z.array(supportMode).min(1).max(3),
   })
@@ -52,6 +56,12 @@ async function json(request: Request) {
   return actor;
 }
 
+function validated<T>(schema: z.ZodType<T>, value: unknown): T {
+  const result = schema.safeParse(value);
+  if (!result.success) throw new ApplicationError('VALIDATION_ERROR', 'invalid program input');
+  return result.data;
+}
+
 const response = (data: unknown, requestId: string, status = 200) =>
   Response.json({ data, requestId }, { status, headers: { 'cache-control': 'private, no-store' } });
 
@@ -67,14 +77,28 @@ export async function createOfficialProgramResponse(request: Request) {
   const requestId = requestIdFromHeader(request.headers.get('x-request-id'));
   try {
     const actor = await json(request);
-    const value = officialProgramSchema.parse(await request.json());
+    const value = validated(officialProgramSchema, await request.json());
     const db = await import('@bunshin/database');
+    const trainingDefinition = createAiTrainingV1Definition();
+    if (
+      value.definitionPreset === 'AI_TRAINING_V1' &&
+      (value.standardDurationDays !== 30 ||
+        value.supportModes.length !== trainingDefinition.supportModes.length ||
+        trainingDefinition.supportModes.some((mode) => !value.supportModes.includes(mode)))
+    ) {
+      throw new ApplicationError(
+        'VALIDATION_ERROR',
+        'AI training uses the fixed 30-day definition',
+      );
+    }
     const definition = parseProgramDefinition(
-      createProgramDefinition({
-        preset: value.definitionPreset,
-        durationDays: value.standardDurationDays,
-        supportModes: value.supportModes,
-      }),
+      value.definitionPreset === 'AI_TRAINING_V1'
+        ? trainingDefinition
+        : createProgramDefinition({
+            preset: value.definitionPreset,
+            durationDays: value.standardDurationDays,
+            supportModes: value.supportModes,
+          }),
     );
     const definitionJson = programDefinitionJson(definition);
     const data = await db.prisma.$transaction(async (tx) => {
@@ -158,7 +182,7 @@ export async function adoptProgramResponse(request: Request, serviceSlug: string
     const actor = await json(request);
     const [service, value] = await Promise.all([
       resolveManagedServiceContext(serviceSlug, actor.userId),
-      adoptSchema.parseAsync(request.json()),
+      request.json().then((body) => validated(adoptSchema, body)),
     ]);
     const db = await import('@bunshin/database');
     const data = await db.prisma.$transaction(async (tx) => {
@@ -179,6 +203,7 @@ export async function adoptProgramResponse(request: Request, serviceSlug: string
         },
       });
       if (!template) throw new ApplicationError('NOT_FOUND', 'program unavailable');
+      const settings = adoptedProgramSettings(version.definition, value.supportModes);
       const duplicate = await tx.serviceProgram.findFirst({
         where: {
           workspaceId: service.workspaceId,
@@ -197,7 +222,7 @@ export async function adoptProgramResponse(request: Request, serviceSlug: string
           displayName: value.displayName,
           description: value.description,
           status: 'ACTIVE',
-          settings: { supportModes: value.supportModes, participation: 'INVITATION_ONLY' },
+          settings,
           createdByUserId: actor.userId,
         },
       });
@@ -237,6 +262,7 @@ export async function adoptProgramResponse(request: Request, serviceSlug: string
               id: program.id,
               programTemplateVersionId: program.programTemplateVersionId,
               status: program.status,
+              settings,
             },
             performedByUserId: actor.userId,
           },
@@ -275,8 +301,8 @@ export async function enrollProgramResponse(
     const actor = await json(request);
     const [service, value, serviceProgramId] = await Promise.all([
       resolveManagedServiceContext(serviceSlug, actor.userId),
-      enrollmentSchema.parseAsync(request.json()),
-      uuid.parseAsync(rawServiceProgramId),
+      request.json().then((body) => validated(enrollmentSchema, body)),
+      Promise.resolve(validated(uuid, rawServiceProgramId)),
     ]);
     const db = await import('@bunshin/database');
     const data = await db.prisma.$transaction(async (tx) => {
