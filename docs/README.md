@@ -21,6 +21,7 @@
 5. [残機能実装計画](REMAINING_FEATURE_IMPLEMENTATION_PLAN.md)
 6. [Codex Capability Architecture Gap Analysis](CODEX_CAPABILITY_ARCHITECTURE_GAP_ANALYSIS.md)
 7. [AI研修 Skill Factory V1 設計](ai-training/AI_TRAINING_SKILL_FACTORY_V1_DESIGN.md)
+8. [AI研修 Skill Lifecycle V1 設計](ai-training/AI_TRAINING_SKILL_LIFECYCLE_V1_DESIGN.md)
 
 Phase 0実行ガイド、初期Codex指示、過去のPhase完了文書は実装履歴として参照し、単独で現在状態を判断しない。
 
