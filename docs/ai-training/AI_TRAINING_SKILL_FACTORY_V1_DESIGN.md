@@ -2,7 +2,7 @@
 
 日付: 2026-10-05（Asia/Tokyo）
 
-状態: Design only / Human review required
+状態: Approved design / Pure Contract implemented
 
 ## 1. 目的と今回の結論
 
@@ -14,7 +14,7 @@ V1の対象Problemは次の一つに限定する。
 
 期待Outcomeは、承認済みの限定情報から、元Missionの学習目的を変えずに受講者の次の一歩を小さくする支援Skill / Workflow案を、担当者が安全にレビューできることである。Skillの自動採用、受講者への自動配信、外部AI実行はOutcomeに含めない。
 
-本書は設計だけであり、型、validation、DB、schema、migration、UI、Provider、Codex API、Skill生成、外部実行を追加しない。
+本設計に基づくPure Contractは`@bunshin/capability-training`内の型、validation、fixtureだけを追加する。DB、schema、migration、HTTP、UI、Provider、Codex API、Skill生成、外部実行は追加しない。
 
 ## 2. 既存資産と境界
 
@@ -45,7 +45,7 @@ AI研修はEnrollment単位であり、Bunshinを必須にしない。SNSの`Dai
 
 ## 3. V1 Problem Contract案
 
-実装候補名は `TrainingMissionHelpProblemV1` とする。次のPure Contract PRで名称を確定するまでは設計上の呼称である。
+実装名は `TrainingMissionHelpProblemV1` とする。
 
 ```text
 TrainingMissionHelpProblemV1
@@ -99,7 +99,7 @@ Internal scope IDは所有・認可・revision照合のためだけに用い、P
 
 ## 4. Feasibility Contract案
 
-実装候補名は `TrainingSkillDraftFeasibilityV1` とする。各判定は `PASSED | BLOCKED | UNKNOWN` の三値と、固定reason code、確認revision、確認時刻を持つ。
+実装名は `TrainingSkillDraftFeasibilityV1` とする。各判定は `PASSED | BLOCKED | UNKNOWN` の三値と、固定reason code、確認revision、確認時刻を持つ。
 
 最低限の判定軸:
 
@@ -119,7 +119,7 @@ Internal scope IDは所有・認可・revision照合のためだけに用い、P
 
 ## 5. Skill / Workflow Contract案
 
-実装候補名は `TrainingMissionSupportSkillDraftV1` とする。これは採用済みSkillではなく、人間レビュー対象のDraftである。
+実装名は `TrainingMissionSupportSkillDraftV1` とする。これは採用済みSkillではなく、人間レビュー対象のDraftである。
 
 ```text
 TrainingMissionSupportSkillDraftV1
@@ -152,7 +152,7 @@ Skill Draftは回答の正解、受講完了、Skill score更新、Mission差し
 
 ## 6. Artifact Contract案
 
-実装候補名は `TrainingSupportDraftArtifactV1`、種別は `TRAINING_SUPPORT_SKILL_DRAFT` とする。
+実装名は `TrainingSupportDraftArtifactV1`、種別は `TRAINING_SUPPORT_SKILL_DRAFT` とする。
 
 Artifactに含められるもの:
 
@@ -173,7 +173,7 @@ Artifactは画面表示、LINE配信、Provider実行、コード変更、PR作�
 
 ## 7. Validation Contract案
 
-実装候補名は `TrainingSupportDraftValidationReceiptV1` とする。Validationは最低限、次を個別に記録する。
+実装名は `TrainingSupportDraftValidationReceiptV1` とする。Validationは最低限、次を個別に記録する。
 
 - contract / schema versionが対応範囲内
 - Problemが`APPROVED`かつ未取消・期限内
@@ -216,9 +216,9 @@ Validation失敗を空Artifactや部分成功へ変換しない。失敗理由�
 
 判定: 設計継続は妥当。ただし実利用Outcomeは未測定であり、Genspark Test通過をProvider実行や本番提供の承認にしない。
 
-## 10. 次のPure Contract PRの受入条件
+## 10. Pure Contract PRの受入条件
 
-次のPRは`@bunshin/capability-training`内の純粋型・validation・fixtureに限定し、次をテストする。
+Pure Contract PRは`@bunshin/capability-training`内の純粋型・validation・fixtureに限定し、次をテストする。
 
 - 別Workspace、別Service、別Enrollment、別Assignment、別Packageを拒否する
 - `HELP_REQUESTED`以外のEventを対象Problemとして拒否する
@@ -235,12 +235,15 @@ Validation失敗を空Artifactや部分成功へ変換しない。失敗理由�
 
 ## 11. 未解決事項と停止条件
 
-未解決事項:
+Pure Contractで確定した事項:
 
-- Problem / Skill Draftの有効期限の具体値
-- Human Approverを既存のどのAI研修管理権限へ限定するか
-- Artifact本文の最大step数・最大文字数
-- `HELP_REQUESTED`だけで不足する場合に、既存Barrier reasonを必須にするか
+- Problem / Skill Draftの有効期限は`HELP_REQUESTED`から7日以内かつEnrollment終了日時まで
+- Human ApproverはACTIVEな`SERVICE_OWNER`または`SERVICE_ADMIN`
+- Artifact本文は最大5 steps、1 step 200文字、全体4 KiB以内
+- Barrier reasonは任意。未入力は`null`を維持し、入力時は既存固定codeだけを許可
+
+後続へ残す未解決事項:
+
 - 採用後Skillの保存先と廃止・rollback契約
 - 実利用Outcomeをどの既存Eventで測るか
 
@@ -256,7 +259,6 @@ Validation失敗を空Artifactや部分成功へ変換しない。失敗理由�
 
 ## 12. 次Phaseへ進める条件
 
-1. 本設計PRの人間レビューと承認。
-2. 有効期限、承認権限、サイズ上限、Barrier必須性を確定する。
-3. Pure Contractの配置を`@bunshin/capability-training`内に限定することを確認する。
-4. DB、UI、Providerなしの型・validation・否定テストだけを次の独立PRとして承認する。
+1. 本Pure Contract PRの人間レビューと承認。
+2. 採用後Skillの保存先、廃止、rollback、Outcome測定を別設計で確定する。
+3. DB、UI、Provider、Deliveryを伴う接続は別承認・別PRとする。
