@@ -20,6 +20,7 @@ import {
 } from '@bunshin/capability-training';
 import {
   computeTrainingSupportSkillVersionDigestV1,
+  PrismaTrainingInteractionRepository,
   PrismaTrainingSupportSkillLifecycleRepository,
 } from '../src';
 import { cleanupProgramFixtures } from './program-fixture-cleanup';
@@ -85,7 +86,7 @@ export function registerTrainingSupportSkillLifecycleIntegrationCases(client: Pr
           publishedAt: occurredAt,
         },
       });
-      await client.serviceProgram.create({
+      const serviceProgram = await client.serviceProgram.create({
         data: {
           workspaceId: workspace.id,
           groupId: group.id,
@@ -97,7 +98,7 @@ export function registerTrainingSupportSkillLifecycleIntegrationCases(client: Pr
           createdByUserId: owner.id,
         },
       });
-      return { owner, workspace, group, templateVersion };
+      return { owner, workspace, group, templateVersion, serviceProgram };
     }
 
     function evidence(scope: Awaited<ReturnType<typeof fixture>>, suffix: string, now: Date) {
@@ -424,6 +425,152 @@ export function registerTrainingSupportSkillLifecycleIntegrationCases(client: Pr
           data: { steps: ['改ざん'] },
         }),
       ).rejects.toThrow();
+    });
+
+    it('presents only an explicitly enabled exact-scope active skill and records provenance', async () => {
+      const f = await fixture();
+      const lifecycle = new PrismaTrainingSupportSkillLifecycleRepository(client);
+      let state = adoption(f);
+      expect(await lifecycle.saveAdoption({ state, expectedAbsent: true })).toBe('CREATED');
+      const previousRevision = state.skill.revision;
+      state = activateTrainingSupportSkillVersionV1({
+        state,
+        skillVersionId: state.versions[0]!.skillVersionId,
+        expectedSkillRevision: previousRevision,
+        operationId: randomUUID(),
+        idempotencyKey: randomUUID(),
+        reasonCode: 'HUMAN_APPROVED_ACTIVATION',
+        actor: { userId: f.owner.id, serviceRole: 'SERVICE_OWNER', active: true },
+        now: new Date('2026-10-05T02:00:00.000Z'),
+      });
+      expect(await lifecycle.saveTransition({ previousRevision, state })).toBe('UPDATED');
+
+      const participant = await client.user.create({ data: { displayName: 'Skill participant' } });
+      const membership = await client.groupMembership.create({
+        data: {
+          workspaceId: f.workspace.id,
+          groupId: f.group.id,
+          userId: participant.id,
+          serviceRole: 'PARTICIPANT',
+          status: 'ACTIVE',
+          consentedAt: occurredAt,
+        },
+      });
+      const offering = await client.programOffering.create({
+        data: {
+          workspaceId: f.workspace.id,
+          groupId: f.group.id,
+          serviceProgramId: f.serviceProgram.id,
+          version: 1,
+          seller: 'SERVICE',
+          priceOwner: 'SERVICE',
+          paymentOwner: 'SERVICE',
+          apiCostOwner: 'SERVICE',
+          supportOwner: 'SERVICE',
+          contentOwner: 'SERVICE',
+          characterOwner: 'SERVICE',
+          termsSnapshot: {},
+          createdByUserId: f.owner.id,
+        },
+      });
+      const enrollment = await client.programEnrollment.create({
+        data: {
+          workspaceId: f.workspace.id,
+          groupId: f.group.id,
+          groupMembershipId: membership.id,
+          serviceProgramId: f.serviceProgram.id,
+          programOfferingId: offering.id,
+          status: 'ACTIVE',
+          supportMode: 'GUIDED',
+          goalSnapshot: {},
+          offeringSnapshot: {},
+          invitedByUserId: f.owner.id,
+          startsAt: new Date('2026-10-04T00:00:00.000Z'),
+          endsAt: new Date('2026-10-06T00:00:00.000Z'),
+        },
+      });
+      const assignment = await client.programMissionAssignment.create({
+        data: {
+          workspaceId: f.workspace.id,
+          groupId: f.group.id,
+          programEnrollmentId: enrollment.id,
+          programTemplateVersionId: f.templateVersion.id,
+          sequence: 1,
+          routeKey: 'PERSONALIZED',
+          phaseKey: 'FOUNDATION',
+          missionDefinitionKey: 'PROMPT_BASIC',
+          variantKey: 'STANDARD',
+          displaySnapshot: {},
+          ruleVersion: 'AI_TRAINING_V1_RULES_4',
+          presentedAt: occurredAt,
+        },
+      });
+      const interactions = new PrismaTrainingInteractionRepository(client);
+      const disabled = await interactions.record({
+        workspaceId: f.workspace.id,
+        groupId: f.group.id,
+        actorUserId: participant.id,
+        programEnrollmentId: enrollment.id,
+        missionAssignmentId: assignment.id,
+        interactionType: 'HELP_REQUESTED',
+        idempotencyKey: randomUUID(),
+        occurredAt,
+      });
+      expect(disabled).toMatchObject({ outcome: 'RECORDED', supportSkill: null });
+
+      await client.serviceProgram.update({
+        where: { id: f.serviceProgram.id },
+        data: {
+          settings: {
+            moduleKey: 'AI_TRAINING_V1',
+            trainingSupportSkillExposurePilot: {
+              schemaVersion: 1,
+              enabled: true,
+              bindings: [
+                {
+                  trainingSupportSkillId: state.skill.skillId,
+                  learningObjectiveKey: state.skill.scope.learningObjectiveKey,
+                },
+              ],
+            },
+          },
+        },
+      });
+      const enabled = await interactions.record({
+        workspaceId: f.workspace.id,
+        groupId: f.group.id,
+        actorUserId: participant.id,
+        programEnrollmentId: enrollment.id,
+        missionAssignmentId: assignment.id,
+        interactionType: 'HELP_REQUESTED',
+        idempotencyKey: randomUUID(),
+        occurredAt: new Date('2026-10-05T03:00:00.000Z'),
+      });
+      expect(enabled).toMatchObject({
+        outcome: 'RECORDED',
+        supportSkill: {
+          trainingSupportSkillId: state.skill.skillId,
+          skillVersionId: state.skill.currentVersionId,
+          steps: state.versions[0]!.steps,
+          expectedOutput: state.versions[0]!.expectedOutput,
+        },
+      });
+      const exposure = await client.programActionEvent.findFirstOrThrow({
+        where: {
+          workspaceId: f.workspace.id,
+          groupId: f.group.id,
+          eventType: 'TRAINING_SUPPORT_SKILL_PRESENTED',
+        },
+      });
+      expect(exposure.sourceResourceId).toBe(enabled.outcome === 'RECORDED' ? enabled.eventId : '');
+      expect(exposure.metadata).toMatchObject({
+        trainingSupportSkillId: state.skill.skillId,
+        skillVersionId: state.skill.currentVersionId,
+        missionDefinitionKey: 'PROMPT_BASIC',
+        learningObjectiveKey: 'PROMPT_BASIC_OBJECTIVE',
+      });
+      expect(exposure.metadata).not.toHaveProperty('steps');
+      expect(exposure.metadata).not.toHaveProperty('expectedOutput');
     });
   });
 }

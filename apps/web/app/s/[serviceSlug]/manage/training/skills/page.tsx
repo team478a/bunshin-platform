@@ -1,6 +1,9 @@
 import { notFound, redirect } from 'next/navigation';
 import { currentUserProvider } from '../../../../../../src/auth/current-user';
-import { listTrainingSupportSkillsForAdmin } from '../../../../../../src/services/ai-training-skill-lifecycle-admin';
+import {
+  listTrainingSupportSkillExposurePilotsForAdmin,
+  listTrainingSupportSkillsForAdmin,
+} from '../../../../../../src/services/ai-training-skill-lifecycle-admin';
 import { resolveManagedServiceContext } from '../../../../../../src/services/public-service';
 import { TrainingSupportSkillAdmin } from './training-support-skill-admin';
 
@@ -21,9 +24,21 @@ export default async function TrainingSupportSkillAdminPage({
     'ADMINISTRATION',
   ).catch(() => null);
   if (!service || !['SERVICE_OWNER', 'SERVICE_ADMIN'].includes(service.serviceRole)) notFound();
-  const skills = await listTrainingSupportSkillsForAdmin({
-    workspaceId: service.workspaceId,
-    serviceId: service.serviceId,
-  });
-  return <TrainingSupportSkillAdmin serviceSlug={serviceSlug} initialSkills={skills} />;
+  const [skills, exposurePrograms] = await Promise.all([
+    listTrainingSupportSkillsForAdmin({
+      workspaceId: service.workspaceId,
+      serviceId: service.serviceId,
+    }),
+    listTrainingSupportSkillExposurePilotsForAdmin({
+      workspaceId: service.workspaceId,
+      serviceId: service.serviceId,
+    }),
+  ]);
+  return (
+    <TrainingSupportSkillAdmin
+      serviceSlug={serviceSlug}
+      initialSkills={skills}
+      exposurePrograms={exposurePrograms}
+    />
+  );
 }

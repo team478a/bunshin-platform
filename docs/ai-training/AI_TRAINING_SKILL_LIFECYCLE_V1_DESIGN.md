@@ -142,6 +142,14 @@ Service管理者向けに、review packageの読み取り専用preview、人間�
 
 review packageのWorkspace / Service、Program Enrollment、Mission Assignment、`HELP_REQUESTED` Event、Program版、Mission、rule、variantは、認証済みService scope内の実レコードからサーバー側で再構築する。クライアントが指定したscope、event種別、Program版を信用しない。learning objective等、現行DBから独立検証できない内容は人間review packageに残し、Pure ContractでDraft / Artifact間の不変条件を再検証する。Problem / Draft専用tableは追加しない。
 
+### 4.6 限定Service Exposure Pilot実装
+
+Service管理者が、ACTIVEなSkillと対象ServiceProgramの組合せを明示確認した場合だけ、`ServiceProgram.settings.trainingSupportSkillExposurePilot`へ`trainingSupportSkillId + learningObjectiveKey`のbindingを保存する。既定値は無効であり、Skillのapprove / activateだけでは参加者へ提示しない。設定変更は`ProgramAuditLog`へ記録する。
+
+参加者が既存Missionで「困った」を選んだ時だけ、Workspace、Service、Program版、Mission、assignment variant、明示binding、Skillの`ACTIVE`、current versionの`ACTIVE`、activation履歴を同一transaction内で再確認する。候補が0件または複数、設定不正、scope不一致の場合はSkillを提示せず、既存の汎用ヘルプへフォールバックする。実行時表示文から`learningObjectiveKey`を推測しない。
+
+提示した場合は、`HELP_REQUESTED` Eventをsourceとする`TRAINING_SUPPORT_SKILL_PRESENTED` Eventを同一transactionで保存してから、承認済みsteps / expected outputだけを返す。metadataにはSkill ID、version ID、activation ID、Mission key、learning objective key、提示時刻のみを保存し、本文・steps・回答・User IDを複製しない。Provider呼出し、外部AI実行、課金、Outcome集計、自動改善は行わない。
+
 rollback互換性5軸のUI初期値は全て`UNKNOWN`とし、全軸を人間が`PASSED`へ変更した場合だけ要求を送信できる。API、Pure Contract、DB制約も全軸`PASSED`以外を拒否する。未確認条件を自動で`PASSED`へ補完しない。
 
 ## 5. 採用条件
@@ -222,7 +230,7 @@ metadata:
   presentedAt
 ```
 
-本文、steps、回答、Barrier自由文、User/Bunshin IDをmetadataへ複製しない。Exposure Eventの追加は本書では実装しない。
+本文、steps、回答、Barrier自由文、User/Bunshin IDをmetadataへ複製しない。限定Service Exposure PilotでこのEventを実装済みとし、Outcome評価は後続Phaseに残す。
 
 ### 8.2 V1 Outcome
 
@@ -272,20 +280,20 @@ Provider性能が向上してもDraft候補の品質向上として吸収し、R
 1. Persistence Contract: package内の状態遷移、Repository Port、認可・revision・idempotencyのPure Contract。DBなし。実装済み。
 2. Persistence: additive schema / migration / Prisma Repository / 実DBIsolation・競合・rollbackテスト。HTTP/UIなし。実装済み。
 3. Admin Adoption: 明示的なreview・approve・activate・suspend・rollback API/UI。Deliveryなし。実装済み。
-4. Exposure Pilot: 限定Serviceでの提示と`TRAINING_SUPPORT_SKILL_PRESENTED`記録。Providerなし。
+4. Exposure Pilot: 限定Serviceでの提示と`TRAINING_SUPPORT_SKILL_PRESENTED`記録。Providerなし。実装済み。
 5. Outcome Review: 最小件数と期間を人間承認後、既存Eventからread-only集計。自動改善なし。
 
 各PRは前段の人間承認後に開始し、積み重ねたまま本番接続しない。
 
 ## 12. 停止条件と次Phaseへ進める条件
 
-本Admin Adoption PRで停止する。次は実装しない。
+本Exposure Pilot PRで停止する。次は実装しない。
 
 - Problem / Draftの永続化
-- Delivery、Exposure Event
+- Outcome集計、Outcome判定
 - Provider、Codex API、外部実行、課金
 - 自動生成、自動採用、自動rollback、自動改善
 - 共通Core、ハッシー、他Packageへの横展開
 - Merge、Deploy
 
-次Phaseは、本Admin Adoption実装を人間が承認した後、限定ServiceでのExposure Pilotを独立PRとして設計・実装する。Provider接続、外部AI実行、課金、自動改善、Outcome集計はさらに後続とする。
+次Phaseは、本Exposure Pilotを人間が承認し、本番で十分な観測期間と最小件数を満たした後、既存Eventからのread-only Outcome Reviewを独立PRとして検討する。Provider接続、外部AI実行、課金、自動改善には進まない。

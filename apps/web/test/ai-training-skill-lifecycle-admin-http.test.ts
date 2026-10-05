@@ -34,6 +34,13 @@ const activate = {
   idempotencyKey: '33333333-3333-4333-8333-333333333333',
   confirmation: 'ACTIVATE_SKILL_VERSION',
 };
+const enableExposure = {
+  action: 'ENABLE_EXPOSURE',
+  skillId: id,
+  serviceProgramId: '44444444-4444-4444-8444-444444444444',
+  idempotencyKey: '55555555-5555-4555-8555-555555555555',
+  confirmation: 'ENABLE_LIMITED_SERVICE_EXPOSURE',
+};
 const post = (body: unknown, origin = 'https://example.test') =>
   new Request('https://example.test/api/services/fixture/training-support-skills', {
     method: 'POST',
@@ -76,6 +83,23 @@ describe('AI training support skill admin HTTP boundary', () => {
     const response = await trainingSupportSkillAdminResponse(request, 'fixture');
     expect(response.status).toBe(200);
     expect(fake.list).toHaveBeenCalledWith({ workspaceId: 'workspace', serviceId: 'service' });
+  });
+
+  it('accepts only an explicitly confirmed limited-Service exposure command', async () => {
+    expect((await trainingSupportSkillAdminResponse(post(enableExposure), 'fixture')).status).toBe(
+      200,
+    );
+    expect(fake.execute).toHaveBeenCalledWith(
+      expect.objectContaining({ command: enableExposure, actorUserId: 'actor' }),
+    );
+    expect(
+      (
+        await trainingSupportSkillAdminResponse(
+          post({ ...enableExposure, confirmation: 'ENABLE' }),
+          'fixture',
+        )
+      ).status,
+    ).toBe(400);
   });
 
   it('rejects cross-origin, missing session, and non-manager roles before writes', async () => {
