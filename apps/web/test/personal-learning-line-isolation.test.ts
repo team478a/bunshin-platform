@@ -28,13 +28,11 @@ describe('Personal Learning never delivers training LINE', () => {
         prisma: {
           groupMembership: { findMany: vi.fn().mockResolvedValue([{ id: 'member' }]) },
           programEnrollment: {
-            findFirst: vi
-              .fn()
-              .mockResolvedValue({
-                id: 'enrollment',
-                groupMembershipId: 'member',
-                serviceProgramId: 'program',
-              }),
+            findFirst: vi.fn().mockResolvedValue({
+              id: 'enrollment',
+              groupMembershipId: 'member',
+              serviceProgramId: 'program',
+            }),
           },
           programProgressSnapshot: { findFirst: vi.fn().mockResolvedValue({ id: 'progress' }) },
           programMissionAssignment: {
