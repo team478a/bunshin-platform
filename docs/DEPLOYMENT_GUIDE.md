@@ -37,6 +37,8 @@ SOCIAL Intelligenceを有効にする場合は、Productionだけにserver-only�
 
 ## Deployment Order
 
+Personal Learning P1-C-S migration `20261006021000_personal_learning_persistence`を含むリリースは、[承認条件と手順](ai-training/AI_TRAINING_PERSONAL_LEARNING_P1CS_RELEASE_RUNBOOK.md)でBackup、実DBのpending一覧、旧V1との互換性、既存Goal indexのlock影響を確認する。保存基盤の配備、Definitionの人間承認、利用開始は別判断とし、review fixtureを自動承認しない。
+
 Feedback maintenance migration `20261003050000_feedback_maintenance_job`を含むリリースは、[専用Runbook](improvement/IMPROVEMENT_MAINTENANCE_RELEASE_RUNBOOK.md)の停止/drain/preflightをbuild開始前に満たす。build先頭でDBが変わり、旧アプリのworkerが動いている状態は非互換。jobs/scheduleだけ止めてもjobs/runのcleanupは止まらない。停止を証明できない場合は公開を開始しない。
 
 1. `main`でCIのtypecheck/lint/test/buildが成功していることを確認する。
