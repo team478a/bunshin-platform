@@ -1,5 +1,7 @@
 # Production Closed Pilot: 3 Definition人間レビュー票
 
+2026-10-07追記: 本番準備APIは#1161/P1-Hで固定authority・Pilot停止中に限り利用できる契約へ拡張済み。下記の非production限定記述は旧時点の履歴。[最新開始前Gate](PERSONAL_LEARNING_PRODUCTION_WAVE0_FINAL_READINESS.md)を併用する。API実装は教育レビュー・本番承認の代替ではなく、下記3件の人間判断をAIが補完しない。
+
 基準main `b462cdb9320cdfae2522f43e7ae4620cb02016d3`。**3件とも未レビュー・未承認（UNKNOWN）。本書はAPPROVE操作ではない。** [開始Runbook](PERSONAL_LEARNING_PRODUCTION_CLOSED_PILOT_RUNBOOK.md)と併用する。
 
 正本: `packages/capability-training/src/learning-definition-fixtures.ts`、`mission-quality.ts`、`skill-evaluation.ts`、`learning-router.ts`。運用時は対象release SHAと管理APIのreviewDigest/revisionを再取得し、表だけで承認しない。

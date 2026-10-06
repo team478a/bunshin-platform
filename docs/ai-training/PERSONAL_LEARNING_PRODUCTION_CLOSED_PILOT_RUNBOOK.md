@@ -1,5 +1,9 @@
 # Personal Learning Production Closed Pilot Runbook
 
+## 2026-10-07 Wave 0開始前の最新監査
+
+[Production Wave 0 Final Readiness](PERSONAL_LEARNING_PRODUCTION_WAVE0_FINAL_READINESS.md)がP1-H merge後の現行Gateと残作業を整理する。Hard Cap・Call Admission・trusted本番準備APIは実装済みであり、以下の旧監査の未実装記述は時点の履歴。外部Waveは累計0/5/20/50/100、内部人数は別承認とし、旧「追加人数」表を現在の設定値として使わない。本人Profile準備導線、本番Migration/RLS/実認証/承認/費用・停止運用は未確認で、Wave 0 NO-GOを維持する。本番操作は別承認。
+
 ## P1-H追記（本番未適用）
 
 [累計participant cap / Wave実装報告](MANABERU_STYLE_PILOT_PARTICIPANT_CAP_IMPLEMENTATION.md)を参照。外部unique participant最大100、Wave累計0/5/20/50/100、取消後の自動枠再利用なし。内部人数の運用値は別人間承認、未設定0で拒否。本番実行は旧5人allowlistだけでは許可しない。新Migration・Privacy保持・authority・人数設定・実認証・全deployment更新/drainを確認するまでWave 0 NO-GO。新準備APIは停止中の参加権操作だけであり、Enrollment作成やPilot enableは行わない。
