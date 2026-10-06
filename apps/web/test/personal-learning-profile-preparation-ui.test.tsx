@@ -89,16 +89,14 @@ describe('learner Profile preparation UI', () => {
     expect(await submitProfilePreparation('/profile', command)).toBe('RETRY');
     vi.stubGlobal(
       'fetch',
-      vi
-        .fn()
-        .mockResolvedValue(
-          Response.json({
-            data: {
-              outcome: 'INITIALIZED',
-              profile: { role: 'SALES', aiLevel: 'BEGINNER', dailyMinutes: 5 },
-            },
-          }),
-        ),
+      vi.fn().mockResolvedValue(
+        Response.json({
+          data: {
+            outcome: 'INITIALIZED',
+            profile: { role: 'SALES', aiLevel: 'BEGINNER', dailyMinutes: 5 },
+          },
+        }),
+      ),
     );
     expect(await submitProfilePreparation('/profile', command)).toBe('CONFLICT');
   });
