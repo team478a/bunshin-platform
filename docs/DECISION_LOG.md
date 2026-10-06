@@ -1,5 +1,13 @@
 # BUNSHIN Platform Decision Log
 
+## 2026-10-06: P1-Bは既存Profile/Goalの読取投影と未接続の意味契約に限定する
+
+- 状態: Proposed（P1-B指示に基づくPRレビュー対象。P1-C/保存/Runtime接続は別承認）
+- dailyMinutesと既存Goal IDだけを共通Learner投影にし、AIレベル/用途/テーマ/経験状態はtraining Packageへ残す。新保存正本や巨大JSONは作らない。
+- ProgramMemberGoalのACTIVE/ACHIEVED/PAUSED/CANCELLEDを再利用する。ACTIVEを本人確認の証拠とせず、Candidate・既存参照・明示確認receiptを区別する。旧Goal履歴を削除せず、複数ACTIVEは推測選択せず拒否する。
+- BEGINNER/NOT_YETから未経験NONEを推定しない。未回答UNKNOWNを維持する。既存ProfileのGoal keyから特定Goal IDを名前で推定しない。
+- Scope判定だけでGoalを確定しない。確認receiptは本人/scope/既存ID/意味版を照合する純粋契約であり、認可・永続化・実行の代替ではない。期間/終了状態をGoalへ投影しない。
+
 ## 2026-10-06: P1-A Learning Scope契約を未接続の純粋Domainとして追加する
 
 - 状態: Proposed（P1-A実装指示に基づくPRレビュー対象。P1-B/本番接続は別承認）
