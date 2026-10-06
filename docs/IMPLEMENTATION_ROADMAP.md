@@ -206,6 +206,8 @@ MS-1とMS-2を完了する前に、第一号サービスを一般公開しない
 
 ## AI研修
 
+Personal Learning P1-A〜P1-FはPR #1152までmainへ反映済み。限定Pilot UI/APIの実装・自動検証と、staging配備・DB適用・Definition人間承認・利用開始は別状態とする。次は[Personal Learning Pilot開始前Gate / staging手順](ai-training/AI_TRAINING_PERSONAL_LEARNING_PILOT_READINESS_RUNBOOK.md)に従い、環境owner、承認登録、本人Profile準備、実認証検証を確認する。現時点で開始Gateの通過証拠はなくNO-GO。一般公開、本番適用、実課金API、Teaching / Factory / Codex等の後続実装はこの文書更新では承認しない。
+
 Skill限定Pilotの運用条件提案は`docs/ai-training/AI_TRAINING_SKILL_EXPOSURE_PILOT_OPERATIONS.md`を参照。単一Service / Program / Mission / variant / Skill版、14日の提示と最大7日の追跡、10 Assignmentかつ5人以上を探索的レビューの最低条件として提案する。数値は未承認で、本番対象・担当者・開始日時も未確定。現行設定はServiceProgram単位で個人allowlistや自動終了を持たないため、招待限定Programと担当者の停止操作を開始条件にする。本番有効化やOutcome集計実装は本文書PRに含めない。
 
 AI研修のSkill Lifecycle V1は`docs/ai-training/AI_TRAINING_SKILL_LIFECYCLE_V1_DESIGN.md`と`docs/ai-training/AI_TRAINING_SKILL_LIFECYCLE_V1_PERSISTENCE_IMPLEMENTATION.md`を参照。Service-ownedの論理Skill、immutable version、append-only操作監査、additive migration、Prisma Repository、管理者review / approve / activate / suspend / rollback API・UI、限定Service Exposure Pilot、`TRAINING_SUPPORT_SKILL_PRESENTED` Eventまで実装し、PR #1138で本番反映済み。Exposure Pilotは既定無効で、Skillの有効化だけでは参加者へ提示しない。Provider、外部AI実行、課金、自動採用・自動rollback・自動改善は未実装。次は対象・観測期間・最小件数・少数データの非表示条件・停止条件を人間承認した限定運用の後に、read-only Outcome Reviewを判断する。
