@@ -121,3 +121,4 @@ export * from './improvement-feedback-observations';
 export * from './improvement-feedback-review-evidence';
 export * from './improvement-feedback-triage';
 export * from './improvement-feedback-retention-job';
+export * from './learning-router';

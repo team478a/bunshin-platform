@@ -1,5 +1,13 @@
 # BUNSHIN Platform Decision Log
 
+## 2026-10-06: P1-Eは版固定Planから既存Assignmentへ明示Bridgeする
+
+- 状態: Proposed（独立PR。UI/LINE登録・本番migration・deployなし）
+- Routerは純粋契約とAI Packageの3Definition限定Completion Ruleに分離する。回答に保存された版付きAssessmentを利用し、ProfileのScoreだけで習得・Skipを推測しない。
+- Assignment/Answer/Assessment/Progressを既存実行正本として再利用する。Assignmentの参照metadataにPlan RevisionとDefinition Versionを記録し、同一Missionに対応するDefinitionも別々に実行する。新しいProgress/Assignment modelは作らない。
+- 同じEnrollment lockと再認可で現行Confirmed Plan・ACTIVE Goal・人間承認・契約期間を検証する。旧Revision、未評価、不明Evidenceは止める。既存V1の未完了Assignmentを置き換えず、Schedulerへ登録しない。
+- PLAN_COMPLETEDはRouter結果だけとし、Goal/Plan/Enrollment状態を自動変更しない。Teaching・UI・LINE・Provider・Definition拡張は別レビューとする。
+
 ## 2026-10-06: P1-C-Sは既存Goal正本と参照だけのPlan Revisionを永続化する
 
 - 状態: Proposed（P1-C-S独立PRレビュー対象。本番migration/承認/Runtime接続なし）
