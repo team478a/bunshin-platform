@@ -175,3 +175,11 @@ PASS/READYには対象SHA/環境/日時/担当者/証拠を要求する。空欄
 追加Migration `20261006120000_personal_learning_call_admission`は本番未適用。適用監査と全instanceのrelease確認が必要。Kill Switchは引き続き既存flagを使用し、未知枠の復旧を台帳削除やTTLで行わない。
 
 Gate Hは引き続きUNKNOWN。金額Hard Stopの完成・費用見積もり・本番数値承認・実課金開始承認を意味しない。Gate B/C/D/E/F/G/Iも本番証拠を要する。trusted準備操作、累計100人Hard Capは別PR。Wave 0はNO-GOのまま。
+
+## 2026-10-06: trusted Production準備API Gate（本番未反映）
+
+PR BをAPI Gateと本人UIへ分割し、API Gateのみ追加した。詳細は[本番準備API報告](PERSONAL_LEARNING_PRODUCTION_PREPARATION_IMPLEMENTATION.md)。過去の非本番限定記述は旧実装の履歴として保持する。
+
+既存機能別flagに加え、`PERSONAL_LEARNING_PRODUCTION_PREPARATION`で単一Workspace / Service / Programを固定する。未設定・不正設定・実行flag trueは拒否。DB transaction内でSUSPENDED / Pilot disabled / 通知停止 / allowlist scopeを再検証し、別AI Training Programと共有するServiceでは準備を拒否する。Definitionは人間管理者だけ、Profileは本人だけが既存契約を使用する。GET・再送にも現認可を要求する。
+
+実設定・deploy・承認・Profile登録は未実施。最小本人UI、専用scope準備、100人Hard Cap、停止操作・drain、実Migration/実role/実認証、全Release Gateは別作業。APIを実装したことをGate F/G READYの証拠にせず、Wave 0はNO-GOを維持する。

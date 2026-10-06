@@ -3711,3 +3711,11 @@
 - transport/timeout等で終了不明なら同時実行枠を自動解放しない。TTLでの推測解放を禁止する。復旧はKill Switch停止・実行終了確認・人間レビュー後の別操作とし、今回復旧APIは作らない。
 - ledgerには相談・回答・成果物・Provider response・User/Enrollment参照を保存しない。Job attemptの不可逆digestは仮名化情報であり匿名とは主張しない。回答削除で上限を回避できないよう保存を分離する。
 - これは金額上限ではない。モデル価格、外部Provider予算、費用Alert、人間承認、Migration、Wave 0実認証は引き続き別Gate。Production準備操作と100人Hard Capは別PRへ残す。
+
+## 2026-10-06: Production準備は実行Gateと独立した単一authorityへ限定する
+
+- 状態: Proposed（実装PRレビュー待ち。本番操作は未承認）
+- 既存Definition管理・本人Profile初期化APIだけへ、既定無効のProduction準備authority設定を追加する。既存機能別flagと実session/Service認可を維持する。本人Profileを管理者が代入する経路は作らない。
+- authorityはserver設定のWorkspace/Service/Program完全一致。DB transaction内で停止済み専用Program、disabled Pilot/通知停止、既存bounded allowlistを再検証する。Service-owned Definition承認が別Programへ影響しないよう、同Serviceの他AI Training ProgramがあればProduction準備を拒否する。
+- Production実行flagが有効な間は準備APIを閉じる。開始後のProfile編集/新規登録や緊急撤回の別機構を完成させたとは扱わない。実行を停止しただけでProgram SUSPENDEDへの変更が完了したとはしない。
+- schema/Migration/UI/Provider/LINE/100人登録を追加しない。設定変更、実承認、実Profile登録、Migration、deploy、Pilot enableは別の人間承認を待つ。

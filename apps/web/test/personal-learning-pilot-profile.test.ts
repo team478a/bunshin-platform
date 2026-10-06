@@ -7,6 +7,7 @@ const fake = vi.hoisted(() => ({
   read: vi.fn(),
   initialize: vi.fn(),
   environment: vi.fn(),
+  constructor: vi.fn(),
 }));
 vi.mock('@bunshin/config', () => ({ getServerEnvironment: fake.environment }));
 vi.mock('../src/auth/current-user', () => ({
@@ -17,6 +18,9 @@ vi.mock('../src/services/public-service', () => ({ resolveMemberServiceContext: 
 vi.mock('@bunshin/database', () => ({
   prisma: {},
   PrismaPersonalLearningPilotProfileRepository: class {
+    constructor(...args: unknown[]) {
+      fake.constructor(...args);
+    }
     read = fake.read;
     initialize = fake.initialize;
   },
@@ -41,6 +45,9 @@ describe('Pilot learner-owned profile preparation HTTP', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     vi.stubEnv('PERSONAL_LEARNING_PROFILE_PREPARATION', 'true');
+    vi.stubEnv('PERSONAL_LEARNING_PRODUCTION_PREPARATION', '');
+    vi.stubEnv('PERSONAL_LEARNING_PILOT', 'false');
+    vi.stubEnv('PERSONAL_LEARNING_PRODUCTION_CLOSED_PILOT', 'false');
     fake.environment.mockReturnValue({ APP_ENV: 'staging' });
     fake.actor.mockResolvedValue({ userId: 'learner' });
     fake.service.mockResolvedValue({ workspaceId: 'server-workspace', serviceId: 'server-group' });
@@ -48,6 +55,45 @@ describe('Pilot learner-owned profile preparation HTTP', () => {
     fake.initialize.mockResolvedValue({ outcome: 'INITIALIZED' });
   });
   afterEach(() => vi.unstubAllEnvs());
+  it('production pins preparation scope and keeps learner-owned explicit answers', async () => {
+    const authority = {
+      workspaceId: '11111111-1111-4111-8111-111111111111',
+      groupId: '22222222-2222-4222-8222-222222222222',
+      serviceProgramId: '33333333-3333-4333-8333-333333333333',
+    };
+    fake.environment.mockReturnValue({ APP_ENV: 'production' });
+    vi.stubEnv('PERSONAL_LEARNING_PRODUCTION_PREPARATION', JSON.stringify(authority));
+    fake.service.mockResolvedValue({
+      workspaceId: authority.workspaceId,
+      serviceId: authority.groupId,
+    });
+    expect((await personalLearningPilotProfileResponse(req(), 'training', id)).status).toBe(200);
+    expect(fake.constructor).toHaveBeenCalledWith({}, undefined, authority);
+    expect(fake.initialize).toHaveBeenCalledWith(
+      {
+        workspaceId: authority.workspaceId,
+        groupId: authority.groupId,
+        programEnrollmentId: id,
+        actorUserId: 'learner',
+      },
+      body,
+    );
+    fake.initialize.mockClear();
+    fake.service.mockResolvedValue({
+      workspaceId: authority.serviceProgramId,
+      serviceId: authority.groupId,
+    });
+    expect((await personalLearningPilotProfileResponse(req(), 'training', id)).status).toBe(404);
+    expect(fake.initialize).not.toHaveBeenCalled();
+  });
+  it('does not proceed after asynchronous preparation feature revocation', async () => {
+    fake.service.mockImplementation(() => {
+      vi.stubEnv('PERSONAL_LEARNING_PROFILE_PREPARATION', 'false');
+      return Promise.resolve({ workspaceId: 'server-workspace', serviceId: 'server-group' });
+    });
+    expect((await personalLearningPilotProfileResponse(req(), 'training', id)).status).toBe(404);
+    expect(fake.constructor).not.toHaveBeenCalled();
+  });
   it('reads without initialization and resolves owner/service server-side', async () => {
     const get = await personalLearningPilotProfileResponse(
       new Request('https://app.example.com/api'),

@@ -231,6 +231,151 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
       };
       return { ...f, repository, profileScope: scope, command };
     }
+    it('production preparation pins Program and retains human approval/profile ownership and retry authorization', async () => {
+      const f = await profilePreparation();
+      const authority = {
+        workspaceId: f.scope.workspaceId,
+        groupId: f.scope.groupId,
+        serviceProgramId: f.enrollment.serviceProgramId,
+      };
+      const profile = new PrismaPersonalLearningPilotProfileRepository(
+        client,
+        () => now,
+        authority,
+      );
+      const admin = new PrismaLearningDefinitionApprovalAdminRepository(
+        client,
+        () => now,
+        authority,
+      );
+      const adminScope = {
+        workspaceId: f.scope.workspaceId,
+        groupId: f.scope.groupId,
+        actorUserId: f.owner.id,
+      };
+      const first = (await admin.list(adminScope))[0]!;
+      expect(first.current).toBeNull();
+      expect(
+        await client.programAuditLog.count({
+          where: { action: 'LEARNING_DEFINITION_APPROVAL_CHANGED' },
+        }),
+      ).toBe(0);
+      const command = {
+        operationId: randomUUID(),
+        action: 'APPROVE' as const,
+        confirmation: 'CONFIRM_DEFINITION_APPROVAL' as const,
+        definitionKey: first.definition.reference.definitionKey,
+        version: first.definition.reference.version,
+        expectedRevision: first.revision,
+        reviewDigest: first.reviewDigest,
+        reviewedCommitSha: 'a'.repeat(40),
+        reviewEvidenceKey: 'synthetic-production-review',
+        reviewChecklist: {
+          objective: true as const,
+          prerequisites: true as const,
+          concepts: true as const,
+          safety: true as const,
+          mistakes: true as const,
+          practice: true as const,
+          rubricAndMission: true as const,
+        },
+      };
+      await admin.change(adminScope, command);
+      await expect(admin.change(adminScope, command)).resolves.toMatchObject({ replayed: true });
+      await expect(
+        profile.initialize({ ...f.profileScope, actorUserId: f.owner.id }, f.command),
+      ).rejects.toThrow();
+      await profile.initialize(f.profileScope, f.command);
+      expect(await client.programMemberGoal.count()).toBe(0);
+      expect(await client.programMissionAssignment.count()).toBe(0);
+      await client.serviceProgram.update({
+        where: { id: authority.serviceProgramId },
+        data: { status: 'ACTIVE' },
+      });
+      await expect(admin.change(adminScope, command)).rejects.toThrow();
+      await expect(profile.initialize(f.profileScope, f.command)).rejects.toThrow();
+    });
+    it('production preparation rejects different authority, notification enablement and foreign allowlist', async () => {
+      const f = await profilePreparation();
+      const authority = {
+        workspaceId: f.scope.workspaceId,
+        groupId: f.scope.groupId,
+        serviceProgramId: f.enrollment.serviceProgramId,
+      };
+      for (const invalid of [
+        { ...authority, workspaceId: randomUUID() },
+        { ...authority, groupId: randomUUID() },
+        { ...authority, serviceProgramId: randomUUID() },
+      ]) {
+        const repo = new PrismaPersonalLearningPilotProfileRepository(client, () => now, invalid);
+        await expect(repo.initialize(f.profileScope, f.command)).rejects.toThrow();
+      }
+      const repo = new PrismaPersonalLearningPilotProfileRepository(client, () => now, authority);
+      for (const settings of [
+        {
+          moduleKey: 'AI_TRAINING_V1',
+          personalLearningPilot: { enabled: true, enrollmentIds: [f.enrollment.id] },
+          trainingOperations: { notificationsEnabled: false, postponedReminderEnabled: false },
+        },
+        {
+          moduleKey: 'AI_TRAINING_V1',
+          personalLearningPilot: { enabled: false, enrollmentIds: [f.enrollment.id] },
+          trainingOperations: { notificationsEnabled: true, postponedReminderEnabled: false },
+        },
+        {
+          moduleKey: 'AI_TRAINING_V1',
+          personalLearningPilot: { enabled: false, enrollmentIds: [f.enrollment.id, randomUUID()] },
+          trainingOperations: { notificationsEnabled: false, postponedReminderEnabled: false },
+        },
+      ]) {
+        await client.serviceProgram.update({
+          where: { id: authority.serviceProgramId },
+          data: { settings },
+        });
+        await expect(repo.initialize(f.profileScope, f.command)).rejects.toThrow();
+      }
+      expect(await client.trainingParticipantProfile.count()).toBe(0);
+    });
+    it('production preparation refuses a shared Service with another AI Training Program', async () => {
+      const f = await profilePreparation();
+      const program = await client.serviceProgram.findUniqueOrThrow({
+        where: { id: f.enrollment.serviceProgramId },
+      });
+      await client.serviceProgram.create({
+        data: {
+          ...program,
+          id: randomUUID(),
+          displayName: 'Synthetic existing V1',
+          settings: { moduleKey: 'AI_TRAINING_V1' },
+          status: 'ACTIVE',
+        },
+      });
+      const authority = {
+        workspaceId: f.scope.workspaceId,
+        groupId: f.scope.groupId,
+        serviceProgramId: program.id,
+      };
+      const admin = new PrismaLearningDefinitionApprovalAdminRepository(
+        client,
+        () => now,
+        authority,
+      );
+      await expect(
+        admin.list({
+          workspaceId: f.scope.workspaceId,
+          groupId: f.scope.groupId,
+          actorUserId: f.owner.id,
+        }),
+      ).rejects.toThrow();
+      const profile = new PrismaPersonalLearningPilotProfileRepository(
+        client,
+        () => now,
+        authority,
+      );
+      await expect(profile.initialize(f.profileScope, f.command)).rejects.toThrow();
+      expect(await client.learningDefinitionApproval.count()).toBe(0);
+      expect(await client.trainingParticipantProfile.count()).toBe(0);
+    });
     it('Profile preparation: restore, immutable retry, no Goal or Assignment and no content', async () => {
       const f = await profilePreparation();
       expect(await f.repository.read(f.profileScope)).toEqual({ profile: null });
