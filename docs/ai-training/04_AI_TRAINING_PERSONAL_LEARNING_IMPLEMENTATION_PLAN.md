@@ -13,6 +13,12 @@ Learning Definition Libraryを中心にし、完成教材の事前準備は必�
 
 ## 最初のPRと人間承認
 
+### 2026-10-06 P1-D個別指示による順序更新
+
+P1-A/B/Cはmain反映済み（P1-C #1147）。今回のP1-Dは保存前に必要な相談状態を確認するため、最大3問の非永続Application契約・決定的AI Mapping・候補本人選択までを先に実装する。旧計画の「保存専用PRを先にレビュー」はUI/API/永続化/Runtime接続のGateとして維持し、純粋な相談契約の着手条件ではなくする。P1-C-Sは今回実装しない。
+
+既存setup UIはProfile/Goal保存と旧Runtimeを前提にするため、今回UI/APIは追加しない。P1-Cの3 Definitionはreview fixtureで、承認済み参照がなければGap。本人選択済み候補もProgramMemberGoal/Confirmed Goal参照/Planにはせず、後続保存PRで証跡・変更/取消・scope・Revisionを再検証する。
+
 推奨する最初の実装PRはP1-Aの「Learning Scopeの純粋契約とAI研修固有の拒否/変換Rule」。汎用chat、LLMによる自動Goal確定、先行Content Factoryを作らず、Learning Firstを入口から守る。今回の監査文書PRはその前の設計レビューである。
 
 実装開始前に次を人間が決める。
