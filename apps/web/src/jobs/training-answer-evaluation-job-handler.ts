@@ -240,6 +240,13 @@ export function createTrainingAnswerEvaluationJobHandler(): TrainingAnswerEvalua
         });
       } catch (error) {
         if (error instanceof TrainingAnswerEvaluationJobError) throw error;
+        if (
+          requirePilot &&
+          !providerAttempted &&
+          error instanceof ApplicationError &&
+          ['NOT_FOUND', 'FORBIDDEN', 'CONFLICT', 'VALIDATION_ERROR'].includes(error.code)
+        )
+          throw new TrainingAnswerEvaluationJobError('TRAINING_EVALUATION_SCOPE_REVOKED', false);
         await recordAiUsageSafely({
           workspaceId: input.workspaceId,
           bunshinId: null,

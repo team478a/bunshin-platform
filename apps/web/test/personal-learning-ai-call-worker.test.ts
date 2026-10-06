@@ -206,6 +206,7 @@ describe('Pilot Assessment AI call wiring', () => {
       );
       expect(fake.evaluate).not.toHaveBeenCalled();
       expect(fake.record).not.toHaveBeenCalled();
+      expect(fake.usage).not.toHaveBeenCalled();
     },
   );
   it('marker removed during quota wait cannot fall back to legacy', async () => {
