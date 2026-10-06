@@ -4,7 +4,7 @@
 
 - 基準main: `15751e98029049048b74898406e84c298d5d6abc`（#1150）
 - branch: `feat/personal-learning-router-bridge-v1`
-- commit: 最終検証後に本報告の追記commitで実装SHAを記録する。
+- 実装commit: `5409ff9bda2c42bea80d19354f248c5b2168e9fe`。検証結果の文書追記commitはPR headで確認する。
 - 対象: P1-Eのみ。server-internal opt-in Bridge。UI/API/LINE Schedulerへの登録、本番利用開始を含まない。
 
 ## 正本・責務
@@ -70,7 +70,22 @@ DB schema/migration追加なし。本番migration未適用。隔離した使い�
 
 ## 検証
 
-最終検証結果は追記commitで確定する。テスト対象:
+検証結果（2026-10-06）:
+
+| 検証                                                           | 結果                                                     |
+| -------------------------------------------------------------- | -------------------------------------------------------- |
+| application unit（P1-A/B/C/CS・Program Goal/Runtime含む）      | 796 passed                                               |
+| capability-training unit（P1-A/B/C/D・Policy/Skill含む）       | 251 passed                                               |
+| database unit（Assignment/Evaluation/既存V1含む）              | 838 passed                                               |
+| PostgreSQL integration（P1-C-S/P1-E・既存Program Runtime含む） | 115 passed（`--testTimeout 30000`）                      |
+| architecture check / architecture tests                        | 成功 / 10 passed                                         |
+| application / capability-training / database typecheck・build  | 成功                                                     |
+| application / capability-training / database lint              | 成功（DBのtype import/unsafe assertionを修正して再検証） |
+| format check / diff check                                      | 成功                                                     |
+
+Windowsで全体回帰と実DBテストを並行した初回はPrisma DLLのrenameがEPERMとなった。実DB検証終了後に生成/buildを分離して再実行した。テスト条件・安全gateは緩めていない。使い捨てDB/networkは検証後にID・task labelを照合して削除済み。本番DBへは接続していない。全体Web回帰/CIの最終状態はPRと完了報告を参照する。
+
+テスト対象:
 
 - 純粋Router: A〜J相当、共有Missionの独立Evidence、REVIEW/RETRY、Rule/Definition版、Skill欠落、前提不足、Draft拒否、read-only completion。
 - 実PostgreSQL: 保存済みGoal/Confirmed Plan→既存Assignment→既存Answer submission→既存Assessment保存形式→次Definition→完了、再送、同時実行、cross-user/workspace/group/enrollment/membership、取消、承認失効、旧Revision、未検証audit、既存V1未完了保護。
