@@ -1,5 +1,12 @@
 # BUNSHIN Platform Decision Log
 
+## 2026-10-06: P1-C-Sは既存Goal正本と参照だけのPlan Revisionを永続化する
+
+- 状態: Proposed（P1-C-S独立PRレビュー対象。本番migration/承認/Runtime接続なし）
+- ProgramMemberGoalをGoal正本とし、専用確認証跡・immutable構造のPlan Revision・Service scopeのcode-defined Definition承認だけを追加する。Eventは操作receipt/冪等性でありPlan正本ではない。
+- fixtureは自動承認しない。人間による承認recordと完全一致する版だけ新規利用でき、Deprecatedは履歴参照を残し新規利用を拒否する。承認管理UI/自動承認は作らない。
+- 既存Enrollment lockとtransaction内の再認可、Primary Goal拒否、expectedRevision CAS、操作内容hash付き再送照合を使う。P1-D candidateKeyだけでは保存せず再計算する。UI/API公開/Router/Teachingは別指示。
+
 ## 2026-10-06: P1-Dは非永続の短い学習相談と本人選択候補に限定する
 
 - 状態: Proposed（今回のP1-D指示による独立PRレビュー対象）

@@ -168,8 +168,17 @@ export class PrismaTrainingPersonalDataExportRepository implements TrainingPerso
           orderBy,
           take,
         });
+        const learningScope = { ...personal, groupMembershipId: membership.id };
+        const [learningGoals, learningPlans] = await Promise.all([
+          tx.personalLearningGoalConfirmation.findMany({ where: learningScope, take }),
+          tx.personalLearningPlanRevision.findMany({
+            where: learningScope,
+            take,
+            orderBy: [{ planId: 'asc' }, { revision: 'asc' }],
+          }),
+        ]);
         if (
-          [assignments, answers, toolkit, activities, goals].some(
+          [assignments, answers, toolkit, activities, goals, learningGoals, learningPlans].some(
             (rows) => rows.length > TRAINING_EXPORT_MAX_ROWS,
           )
         )
@@ -177,6 +186,24 @@ export class PrismaTrainingPersonalDataExportRepository implements TrainingPerso
         return {
           outcome: 'FOUND',
           data: {
+            ...(learningGoals.length + learningPlans.length > 0
+              ? {
+                  personalLearning: [
+                    ...learningGoals.map((row) => ({
+                      ...row,
+                      kind: 'GOAL_CONFIRMATION',
+                      confirmedAt: iso(row.confirmedAt),
+                    })),
+                    ...learningPlans.map((row) => ({
+                      ...row,
+                      kind: 'PLAN_REVISION',
+                      confirmedAt: iso(row.confirmedAt),
+                      createdAt: iso(row.createdAt),
+                      updatedAt: iso(row.updatedAt),
+                    })),
+                  ],
+                }
+              : {}),
             enrollment: {
               id: enrollment.id,
               status: enrollment.status,

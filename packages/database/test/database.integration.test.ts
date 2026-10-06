@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { registerImprovementTriageIntegrationCases } from './improvement-triage.integration-cases';
 import { registerImprovementRetentionJobIntegrationCases } from './improvement-retention-jobs.integration-cases';
 import { registerTrainingSupportSkillLifecycleIntegrationCases } from './training-support-skill-lifecycle.integration-cases';
+import { registerPersonalLearningPersistenceIntegrationCases } from './personal-learning-persistence.integration-cases';
 import { cleanupProgramFixtures } from './program-fixture-cleanup';
 import {
   integrationDatabaseTarget,
@@ -212,6 +213,7 @@ describe('database ownership boundaries', () => {
   registerImprovementTriageIntegrationCases(client);
   registerImprovementRetentionJobIntegrationCases(client);
   registerTrainingSupportSkillLifecycleIntegrationCases(client);
+  registerPersonalLearningPersistenceIntegrationCases(client);
 
   it('fixture cleanup regression: program and training residue is absent before new fixtures', async () => {
     expect(
