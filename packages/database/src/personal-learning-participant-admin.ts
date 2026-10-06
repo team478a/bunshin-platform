@@ -273,9 +273,7 @@ export class PrismaPersonalLearningParticipantAdminRepository {
               ...pilot,
               enabled: false,
               participantControl: nextPolicy as unknown as Prisma.InputJsonValue,
-              enrollmentIds: newSeats
-                .filter((s) => !s.revokedAt)
-                .map((s) => s.programEnrollmentId!),
+              enrollmentIds: newSeats.filter((s) => !s.revokedAt).map((s) => s.programEnrollmentId),
             },
           },
         },
