@@ -116,9 +116,11 @@ P1-Eの現在Confirmed Plan、最新revision、ACTIVE Goal/Enrollment、APPROVED
 - application: 796 passed（P1-A/B/C/CS / Program Runtime等）。
 - database unit: 838 passed（旧V1 / Assignment / Auth境界等）。
 - 実PostgreSQL integration: 117 passed。使い捨てDBのID・markerを確認してからfixture/cleanupを実行。P1-Fの相談・確認済みGoal・Draft/Confirmed Plan保存と、保存Plan→3つの既存Assignment→既存回答→合成既存Assessment形式→次Definition→Plan完了、開始日時・Feedback再送・旧Runtime拒否・停止・越境を追加した。PC高負荷で初回のbeforeAllが10秒を超えたため、コードの安全Gateやtransaction期限は変更せず、実行コマンドだけtestTimeout / hookTimeoutを120秒にして再実行成功。
-- Web追加/評価境界: HTTP / 認証Gate / SSR UI / 既存評価期間・Job境界の5 files、37 passed。完了復元の表示追加後は変更した3 files、21 passed（合計38 cases）。全体回帰・typecheck・lint・buildの最終結果は完了報告に追記する。
+- Web追加/評価境界: HTTP / 認証Gate / SSR UI / 既存評価期間・Job境界の5 files、37 passed。完了復元の表示追加後は変更した3 files、21 passed（合計38 cases）。
+- 標準検証: ローカルformat / architecture / diff check成功。ローカル全体typecheckは成功後に完了復元の表示を追加し、CIの型エラー（表示しない分岐の不要なaction参照）を修正した。メモリ不足で全体testの既存テストが時間切れになった再実行は中止し、最終headのformat / typecheck / lint / 全体test / build / DB integrationは[PR #1152のCI checks](https://github.com/team478a/bunshin-platform/pull/1152/checks)を検証正本とする。安全Gateや既存テストの時間制約は変更していない。
 - ブラウザ: 390×844のローカル合成previewで希望入力→質問→Goal→Draft Plan→独立確認→Mission→回答→既存評価カード→次Definition / Feedbackを実操作した。入口のscrollWidth=390 / innerWidth=390、次の学習時も横にはみ出さないことを確認。合成previewは認証・本番API・実Providerを検証するものではない。
 - REVIEW / RETRY / BLOCKED / UNKNOWN / 完了文言は固定mappingテスト、Router/完了条件は既存Packageと実DBの回帰で検証する。
+- ブラウザの一時viewport解除は接続障害で確認できなかった。previewサーバーは停止し、一時ソースは削除した。使い捨てDB/container/networkは自分で作成したlabelとIDだけを検証して削除し、既存の他の環境は操作していない。
 
 ## 変更ファイル / 未実装 / rollback
 
