@@ -198,12 +198,15 @@ export class PrismaLearningDefinitionApprovalAdminRepository {
     return this.authorized(s, false, async (tx) => {
       const items = [];
       for (const d of AI_TRAINING_LEARNING_DEFINITION_FIXTURES) {
-        const {
-          key: _key,
-          resourceId: _resourceId,
-          ...item
-        } = await this.read(tx, s, d.reference.definitionKey, d.reference.version);
-        items.push(item);
+        const item = await this.read(tx, s, d.reference.definitionKey, d.reference.version);
+        items.push({
+          current: item.current,
+          revision: item.revision,
+          reviewDigest: item.reviewDigest,
+          definition: item.definition,
+          mission: item.mission,
+          routerRuleVersion: item.routerRuleVersion,
+        });
       }
       return items;
     });

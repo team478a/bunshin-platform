@@ -246,7 +246,8 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
         repository.change(scope, { ...command, operationId: randomUUID() }),
       ).rejects.toMatchObject({ code: 'CONFLICT' });
       const current = (await repository.list(scope))[0]!;
-      const { reviewChecklist: _check, ...fields } = command;
+      const { reviewChecklist, ...fields } = command;
+      expect(reviewChecklist.safety).toBe(true);
       await repository.change(scope, {
         ...fields,
         operationId: randomUUID(),
@@ -290,7 +291,7 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
       });
       await client.groupMembership.updateMany({
         where: { workspaceId: scope.workspaceId, groupId: scope.groupId, userId: f.owner.id },
-        data: { status: 'REVOKED' },
+        data: { status: 'REVOKED', revokedAt: now },
       });
       await expect(repository.change(scope, command)).rejects.toMatchObject({ code: 'FORBIDDEN' });
     });

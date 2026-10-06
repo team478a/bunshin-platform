@@ -115,7 +115,8 @@ describe('Definition human approval HTTP', () => {
     expect(fake.change).not.toHaveBeenCalled();
   });
   it('withdrawal is explicit; validation errors do not expose the submitted body', async () => {
-    const { reviewChecklist: _check, ...fields } = command;
+    const { reviewChecklist, ...fields } = command;
+    expect(reviewChecklist.safety).toBe(true);
     const body = { ...fields, action: 'DEPRECATE', confirmation: 'CONFIRM_DEFINITION_WITHDRAWAL' };
     expect((await learningDefinitionApprovalAdminResponse(req(body), 'training')).status).toBe(200);
     fake.change.mockRejectedValue(new ApplicationError('CONFLICT', 'changed'));

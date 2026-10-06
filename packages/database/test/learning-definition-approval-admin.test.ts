@@ -46,7 +46,8 @@ describe('Definition approval command safety', () => {
     );
   });
   it('withdrawal must be explicit and cannot carry an approval checklist', () => {
-    const { reviewChecklist: _check, ...fields } = command;
+    const { reviewChecklist, ...fields } = command;
+    expect(reviewChecklist.safety).toBe(true);
     const withdrawal = {
       ...fields,
       action: 'DEPRECATE' as const,
