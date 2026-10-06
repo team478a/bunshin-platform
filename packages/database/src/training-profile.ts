@@ -1,6 +1,7 @@
 import {
   AI_TRAINING_LEARNING_CATALOG_VERSION,
   AI_TRAINING_V1_MODULE_KEY,
+  isPersonalLearningPilotProgram,
   findTrainingGoal,
   type TrainingChallengeKey,
   type TrainingGoalKey,
@@ -85,9 +86,10 @@ export class PrismaTrainingParticipantProfileRepository {
               status: 'ACTIVE',
               settings: { path: ['moduleKey'], equals: AI_TRAINING_V1_MODULE_KEY },
             },
-            select: { id: true },
+            select: { id: true, settings: true },
           });
-          if (!program) return { outcome: 'NOT_FOUND' } as const;
+          if (!program || isPersonalLearningPilotProgram(program.settings))
+            return { outcome: 'NOT_FOUND' } as const;
           const profile = await tx.trainingParticipantProfile.upsert({
             where: { programEnrollmentId: enrollment.id },
             create: {

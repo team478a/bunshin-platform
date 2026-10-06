@@ -4,6 +4,7 @@ import { EnqueueJob, TRAINING_ANSWER_EVALUATION_JOB_TYPE } from '@bunshin/applic
 import { AI_TRAINING_V1_MODULE_KEY } from '@bunshin/capability-training';
 import { getServerEnvironment } from '@bunshin/config';
 import { ApplicationError } from '@bunshin/shared';
+import { personalLearningPilotExecutionAllowed } from './personal-learning-pilot-access';
 
 const runtimeEnvironment = {
   development: 'DEVELOPMENT',
@@ -59,9 +60,10 @@ export async function enqueueAiTrainingEvaluation(input: {
         status: 'ACTIVE',
         settings: { path: ['moduleKey'], equals: AI_TRAINING_V1_MODULE_KEY },
       },
-      select: { id: true },
+      select: { id: true, settings: true },
     });
-    if (!program) throw new ApplicationError('NOT_FOUND', 'training program unavailable');
+    if (!program || !personalLearningPilotExecutionAllowed(program.settings, input.enrollmentId))
+      throw new ApplicationError('NOT_FOUND', 'training program unavailable');
     const answer = await tx.trainingMissionAnswer.findFirst({
       where: {
         id: input.answerId,

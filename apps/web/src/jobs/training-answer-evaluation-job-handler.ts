@@ -6,10 +6,12 @@ import {
 } from '@bunshin/application';
 import {
   AI_TRAINING_V1_MODULE_KEY,
+  isPersonalLearningPilotProgram,
   mergeTrainingSkillScores,
   trainingSkillBottleneckKey,
 } from '@bunshin/capability-training';
 import { ApplicationError } from '@bunshin/shared';
+import { personalLearningPilotExecutionAllowed } from '../services/personal-learning-pilot-access';
 import { resolveOpenAiRuntimeConfiguration } from '../ai/runtime-provider-configuration';
 import { recordAiUsageSafely } from '../observability/ai-usage';
 import { withOrganizationAiGenerationQuota } from '../organization-ai-generation-quota';
@@ -58,9 +60,9 @@ export function createTrainingAnswerEvaluationJobHandler(): TrainingAnswerEvalua
           status: 'ACTIVE',
           settings: { path: ['moduleKey'], equals: AI_TRAINING_V1_MODULE_KEY },
         },
-        select: { id: true },
+        select: { id: true, settings: true },
       });
-      if (!program) {
+      if (!program || !personalLearningPilotExecutionAllowed(program.settings, enrollment.id)) {
         throw new TrainingAnswerEvaluationJobError('TRAINING_EVALUATION_SCOPE_REVOKED', false);
       }
       const answer = await db.prisma.trainingMissionAnswer.findFirst({
@@ -119,6 +121,26 @@ export function createTrainingAnswerEvaluationJobHandler(): TrainingAnswerEvalua
                 'TRAINING_EVALUATION_SCOPE_REVOKED',
                 false,
               );
+            }
+            if (isPersonalLearningPilotProgram(program.settings)) {
+              const currentProgram = await db.prisma.serviceProgram.findFirst({
+                where: {
+                  id: enrollment.serviceProgramId,
+                  workspaceId: input.workspaceId,
+                  groupId: input.groupId,
+                  status: 'ACTIVE',
+                },
+                select: { settings: true },
+              });
+              if (
+                !currentProgram ||
+                !personalLearningPilotExecutionAllowed(currentProgram.settings, enrollment.id)
+              ) {
+                throw new TrainingAnswerEvaluationJobError(
+                  'TRAINING_EVALUATION_SCOPE_REVOKED',
+                  false,
+                );
+              }
             }
             providerAttempted = true;
             return new OpenAiTrainingAnswerEvaluator({

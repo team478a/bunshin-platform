@@ -9,8 +9,10 @@ import {
   AiTrainingParticipantService,
   AiTrainingV1Policy,
   TrainingRuntimeError,
+  isPersonalLearningPilotProgram,
 } from '@bunshin/capability-training';
 import type { CSSProperties } from 'react';
+import { ApplicationError } from '@bunshin/shared';
 import { notFound } from 'next/navigation';
 import { resolveAuthenticatedMemberServicePage } from '../../../../../src/services/member-service-page';
 import { PublicShell } from '../../../../ui/public-shell';
@@ -18,6 +20,8 @@ import { AiResaleActionCard } from './ai-resale-action-card';
 import { AiTrainingCard } from './ai-training-card';
 import { AiTrainingDataExportCard } from './ai-training-data-export-card';
 import { AiTrainingEndedCard } from './ai-training-ended-card';
+import { PersonalLearningPilotCard } from './personal-learning-pilot-card';
+import { resolvePersonalLearningPilot } from '../../../../../src/services/personal-learning-pilot-access';
 
 export const dynamic = 'force-dynamic';
 
@@ -76,6 +80,47 @@ export default async function ProgramParticipantPage({
   } as CSSProperties;
 
   if (moduleKey === AI_TRAINING_V1_MODULE_KEY) {
+    if (isPersonalLearningPilotProgram(program.settings)) {
+      let pilotActor;
+      try {
+        pilotActor = await resolvePersonalLearningPilot(
+          serviceSlug,
+          programEnrollmentId,
+          actor.userId,
+        );
+      } catch (error) {
+        if (error instanceof ApplicationError && error.code === 'NOT_FOUND') notFound();
+        throw error;
+      }
+      const pilotRepository = new db.PrismaPersonalLearningPilotRepository(db.prisma);
+      const initialSnapshot = {
+        state: await pilotRepository.read(pilotActor),
+        assignment: null,
+        readiness: await pilotRepository.readiness(pilotActor),
+      };
+      return (
+        <PublicShell showPlatformBrand={false}>
+          <main className="service-entry resale-action-page training-page" style={style}>
+            <header className="service-entry__header">
+              <p className="eyebrow">限定学習Pilot</p>
+              <h1>あなたのAI学習</h1>
+              <p>答えを代わりに作るのではなく、自分でAIを使えるようになるための研修です。</p>
+            </header>
+            <PersonalLearningPilotCard
+              serviceSlug={serviceSlug}
+              enrollmentId={programEnrollmentId}
+              initialSnapshot={initialSnapshot}
+            />
+            <a
+              className="button button--secondary button--full"
+              href={`/s/${serviceSlug}/programs`}
+            >
+              プログラム一覧へ戻る
+            </a>
+          </main>
+        </PublicShell>
+      );
+    }
     const now = new Date();
     const periodEnded =
       enrollment.status === 'ACTIVE' && enrollment.endsAt && enrollment.endsAt <= now;
