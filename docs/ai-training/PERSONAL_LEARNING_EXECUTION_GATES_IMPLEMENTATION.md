@@ -16,6 +16,8 @@ Provider直前に本人PENDING Answer、同scopeの未実行Plan Assignment、�
 
 最初にPilotと認識した処理はrequirePilot=trueを保持し、待機中のmarker消失を旧V1許可に戻さない。Program markerが既に消えていてもAssignment.targetResourceType=PERSONAL_LEARNING_PLANならPilot扱いし、Providerへ送らない。旧V1 Assignmentは新gateを呼ばず、従来Provider/評価/Quota/再試行を維持する。
 
+旧Runtimeのcandidate/state/decision RepositoryでもPersonal Learning Plan参照Assignmentを除外する。candidateは完了済み履歴も確認し、marker消失後に旧30日V1の次Missionへ流さない。恒久Program台帳を追加するものではなく、保存済み参照を利用する最小保護とする。
+
 既存queueのflag/allowlist再検証とRouterの新Assignment生成gateは維持。新gateは評価実行の最後の認可であり、queue停止後の実行中fetchの取消機能ではない。認可transaction完了から外部fetch開始までには競合窓があり、停止操作が完了した瞬間に全外部呼出しを消せるとは保証しない。外部呼出し中のDB lock保持はしない。送信後の結果/usage保存とdrain確認は履歴・運用責務として残す。
 
 ## LINE分離
@@ -27,6 +29,8 @@ AI Training Action schedulerはmarker存在Programをenabled/malformed状態に�
 ローカル対象4ファイル27テスト成功。dual production flags、flag停止、旧V1維持、Provider前拒否、marker消失、Plan Assignment判定、scheduler除外、配信eligibilityを確認。
 
 実PostgreSQL統合へ本人の現Plan/PENDING回答の認可成功、cross-user、Goal取消、Definition撤回、marker消失、Program停止、所属失効、Plan SUPERSEDED拒否を追加。既存P1-A〜G、Program/AI Training/LINE回帰、format/typecheck/lint/test/buildは最終CIを参照し、未成功の検証を成功としない。
+
+完了済みPlan Assignmentの履歴がある状態でmarkerを削除しても旧Runtime候補を返さない統合ケースを追加する。
 
 変更: Webの環境/Provider直前gate、LINE scheduler/eligibilityとテスト、DBの新実行認可Repository/export/統合ケース、ADR/本報告/Runbook追記。schema/migration/UI/新Provider/価格/Quota/Definition内容は変更しない。
 
