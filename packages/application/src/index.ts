@@ -92,6 +92,7 @@ export * from './program-definition-presets';
 export * from './program-runtime';
 export * from './program-next-action';
 export * from './learning-scope';
+export * from './learning-profile-goal';
 export * from './program-goals-core';
 export * from './ai-character-profile';
 export * from './service-line-broadcast';
