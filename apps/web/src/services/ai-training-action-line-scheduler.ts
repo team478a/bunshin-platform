@@ -3,6 +3,7 @@ import 'server-only';
 import { EnqueueJob, type JobEnvironment } from '@bunshin/application';
 import {
   AI_TRAINING_V1_MODULE_KEY,
+  isPersonalLearningPilotProgram,
   AiTrainingParticipantService,
   AiTrainingV1Policy,
   buildAiTrainingActionLineMessage,
@@ -59,6 +60,10 @@ export async function scheduleAiTrainingActionLineDeliveries(input: {
   summary.programs = programs.length;
 
   for (const program of programs) {
+    if (isPersonalLearningPilotProgram(program.settings)) {
+      summary.skipped += 1;
+      continue;
+    }
     if (summary.candidates >= limit) {
       summary.truncated = true;
       break;

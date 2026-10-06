@@ -70,6 +70,7 @@ export class PrismaAiTrainingRuntimeDecisionRepository {
             where: { programEnrollmentId: scope.enrollment.id },
             orderBy: { sequence: 'desc' },
           });
+          if (latest?.targetResourceType === 'PERSONAL_LEARNING_PLAN') return 'NOT_FOUND' as const;
           if (
             latest &&
             ['PRESENTED', 'STARTED'].includes(latest.status) &&

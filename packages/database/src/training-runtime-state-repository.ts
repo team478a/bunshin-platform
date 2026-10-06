@@ -62,6 +62,7 @@ export class PrismaAiTrainingRuntimeStateRepository {
           },
         })
       : null;
+    if (assignment?.targetResourceType === 'PERSONAL_LEARNING_PLAN') return null;
     const submission = assignment
       ? await this.client.trainingMissionAnswer.findFirst({
           where: {

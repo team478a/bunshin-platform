@@ -1,0 +1,11 @@
+# Production Closed Pilotの実行直前境界
+
+2026-10-06。基準main `3530d9628833c0edcab4e47ca5fede5a0adb9e80`。本番利用開始はNO-GOを維持する。
+
+本番は既存PERSONAL_LEARNING_PILOTに加えてPERSONAL_LEARNING_PRODUCTION_CLOSED_PILOT=trueを要求する。両方既定無効。最大5件のallowlist、専用Program、通知停止は変更しない。Definition管理/本人Profile準備は非本番のまま。本番設定を行わない。
+
+Provider直前に既存Pilot Repositoryの本人/Enrollment/Program認可を再利用し、現在のConfirmed Plan revision、ACTIVE Primary Goal、版固定Definition承認と承認者、本人PENDING AnswerとPlan Assignmentを再検証する。Pilotと認識した処理とPlan参照Assignmentはmarker消失時に旧V1へ戻さない。LINE scheduler/既存Action配信でも予約ProgramまたはPlan Assignmentを除外する。
+
+認可チェックを通過して外部送信した処理の強制取消は保証しない。DB transactionで外部呼出しを保持せず、認可終了からfetchまでの競合窓・in-flight drainは運用Gate。履歴・実行済みusageは保存し、既存V1のProvider/評価/Quotaを変えない。Program markerをDB直接操作で完全消去し、学習参照も存在しない場合は識別不能であり、運用上禁止。恒久予約・100人authorityは後続の人数制御設計で扱う。
+
+今回は実行/停止コードと否定・回帰テスト、PRまで。schema/migration/UI/LINE導線/Provider追加/本番操作はない。100人Hard Cap、費用Hard Stop、準備UI、実Auth/E2E、開始承認へは進まない。

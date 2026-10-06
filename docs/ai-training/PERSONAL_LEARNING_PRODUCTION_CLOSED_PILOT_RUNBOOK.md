@@ -1,5 +1,9 @@
 # Personal Learning Production Closed Pilot Runbook
 
+## 実行境界の追記（本番未反映）
+
+#1153 merge後の最小実装は [実行・停止境界報告](PERSONAL_LEARNING_EXECUTION_GATES_IMPLEMENTATION.md)を参照する。productionは既存Pilot flagと追加のPERSONAL_LEARNING_PRODUCTION_CLOSED_PILOTを両方要求する方向へ変更し、fresh Assessment gate、認識済みPilotのmarker消失拒否、LINE reserved/Plan除外を追加する。以下の監査表は#1153時点の履歴であり、コード反映と実環境Gate通過を混同しない。100人Hard Cap、費用Hard Stop、恒久Program authority、準備UI/本番管理操作、実認証・Migration安全確認は引き続き未完、開始NO-GO。
+
 ## 判定と作業範囲
 
 2026-10-06 JST。基準main `b462cdb9320cdfae2522f43e7ae4620cb02016d3`（#1156）。#1153の文書branch `docs/personal-learning-pilot-readiness`へ最新mainを取り込み、監査・文書更新・不足PR計画だけを行う。コード/schema/migration/環境設定は変更しない。
