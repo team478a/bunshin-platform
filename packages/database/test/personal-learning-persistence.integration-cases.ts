@@ -799,7 +799,7 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
               ...(display.personalLearning as Prisma.JsonObject),
               planId: plan.planId,
             },
-          } as Prisma.InputJsonValue,
+          },
         },
       });
       const answer = await client.trainingMissionAnswer.create({

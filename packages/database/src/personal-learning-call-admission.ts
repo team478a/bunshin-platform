@@ -16,7 +16,7 @@ export class PrismaPersonalLearningCallAdmission extends PrismaPersonalLearningA
     super(admissionClient, now);
   }
 
-  admit(input: {
+  async admit(input: {
     actor: PersonalLearningActor;
     assignmentId: string;
     answerId: string;
@@ -40,7 +40,7 @@ export class PrismaPersonalLearningCallAdmission extends PrismaPersonalLearningA
     const operationHash = createHash('sha256')
       .update(`${input.jobId}:${input.attemptCount}`)
       .digest('hex');
-    return this.authorized(input.actor, true, async (tx) => {
+    return await this.authorized(input.actor, true, async (tx) => {
       // All workers for this authority share the lock. Serializable conflicts fail closed.
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`personal-learning-call:${policy.serviceProgramId}`}, 0))`;
       const [clock] = await tx.$queryRaw<{ now: Date }[]>`SELECT clock_timestamp() AS now`;
