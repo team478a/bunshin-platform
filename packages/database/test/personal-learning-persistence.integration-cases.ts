@@ -25,6 +25,7 @@ import { PrismaLearningDefinitionApprovalAdminRepository } from '../src/learning
 import { PrismaPersonalLearningPilotProfileRepository } from '../src/personal-learning-pilot-profile';
 import { PrismaPersonalLearningAssessmentGate } from '../src/personal-learning-assessment-gate';
 import { PrismaGuidedPracticeRepository } from '../src/guided-practice';
+import { PrismaTrainingPersonalDataDeletionRepository } from '../src/training-personal-data-deletion';
 import {
   PrismaPersonalLearningPilotRepository,
   PrismaPersonalLearningPilotRouter,
@@ -707,6 +708,7 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
           missionAssignmentId: f.assignmentId,
           eventType: 'HELP_REQUESTED',
           idempotencyKey: 'practice-help',
+          metadata: {},
           occurredAt: now,
         },
       });
@@ -716,6 +718,36 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
         where: { workspaceId: f.scope.workspaceId, groupId: f.scope.groupId },
         data: { approvalStatus: 'DEPRECATED' },
       });
+      await expect(f.complete()).rejects.toThrow();
+    });
+    it('answer deletion removes completion and First Success without retaining the outcome', async () => {
+      const f = await practiceFixture();
+      await f.start();
+      await f.interact();
+      const answer = await f.assessed(f.assignmentId);
+      await f.complete();
+      const deletion = new PrismaTrainingPersonalDataDeletionRepository(client);
+      const input = {
+        workspaceId: f.scope.workspaceId,
+        groupId: f.scope.groupId,
+        programEnrollmentId: f.enrollment.id,
+        actorUserId: f.scope.userId,
+        target: { kind: 'ANSWER' as const, answerId: answer.id },
+      };
+      const preview = await deletion.preview(input);
+      if (preview.outcome !== 'PREVIEW') throw new Error('expected deletion preview');
+      expect(
+        (await deletion.delete({ ...input, revision: preview.preview.revision, now })).outcome,
+      ).toBe('DELETED');
+      expect(await f.practice.readPractice(f.actor, f.assignmentId)).toMatchObject({
+        completed: false,
+        firstSuccess: false,
+      });
+      expect(
+        await client.programActionEvent.count({
+          where: { programEnrollmentId: f.enrollment.id, sourceResourceId: answer.id },
+        }),
+      ).toBe(0);
       await expect(f.complete()).rejects.toThrow();
     });
     it('execution gate authorizes only the current learner Plan, then stops on Goal cancellation', async () => {

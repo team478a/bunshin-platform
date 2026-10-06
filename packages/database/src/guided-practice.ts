@@ -343,7 +343,7 @@ export class PrismaGuidedPracticeRepository extends PrismaPersonalLearningPilotR
                 achievedAt: now.toISOString(),
                 startedAt: starts[0]!.occurredAt.toISOString(),
                 practiceSessionsToFirstSuccess: starts.length,
-              } as Prisma.InputJsonObject,
+              },
             },
           });
         }
