@@ -60,6 +60,8 @@ operation UUIDは既存`ProgramAuditLog`へ固定command digest / actor / receip
 
 非Pilot V1は既存経路。非本番の旧5人fixtureは回帰用に維持するが、本番のseat代替にはしない。LINE / Schedulerのreserved Program除外、Definition承認、Goal/Plan/Routerの意味、Assessment評価仕様は変更しない。
 
+設定ミスによるV1 fallbackを防ぐため、cap導入済みProgramからmoduleKey / participantControl versionを除去する更新はDB triggerで拒否する。通常V1 Programは対象外。停止はflag off / enabled false / Program停止で行い、marker除去で停止しない。
+
 ## Privacy / Analytics
 
 本文、相談、回答、成果物、Provider responseは保存しない。台帳はProgram単位participant digest・Enrollment参照・kind/cohort/slot・時刻だけ。既存auditにはoperation digest / reason / revision / reviewEvidenceKey等の構造化証跡だけ。

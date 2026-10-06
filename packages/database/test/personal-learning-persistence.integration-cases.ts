@@ -325,6 +325,12 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
       const state = await f.admin.read(f.owner.id);
       expect(state.seats).toHaveLength(5);
       expect(state.policy?.currentWave).toBe(1);
+      await expect(
+        client.serviceProgram.update({
+          where: { id: f.authority.serviceProgramId },
+          data: { settings: { moduleKey: 'AI_TRAINING_V1' } },
+        }),
+      ).rejects.toThrow();
     });
     it.each([
       [2, 20],

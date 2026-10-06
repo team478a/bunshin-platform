@@ -39,3 +39,16 @@ BEGIN
 END;
 $$;
 CREATE TRIGGER redact_personal_learning_pilot_seat BEFORE DELETE ON program_enrollments FOR EACH ROW EXECUTE FUNCTION redact_personal_learning_pilot_seat();
+
+-- A configured cap Program must never accidentally fall back to the legacy V1 scheduler.
+CREATE FUNCTION preserve_personal_learning_pilot_identity() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF OLD.settings->'personalLearningPilot'->'participantControl'->>'version'='PILOT_PARTICIPANT_CAP_V1'
+    AND (NEW.settings->>'moduleKey' IS DISTINCT FROM 'AI_TRAINING_V1'
+      OR NEW.settings->'personalLearningPilot'->'participantControl'->>'version' IS DISTINCT FROM 'PILOT_PARTICIPANT_CAP_V1') THEN
+    RAISE EXCEPTION 'configured Personal Learning Pilot identity cannot be removed';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+CREATE TRIGGER preserve_personal_learning_pilot_identity BEFORE UPDATE OF settings ON service_programs FOR EACH ROW EXECUTE FUNCTION preserve_personal_learning_pilot_identity();
