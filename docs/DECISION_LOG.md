@@ -1,5 +1,12 @@
 # BUNSHIN Platform Decision Log
 
+## 2026-10-06: P1-A Learning Scope契約を未接続の純粋Domainとして追加する
+
+- 状態: Proposed（P1-A実装指示に基づくPRレビュー対象。P1-B/本番接続は別承認）
+- 共通結果契約は既存application、AI固有の判定・学習候補はcapability-trainingに置く。新packageや汎用Intent Engineは作らない。
+- 6分類と判定不能のnullを区別し、未知/曖昧/混合/境界回避は確認待ち。primary分類は実行権限ではない。完成品/自動化の学習候補も未承認SuggestionでGoalではない。
+- 明示的な日本語Ruleのみを扱い、未対応表現は確認待ち。LLM/Provider/DB/UI依存と既存V1 Runtimeへの接続は追加しない。
+
 ## 2026-10-06: Learning FirstのPersonal Learning監査と3層設計を実装から分離する
 
 - 状態: Proposed（人間レビュー対象。実装/共通Core化/本番変更の開始承認ではない）
