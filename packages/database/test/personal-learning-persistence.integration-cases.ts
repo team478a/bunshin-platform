@@ -373,7 +373,11 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
         authority,
       );
       await expect(profile.initialize(f.profileScope, f.command)).rejects.toThrow();
-      expect(await client.learningDefinitionApproval.count()).toBe(0);
+      expect(
+        await client.learningDefinitionApproval.count({
+          where: { workspaceId: f.scope.workspaceId, groupId: f.scope.groupId },
+        }),
+      ).toBe(0);
       expect(await client.trainingParticipantProfile.count()).toBe(0);
     });
     it('Profile preparation: restore, immutable retry, no Goal or Assignment and no content', async () => {
