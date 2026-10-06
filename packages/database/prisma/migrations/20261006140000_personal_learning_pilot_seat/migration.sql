@@ -5,7 +5,7 @@ CREATE TABLE personal_learning_pilot_seats (
  group_id UUID NOT NULL,
  service_program_id UUID NOT NULL,
  participant_hash CHAR(64) NOT NULL CHECK (participant_hash ~ '^[a-f0-9]{64}$'),
- program_enrollment_id UUID,
+ program_enrollment_id UUID REFERENCES program_enrollments(id) ON DELETE SET NULL ON UPDATE CASCADE,
  kind VARCHAR(16) NOT NULL CHECK (kind IN ('INTERNAL','EXTERNAL')),
  cohort VARCHAR(16) NOT NULL,
  seat_number INTEGER NOT NULL CHECK (seat_number BETWEEN 1 AND 100),
@@ -20,3 +20,22 @@ CREATE TABLE personal_learning_pilot_seats (
 );
 ALTER TABLE personal_learning_pilot_seats ENABLE ROW LEVEL SECURITY;
 -- No public policy; trusted server only. The slot is never recycled by the application.
+
+-- Physical Enrollment deletion (including account cleanup) redacts the link but never frees a slot.
+CREATE FUNCTION redact_personal_learning_pilot_seat() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM personal_learning_pilot_seats WHERE program_enrollment_id=OLD.id) THEN
+    UPDATE personal_learning_pilot_seats SET program_enrollment_id=NULL, revoked_at=COALESCE(revoked_at,clock_timestamp()) WHERE program_enrollment_id=OLD.id;
+    UPDATE service_programs p SET settings=jsonb_set(p.settings,'{personalLearningPilot,enrollmentIds}',
+      COALESCE((SELECT jsonb_agg(v) FROM jsonb_array_elements(p.settings->'personalLearningPilot'->'enrollmentIds') v WHERE v <> to_jsonb(OLD.id::text)), '[]'::jsonb))
+      WHERE p.id=OLD.service_program_id AND p.workspace_id=OLD.workspace_id AND p.group_id=OLD.group_id
+        AND p.settings->'personalLearningPilot'->'participantControl'->>'version'='PILOT_PARTICIPANT_CAP_V1';
+    UPDATE service_programs p SET settings=jsonb_set(p.settings,'{personalLearningPilot,participantControl,revision}',to_jsonb((p.settings->'personalLearningPilot'->'participantControl'->>'revision')::bigint+1))
+      WHERE p.id=OLD.service_program_id AND p.workspace_id=OLD.workspace_id AND p.group_id=OLD.group_id
+        AND p.settings->'personalLearningPilot'->'participantControl'->>'version'='PILOT_PARTICIPANT_CAP_V1'
+        AND p.settings->'personalLearningPilot'->'participantControl'->>'revision' ~ '^[0-9]{1,15}$';
+  END IF;
+  RETURN OLD;
+END;
+$$;
+CREATE TRIGGER redact_personal_learning_pilot_seat BEFORE DELETE ON program_enrollments FOR EACH ROW EXECUTE FUNCTION redact_personal_learning_pilot_seat();

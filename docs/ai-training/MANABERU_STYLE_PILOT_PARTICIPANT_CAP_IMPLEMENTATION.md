@@ -70,7 +70,7 @@ Wave別人数は台帳、First Success / Plan / REVIEW / RETRY / Fit / AI Cost�
 
 ## schema / Migration
 
-小さなtable一つ、Program scope FK cascade、User digest / Enrollment / kind-slot unique、CHECK、RLS有効・public policyなし。Migration `20261006140000_personal_learning_pilot_seat`、schema readiness更新。既存table破壊・既存データDML・backfillなし。本番未適用。人数正本を巨大settings JSONや削除可能なEventだけへ置く設計は採用しない。
+小さなtable一つ、Program scope FK cascade、Enrollment FK SET NULL、User digest / Enrollment / kind-slot unique、CHECK、RLS有効・public policyなし。物理Enrollment削除時の小さなtriggerも参加権失効・参照除去・allowlist除去・CAS revision更新だけを行い、累計枠を減らさない。Migration `20261006140000_personal_learning_pilot_seat`、schema readiness更新。既存table破壊・既存データDML・backfillなし。本番未適用。人数正本を巨大settings JSONや削除可能なEventだけへ置く設計は採用しない。
 
 ## test
 

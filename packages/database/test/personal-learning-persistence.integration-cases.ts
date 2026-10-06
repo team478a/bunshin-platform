@@ -566,6 +566,16 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
           { kind: 'PILOT_SEAT', cohort: 'WAVE_1' },
         ]);
     });
+    it('P1-H physical Enrollment deletion redacts the seat without reducing the cumulative count', async () => {
+      const f = await capFixture();
+      const p = await f.participant();
+      await f.admit(p.e.id, 1);
+      await client.programEnrollment.delete({ where: { id: p.e.id } });
+      const state = await f.admin.read(f.owner.id);
+      expect(state.seats).toHaveLength(1);
+      expect(state.seats[0]?.programEnrollmentId).toBeNull();
+      expect(state.seats[0]?.revokedAt).not.toBeNull();
+    });
     it('production preparation pins Program and retains human approval/profile ownership and retry authorization', async () => {
       const f = await profilePreparation();
       const authority = {
