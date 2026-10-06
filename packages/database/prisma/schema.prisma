@@ -411,6 +411,7 @@ model ProgramEnrollment {
   updatedAt         DateTime                    @updatedAt @map("updated_at") @db.Timestamptz(3)
   paidPurchase      ProgramPurchase?            @relation("ProgramPurchasePaidEnrollment")
   trainingRetention TrainingDataRetentionState?
+  personalLearningGoalConfirmations PersonalLearningGoalConfirmation[]
 
   @@unique([groupMembershipId, serviceProgramId])
   @@unique([workspaceId, groupId, id])
@@ -805,11 +806,76 @@ model ProgramMemberGoal {
   updatedByUserId     String                  @map("updated_by_user_id") @db.Uuid
   createdAt           DateTime                @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt           DateTime                @updatedAt @map("updated_at") @db.Timestamptz(3)
+  personalLearningConfirmations PersonalLearningGoalConfirmation[]
 
   @@unique([workspaceId, groupId, id])
+  @@unique([workspaceId, groupId, programEnrollmentId, groupMembershipId, id], map: "program_goal_learning_scope_key")
   @@index([workspaceId, groupId, groupMembershipId, status])
   @@index([workspaceId, groupId, programEnrollmentId])
   @@map("program_member_goals")
+}
+
+model PersonalLearningGoalConfirmation {
+  programMemberGoalId     String                         @id @map("program_member_goal_id") @db.Uuid
+  workspaceId             String                         @map("workspace_id") @db.Uuid
+  groupId                 String                         @map("group_id") @db.Uuid
+  programEnrollmentId     String                         @map("program_enrollment_id") @db.Uuid
+  groupMembershipId       String                         @map("group_membership_id") @db.Uuid
+  userId                  String                         @map("user_id") @db.Uuid
+  packageKey              String                         @map("package_key") @db.VarChar(80)
+  goalKey                 String                         @map("goal_key") @db.VarChar(80)
+  semanticVersion         String                         @map("semantic_version") @db.VarChar(80)
+  consultationRuleVersion String                         @map("consultation_rule_version") @db.VarChar(80)
+  scopeRuleVersion        String                         @map("scope_rule_version") @db.VarChar(80)
+  confirmedAt             DateTime                       @map("confirmed_at") @db.Timestamptz(3)
+  goal                    ProgramMemberGoal              @relation(fields: [workspaceId, groupId, programEnrollmentId, groupMembershipId, programMemberGoalId], references: [workspaceId, groupId, programEnrollmentId, groupMembershipId, id], onDelete: Cascade, map: "learning_confirmation_goal_fk")
+  enrollment              ProgramEnrollment              @relation(fields: [workspaceId, groupId, programEnrollmentId, groupMembershipId], references: [workspaceId, groupId, id, groupMembershipId], onDelete: Cascade, map: "learning_confirmation_enrollment_fk")
+  membership              GroupMembership                @relation(fields: [workspaceId, groupId, groupMembershipId, userId], references: [workspaceId, groupId, id, userId], onDelete: Cascade, map: "learning_confirmation_membership_fk")
+  revisions               PersonalLearningPlanRevision[]
+
+  @@unique([workspaceId, groupId, programEnrollmentId, groupMembershipId, userId, programMemberGoalId], map: "learning_confirmation_scope_key")
+  @@map("personal_learning_goal_confirmations")
+}
+
+model PersonalLearningPlanRevision {
+  planId              String                           @map("plan_id") @db.Uuid
+  revision            Int
+  previousRevision    Int?                             @map("previous_revision")
+  revisionReason      String                           @map("revision_reason") @db.VarChar(80)
+  workspaceId         String                           @map("workspace_id") @db.Uuid
+  groupId             String                           @map("group_id") @db.Uuid
+  programEnrollmentId String                           @map("program_enrollment_id") @db.Uuid
+  groupMembershipId   String                           @map("group_membership_id") @db.Uuid
+  userId              String                           @map("user_id") @db.Uuid
+  programMemberGoalId String                           @map("program_member_goal_id") @db.Uuid
+  contractVersion     String                           @map("contract_version") @db.VarChar(80)
+  ruleVersion         String                           @map("rule_version") @db.VarChar(80)
+  status              String                           @db.VarChar(20)
+  steps               Json
+  confirmedAt         DateTime?                        @map("confirmed_at") @db.Timestamptz(3)
+  createdAt           DateTime                         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime                         @updatedAt @map("updated_at") @db.Timestamptz(3)
+  goalConfirmation    PersonalLearningGoalConfirmation @relation(fields: [workspaceId, groupId, programEnrollmentId, groupMembershipId, userId, programMemberGoalId], references: [workspaceId, groupId, programEnrollmentId, groupMembershipId, userId, programMemberGoalId], onDelete: Cascade, map: "learning_plan_confirmation_fk")
+
+  @@id([planId, revision])
+  @@index([workspaceId, groupId, programEnrollmentId])
+  @@map("personal_learning_plan_revisions")
+}
+
+model LearningDefinitionApproval {
+  workspaceId      String    @map("workspace_id") @db.Uuid
+  groupId          String    @map("group_id") @db.Uuid
+  packageKey       String    @map("package_key") @db.VarChar(80)
+  definitionKey    String    @map("definition_key") @db.VarChar(80)
+  version          String    @db.VarChar(80)
+  approvalStatus   String    @map("approval_status") @db.VarChar(20)
+  approvedAt       DateTime? @map("approved_at") @db.Timestamptz(3)
+  approvedByUserId String?   @map("approved_by_user_id") @db.Uuid
+  group            Group     @relation(fields: [workspaceId, groupId], references: [workspaceId, id], onDelete: Cascade, map: "learning_approval_group_fk")
+  approver         User?     @relation(fields: [approvedByUserId], references: [id], onDelete: Cascade, map: "learning_approval_human_fk")
+
+  @@id([workspaceId, groupId, packageKey, definitionKey, version])
+  @@map("learning_definition_approvals")
 }
 
 model ProgramAuditLog {
@@ -2188,6 +2254,7 @@ enum VideoSceneVisualType {
 }
 
 model User {
+  learningDefinitionApprovals            LearningDefinitionApproval[]
   id                                String                              @id @default(uuid()) @db.Uuid
   status                            UserStatus                          @default(ACTIVE)
   displayName                       String                              @map("display_name") @db.VarChar(100)
@@ -2709,6 +2776,7 @@ model OrganizationEntitlementAudit {
 }
 
 model Group {
+  learningDefinitionApprovals     LearningDefinitionApproval[]
   id                              String                           @id @default(uuid()) @db.Uuid
   workspaceId                     String                           @map("workspace_id") @db.Uuid
   name                            String                           @db.VarChar(120)
@@ -3329,6 +3397,7 @@ model ServiceMemberBusinessProfile {
 
 model GroupMembership {
   id                           String                           @id @default(uuid()) @db.Uuid
+  personalLearningGoalConfirmations PersonalLearningGoalConfirmation[]
   workspaceId                  String                           @map("workspace_id") @db.Uuid
   groupId                      String                           @map("group_id") @db.Uuid
   userId                       String                           @map("user_id") @db.Uuid

@@ -11,6 +11,8 @@ const input = {
 const now = new Date('2026-09-28T12:00:00Z');
 function fixture() {
   const tx = {
+    personalLearningGoalConfirmation: { findMany: vi.fn().mockResolvedValue([]) },
+    personalLearningPlanRevision: { findMany: vi.fn().mockResolvedValue([]) },
     groupMembership: { findFirst: vi.fn().mockResolvedValue({ id: 'membership-a' }) },
     programEnrollment: {
       findFirst: vi.fn().mockResolvedValue({

@@ -286,6 +286,7 @@ export { PrismaHassyPhotoQualityImprovementAdapter } from './hassy-improvement-p
 export { PrismaImprovementFeedbackRepository } from './improvement-feedback';
 export { PrismaImprovementFeedbackObservationAdapter } from './improvement-feedback-observation-adapter';
 export { PrismaImprovementFeedbackTriageRepository } from './improvement-feedback-triage';
+export { PrismaPersonalLearningPersistenceRepository } from './personal-learning-persistence';
 export { PrismaImprovementFeedbackRetentionJobRepository } from './improvement-feedback-retention-jobs';
 export {
   purgeExpiredImprovementFeedback,
