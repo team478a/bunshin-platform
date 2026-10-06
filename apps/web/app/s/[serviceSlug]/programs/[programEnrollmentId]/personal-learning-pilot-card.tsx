@@ -398,7 +398,7 @@ export function PersonalLearningPilotCard({
           ) : !action && !planCompleted ? (
             <button
               className="button button--primary button--full"
-              disabled={busy || (!!action && !action.submission && !evaluation)}
+              disabled={busy}
               onClick={() => void run(nextLearning)}
             >
               今日の学習を確認する

@@ -16,7 +16,7 @@
 
 相談はブラウザメモリ内の最大3問bounded replayだけ。戻る・希望変更で未確認候補を破棄する。Goal以降はログアウト・再読込後も既存保存正本から復元する。Goal確認後にPlan準備通信が失敗しても、確認済みGoalから再準備できる。相談本文をそのために保存しない。
 
-Planは版固定参照のまま、表示は「AIへの指示の基本構造 / 必要な背景情報の伝え方 / 条件の指定方法」。内部key/versionをラベルへ出さない。前のステップの完了表示はBridgeが選択した現在Definitionより前の経路に限定し、Profile scoreから推測しない。最終完了表示にはRouterのPLAN_COMPLETEDが必要。
+Planは版固定参照のまま、表示は「AIへの指示の基本構造 / 必要な背景情報の伝え方 / 条件の指定方法」。内部key/versionをラベルへ出さない。前のステップの完了表示はBridgeが選択した現在Definitionより前の経路に限定し、Profile scoreから推測しない。最終完了表示にはRouterのPLAN_COMPLETEDまたは本人・Enrollment・Plan revisionが一致する既存Router完了監査が必要。再読込時もこの監査から完了表示を復元し、最後の課題を再提示しない。
 
 NEXT / REVIEW / RETRY / BLOCKED / UNKNOWN / PLAN_COMPLETEDは固定の日本語へmappingする。完了は研修修了・Goal達成・契約終了ではない。未対応テーマはP1-DのDefinition Gapを表示し、新しいDefinitionは作らない。
 
@@ -116,7 +116,7 @@ P1-Eの現在Confirmed Plan、最新revision、ACTIVE Goal/Enrollment、APPROVED
 - application: 796 passed（P1-A/B/C/CS / Program Runtime等）。
 - database unit: 838 passed（旧V1 / Assignment / Auth境界等）。
 - 実PostgreSQL integration: 117 passed。使い捨てDBのID・markerを確認してからfixture/cleanupを実行。P1-Fの相談・確認済みGoal・Draft/Confirmed Plan保存と、保存Plan→3つの既存Assignment→既存回答→合成既存Assessment形式→次Definition→Plan完了、開始日時・Feedback再送・旧Runtime拒否・停止・越境を追加した。PC高負荷で初回のbeforeAllが10秒を超えたため、コードの安全Gateやtransaction期限は変更せず、実行コマンドだけtestTimeout / hookTimeoutを120秒にして再実行成功。
-- Web追加/評価境界: HTTP / 認証Gate / SSR UI / 既存評価期間・Job境界の5 files、37 passed。全体回帰・typecheck・lint・buildの最終結果は完了報告に追記する。
+- Web追加/評価境界: HTTP / 認証Gate / SSR UI / 既存評価期間・Job境界の5 files、37 passed。完了復元の表示追加後は変更した3 files、21 passed（合計38 cases）。全体回帰・typecheck・lint・buildの最終結果は完了報告に追記する。
 - ブラウザ: 390×844のローカル合成previewで希望入力→質問→Goal→Draft Plan→独立確認→Mission→回答→既存評価カード→次Definition / Feedbackを実操作した。入口のscrollWidth=390 / innerWidth=390、次の学習時も横にはみ出さないことを確認。合成previewは認証・本番API・実Providerを検証するものではない。
 - REVIEW / RETRY / BLOCKED / UNKNOWN / 完了文言は固定mappingテスト、Router/完了条件は既存Packageと実DBの回帰で検証する。
 
