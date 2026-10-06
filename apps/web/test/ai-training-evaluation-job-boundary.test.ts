@@ -20,11 +20,14 @@ describe('AI training evaluation job boundary', () => {
       'personalLearningPilotExecutionAllowed(program.settings, input.enrollmentId)',
     );
     const check = handler.indexOf(
-      'personalLearningPilotExecutionAllowed(currentProgram.settings, enrollment.id)',
+      'personalLearningPilotExecutionAllowed(currentProgram.settings, enrollment.id, true)',
     );
     const call = handler.indexOf('providerAttempted = true');
     expect(check).toBeGreaterThan(0);
     expect(check).toBeLessThan(call);
+    const authorization = handler.indexOf('.authorizeAssessment(');
+    expect(authorization).toBeGreaterThan(check);
+    expect(authorization).toBeLessThan(call);
   });
   it('revalidates active enrollment after the data lock before saving a late evaluation', () => {
     const lock = handler.indexOf('await db.lockTrainingEnrollmentData');
