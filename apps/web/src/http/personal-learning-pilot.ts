@@ -38,6 +38,33 @@ const consultation = z
   }));
 const body = z.discriminatedUnion('operation', [
   z
+    .object({
+      operation: z.literal('PRACTICE'),
+      assignmentId: z.string().uuid(),
+      command: z.discriminatedUnion('action', [
+        z
+          .object({
+            action: z.literal('START'),
+            supportLevel: z.enum(['GUIDED', 'HINTED', 'INDEPENDENT']),
+          })
+          .strict(),
+        z
+          .object({
+            action: z.literal('INTERACT'),
+            interaction: z.enum(['SELF_PROMPTED', 'SELF_EVALUATED', 'SELF_REVISED']),
+          })
+          .strict(),
+        z
+          .object({
+            action: z.literal('COMPLETE'),
+            learnerConfirmedCompletion: z.literal(true),
+            usefulResult: z.literal(true),
+          })
+          .strict(),
+      ]),
+    })
+    .strict(),
+  z
     .object({ operation: z.literal('CONSULT'), consultation, telemetryKey: z.string().uuid() })
     .strict(),
   z
@@ -102,12 +129,28 @@ export async function personalLearningPilotResponse(
             revision: current.plan.revision,
           })
         : null;
-      return respond({ state, assignment, readiness: await repository.readiness(input) });
+      return respond({
+        state,
+        assignment,
+        readiness: await repository.readiness(input),
+        practice: await new db.PrismaGuidedPracticeRepository(db.prisma).readPractice(
+          input,
+          assignment?.id ?? null,
+        ),
+      });
     }
     const value = body.parse(await request.json());
     const readiness = await repository.readiness(input);
     if (!readiness.profileReady && value.operation !== 'CONSULT')
       throw new ApplicationError('CONFLICT', 'pilot profile preparation required');
+    if (value.operation === 'PRACTICE')
+      return respond(
+        await new db.PrismaGuidedPracticeRepository(db.prisma).recordPractice(
+          input,
+          value.assignmentId,
+          value.command,
+        ),
+      );
     if (value.operation === 'CONSULT')
       return respond(
         await repository.consult({

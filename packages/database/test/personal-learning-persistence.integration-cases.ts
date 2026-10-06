@@ -24,6 +24,7 @@ import { PrismaPersonalLearningAiCallRepository } from '../src/personal-learning
 import { PrismaLearningDefinitionApprovalAdminRepository } from '../src/learning-definition-approval-admin';
 import { PrismaPersonalLearningPilotProfileRepository } from '../src/personal-learning-pilot-profile';
 import { PrismaPersonalLearningAssessmentGate } from '../src/personal-learning-assessment-gate';
+import { PrismaGuidedPracticeRepository } from '../src/guided-practice';
 import {
   PrismaPersonalLearningPilotRepository,
   PrismaPersonalLearningPilotRouter,
@@ -572,6 +573,151 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
       }
       return { ...f, plan, bridge, request, assessed };
     }
+    async function practiceFixture() {
+      const f = await routerFixture();
+      await client.serviceProgram.update({
+        where: { id: f.enrollment.serviceProgramId },
+        data: {
+          settings: {
+            moduleKey: 'AI_TRAINING_V1',
+            personalLearningPilot: { enabled: true, enrollmentIds: [f.enrollment.id] },
+            trainingOperations: { notificationsEnabled: false, postponedReminderEnabled: false },
+          },
+        },
+      });
+      const selected = await f.bridge.bridge(f.request);
+      const practice = new PrismaGuidedPracticeRepository(client, () => now);
+      const assignmentId = selected.assignmentId!;
+      const start = () =>
+        practice.recordPractice(f.actor, assignmentId, {
+          action: 'START',
+          supportLevel: 'INDEPENDENT',
+        });
+      const interact = async () => {
+        await practice.recordPractice(f.actor, assignmentId, {
+          action: 'INTERACT',
+          interaction: 'SELF_PROMPTED',
+        });
+        await practice.recordPractice(f.actor, assignmentId, {
+          action: 'INTERACT',
+          interaction: 'SELF_EVALUATED',
+        });
+      };
+      const complete = () =>
+        practice.recordPractice(f.actor, assignmentId, {
+          action: 'COMPLETE',
+          learnerConfirmedCompletion: true,
+          usefulResult: true,
+        });
+      return { ...f, practice, assignmentId, start, interact, complete };
+    }
+    it('practice requires learner interaction, confirmation and a matching Assessment, then records First Success once', async () => {
+      const f = await practiceFixture();
+      await expect(f.complete()).rejects.toThrow();
+      await f.start();
+      await expect(f.complete()).rejects.toThrow();
+      await f.interact();
+      await expect(f.complete()).rejects.toThrow();
+      const answer = await f.assessed(f.assignmentId);
+      await f.complete();
+      expect(await f.complete()).toMatchObject({ replayed: true });
+      expect(await f.practice.readPractice(f.actor, f.assignmentId)).toMatchObject({
+        completed: true,
+        firstSuccess: true,
+      });
+      const rows = await client.programActionEvent.findMany({
+        where: {
+          programEnrollmentId: f.enrollment.id,
+          eventType: 'PERSONAL_LEARNING_FIRST_SUCCESS',
+        },
+      });
+      expect(rows).toHaveLength(1);
+      expect(rows[0]!.sourceResourceId).toBe(answer.id);
+      expect(rows[0]!.metadata).toMatchObject({
+        capabilityLevel: 'UNKNOWN',
+        outcomeQuality: 'UNKNOWN',
+        practiceSessionsToFirstSuccess: 1,
+      });
+      expect(JSON.stringify(rows[0]!.metadata)).not.toContain('Synthetic learner practice');
+      expect(
+        (await client.programEnrollment.findUniqueOrThrow({ where: { id: f.enrollment.id } }))
+          .status,
+      ).toBe('ACTIVE');
+      const next = await f.bridge.bridge({ ...f.request, idempotencyKey: 'practice-next' });
+      const second = next.assignmentId!;
+      await f.practice.recordPractice(f.actor, second, { action: 'START', supportLevel: 'GUIDED' });
+      for (const interaction of ['SELF_PROMPTED', 'SELF_EVALUATED'] as const)
+        await f.practice.recordPractice(f.actor, second, { action: 'INTERACT', interaction });
+      await f.assessed(second);
+      await f.practice.recordPractice(f.actor, second, {
+        action: 'COMPLETE',
+        learnerConfirmedCompletion: true,
+        usefulResult: true,
+      });
+      expect(
+        await client.programActionEvent.count({
+          where: {
+            programEnrollmentId: f.enrollment.id,
+            eventType: 'PERSONAL_LEARNING_FIRST_SUCCESS',
+          },
+        }),
+      ).toBe(1);
+    });
+    it('practice rejects cross-actor, cross-workspace and cross-enrollment access', async () => {
+      const f = await practiceFixture();
+      for (const actor of [
+        { ...f.actor, actorUserId: randomUUID() },
+        { ...f.actor, scope: { ...f.scope, workspaceId: randomUUID() } },
+        { ...f.actor, scope: { ...f.scope, programEnrollmentId: randomUUID() } },
+      ]) {
+        await expect(
+          f.practice.recordPractice(actor, f.assignmentId, {
+            action: 'START',
+            supportLevel: 'GUIDED',
+          }),
+        ).rejects.toThrow();
+      }
+    });
+    it('practice cannot bypass a revoked Pilot gate or learner interaction order', async () => {
+      const f = await practiceFixture();
+      await f.start();
+      await expect(
+        f.practice.recordPractice(f.actor, f.assignmentId, {
+          action: 'INTERACT',
+          interaction: 'SELF_REVISED',
+        }),
+      ).rejects.toThrow();
+      await client.serviceProgram.update({
+        where: { id: f.enrollment.serviceProgramId },
+        data: { settings: { moduleKey: 'AI_TRAINING_V1' } },
+      });
+      await expect(f.interact()).rejects.toThrow();
+    });
+    it('practice preserves support use and refuses unapproved Definition completion', async () => {
+      const f = await practiceFixture();
+      await f.start();
+      await f.interact();
+      await f.assessed(f.assignmentId);
+      await client.programActionEvent.create({
+        data: {
+          workspaceId: f.scope.workspaceId,
+          groupId: f.scope.groupId,
+          programEnrollmentId: f.enrollment.id,
+          actorUserId: f.scope.userId,
+          missionAssignmentId: f.assignmentId,
+          eventType: 'HELP_REQUESTED',
+          idempotencyKey: 'practice-help',
+          occurredAt: now,
+        },
+      });
+      await f.complete();
+      expect((await f.practice.readPractice(f.actor, f.assignmentId)).supportLevel).toBe('GUIDED');
+      await client.learningDefinitionApproval.updateMany({
+        where: { workspaceId: f.scope.workspaceId, groupId: f.scope.groupId },
+        data: { approvalStatus: 'DEPRECATED' },
+      });
+      await expect(f.complete()).rejects.toThrow();
+    });
     it('execution gate authorizes only the current learner Plan, then stops on Goal cancellation', async () => {
       const f = await routerFixture();
       await client.serviceProgram.update({

@@ -23,6 +23,8 @@ const f = vi.hoisted(() => ({
   readiness: vi.fn(),
   save: vi.fn(),
   storedGoal: vi.fn(),
+  practice: vi.fn(),
+  readPractice: vi.fn(),
 }));
 vi.mock('../src/auth/current-user', () => ({
   currentUserProvider: () => Promise.resolve({ getCurrentUser: f.actor }),
@@ -45,6 +47,10 @@ vi.mock('@bunshin/database', () => ({
   },
   PrismaPersonalLearningPilotRouter: class {
     bridge = f.bridge;
+  },
+  PrismaGuidedPracticeRepository: class {
+    recordPractice = f.practice;
+    readPractice = f.readPractice;
   },
 }));
 import { personalLearningPilotResponse } from '../src/http/personal-learning-pilot';
@@ -82,6 +88,13 @@ describe('Personal Learning pilot HTTP composition', () => {
     f.access.mockResolvedValue({ scope, actorUserId: scope.userId });
     f.readiness.mockResolvedValue({ profileReady: true, approvalReady: true });
     f.read.mockResolvedValue({ goals: [], plans: [] });
+    f.readPractice.mockResolvedValue({
+      started: false,
+      completed: false,
+      supportLevel: null,
+      interactions: [],
+      firstSuccess: false,
+    });
     f.consult.mockImplementation((input: { consultation: LearningConsultationRequest }) =>
       Promise.resolve(consultAiTrainingLearning(consultationContext(), input.consultation)),
     );
@@ -92,6 +105,29 @@ describe('Personal Learning pilot HTTP composition', () => {
     expect(result.headers.get('cache-control')).toBe('private, no-store');
     expect(f.bridge).not.toHaveBeenCalled();
     expect(f.goal).not.toHaveBeenCalled();
+  });
+  it('records bounded practice through the authenticated server actor', async () => {
+    const command = { action: 'START', supportLevel: 'GUIDED' };
+    f.practice.mockResolvedValue({ saved: true });
+    expect(
+      (await call({ operation: 'PRACTICE', assignmentId: idempotencyKey, command })).status,
+    ).toBe(200);
+    expect(f.practice).toHaveBeenCalledWith(
+      { scope, actorUserId: scope.userId },
+      idempotencyKey,
+      command,
+    );
+  });
+  it('rejects outcome text and unconfirmed completion', async () => {
+    for (const command of [
+      { action: 'START', supportLevel: 'GUIDED', outcome: 'secret' },
+      { action: 'COMPLETE', learnerConfirmedCompletion: false, usefulResult: true },
+    ]) {
+      expect(
+        (await call({ operation: 'PRACTICE', assignmentId: idempotencyKey, command })).status,
+      ).toBe(400);
+    }
+    expect(f.practice).not.toHaveBeenCalled();
   });
   it('recovers a DRAFT Plan from the existing Goal, without client refs or automatic Plan confirmation', async () => {
     const reference = {

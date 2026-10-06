@@ -4,6 +4,7 @@ import {
   type NextActionPolicy,
   type ProgramDefinitionV1,
 } from '@bunshin/application';
+export * from './guided-practice';
 import { AI_TRAINING_MISSION_QUALITY } from './mission-quality';
 import type { TrainingGoalKey } from './learning-catalog';
 
