@@ -303,6 +303,7 @@ export { PrismaPersonalLearningPilotProfileRepository } from './personal-learnin
 export { PrismaPersonalLearningAssessmentGate } from './personal-learning-assessment-gate';
 export { PrismaGuidedPracticeRepository } from './guided-practice';
 export { PrismaPersonalLearningCallAdmission } from './personal-learning-call-admission';
+export { PrismaPersonalLearningPilotOperations } from './personal-learning-pilot-operations';
 export {
   PrismaPersonalLearningParticipantAdminRepository,
   type PilotParticipantCommand,

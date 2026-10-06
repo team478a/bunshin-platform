@@ -3735,3 +3735,12 @@
 - authorityはserver設定のWorkspace/Service/Program完全一致。DB transaction内で停止済み専用Program、disabled Pilot/通知停止、既存bounded allowlistを再検証する。Service-owned Definition承認が別Programへ影響しないよう、同Serviceの他AI Training ProgramがあればProduction準備を拒否する。
 - Production実行flagが有効な間は準備APIを閉じる。開始後のProfile編集/新規登録や緊急撤回の別機構を完成させたとは扱わない。実行を停止しただけでProgram SUSPENDEDへの変更が完了したとはしない。
 - schema/Migration/UI/Provider/LINE/100人登録を追加しない。設定変更、実承認、実Profile登録、Migration、deploy、Pilot enableは別の人間承認を待つ。
+
+## 2026-10-07: Wave 0の運用操作を準備APIと分離する
+
+- 状態: Proposed（実装レビュー待ち。本番操作は未承認）
+- server-owned単一authority、既定無効の運用flag、現在のService管理者認証、同origin、明示確認とreview evidenceを必須にする。既存の空AI Training Programだけを専用Pilotへ初期化し、停止中に既存Enrollment契約で準備する。参加権は別のSeat付与操作であり自動付与しない。
+- 開始はWave 0の内部1〜2人のみ。Definition人間承認、本人Profile、現Seat/allowlist、通知隔離、Admission設定と未終了callなしを再検証する。環境flagは変更せず、実課金承認・backup・Migration・deploy等は人間のRelease Gateとして別に残す。
+- settings/statusのstate tokenと運用revisionによるCAS、Program lock、同actor/operation digestの冪等性、既存Auditを同transactionで扱う。STOPだけはstale tokenでも最新状態を停止可能とし、再開や設定の上書きをしない。
+- STOPは実行flagがONでも使える独立操作。専用marker・通知隔離・Seat・Goal・Plan・履歴を保持する。送信済みcallを取消したとは扱わず、drainは常に別確認とする。
+- schema、migration、Provider、UI、LINE、V1 Runtimeは変更しない。本番での操作、Definition承認、参加者登録、課金、Wave拡大は実行しない。
