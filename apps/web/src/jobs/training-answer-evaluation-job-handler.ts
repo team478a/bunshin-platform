@@ -13,6 +13,7 @@ import {
 } from '@bunshin/capability-training';
 import { ApplicationError } from '@bunshin/shared';
 import { personalLearningPilotExecutionAllowed } from '../services/personal-learning-pilot-access';
+import { admitPersonalLearningCall } from '../services/personal-learning-call-admission';
 import { resolveOpenAiRuntimeConfiguration } from '../ai/runtime-provider-configuration';
 import { recordAiUsageSafely } from '../observability/ai-usage';
 import { preparePersonalLearningAiCall } from '../observability/personal-learning-ai-call';
@@ -190,26 +191,68 @@ export function createTrainingAnswerEvaluationJobHandler(): TrainingAnswerEvalua
                   false,
                 );
             }
-            providerAttempted = true;
-            return new OpenAiTrainingAnswerEvaluator({
-              apiKey: runtime.apiKey,
-              model: runtime.model,
-              requestCostUsdMicros: runtime.requestCostUsdMicros,
-              ...(pilot
-                ? {
-                    observe: (measurement: AiCallMeasurement) => {
-                      observed.measurement = measurement;
+            const admission = requirePilot
+              ? await admitPersonalLearningCall({
+                  actor: {
+                    actorUserId: input.actorUserId,
+                    scope: {
+                      workspaceId: input.workspaceId,
+                      groupId: input.groupId,
+                      programEnrollmentId: enrollment.id,
+                      groupMembershipId: membership.id,
+                      userId: input.actorUserId,
                     },
-                    onRequestStarted: () => {
-                      pilotRequestStarted = true;
-                    },
-                  }
-                : {}),
-            }).evaluate({
-              missionDefinitionKey: assignment.missionDefinitionKey,
-              answer: answer.answer,
-              displaySnapshot: assignment.displaySnapshot,
-            });
+                  },
+                  assignmentId: answer.missionAssignmentId,
+                  answerId: answer.id,
+                  jobId: input.jobId,
+                  attemptCount: input.attemptCount,
+                  model: runtime.model,
+                })
+              : null;
+            let requestStarted = false;
+            let responseSettled = false;
+            try {
+              if (
+                requirePilot &&
+                !personalLearningPilotExecutionAllowed(program.settings, enrollment.id, true)
+              )
+                throw new TrainingAnswerEvaluationJobError(
+                  'TRAINING_EVALUATION_SCOPE_REVOKED',
+                  false,
+                );
+              providerAttempted = true;
+              return await new OpenAiTrainingAnswerEvaluator({
+                apiKey: runtime.apiKey,
+                model: runtime.model,
+                requestCostUsdMicros: runtime.requestCostUsdMicros,
+                ...(admission
+                  ? {
+                      requestLimits: admission.requestLimits,
+                      onResponseSettled: () => {
+                        responseSettled = true;
+                      },
+                    }
+                  : {}),
+                ...(pilot
+                  ? {
+                      observe: (measurement: AiCallMeasurement) => {
+                        observed.measurement = measurement;
+                      },
+                      onRequestStarted: () => {
+                        pilotRequestStarted = true;
+                        requestStarted = true;
+                      },
+                    }
+                  : {}),
+              }).evaluate({
+                missionDefinitionKey: assignment.missionDefinitionKey,
+                answer: answer.answer,
+                displaySnapshot: assignment.displaySnapshot,
+              });
+            } finally {
+              if (admission && (!requestStarted || responseSettled)) await admission.settle();
+            }
           },
         });
         providerSucceeded = true;

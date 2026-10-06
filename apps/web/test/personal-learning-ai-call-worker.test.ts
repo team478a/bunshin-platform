@@ -18,6 +18,8 @@ const fake = vi.hoisted(() => {
     record: vi.fn(),
     evaluate: vi.fn(),
     authorize: vi.fn(),
+    admit: vi.fn(),
+    settle: vi.fn(),
     ...state,
   };
 });
@@ -48,6 +50,9 @@ vi.mock('../src/ai/runtime-provider-configuration', () => ({
     }),
 }));
 vi.mock('../src/observability/ai-usage', () => ({ recordAiUsageSafely: fake.usage }));
+vi.mock('../src/services/personal-learning-call-admission', () => ({
+  admitPersonalLearningCall: fake.admit,
+}));
 vi.mock('../src/observability/personal-learning-ai-call', () => ({
   preparePersonalLearningAiCall: fake.prepare,
 }));
@@ -64,6 +69,8 @@ vi.mock('../src/providers/openai-training-answer-evaluator', () => ({
       (fake.options['onRequestStarted'] as (() => void) | undefined)?.();
       fake.evaluate(input);
       (fake.options['observe'] as ((v: unknown) => void) | undefined)?.(fake.measurement);
+      if (fake.measurement['validationResult'] !== 'NOT_RUN')
+        (fake.options['onResponseSettled'] as (() => void) | undefined)?.();
       if (fake.error) return Promise.reject(fake.error);
       return Promise.resolve({
         evaluation: {},
@@ -100,6 +107,10 @@ describe('Pilot Assessment AI call wiring', () => {
     vi.stubEnv('PERSONAL_LEARNING_PILOT', 'true');
     fake.error = null;
     fake.authorize.mockResolvedValue(undefined);
+    fake.admit.mockResolvedValue({
+      requestLimits: { maxRequestBytes: 10000, maxOutputTokens: 100 },
+      settle: fake.settle,
+    });
     fake.membership.mockResolvedValue({ id: 'membership' });
     fake.enrollment.mockResolvedValue({ id: enrollmentId, serviceProgramId: 'program' });
     fake.program.mockResolvedValue({ id: 'program', settings });
@@ -133,6 +144,50 @@ describe('Pilot Assessment AI call wiring', () => {
     });
   });
   afterEach(() => vi.unstubAllEnvs());
+  it('fails closed before Provider when admission is denied', async () => {
+    const { TrainingAnswerEvaluationJobError } = await import('@bunshin/application');
+    fake.admit.mockRejectedValue(
+      new TrainingAnswerEvaluationJobError('PERSONAL_LEARNING_CALL_ADMISSION_DENIED', false),
+    );
+    await expect(createTrainingAnswerEvaluationJobHandler().execute(input)).rejects.toMatchObject({
+      retryable: false,
+    });
+    expect(fake.evaluate).not.toHaveBeenCalled();
+    expect(fake.record).not.toHaveBeenCalled();
+  });
+  it('a kill switch changed during admission settles the unused slot without fetching', async () => {
+    fake.admit.mockImplementation(() => {
+      vi.stubEnv('PERSONAL_LEARNING_PILOT', 'false');
+      return Promise.resolve({
+        requestLimits: { maxRequestBytes: 10000, maxOutputTokens: 100 },
+        settle: fake.settle,
+      });
+    });
+    await expect(createTrainingAnswerEvaluationJobHandler().execute(input)).rejects.toMatchObject({
+      retryable: false,
+    });
+    expect(fake.evaluate).not.toHaveBeenCalled();
+    expect(fake.settle).toHaveBeenCalledOnce();
+  });
+  it('settles a completed response, but retains an uncertain transport slot', async () => {
+    await createTrainingAnswerEvaluationJobHandler().execute(input);
+    expect(fake.admit).toHaveBeenCalledWith(
+      expect.objectContaining({ jobId: 'job', attemptCount: 1, model: 'unchanged-model' }),
+    );
+    expect(fake.settle).toHaveBeenCalledOnce();
+    fake.settle.mockClear();
+    fake.measurement = {
+      ...fake.measurement,
+      validationResult: 'NOT_RUN',
+      success: false,
+      errorCategory: 'TIMEOUT',
+    };
+    fake.error = new ApplicationError('AI_PROVIDER_UNAVAILABLE', 'synthetic timeout');
+    await expect(createTrainingAnswerEvaluationJobHandler().execute(input)).rejects.toMatchObject({
+      retryable: true,
+    });
+    expect(fake.settle).not.toHaveBeenCalled();
+  });
   it('wires only Pilot calls, uses response usage price and links the same attempt key', async () => {
     await createTrainingAnswerEvaluationJobHandler().execute(input);
     expect(fake.options['model']).toBe('unchanged-model');
@@ -182,6 +237,8 @@ describe('Pilot Assessment AI call wiring', () => {
     fake.program.mockResolvedValue({ id: 'program', settings: { moduleKey: 'AI_TRAINING_V1' } });
     await createTrainingAnswerEvaluationJobHandler().execute(input);
     expect(fake.prepare).not.toHaveBeenCalled();
+    expect(fake.admit).not.toHaveBeenCalled();
+    expect(fake.options['requestLimits']).toBeUndefined();
     expect(fake.options['observe']).toBeUndefined();
     expect(fake.usage).toHaveBeenCalledWith(
       expect.objectContaining({

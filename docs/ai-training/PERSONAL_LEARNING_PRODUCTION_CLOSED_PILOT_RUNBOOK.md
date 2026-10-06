@@ -165,3 +165,13 @@ PASS/READYには対象SHA/環境/日時/担当者/証拠を要求する。空欄
 4. **運用Gate（コードPRではない）**: 実DB読取/Backup/DDL検証、全release差分レビュー、Definition教育レビュー、Wave 0実認証・実Provider許可、停止/監視責任者確定。実環境証拠でB〜Iを埋めて別開始承認。
 
 優先順はAの設計承認→A/B/Cの必要最小変更→release候補CI→Production Release Gate→別操作承認。今回は全実装を続行しない。Teaching/Memory/Definition Factory/Codex/新Provider/LINE導線/新Definition/一般公開は対象外。
+
+## 2026-10-06: Pilot Call Admission追加（本番未適用）
+
+過去の監査結果とGate判定は保持する。PR C相当の小さな変更として、Pilot専用のUTC日次attempt上限、同時実行上限、同一Job attempt再送拒否、request byte / output token上限、model一致を追加した。詳細は[実装報告](PERSONAL_LEARNING_CALL_ADMISSION_IMPLEMENTATION.md)。
+
+サーバー設定`PERSONAL_LEARNING_CALL_ADMISSION`は既定なし。未設定ではPilotのProvider呼出しを停止する。既存V1には適用しない。失敗・retryも件数に数え、終了不明のcallは枠を自動解放しない。
+
+追加Migration `20261006120000_personal_learning_call_admission`は本番未適用。適用監査と全instanceのrelease確認が必要。Kill Switchは引き続き既存flagを使用し、未知枠の復旧を台帳削除やTTLで行わない。
+
+Gate Hは引き続きUNKNOWN。金額Hard Stopの完成・費用見積もり・本番数値承認・実課金開始承認を意味しない。Gate B/C/D/E/F/G/Iも本番証拠を要する。trusted準備操作、累計100人Hard Capは別PR。Wave 0はNO-GOのまま。

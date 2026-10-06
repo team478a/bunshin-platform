@@ -8051,3 +8051,18 @@ model VideoLineAccess {
   @@index([expiresAt, sessionExpiresAt])
   @@map("video_line_access")
 }
+// Safety ledger, separate from deletable answer/telemetry records. SQL migration owns scoped FK.
+model PersonalLearningCallAdmission {
+  id               String    @id @default(uuid()) @db.Uuid
+  workspaceId      String    @map("workspace_id") @db.Uuid
+  groupId          String    @map("group_id") @db.Uuid
+  serviceProgramId String    @map("service_program_id") @db.Uuid
+  operationHash    String    @map("operation_hash") @db.Char(64)
+  admittedAt       DateTime  @default(now()) @map("admitted_at") @db.Timestamptz(3)
+  settledAt        DateTime? @map("settled_at") @db.Timestamptz(3)
+
+  @@unique([workspaceId, groupId, serviceProgramId, operationHash], map: "personal_learning_call_admissions_operation_key")
+  @@index([workspaceId, groupId, serviceProgramId, admittedAt], map: "personal_learning_call_admissions_day_idx")
+  @@index([workspaceId, groupId, serviceProgramId, settledAt], map: "personal_learning_call_admissions_open_idx")
+  @@map("personal_learning_call_admissions")
+}
