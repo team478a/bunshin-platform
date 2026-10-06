@@ -677,6 +677,24 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
         ).rejects.toThrow();
       },
     );
+    it('completed Plan assignments cannot enter the legacy candidate runtime after marker loss', async () => {
+      const f = await routerFixture();
+      const selected = await f.bridge.bridge(f.request);
+      await f.assessed(selected.assignmentId!);
+      await client.serviceProgram.update({
+        where: { id: f.enrollment.serviceProgramId },
+        data: { settings: { moduleKey: 'AI_TRAINING_V1' } },
+      });
+      await expect(
+        new PrismaAiTrainingRuntimeCandidateRepository(client).findCandidate({
+          workspaceId: f.scope.workspaceId,
+          groupId: f.scope.groupId,
+          programEnrollmentId: f.enrollment.id,
+          actorUserId: f.scope.userId,
+          now,
+        }),
+      ).resolves.toBeNull();
+    });
     it('P1-G records scoped AI attempts once, preserves historical refs, and refuses cross tenant/deleted data', async () => {
       const f = await routerFixture();
       await client.serviceProgram.update({

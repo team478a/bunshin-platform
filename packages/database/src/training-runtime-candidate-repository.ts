@@ -80,6 +80,7 @@ export class PrismaAiTrainingRuntimeCandidateRepository {
     ) {
       return null;
     }
+    if (assignments.some((a) => a.targetResourceType === 'PERSONAL_LEARNING_PLAN')) return null;
     const completed = assignments.filter(({ status }) => status === 'COMPLETED');
     const phase = ['FOUNDATION', 'PRACTICE', 'APPLICATION'].includes(progress?.phaseKey ?? '')
       ? (progress!.phaseKey as AiTrainingRuntimeCandidate['currentPhase'])
