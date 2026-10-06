@@ -33,3 +33,18 @@ export function personalLearningPilotAllows(settings: unknown, enrollmentId: str
     !parseAiTrainingOperationsSettings(settings).postponedReminderEnabled
   );
 }
+
+/** Preparation only: validate the same bounded allowlist without enabling execution. */
+export function personalLearningPilotProfilePreparationAllows(
+  settings: unknown,
+  enrollmentId: string,
+): boolean {
+  const root = object(settings);
+  const pilot = object(root?.['personalLearningPilot']);
+  if (!root || !pilot || pilot['enabled'] !== false) return false;
+  // Pure validation projection; stored settings and runtime enablement remain unchanged.
+  return personalLearningPilotAllows(
+    { ...root, personalLearningPilot: { ...pilot, enabled: true } },
+    enrollmentId,
+  );
+}

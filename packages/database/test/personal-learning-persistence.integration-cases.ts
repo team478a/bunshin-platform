@@ -22,6 +22,7 @@ import { PrismaPersonalLearningRouterBridge } from '../src/personal-learning-rou
 import { PrismaTrainingAnswerRepository } from '../src/training-answer';
 import { PrismaPersonalLearningAiCallRepository } from '../src/personal-learning-ai-call';
 import { PrismaLearningDefinitionApprovalAdminRepository } from '../src/learning-definition-approval-admin';
+import { PrismaPersonalLearningPilotProfileRepository } from '../src/personal-learning-pilot-profile';
 import {
   PrismaPersonalLearningPilotRepository,
   PrismaPersonalLearningPilotRouter,
@@ -196,6 +197,134 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
       }
       return { repo, actor, confirm, scope, enrollment, owner, group, member, plan };
     }
+    async function profilePreparation() {
+      const f = await fixture(false);
+      await client.serviceProgram.update({
+        where: { id: f.enrollment.serviceProgramId },
+        data: {
+          status: 'SUSPENDED',
+          settings: {
+            moduleKey: 'AI_TRAINING_V1',
+            personalLearningPilot: { enabled: false, enrollmentIds: [f.enrollment.id] },
+            trainingOperations: { notificationsEnabled: false, postponedReminderEnabled: false },
+          },
+        },
+      });
+      const repository = new PrismaPersonalLearningPilotProfileRepository(client, () => now);
+      const scope = {
+        workspaceId: f.scope.workspaceId,
+        groupId: f.scope.groupId,
+        programEnrollmentId: f.enrollment.id,
+        actorUserId: f.scope.userId,
+      };
+      const command = {
+        operationId: randomUUID(),
+        role: 'OFFICE' as const,
+        aiLevel: 'BEGINNER' as const,
+        dailyMinutes: 10 as const,
+        confirmation: 'CONFIRM_MY_LEARNING_PROFILE' as const,
+        expectedAbsent: true as const,
+      };
+      return { ...f, repository, profileScope: scope, command };
+    }
+    it('Profile preparation: restore, immutable retry, no Goal or Assignment and no content', async () => {
+      const f = await profilePreparation();
+      expect(await f.repository.read(f.profileScope)).toEqual({ profile: null });
+      const first = await f.repository.initialize(f.profileScope, f.command);
+      expect(first.outcome).toBe('INITIALIZED');
+      expect(await f.repository.read(f.profileScope)).toEqual({ profile: first.profile });
+      expect((await f.repository.initialize(f.profileScope, f.command)).outcome).toBe(
+        'ALREADY_INITIALIZED',
+      );
+      await expect(
+        f.repository.initialize(f.profileScope, { ...f.command, dailyMinutes: 15 }),
+      ).rejects.toMatchObject({ code: 'CONFLICT' });
+      await expect(
+        f.repository.initialize(f.profileScope, { ...f.command, operationId: randomUUID() }),
+      ).rejects.toMatchObject({ code: 'CONFLICT' });
+      const profile = await client.trainingParticipantProfile.findUniqueOrThrow({
+        where: { programEnrollmentId: f.enrollment.id },
+      });
+      expect(profile.learningGoalKey).toBeNull();
+      expect(profile.workContext).toEqual({});
+      expect(profile.skillScores).toEqual({});
+      expect(await client.programMemberGoal.count()).toBe(0);
+      expect(await client.programMissionAssignment.count()).toBe(0);
+      expect(await client.programActionEvent.count()).toBe(1);
+    });
+    it('Profile preparation: concurrent absence CAS creates one profile and event', async () => {
+      const f = await profilePreparation();
+      const results = await Promise.allSettled([
+        f.repository.initialize(f.profileScope, f.command),
+        f.repository.initialize(f.profileScope, { ...f.command, operationId: randomUUID() }),
+      ]);
+      expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+      expect(await client.trainingParticipantProfile.count()).toBe(1);
+      expect(await client.programActionEvent.count()).toBe(1);
+    });
+    it('Profile preparation: cross scope and lost membership rejected even on replay', async () => {
+      const f = await profilePreparation();
+      await f.repository.initialize(f.profileScope, f.command);
+      for (const key of ['workspaceId', 'groupId', 'programEnrollmentId', 'actorUserId'] as const) {
+        await expect(
+          f.repository.read({ ...f.profileScope, [key]: randomUUID() }),
+        ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+      }
+      await client.groupMembership.update({
+        where: { id: f.member.id },
+        data: { status: 'REVOKED', revokedAt: now },
+      });
+      await expect(f.repository.initialize(f.profileScope, f.command)).rejects.toMatchObject({
+        code: 'NOT_FOUND',
+      });
+    });
+    it('Profile preparation: active Program and expired enrollment cannot initialize', async () => {
+      const f = await profilePreparation();
+      await client.serviceProgram.update({
+        where: { id: f.enrollment.serviceProgramId },
+        data: { status: 'ACTIVE' },
+      });
+      await expect(f.repository.initialize(f.profileScope, f.command)).rejects.toMatchObject({
+        code: 'NOT_FOUND',
+      });
+      await client.serviceProgram.update({
+        where: { id: f.enrollment.serviceProgramId },
+        data: { status: 'SUSPENDED' },
+      });
+      await client.programEnrollment.update({
+        where: { id: f.enrollment.id },
+        data: { endsAt: now },
+      });
+      await expect(f.repository.initialize(f.profileScope, f.command)).rejects.toMatchObject({
+        code: 'NOT_FOUND',
+      });
+      expect(await client.trainingParticipantProfile.count()).toBe(0);
+    });
+    it('Profile preparation: deletion tombstone prevents recreation and replay', async () => {
+      const f = await profilePreparation();
+      await f.repository.initialize(f.profileScope, f.command);
+      await client.trainingParticipantProfile.deleteMany({
+        where: { programEnrollmentId: f.enrollment.id },
+      });
+      await client.programAuditLog.create({
+        data: {
+          workspaceId: f.scope.workspaceId,
+          groupId: f.scope.groupId,
+          resourceType: 'PROGRAM_ENROLLMENT',
+          resourceId: f.enrollment.id,
+          action: 'TRAINING_PERSONAL_DATA_DELETED',
+          performedByUserId: f.scope.userId,
+          afterData: { kind: 'ALL' },
+        },
+      });
+      await expect(f.repository.initialize(f.profileScope, f.command)).rejects.toMatchObject({
+        code: 'NOT_FOUND',
+      });
+      await expect(
+        f.repository.initialize(f.profileScope, { ...f.command, operationId: randomUUID() }),
+      ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+      expect(await client.trainingParticipantProfile.count()).toBe(0);
+    });
     it('Definition admin: human review, immutable retry, CAS, withdrawal and reapproval audit', async () => {
       const f = await fixture(false);
       const repository = new PrismaLearningDefinitionApprovalAdminRepository(client, () => now);
