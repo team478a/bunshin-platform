@@ -18,7 +18,7 @@ Wave 0は内部1〜2人の実環境E2Eであり、外部募集ではない。内
 4. Pilot scopeの評価Jobと `personal_learning_call_admissions.settled_at IS NULL` を制限付きで調査し、送信済みcall・lease・返却後保存を追跡。停止は送信済みcallの取消ではない。TTL/lease期限だけでdrain完了としない。
 5. 時刻、SHA、固定reason、call数/既知推定原価、影響範囲を記録。Goal/Plan/Seat/Answer/監査/Admissionを削除しない。未終了枠の自動解放・台帳削除・自動再開は禁止。
 
-**停止操作上のBlocker:** Repositoryに専用Programのstatus/marker/enableを変更するtrusted endpoint/commandは確認できない。準備APIはenableを行わない。環境flagの停止は実装済みだが即時反映/drainは未証明。開始前に環境ownerが、監査・scope照合・競合制御付きの停止/開始操作（レビュー済みone-time operation等）と全instance反映方法を別途承認・検証する。それまではON不可。本書は未レビューのSQL UPDATEや架空endpointを代替手順にしない。
+**2026-10-07運用操作の追記:** `GET/POST /api/services/{serviceSlug}/ai-training/pilot-operations` を追加した。STOPは実行flag ONでも利用可能で、最新settingsを保全してSUSPENDED/enabled=falseへ停止する。全instance反映と送信済みcallのdrainは未証明で、引き続きON不可。具体的なbody/flag/初期化/停止中Enrollment準備/STARTの順序は [運用操作実装報告](MANABERU_STYLE_PILOT_OPERATIONS_IMPLEMENTATION.md) を参照。本書の従来Blockerは実装有無と実運用検証を区別して更新する。
 
 ## Phase A — Preflight（最初の人間操作）
 
@@ -114,7 +114,8 @@ Safety: 本人がCreator、代行制作/業務戦略決定なし、個人情報/
 | APP_ENV / VERCEL_ENV                                                                                                   | production / production。偽stagingは禁止                                                                                                                                                                                                          |
 | PERSONAL_LEARNING_PILOT / PERSONAL_LEARNING_PRODUCTION_CLOSED_PILOT                                                    | 準備は両方false、開始承認後だけ両方true                                                                                                                                                                                                           |
 | PERSONAL_LEARNING_PRODUCTION_PREPARATION                                                                               | JSON: workspaceId/groupId/serviceProgramIdのlowercase UUID3つのみ。groupIdはService。全instanceで単一authority                                                                                                                                    |
-| PERSONAL_LEARNING_DEFINITION_ADMIN / PERSONAL_LEARNING_PARTICIPANT_PREPARATION / PERSONAL_LEARNING_PROFILE_PREPARATION | 必要準備時のみtrue、開始前に全てfalse。authorityも準備終了後閉じる                                                                                                                                                                                |
+| PERSONAL_LEARNING_DEFINITION_ADMIN / PERSONAL_LEARNING_PARTICIPANT_PREPARATION / PERSONAL_LEARNING_PROFILE_PREPARATION | 必要準備時のみtrue、開始前に全てfalse。authorityと運用flagはSTOP経路のため維持                                                                                                                                                                    |
+| PERSONAL_LEARNING_PILOT_OPERATIONS                                                                                     | 既定false。レビュー済み操作時true、稼働中も停止担当が到達できるよう維持。STARTは両実行flag OFFでのみ可能                                                                                                                                          |
 | ServiceProgram.status / settings.moduleKey                                                                             | 準備SUSPENDED、実行ACTIVE / AI_TRAINING_V1を維持                                                                                                                                                                                                  |
 | settings.trainingOperations                                                                                            | notificationsEnabled=false、postponedReminderEnabled=falseを明示。既存他field維持                                                                                                                                                                 |
 | settings.personalLearningPilot                                                                                         | enabled=false、enrollmentIds=[]で開始。台帳CONFIGURE/ADMITがparticipantControl/allowlistを管理。手でallowlistを追加しない                                                                                                                         |
@@ -131,8 +132,8 @@ Safety: 本人がCreator、代行制作/業務戦略決定なし、個人情報/
 ## Phase F — Internal Participant Preparation
 
 1. 本人同意と内部1〜2人の非公開名簿、ACTIVE User/Workspace、専用ServiceのACTIVE PARTICIPANT Membershipを確認。管理者を本人の代用にしない。
-2. 既存 `POST /api/services/{serviceSlug}/programs/{serviceProgramId}/enrollments` は管理者session、groupMembershipId/programOfferingId/supportMode/goalを受ける。ACTIVE Program、ACTIVE free INVITATION_ONLY offering、重複なしを要求する。goalは空として候補を先行確定しない。Enrollment startsAtはserver設定。
-3. **順序のBlocker:** このEnrollment APIはSUSPENDED Programを受け付けない。Program marker/通知隔離を保ったまま実行flag OFFでACTIVE→Enrollment準備→SUSPENDEDへ戻す切替と既存worker隔離を、別承認のtrusted operationで確定する。代わりに旧V1 setupを使わない。既存の適切なEnrollmentがあれば新規作成不要。期間延長/30日V1変換なし。
+2. pilot-operationsのINITIALIZEで空の専用Programを停止・隔離し、下記CONFIGUREを先に行う。その後GETの最新stateTokenでPREPARE_ENROLLMENTを送る。管理者session、groupMembershipId/programOfferingIdを検証し、SUSPENDEDのままGUIDED Enrollmentを準備する。Goalは空、startsAtはserver設定。Seatはまだ付与しない。
+3. 従来のACTIVE専用Enrollment APIは変更しない。PilotでACTIVE↔SUSPENDEDを一時切替して登録する手順は採用しない。旧V1 setup/期間延長/30日V1変換なし。具体例は運用操作実装報告を参照。
 4. 停止状態で `GET /api/services/{serviceSlug}/ai-training/pilot-participants`。data.policy/seats、累計INTERNAL/EXTERNAL、revoked含むを確認。初回空台帳/allowlist、expectedRevision=0を確認。
 5. 人間管理者が同URLへPOST CONFIGURE。例の構造（値は承認後置換）:
 
@@ -158,11 +159,11 @@ Safety: 本人がCreator、代行制作/業務戦略決定なし、個人情報/
 
 ## Phase G — Pilot Enable（別開始承認）
 
-Migration、deploy/V1 smoke、3版APPROVED、内部参加者/Profile、Provider/価格・実課金同意、Admission、停止/drain、logs、PrivacyがすべてPASS/READYでない限りON不可。準備flagsを全てfalse、authorityを閉じたことを全instanceで確認する。
+Migration、deploy/V1 smoke、3版APPROVED、内部参加者/Profile、Provider/価格・実課金同意、Admission、停止/drain、logs、PrivacyがすべてPASS/READYでない限りON不可。Definition/Profile/Participantの準備flagsを全てfalseにする。運用flagと単一authorityはSTOP経路のため維持し、全instanceで同一scope・停止担当の到達性を確認する。
 
-人間が別途承認したProgram切替操作でstatus=ACTIVE / personalLearningPilot.enabled=trueを設定する。台帳/allowlist/participantControl/通知offを維持し、環境の両実行flagをtrueへ反映。最後の必要条件が揃う瞬間に実行可能になるため、その時刻・担当者・送信費用承認を記録する。順序と反映範囲はownerが確定し、旧deploy到達を遮断する。
+人間がGETで最新stateTokenを取得・レビューし、pilot-operations STARTでstatus=ACTIVE / personalLearningPilot.enabled=trueを設定する。この時点では両実行flagはfalse。台帳/allowlist/participantControl/通知offを維持し、別承認で環境の両実行flagをtrueへ反映。最後の必要条件が揃う瞬間に実行可能になるため、その時刻・担当者・送信費用承認を記録する。順序と反映範囲はownerが確定し、旧deploy到達を遮断する。
 
-既存APIのCONFIGURE/ADMIT/APPROVEでenableはできない。Program切替操作未確定、反映/drain不明ならこのPhaseはBLOCKED。架空の `/enable` APIや直接DB手入力で進めない。
+既存APIのCONFIGURE/ADMIT/APPROVEでenableはできない。pilot-operationsの人間レビュー・実環境検証、反映/drainが不明ならこのPhaseはBLOCKED。架空の `/enable` APIや直接DB手入力で進めない。
 
 内部本人GET/ページを確認し、対象外/匿名/別Enrollmentで拒否、外部枠0を確認。否定試験に実個人データを覗かない。準備APIは閉じたことを確認する。
 
@@ -222,7 +223,7 @@ DBは原則rollbackせず履歴を保全しforward-fix。逆DROP/適用済みfil
 ## 残作業 / Blocker / 安全な支援
 
 1. 対象実環境・owner・role・公開SHA・backup/restore/DDL・pending全履歴・RLSを実読取で確定（現在UNKNOWN）。
-2. 専用scope/Program初期化、ACTIVE↔SUSPENDED/enable/disableのtrusted操作と即時停止・全instance/drainを確定。既存Enrollment APIと準備状態の順序問題がBlocker。必要なら別の最小運用操作PRを人間レビュー、本書では実装しない。
+2. pilot-operations実装PRを人間レビュー。停止中Enrollment準備とSTART/STOPの隔離環境試験を確認し、本番の停止担当・全instance反映/drainを確定する。APIの存在だけで本番GateをPASSにしない。運用flagとauthorityはSTOPのため維持し、通常準備flagを閉じることと混同しない。
 3. 内部人数/Provider source/model/価格/上限/予算/監視/Privacy保持・同意を人間承認。3Definitionの教育レビュー/APPROVE、内部Seat/Profile、全Release Gateを実証する。
 4. 別releaseと開始承認後にのみ実Provider/実スマートフォンE2E、Kill Switch、状態復元を実施しWave0結果を判定。
 
