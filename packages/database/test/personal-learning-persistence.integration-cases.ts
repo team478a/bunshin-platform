@@ -4,7 +4,10 @@ import type { PrismaClient, Prisma } from '@prisma/client';
 import { afterEach, describe, expect, it } from 'vitest';
 import { cleanupProgramFixtures } from './program-fixture-cleanup';
 import { PrismaPersonalLearningParticipantAdminRepository } from '../src/personal-learning-participant-admin';
-import { requirePersonalLearningPilotSeat } from '../src/personal-learning-pilot-seat';
+import {
+  requirePersonalLearningPilotSeat,
+  pilotParticipantHash,
+} from '../src/personal-learning-pilot-seat';
 import { PrismaTrainingPersonalDataExportRepository } from '../src/training-personal-data-export';
 import {
   PERSONAL_LEARNING_PLAN_CONTRACT_VERSION,
@@ -1177,6 +1180,57 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
       expect(rows[0]).not.toHaveProperty('userId');
       await client.trainingMissionAnswer.delete({ where: { id: f.answer.id } });
       expect(await client.personalLearningCallAdmission.count()).toBe(2);
+    });
+    it('P1-H Production admission requires a live seat, accepts admitted participant and denies revocation', async () => {
+      const f = await admissionFixture();
+      const request = { ...(await f.request()), environment: 'PRODUCTION' as const };
+      await client.job.update({
+        where: { id: request.jobId },
+        data: { environment: 'PRODUCTION' },
+      });
+      await expect(f.repo.admit(request)).rejects.toThrow();
+      await client.serviceProgram.update({
+        where: { id: f.enrollment.serviceProgramId },
+        data: {
+          settings: {
+            moduleKey: 'AI_TRAINING_V1',
+            personalLearningPilot: {
+              enabled: true,
+              enrollmentIds: [f.enrollment.id],
+              participantControl: {
+                version: 'PILOT_PARTICIPANT_CAP_V1',
+                revision: 1,
+                externalParticipantCap: 100,
+                internalParticipantCap: 0,
+                currentWave: 1,
+                currentWaveCap: 5,
+              },
+            },
+            trainingOperations: { notificationsEnabled: false, postponedReminderEnabled: false },
+          },
+        },
+      });
+      await expect(f.repo.admit(request)).rejects.toThrow();
+      const seat = await client.personalLearningPilotSeat.create({
+        data: {
+          workspaceId: f.scope.workspaceId,
+          groupId: f.scope.groupId,
+          serviceProgramId: f.enrollment.serviceProgramId,
+          participantHash: pilotParticipantHash(f.enrollment.serviceProgramId, f.scope.userId),
+          programEnrollmentId: f.enrollment.id,
+          kind: 'EXTERNAL',
+          cohort: 'WAVE_1',
+          seatNumber: 1,
+        },
+      });
+      const permit = await f.repo.admit(request);
+      await f.repo.settle(permit);
+      await client.personalLearningPilotSeat.update({
+        where: { id: seat.id },
+        data: { revokedAt: new Date() },
+      });
+      await expect(f.repo.admit({ ...request, jobId: randomUUID() })).rejects.toThrow();
+      expect(await client.personalLearningCallAdmission.count()).toBe(1);
     });
     it('parallel workers never admit more than one open call; unknown slots survive midnight', async () => {
       const f = await admissionFixture();
