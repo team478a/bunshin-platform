@@ -3,6 +3,11 @@ import { readFileSync } from 'node:fs';
 import type { PrismaClient, Prisma } from '@prisma/client';
 import { afterEach, describe, expect, it } from 'vitest';
 import { cleanupProgramFixtures } from './program-fixture-cleanup';
+import { PrismaPersonalLearningParticipantAdminRepository } from '../src/personal-learning-participant-admin';
+import {
+  requirePersonalLearningPilotSeat,
+  pilotParticipantHash,
+} from '../src/personal-learning-pilot-seat';
 import { PrismaTrainingPersonalDataExportRepository } from '../src/training-personal-data-export';
 import {
   PERSONAL_LEARNING_PLAN_CONTRACT_VERSION,
@@ -231,6 +236,355 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
       };
       return { ...f, repository, profileScope: scope, command };
     }
+    async function capFixture(wave = 1) {
+      const f = await profilePreparation();
+      await client.serviceProgram.update({
+        where: { id: f.enrollment.serviceProgramId },
+        data: {
+          settings: {
+            moduleKey: 'AI_TRAINING_V1',
+            personalLearningPilot: { enabled: false, enrollmentIds: [] },
+            trainingOperations: { notificationsEnabled: false, postponedReminderEnabled: false },
+          },
+        },
+      });
+      const authority = {
+        workspaceId: f.scope.workspaceId,
+        groupId: f.scope.groupId,
+        serviceProgramId: f.enrollment.serviceProgramId,
+      };
+      const admin = new PrismaPersonalLearningParticipantAdminRepository(client, authority);
+      const common = {
+        confirmation: 'CONFIRM_PILOT_PARTICIPANT_OPERATION' as const,
+        reviewEvidenceKey: 'synthetic-human-review',
+      };
+      await admin.change(f.owner.id, {
+        ...common,
+        operationId: randomUUID(),
+        expectedRevision: 0,
+        action: 'CONFIGURE',
+        externalParticipantCap: 100,
+        internalParticipantCap: 0,
+        currentWave: wave,
+      });
+      async function participant() {
+        const u = await client.user.create({ data: { displayName: 'Synthetic cap participant' } });
+        const m = await client.groupMembership.create({
+          data: {
+            workspaceId: authority.workspaceId,
+            groupId: authority.groupId,
+            userId: u.id,
+            status: 'ACTIVE',
+            serviceRole: 'PARTICIPANT',
+            consentedAt: now,
+          },
+        });
+        const e = await client.programEnrollment.create({
+          data: {
+            ...f.enrollment,
+            goalSnapshot: {},
+            offeringSnapshot: {},
+            id: randomUUID(),
+            groupMembershipId: m.id,
+            startsAt: new Date(Date.now() - 86400000),
+            endsAt: new Date(Date.now() + 86400000),
+          },
+        });
+        return { u, m, e };
+      }
+      async function admit(id: string, expectedRevision: number) {
+        return admin.change(f.owner.id, {
+          ...common,
+          operationId: randomUUID(),
+          expectedRevision,
+          action: 'ADMIT',
+          programEnrollmentId: id,
+          kind: 'EXTERNAL',
+        });
+      }
+      return { ...f, authority, admin, common, participant, admit };
+    }
+    it('P1-H Wave 1 first/fifth seats, sixth rejection, idempotency and no automatic promotion', async () => {
+      const f = await capFixture();
+      const people = [];
+      for (let i = 0; i < 6; i++) people.push(await f.participant());
+      const command = {
+        ...f.common,
+        operationId: randomUUID(),
+        expectedRevision: 1,
+        action: 'ADMIT' as const,
+        programEnrollmentId: people[0]!.e.id,
+        kind: 'EXTERNAL' as const,
+      };
+      await f.admin.change(f.owner.id, command);
+      expect((await f.admin.change(f.owner.id, command)).replayed).toBe(true);
+      // A new operation for the same user is still one consumed seat.
+      await f.admit(people[0]!.e.id, 2);
+      for (let i = 1; i < 5; i++) await f.admit(people[i]!.e.id, i + 2);
+      await expect(f.admit(people[5]!.e.id, 7)).rejects.toThrow('WAVE_CAP_REACHED');
+      const state = await f.admin.read(f.owner.id);
+      expect(state.seats).toHaveLength(5);
+      expect(state.policy?.currentWave).toBe(1);
+      await expect(
+        client.serviceProgram.update({
+          where: { id: f.authority.serviceProgramId },
+          data: { settings: { moduleKey: 'AI_TRAINING_V1' } },
+        }),
+      ).rejects.toThrow();
+    });
+    it.each([
+      [2, 20],
+      [3, 50],
+      [4, 100],
+    ])(
+      'P1-H Wave %i allows cumulative %i only',
+      async (wave, limit) => {
+        const f = await capFixture(wave);
+        for (let i = 0; i < limit; i++) {
+          const p = await f.participant();
+          await f.admit(p.e.id, i + 1);
+        }
+        const extra = await f.participant();
+        await expect(f.admit(extra.e.id, limit + 1)).rejects.toThrow(
+          limit === 100 ? 'PILOT_CAP_REACHED' : 'WAVE_CAP_REACHED',
+        );
+        expect((await f.admin.read(f.owner.id)).seats).toHaveLength(limit);
+      },
+      30000,
+    );
+    it('P1-H simultaneous 100/101 registration has one winner and DB slots cannot exceed 100', async () => {
+      const f = await capFixture(4);
+      // Synthetic setup of 99 previously consumed slots; no production backfill.
+      for (let i = 0; i < 99; i++) {
+        const p = await f.participant();
+        await f.admit(p.e.id, i + 1);
+      }
+      const a = await f.participant(),
+        b = await f.participant();
+      const results = await Promise.allSettled([f.admit(a.e.id, 100), f.admit(b.e.id, 100)]);
+      expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+      expect((await f.admin.read(f.owner.id)).seats).toHaveLength(100);
+      await expect(
+        client.personalLearningPilotSeat.create({
+          data: {
+            ...f.authority,
+            participantHash: 'a'.repeat(64),
+            programEnrollmentId: b.e.id,
+            kind: 'EXTERNAL',
+            cohort: 'WAVE_4',
+            seatNumber: 101,
+          },
+        }),
+      ).rejects.toThrow();
+    }, 30000);
+    it('P1-H revoked seat remains consumed and UI/Router/Assessment/Provider authorization rejects it', async () => {
+      const f = await capFixture();
+      const p = await f.participant();
+      await f.admit(p.e.id, 1);
+      await f.admin.change(f.owner.id, {
+        ...f.common,
+        operationId: randomUUID(),
+        expectedRevision: 2,
+        action: 'REVOKE',
+        programEnrollmentId: p.e.id,
+      });
+      await expect(f.admit(p.e.id, 3)).rejects.toThrow('PARTICIPANT_REVOKED');
+      expect((await f.admin.read(f.owner.id)).seats).toHaveLength(1);
+      const actor = {
+        scope: {
+          ...f.scope,
+          programEnrollmentId: p.e.id,
+          groupMembershipId: p.m.id,
+          userId: p.u.id,
+        },
+        actorUserId: p.u.id,
+      };
+      await client.serviceProgram.update({
+        where: { id: f.authority.serviceProgramId },
+        data: {
+          status: 'ACTIVE',
+          settings: {
+            moduleKey: 'AI_TRAINING_V1',
+            personalLearningPilot: {
+              enabled: true,
+              enrollmentIds: [p.e.id],
+              participantControl: {
+                version: 'PILOT_PARTICIPANT_CAP_V1',
+                revision: 3,
+                externalParticipantCap: 100,
+                internalParticipantCap: 0,
+                currentWave: 1,
+                currentWaveCap: 5,
+              },
+            },
+            trainingOperations: { notificationsEnabled: false, postponedReminderEnabled: false },
+          },
+        },
+      });
+      await expect(
+        new PrismaPersonalLearningPilotRepository(client).authorizeAccess(actor, true),
+      ).rejects.toThrow();
+      await expect(
+        new PrismaPersonalLearningPilotRouter(client).bridge({
+          ...actor,
+          planId: randomUUID(),
+          expectedRevision: 1,
+          idempotencyKey: 'revoked',
+        }),
+      ).rejects.toThrow();
+      await expect(
+        new PrismaPersonalLearningAssessmentGate(client).authorizeAssessment(
+          actor,
+          randomUUID(),
+          randomUUID(),
+        ),
+      ).rejects.toThrow();
+      await expect(
+        client.$transaction((tx) => requirePersonalLearningPilotSeat(tx, actor.scope, true)),
+      ).rejects.toThrow();
+    });
+    it('P1-H Wave changes are explicit CAS, absolute cap is fixed, internal unset and foreign authority denied', async () => {
+      const f = await capFixture();
+      const cfg = {
+        ...f.common,
+        operationId: randomUUID(),
+        expectedRevision: 1,
+        action: 'CONFIGURE' as const,
+        externalParticipantCap: 100,
+        internalParticipantCap: 0,
+        currentWave: 2,
+      };
+      await expect(f.admin.change(f.scope.userId, cfg)).rejects.toThrow();
+      await expect(
+        f.admin.change(f.owner.id, { ...cfg, externalParticipantCap: 500 }),
+      ).rejects.toThrow();
+      await f.admin.change(f.owner.id, cfg);
+      expect((await f.admin.read(f.owner.id)).policy?.currentWaveCap).toBe(20);
+      await expect(
+        f.admin.change(f.owner.id, { ...cfg, operationId: randomUUID() }),
+      ).rejects.toThrow('PILOT_REVISION_CHANGED');
+      await expect(
+        new PrismaPersonalLearningParticipantAdminRepository(client, {
+          ...f.authority,
+          groupId: randomUUID(),
+        }).read(f.owner.id),
+      ).rejects.toThrow();
+      await expect(
+        new PrismaPersonalLearningParticipantAdminRepository(client, {
+          ...f.authority,
+          serviceProgramId: randomUUID(),
+        }).read(f.owner.id),
+      ).rejects.toThrow();
+      const p = await f.participant();
+      await expect(
+        f.admin.change(f.owner.id, {
+          ...f.common,
+          operationId: randomUUID(),
+          expectedRevision: 2,
+          action: 'ADMIT',
+          kind: 'INTERNAL',
+          programEnrollmentId: p.e.id,
+        }),
+      ).rejects.toThrow();
+      await client.serviceProgram.update({
+        where: { id: f.authority.serviceProgramId },
+        data: { status: 'ACTIVE' },
+      });
+      await expect(
+        f.admin.change(f.owner.id, { ...cfg, expectedRevision: 2, operationId: randomUUID() }),
+      ).rejects.toThrow();
+    });
+    it('P1-H explicitly reviewed internal slots are separate and finite', async () => {
+      const f = await capFixture(0);
+      await f.admin.change(f.owner.id, {
+        ...f.common,
+        operationId: randomUUID(),
+        expectedRevision: 1,
+        action: 'CONFIGURE',
+        externalParticipantCap: 100,
+        internalParticipantCap: 2,
+        currentWave: 0,
+      });
+      for (let i = 0; i < 2; i++) {
+        const p = await f.participant();
+        await f.admin.change(f.owner.id, {
+          ...f.common,
+          operationId: randomUUID(),
+          expectedRevision: i + 2,
+          action: 'ADMIT',
+          kind: 'INTERNAL',
+          programEnrollmentId: p.e.id,
+        });
+      }
+      const third = await f.participant();
+      await expect(
+        f.admin.change(f.owner.id, {
+          ...f.common,
+          operationId: randomUUID(),
+          expectedRevision: 4,
+          action: 'ADMIT',
+          kind: 'INTERNAL',
+          programEnrollmentId: third.e.id,
+        }),
+      ).rejects.toThrow();
+      await expect(f.admit(third.e.id, 4)).rejects.toThrow();
+      expect((await f.admin.read(f.owner.id)).seats.map((s) => s.cohort)).toEqual([
+        'INTERNAL',
+        'INTERNAL',
+      ]);
+    });
+    it('P1-H ALL deletion revokes/redacts the seat without recycling capacity or blocking other seats', async () => {
+      const f = await capFixture();
+      const p = await f.participant();
+      const q = await f.participant();
+      await f.admit(p.e.id, 1);
+      await f.admit(q.e.id, 2);
+      const input = {
+        workspaceId: f.scope.workspaceId,
+        groupId: f.scope.groupId,
+        programEnrollmentId: p.e.id,
+        actorUserId: p.u.id,
+        target: { kind: 'ALL' as const },
+      };
+      const repo = new PrismaTrainingPersonalDataDeletionRepository(client);
+      const preview = await repo.preview(input);
+      expect(preview.outcome).toBe('PREVIEW');
+      if (preview.outcome !== 'PREVIEW') throw new Error('missing deletion preview');
+      expect(
+        (await repo.delete({ ...input, revision: preview.preview.revision, now: new Date() }))
+          .outcome,
+      ).toBe('DELETED');
+      const state = await f.admin.read(f.owner.id);
+      expect(state.seats).toHaveLength(2);
+      expect(state.seats.filter((s) => s.revokedAt)).toMatchObject([{ programEnrollmentId: null }]);
+      const program = await client.serviceProgram.findUniqueOrThrow({
+        where: { id: f.authority.serviceProgramId },
+      });
+      expect(
+        (program.settings as { personalLearningPilot: { enrollmentIds: string[] } })
+          .personalLearningPilot.enrollmentIds,
+      ).toEqual([q.e.id]);
+      const exported = await new PrismaTrainingPersonalDataExportRepository(client).read({
+        ...input,
+        programEnrollmentId: q.e.id,
+        actorUserId: q.u.id,
+      });
+      expect(exported.outcome).toBe('FOUND');
+      if (exported.outcome === 'FOUND')
+        expect(exported.data.personalLearning).toMatchObject([
+          { kind: 'PILOT_SEAT', cohort: 'WAVE_1' },
+        ]);
+    });
+    it('P1-H physical Enrollment deletion redacts the seat without reducing the cumulative count', async () => {
+      const f = await capFixture();
+      const p = await f.participant();
+      await f.admit(p.e.id, 1);
+      await client.programEnrollment.delete({ where: { id: p.e.id } });
+      const state = await f.admin.read(f.owner.id);
+      expect(state.seats).toHaveLength(1);
+      expect(state.seats[0]?.programEnrollmentId).toBeNull();
+      expect(state.seats[0]?.revokedAt).not.toBeNull();
+    });
     it('production preparation pins Program and retains human approval/profile ownership and retry authorization', async () => {
       const f = await profilePreparation();
       const authority = {
@@ -832,6 +1186,57 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
       expect(rows[0]).not.toHaveProperty('userId');
       await client.trainingMissionAnswer.delete({ where: { id: f.answer.id } });
       expect(await client.personalLearningCallAdmission.count()).toBe(2);
+    });
+    it('P1-H Production admission requires a live seat, accepts admitted participant and denies revocation', async () => {
+      const f = await admissionFixture();
+      const request = { ...(await f.request()), environment: 'PRODUCTION' as const };
+      await client.job.update({
+        where: { id: request.jobId },
+        data: { environment: 'PRODUCTION' },
+      });
+      await expect(f.repo.admit(request)).rejects.toThrow();
+      await client.serviceProgram.update({
+        where: { id: f.enrollment.serviceProgramId },
+        data: {
+          settings: {
+            moduleKey: 'AI_TRAINING_V1',
+            personalLearningPilot: {
+              enabled: true,
+              enrollmentIds: [f.enrollment.id],
+              participantControl: {
+                version: 'PILOT_PARTICIPANT_CAP_V1',
+                revision: 1,
+                externalParticipantCap: 100,
+                internalParticipantCap: 0,
+                currentWave: 1,
+                currentWaveCap: 5,
+              },
+            },
+            trainingOperations: { notificationsEnabled: false, postponedReminderEnabled: false },
+          },
+        },
+      });
+      await expect(f.repo.admit(request)).rejects.toThrow();
+      const seat = await client.personalLearningPilotSeat.create({
+        data: {
+          workspaceId: f.scope.workspaceId,
+          groupId: f.scope.groupId,
+          serviceProgramId: f.enrollment.serviceProgramId,
+          participantHash: pilotParticipantHash(f.enrollment.serviceProgramId, f.scope.userId),
+          programEnrollmentId: f.enrollment.id,
+          kind: 'EXTERNAL',
+          cohort: 'WAVE_1',
+          seatNumber: 1,
+        },
+      });
+      const permit = await f.repo.admit(request);
+      await f.repo.settle(permit);
+      await client.personalLearningPilotSeat.update({
+        where: { id: seat.id },
+        data: { revokedAt: new Date() },
+      });
+      await expect(f.repo.admit({ ...request, jobId: randomUUID() })).rejects.toThrow();
+      expect(await client.personalLearningCallAdmission.count()).toBe(1);
     });
     it('parallel workers never admit more than one open call; unknown slots survive midnight', async () => {
       const f = await admissionFixture();

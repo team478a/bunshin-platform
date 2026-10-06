@@ -3,7 +3,11 @@ import {
   parsePersonalLearningPreparationAuthority,
   type PersonalLearningPreparationAuthority,
 } from '@bunshin/application';
-import { personalLearningPilotProfilePreparationAllows } from '@bunshin/capability-training';
+import {
+  personalLearningPilotProfilePreparationAllows,
+  parsePilotParticipantPolicy,
+  parseAiTrainingOperationsSettings,
+} from '@bunshin/capability-training';
 import { ApplicationError } from '@bunshin/shared';
 
 /** Called inside the existing authorization transaction, not a preflight-only check. */
@@ -12,6 +16,7 @@ export async function requirePersonalLearningPreparationAuthority(
   authority: PersonalLearningPreparationAuthority,
   scope: { workspaceId: string; groupId: string },
   enrollmentProgramId?: string,
+  allowEmpty = false,
 ) {
   const parsed = parsePersonalLearningPreparationAuthority(authority);
   if (
@@ -26,12 +31,33 @@ export async function requirePersonalLearningPreparationAuthority(
       AND workspace_id=${parsed.workspaceId}::uuid AND group_id=${parsed.groupId}::uuid
       AND status::text='SUSPENDED' AND settings->>'moduleKey'='AI_TRAINING_V1' FOR SHARE`;
   const settings = rows[0]?.settings as
-    { personalLearningPilot?: { enrollmentIds?: unknown[] } } | undefined;
+    | {
+        personalLearningPilot?: {
+          enabled?: boolean;
+          enrollmentIds?: unknown[];
+          participantControl?: unknown;
+        };
+      }
+    | undefined;
   const first = settings?.personalLearningPilot?.enrollmentIds?.[0];
+  const pilot = settings?.personalLearningPilot;
+  const emptyValid =
+    (allowEmpty || !!parsePilotParticipantPolicy(pilot?.participantControl)) &&
+    pilot?.enabled === false &&
+    Array.isArray(pilot.enrollmentIds) &&
+    pilot.enrollmentIds.length === 0 &&
+    Object.keys(pilot).every((k) =>
+      ['enabled', 'enrollmentIds', 'participantControl'].includes(k),
+    ) &&
+    (!Object.hasOwn(pilot, 'participantControl') ||
+      !!parsePilotParticipantPolicy(pilot.participantControl)) &&
+    !parseAiTrainingOperationsSettings(settings).notificationsEnabled &&
+    !parseAiTrainingOperationsSettings(settings).postponedReminderEnabled;
   if (
     rows.length !== 1 ||
-    typeof first !== 'string' ||
-    !personalLearningPilotProfilePreparationAllows(settings, first)
+    (!emptyValid &&
+      (typeof first !== 'string' ||
+        !personalLearningPilotProfilePreparationAllows(settings, first)))
   )
     throw new ApplicationError('NOT_FOUND', 'production preparation unavailable');
   const ids = settings?.personalLearningPilot?.enrollmentIds as string[];

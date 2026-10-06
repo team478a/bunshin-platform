@@ -3,6 +3,7 @@ import { Prisma, type PrismaClient } from '@prisma/client';
 import { prisma } from './index';
 import { lockTrainingEnrollmentData } from './training-data-lock';
 import { trainingEnrollmentPeriodWhere } from './training-enrollment-period';
+import { requirePersonalLearningPilotSeat } from './personal-learning-pilot-seat';
 
 export type TrainingAnswerSubmissionResult =
   | {
@@ -64,9 +65,21 @@ export class PrismaTrainingAnswerRepository {
         status: 'ACTIVE',
         settings: { path: ['moduleKey'], equals: AI_TRAINING_V1_MODULE_KEY },
       },
-      select: { id: true },
+      select: { id: true, settings: true },
     });
     if (!program) return { outcome: 'NOT_FOUND' };
+    const capped = Object.hasOwn(
+      (program.settings as { personalLearningPilot?: object })?.personalLearningPilot ?? {},
+      'participantControl',
+    );
+    const seatScope = {
+      workspaceId: input.workspaceId,
+      groupId: input.groupId,
+      programEnrollmentId: input.programEnrollmentId,
+      userId: input.actorUserId,
+    };
+    if (capped)
+      await this.client.$transaction((tx) => requirePersonalLearningPilotSeat(tx, seatScope, true));
 
     const eventWhere = {
       workspaceId_groupId_idempotencyKey: {
@@ -81,6 +94,7 @@ export class PrismaTrainingAnswerRepository {
     try {
       return await this.client.$transaction(async (tx) => {
         await lockTrainingEnrollmentData(tx, input);
+        if (capped) await requirePersonalLearningPilotSeat(tx, seatScope, true);
         const active = await tx.programEnrollment.findFirst({
           where: {
             id: enrollment.id,

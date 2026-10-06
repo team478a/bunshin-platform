@@ -3,6 +3,7 @@ import { Prisma, type PrismaClient } from '@prisma/client';
 import { ApplicationError } from '@bunshin/shared';
 import type { PersonalLearningPreparationAuthority } from '@bunshin/application';
 import { requirePersonalLearningPreparationAuthority } from './personal-learning-preparation-authority';
+import { requirePersonalLearningPilotSeat } from './personal-learning-pilot-seat';
 import {
   AI_TRAINING_LEARNING_CATALOG_VERSION,
   personalLearningPilotProfilePreparationAllows,
@@ -127,6 +128,12 @@ export class PrismaPersonalLearningPilotProfileRepository {
             AND workspace_id=${s.workspaceId}::uuid AND group_id=${s.groupId}::uuid
             AND status::text='SUSPENDED' AND settings->>'moduleKey'='AI_TRAINING_V1' FOR SHARE`;
           const settings = programs[0]?.settings;
+          await requirePersonalLearningPilotSeat(tx, {
+            workspaceId: s.workspaceId,
+            groupId: s.groupId,
+            programEnrollmentId: s.programEnrollmentId,
+            userId: s.actorUserId,
+          });
           if (
             programs.length !== 1 ||
             !personalLearningPilotProfilePreparationAllows(settings, s.programEnrollmentId)

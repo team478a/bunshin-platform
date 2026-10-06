@@ -3,6 +3,7 @@ import { getServerEnvironment } from '@bunshin/config';
 import {
   personalLearningPilotAllows,
   isPersonalLearningPilotProgram,
+  parsePilotParticipantPolicy,
 } from '@bunshin/capability-training';
 import { ApplicationError } from '@bunshin/shared';
 import { z } from 'zod';
@@ -23,7 +24,13 @@ export function personalLearningPilotExecutionAllowed(
 ) {
   return (
     (!requirePilot && !isPersonalLearningPilotProgram(settings)) ||
-    (personalLearningPilotEnabled() && personalLearningPilotAllows(settings, enrollmentId))
+    (personalLearningPilotEnabled() &&
+      personalLearningPilotAllows(settings, enrollmentId) &&
+      (getServerEnvironment().APP_ENV !== 'production' ||
+        parsePilotParticipantPolicy(
+          (settings as { personalLearningPilot?: { participantControl?: unknown } })
+            ?.personalLearningPilot?.participantControl,
+        ) !== null))
   );
 }
 export async function resolvePersonalLearningPilot(
@@ -72,8 +79,19 @@ export async function resolvePersonalLearningPilot(
         },
       })
     : null;
-  if (!program || !personalLearningPilotAllows(program.settings, enrollmentId))
+  if (!program || !personalLearningPilotExecutionAllowed(program.settings, enrollmentId, true))
     throw new ApplicationError('NOT_FOUND', 'pilot unavailable');
+  if (
+    getServerEnvironment().APP_ENV === 'production' ||
+    parsePilotParticipantPolicy(
+      (program.settings as { personalLearningPilot?: { participantControl?: unknown } })
+        ?.personalLearningPilot?.participantControl,
+    )
+  )
+    await new db.PrismaPersonalLearningPilotRepository(db.prisma).authorizeAccess(
+      { scope, actorUserId: userId },
+      getServerEnvironment().APP_ENV === 'production',
+    );
   return { scope, actorUserId: userId };
 }
 

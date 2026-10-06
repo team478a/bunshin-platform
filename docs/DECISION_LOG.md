@@ -3703,6 +3703,15 @@
 - PersistenceはAI研修Package専用の3 table、additive migration、Prisma Repository、実DBテストに限定する。Service・管理Membership lock、現権限再確認、CAS、canonical digest再計算、immutable version、append-only監査を同一Transactionで扱い、rollback互換性5軸は全PASSEDのsnapshotだけを保存する。
 - 本DecisionはAPI、UI、Delivery、Exposure Event、Provider、共通Skill Registryの実装を承認しない。
 
+# 2026-10-06: P1-Hは累計unique participantの取消不能な枠消費を正本にする
+
+- 状態: Proposed（本番操作・人数設定は未承認）
+- 同一Programのunique Userを1人とする。既存Enrollmentは作成せず、明示付与された参加権だけを小さなseat台帳へ記録する。取消・離脱・期間終了でも累計枠は減らさず、自動再利用・再付与しない。
+- 外部枠はDB slot制約で絶対100、Waveは累計0/5/20/50/100。内部枠は別集計、未設定0で登録不可。内部人数は明示的な人間レビュー設定であり、本番既定値を設けない。
+- Program lock / Serializable / expectedRevision / operation UUID / 監査を組み合わせ、停止済みtrusted authorityだけで人数設定・参加権付与・取消を行う。既存allowlistは台帳の投影とし、本番では旧5件設定を実行許可の代用にしない。
+- 台帳には本文を保存しない。User識別はProgram単位digest（匿名ではない）、Enrollment参照はALL削除時に除去して参加権を失効させる。枠台帳は削除による上限回避に使わない。保持・RLS・本番roleはRelease Gateで人間確認する。
+- additive migrationは作成のみ。本番Migration/deploy/登録/enable/承認/課金/募集を実施しない。
+
 # 2026-10-06: Personal Learning Pilotの呼出しAdmissionを原価Telemetryから分離する
 
 - 状態: Proposed（人間レビュー待ち。本番操作を承認しない）

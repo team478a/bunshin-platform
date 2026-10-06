@@ -9,6 +9,7 @@ import {
 } from '@bunshin/capability-training';
 import { PrismaPersonalLearningPersistenceRepository } from './personal-learning-persistence';
 import { PrismaPersonalLearningRouterBridge } from './personal-learning-router';
+import { requirePersonalLearningPilotSeat } from './personal-learning-pilot-seat';
 
 type Tx = Prisma.TransactionClient;
 async function requirePilot(tx: Tx, input: PersonalLearningActor) {
@@ -24,10 +25,17 @@ async function requirePilot(tx: Tx, input: PersonalLearningActor) {
     !personalLearningPilotAllows(programs[0]?.settings, s.programEnrollmentId)
   )
     throw new ApplicationError('NOT_FOUND', 'personal learning pilot unavailable');
+  await requirePersonalLearningPilotSeat(tx, s);
 }
 
 /** HTTP composition uses this gated subclass, never an ungated persistence port. */
 export class PrismaPersonalLearningPilotRepository extends PrismaPersonalLearningPersistenceRepository {
+  authorizeAccess(input: PersonalLearningActor, requireSeat = false) {
+    return this.authorized(input, false, async (tx) => {
+      await requirePersonalLearningPilotSeat(tx, input.scope, requireSeat);
+      return true;
+    });
+  }
   protected override authorized<T>(
     input: PersonalLearningActor,
     write: boolean,

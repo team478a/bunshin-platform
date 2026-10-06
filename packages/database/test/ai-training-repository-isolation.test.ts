@@ -138,7 +138,7 @@ describe('AI training repository isolation', () => {
         status: 'ACTIVE',
         settings: { path: ['moduleKey'], equals: 'AI_TRAINING_V1' },
       },
-      select: { id: true },
+      select: { id: true, settings: true },
     });
     expect(client.programActionEvent.findUnique).not.toHaveBeenCalled();
     expect(client.$transaction).not.toHaveBeenCalled();
