@@ -297,3 +297,4 @@ export {
   PrismaPersonalLearningPilotRepository,
   PrismaPersonalLearningPilotRouter,
 } from './personal-learning-pilot';
+export { PrismaPersonalLearningAiCallRepository } from './personal-learning-ai-call';

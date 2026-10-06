@@ -3,6 +3,7 @@ import 'server-only';
 import {
   TrainingAnswerEvaluationJobError,
   type TrainingAnswerEvaluationJobHandler,
+  type AiCallMeasurement,
 } from '@bunshin/application';
 import {
   AI_TRAINING_V1_MODULE_KEY,
@@ -14,6 +15,7 @@ import { ApplicationError } from '@bunshin/shared';
 import { personalLearningPilotExecutionAllowed } from '../services/personal-learning-pilot-access';
 import { resolveOpenAiRuntimeConfiguration } from '../ai/runtime-provider-configuration';
 import { recordAiUsageSafely } from '../observability/ai-usage';
+import { preparePersonalLearningAiCall } from '../observability/personal-learning-ai-call';
 import { withOrganizationAiGenerationQuota } from '../organization-ai-generation-quota';
 import {
   OpenAiTrainingAnswerEvaluator,
@@ -94,10 +96,28 @@ export function createTrainingAnswerEvaluationJobHandler(): TrainingAnswerEvalua
         throw new TrainingAnswerEvaluationJobError('TRAINING_EVALUATION_MISSION_NOT_FOUND', false);
       }
       const runtime = await resolveOpenAiRuntimeConfiguration();
+      const pilot = isPersonalLearningPilotProgram(program.settings)
+        ? await preparePersonalLearningAiCall(
+            {
+              actorUserId: input.actorUserId,
+              scope: {
+                workspaceId: input.workspaceId,
+                groupId: input.groupId,
+                programEnrollmentId: enrollment.id,
+                groupMembershipId: membership.id,
+                userId: input.actorUserId,
+              },
+            },
+            answer.missionAssignmentId,
+            answer.id,
+          )
+        : null;
+      const observed: { measurement: AiCallMeasurement | null } = { measurement: null };
       const operationKey = `training-evaluation:${answer.id}:${input.jobId}:attempt:${input.attemptCount}`;
       const usageKey = operationKey;
       const started = Date.now();
       let providerAttempted = false;
+      let providerSucceeded = false;
       let evaluated: Awaited<ReturnType<OpenAiTrainingAnswerEvaluator['evaluate']>>;
       try {
         evaluated = await withOrganizationAiGenerationQuota({
@@ -147,6 +167,13 @@ export function createTrainingAnswerEvaluationJobHandler(): TrainingAnswerEvalua
               apiKey: runtime.apiKey,
               model: runtime.model,
               requestCostUsdMicros: runtime.requestCostUsdMicros,
+              ...(pilot
+                ? {
+                    observe: (measurement: AiCallMeasurement) => {
+                      observed.measurement = measurement;
+                    },
+                  }
+                : {}),
             }).evaluate({
               missionDefinitionKey: assignment.missionDefinitionKey,
               answer: answer.answer,
@@ -154,20 +181,30 @@ export function createTrainingAnswerEvaluationJobHandler(): TrainingAnswerEvalua
             });
           },
         });
+        providerSucceeded = true;
+        const pilotCost = pilot && observed.measurement ? pilot.cost(observed.measurement) : null;
         await recordAiUsageSafely({
           workspaceId: input.workspaceId,
           bunshinId: null,
           actorUserId: input.actorUserId,
           taskType: 'AI_TRAINING_ANSWER_EVALUATION',
           provider: evaluated.provider,
-          model: evaluated.model,
+          model: pilot ? (observed.measurement?.model ?? 'unknown') : evaluated.model,
           promptVersion: evaluated.promptVersion,
           status: 'SUCCESS',
-          inputTokens: evaluated.inputTokens,
-          outputTokens: evaluated.outputTokens,
+          inputTokens: pilot ? (observed.measurement?.inputTokens ?? null) : evaluated.inputTokens,
+          outputTokens: pilot
+            ? (observed.measurement?.outputTokens ?? null)
+            : evaluated.outputTokens,
           latencyMs: evaluated.latencyMs,
-          estimatedCostUsdMicros: evaluated.estimatedCostUsdMicros,
-          pricingVersion: evaluated.estimatedCostUsdMicros ? 'admin-request-cost-v1' : null,
+          estimatedCostUsdMicros: pilot
+            ? (pilotCost?.totalCostUsdMicros ?? null)
+            : evaluated.estimatedCostUsdMicros,
+          pricingVersion: pilot
+            ? (pilotCost?.pricing?.pricingVersion ?? null)
+            : evaluated.estimatedCostUsdMicros
+              ? 'admin-request-cost-v1'
+              : null,
           idempotencyKey: usageKey,
         });
       } catch (error) {
@@ -178,16 +215,26 @@ export function createTrainingAnswerEvaluationJobHandler(): TrainingAnswerEvalua
           actorUserId: input.actorUserId,
           taskType: 'AI_TRAINING_ANSWER_EVALUATION',
           provider: 'openai',
-          model: runtime.model,
+          model: pilot ? (observed.measurement?.model ?? 'unknown') : runtime.model,
           promptVersion: TRAINING_EVALUATION_PROMPT_VERSION,
           status: 'FAILED',
-          inputTokens: null,
-          outputTokens: null,
+          inputTokens: pilot ? (observed.measurement?.inputTokens ?? null) : null,
+          outputTokens: pilot ? (observed.measurement?.outputTokens ?? null) : null,
           latencyMs: Date.now() - started,
-          estimatedCostUsdMicros:
-            providerAttempted && runtime.requestCostUsdMicros ? runtime.requestCostUsdMicros : null,
-          pricingVersion:
-            providerAttempted && runtime.requestCostUsdMicros ? 'admin-request-cost-v1' : null,
+          estimatedCostUsdMicros: pilot
+            ? observed.measurement
+              ? pilot.cost(observed.measurement).totalCostUsdMicros
+              : null
+            : providerAttempted && runtime.requestCostUsdMicros
+              ? runtime.requestCostUsdMicros
+              : null,
+          pricingVersion: pilot
+            ? observed.measurement
+              ? (pilot.cost(observed.measurement).pricing?.pricingVersion ?? null)
+              : null
+            : providerAttempted && runtime.requestCostUsdMicros
+              ? 'admin-request-cost-v1'
+              : null,
           errorCode: error instanceof ApplicationError ? error.code : 'INTERNAL_ERROR',
           idempotencyKey: usageKey,
         });
@@ -198,6 +245,27 @@ export function createTrainingAnswerEvaluationJobHandler(): TrainingAnswerEvalua
           );
         }
         throw new TrainingAnswerEvaluationJobError('TRAINING_EVALUATION_PROVIDER_ERROR', true);
+      } finally {
+        if (pilot && providerAttempted) {
+          await pilot.record(
+            usageKey,
+            observed.measurement ?? {
+              provider: 'openai',
+              model: /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,119}$/.test(runtime.model)
+                ? runtime.model
+                : 'unknown',
+              inputTokens: null,
+              outputTokens: null,
+              cachedInputTokens: null,
+              latencyMs: Math.max(0, Date.now() - started),
+              success: providerSucceeded,
+              errorCategory: providerSucceeded ? null : 'UNKNOWN',
+              validationResult: providerSucceeded ? 'PASSED' : 'NOT_RUN',
+              fallbackUsed: false,
+              occurredAt: new Date(started).toISOString(),
+            },
+          );
+        }
       }
 
       await db.prisma.$transaction(async (tx) => {

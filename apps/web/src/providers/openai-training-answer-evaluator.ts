@@ -8,6 +8,7 @@ import {
 } from '@bunshin/capability-training';
 import { ApplicationError } from '@bunshin/shared';
 import { z } from 'zod';
+import type { AiCallMeasurement } from '@bunshin/application';
 
 export const TRAINING_EVALUATION_PROMPT_VERSION = 'ai-training-evaluation-v3';
 
@@ -54,7 +55,11 @@ const jsonSchema = {
 
 type ResponseValue = {
   output?: Array<{ content?: Array<{ type?: string; text?: string }> }>;
-  usage?: { input_tokens?: number; output_tokens?: number };
+  usage?: {
+    input_tokens?: number;
+    output_tokens?: number;
+    input_tokens_details?: { cached_tokens?: number };
+  };
   model?: string;
   error?: unknown;
 };
@@ -68,6 +73,8 @@ export class OpenAiTrainingAnswerEvaluator {
       model: string;
       requestCostUsdMicros: number;
       fetch?: typeof fetch;
+      /** Pilot-only observer; no prompt, output, or raw errors. */
+      observe?: (measurement: AiCallMeasurement) => void;
     },
   ) {}
 
@@ -97,6 +104,36 @@ export class OpenAiTrainingAnswerEvaluator {
     if (display && display.actionKey !== mission.key)
       throw new ApplicationError('VALIDATION_ERROR', 'training mission snapshot mismatch');
     const started = Date.now();
+    let value: ResponseValue | null = null;
+    const token = (n: unknown) =>
+      Number.isInteger(n) && Number(n) >= 0 && Number(n) <= 2_147_483_647 ? Number(n) : null;
+    const observe = (
+      success: boolean,
+      errorCategory: AiCallMeasurement['errorCategory'],
+      validationResult: AiCallMeasurement['validationResult'],
+    ) => {
+      const inputTokens = token(value?.usage?.input_tokens);
+      const cached = token(value?.usage?.input_tokens_details?.cached_tokens);
+      const reportedModel = value?.model ?? this.options.model;
+      this.options.observe?.({
+        provider: 'openai',
+        model:
+          typeof reportedModel === 'string' &&
+          /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,119}$/.test(reportedModel)
+            ? reportedModel
+            : 'unknown',
+        inputTokens,
+        outputTokens: token(value?.usage?.output_tokens),
+        cachedInputTokens:
+          inputTokens !== null && cached !== null && cached <= inputTokens ? cached : null,
+        latencyMs: Math.max(0, Date.now() - started),
+        success,
+        errorCategory,
+        validationResult,
+        fallbackUsed: false,
+        occurredAt: new Date(started).toISOString(),
+      });
+    };
     let response: Response;
     try {
       response = await (this.options.fetch ?? fetch)('https://api.openai.com/v1/responses', {
@@ -142,24 +179,52 @@ export class OpenAiTrainingAnswerEvaluator {
         }),
       });
     } catch (error) {
+      observe(
+        false,
+        error instanceof Error && ['TimeoutError', 'AbortError'].includes(error.name)
+          ? 'TIMEOUT'
+          : 'PROVIDER_ERROR',
+        'NOT_RUN',
+      );
       throw new ApplicationError('AI_PROVIDER_UNAVAILABLE', 'training evaluator timeout', {
         error,
       });
     }
-    const value = (await response.json()) as ResponseValue;
-    if (!response.ok)
+    try {
+      const parsed: unknown = await response.json();
+      value =
+        parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)
+          ? (parsed as ResponseValue)
+          : {};
+    } catch (error) {
+      observe(
+        false,
+        !response.ok
+          ? response.status === 429
+            ? 'RATE_LIMIT'
+            : 'PROVIDER_ERROR'
+          : 'INVALID_RESPONSE',
+        'NOT_RUN',
+      );
+      throw error;
+    }
+    if (!response.ok) {
+      observe(false, response.status === 429 ? 'RATE_LIMIT' : 'PROVIDER_ERROR', 'NOT_RUN');
       throw new ApplicationError('AI_PROVIDER_UNAVAILABLE', 'training evaluator failed', {
         status: response.status,
         error: value.error,
       });
-    const text = value.output
-      ?.flatMap((item) => item.content ?? [])
-      .find((item) => item.type === 'output_text')?.text;
-    if (!text)
+    }
+    const text = (Array.isArray(value.output) ? value.output : [])
+      .flatMap((item) => (Array.isArray(item?.content) ? item.content : []))
+      .find((item) => item?.type === 'output_text')?.text;
+    if (!text) {
+      observe(false, 'INVALID_RESPONSE', 'NOT_RUN');
       throw new ApplicationError(
         'AI_PROVIDER_UNAVAILABLE',
         'training evaluator returned no output',
       );
+    }
     let evaluation: TrainingEvaluation;
     try {
       const providerEvaluation = providerEvaluationSchema.parse(JSON.parse(text));
@@ -174,12 +239,18 @@ export class OpenAiTrainingAnswerEvaluator {
         mission.skillKeys,
       );
     } catch (error) {
+      observe(
+        false,
+        error instanceof SyntaxError ? 'INVALID_RESPONSE' : 'VALIDATION_FAILURE',
+        'FAILED',
+      );
       throw new ApplicationError(
         'AI_PROVIDER_UNAVAILABLE',
         'training evaluator returned invalid output',
         { error },
       );
     }
+    observe(true, null, 'PASSED');
     return {
       evaluation,
       provider: 'openai',

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import type { PrismaClient, Prisma } from '@prisma/client';
 import { afterEach, describe, expect, it } from 'vitest';
 import { cleanupProgramFixtures } from './program-fixture-cleanup';
@@ -19,6 +20,7 @@ import {
 import { PrismaPersonalLearningPersistenceRepository } from '../src/personal-learning-persistence';
 import { PrismaPersonalLearningRouterBridge } from '../src/personal-learning-router';
 import { PrismaTrainingAnswerRepository } from '../src/training-answer';
+import { PrismaPersonalLearningAiCallRepository } from '../src/personal-learning-ai-call';
 import {
   PrismaPersonalLearningPilotRepository,
   PrismaPersonalLearningPilotRouter,
@@ -297,6 +299,101 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
       }
       return { ...f, plan, bridge, request, assessed };
     }
+    it('P1-G records scoped AI attempts once, preserves historical refs, and refuses cross tenant/deleted data', async () => {
+      const f = await routerFixture();
+      await client.serviceProgram.update({
+        where: { id: f.enrollment.serviceProgramId },
+        data: {
+          settings: {
+            moduleKey: 'AI_TRAINING_V1',
+            personalLearningPilot: { enabled: true, enrollmentIds: [f.enrollment.id] },
+            trainingOperations: { notificationsEnabled: false, postponedReminderEnabled: false },
+          },
+        },
+      });
+      const bridge = await f.bridge.bridge({ ...f.request, idempotencyKey: 'telemetry-bridge' });
+      const answer = await f.assessed(bridge.assignmentId!);
+      const repo = new PrismaPersonalLearningAiCallRepository(client);
+      const input = {
+        actor: f.actor,
+        assignmentId: bridge.assignmentId!,
+        answerId: answer.id,
+        usageKey: `training-evaluation:${answer.id}:${randomUUID()}:attempt:1`,
+        measurement: {
+          provider: 'openai',
+          model: 'synthetic',
+          inputTokens: 100,
+          outputTokens: 20,
+          cachedInputTokens: 0,
+          latencyMs: 15,
+          success: true,
+          errorCategory: null,
+          validationResult: 'PASSED' as const,
+          fallbackUsed: false,
+          occurredAt: now.toISOString(),
+        },
+        registry: [],
+      };
+      await repo.record(input);
+      await repo.record(input);
+      const rows = await client.programActionEvent.findMany({
+        where: { programEnrollmentId: f.enrollment.id, eventType: 'PERSONAL_LEARNING_AI_CALL' },
+      });
+      expect(rows).toHaveLength(1);
+      expect(rows[0]!.metadata).toMatchObject({
+        planId: f.request.planId,
+        planRevision: 1,
+        definition: AI_TRAINING_LEARNING_DEFINITION_FIXTURES[0]!.reference,
+        cost: { costStatus: 'UNKNOWN' },
+      });
+      expect(JSON.stringify(rows[0]!.metadata)).not.toContain('Synthetic learner practice');
+      const sql = readFileSync(
+        new URL('../../../docs/ai-training/P1G_AI_COST_ANALYSIS.sql', import.meta.url),
+        'utf8',
+      );
+      const metrics = await client.$queryRawUnsafe<
+        {
+          attempts: bigint;
+          unknown_cost_attempts: bigint;
+          known_estimated_usd_micros: unknown;
+          assessed_pass_answers: bigint;
+        }[]
+      >(
+        sql,
+        f.scope.workspaceId,
+        f.scope.groupId,
+        new Date(now.getTime() - 1000),
+        new Date(now.getTime() + 1000),
+      );
+      expect(metrics).toHaveLength(1);
+      expect(metrics[0]).toMatchObject({
+        attempts: 1n,
+        unknown_cost_attempts: 1n,
+        known_estimated_usd_micros: null,
+        assessed_pass_answers: 1n,
+      });
+      expect(
+        await client.$queryRawUnsafe(
+          sql,
+          f.scope.workspaceId,
+          randomUUID(),
+          new Date(now.getTime() - 1000),
+          new Date(now.getTime() + 1000),
+        ),
+      ).toEqual([]);
+      for (const scope of [
+        { ...f.scope, userId: f.owner.id },
+        { ...f.scope, workspaceId: randomUUID() },
+        { ...f.scope, programEnrollmentId: randomUUID() },
+      ])
+        await expect(
+          repo.record({ ...input, actor: { actorUserId: scope.userId, scope } }),
+        ).rejects.toThrow();
+      await client.trainingMissionAnswer.delete({ where: { id: answer.id } });
+      await expect(
+        repo.record({ ...input, usageKey: input.usageKey.replace('attempt:1', 'attempt:2') }),
+      ).rejects.toThrow();
+    });
     it('P1-F restricted pilot bridges an entire saved path with existing answers and fixed feedback', async () => {
       const f = await routerFixture();
       await client.serviceProgram.update({
