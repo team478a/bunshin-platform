@@ -206,7 +206,7 @@ MS-1とMS-2を完了する前に、第一号サービスを一般公開しない
 
 ## AI研修
 
-Personal Learning P1-A〜P1-FはPR #1152までmainへ反映済み。限定Pilot UI/APIの実装・自動検証と、staging配備・DB適用・Definition人間承認・利用開始は別状態とする。次は[Personal Learning Pilot開始前Gate / staging手順](ai-training/AI_TRAINING_PERSONAL_LEARNING_PILOT_READINESS_RUNBOOK.md)に従い、環境owner、承認登録、本人Profile準備、実認証検証を確認する。現時点で開始Gateの通過証拠はなくNO-GO。一般公開、本番適用、実課金API、Teaching / Factory / Codex等の後続実装はこの文書更新では承認しない。
+Personal Learning P1-A〜P1-F、P1-G費用計測、Definition管理・本人Profile初期化は#1156までmainへ反映済み。運用方針は[Production Closed Pilot Runbook](ai-training/PERSONAL_LEARNING_PRODUCTION_CLOSED_PILOT_RUNBOOK.md)へ更新。stagingは任意確認環境であり開始必須ではない。現コードは本番拒否/allowlist最大5件を維持し、累計100人制約・費用Hard Stop・本番準備操作・実環境Gateは未完、開始NO-GO。次は不足PR A/B/Cの設計と分割案の人間レビュー。本番適用、承認登録、実課金API、Pilot enable、Teaching / Factory / Codex等はこの文書更新では承認しない。
 
 Skill限定Pilotの運用条件提案は`docs/ai-training/AI_TRAINING_SKILL_EXPOSURE_PILOT_OPERATIONS.md`を参照。単一Service / Program / Mission / variant / Skill版、14日の提示と最大7日の追跡、10 Assignmentかつ5人以上を探索的レビューの最低条件として提案する。数値は未承認で、本番対象・担当者・開始日時も未確定。現行設定はServiceProgram単位で個人allowlistや自動終了を持たないため、招待限定Programと担当者の停止操作を開始条件にする。本番有効化やOutcome集計実装は本文書PRに含めない。
 

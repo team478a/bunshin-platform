@@ -1,5 +1,13 @@
 # BUNSHIN Platform Decision Log
 
+## 2026-10-06: Personal LearningはProduction Closed Pilotへ方針変更する
+
+- 状態: 方針は人間指示に基づき文書化、具体的release/実装/開始はレビュー待ち。現状NO-GO。
+- staging配備を開始必須条件から外し、Development/CI/Test→Production Release Gate→内部Wave 0（1〜2人）→人間レビュー付きWave拡大、累計最大100人とする。Production利用を一般公開と同一視しない。
+- 既存専用Program/flag/allowlist/旧V1除外/認可/保存/人間承認/Telemetryを再利用し、新Pilot Platformを作らない。現コードのproduction拒否・5人上限は今回変更しない。既存機構の存在を実環境Gate PASSへ置換しない。
+- 認可隔離と共有DB/worker/Provider/quotaの障害影響を区別し、Migration/人数制御/Provider停止直前/LINE最終配信/費用上限/実Authの未確認条件を残す。累計Hard Capと失敗再試行を含むcall admissionは最小別PR候補。
+- [Runbook](ai-training/PERSONAL_LEARNING_PRODUCTION_CLOSED_PILOT_RUNBOOK.md)と[Definitionレビュー票](ai-training/PERSONAL_LEARNING_PRODUCTION_DEFINITION_REVIEW_SHEET.md)へ根拠・不足PR計画を記録する。旧#1153方針は履歴として保持。本番Migration/deploy/enable/APPROVE/Enrollment登録/実課金/招待は別承認。
+
 ## 2026-10-06: P1-Eは版固定Planから既存Assignmentへ明示Bridgeする
 
 - 状態: Proposed（独立PR。UI/LINE登録・本番migration・deployなし）

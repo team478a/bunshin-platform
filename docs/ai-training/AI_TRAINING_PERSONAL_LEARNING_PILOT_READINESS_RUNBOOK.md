@@ -1,4 +1,14 @@
-# Personal Learning 限定Pilot 開始前Gate / staging運用手順
+# Personal Learning Pilot Readiness — Production Closed Pilotへ方針更新
+
+## 現行方針（2026-10-06更新）
+
+開始Gateの現行正本は [Production Closed Pilot Runbook](PERSONAL_LEARNING_PRODUCTION_CLOSED_PILOT_RUNBOOK.md)。基準main `b462cdb9320cdfae2522f43e7ae4620cb02016d3`。stagingはoptional verification environmentであり、Pilot開始必須条件から外す。Production上の内部1〜2人から段階拡大し、全体Hard Capは100人。一般公開ではない。現在はNO-GO。
+
+現コードのproduction拒否と1〜5件allowlistはまだ維持している。#1154に費用計測、#1155にDefinition管理API、#1156に本人Profile初期化APIが追加済みだが、管理/準備APIも非production限定。これらを本番対応済み・実承認済みとは扱わない。追加実装は新RunbookのPR A/B/C計画として人間レビューを待つ。
+
+以下の旧G0〜G7、staging必須、承認/初期化API未整備の記述は**旧監査時点の履歴**であり、現行必須手順ではない。stagingを選ぶ場合の独立DB/認証/secret、MigrationとProvider承認の注意は引き続き参考にする。ProductionをAPP_ENV=stagingと偽装して旧gateを回避しない。
+
+## 旧方針の監査記録（履歴・新Gateにより置換）
 
 ## 範囲と判定
 
