@@ -1,0 +1,9 @@
+# Personal Learning Definitionの人間承認操作
+
+2026-10-06。基準main `094f83668b4a283290de4ec66daec0268af5f4fa`。
+
+ユーザーの別指示により、Pilot開始準備のうちDefinition承認・撤回・監査だけを独立実装する。既存LearningDefinitionApprovalが現在状態の正本、ProgramAuditLogが操作履歴。schema/migrationなし、3つの既存固定版だけ、非本番かつ専用管理flag既定無効。実際の承認、設定、有効化、Provider利用、配備はしない。
+
+管理者本人を認証・Origin検証・Service解決し、DB transactionで同ServiceのACTIVE OWNER/ADMIN、User/Workspace/Serviceを再検証してlockする。Profile/参加者権限では操作できない。監査IDを操作UUIDに再利用し、内容fingerprintで再送を照合する。現在状態と最後の操作IDをrevisionに含め、CASとSerializable/group lockで欠損行の同時作成とABAを防ぐ。再送でも現在の管理権限を確認し、当時のreceiptと現在状態を混同しない。
+
+人間はGETのDefinition/Missionレビュー指紋とrevisionを読み、レビュー項目・証跡キー・レビューしたcommit SHAを明示してAPPROVEDを要求する。指紋はサーバーで再計算し、時刻と承認者はサーバーが決める。commit/証跡は人間の申告として監査し、実レビュー実施を自動証明したとは主張しない。DEPRECATEDを撤回として使い、元承認者/時刻と過去Planを保持する。再承認も新しい人間操作・監査が必要。自動承認、bulk/seed、長文根拠保存、管理UI、Profile初期化、Pilot開始は別作業。

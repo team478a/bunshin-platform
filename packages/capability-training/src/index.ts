@@ -269,4 +269,5 @@ export * from './learning-router';
 export {
   isPersonalLearningPilotProgram,
   personalLearningPilotAllows,
+  personalLearningPilotProfilePreparationAllows,
 } from './personal-learning-pilot';

@@ -11,6 +11,7 @@ const fake = vi.hoisted(() => ({
   runtime: vi.fn(),
   evaluate: vi.fn(),
   usage: vi.fn(),
+  pilotPrepare: vi.fn(),
   environment: 'development',
 }));
 vi.mock('@bunshin/config', () => ({ getServerEnvironment: () => ({ APP_ENV: fake.environment }) }));
@@ -36,6 +37,9 @@ vi.mock('../src/ai/runtime-provider-configuration', () => ({
   resolveOpenAiRuntimeConfiguration: fake.runtime,
 }));
 vi.mock('../src/observability/ai-usage', () => ({ recordAiUsageSafely: fake.usage }));
+vi.mock('../src/observability/personal-learning-ai-call', () => ({
+  preparePersonalLearningAiCall: fake.pilotPrepare,
+}));
 vi.mock('../src/organization-ai-generation-quota', () => ({
   withOrganizationAiGenerationQuota: ({ generate }: { generate: () => unknown }) => generate(),
 }));
