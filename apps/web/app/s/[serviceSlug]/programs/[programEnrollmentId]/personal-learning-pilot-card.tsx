@@ -2,6 +2,11 @@
 
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import type {
+  GuidedPracticeCommand,
+  GuidedPracticeView,
+  PracticeSupportLevel,
+} from '@bunshin/capability-training';
+import type {
   LearningConsultationAnswer,
   LearningConsultationResult,
   PersonalLearningState,
@@ -37,6 +42,7 @@ export function personalLearningRouterMessage(status: string, reason?: string) {
   );
 }
 export type PersonalLearningPilotSnapshot = {
+  practice?: GuidedPracticeView;
   state: PersonalLearningState;
   assignment: (TrainingAction & { definitionKey: string | null; planCompleted?: boolean }) | null;
   readiness: { profileReady: boolean; approvalReady: boolean };
@@ -68,6 +74,9 @@ export function PersonalLearningPilotCard({
   const [help, setHelp] = useState(false);
   const [postponed, setPostponed] = useState(false);
   const [fitSaved, setFitSaved] = useState(false);
+  const [supportLevel, setSupportLevel] = useState<PracticeSupportLevel>('GUIDED');
+  const [completedByMe, setCompletedByMe] = useState(false);
+  const [usefulResult, setUsefulResult] = useState(false);
   // Stable operation keys survive a network retry; durable state is recovered from the server.
   const keys = useRef<Record<string, string>>({});
   const key = (operation: string) => (keys.current[operation] ??= crypto.randomUUID());
@@ -119,6 +128,16 @@ export function PersonalLearningPilotCard({
   const current = snapshot?.state.plans.find((row) => row.isCurrent && row.goalActive);
   const goal = snapshot?.state.goals.find((row) => row.reference.reference.status === 'ACTIVE');
   const action = snapshot?.assignment;
+  const practice = snapshot?.practice;
+  async function recordPractice(command: GuidedPracticeCommand) {
+    if (!action) return;
+    await api(`${base}/personal-learning`, {
+      operation: 'PRACTICE',
+      assignmentId: action.id,
+      command,
+    });
+    await reload();
+  }
   const planCompleted = router?.status === 'PLAN_COMPLETED' || action?.planCompleted === true;
   async function consult(nextAnswers: LearningConsultationAnswer[] = []) {
     setAnswers(nextAnswers);
@@ -174,6 +193,8 @@ export function PersonalLearningPilotCard({
     setHelp(false);
     setPostponed(false);
     setFitSaved(false);
+    setCompletedByMe(false);
+    setUsefulResult(false);
     await reload();
   }
   async function submit(event?: FormEvent<HTMLFormElement>) {
@@ -219,6 +240,14 @@ export function PersonalLearningPilotCard({
   };
   return (
     <>
+      <p>
+        マナベルスタイルは、代わりに作るのではなく、あなた自身がAIを使って作れるようになるための研修です。
+      </p>
+      {practice?.firstSuccess ? (
+        <p className="notice" role="status">
+          最初の実践が完了しました。本人の完了申告と指示の課題評価を記録しました。能力レベルや完成品品質の認定ではありません。
+        </p>
+      ) : null}
       {error ? (
         <p className="notice notice--error" role="alert">
           {error}
@@ -414,6 +443,120 @@ export function PersonalLearningPilotCard({
           )}
         </p>
       ) : null}
+      {action && !planCompleted && !practice?.started ? (
+        <section className="service-entry__card training-card">
+          <h2>自分でAIを使う実践</h2>
+          <p>
+            会社の情報や実在する個人情報ではなく、安全な練習用の題材を使います。下の課題ではAIへの指示を提出し、外部AIの完成した回答は貼り付けないでください。
+          </p>
+          <label className="field">
+            <span className="field__label">どの支援方法で始めますか？</span>
+            <select
+              className="field__control"
+              value={supportLevel}
+              disabled={busy}
+              onChange={(e) => setSupportLevel(e.target.value as PracticeSupportLevel)}
+            >
+              <option value="GUIDED">手順を確認しながら</option>
+              <option value="HINTED">要点のヒントを使って</option>
+              <option value="INDEPENDENT">まず自分で考えて</option>
+            </select>
+          </label>
+          <button
+            className="button button--primary button--full"
+            disabled={busy}
+            onClick={() => void run(() => recordPractice({ action: 'START', supportLevel }))}
+          >
+            この方法で実践を始める
+          </button>
+        </section>
+      ) : null}
+      {action && practice?.started && !practice.completed ? (
+        <section className="service-entry__card training-card">
+          <h2>本人が操作・確認する</h2>
+          <p>
+            {practice.supportLevel === 'GUIDED'
+              ? 'まず目的、次に相手や背景、必要な条件を整理します。自分のAIツールへ入力し、結果を確認して必要なら指示を修正してください。'
+              : practice.supportLevel === 'HINTED'
+                ? 'AIに伝える目的・背景・条件がそろっているか考え、結果を確認してください。'
+                : 'まず自分でAIへの指示を考え、結果を確認してください。必要なら下のヒントも使えます。'}
+          </p>
+          <p>実施したことだけを記録してください。外部AIの操作は本人申告として扱います。</p>
+          {(
+            [
+              ['SELF_PROMPTED', '自分でAIへ入力した'],
+              ['SELF_EVALUATED', 'AIの結果を自分で確認した'],
+              ['SELF_REVISED', '指示や結果を自分で修正した（任意）'],
+            ] as const
+          ).map(([interaction, label]) => (
+            <button
+              key={interaction}
+              className="button button--secondary button--full"
+              disabled={
+                busy ||
+                practice.interactions.includes(interaction) ||
+                (interaction !== 'SELF_PROMPTED' &&
+                  !practice.interactions.includes('SELF_PROMPTED')) ||
+                (interaction === 'SELF_REVISED' &&
+                  !practice.interactions.includes('SELF_EVALUATED'))
+              }
+              onClick={() => void run(() => recordPractice({ action: 'INTERACT', interaction }))}
+            >
+              {label}
+              {practice.interactions.includes(interaction) ? ' — 記録済み' : ''}
+            </button>
+          ))}
+          {action.submission?.evaluationStatus === 'READY' ? (
+            <>
+              <p>
+                課題の指示が合格したうえで、本人の操作・確認と完了申告がそろうと実践完了を記録できます。復習判定の場合は先に再挑戦してください。
+              </p>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={completedByMe}
+                  onChange={(e) => setCompletedByMe(e.target.checked)}
+                />
+                自分で操作・確認して完成させた
+              </label>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={usefulResult}
+                  onChange={(e) => setUsefulResult(e.target.checked)}
+                />
+                自分に役立つ結果が得られた
+              </label>
+              <button
+                className="button button--primary button--full"
+                disabled={
+                  busy ||
+                  !completedByMe ||
+                  !usefulResult ||
+                  !practice.interactions.includes('SELF_PROMPTED') ||
+                  !practice.interactions.includes('SELF_EVALUATED')
+                }
+                onClick={() =>
+                  void run(() =>
+                    recordPractice({
+                      action: 'COMPLETE',
+                      learnerConfirmedCompletion: true,
+                      usefulResult: true,
+                    }),
+                  )
+                }
+              >
+                本人の実践完了を記録する
+              </button>
+            </>
+          ) : null}
+        </section>
+      ) : null}
+      {practice?.completed ? (
+        <p role="status">
+          この実践の完了を記録しました。支援方法・本人申告・課題評価を別々の証拠として扱います。
+        </p>
+      ) : null}
       {evaluation ? (
         <>
           <AiTrainingEvaluationCard
@@ -465,7 +608,7 @@ export function PersonalLearningPilotCard({
             {fitSaved ? <p role="status">回答ありがとうございます。</p> : null}
           </section>
         </>
-      ) : action && !planCompleted ? (
+      ) : action && !planCompleted && practice?.started ? (
         <AiTrainingMissionCard
           pilot
           state={state}

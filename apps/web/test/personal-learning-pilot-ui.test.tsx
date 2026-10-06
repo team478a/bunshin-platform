@@ -6,6 +6,29 @@ import {
 } from '../app/s/[serviceSlug]/programs/[programEnrollmentId]/personal-learning-pilot-card';
 import { readFileSync } from 'node:fs';
 describe('Personal Learning pilot presentation', () => {
+  it('explains the learner-created outcome and bounds First Success claims', () => {
+    const html = renderToStaticMarkup(
+      <PersonalLearningPilotCard
+        serviceSlug="synthetic"
+        enrollmentId="synthetic"
+        initialSnapshot={{
+          state: { goals: [], plans: [] },
+          assignment: null,
+          readiness: { profileReady: true, approvalReady: true },
+          practice: {
+            started: false,
+            completed: false,
+            supportLevel: null,
+            interactions: [],
+            firstSuccess: true,
+          },
+        }}
+      />,
+    );
+    expect(html).toContain('マナベルスタイル');
+    expect(html).toContain('本人の完了申告');
+    expect(html).toContain('最初の実践');
+  });
   it('shows one learning choice, no chat/provider/unsupported theme offers', () => {
     const html = renderToStaticMarkup(
       <PersonalLearningPilotCard

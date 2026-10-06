@@ -301,3 +301,4 @@ export { PrismaPersonalLearningAiCallRepository } from './personal-learning-ai-c
 export { PrismaLearningDefinitionApprovalAdminRepository } from './learning-definition-approval-admin';
 export { PrismaPersonalLearningPilotProfileRepository } from './personal-learning-pilot-profile';
 export { PrismaPersonalLearningAssessmentGate } from './personal-learning-assessment-gate';
+export { PrismaGuidedPracticeRepository } from './guided-practice';
