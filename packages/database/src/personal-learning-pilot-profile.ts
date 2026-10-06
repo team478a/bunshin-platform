@@ -1,6 +1,8 @@
 import { createHash } from 'node:crypto';
 import { Prisma, type PrismaClient } from '@prisma/client';
 import { ApplicationError } from '@bunshin/shared';
+import type { PersonalLearningPreparationAuthority } from '@bunshin/application';
+import { requirePersonalLearningPreparationAuthority } from './personal-learning-preparation-authority';
 import {
   AI_TRAINING_LEARNING_CATALOG_VERSION,
   personalLearningPilotProfilePreparationAllows,
@@ -74,6 +76,7 @@ export class PrismaPersonalLearningPilotProfileRepository {
   constructor(
     private readonly client: PrismaClient,
     private readonly now = () => new Date(),
+    private readonly preparationAuthority?: PersonalLearningPreparationAuthority,
   ) {}
   private async authorized<T>(
     s: PersonalLearningPilotProfileScope,
@@ -112,6 +115,13 @@ export class PrismaPersonalLearningPilotProfileRepository {
             select: { serviceProgramId: true },
           });
           if (!enrollment) denied();
+          if (this.preparationAuthority)
+            await requirePersonalLearningPreparationAuthority(
+              tx,
+              this.preparationAuthority,
+              s,
+              enrollment.serviceProgramId,
+            );
           const programs = await tx.$queryRaw<{ settings: unknown }[]>`
           SELECT settings FROM service_programs WHERE id=${enrollment.serviceProgramId}::uuid
             AND workspace_id=${s.workspaceId}::uuid AND group_id=${s.groupId}::uuid

@@ -1,6 +1,8 @@
 import { createHash } from 'node:crypto';
 import { Prisma, type PrismaClient } from '@prisma/client';
 import { ApplicationError } from '@bunshin/shared';
+import type { PersonalLearningPreparationAuthority } from '@bunshin/application';
+import { requirePersonalLearningPreparationAuthority } from './personal-learning-preparation-authority';
 import {
   AI_TRAINING_LEARNING_DEFINITION_FIXTURES,
   getAiTrainingMissionQuality,
@@ -108,6 +110,7 @@ export class PrismaLearningDefinitionApprovalAdminRepository {
   constructor(
     private readonly client: PrismaClient,
     private readonly now = () => new Date(),
+    private readonly preparationAuthority?: PersonalLearningPreparationAuthority,
   ) {}
   private async authorized<T>(
     s: LearningDefinitionApprovalAdminScope,
@@ -133,6 +136,8 @@ export class PrismaLearningDefinitionApprovalAdminRepository {
             AND u.status::text='ACTIVE' AND w.status::text='ACTIVE' FOR SHARE OF m,u,w`;
           if (groups.length !== 1 || admins.length !== 1)
             throw new ApplicationError('FORBIDDEN', 'definition review permission required');
+          if (this.preparationAuthority)
+            await requirePersonalLearningPreparationAuthority(tx, this.preparationAuthority, s);
           return work(tx);
         },
         { isolationLevel: 'Serializable', maxWait: 10000, timeout: 20000 },

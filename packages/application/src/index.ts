@@ -124,3 +124,4 @@ export * from './improvement-feedback-retention-job';
 export * from './learning-router';
 export * from './ai-call-observability';
 export * from './personal-learning-call-admission';
+export * from './personal-learning-preparation-authority';

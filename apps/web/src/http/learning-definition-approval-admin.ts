@@ -1,6 +1,9 @@
 import 'server-only';
 import { z } from 'zod';
-import { getServerEnvironment } from '@bunshin/config';
+import {
+  personalLearningPreparationAccess,
+  recheckPersonalLearningPreparationAccess,
+} from '../services/personal-learning-preparation-access';
 import { ApplicationError, toApiError } from '@bunshin/shared';
 import { requestIdFromHeader } from '@bunshin/observability';
 import { currentUserProvider } from '../auth/current-user';
@@ -58,11 +61,7 @@ export async function learningDefinitionApprovalAdminResponse(
     if (request.method === 'POST') requireSameOrigin(request);
     const actor = await (await currentUserProvider()).getCurrentUser();
     if (!actor) throw new ApplicationError('UNAUTHENTICATED', 'session required');
-    if (
-      getServerEnvironment().APP_ENV === 'production' ||
-      process.env['PERSONAL_LEARNING_DEFINITION_ADMIN'] !== 'true'
-    )
-      throw new ApplicationError('NOT_FOUND', 'definition review unavailable');
+    const authority = personalLearningPreparationAccess('PERSONAL_LEARNING_DEFINITION_ADMIN');
     if (new URL(request.url).search)
       throw new ApplicationError('VALIDATION_ERROR', 'query parameters not accepted');
     const service = await resolveManagedServiceContext(serviceSlug, actor.userId).catch((error) => {
@@ -75,8 +74,18 @@ export async function learningDefinitionApprovalAdminResponse(
       groupId: service.serviceId,
       actorUserId: actor.userId,
     };
+    if (
+      authority &&
+      (authority.workspaceId !== scope.workspaceId || authority.groupId !== scope.groupId)
+    )
+      throw new ApplicationError('NOT_FOUND', 'learning preparation unavailable');
     const db = await import('@bunshin/database');
-    const repository = new db.PrismaLearningDefinitionApprovalAdminRepository(db.prisma);
+    recheckPersonalLearningPreparationAccess('PERSONAL_LEARNING_DEFINITION_ADMIN', authority);
+    const repository = new db.PrismaLearningDefinitionApprovalAdminRepository(
+      db.prisma,
+      undefined,
+      authority,
+    );
     if (request.method === 'GET')
       return Response.json({ data: await repository.list(scope), requestId }, { headers });
     if (!request.headers.get('content-type')?.startsWith('application/json') || !request.body)
@@ -107,6 +116,7 @@ export async function learningDefinitionApprovalAdminResponse(
     const parsed = command.safeParse(json);
     if (!parsed.success)
       throw new ApplicationError('VALIDATION_ERROR', 'valid review confirmation required');
+    recheckPersonalLearningPreparationAccess('PERSONAL_LEARNING_DEFINITION_ADMIN', authority);
     return Response.json(
       { data: await repository.change(scope, parsed.data), requestId },
       { headers },

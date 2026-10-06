@@ -7,6 +7,7 @@ const fake = vi.hoisted(() => ({
   list: vi.fn(),
   change: vi.fn(),
   environment: vi.fn(),
+  constructor: vi.fn(),
 }));
 vi.mock('@bunshin/config', () => ({ getServerEnvironment: fake.environment }));
 vi.mock('../src/auth/current-user', () => ({
@@ -17,6 +18,9 @@ vi.mock('../src/services/public-service', () => ({ resolveManagedServiceContext:
 vi.mock('@bunshin/database', () => ({
   prisma: {},
   PrismaLearningDefinitionApprovalAdminRepository: class {
+    constructor(...args: unknown[]) {
+      fake.constructor(...args);
+    }
     list = fake.list;
     change = fake.change;
   },
@@ -52,6 +56,9 @@ describe('Definition human approval HTTP', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     vi.stubEnv('PERSONAL_LEARNING_DEFINITION_ADMIN', 'true');
+    vi.stubEnv('PERSONAL_LEARNING_PRODUCTION_PREPARATION', '');
+    vi.stubEnv('PERSONAL_LEARNING_PILOT', 'false');
+    vi.stubEnv('PERSONAL_LEARNING_PRODUCTION_CLOSED_PILOT', 'false');
     fake.actor.mockResolvedValue({ userId: 'manager' });
     fake.environment.mockReturnValue({ APP_ENV: 'staging' });
     fake.service.mockResolvedValue({ workspaceId: 'server-workspace', serviceId: 'server-group' });
@@ -59,6 +66,58 @@ describe('Definition human approval HTTP', () => {
     fake.change.mockResolvedValue({ replayed: false });
   });
   afterEach(() => vi.unstubAllEnvs());
+  it('production uses only explicit server authority without manufacturing human review', async () => {
+    const authority = {
+      workspaceId: '11111111-1111-4111-8111-111111111111',
+      groupId: '22222222-2222-4222-8222-222222222222',
+      serviceProgramId: '33333333-3333-4333-8333-333333333333',
+    };
+    fake.environment.mockReturnValue({ APP_ENV: 'production' });
+    vi.stubEnv('PERSONAL_LEARNING_PRODUCTION_PREPARATION', JSON.stringify(authority));
+    fake.service.mockResolvedValue({
+      workspaceId: authority.workspaceId,
+      serviceId: authority.groupId,
+    });
+    expect(
+      (
+        await learningDefinitionApprovalAdminResponse(
+          new Request('https://app.example.com/api'),
+          'training',
+        )
+      ).status,
+    ).toBe(200);
+    expect(fake.change).not.toHaveBeenCalled();
+    expect(fake.constructor).toHaveBeenCalledWith({}, undefined, authority);
+    expect(
+      (
+        await learningDefinitionApprovalAdminResponse(
+          req({ ...command, reviewChecklist: undefined }),
+          'training',
+        )
+      ).status,
+    ).toBe(400);
+    expect(fake.change).not.toHaveBeenCalled();
+    expect((await learningDefinitionApprovalAdminResponse(req(), 'training')).status).toBe(200);
+    expect(fake.change).toHaveBeenCalledWith(
+      { workspaceId: authority.workspaceId, groupId: authority.groupId, actorUserId: 'manager' },
+      command,
+    );
+    fake.change.mockClear();
+    fake.service.mockResolvedValue({
+      workspaceId: authority.workspaceId,
+      serviceId: authority.serviceProgramId,
+    });
+    expect((await learningDefinitionApprovalAdminResponse(req(), 'training')).status).toBe(404);
+    expect(fake.change).not.toHaveBeenCalled();
+  });
+  it('revoking the preparation feature during service resolution prevents repository access', async () => {
+    fake.service.mockImplementation(() => {
+      vi.stubEnv('PERSONAL_LEARNING_DEFINITION_ADMIN', 'false');
+      return Promise.resolve({ workspaceId: 'server-workspace', serviceId: 'server-group' });
+    });
+    expect((await learningDefinitionApprovalAdminResponse(req(), 'training')).status).toBe(404);
+    expect(fake.constructor).not.toHaveBeenCalled();
+  });
   it('GET never mutates; POST resolves Service and actor server-side', async () => {
     const get = await learningDefinitionApprovalAdminResponse(
       new Request('https://app.example.com/api'),

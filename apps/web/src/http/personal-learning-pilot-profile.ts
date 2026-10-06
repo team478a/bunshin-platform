@@ -1,6 +1,9 @@
 import 'server-only';
 import { z } from 'zod';
-import { getServerEnvironment } from '@bunshin/config';
+import {
+  personalLearningPreparationAccess,
+  recheckPersonalLearningPreparationAccess,
+} from '../services/personal-learning-preparation-access';
 import { ApplicationError, toApiError } from '@bunshin/shared';
 import { requestIdFromHeader } from '@bunshin/observability';
 import { currentUserProvider } from '../auth/current-user';
@@ -32,11 +35,7 @@ export async function personalLearningPilotProfileResponse(
     if (request.method === 'POST') requireSameOrigin(request);
     const actor = await (await currentUserProvider()).getCurrentUser();
     if (!actor) throw new ApplicationError('UNAUTHENTICATED', 'session required');
-    if (
-      getServerEnvironment().APP_ENV === 'production' ||
-      process.env['PERSONAL_LEARNING_PROFILE_PREPARATION'] !== 'true'
-    )
-      throw new ApplicationError('NOT_FOUND', 'profile preparation unavailable');
+    const authority = personalLearningPreparationAccess('PERSONAL_LEARNING_PROFILE_PREPARATION');
     if (new URL(request.url).search)
       throw new ApplicationError('VALIDATION_ERROR', 'query scope not accepted');
     const enrollment = z.uuid().safeParse(rawEnrollmentId);
@@ -53,8 +52,18 @@ export async function personalLearningPilotProfileResponse(
       programEnrollmentId: enrollment.data,
       actorUserId: actor.userId,
     };
+    if (
+      authority &&
+      (authority.workspaceId !== scope.workspaceId || authority.groupId !== scope.groupId)
+    )
+      throw new ApplicationError('NOT_FOUND', 'learning preparation unavailable');
     const db = await import('@bunshin/database');
-    const repository = new db.PrismaPersonalLearningPilotProfileRepository(db.prisma);
+    recheckPersonalLearningPreparationAccess('PERSONAL_LEARNING_PROFILE_PREPARATION', authority);
+    const repository = new db.PrismaPersonalLearningPilotProfileRepository(
+      db.prisma,
+      undefined,
+      authority,
+    );
     if (request.method === 'GET')
       return Response.json({ data: await repository.read(scope), requestId }, { headers });
     if (!request.headers.get('content-type')?.startsWith('application/json') || !request.body)
@@ -85,6 +94,7 @@ export async function personalLearningPilotProfileResponse(
     const parsed = command.safeParse(json);
     if (!parsed.success)
       throw new ApplicationError('VALIDATION_ERROR', 'explicit profile confirmation required');
+    recheckPersonalLearningPreparationAccess('PERSONAL_LEARNING_PROFILE_PREPARATION', authority);
     return Response.json(
       { data: await repository.initialize(scope, parsed.data), requestId },
       { headers },
