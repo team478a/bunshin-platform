@@ -1,5 +1,13 @@
 # BUNSHIN Platform Decision Log
 
+## 2026-10-06: P1-Dは非永続の短い学習相談と本人選択候補に限定する
+
+- 状態: Proposed（今回のP1-D指示による独立PRレビュー対象）
+- P1-A判定を必ず通し、追加質問・成果物/自動化から学習への明示選択・Goal候補確認を最大3問の決定的Application契約にする。AI Mappingはtraining Packageへ置く。長期Chat/Provider/Teachingを作らない。
+- P1-B投影をscope照合して参照する。既知AIレベル/経験は再質問せず、UNKNOWNをNONEへ推定しない。回答は選択codeのみ、相談本文をProfile/Memoryへコピーしない。
+- P1-C fixtureは未承認。trusted callerの版固定承認参照がなければDefinition Gapにし、本PRで承認やFactoryを作らない。候補の本人選択も既存Goal保存・Confirmed Goal参照・Plan確定の代替ではない。
+- 既存setup UIはProfile/Goal保存と旧Runtimeを前提にするため、今回UI/APIは追加しない。P1-C-Sは相談契約のレビュー後に延期し、P1-E/永続化/本番接続は別指示を待つ。
+
 ## 2026-10-06: P1-CをPlan/Definition参照のDomain契約へ限定し、Definition中心へ変更する
 
 - 状態: Proposed（今回のP1-C指示に基づくPRレビュー対象。旧P1-C永続化は延期）
