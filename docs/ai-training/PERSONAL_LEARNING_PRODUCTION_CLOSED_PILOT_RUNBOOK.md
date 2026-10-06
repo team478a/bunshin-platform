@@ -1,5 +1,9 @@
 # Personal Learning Production Closed Pilot Runbook
 
+## 2026-10-07 Wave 0 Launch操作手順（未実行）
+
+[Launch Runbook](MANABERU_STYLE_PRODUCTION_WAVE0_LAUNCH_RUNBOOK.md)と[Execution Checklist](MANABERU_STYLE_WAVE0_EXECUTION_CHECKLIST.md)を追加。最新main #1164のAPI/config/MigrationとPhase A〜Kを照合し、専用Program初期化・ACTIVE/SUSPENDED/enable/disable操作未確定、Enrollment APIと準備状態の順序問題をBlockerとして記録する。合成Profile UI確認は実認証/DB/実端末確認の代替ではない。Production操作は一切行わず、開始NO-GOと別人間承認を維持する。以下は過去時点の監査履歴。
+
 ## 2026-10-07 本人Profile準備UI
 
 [本人Profile準備UI実装報告](PERSONAL_LEARNING_PROFILE_PREPARATION_UI_IMPLEMENTATION.md)を参照。停止中のreserved Pilot受講者ページだけで既存本人APIを使う最小UIを追加する。未回答補完・既存Profile上書き・Goal/Plan/Pilot自動開始はない。実画面/実認証/本番反映は未確認で、Final ReadinessのNO-GOは維持する。
