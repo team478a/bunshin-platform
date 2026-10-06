@@ -51,6 +51,7 @@ vi.mock('../src/providers/openai-training-answer-evaluator', () => ({
       fake.options = options;
     }
     async evaluate(input: unknown) {
+      (fake.options['onRequestStarted'] as (() => void) | undefined)?.();
       fake.evaluate(input);
       (fake.options['observe'] as ((v: unknown) => void) | undefined)?.(fake.measurement);
       if (fake.error) throw fake.error;

@@ -9,12 +9,12 @@ import {
   type PersonalLearningActor,
 } from '@bunshin/application';
 import { isPersonalLearningPilotProgram } from '@bunshin/capability-training';
-import { Prisma, type PrismaClient } from '@prisma/client';
+import type { Prisma, PrismaClient } from '@prisma/client';
 import { lockTrainingEnrollmentData } from './training-data-lock';
 
-const denied = (): never => {
+function denied(): never {
   throw new ApplicationError('NOT_FOUND', 'AI call learning scope unavailable');
-};
+}
 /** Facts only; the existing Plan/Assignment/Answer remain authoritative. */
 export class PrismaPersonalLearningAiCallRepository {
   constructor(private readonly client: PrismaClient) {}
@@ -47,15 +47,19 @@ export class PrismaPersonalLearningAiCallRepository {
         groupId: s.groupId,
         groupMembershipId: s.groupMembershipId,
       },
-      include: { serviceProgram: true },
+      select: { serviceProgramId: true },
     });
-    if (
-      !membership ||
-      !enrollment ||
-      enrollment.serviceProgram.workspaceId !== s.workspaceId ||
-      enrollment.serviceProgram.groupId !== s.groupId ||
-      !isPersonalLearningPilotProgram(enrollment.serviceProgram.settings)
-    )
+    const program = enrollment
+      ? await tx.serviceProgram.findFirst({
+          where: {
+            id: enrollment.serviceProgramId,
+            workspaceId: s.workspaceId,
+            groupId: s.groupId,
+          },
+          select: { settings: true },
+        })
+      : null;
+    if (!membership || !enrollment || !program || !isPersonalLearningPilotProgram(program.settings))
       denied();
     const deletion = await tx.programAuditLog.findFirst({
       where: {

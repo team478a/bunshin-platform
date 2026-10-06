@@ -75,6 +75,7 @@ export class OpenAiTrainingAnswerEvaluator {
       fetch?: typeof fetch;
       /** Pilot-only observer; no prompt, output, or raw errors. */
       observe?: (measurement: AiCallMeasurement) => void;
+      onRequestStarted?: () => void;
     },
   ) {}
 
@@ -135,6 +136,7 @@ export class OpenAiTrainingAnswerEvaluator {
       });
     };
     let response: Response;
+    this.options.onRequestStarted?.();
     try {
       response = await (this.options.fetch ?? fetch)('https://api.openai.com/v1/responses', {
         method: 'POST',

@@ -39,29 +39,28 @@ const input = {
 };
 function fixture() {
   const tx = {
+    serviceProgram: {
+      findFirst: vi.fn().mockResolvedValue({ settings: { personalLearningPilot: {} } }),
+    },
     $queryRaw: vi.fn(),
     groupMembership: { findFirst: vi.fn().mockResolvedValue({ id: 'member' }) },
     programEnrollment: {
-      findFirst: vi
-        .fn()
-        .mockResolvedValue({
-          serviceProgramId: 'program',
-          serviceProgram: {
-            workspaceId: 'workspace',
-            groupId: 'group',
-            settings: { personalLearningPilot: {} },
-          },
-        }),
+      findFirst: vi.fn().mockResolvedValue({
+        serviceProgramId: 'program',
+        serviceProgram: {
+          workspaceId: 'workspace',
+          groupId: 'group',
+          settings: { personalLearningPilot: {} },
+        },
+      }),
     },
     programAuditLog: { findFirst: vi.fn().mockResolvedValue(null) },
     trainingMissionAnswer: { findFirst: vi.fn().mockResolvedValue({ id: answerId }) },
     programMissionAssignment: {
-      findFirst: vi
-        .fn()
-        .mockResolvedValue({
-          targetResourceId: 'plan',
-          displaySnapshot: { personalLearning: { planRevision: 1, definition } },
-        }),
+      findFirst: vi.fn().mockResolvedValue({
+        targetResourceId: 'plan',
+        displaySnapshot: { personalLearning: { planRevision: 1, definition } },
+      }),
     },
     personalLearningPlanRevision: {
       findFirst: vi.fn().mockResolvedValue({ steps: [{ definition }] }),

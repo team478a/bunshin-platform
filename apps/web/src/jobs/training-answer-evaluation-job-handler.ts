@@ -118,6 +118,7 @@ export function createTrainingAnswerEvaluationJobHandler(): TrainingAnswerEvalua
       const started = Date.now();
       let providerAttempted = false;
       let providerSucceeded = false;
+      let pilotRequestStarted = false;
       let evaluated: Awaited<ReturnType<OpenAiTrainingAnswerEvaluator['evaluate']>>;
       try {
         evaluated = await withOrganizationAiGenerationQuota({
@@ -171,6 +172,9 @@ export function createTrainingAnswerEvaluationJobHandler(): TrainingAnswerEvalua
                 ? {
                     observe: (measurement: AiCallMeasurement) => {
                       observed.measurement = measurement;
+                    },
+                    onRequestStarted: () => {
+                      pilotRequestStarted = true;
                     },
                   }
                 : {}),
@@ -246,7 +250,7 @@ export function createTrainingAnswerEvaluationJobHandler(): TrainingAnswerEvalua
         }
         throw new TrainingAnswerEvaluationJobError('TRAINING_EVALUATION_PROVIDER_ERROR', true);
       } finally {
-        if (pilot && providerAttempted) {
+        if (pilot && pilotRequestStarted) {
           await pilot.record(
             usageKey,
             observed.measurement ?? {
