@@ -194,10 +194,7 @@ export class OpenAiTrainingAnswerEvaluator {
     }
     try {
       const parsed: unknown = await response.json();
-      value =
-        parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)
-          ? (parsed as ResponseValue)
-          : {};
+      value = parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
     } catch (error) {
       observe(
         false,

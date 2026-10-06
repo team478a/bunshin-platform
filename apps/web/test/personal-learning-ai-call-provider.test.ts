@@ -16,11 +16,13 @@ const valid = {
 };
 function evaluator(body: unknown, status = 200) {
   const observe = vi.fn();
+  const onRequestStarted = vi.fn();
   const fetcher = vi
     .fn<typeof fetch>()
     .mockResolvedValue(new Response(JSON.stringify(body), { status }));
   return {
     observe,
+    onRequestStarted,
     fetcher,
     provider: new OpenAiTrainingAnswerEvaluator({
       apiKey: 'synthetic-key',
@@ -28,6 +30,7 @@ function evaluator(body: unknown, status = 200) {
       requestCostUsdMicros: 9,
       fetch: fetcher,
       observe,
+      onRequestStarted,
     }),
   };
 }
@@ -38,13 +41,22 @@ const response = (text: string) => ({
 });
 describe('Pilot structured Provider measurements', () => {
   afterEach(() => vi.useRealTimers());
+  it('does not invent a Provider attempt when Mission validation fails before fetch', async () => {
+    const f = evaluator({});
+    await expect(
+      f.provider.evaluate({ missionDefinitionKey: 'UNKNOWN_MISSION', answer: 'private' }),
+    ).rejects.toThrow('unknown training mission definition');
+    expect(f.fetcher).not.toHaveBeenCalled();
+    expect(f.onRequestStarted).not.toHaveBeenCalled();
+    expect(f.observe).not.toHaveBeenCalled();
+  });
   it('observes successful validation, actual model, cached usage and latency without bodies', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-10-06T00:00:00Z'));
     const f = evaluator(response(JSON.stringify(valid)));
-    f.fetcher.mockImplementation(async () => {
+    f.fetcher.mockImplementation(() => {
       vi.advanceTimersByTime(123);
-      return new Response(JSON.stringify(response(JSON.stringify(valid))));
+      return Promise.resolve(new Response(JSON.stringify(response(JSON.stringify(valid)))));
     });
     const result = await f.provider.evaluate({
       missionDefinitionKey: 'PROMPT_BASIC',

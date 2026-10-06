@@ -1,20 +1,25 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApplicationError } from '@bunshin/shared';
-const fake = vi.hoisted(() => ({
-  membership: vi.fn(),
-  enrollment: vi.fn(),
-  program: vi.fn(),
-  answer: vi.fn(),
-  assignment: vi.fn(),
-  save: vi.fn(),
-  usage: vi.fn(),
-  prepare: vi.fn(),
-  record: vi.fn(),
-  evaluate: vi.fn(),
-  measurement: {} as Record<string, unknown>,
-  options: {} as Record<string, unknown>,
-  error: null as unknown,
-}));
+const fake = vi.hoisted(() => {
+  const state: {
+    measurement: Record<string, unknown>;
+    options: Record<string, unknown>;
+    error: Error | null;
+  } = { measurement: {}, options: {}, error: null };
+  return {
+    membership: vi.fn(),
+    enrollment: vi.fn(),
+    program: vi.fn(),
+    answer: vi.fn(),
+    assignment: vi.fn(),
+    save: vi.fn(),
+    usage: vi.fn(),
+    prepare: vi.fn(),
+    record: vi.fn(),
+    evaluate: vi.fn(),
+    ...state,
+  };
+});
 vi.mock('@bunshin/config', () => ({ getServerEnvironment: () => ({ APP_ENV: 'staging' }) }));
 vi.mock('@bunshin/database', () => {
   const tx = {
@@ -31,11 +36,12 @@ vi.mock('@bunshin/database', () => {
   };
 });
 vi.mock('../src/ai/runtime-provider-configuration', () => ({
-  resolveOpenAiRuntimeConfiguration: async () => ({
-    apiKey: 'synthetic-key',
-    model: 'unchanged-model',
-    requestCostUsdMicros: 999,
-  }),
+  resolveOpenAiRuntimeConfiguration: () =>
+    Promise.resolve({
+      apiKey: 'synthetic-key',
+      model: 'unchanged-model',
+      requestCostUsdMicros: 999,
+    }),
 }));
 vi.mock('../src/observability/ai-usage', () => ({ recordAiUsageSafely: fake.usage }));
 vi.mock('../src/observability/personal-learning-ai-call', () => ({
@@ -50,12 +56,12 @@ vi.mock('../src/providers/openai-training-answer-evaluator', () => ({
     constructor(options: Record<string, unknown>) {
       fake.options = options;
     }
-    async evaluate(input: unknown) {
+    evaluate(input: unknown) {
       (fake.options['onRequestStarted'] as (() => void) | undefined)?.();
       fake.evaluate(input);
       (fake.options['observe'] as ((v: unknown) => void) | undefined)?.(fake.measurement);
-      if (fake.error) throw fake.error;
-      return {
+      if (fake.error) return Promise.reject(fake.error);
+      return Promise.resolve({
         evaluation: {},
         provider: 'openai',
         model: 'response-model',
@@ -64,7 +70,7 @@ vi.mock('../src/providers/openai-training-answer-evaluator', () => ({
         outputTokens: 20,
         latencyMs: 10,
         estimatedCostUsdMicros: 999,
-      };
+      });
     }
   },
 }));
