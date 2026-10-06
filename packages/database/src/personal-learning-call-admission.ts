@@ -7,6 +7,7 @@ import {
 } from '@bunshin/application';
 import { ApplicationError } from '@bunshin/shared';
 import { PrismaPersonalLearningAssessmentGate } from './personal-learning-assessment-gate';
+import { requirePersonalLearningPilotSeat } from './personal-learning-pilot-seat';
 
 export class PrismaPersonalLearningCallAdmission extends PrismaPersonalLearningAssessmentGate {
   constructor(
@@ -55,6 +56,7 @@ export class PrismaPersonalLearningCallAdmission extends PrismaPersonalLearningA
       });
       if (!enrollment) throw new ApplicationError('NOT_FOUND', 'pilot authority unavailable');
       await this.validateAssessment(tx, input.actor, input.assignmentId, input.answerId);
+      await requirePersonalLearningPilotSeat(tx, s, input.environment === 'PRODUCTION');
       const jobs = await tx.$queryRaw<{ id: string }[]>`
         SELECT id FROM jobs WHERE id=${input.jobId}::uuid AND workspace_id=${s.workspaceId}::uuid
           AND environment=${input.environment}::"LineConfigurationEnvironment"

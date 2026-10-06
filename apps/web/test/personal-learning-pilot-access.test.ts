@@ -74,7 +74,27 @@ describe('pilot server identity and exposure gate', () => {
     expect(personalLearningPilotEnabled()).toBe(false);
     vi.stubEnv('PERSONAL_LEARNING_PRODUCTION_CLOSED_PILOT', 'true');
     expect(personalLearningPilotEnabled()).toBe(true);
-    expect(personalLearningPilotExecutionAllowed(settings, enrollmentId, true)).toBe(true);
+    expect(personalLearningPilotExecutionAllowed(settings, enrollmentId, true)).toBe(false);
+    expect(
+      personalLearningPilotExecutionAllowed(
+        {
+          ...settings,
+          personalLearningPilot: {
+            ...settings.personalLearningPilot,
+            participantControl: {
+              version: 'PILOT_PARTICIPANT_CAP_V1',
+              revision: 1,
+              externalParticipantCap: 100,
+              internalParticipantCap: 0,
+              currentWave: 1,
+              currentWaveCap: 5,
+            },
+          },
+        },
+        enrollmentId,
+        true,
+      ),
+    ).toBe(true);
     expect(
       personalLearningPilotExecutionAllowed({ moduleKey: 'AI_TRAINING_V1' }, enrollmentId, true),
     ).toBe(false);

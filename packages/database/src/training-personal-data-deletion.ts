@@ -114,6 +114,26 @@ export class PrismaTrainingPersonalDataDeletionRepository implements TrainingPer
           });
           await tx.programActionEvent.deleteMany({ where: snapshot.eventWhere });
           if (all) {
+            // Preserve cumulative capacity, but remove the Enrollment link and revoke access.
+            await tx.personalLearningPilotSeat.updateMany({
+              where: {
+                workspaceId: input.workspaceId,
+                groupId: input.groupId,
+                programEnrollmentId: input.programEnrollmentId,
+              },
+              data: { programEnrollmentId: null, revokedAt: new Date() },
+            });
+            // Do not leave another learner blocked by a stale allowlist projection.
+            await tx.$executeRaw`UPDATE service_programs p SET settings=jsonb_set(p.settings,'{personalLearningPilot,enrollmentIds}',
+              COALESCE((SELECT jsonb_agg(v) FROM jsonb_array_elements(p.settings->'personalLearningPilot'->'enrollmentIds') v WHERE v <> to_jsonb(${input.programEnrollmentId}::text)), '[]'::jsonb))
+              WHERE p.workspace_id=${input.workspaceId}::uuid AND p.group_id=${input.groupId}::uuid
+              AND p.id IN (SELECT service_program_id FROM program_enrollments WHERE id=${input.programEnrollmentId}::uuid)
+              AND p.settings->'personalLearningPilot'->'participantControl'->>'version'='PILOT_PARTICIPANT_CAP_V1'`;
+            await tx.$executeRaw`UPDATE service_programs p SET settings=jsonb_set(p.settings,'{personalLearningPilot,participantControl,revision}',to_jsonb((p.settings->'personalLearningPilot'->'participantControl'->>'revision')::bigint+1))
+              WHERE p.workspace_id=${input.workspaceId}::uuid AND p.group_id=${input.groupId}::uuid
+              AND p.id IN (SELECT service_program_id FROM program_enrollments WHERE id=${input.programEnrollmentId}::uuid)
+              AND p.settings->'personalLearningPilot'->'participantControl'->>'version'='PILOT_PARTICIPANT_CAP_V1'
+              AND p.settings->'personalLearningPilot'->'participantControl'->>'revision' ~ '^[0-9]{1,15}$'`;
             await tx.trainingParticipantProfile.deleteMany({
               where: { ...personal, groupMembershipId: owned.membershipId },
             });

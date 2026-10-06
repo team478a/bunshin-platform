@@ -7,15 +7,21 @@ import {
 import { ApplicationError } from '@bunshin/shared';
 
 type PreparationFlag =
-  'PERSONAL_LEARNING_DEFINITION_ADMIN' | 'PERSONAL_LEARNING_PROFILE_PREPARATION';
+  | 'PERSONAL_LEARNING_DEFINITION_ADMIN'
+  | 'PERSONAL_LEARNING_PROFILE_PREPARATION'
+  | 'PERSONAL_LEARNING_PARTICIPANT_PREPARATION';
 export function personalLearningPreparationAccess(
   flag: PreparationFlag,
 ): PersonalLearningPreparationAuthority | undefined {
   const denied = () => new ApplicationError('NOT_FOUND', 'learning preparation unavailable');
   if (process.env[flag] !== 'true') throw denied();
   const environment = getServerEnvironment().APP_ENV;
-  if (environment === 'development' || environment === 'staging') return undefined;
-  if (environment !== 'production') throw denied();
+  if (
+    (environment === 'development' || environment === 'staging') &&
+    flag !== 'PERSONAL_LEARNING_PARTICIPANT_PREPARATION'
+  )
+    return undefined;
+  if (!['production', 'development', 'staging'].includes(environment)) throw denied();
   if (
     process.env['PERSONAL_LEARNING_PILOT'] === 'true' ||
     process.env['PERSONAL_LEARNING_PRODUCTION_CLOSED_PILOT'] === 'true'

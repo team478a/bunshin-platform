@@ -1,4 +1,5 @@
 import { parseAiTrainingOperationsSettings } from './operations';
+import { parsePilotParticipantPolicy } from './pilot-participant-cap';
 
 const object = (value: unknown): Record<string, unknown> | null =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -15,13 +16,22 @@ export function personalLearningPilotAllows(settings: unknown, enrollmentId: str
   const root = object(settings);
   const pilot = object(root?.['personalLearningPilot']);
   const ids = pilot?.['enrollmentIds'];
+  const capped = Object.hasOwn(pilot ?? {}, 'participantControl');
+  const policy = capped ? parsePilotParticipantPolicy(pilot?.['participantControl']) : null;
   return (
     root?.['moduleKey'] === 'AI_TRAINING_V1' &&
     pilot?.['enabled'] === true &&
-    Object.keys(pilot).every((key) => ['enabled', 'enrollmentIds'].includes(key)) &&
+    Object.keys(pilot).every((key) =>
+      ['enabled', 'enrollmentIds', ...(capped ? ['participantControl'] : [])].includes(key),
+    ) &&
+    (!capped || policy !== null) &&
     Array.isArray(ids) &&
     ids.length > 0 &&
-    ids.length <= 5 &&
+    ids.length <=
+      (policy
+        ? Math.min(policy.externalParticipantCap, policy.currentWaveCap) +
+          policy.internalParticipantCap
+        : 5) &&
     ids.every(
       (id) =>
         typeof id === 'string' &&

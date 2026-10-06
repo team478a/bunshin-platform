@@ -263,6 +263,7 @@ export * from './skill-factory';
 export * from './skill-lifecycle';
 export * from './skill-exposure';
 export * from './learning-scope';
+export * from './pilot-participant-cap';
 export * from './learning-profile-goal';
 export * from './learning-definition-fixtures';
 export * from './learning-consultation';

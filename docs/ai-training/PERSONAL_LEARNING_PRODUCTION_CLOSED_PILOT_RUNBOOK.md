@@ -1,5 +1,9 @@
 # Personal Learning Production Closed Pilot Runbook
 
+## P1-H追記（本番未適用）
+
+[累計participant cap / Wave実装報告](MANABERU_STYLE_PILOT_PARTICIPANT_CAP_IMPLEMENTATION.md)を参照。外部unique participant最大100、Wave累計0/5/20/50/100、取消後の自動枠再利用なし。内部人数の運用値は別人間承認、未設定0で拒否。本番実行は旧5人allowlistだけでは許可しない。新Migration・Privacy保持・authority・人数設定・実認証・全deployment更新/drainを確認するまでWave 0 NO-GO。新準備APIは停止中の参加権操作だけであり、Enrollment作成やPilot enableは行わない。
+
 ## 実行境界の追記（本番未反映）
 
 #1153 merge後の最小実装は [実行・停止境界報告](PERSONAL_LEARNING_EXECUTION_GATES_IMPLEMENTATION.md)を参照する。productionは既存Pilot flagと追加のPERSONAL_LEARNING_PRODUCTION_CLOSED_PILOTを両方要求する方向へ変更し、fresh Assessment gate、認識済みPilotのmarker消失拒否、LINE reserved/Plan除外を追加する。以下の監査表は#1153時点の履歴であり、コード反映と実環境Gate通過を混同しない。100人Hard Cap、費用Hard Stop、恒久Program authority、準備UI/本番管理操作、実認証・Migration安全確認は引き続き未完、開始NO-GO。
