@@ -5,6 +5,12 @@
 - 範囲/根拠: [現状E01〜E17](01_AI_TRAINING_PERSONAL_LEARNING_CURRENT_STATE.md)、[Gap表](02_AI_TRAINING_PERSONAL_LEARNING_GAP_ANALYSIS.md)、[目標Architecture](03_AI_TRAINING_PERSONAL_LEARNING_TARGET_ARCHITECTURE.md)。すべてProposed、未実装計画。
 - 未確認: 本番学習効果、相談保持方針、AI新領域Rubric、期間/価格/契約、新保存schemaの必要性。UNKNOWNで開始Gateを止める。
 
+## 2026-10-06 P1-C限定指示による更新
+
+P1-A（#1145）/P1-B（#1146）はmain反映済み。今回P1-CはPlan / Learning Definition参照の最小Domain Contractと少数fixtureのみ。旧P1-C保存はP1-C-S候補として延期する。以降の計画は着手承認ではなく、P1-D/P1-E/保存/Providerは今回実装しない。過去の監査時点の検証記録は履歴として保持する。
+
+Learning Definition Libraryを中心にし、完成教材の事前準備は必須ではない。固定骨格はSkill / Objective / Prerequisite / Concepts / Safety / Common Mistakes / Practice Pattern / Rubric参照。説明/例/練習/Hint/復習/難易度は別のPersonalization。Planは何を学ぶかだけを持ち、教えた本文を保存しない。Definition Factoryは欠けた設計図Draft→Validation→Human Review→Approved Definitionを将来方向とし、Content生成は下位候補へ変更する。
+
 ## 最初のPRと人間承認
 
 推奨する最初の実装PRはP1-Aの「Learning Scopeの純粋契約とAI研修固有の拒否/変換Rule」。汎用chat、LLMによる自動Goal確定、先行Content Factoryを作らず、Learning Firstを入口から守る。今回の監査文書PRはその前の設計レビューである。
@@ -41,9 +47,17 @@
 - テスト: 旧Catalog/Profile decode、AI経験と共通項目の境界、unknown key、学習Goalと契約dueAtの分離。
 - rollback: projection adapterを外して旧読取へ戻せる。保存を追加する場合はP1-Cの承認前に着手しない。
 
-### P1-C GoalとPlanの永続化境界
+### P1-C Plan / Learning Definition参照の最小Domain契約
 
-- 目的/変更範囲: confirmed Goal参照とPlan revision、Unit版/理由/承認状態の保存Port、Prisma最小実装、本人scope/Enrollment lock/CAS/idempotency、最小Audit（E03/E06/E07/E15）。
+- 目的/変更範囲: Confirmed Goalに紐付くPlan identity/Revision/参照経路/前提/理由code/Draftと本人確認receipt、版固定Definition参照。AI Packageの既存Missionから3 review fixture。
+- 対象外: DB/schema/migration/保存/CAS/idempotency/UI/API/LLM/Provider/Codex/Teaching/Factory/Router接続。
+- 受入条件: Candidate/Suggestion拒否、GoalとPlanの別確認、Revisionの上書き/承認引継ぎなし、CoreへAI語をhardcodeしない。本文なし、既存V1未変更。fixtureは公開済み教材/Definitionではない。
+- テスト: P1-A/P1-B回帰、Confirmed Goal要件、scope/版/前提関係/Revision、本文混入拒否、Enrollment分離、仮想Sales参照。
+- rollback: 未接続のcontract/fixture/exportをrevertするだけ。DB操作なし。今回PRレビュー後に停止する。
+
+### P1-C-S GoalとPlanの永続化境界（延期・保存専用PR候補）
+
+- 目的/変更範囲: P1-C Domainレビュー後の別承認で、confirmed Goal参照とPlan revision、Definition版/理由/承認状態の保存Port、Prisma最小実装、本人scope/Enrollment lock/CAS/idempotency、最小Audit（E03/E06/E07/E15）。Definition Libraryの巨大Registryは先行実装しない。
 - 対象外: 実行選定、相談UI、Provider、既存Goal/Enrollmentの一括移行。
 - 受入条件: 既存Programへ同じAssignment/Eventを二重作成しない。旧revisionは不変、競合409、削除中/所属失効は拒否。不要ならschema追加なし。必要なら独立additive migrationの理由・索引・参照・backup/rollbackを人間承認する。
 - テスト: User/Service/Workspace越境、CAS同時更新、再送、削除後遅延保存、旧Goal行維持。隔離DB統合を必須にする。
@@ -54,6 +68,7 @@
 - 目的/変更範囲: 「今日は何を学びたいですか」→Scope→bounded希望→Goal候補→本人確認→Plan提案のmobile UI/API。Profileを必要時に追加質問する（E05/E06/E09/E13）。
 - 対象外: 万能chat、長期会話Memory、個社改善提案、成果物納品、Content Factory、LINE開始。
 - 受入条件: 認可scopeをserver解決、機密入力注意/上限、更新はsame-origin+validation。管理者に相談本文を公開しない。LLMを使うなら事前にProvider/費用/送信情報承認、構造化候補/Usage/失敗時確認待ち、Draftは実行しない。
+- 追加Gate: 保存専用PRとGoal/Plan確認証跡を先にレビュー。承認済みDefinition骨格なしに自由Teachingを開始しない。Definition gapはDraftへ保留し、完成教材の事前存在を必須にはしない。
 - テスト: Scope分類のUI、本人確認なし保存拒否、未知テーマはLibrary gapとして保留、Provider failure/invalid output、他Enrollment拒否、相談削除/Export。
 - rollback: 入口を停止し旧初期設定を維持。提案済みDraftをconfirmedとして誤実行しない。
 
@@ -62,6 +77,7 @@
 - 目的/変更範囲: confirmed PlanをAiTrainingV1Policyへ最小投影し、既存persistDecisionでAssignmentを確定する。AI key/前提/復習規則はPackage（E03〜E05/E08）。
 - 対象外: Router Framework、Sales実装、AI教材新規生成、契約期間変更。
 - 受入条件: Plan/Goal/Unit/Template版が一致。review/recovery/wait優先の意味を保ち、Rule版と選定理由を保存。未承認/削除済み/未知Unitは旧動作への明示fallbackまたは保留で、架空完了にしない。
+- Definition更新Gate: 承認済みDefinition版→既存Mission/quality/Rubricの対応、外部prerequisiteの実証、現行Goal/Plan Revision/認可/期間/削除状態を実行直前に再照合する。Plan CONFIRMEDやfixture存在は実行許可ではない。
 - テスト: 旧25 keyの回帰、前提不足、完了/失敗/復習、Goal変更同時選定、二重Assignment、fallback理由、削除世代/期間拒否。
 - rollback: Plan接続を停止し旧Policyを維持。既に提示したsnapshot/評価版を上書きしない。
 
@@ -75,11 +91,11 @@
 
 Phase 1完了は希望→本人確認Goal→Plan→既存課題→評価→次課題の通し検証、Privacy/期限/越境/競合の否定テスト、人間の学習体験レビューが条件。実装完了と本番参加承認は別。
 
-### P2-A AI Skill MapとLearning Libraryの版管理
+### P2-A AI Skill MapとLearning Definition Libraryの版管理
 
-- 目的/変更範囲: E08/E16を再利用し、AI Literacy/Safety/Promptingから必要テーマのUnit/Skill/Rubric参照を整理。Image/Video/Excel/Automation/API/Agentは教材・専門評価の準備順で追加する。
+- 目的/変更範囲: E08/E16の責務の違いを維持し、AI Literacy/Safety/Promptingから必要なDefinition固定骨格/Skill/Rubricを整理。Image/Video等は実需と専門評価で段階追加し、大量教材を先に作らない。
 - 対象外: 全領域一括実装、一般Package Builder、共通Skill名hardcode、Support Skillと習熟Skillの統合。
-- 受入条件: immutable意味版、旧6技能の対応、教材のlearning objective、prerequisite、content/evaluation ref、同版内意味変更拒否。
+- 受入条件: immutable意味版、旧6技能の対応、DefinitionのObjective/Prerequisite/Concepts/Safety/Mistakes/Practice/Rubric参照、同版内意味変更拒否。Presentation参照は任意で、完成教材を必須にしない。
 - テスト: 旧Catalog版、存在しないUnit/Rubric、前提循環/不足、Skill namespace collision、Service独自教材越境。
 - rollback: 新教材の新規提示を停止。過去Assignment/評価版を維持、学習履歴を削除しない。
 
@@ -99,11 +115,11 @@ Phase 1完了は希望→本人確認Goal→Plan→既存課題→評価→次�
 - テスト: 再構築、重複Event、削除後再投影防止、未評価表示、本文非取得、別User/Service/Bunshin越境。
 - rollback: 新projection/UIを停止、旧正本を維持。派生データを元に未確認習得を復元しない。
 
-### P3-A Learning Content Factoryの設計再レビュー
+### P3-A Learning Definition Factoryの設計再レビュー
 
-- 目的/変更範囲: AI V1完成・Loop実証後に、Library検索→Gap→Content Specification→教材Draft→Validation→Human Approval→Package Libraryの最小設計。既存E16との相違を先に評価。
+- 目的/変更範囲: AI V1完成・Loop実証後に、Definition Library検索→Definition Gap→Skill/Objective/Prerequisite/Concepts/Safety/Mistakes/Practice/Rubric Draft→Validation→Human Review→Approved Definitionの最小設計。Codex等はDraft候補のProvider。Content生成は骨格に基づく下位候補。既存E16との相違を先に評価し、支援Skillと習熟Skill/Definitionを混同しない。
 - 対象外: 今回のCodex接続、ユーザー環境実行、完成成果物、自動改善/PR/Merge/Deploy、Marketplace/SDK。
-- 受入条件: AI以外の仮想Sales教材でもspec参照を表現できる、個人情報除去/教材権利/予算/承認役割/再利用版の条件を人間が確定。実第二Packageは別商品承認。
+- 受入条件: AI以外の仮想Sales Definitionでも骨格参照を表現できる、個人情報除去/Definition・教材権利/予算/承認役割/再利用版の条件を人間が確定。実第二Packageは別商品承認。
 - テスト案: 将来の非本番fixtureで旧Library再利用、未知Gap、Draft検証失敗、未承認登録拒否、scope/版整合。実Provider試験は別承認。
 - rollback観点: 自動登録をそもそも許可せず、承認済み版のみ配布。外部実行開始前なら設計を棄却可能。
 

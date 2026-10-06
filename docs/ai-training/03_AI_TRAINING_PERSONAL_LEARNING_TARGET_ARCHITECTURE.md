@@ -5,6 +5,10 @@
 - 範囲/根拠: [現状監査E01〜E17](01_AI_TRAINING_PERSONAL_LEARNING_CURRENT_STATE.md)、[Gap分類](02_AI_TRAINING_PERSONAL_LEARNING_GAP_ANALYSIS.md)。以下は設計案であり実装済み契約ではない。
 - 未確認: 新保存modelの必要性、教育評価妥当性、第二Packageの実需、Provider/Backupの消去保証。今回はMOVE/schema/migrationを行わない。
 
+## 2026-10-06 P1-C設計更新
+
+今回の人間レビューでLearning Libraryの中心を完成教材からLearning Definitionへ変更する。以下の最新方向は旧監査の教材Library/Content Factory案に優先する。P1-A/P1-Bはmain反映済みで、今回P1-CはPlan/Definition参照の純粋Domain契約だけ。旧P1-C永続化は設計レビュー後の保存専用PRへ延期し、DB/UI/Provider/Teaching/Runtimeには接続しない。
+
 ## 3層の責務図
 
 ```text
@@ -16,14 +20,15 @@ Layer 3  Service / Operator / OEM
                     v
 Layer 1  Personal Learning Core候補
   Learnerの共通投影 / Goal参照 / Plan revision
-  Unit・Skill・Assessment参照 / Router結果 / Learning Scope結果
+  Definition・Skill・Assessment参照 / Router結果 / Learning Scope結果
   Memory・Progressの派生投影（保存正本を重複させない）
   既存ProgramのAssignment / Event / Progress / Audit / Jobを利用
                     ^
                     | Package提供の版固定定義・Policy・検証済み結果
 Layer 2  AI Training Package
   AI Profile / AI Goal変換 / Scope Rule / AI Skill Map
-  AI Unit・教材・Rubric / AiTrainingV1Policy / Adaptive Rule
+  AI Definitionの固定骨格・Rubric / AiTrainingV1Policy / Adaptive Rule
+  将来のPresentation（説明・例・練習・Hint）は別責務
   AI評価Port -> Web composition -> Provider Adapter（Coreの外側）
 ```
 
@@ -45,17 +50,23 @@ AI研修が第一の商品。営業/SNS/新人/接客/業種別/独自研修は�
 
 ProgramMemberGoalのIDと旧履歴を再利用する。自由希望をLLM出力のままGoalへ保存せず、Scope判定→AI学習目標候補→本人確認→保存の順にする。共通Goalは学習目的、対象Skill参照、到達証拠、優先順位/状態/semantic versionの候補を持ち、AI固有目標変換はPackageへ残す。数値ACTION=1だけを理解達成の証明にしない。
 
-Planは新しい責務候補である。最小案はscope、planId、revision、goalRef、packageRef、ordered Unit refs、prerequisites、選定理由code、作成Rule版、確認/失効状態、basedOn（Goal revision/評価参照）を持つ。Assignment/Event/Progressを複製しない。本人確認済みの主要Goalは最初1つとし、新希望は次候補として保持する案を推奨する。複数同時Goal数は人間承認対象。
+PlanはConfirmed Learning Goalへ到達するLearning Definitionの経路であり、完成教材の一覧ではない。今回の最小契約はscope、planId、contract/rule version、revision、previousRevision、revision reason、Confirmed Goal参照、ordered Definition refs、prerequisites、選定理由code、Draft/Confirmed/失効・完了状態と同Revisionの本人確認receipt。Goal参照とpreviousRevisionが最小の作成元を表し、未使用のcreatedFrom本文/巨大metadataは増やさない。Assignment/Event/Progressを複製しない。GoalとPlanの確認は別で、Candidate/SuggestionからPlanを確定しない。
 
 再計画は旧Planを消さず、旧revisionを参照した変更提案→本人確認→CAS確定を想定する。相談中のDraftはRuntimeに接続しない。承認済みPlan、Enrollment、Template版、Unit版の一致を実行直前に再確認する。Plan永続化をProgramActionEventへ本文として押し込むかは未承認。イベントは事実receiptでありPlan正本の無制限代用品にしない。
 
-### UnitとSkill
+### Learning DefinitionとSkill / Mission / Content
 
-Learning Unit共通契約の候補はid、package、version、title、objective、prerequisites、targetSkills、difficulty、content reference、evaluation reference、status。全項目を初日から汎用Registryへ実装しない。最初は既存TemplateVersion + Mission key + quality版へ参照を張り、対応が未定ならUNKNOWNで停止する。公開済みUnitの意味を同じversionで変更しない。
+Learning DefinitionはSkillを教える設計図。Coreの最小参照はpackageKey / definitionKey / versionで、AI固有Skill/Concepts/Rubric本文を持たない。Package側でSkill、Learning Objective、Prerequisite、Core Concepts、Safety / Boundary、Common Mistakes、Practice Pattern、Evaluation Rubric参照を固定する。巨大Registryや大量完成教材の事前準備は必須にしない。同versionの意味を変更しない。
+
+Skillは「何ができるか」、Definitionは「その能力のために何を学ぶか」、Missionは本人が行う具体的練習、ContentはDefinitionのPresentation（説明/例/練習/Hint等）。1 Skillに複数Definition、1 Missionに複数Definitionが対応してよい。Planに教材本文、生成説明、個人例/練習/Hint/回答/Manualを保存しない。
+
+骨格は固定し、教え方を個別化する。将来、説明量/表現/具体例/練習/Hint/復習/難易度をPresentationへ、Definition選択/順序/基礎省略/復習追加/学習量をPlan側の別責務へ分ける。LLMへ「この人に教えて」だけを渡して自由生成する構造にしない。省略された外部prerequisite参照は習得証拠ではなくUNKNOWNを残し、P1-Eの実行前検証で別途解決する。
+
+今回のAI PackageはPROMPT_STRUCTURE / CONTEXT_SETTING / CONSTRAINT_SETTINGの3 review fixtureだけ。既存PROMPT_BASIC / PROMPT_CONDITIONとquality版・Skill Rule版の対応を持つ。Approved Definition Libraryではなく、教育品質/公開承認は未確認。画像/動画/自動化/Agent Definition、教材生成、Mission生成は追加しない。
 
 Skill共通契約はskillRef（package/id/version）、習熟状態、評価証拠参照、評価日時/Rule版まで。Prompting、Image Generation、Questioning等の意味・階層・合格基準はPackage。現在のTrainingSupportSkillは支援手順であり、Learner Skillの正本へrename/MOVEしない。
 
-Libraryは承認済みPackage contentを再利用する。Coreは参照と状態だけ、AI Packageは説明・Prompt練習・画像/動画/自動化の一般教材を持つ。独自教材もService所有scopeを維持し、他社Libraryへ自動共有しない。教材一般化時には個人相談/仕事情報の除去と権利確認を別Gateにする。
+Learning Definition Libraryは承認済みPackageの設計図を再利用する方向。完成教材は任意のPresentationで、存在を学習契約の必須条件にしない。既存教材/qualityを捨てず、段階的にDefinitionとの対応を検証する。独自Definition/教材もService所有scopeを維持し、他社Libraryへ自動共有しない。一般化時の個人情報除去・権利確認は別Gate。
 
 ### RouterとAssessmentとAdaptive
 
@@ -122,8 +133,8 @@ Adaptive共通状態は説明希望、前提充足、review requirement、難易
 
 この例ではCore fieldにPrompt条件/CTA/Closing等がなくても表現できる。意味をopaqueなPackage参照に残すことにより、学習計画保存・履歴・版・前提確認は共通候補になる。しかし採点/Skill体系/具体的復習内容の共通化は証明していない。将来Sales専用RuleをCoreへ押し込む必要が出れば、その案は棄却する。
 
-## Content Factoryと承認Gate
+## Learning Definition Factoryと承認Gate
 
-将来の流れはTraining Package→Learning Gap→Content Specification→Draft→Validation→Human Approval→Package Library。Codex等は教材/Manual支援だけ。完成画像/動画/プログラム、個社自動化、ユーザー環境設定には使わない。既存支援契約を教材全般へ自動拡張せず、個人由来情報の共有/Provider送信は別承認とする。
+旧Learning Content Factory中心案を変更し、将来の中心はTraining Package→欠けたLearning Definition→Definition Draft（Skill分解/Objective/Prerequisite/Concepts/Safety/Common Mistakes/Practice Pattern/Rubric Draft）→Validation→Human Review→Approved Learning Definition。Codex等は設計図Draft支援のProvider候補にとどめる。その後の説明/例/練習/Hint生成は承認済み骨格に基づく下位機能候補で、本人のSkill向上に限定する。完成成果物・実務代行・業務コンサル・ユーザー環境実行は禁止。既存支援SkillをDefinitionへ自動転用せず、個人情報/権利/Provider送信は別承認とする。
 
 AI V1が学習Loopを実証する前に実装しない。Factory完成も自動公開/本番変更の許可ではない。Draft/Validation/Approval/外部実行/PR/Merge/Deployは別権限。Plugin、SDK、Dynamic Schema、Marketplace、未使用Extension Point、汎用教材Editorは対象外。

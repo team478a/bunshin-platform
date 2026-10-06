@@ -1,5 +1,13 @@
 # BUNSHIN Platform Decision Log
 
+## 2026-10-06: P1-CをPlan/Definition参照のDomain契約へ限定し、Definition中心へ変更する
+
+- 状態: Proposed（今回のP1-C指示に基づくPRレビュー対象。旧P1-C永続化は延期）
+- Learning Definition Libraryを教える設計図の中心とし、完成教材の事前大量準備は必須にしない。Skill/Objective/Prerequisite/Concepts/Safety/Common Mistakes/Practice Pattern/Rubric参照は固定、説明/例/練習/Hint/復習等は別のPersonalization責務。
+- Core候補は版固定Definition参照・Confirmed Goalに紐付くPlan・Revision/前提/確認状態。AI固有内容はPackageの少数fixtureへ置く。Skill/Definition/Mission/Contentを別概念として維持する。
+- Definition Factoryは、欠けたDefinition→構造化Draft→Validation→Human Review→Approved Definitionを将来方向にする。Content生成は下位候補。今回Factory/Codex/LLM/Teachingは実装しない。
+- 永続化、CAS、Prisma、UI/API、Provider、P1-D/P1-E/実Runtime接続は別承認。旧Decisionと監査の時点情報は削除しない。
+
 ## 2026-10-06: P1-Bは既存Profile/Goalの読取投影と未接続の意味契約に限定する
 
 - 状態: Proposed（P1-B指示に基づくPRレビュー対象。P1-C/保存/Runtime接続は別承認）
