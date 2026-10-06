@@ -23,9 +23,9 @@ const command = {
 describe('Definition approval command safety', () => {
   it('requires human checklist and confirmation with no arbitrary content', () => {
     expect(validateLearningDefinitionApprovalCommand(command)).toEqual(command);
-    expect(() =>
-      validateLearningDefinitionApprovalCommand({ ...command, reviewChecklist: undefined }),
-    ).toThrow();
+    const { reviewChecklist, ...unconfirmed } = command;
+    expect(reviewChecklist.safety).toBe(true);
+    expect(() => validateLearningDefinitionApprovalCommand(unconfirmed)).toThrow();
     expect(() =>
       validateLearningDefinitionApprovalCommand({
         ...command,
