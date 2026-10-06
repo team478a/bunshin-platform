@@ -11,7 +11,7 @@ const f = vi.hoisted(() => ({
 }));
 vi.mock('@bunshin/config', () => ({ getServerEnvironment: () => ({ APP_ENV: f.environment }) }));
 vi.mock('../src/auth/current-user', () => ({
-  currentUserProvider: async () => ({ getCurrentUser: f.actor }),
+  currentUserProvider: () => Promise.resolve({ getCurrentUser: f.actor }),
 }));
 vi.mock('../src/auth/request-security', () => ({ requireSameOrigin: f.origin }));
 vi.mock('../src/services/public-service', () => ({ resolveManagedServiceContext: f.service }));
@@ -110,9 +110,9 @@ describe('trusted participant operation HTTP', () => {
     expect((await response(request(), 'slug')).status).toBe(404);
   });
   it('rechecks switch revocation after async Service lookup', async () => {
-    f.service.mockImplementation(async () => {
+    f.service.mockImplementation(() => {
       vi.stubEnv('PERSONAL_LEARNING_PARTICIPANT_PREPARATION', 'false');
-      return { workspaceId: authority.workspaceId, serviceId: authority.groupId };
+      return Promise.resolve({ workspaceId: authority.workspaceId, serviceId: authority.groupId });
     });
     expect((await response(request(), 'slug')).status).toBe(404);
     expect(f.change).not.toHaveBeenCalled();
