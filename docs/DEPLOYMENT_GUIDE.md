@@ -37,6 +37,8 @@ SOCIAL Intelligenceを有効にする場合は、Productionだけにserver-only�
 
 ## Deployment Order
 
+Personal Learningの限定運用は[Production Closed Pilot Runbook](ai-training/PERSONAL_LEARNING_PRODUCTION_CLOSED_PILOT_RUNBOOK.md)を参照する。stagingは任意確認環境であり、Production Release Gateと人間承認を省略する理由ではない。現コードの本番拒否と少人数制限は別PRまで維持し、本番配備・利用開始・Provider利用を分離する。
+
 Personal Learning P1-C-S migration `20261006021000_personal_learning_persistence`を含むリリースは、[承認条件と手順](ai-training/AI_TRAINING_PERSONAL_LEARNING_P1CS_RELEASE_RUNBOOK.md)でBackup、実DBのpending一覧、旧V1との互換性、既存Goal indexのlock影響を確認する。保存基盤の配備、Definitionの人間承認、利用開始は別判断とし、review fixtureを自動承認しない。
 
 Feedback maintenance migration `20261003050000_feedback_maintenance_job`を含むリリースは、[専用Runbook](improvement/IMPROVEMENT_MAINTENANCE_RELEASE_RUNBOOK.md)の停止/drain/preflightをbuild開始前に満たす。build先頭でDBが変わり、旧アプリのworkerが動いている状態は非互換。jobs/scheduleだけ止めてもjobs/runのcleanupは止まらない。停止を証明できない場合は公開を開始しない。
