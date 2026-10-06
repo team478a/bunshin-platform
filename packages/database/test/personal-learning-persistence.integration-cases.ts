@@ -21,6 +21,7 @@ import { PrismaPersonalLearningPersistenceRepository } from '../src/personal-lea
 import { PrismaPersonalLearningRouterBridge } from '../src/personal-learning-router';
 import { PrismaTrainingAnswerRepository } from '../src/training-answer';
 import { PrismaPersonalLearningAiCallRepository } from '../src/personal-learning-ai-call';
+import { PrismaLearningDefinitionApprovalAdminRepository } from '../src/learning-definition-approval-admin';
 import {
   PrismaPersonalLearningPilotRepository,
   PrismaPersonalLearningPilotRouter,
@@ -195,6 +196,147 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
       }
       return { repo, actor, confirm, scope, enrollment, owner, group, member, plan };
     }
+    it('Definition admin: human review, immutable retry, CAS, withdrawal and reapproval audit', async () => {
+      const f = await fixture(false);
+      const repository = new PrismaLearningDefinitionApprovalAdminRepository(client, () => now);
+      const scope = {
+        workspaceId: f.scope.workspaceId,
+        groupId: f.scope.groupId,
+        actorUserId: f.owner.id,
+      };
+      const first = (await repository.list(scope))[0]!;
+      expect(first.current).toBeNull();
+      const command = {
+        operationId: randomUUID(),
+        action: 'APPROVE' as const,
+        confirmation: 'CONFIRM_DEFINITION_APPROVAL' as const,
+        definitionKey: first.definition.reference.definitionKey,
+        version: first.definition.reference.version,
+        expectedRevision: first.revision,
+        reviewDigest: first.reviewDigest,
+        reviewedCommitSha: 'a'.repeat(40),
+        reviewEvidenceKey: 'synthetic-review',
+        reviewChecklist: {
+          objective: true as const,
+          prerequisites: true as const,
+          concepts: true as const,
+          safety: true as const,
+          mistakes: true as const,
+          practice: true as const,
+          rubricAndMission: true as const,
+        },
+      };
+      await expect(
+        repository.change(scope, { ...command, reviewDigest: 'b'.repeat(64) }),
+      ).rejects.toMatchObject({ code: 'CONFLICT' });
+      await expect(
+        repository.change(scope, { ...command, version: 'UNKNOWN' }),
+      ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+      const receipt = await repository.change(scope, command);
+      expect(receipt.stateAtOperation).toMatchObject({
+        approvalStatus: 'APPROVED',
+        approvedAt: now.toISOString(),
+        approvedByUserId: f.owner.id,
+      });
+      expect((await repository.change(scope, command)).replayed).toBe(true);
+      await expect(
+        repository.change(scope, { ...command, reviewEvidenceKey: 'different' }),
+      ).rejects.toMatchObject({ code: 'CONFLICT' });
+      await expect(
+        repository.change(scope, { ...command, operationId: randomUUID() }),
+      ).rejects.toMatchObject({ code: 'CONFLICT' });
+      const current = (await repository.list(scope))[0]!;
+      const { reviewChecklist: _check, ...fields } = command;
+      await repository.change(scope, {
+        ...fields,
+        operationId: randomUUID(),
+        action: 'DEPRECATE',
+        confirmation: 'CONFIRM_DEFINITION_WITHDRAWAL',
+        expectedRevision: current.revision,
+      });
+      const withdrawn = (await repository.list(scope))[0]!;
+      expect(withdrawn.current).toMatchObject({
+        approvalStatus: 'DEPRECATED',
+        approvedAt: now.toISOString(),
+        approvedByUserId: f.owner.id,
+      });
+      // A replay returns the historical receipt, never restores the current approval.
+      expect((await repository.change(scope, command)).replayed).toBe(true);
+      expect((await repository.list(scope))[0]!.current?.approvalStatus).toBe('DEPRECATED');
+      await repository.change(scope, {
+        ...command,
+        operationId: randomUUID(),
+        expectedRevision: withdrawn.revision,
+      });
+      const renewed = (await repository.list(scope))[0]!;
+      expect(renewed.revision).not.toBe(current.revision); // identical millisecond/state is not an ABA match
+      expect(
+        await client.programAuditLog.count({
+          where: {
+            workspaceId: scope.workspaceId,
+            groupId: scope.groupId,
+            action: 'LEARNING_DEFINITION_APPROVAL_CHANGED',
+          },
+        }),
+      ).toBe(3);
+      await expect(
+        repository.list({ ...scope, actorUserId: f.scope.userId }),
+      ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+      await expect(repository.list({ ...scope, workspaceId: randomUUID() })).rejects.toMatchObject({
+        code: 'FORBIDDEN',
+      });
+      await expect(repository.list({ ...scope, groupId: randomUUID() })).rejects.toMatchObject({
+        code: 'FORBIDDEN',
+      });
+      await client.groupMembership.updateMany({
+        where: { workspaceId: scope.workspaceId, groupId: scope.groupId, userId: f.owner.id },
+        data: { status: 'REVOKED' },
+      });
+      await expect(repository.change(scope, command)).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    });
+    it('Definition admin: concurrent first approvals create only one state/audit', async () => {
+      const f = await fixture(false);
+      const repository = new PrismaLearningDefinitionApprovalAdminRepository(client, () => now);
+      const scope = {
+        workspaceId: f.scope.workspaceId,
+        groupId: f.scope.groupId,
+        actorUserId: f.owner.id,
+      };
+      const first = (await repository.list(scope))[0]!;
+      const command = {
+        action: 'APPROVE' as const,
+        confirmation: 'CONFIRM_DEFINITION_APPROVAL' as const,
+        definitionKey: first.definition.reference.definitionKey,
+        version: first.definition.reference.version,
+        expectedRevision: first.revision,
+        reviewDigest: first.reviewDigest,
+        reviewedCommitSha: 'a'.repeat(40),
+        reviewEvidenceKey: 'synthetic-review',
+        reviewChecklist: {
+          objective: true as const,
+          prerequisites: true as const,
+          concepts: true as const,
+          safety: true as const,
+          mistakes: true as const,
+          practice: true as const,
+          rubricAndMission: true as const,
+        },
+      };
+      const results = await Promise.allSettled([
+        repository.change(scope, { ...command, operationId: randomUUID() }),
+        repository.change(scope, { ...command, operationId: randomUUID() }),
+      ]);
+      expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+      expect(
+        await client.programAuditLog.count({
+          where: {
+            workspaceId: scope.workspaceId,
+            groupId: scope.groupId,
+            action: 'LEARNING_DEFINITION_APPROVAL_CHANGED',
+          },
+        }),
+      ).toBe(1);
+    });
     async function routerFixture() {
       const f = await fixture();
       const plan = await f.plan();
