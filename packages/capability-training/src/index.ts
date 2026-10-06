@@ -263,3 +263,4 @@ export * from './skill-lifecycle';
 export * from './skill-exposure';
 export * from './learning-scope';
 export * from './learning-profile-goal';
+export * from './learning-definition-fixtures';
