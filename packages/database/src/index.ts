@@ -292,3 +292,4 @@ export {
   purgeExpiredImprovementFeedback,
   IMPROVEMENT_FEEDBACK_RETENTION_POLICY,
 } from './improvement-feedback-retention';
+export { PrismaPersonalLearningRouterBridge } from './personal-learning-router';

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { PrismaClient } from '@prisma/client';
+import type { PrismaClient, Prisma } from '@prisma/client';
 import { afterEach, describe, expect, it } from 'vitest';
 import { cleanupProgramFixtures } from './program-fixture-cleanup';
 import { PrismaTrainingPersonalDataExportRepository } from '../src/training-personal-data-export';
@@ -12,8 +12,13 @@ import {
   AI_TRAINING_LEARNING_DEFINITION_FIXTURES,
   consultAiTrainingLearning,
   projectAiTrainingLearnerProfiles,
+  createAiTrainingV1Definition,
+  AI_TRAINING_SKILL_RULE_VERSION,
+  getAiTrainingMissionQuality,
 } from '@bunshin/capability-training';
 import { PrismaPersonalLearningPersistenceRepository } from '../src/personal-learning-persistence';
+import { PrismaPersonalLearningRouterBridge } from '../src/personal-learning-router';
+import { PrismaTrainingAnswerRepository } from '../src/training-answer';
 const now = new Date('2026-10-06T02:00:00Z');
 
 /** Called ONLY after database.integration.test.ts live disposable preflight. */
@@ -182,6 +187,270 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
       }
       return { repo, actor, confirm, scope, enrollment, owner, group, member, plan };
     }
+    async function routerFixture() {
+      const f = await fixture();
+      const plan = await f.plan();
+      await f.repo.savePlan({ ...f.actor, plan, expectedRevision: 0, idempotencyKey: 'plan' });
+      await f.repo.confirmPlan({
+        ...f.actor,
+        planId: plan.planId,
+        expectedRevision: 1,
+        idempotencyKey: 'plan-confirm',
+      });
+      const program = await client.serviceProgram.findUniqueOrThrow({
+        where: { id: f.enrollment.serviceProgramId },
+      });
+      await client.programTemplateVersion.update({
+        where: { id: program.programTemplateVersionId },
+        data: {
+          definition: JSON.parse(
+            JSON.stringify(createAiTrainingV1Definition()),
+          ) as Prisma.InputJsonValue,
+        },
+      });
+      await client.trainingParticipantProfile.create({
+        data: { ...f.scope, role: 'OTHER', aiLevel: 'BEGINNER', updatedByUserId: f.scope.userId },
+      });
+      const bridge = new PrismaPersonalLearningRouterBridge(client, () => now);
+      const request = {
+        ...f.actor,
+        planId: plan.planId,
+        expectedRevision: 1,
+        idempotencyKey: 'bridge-1',
+      };
+      await client.programEnrollment.update({
+        where: { id: f.enrollment.id },
+        data: {
+          startsAt: new Date(Math.min(Date.now(), now.getTime()) - 86400000),
+          endsAt: new Date(Math.max(Date.now(), now.getTime()) + 86400000),
+        },
+      });
+      // Persist the exact existing Assessment handler format without invoking its paid Provider.
+      async function assessed(assignmentId: string, result: 'PASS' | 'REVIEW' = 'PASS') {
+        const assignment = await client.programMissionAssignment.findUniqueOrThrow({
+          where: { id: assignmentId },
+        });
+        const quality = getAiTrainingMissionQuality(
+          assignment.missionDefinitionKey === 'PROMPT_BASIC' ? 'PROMPT_BASIC' : 'PROMPT_CONDITION',
+        )!;
+        const evaluation = {
+          result,
+          understanding: 80,
+          skills: {
+            promptStructure: result === 'REVIEW' ? 40 : 80,
+            contextSetting: 80,
+            constraintSetting: 80,
+          },
+          evaluatedSkillKeys: quality.skillKeys,
+          evaluationRuleVersion: AI_TRAINING_SKILL_RULE_VERSION,
+        };
+        const submission = await new PrismaTrainingAnswerRepository(client).submit({
+          workspaceId: f.scope.workspaceId,
+          groupId: f.scope.groupId,
+          programEnrollmentId: f.enrollment.id,
+          actorUserId: f.scope.userId,
+          missionAssignmentId: assignmentId,
+          answer: 'Synthetic learner practice',
+          idempotencyKey: `submission-${assignmentId}`,
+          occurredAt: now,
+        });
+        if (submission.outcome !== 'SUBMITTED')
+          throw new Error('existing answer runtime rejected bridge');
+        const answer = await client.trainingMissionAnswer.update({
+          where: { id: submission.answer.id },
+          data: { evaluationStatus: 'READY', evaluation, evaluatedAt: now },
+        });
+        await client.programActionEvent.create({
+          data: {
+            workspaceId: f.scope.workspaceId,
+            groupId: f.scope.groupId,
+            programEnrollmentId: f.enrollment.id,
+            missionAssignmentId: assignmentId,
+            actorUserId: f.scope.userId,
+            eventType: 'ANSWER_EVALUATED',
+            sourceResourceType: 'TRAINING_MISSION_ANSWER',
+            sourceResourceId: answer.id,
+            idempotencyKey: `training-evaluation:${answer.id}:evaluated`,
+            metadata: evaluation,
+            occurredAt: now,
+          },
+        });
+        await client.programMissionAssignment.update({
+          where: { id: assignmentId },
+          data:
+            result === 'PASS'
+              ? { status: 'COMPLETED', startedAt: now, completedAt: now }
+              : { status: 'SKIPPED', skippedAt: now },
+        });
+        return answer;
+      }
+      return { ...f, plan, bridge, request, assessed };
+    }
+    it('P1-E A/B/C/F/K: bridges three independent assignments and consumes existing assessment evidence', async () => {
+      const f = await routerFixture();
+      const first = await f.bridge.bridge(f.request);
+      expect(first.result.status).toBe('NEXT');
+      expect(await f.bridge.bridge(f.request)).toEqual(first);
+      expect(
+        (await f.bridge.bridge({ ...f.request, idempotencyKey: 'pending' })).result.status,
+      ).toBe('UNKNOWN');
+      await f.assessed(first.assignmentId!);
+      const second = await f.bridge.bridge({ ...f.request, idempotencyKey: 'bridge-2' });
+      expect(second.result.definition?.definitionKey).toBe('CONTEXT_SETTING');
+      expect(second.assignmentId).not.toBe(first.assignmentId);
+      await f.assessed(second.assignmentId!);
+      const third = await f.bridge.bridge({ ...f.request, idempotencyKey: 'bridge-3' });
+      expect(third.result.definition?.definitionKey).toBe('CONSTRAINT_SETTING');
+      await f.assessed(third.assignmentId!);
+      expect((await f.bridge.bridge({ ...f.request, idempotencyKey: 'done' })).result.status).toBe(
+        'PLAN_COMPLETED',
+      );
+      expect(
+        await client.programMissionAssignment.count({
+          where: { programEnrollmentId: f.enrollment.id },
+        }),
+      ).toBe(3);
+      expect(
+        (await client.programEnrollment.findUniqueOrThrow({ where: { id: f.enrollment.id } }))
+          .status,
+      ).toBe('ACTIVE');
+      expect((await f.repo.read(f.actor)).goals[0]!.reference.reference.status).toBe('ACTIVE');
+      expect((await f.repo.read(f.actor)).plans[0]!.plan.status).toBe('CONFIRMED');
+    });
+    it('P1-E D: REVIEW creates a distinct idempotent attempt, never overwrites history', async () => {
+      const f = await routerFixture();
+      const first = await f.bridge.bridge(f.request);
+      await f.assessed(first.assignmentId!, 'REVIEW');
+      const retryRequest = { ...f.request, idempotencyKey: 'review' };
+      const second = await f.bridge.bridge(retryRequest);
+      expect(second.result.status).toBe('REVIEW');
+      expect(second.assignmentId).not.toBe(first.assignmentId);
+      expect(await f.bridge.bridge(retryRequest)).toEqual(second);
+    });
+    it('P1-E G/H/I/J/L: rejects stale revision, revoked approval, cancelled Goal, inactive Enrollment and scope changes', async () => {
+      const f = await routerFixture();
+      expect((await f.bridge.bridge({ ...f.request, expectedRevision: 2 })).result.reason).toBe(
+        'PLAN_REVISION_CHANGED',
+      );
+      for (const field of [
+        'userId',
+        'workspaceId',
+        'programEnrollmentId',
+        'groupId',
+        'groupMembershipId',
+      ] as const) {
+        await expect(
+          f.bridge.bridge({ ...f.request, scope: { ...f.scope, [field]: randomUUID() } }),
+        ).rejects.toThrow();
+      }
+      await client.learningDefinitionApproval.updateMany({
+        where: { groupId: f.scope.groupId },
+        data: { approvalStatus: 'DEPRECATED' },
+      });
+      expect((await f.bridge.bridge(f.request)).result.reason).toBe('DEFINITION_NOT_APPROVED');
+      await client.programMemberGoal.updateMany({
+        where: { programEnrollmentId: f.enrollment.id },
+        data: { status: 'CANCELLED' },
+      });
+      expect((await f.bridge.bridge(f.request)).result.reason).toBe('GOAL_NOT_ACTIVE');
+      await client.programEnrollment.update({
+        where: { id: f.enrollment.id },
+        data: { status: 'CANCELLED' },
+      });
+      await expect(f.bridge.bridge(f.request)).rejects.toThrow();
+      expect(
+        await client.programMissionAssignment.count({
+          where: { programEnrollmentId: f.enrollment.id },
+        }),
+      ).toBe(0);
+    });
+    it('P1-E refuses unverified skill data and preserves an unfinished legacy assignment', async () => {
+      const f = await routerFixture();
+      const first = await f.bridge.bridge(f.request);
+      const answer = await f.assessed(first.assignmentId!);
+      await client.programActionEvent.deleteMany({
+        where: { sourceResourceId: answer.id, eventType: 'ANSWER_EVALUATED' },
+      });
+      expect(
+        (await f.bridge.bridge({ ...f.request, idempotencyKey: 'unverified' })).result.status,
+      ).toBe('UNKNOWN');
+      await client.programMissionAssignment.update({
+        where: { id: first.assignmentId! },
+        data: {
+          targetResourceType: null,
+          targetResourceId: null,
+          status: 'PRESENTED',
+          startedAt: null,
+          completedAt: null,
+          skippedAt: null,
+        },
+      });
+      expect(
+        (await f.bridge.bridge({ ...f.request, idempotencyKey: 'legacy' })).result.reason,
+      ).toBe('EXISTING_ASSIGNMENT_ACTIVE');
+    });
+    it('P1-E rechecks approval even on a duplicate receipt and never reuses old-revision evidence', async () => {
+      const f = await routerFixture();
+      const first = await f.bridge.bridge(f.request);
+      await f.assessed(first.assignmentId!);
+      const draft: PersonalLearningPlan = {
+        ...f.plan,
+        revision: 2,
+        previousRevision: { planId: f.plan.planId, revision: 1 },
+        revisionReason: 'LEARNER_REQUEST',
+        status: 'DRAFT',
+        confirmation: null,
+      };
+      await f.repo.savePlan({
+        ...f.actor,
+        plan: draft,
+        expectedRevision: 1,
+        idempotencyKey: 'revision-2',
+      });
+      await f.repo.confirmPlan({
+        ...f.actor,
+        planId: draft.planId,
+        expectedRevision: 2,
+        idempotencyKey: 'confirm-2',
+      });
+      expect((await f.bridge.bridge(f.request)).result.reason).toBe('PLAN_REVISION_CHANGED');
+      expect(
+        (await f.bridge.bridge({ ...f.request, expectedRevision: 2, idempotencyKey: 'new' })).result
+          .status,
+      ).toBe('UNKNOWN');
+      const g = await routerFixture();
+      await g.bridge.bridge(g.request);
+      await client.learningDefinitionApproval.updateMany({
+        where: { groupId: g.scope.groupId },
+        data: { approvalStatus: 'DRAFT' },
+      });
+      expect((await g.bridge.bridge(g.request)).result.reason).toBe('DEFINITION_NOT_APPROVED');
+    });
+    it('P1-E simultaneous bridge requests cannot create duplicate assignments', async () => {
+      const f = await routerFixture();
+      await Promise.allSettled([
+        f.bridge.bridge(f.request),
+        f.bridge.bridge({ ...f.request, idempotencyKey: 'parallel' }),
+      ]);
+      expect(
+        await client.programMissionAssignment.count({
+          where: { programEnrollmentId: f.enrollment.id },
+        }),
+      ).toBe(1);
+    });
+    it('P1-E does not ignore an unscoped legacy review requirement', async () => {
+      const f = await routerFixture();
+      await client.trainingParticipantProfile.update({
+        where: { programEnrollmentId: f.enrollment.id },
+        data: { needsReview: true },
+      });
+      expect((await f.bridge.bridge(f.request)).result.reason).toBe('REVIEW_EVIDENCE_MISSING');
+      expect(
+        await client.programMissionAssignment.count({
+          where: { programEnrollmentId: f.enrollment.id },
+        }),
+      ).toBe(0);
+    });
     it('saves Goal once, restores its evidence, and rejects a different key without explicit replacement', async () => {
       const f = await fixture();
       const first = await f.repo.confirmGoal(f.confirm);

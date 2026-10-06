@@ -60,7 +60,7 @@ export class PrismaPersonalLearningPersistenceRepository implements PersonalLear
     private readonly client: PrismaClient,
     private readonly now = () => new Date(),
   ) {}
-  private async authorized<T>(
+  protected async authorized<T>(
     input: PersonalLearningActor,
     write: boolean,
     work: (tx: Tx, now: Date) => Promise<T>,
@@ -121,7 +121,7 @@ export class PrismaPersonalLearningPersistenceRepository implements PersonalLear
       throw error;
     }
   }
-  private async approved(
+  protected async approved(
     tx: Tx,
     input: PersonalLearningActor,
   ): Promise<readonly LearningDefinitionReference[]> {
@@ -160,7 +160,7 @@ export class PrismaPersonalLearningPersistenceRepository implements PersonalLear
       reference: projectProgramMemberGoalReference(scope, row.goal),
     });
   }
-  private restore(row: Revision): PersonalLearningPlan {
+  protected restore(row: Revision): PersonalLearningPlan {
     const goal = this.goalReference(row.goalConfirmation);
     // Immutable confirmation snapshot. Current Goal state is returned separately, never inferred from Plan.
     const snapshot = { ...goal, reference: { ...goal.reference, status: 'ACTIVE' as const } };
