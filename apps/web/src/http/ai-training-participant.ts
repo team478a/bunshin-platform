@@ -21,6 +21,7 @@ import { currentUserProvider } from '../auth/current-user';
 import { requireSameOrigin } from '../auth/request-security';
 import { resolveMemberServiceContext } from '../services/public-service';
 import { enqueueAiTrainingEvaluation } from '../services/ai-training-evaluation-queue';
+import { requirePersonalLearningPilotForReservedProgram } from '../services/personal-learning-pilot-access';
 
 const uuid = z.string().uuid();
 const submissionSchema = z
@@ -197,6 +198,12 @@ export async function submitAiTrainingAnswerResponse(
       submissionSchema.parseAsync(request.json()),
     ]);
     const db = await import('@bunshin/database');
+    await requirePersonalLearningPilotForReservedProgram(
+      serviceSlug,
+      uuid.parse(rawEnrollmentId),
+      actor.userId,
+      service,
+    );
     const result = await new db.PrismaTrainingAnswerRepository(db.prisma).submit({
       workspaceId: service.workspaceId,
       groupId: service.serviceId,
@@ -247,6 +254,12 @@ export async function recordAiTrainingInteractionResponse(
       interactionSchema.parseAsync(request.json()),
     ]);
     const db = await import('@bunshin/database');
+    await requirePersonalLearningPilotForReservedProgram(
+      serviceSlug,
+      uuid.parse(rawEnrollmentId),
+      actor.userId,
+      service,
+    );
     const result = await new db.PrismaTrainingInteractionRepository(db.prisma).record({
       workspaceId: service.workspaceId,
       groupId: service.serviceId,

@@ -38,6 +38,7 @@ export function AiTrainingMissionCard({
   adjustMission,
   editGoal,
   submitAnswer,
+  pilot = false,
 }: {
   state: TrainingParticipantState;
   action: TrainingAction;
@@ -61,6 +62,7 @@ export function AiTrainingMissionCard({
   ) => Promise<void>;
   editGoal: () => void;
   submitAnswer: (event?: FormEvent<HTMLFormElement>) => Promise<void>;
+  pilot?: boolean;
 }) {
   const [barrierOpen, setBarrierOpen] = useState(false);
   return (
@@ -100,7 +102,7 @@ export function AiTrainingMissionCard({
           {action.display.barrierGuidance}
         </p>
       ) : null}
-      {action.display.goalReviewRecommended ? (
+      {!pilot && action.display.goalReviewRecommended ? (
         <button className="button button--secondary" type="button" onClick={editGoal}>
           学習目標を見直す
         </button>
@@ -159,15 +161,17 @@ export function AiTrainingMissionCard({
           >
             {postponed ? '後で再開できます' : '後でやる'}
           </button>
-          <button
-            className="button button--secondary"
-            type="button"
-            aria-expanded={barrierOpen}
-            onClick={() => setBarrierOpen((open) => !open)}
-            disabled={barrierSaving || action.submission !== null}
-          >
-            進めにくい理由
-          </button>
+          {!pilot ? (
+            <button
+              className="button button--secondary"
+              type="button"
+              aria-expanded={barrierOpen}
+              onClick={() => setBarrierOpen((open) => !open)}
+              disabled={barrierSaving || action.submission !== null}
+            >
+              進めにくい理由
+            </button>
+          ) : null}
         </div>
       ) : null}
       {barrierOpen && action.mode === 'WORK' && !action.submission ? (
@@ -288,7 +292,9 @@ export function AiTrainingMissionCard({
           <p>
             {action.submission.evaluationStatus === 'FAILED'
               ? '回答は保存されています。AI評価をもう一度試すことができます。'
-              : '回答は保存されています。AIが確認中です。画面を閉じても処理は続きます。'}
+              : pilot && action.submission.evaluationStatus === 'READY'
+                ? '評価が完了しています。確認結果をご覧ください。'
+                : '回答は保存されています。AIが確認中です。画面を閉じても処理は続きます。'}
           </p>
           {message ? <p className="notice notice--success">{message}</p> : null}
           {error ? <p className="notice notice--error">{error}</p> : null}

@@ -1,4 +1,7 @@
-import type { AiTrainingRuntimeRepository } from '@bunshin/capability-training';
+import {
+  isPersonalLearningPilotProgram,
+  type AiTrainingRuntimeRepository,
+} from '@bunshin/capability-training';
 import { Prisma, type PrismaClient } from '@prisma/client';
 import { resolveScope, sameDecision, StaleTrainingRuntimeWrite } from './training-runtime-shared';
 import { lockTrainingEnrollmentData } from './training-data-lock';
@@ -26,6 +29,7 @@ export class PrismaAiTrainingRuntimeDecisionRepository {
           );
           if (
             !scope ||
+            isPersonalLearningPilotProgram(scope.program.settings) ||
             scope.program.programTemplateVersionId !== input.candidate.programTemplateVersionId
           ) {
             return 'NOT_FOUND' as const;

@@ -19,6 +19,12 @@ import {
 import { PrismaPersonalLearningPersistenceRepository } from '../src/personal-learning-persistence';
 import { PrismaPersonalLearningRouterBridge } from '../src/personal-learning-router';
 import { PrismaTrainingAnswerRepository } from '../src/training-answer';
+import {
+  PrismaPersonalLearningPilotRepository,
+  PrismaPersonalLearningPilotRouter,
+} from '../src/personal-learning-pilot';
+import { PrismaAiTrainingRuntimeCandidateRepository } from '../src/training-runtime-candidate-repository';
+import { PrismaAiTrainingRuntimeStateRepository } from '../src/training-runtime-state-repository';
 const now = new Date('2026-10-06T02:00:00Z');
 
 /** Called ONLY after database.integration.test.ts live disposable preflight. */
@@ -256,6 +262,11 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
         });
         if (submission.outcome !== 'SUBMITTED')
           throw new Error('existing answer runtime rejected bridge');
+        const started = await client.programMissionAssignment.findUniqueOrThrow({
+          where: { id: assignmentId },
+        });
+        expect(started.status).toBe('STARTED');
+        expect(started.startedAt).toEqual(now);
         const answer = await client.trainingMissionAnswer.update({
           where: { id: submission.answer.id },
           data: { evaluationStatus: 'READY', evaluation, evaluatedAt: now },
@@ -286,6 +297,170 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
       }
       return { ...f, plan, bridge, request, assessed };
     }
+    it('P1-F restricted pilot bridges an entire saved path with existing answers and fixed feedback', async () => {
+      const f = await routerFixture();
+      await client.serviceProgram.update({
+        where: { id: f.enrollment.serviceProgramId },
+        data: {
+          settings: {
+            moduleKey: 'AI_TRAINING_V1',
+            personalLearningPilot: { enabled: true, enrollmentIds: [f.enrollment.id] },
+            trainingOperations: { notificationsEnabled: false, postponedReminderEnabled: false },
+          },
+        },
+      });
+      const pilot = new PrismaPersonalLearningPilotRepository(client, () => now);
+      const router = new PrismaPersonalLearningPilotRouter(client);
+      expect((await pilot.read(f.actor)).plans[0]?.plan.status).toBe('CONFIRMED');
+      expect(
+        await new PrismaAiTrainingRuntimeCandidateRepository(client).findCandidate({
+          workspaceId: f.scope.workspaceId,
+          groupId: f.scope.groupId,
+          actorUserId: f.scope.userId,
+          programEnrollmentId: f.enrollment.id,
+          now: new Date(),
+        }),
+      ).toBeNull();
+      // The injected assessment fixture uses fixed time, so the bridge is fixed too.
+      const fixedRouter = new PrismaPersonalLearningPilotRouter(client, () => now);
+      for (const [index, definition] of AI_TRAINING_LEARNING_DEFINITION_FIXTURES.entries()) {
+        const receipt = await fixedRouter.bridge({
+          ...f.request,
+          idempotencyKey: `pilot-${index}`,
+        });
+        expect(receipt.result.definition).toEqual(definition.reference);
+        expect(receipt.assignmentId).toBeTruthy();
+        const assignment = await pilot.currentAssignment({
+          ...f.actor,
+          planId: f.plan.planId,
+          revision: 1,
+        });
+        expect(assignment?.id).toBe(receipt.assignmentId);
+        expect(
+          await new PrismaAiTrainingRuntimeStateRepository(client).findState({
+            workspaceId: f.scope.workspaceId,
+            groupId: f.scope.groupId,
+            actorUserId: f.scope.userId,
+            programEnrollmentId: f.enrollment.id,
+            now: new Date(),
+          }),
+        ).toBeNull();
+        await f.assessed(receipt.assignmentId!);
+        const saved = await client.programMissionAssignment.findUniqueOrThrow({
+          where: { id: receipt.assignmentId! },
+        });
+        expect(saved.startedAt).not.toBeNull();
+        await pilot.feedback({ ...f.actor, assignmentId: saved.id, fit: 'FIT' });
+        await pilot.feedback({ ...f.actor, assignmentId: saved.id, fit: 'NOT_FIT' });
+      }
+      expect(
+        (await fixedRouter.bridge({ ...f.request, idempotencyKey: 'pilot-completed' })).result
+          .status,
+      ).toBe('PLAN_COMPLETED');
+      expect(
+        (await client.programEnrollment.findUniqueOrThrow({ where: { id: f.enrollment.id } }))
+          .status,
+      ).toBe('ACTIVE');
+      expect(
+        await client.programActionEvent.count({
+          where: { programEnrollmentId: f.enrollment.id, eventType: 'PERSONAL_LEARNING_PILOT_FIT' },
+        }),
+      ).toBe(3);
+      await expect(pilot.read({ ...f.actor, actorUserId: f.owner.id })).rejects.toThrow();
+      expect(
+        (await pilot.currentAssignment({ ...f.actor, planId: f.request.planId, revision: 1 }))
+          ?.planCompleted,
+      ).toBe(true);
+      await client.serviceProgram.update({
+        where: { id: f.enrollment.serviceProgramId },
+        data: {
+          settings: { moduleKey: 'AI_TRAINING_V1', personalLearningPilot: { enabled: false } },
+        },
+      });
+      await expect(pilot.read(f.actor)).rejects.toThrow();
+      await expect(router.bridge({ ...f.request, idempotencyKey: 'disabled' })).rejects.toThrow();
+    });
+    it('P1-F revalidates Consultation and confirms Goal/Plan separately without saving consultation text', async () => {
+      const f = await fixture();
+      await client.serviceProgram.update({
+        where: { id: f.enrollment.serviceProgramId },
+        data: {
+          settings: {
+            moduleKey: 'AI_TRAINING_V1',
+            personalLearningPilot: { enabled: true, enrollmentIds: [f.enrollment.id] },
+            trainingOperations: { notificationsEnabled: false, postponedReminderEnabled: false },
+          },
+        },
+      });
+      await client.trainingParticipantProfile.create({
+        data: { ...f.scope, role: 'OTHER', aiLevel: 'BEGINNER', updatedByUserId: f.scope.userId },
+      });
+      const pilot = new PrismaPersonalLearningPilotRepository(client, () => now);
+      const consultation = {
+        scope: f.scope,
+        text: 'プロンプトを学びたい',
+        answers: [] as LearningConsultationAnswer[],
+      };
+      const input = { ...f.actor, consultation, telemetryKey: randomUUID() };
+      const candidate = await pilot.consult(input);
+      await pilot.consult(input);
+      if (candidate.status !== 'GOAL_CANDIDATE') throw new Error('synthetic candidate unavailable');
+      expect((await pilot.read(f.actor)).goals).toHaveLength(0);
+      consultation.answers.push({
+        questionKey: 'GOAL_CONFIRMATION',
+        answerKey: 'YES',
+        candidateKey: candidate.question.candidateKey!,
+      });
+      const request = { ...f.actor, consultation, idempotencyKey: 'pilot-goal' };
+      await pilot.confirmGoal(request);
+      await pilot.confirmGoal(request);
+      const reference = (await pilot.read(f.actor)).goals[0]!.reference;
+      const plan: PersonalLearningPlan = {
+        contractVersion: PERSONAL_LEARNING_PLAN_CONTRACT_VERSION,
+        ruleVersion: PERSONAL_LEARNING_PLAN_CONTRACT_VERSION,
+        planId: randomUUID(),
+        revision: 1,
+        previousRevision: null,
+        revisionReason: 'INITIAL',
+        scope: f.scope,
+        goal: reference,
+        steps: AI_TRAINING_LEARNING_DEFINITION_FIXTURES.map((d) => ({
+          definition: d.reference,
+          prerequisites: d.prerequisites,
+          selectionReason: 'GOAL_ALIGNMENT',
+        })),
+        status: 'DRAFT',
+        confirmation: null,
+      };
+      await pilot.savePlan({ ...f.actor, plan, expectedRevision: 0, idempotencyKey: 'pilot-plan' });
+      expect((await pilot.read(f.actor)).plans[0]?.plan.status).toBe('DRAFT');
+      await pilot.confirmPlan({
+        ...f.actor,
+        planId: plan.planId,
+        expectedRevision: 1,
+        idempotencyKey: 'pilot-confirm-plan',
+      });
+      expect((await pilot.read(f.actor)).plans[0]?.plan.status).toBe('CONFIRMED');
+      const events = await client.programActionEvent.findMany({
+        where: { programEnrollmentId: f.enrollment.id },
+      });
+      expect(
+        events.filter((e) => e.eventType === 'PERSONAL_LEARNING_PILOT_CONSULTATION'),
+      ).toHaveLength(1);
+      expect(JSON.stringify(events)).not.toContain(consultation.text);
+      await expect(
+        pilot.confirmGoal({
+          ...f.actor,
+          idempotencyKey: 'forged',
+          consultation: {
+            ...consultation,
+            answers: [
+              { questionKey: 'GOAL_CONFIRMATION', answerKey: 'YES', candidateKey: 'forged' },
+            ],
+          },
+        }),
+      ).rejects.toThrow();
+    });
     it('P1-E A/B/C/F/K: bridges three independent assignments and consumes existing assessment evidence', async () => {
       const f = await routerFixture();
       const first = await f.bridge.bridge(f.request);

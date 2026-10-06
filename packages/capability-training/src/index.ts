@@ -266,3 +266,7 @@ export * from './learning-profile-goal';
 export * from './learning-definition-fixtures';
 export * from './learning-consultation';
 export * from './learning-router';
+export {
+  isPersonalLearningPilotProgram,
+  personalLearningPilotAllows,
+} from './personal-learning-pilot';

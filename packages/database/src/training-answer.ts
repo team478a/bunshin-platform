@@ -102,7 +102,7 @@ export class PrismaTrainingAnswerRepository {
             actionMode: 'WORK',
             status: { in: ['PRESENTED', 'STARTED'] },
           },
-          select: { id: true, missionDefinitionKey: true },
+          select: { id: true, missionDefinitionKey: true, targetResourceType: true, status: true },
         });
         if (!assignment) return { outcome: 'NOT_FOUND' } as const;
 
@@ -111,6 +111,21 @@ export class PrismaTrainingAnswerRepository {
           select: { id: true },
         });
         if (existingAnswer) return { outcome: 'CONFLICT' } as const;
+
+        // Pilot submission is itself a real start fact, not a fabricated HINT/HELP interaction.
+        // Legacy V1 remains unchanged. Enrollment lock keeps this atomic with the answer.
+        if (
+          assignment.targetResourceType === 'PERSONAL_LEARNING_PLAN' &&
+          assignment.status === 'PRESENTED'
+        ) {
+          await tx.programMissionAssignment.update({
+            where: { id: assignment.id },
+            data: {
+              status: 'STARTED',
+              startedAt: input.occurredAt,
+            },
+          });
+        }
 
         const answer = await tx.trainingMissionAnswer.create({
           data: {

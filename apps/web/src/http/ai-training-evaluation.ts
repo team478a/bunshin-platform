@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { currentUserProvider } from '../auth/current-user';
 import { requireSameOrigin } from '../auth/request-security';
 import { resolveMemberServiceContext } from '../services/public-service';
+import { requirePersonalLearningPilotForReservedProgram } from '../services/personal-learning-pilot-access';
 import { enqueueAiTrainingEvaluation } from '../services/ai-training-evaluation-queue';
 
 const uuid = z.string().uuid();
@@ -31,6 +32,12 @@ async function resolveScopedAnswer(
   if (!actor) throw new ApplicationError('UNAUTHENTICATED', 'session required');
   const service = await resolveMemberServiceContext(serviceSlug, actor.userId);
   const enrollmentId = uuid.parse(rawEnrollmentId);
+  await requirePersonalLearningPilotForReservedProgram(
+    serviceSlug,
+    enrollmentId,
+    actor.userId,
+    service,
+  );
   const answerId = uuid.parse(rawAnswerId);
   const db = await import('@bunshin/database');
   const membership = await db.prisma.groupMembership.findFirst({
