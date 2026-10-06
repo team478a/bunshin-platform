@@ -24,6 +24,7 @@ import { PrismaPersonalLearningAiCallRepository } from '../src/personal-learning
 import { PrismaLearningDefinitionApprovalAdminRepository } from '../src/learning-definition-approval-admin';
 import { PrismaPersonalLearningPilotProfileRepository } from '../src/personal-learning-pilot-profile';
 import { PrismaPersonalLearningAssessmentGate } from '../src/personal-learning-assessment-gate';
+import { PrismaPersonalLearningCallAdmission } from '../src/personal-learning-call-admission';
 import { PrismaGuidedPracticeRepository } from '../src/guided-practice';
 import { PrismaTrainingPersonalDataDeletionRepository } from '../src/training-personal-data-deletion';
 import {
@@ -612,6 +613,245 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
         });
       return { ...f, practice, assignmentId, start, interact, complete };
     }
+    async function admissionFixture() {
+      const f = await practiceFixture();
+      const submitted = await new PrismaTrainingAnswerRepository(client).submit({
+        workspaceId: f.scope.workspaceId,
+        groupId: f.scope.groupId,
+        programEnrollmentId: f.enrollment.id,
+        actorUserId: f.scope.userId,
+        missionAssignmentId: f.assignmentId,
+        answer: 'Synthetic admission answer',
+        idempotencyKey: randomUUID(),
+        occurredAt: now,
+      });
+      if (submitted.outcome !== 'SUBMITTED') throw new Error('synthetic submission failed');
+      const answer = await client.trainingMissionAnswer.findFirstOrThrow({
+        where: { missionAssignmentId: f.assignmentId },
+      });
+      const policy = {
+        workspaceId: f.scope.workspaceId,
+        groupId: f.scope.groupId,
+        serviceProgramId: f.enrollment.serviceProgramId,
+        dailyAttemptLimit: 2,
+        maxConcurrent: 1,
+        model: 'synthetic',
+        maxRequestBytes: 10000,
+        maxOutputTokens: 100,
+      };
+      const repo = new PrismaPersonalLearningCallAdmission(client, () => now);
+      const job = () =>
+        client.job.create({
+          data: {
+            environment: 'STAGING',
+            workspaceId: f.scope.workspaceId,
+            jobType: 'TRAINING_ANSWER_EVALUATE',
+            payloadReference: `training-evaluation:${f.scope.groupId}:${f.enrollment.id}:${answer.id}:${f.scope.userId}`,
+            idempotencyKey: randomUUID(),
+            correlationId: randomUUID(),
+            requestedBy: f.scope.userId,
+            status: 'LEASED',
+            attemptCount: 1,
+            leaseOwner: 'synthetic-worker',
+            leaseExpiresAt: new Date(Date.now() + 600000),
+          },
+        });
+      const request = async () => ({
+        actor: f.actor,
+        assignmentId: f.assignmentId,
+        answerId: answer.id,
+        jobId: (await job()).id,
+        attemptCount: 1,
+        environment: 'STAGING' as const,
+        model: 'synthetic',
+        policy,
+      });
+      return { ...f, answer, policy, repo, request };
+    }
+    it('call admission counts failures, rejects replay and enforces daily limits without body storage', async () => {
+      const f = await admissionFixture();
+      const request = await f.request();
+      const first = await f.repo.admit(request);
+      await expect(f.repo.admit(request)).rejects.toThrow();
+      await f.repo.settle(first);
+      const second = await f.repo.admit(await f.request());
+      await f.repo.settle(second);
+      await expect(f.repo.admit(await f.request())).rejects.toThrow();
+      const rows = await client.personalLearningCallAdmission.findMany();
+      expect(rows).toHaveLength(2);
+      expect(JSON.stringify(rows)).not.toContain('Synthetic admission answer');
+      expect(rows[0]).not.toHaveProperty('userId');
+      await client.trainingMissionAnswer.delete({ where: { id: f.answer.id } });
+      expect(await client.personalLearningCallAdmission.count()).toBe(2);
+    });
+    it('parallel workers never admit more than one open call; unknown slots survive midnight', async () => {
+      const f = await admissionFixture();
+      const requests = await Promise.all([f.request(), f.request()]);
+      const results = await Promise.allSettled(requests.map((r) => f.repo.admit(r)));
+      expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+      const permit = await client.personalLearningCallAdmission.findFirstOrThrow();
+      await client.personalLearningCallAdmission.update({
+        where: { id: permit.id },
+        data: { admittedAt: new Date(Date.now() - 86400000) },
+      });
+      await expect(f.repo.admit(await f.request())).rejects.toThrow();
+      await f.repo.settle(permit);
+      await expect(f.repo.admit(await f.request())).resolves.toBeTruthy();
+    });
+    it('admission revalidates actor, configured Program, live job lease and approval', async () => {
+      const f = await admissionFixture();
+      const request = await f.request();
+      for (const change of [
+        { actor: { ...f.actor, actorUserId: f.owner.id } },
+        { actor: { ...f.actor, scope: { ...f.scope, programEnrollmentId: randomUUID() } } },
+        { policy: { ...f.policy, workspaceId: randomUUID() } },
+        { policy: { ...f.policy, serviceProgramId: randomUUID() } },
+        { model: 'different' },
+        { attemptCount: 2 },
+        { environment: 'PRODUCTION' as const },
+      ])
+        await expect(f.repo.admit({ ...request, ...change })).rejects.toThrow();
+      await client.job.update({
+        where: { id: request.jobId },
+        data: { leaseExpiresAt: new Date(0) },
+      });
+      await expect(f.repo.admit(request)).rejects.toThrow();
+      const fresh = await f.request();
+      await client.learningDefinitionApproval.updateMany({
+        where: { workspaceId: f.scope.workspaceId },
+        data: { approvalStatus: 'DEPRECATED' },
+      });
+      await expect(f.repo.admit(fresh)).rejects.toThrow();
+      expect(await client.personalLearningCallAdmission.count()).toBe(0);
+    });
+    it('the Program cap is shared across different learners and enrollment locks', async () => {
+      const f = await admissionFixture();
+      const user = await client.user.create({ data: { displayName: 'Synthetic second learner' } });
+      const member = await client.groupMembership.create({
+        data: {
+          workspaceId: f.scope.workspaceId,
+          groupId: f.scope.groupId,
+          userId: user.id,
+          serviceRole: 'PARTICIPANT',
+          status: 'ACTIVE',
+          consentedAt: now,
+        },
+      });
+      const enrollment = await client.programEnrollment.create({
+        data: {
+          ...(await client.programEnrollment.findUniqueOrThrow({ where: { id: f.enrollment.id } })),
+          id: randomUUID(),
+          groupMembershipId: member.id,
+          goalSnapshot: {},
+          offeringSnapshot: {},
+        },
+      });
+      const scope = {
+        ...f.scope,
+        programEnrollmentId: enrollment.id,
+        groupMembershipId: member.id,
+        userId: user.id,
+      };
+      const originalGoal = await client.programMemberGoal.findFirstOrThrow({
+        where: { programEnrollmentId: f.enrollment.id, status: 'ACTIVE' },
+      });
+      const goal = await client.programMemberGoal.create({
+        data: {
+          ...originalGoal,
+          id: randomUUID(),
+          programEnrollmentId: enrollment.id,
+          groupMembershipId: member.id,
+          createdByUserId: user.id,
+          updatedByUserId: user.id,
+        },
+      });
+      const confirmation = await client.personalLearningGoalConfirmation.findUniqueOrThrow({
+        where: { programMemberGoalId: originalGoal.id },
+      });
+      await client.personalLearningGoalConfirmation.create({
+        data: { ...confirmation, ...scope, programMemberGoalId: goal.id },
+      });
+      const originalPlan = await client.personalLearningPlanRevision.findUniqueOrThrow({
+        where: { planId_revision: { planId: f.plan.planId, revision: 1 } },
+      });
+      const plan = await client.personalLearningPlanRevision.create({
+        data: {
+          ...originalPlan,
+          ...scope,
+          planId: randomUUID(),
+          programMemberGoalId: goal.id,
+          steps: originalPlan.steps as Prisma.InputJsonValue,
+        },
+      });
+      const originalAssignment = await client.programMissionAssignment.findUniqueOrThrow({
+        where: { id: f.assignmentId },
+      });
+      const display = originalAssignment.displaySnapshot as Prisma.JsonObject;
+      const assignment = await client.programMissionAssignment.create({
+        data: {
+          ...originalAssignment,
+          id: randomUUID(),
+          programEnrollmentId: enrollment.id,
+          targetResourceId: plan.planId,
+          displaySnapshot: {
+            ...display,
+            personalLearning: {
+              ...(display.personalLearning as Prisma.JsonObject),
+              planId: plan.planId,
+            },
+          } as Prisma.InputJsonValue,
+        },
+      });
+      const answer = await client.trainingMissionAnswer.create({
+        data: {
+          workspaceId: scope.workspaceId,
+          groupId: scope.groupId,
+          programEnrollmentId: enrollment.id,
+          missionAssignmentId: assignment.id,
+          userId: user.id,
+          answer: 'Synthetic second answer',
+        },
+      });
+      await client.serviceProgram.update({
+        where: { id: f.policy.serviceProgramId },
+        data: {
+          settings: {
+            moduleKey: 'AI_TRAINING_V1',
+            personalLearningPilot: {
+              enabled: true,
+              enrollmentIds: [f.enrollment.id, enrollment.id],
+            },
+            trainingOperations: { notificationsEnabled: false, postponedReminderEnabled: false },
+          },
+        },
+      });
+      const job = await client.job.create({
+        data: {
+          environment: 'STAGING',
+          workspaceId: scope.workspaceId,
+          jobType: 'TRAINING_ANSWER_EVALUATE',
+          payloadReference: `training-evaluation:${scope.groupId}:${enrollment.id}:${answer.id}:${user.id}`,
+          idempotencyKey: randomUUID(),
+          correlationId: randomUUID(),
+          requestedBy: user.id,
+          status: 'LEASED',
+          attemptCount: 1,
+          leaseOwner: 'second-worker',
+          leaseExpiresAt: new Date(Date.now() + 600000),
+        },
+      });
+      const first = await f.request();
+      const second = {
+        ...first,
+        actor: { scope, actorUserId: user.id },
+        assignmentId: assignment.id,
+        answerId: answer.id,
+        jobId: job.id,
+      };
+      const results = await Promise.allSettled([f.repo.admit(first), f.repo.admit(second)]);
+      expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+      expect(await client.personalLearningCallAdmission.count()).toBe(1);
+    });
     it('practice requires learner interaction, confirmation and a matching Assessment, then records First Success once', async () => {
       const f = await practiceFixture();
       await expect(f.complete()).rejects.toThrow();

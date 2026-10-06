@@ -3702,3 +3702,12 @@
 - Persistence Contractは`@bunshin/capability-training`内の型、純粋な状態遷移、Repository Port、否定テストに限定する。ACTIVEな`SERVICE_OWNER / SERVICE_ADMIN`、expected revision、固定reason code、idempotencyを必須にし、UNKNOWNなrollback互換性では実行しない。
 - PersistenceはAI研修Package専用の3 table、additive migration、Prisma Repository、実DBテストに限定する。Service・管理Membership lock、現権限再確認、CAS、canonical digest再計算、immutable version、append-only監査を同一Transactionで扱い、rollback互換性5軸は全PASSEDのsnapshotだけを保存する。
 - 本DecisionはAPI、UI、Delivery、Exposure Event、Provider、共通Skill Registryの実装を承認しない。
+
+# 2026-10-06: Personal Learning Pilotの呼出しAdmissionを原価Telemetryから分離する
+
+- 状態: Proposed（人間レビュー待ち。本番操作を承認しない）
+- Pilotだけに、明示設定された単一ProgramのUTC日次attempt上限・未終了callの同時実行上限・送信JSON byte上限・出力token上限・model固定を追加する。未設定・不正設定はfail-closed。既存30日V1の呼出しを変更しない。
+- 月次Quotaの失敗refundやbest-effort Telemetryは暴走防止の正本にしない。小さな専用Admission ledgerを使用し、同一Job attemptの再送を拒否する。失敗も日次attemptとして残す。
+- transport/timeout等で終了不明なら同時実行枠を自動解放しない。TTLでの推測解放を禁止する。復旧はKill Switch停止・実行終了確認・人間レビュー後の別操作とし、今回復旧APIは作らない。
+- ledgerには相談・回答・成果物・Provider response・User/Enrollment参照を保存しない。Job attemptの不可逆digestは仮名化情報であり匿名とは主張しない。回答削除で上限を回避できないよう保存を分離する。
+- これは金額上限ではない。モデル価格、外部Provider予算、費用Alert、人間承認、Migration、Wave 0実認証は引き続き別Gate。Production準備操作と100人Hard Capは別PRへ残す。

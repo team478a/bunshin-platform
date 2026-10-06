@@ -40,6 +40,45 @@ const response = (text: string) => ({
   output: [{ content: [{ type: 'output_text', text }] }],
 });
 describe('Pilot structured Provider measurements', () => {
+  it('bounds the serialized request and output only for the opted-in Pilot', async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(new Response(JSON.stringify(response(JSON.stringify(valid)))));
+    const onResponseSettled = vi.fn();
+    const provider = new OpenAiTrainingAnswerEvaluator({
+      apiKey: 'synthetic',
+      model: 'synthetic',
+      requestCostUsdMicros: 0,
+      fetch: fetcher,
+      onResponseSettled,
+      requestLimits: { maxRequestBytes: 20000, maxOutputTokens: 100 },
+    });
+    await provider.evaluate({ missionDefinitionKey: 'PROMPT_BASIC', answer: '日本語' });
+    expect(JSON.parse(fetcher.mock.calls[0]?.[1]?.body as string).max_output_tokens).toBe(100);
+    expect(onResponseSettled).toHaveBeenCalledOnce();
+    const legacy = evaluator(response(JSON.stringify(valid)));
+    await legacy.provider.evaluate({ missionDefinitionKey: 'PROMPT_BASIC', answer: '日本語' });
+    expect(JSON.parse(legacy.fetcher.mock.calls[0]?.[1]?.body as string)).not.toHaveProperty(
+      'max_output_tokens',
+    );
+  });
+  it('rejects an oversized UTF-8 request before any Provider attempt', async () => {
+    const fetcher = vi.fn<typeof fetch>();
+    const onRequestStarted = vi.fn();
+    const provider = new OpenAiTrainingAnswerEvaluator({
+      apiKey: 'synthetic',
+      model: 'synthetic',
+      requestCostUsdMicros: 0,
+      fetch: fetcher,
+      onRequestStarted,
+      requestLimits: { maxRequestBytes: 10, maxOutputTokens: 100 },
+    });
+    await expect(
+      provider.evaluate({ missionDefinitionKey: 'PROMPT_BASIC', answer: '日本語' }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(onRequestStarted).not.toHaveBeenCalled();
+  });
   afterEach(() => vi.useRealTimers());
   it('does not invent a Provider attempt when Mission validation fails before fetch', async () => {
     const f = evaluator({});
