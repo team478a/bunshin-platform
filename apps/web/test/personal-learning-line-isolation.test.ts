@@ -3,7 +3,7 @@ import { resolveServiceLineBroadcastRecipientIds } from '../src/jobs/service-lin
 import { scheduleAiTrainingActionLineDeliveries } from '../src/services/ai-training-action-line-scheduler';
 const settings = { moduleKey: 'AI_TRAINING_V1', personalLearningPilot: null };
 vi.mock('@bunshin/database', () => ({
-  prisma: { serviceProgram: { findMany: async () => [{ id: 'program', settings }] } },
+  prisma: { serviceProgram: { findMany: () => Promise.resolve([{ id: 'program', settings }]) } },
   PrismaAiTrainingRuntimeRepository: class {},
 }));
 describe('Personal Learning never delivers training LINE', () => {
