@@ -300,3 +300,4 @@ export {
 export { PrismaPersonalLearningAiCallRepository } from './personal-learning-ai-call';
 export { PrismaLearningDefinitionApprovalAdminRepository } from './learning-definition-approval-admin';
 export { PrismaPersonalLearningPilotProfileRepository } from './personal-learning-pilot-profile';
+export { PrismaPersonalLearningAssessmentGate } from './personal-learning-assessment-gate';

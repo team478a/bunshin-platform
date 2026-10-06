@@ -10,14 +10,19 @@ import { resolveMemberServiceContext, type PublicServiceContext } from './public
 
 export function personalLearningPilotEnabled() {
   return (
-    getServerEnvironment().APP_ENV !== 'production' &&
-    process.env['PERSONAL_LEARNING_PILOT'] === 'true'
+    process.env['PERSONAL_LEARNING_PILOT'] === 'true' &&
+    (getServerEnvironment().APP_ENV !== 'production' ||
+      process.env['PERSONAL_LEARNING_PRODUCTION_CLOSED_PILOT'] === 'true')
   );
 }
 /** Used again at queue/worker execution, not just when a page was opened. */
-export function personalLearningPilotExecutionAllowed(settings: unknown, enrollmentId: string) {
+export function personalLearningPilotExecutionAllowed(
+  settings: unknown,
+  enrollmentId: string,
+  requirePilot = false,
+) {
   return (
-    !isPersonalLearningPilotProgram(settings) ||
+    (!requirePilot && !isPersonalLearningPilotProgram(settings)) ||
     (personalLearningPilotEnabled() && personalLearningPilotAllows(settings, enrollmentId))
   );
 }

@@ -17,6 +17,7 @@ const fake = vi.hoisted(() => {
     prepare: vi.fn(),
     record: vi.fn(),
     evaluate: vi.fn(),
+    authorize: vi.fn(),
     ...state,
   };
 });
@@ -33,6 +34,9 @@ vi.mock('@bunshin/database', () => {
     prisma: { ...tx, $transaction: (fn: (tx: unknown) => unknown) => fn(tx) },
     lockTrainingEnrollmentData: vi.fn(),
     trainingEnrollmentPeriodWhere: () => ({}),
+    PrismaPersonalLearningAssessmentGate: class {
+      authorizeAssessment = fake.authorize;
+    },
   };
 });
 vi.mock('../src/ai/runtime-provider-configuration', () => ({
@@ -95,6 +99,7 @@ describe('Pilot Assessment AI call wiring', () => {
     vi.resetAllMocks();
     vi.stubEnv('PERSONAL_LEARNING_PILOT', 'true');
     fake.error = null;
+    fake.authorize.mockResolvedValue(undefined);
     fake.membership.mockResolvedValue({ id: 'membership' });
     fake.enrollment.mockResolvedValue({ id: enrollmentId, serviceProgramId: 'program' });
     fake.program.mockResolvedValue({ id: 'program', settings });
@@ -191,5 +196,38 @@ describe('Pilot Assessment AI call wiring', () => {
     expect(fake.evaluate).not.toHaveBeenCalled();
     expect(fake.record).not.toHaveBeenCalled();
     expect(fake.usage).not.toHaveBeenCalled();
+  });
+  it.each(['Goal cancelled', 'Plan revised', 'Definition withdrawn', 'actor revoked'])(
+    'fresh authorization rejects %s before any external call',
+    async () => {
+      fake.authorize.mockRejectedValue(new ApplicationError('NOT_FOUND', 'unavailable'));
+      await expect(createTrainingAnswerEvaluationJobHandler().execute(input)).rejects.toMatchObject(
+        { retryable: false },
+      );
+      expect(fake.evaluate).not.toHaveBeenCalled();
+      expect(fake.record).not.toHaveBeenCalled();
+    },
+  );
+  it('marker removed during quota wait cannot fall back to legacy', async () => {
+    fake.program
+      .mockResolvedValueOnce({ id: 'program', settings })
+      .mockResolvedValue({ settings: { moduleKey: 'AI_TRAINING_V1' } });
+    await expect(createTrainingAnswerEvaluationJobHandler().execute(input)).rejects.toMatchObject({
+      retryable: false,
+    });
+    expect(fake.evaluate).not.toHaveBeenCalled();
+  });
+  it('a persisted Plan assignment with a missing marker is not legacy V1', async () => {
+    fake.program.mockResolvedValue({ id: 'program', settings: { moduleKey: 'AI_TRAINING_V1' } });
+    fake.assignment.mockResolvedValue({
+      missionDefinitionKey: 'PROMPT_BASIC',
+      displaySnapshot: {},
+      targetResourceType: 'PERSONAL_LEARNING_PLAN',
+    });
+    await expect(createTrainingAnswerEvaluationJobHandler().execute(input)).rejects.toMatchObject({
+      retryable: false,
+    });
+    expect(fake.evaluate).not.toHaveBeenCalled();
+    expect(fake.prepare).not.toHaveBeenCalled();
   });
 });

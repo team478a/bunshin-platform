@@ -69,6 +69,21 @@ describe('pilot server identity and exposure gate', () => {
     await expect(resolvePersonalLearningPilot('slug', enrollmentId, 'owner')).rejects.toThrow();
     expect(f.service).not.toHaveBeenCalled();
   });
+  it('requires two explicit production flags and never treats an expected Pilot as legacy', () => {
+    f.environment = 'production';
+    expect(personalLearningPilotEnabled()).toBe(false);
+    vi.stubEnv('PERSONAL_LEARNING_PRODUCTION_CLOSED_PILOT', 'true');
+    expect(personalLearningPilotEnabled()).toBe(true);
+    expect(personalLearningPilotExecutionAllowed(settings, enrollmentId, true)).toBe(true);
+    expect(
+      personalLearningPilotExecutionAllowed({ moduleKey: 'AI_TRAINING_V1' }, enrollmentId, true),
+    ).toBe(false);
+    vi.stubEnv('PERSONAL_LEARNING_PILOT', 'false');
+    expect(personalLearningPilotEnabled()).toBe(false);
+    expect(
+      personalLearningPilotExecutionAllowed({ moduleKey: 'AI_TRAINING_V1' }, enrollmentId),
+    ).toBe(true);
+  });
   it('stops queued Pilot execution when disabled, while leaving ordinary V1 allowed', () => {
     expect(personalLearningPilotExecutionAllowed(settings, enrollmentId)).toBe(true);
     vi.stubEnv('PERSONAL_LEARNING_PILOT', 'false');

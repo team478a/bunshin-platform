@@ -23,6 +23,7 @@ import { PrismaTrainingAnswerRepository } from '../src/training-answer';
 import { PrismaPersonalLearningAiCallRepository } from '../src/personal-learning-ai-call';
 import { PrismaLearningDefinitionApprovalAdminRepository } from '../src/learning-definition-approval-admin';
 import { PrismaPersonalLearningPilotProfileRepository } from '../src/personal-learning-pilot-profile';
+import { PrismaPersonalLearningAssessmentGate } from '../src/personal-learning-assessment-gate';
 import {
   PrismaPersonalLearningPilotRepository,
   PrismaPersonalLearningPilotRouter,
@@ -571,6 +572,111 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
       }
       return { ...f, plan, bridge, request, assessed };
     }
+    it('execution gate authorizes only the current learner Plan, then stops on Goal cancellation', async () => {
+      const f = await routerFixture();
+      await client.serviceProgram.update({
+        where: { id: f.enrollment.serviceProgramId },
+        data: {
+          settings: {
+            moduleKey: 'AI_TRAINING_V1',
+            personalLearningPilot: { enabled: true, enrollmentIds: [f.enrollment.id] },
+            trainingOperations: { notificationsEnabled: false, postponedReminderEnabled: false },
+          },
+        },
+      });
+      const selected = await f.bridge.bridge(f.request);
+      const answer = await client.trainingMissionAnswer.create({
+        data: {
+          workspaceId: f.scope.workspaceId,
+          groupId: f.scope.groupId,
+          programEnrollmentId: f.enrollment.id,
+          missionAssignmentId: selected.assignmentId!,
+          userId: f.scope.userId,
+          answer: 'Synthetic private answer',
+          evaluationStatus: 'PENDING',
+        },
+      });
+      const gate = new PrismaPersonalLearningAssessmentGate(client, () => now);
+      await gate.authorizeAssessment(f.actor, selected.assignmentId!, answer.id);
+      await expect(
+        gate.authorizeAssessment(
+          { ...f.actor, scope: { ...f.scope, userId: randomUUID() } },
+          selected.assignmentId!,
+          answer.id,
+        ),
+      ).rejects.toThrow();
+      await client.programMemberGoal.updateMany({
+        where: { programEnrollmentId: f.enrollment.id },
+        data: { status: 'CANCELLED' },
+      });
+      await expect(
+        gate.authorizeAssessment(f.actor, selected.assignmentId!, answer.id),
+      ).rejects.toThrow();
+      expect(
+        (await client.trainingMissionAnswer.findUniqueOrThrow({ where: { id: answer.id } }))
+          .evaluationStatus,
+      ).toBe('PENDING');
+    });
+    it.each(['definition', 'marker', 'program', 'membership', 'revision'] as const)(
+      'execution gate refuses stale %s without changing answer/history',
+      async (change) => {
+        const f = await routerFixture();
+        await client.serviceProgram.update({
+          where: { id: f.enrollment.serviceProgramId },
+          data: {
+            settings: {
+              moduleKey: 'AI_TRAINING_V1',
+              personalLearningPilot: { enabled: true, enrollmentIds: [f.enrollment.id] },
+              trainingOperations: { notificationsEnabled: false, postponedReminderEnabled: false },
+            },
+          },
+        });
+        const selected = await f.bridge.bridge(f.request);
+        const answer = await client.trainingMissionAnswer.create({
+          data: {
+            workspaceId: f.scope.workspaceId,
+            groupId: f.scope.groupId,
+            programEnrollmentId: f.enrollment.id,
+            missionAssignmentId: selected.assignmentId!,
+            userId: f.scope.userId,
+            answer: 'Synthetic',
+            evaluationStatus: 'PENDING',
+          },
+        });
+        if (change === 'definition')
+          await client.learningDefinitionApproval.updateMany({
+            where: { groupId: f.scope.groupId },
+            data: { approvalStatus: 'DEPRECATED' },
+          });
+        if (change === 'marker')
+          await client.serviceProgram.update({
+            where: { id: f.enrollment.serviceProgramId },
+            data: { settings: { moduleKey: 'AI_TRAINING_V1' } },
+          });
+        if (change === 'program')
+          await client.serviceProgram.update({
+            where: { id: f.enrollment.serviceProgramId },
+            data: { status: 'SUSPENDED' },
+          });
+        if (change === 'membership')
+          await client.groupMembership.update({
+            where: { id: f.member.id },
+            data: { status: 'REVOKED', revokedAt: now },
+          });
+        if (change === 'revision')
+          await client.personalLearningPlanRevision.updateMany({
+            where: { planId: f.plan.planId },
+            data: { status: 'SUPERSEDED' },
+          });
+        await expect(
+          new PrismaPersonalLearningAssessmentGate(client, () => now).authorizeAssessment(
+            f.actor,
+            selected.assignmentId!,
+            answer.id,
+          ),
+        ).rejects.toThrow();
+      },
+    );
     it('P1-G records scoped AI attempts once, preserves historical refs, and refuses cross tenant/deleted data', async () => {
       const f = await routerFixture();
       await client.serviceProgram.update({

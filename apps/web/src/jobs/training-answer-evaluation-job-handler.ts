@@ -90,13 +90,18 @@ export function createTrainingAnswerEvaluationJobHandler(): TrainingAnswerEvalua
           groupId: input.groupId,
           programEnrollmentId: enrollment.id,
         },
-        select: { missionDefinitionKey: true, displaySnapshot: true },
+        select: { missionDefinitionKey: true, displaySnapshot: true, targetResourceType: true },
       });
       if (!assignment) {
         throw new TrainingAnswerEvaluationJobError('TRAINING_EVALUATION_MISSION_NOT_FOUND', false);
       }
+      const requirePilot =
+        isPersonalLearningPilotProgram(program.settings) ||
+        assignment.targetResourceType === 'PERSONAL_LEARNING_PLAN';
+      if (!personalLearningPilotExecutionAllowed(program.settings, enrollment.id, requirePilot))
+        throw new TrainingAnswerEvaluationJobError('TRAINING_EVALUATION_SCOPE_REVOKED', false);
       const runtime = await resolveOpenAiRuntimeConfiguration();
-      const pilot = isPersonalLearningPilotProgram(program.settings)
+      const pilot = requirePilot
         ? await preparePersonalLearningAiCall(
             {
               actorUserId: input.actorUserId,
@@ -143,7 +148,7 @@ export function createTrainingAnswerEvaluationJobHandler(): TrainingAnswerEvalua
                 false,
               );
             }
-            if (isPersonalLearningPilotProgram(program.settings)) {
+            if (requirePilot) {
               const currentProgram = await db.prisma.serviceProgram.findFirst({
                 where: {
                   id: enrollment.serviceProgramId,
@@ -155,13 +160,35 @@ export function createTrainingAnswerEvaluationJobHandler(): TrainingAnswerEvalua
               });
               if (
                 !currentProgram ||
-                !personalLearningPilotExecutionAllowed(currentProgram.settings, enrollment.id)
+                !personalLearningPilotExecutionAllowed(currentProgram.settings, enrollment.id, true)
               ) {
                 throw new TrainingAnswerEvaluationJobError(
                   'TRAINING_EVALUATION_SCOPE_REVOKED',
                   false,
                 );
               }
+              await new db.PrismaPersonalLearningAssessmentGate(db.prisma).authorizeAssessment(
+                {
+                  actorUserId: input.actorUserId,
+                  scope: {
+                    workspaceId: input.workspaceId,
+                    groupId: input.groupId,
+                    programEnrollmentId: enrollment.id,
+                    groupMembershipId: membership.id,
+                    userId: input.actorUserId,
+                  },
+                },
+                answer.missionAssignmentId,
+                answer.id,
+              );
+              // Recheck the environment switch after asynchronous DB authorization.
+              if (
+                !personalLearningPilotExecutionAllowed(currentProgram.settings, enrollment.id, true)
+              )
+                throw new TrainingAnswerEvaluationJobError(
+                  'TRAINING_EVALUATION_SCOPE_REVOKED',
+                  false,
+                );
             }
             providerAttempted = true;
             return new OpenAiTrainingAnswerEvaluator({
