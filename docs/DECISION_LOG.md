@@ -1,5 +1,12 @@
 # BUNSHIN Platform Decision Log
 
+## 2026-10-07: 本人Profile準備UIは停止中の専用Pilotに限定する
+
+- 状態: Proposed（#1163監査後の最小本人UI。実登録/本番操作なし）。
+- 既存受講者ページのreserved Pilot分岐内だけに準備UIを置き、既存sessionとProfile repositoryの読取認可、準備flag/authorityを再利用する。旧V1 setupや新API/保存正本を作らない。
+- role/aiLevel/dailyMinutesは未選択、本人確認必須。通信結果不明時は同じoperation UUID/回答で再送し、保存確認後もGoal/Plan/Pilot実行を自動開始しない。
+- 実認証・本番Migration/RLS・Definition/人数/費用・停止運用は別Gate。UI実装完了をWave 0開始承認としない。
+
 ## 2026-10-06: Personal LearningはProduction Closed Pilotへ方針変更する
 
 - 状態: 方針は人間指示に基づき文書化、具体的release/実装/開始はレビュー待ち。現状NO-GO。

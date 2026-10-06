@@ -22,6 +22,8 @@ import { AiTrainingDataExportCard } from './ai-training-data-export-card';
 import { AiTrainingEndedCard } from './ai-training-ended-card';
 import { PersonalLearningPilotCard } from './personal-learning-pilot-card';
 import { resolvePersonalLearningPilot } from '../../../../../src/services/personal-learning-pilot-access';
+import { readPersonalLearningProfilePreparation } from '../../../../../src/services/personal-learning-profile-preparation-page';
+import { PersonalLearningProfilePreparationCard } from './personal-learning-profile-preparation-card';
 
 export const dynamic = 'force-dynamic';
 
@@ -81,6 +83,41 @@ export default async function ProgramParticipantPage({
 
   if (moduleKey === AI_TRAINING_V1_MODULE_KEY) {
     if (isPersonalLearningPilotProgram(program.settings)) {
+      if (process.env['PERSONAL_LEARNING_PROFILE_PREPARATION'] === 'true') {
+        let initialProfile;
+        try {
+          initialProfile = await readPersonalLearningProfilePreparation(
+            service,
+            programEnrollmentId,
+            actor.userId,
+          );
+        } catch (error) {
+          if (error instanceof ApplicationError && ['NOT_FOUND', 'CONFLICT'].includes(error.code))
+            notFound();
+          throw error;
+        }
+        return (
+          <PublicShell showPlatformBrand={false}>
+            <main className="service-entry resale-action-page training-page" style={style}>
+              <header className="service-entry__header">
+                <p className="eyebrow">マナベルスタイル 限定Pilot</p>
+                <h1>あなたの学習準備</h1>
+              </header>
+              <PersonalLearningProfilePreparationCard
+                serviceSlug={serviceSlug}
+                enrollmentId={programEnrollmentId}
+                initialProfile={initialProfile}
+              />
+              <a
+                className="button button--secondary button--full"
+                href={`/s/${serviceSlug}/programs`}
+              >
+                プログラム一覧へ戻る
+              </a>
+            </main>
+          </PublicShell>
+        );
+      }
       let pilotActor;
       try {
         pilotActor = await resolvePersonalLearningPilot(
