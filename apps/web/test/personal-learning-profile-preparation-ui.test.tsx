@@ -61,7 +61,9 @@ describe('learner Profile preparation UI', () => {
     expect(await submitProfilePreparation('/profile', command)).toBe('RETRY');
     expect(await submitProfilePreparation('/profile', command)).toBe('SAVED');
     expect(fetcher.mock.calls[0]).toEqual(fetcher.mock.calls[1]);
-    expect(JSON.parse(fetcher.mock.calls[0]?.[1].body)).toEqual(command);
+    const sentBody: unknown = fetcher.mock.calls[0]?.[1].body;
+    if (typeof sentBody !== 'string') throw new Error('expected string request body');
+    expect(JSON.parse(sentBody)).toEqual(command);
     expect(fetcher.mock.calls[0]?.[1].credentials).toBe('same-origin');
   });
   it.each([401, 403, 404, 409, 400, 413, 500])(
