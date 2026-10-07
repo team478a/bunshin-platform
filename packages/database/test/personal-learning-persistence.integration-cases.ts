@@ -20,6 +20,7 @@ import {
   consultAiTrainingLearning,
   projectAiTrainingLearnerProfiles,
   createAiTrainingV1Definition,
+  createPersonalLearningProgramDefinition,
   AI_TRAINING_SKILL_RULE_VERSION,
   getAiTrainingMissionQuality,
 } from '@bunshin/capability-training';
@@ -207,6 +208,204 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
       }
       return { repo, actor, confirm, scope, enrollment, owner, group, member, plan };
     }
+    async function creationFixture() {
+      const f = await fixture(false);
+      const group = await client.group.create({
+        data: {
+          workspaceId: f.scope.workspaceId,
+          name: 'Synthetic open-ended Pilot service',
+        },
+      });
+      await client.groupMembership.create({
+        data: {
+          workspaceId: f.scope.workspaceId,
+          groupId: group.id,
+          userId: f.owner.id,
+          serviceRole: 'SERVICE_OWNER',
+          status: 'ACTIVE',
+          consentedAt: now,
+        },
+      });
+      const authority = {
+        workspaceId: f.scope.workspaceId,
+        groupId: group.id,
+        serviceProgramId: randomUUID(),
+      };
+      const ops = new PrismaPersonalLearningPilotOperations(client, authority, () => {});
+      const command = {
+        action: 'CREATE_PROGRAM' as const,
+        operationId: randomUUID(),
+        expectedStateToken: (await ops.read(f.owner.id)).stateToken,
+        confirmation: 'CONFIRM_PILOT_OPERATION' as const,
+        reviewEvidenceKey: 'synthetic-human-review',
+      };
+      return { ...f, authority, ops, command };
+    }
+    it('creates an open-ended stopped Program atomically without runtime or approval data', async () => {
+      const f = await creationFixture();
+      expect(await f.ops.read(f.owner.id)).toMatchObject({ exists: false, status: 'ABSENT' });
+      const result = await f.ops.change(f.owner.id, f.command);
+      expect(result).toMatchObject({
+        exists: true,
+        status: 'SUSPENDED',
+        enabled: false,
+        initialized: true,
+        replayed: false,
+      });
+      const p = await client.serviceProgram.findUniqueOrThrow({
+        where: { id: f.authority.serviceProgramId },
+      });
+      expect(p.settings).toMatchObject({
+        supportModes: ['GUIDED'],
+        personalLearningPilot: { enabled: false, enrollmentIds: [] },
+        trainingOperations: { notificationsEnabled: false, postponedReminderEnabled: false },
+      });
+      const v = await client.programTemplateVersion.findUniqueOrThrow({
+        where: { id: p.programTemplateVersionId },
+      });
+      expect(v.definition).toMatchObject({ duration: { type: 'OPEN_ENDED' } });
+      const t = await client.programTemplate.findUniqueOrThrow({
+        where: { id: v.programTemplateId },
+      });
+      expect(t).toMatchObject({ visibility: 'PRIVATE', ownerGroupId: f.authority.groupId });
+      expect(
+        await client.programOffering.findUniqueOrThrow({
+          where: { id: result.programOfferingId! },
+        }),
+      ).toMatchObject({
+        isFree: true,
+        endsAt: null,
+        startsAt: null,
+        termsSnapshot: { supportModes: ['GUIDED'], participation: 'INVITATION_ONLY' },
+      });
+      expect(await client.programEnrollment.count({ where: f.authority })).toBe(0);
+      expect(await client.personalLearningPilotSeat.count({ where: f.authority })).toBe(0);
+      expect(
+        await client.learningDefinitionApproval.count({
+          where: { workspaceId: f.authority.workspaceId, groupId: f.authority.groupId },
+        }),
+      ).toBe(0);
+      expect(
+        await client.serviceProgram.findUniqueOrThrow({
+          where: { id: f.enrollment.serviceProgramId },
+        }),
+      ).toMatchObject({ status: 'ACTIVE', settings: { moduleKey: 'AI_TRAINING_V1' } });
+      expect(await f.ops.change(f.owner.id, f.command)).toMatchObject({
+        replayed: true,
+        programOfferingId: result.programOfferingId,
+      });
+      expect(await client.programOffering.count({ where: f.authority })).toBe(1);
+      await expect(
+        f.ops.change(f.owner.id, { ...f.command, operationId: randomUUID() }),
+      ).rejects.toThrow('PILOT_PROGRAM_ALREADY_EXISTS');
+      await expect(
+        f.ops.change(f.owner.id, { ...f.command, reviewEvidenceKey: 'changed-review' }),
+      ).rejects.toThrow('PILOT_PROGRAM_ALREADY_EXISTS');
+    });
+    it('rejects stale state, foreign actors and occupied authority without creating data', async () => {
+      const f = await creationFixture();
+      await expect(
+        f.ops.change(f.owner.id, { ...f.command, expectedStateToken: 'a'.repeat(64) }),
+      ).rejects.toThrow('PILOT_STATE_CHANGED');
+      await expect(f.ops.change(f.scope.userId, f.command)).rejects.toThrow(
+        'pilot operation unavailable',
+      );
+      const foreign = new PrismaPersonalLearningPilotOperations(
+        client,
+        { ...f.authority, serviceProgramId: f.enrollment.serviceProgramId },
+        () => {},
+      );
+      await expect(foreign.read(f.owner.id)).rejects.toThrow('pilot operation unavailable');
+      expect(await client.serviceProgram.count({ where: { groupId: f.authority.groupId } })).toBe(
+        0,
+      );
+    });
+    it('rolls creation back if operation authority is revoked before commit', async () => {
+      const f = await creationFixture();
+      let checks = 0;
+      const ops = new PrismaPersonalLearningPilotOperations(client, f.authority, () => {
+        if (++checks >= 3) throw new Error('synthetic authority revoked');
+      });
+      await expect(ops.change(f.owner.id, f.command)).rejects.toThrow(
+        'synthetic authority revoked',
+      );
+      expect(await client.serviceProgram.count({ where: { groupId: f.authority.groupId } })).toBe(
+        0,
+      );
+      expect(
+        await client.programTemplate.count({ where: { ownerGroupId: f.authority.groupId } }),
+      ).toBe(0);
+    });
+    it('serializes simultaneous creation and refuses adoption over existing training', async () => {
+      const f = await creationFixture();
+      const results = await Promise.allSettled([
+        f.ops.change(f.owner.id, f.command),
+        f.ops.change(f.owner.id, { ...f.command, operationId: randomUUID() }),
+      ]);
+      expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+      expect(await client.serviceProgram.count({ where: { groupId: f.authority.groupId } })).toBe(
+        1,
+      );
+      expect(
+        await client.programTemplate.count({ where: { ownerGroupId: f.authority.groupId } }),
+      ).toBe(1);
+      const authority = {
+        ...f.authority,
+        groupId: f.scope.groupId,
+        serviceProgramId: randomUUID(),
+      };
+      const ops = new PrismaPersonalLearningPilotOperations(client, authority, () => {});
+      await expect(
+        ops.change(f.owner.id, {
+          ...f.command,
+          expectedStateToken: (await ops.read(f.owner.id)).stateToken,
+        }),
+      ).rejects.toThrow('PILOT_EMPTY_DEDICATED_PROGRAM_REQUIRED');
+    });
+    it('prepares an Enrollment without a fixed end date while leaving the Pilot stopped', async () => {
+      const f = await creationFixture();
+      const created = await f.ops.change(f.owner.id, f.command);
+      const seats = new PrismaPersonalLearningParticipantAdminRepository(client, f.authority);
+      await seats.change(f.owner.id, {
+        action: 'CONFIGURE',
+        operationId: randomUUID(),
+        expectedRevision: 0,
+        confirmation: 'CONFIRM_PILOT_PARTICIPANT_OPERATION',
+        reviewEvidenceKey: 'synthetic-human-review',
+        externalParticipantCap: 100,
+        internalParticipantCap: 2,
+        currentWave: 0,
+      });
+      const member = await client.groupMembership.create({
+        data: {
+          workspaceId: f.authority.workspaceId,
+          groupId: f.authority.groupId,
+          userId: f.scope.userId,
+          serviceRole: 'PARTICIPANT',
+          status: 'ACTIVE',
+          consentedAt: now,
+        },
+      });
+      const result = await f.ops.change(f.owner.id, {
+        ...f.command,
+        action: 'PREPARE_ENROLLMENT',
+        operationId: randomUUID(),
+        expectedStateToken: (await f.ops.read(f.owner.id)).stateToken,
+        groupMembershipId: member.id,
+        programOfferingId: created.programOfferingId!,
+      });
+      expect(
+        await client.programEnrollment.findUniqueOrThrow({
+          where: { id: result.programEnrollmentId! },
+        }),
+      ).toMatchObject({
+        endsAt: null,
+        supportMode: 'GUIDED',
+        status: 'ACTIVE',
+      });
+      expect(await f.ops.read(f.owner.id)).toMatchObject({ status: 'SUSPENDED', enabled: false });
+      expect(await client.personalLearningPilotSeat.count({ where: f.authority })).toBe(0);
+    });
     async function operationsFixture() {
       const f = await fixture(false);
       const authority = {
@@ -2263,6 +2462,42 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
       ).toBe('ACTIVE');
       expect((await f.repo.read(f.actor)).goals[0]!.reference.reference.status).toBe('ACTIVE');
       expect((await f.repo.read(f.actor)).plans[0]!.plan.status).toBe('CONFIRMED');
+    });
+    it('open-ended shell bridges all three Definitions after thirty days without expiring Enrollment', async () => {
+      const f = await routerFixture();
+      const program = await client.serviceProgram.findUniqueOrThrow({
+        where: { id: f.enrollment.serviceProgramId },
+      });
+      await client.programTemplateVersion.update({
+        where: { id: program.programTemplateVersionId },
+        data: {
+          definition: JSON.parse(
+            JSON.stringify(createPersonalLearningProgramDefinition()),
+          ) as Prisma.InputJsonValue,
+        },
+      });
+      await client.programEnrollment.update({
+        where: { id: f.enrollment.id },
+        data: {
+          startsAt: new Date(now.getTime() - 60 * 86400000),
+          endsAt: null,
+        },
+      });
+      for (const [index, key] of [
+        'PROMPT_STRUCTURE',
+        'CONTEXT_SETTING',
+        'CONSTRAINT_SETTING',
+      ].entries()) {
+        const next = await f.bridge.bridge({ ...f.request, idempotencyKey: `open-ended-${index}` });
+        expect(next.result).toMatchObject({ status: 'NEXT', definition: { definitionKey: key } });
+        await f.assessed(next.assignmentId!);
+      }
+      expect(
+        (await f.bridge.bridge({ ...f.request, idempotencyKey: 'open-ended-done' })).result.status,
+      ).toBe('PLAN_COMPLETED');
+      expect(
+        await client.programEnrollment.findUniqueOrThrow({ where: { id: f.enrollment.id } }),
+      ).toMatchObject({ status: 'ACTIVE', endsAt: null });
     });
     it('P1-E D: REVIEW creates a distinct idempotent attempt, never overwrites history', async () => {
       const f = await routerFixture();

@@ -5,6 +5,7 @@ import {
   parsePersonalLearningPreparationAuthority,
   parsePersonalLearningCallAdmissionPolicy,
   parseAiTokenPricingRegistry,
+  type PilotOperation,
 } from '@bunshin/application';
 import { ApplicationError, toApiError } from '@bunshin/shared';
 import { requestIdFromHeader } from '@bunshin/observability';
@@ -61,7 +62,7 @@ export async function personalLearningPilotOperationsResponse(
     const service = await resolveManagedServiceContext(serviceSlug, actor.userId);
     if (authority.workspaceId !== service.workspaceId || authority.groupId !== service.serviceId)
       throw denied();
-    const guard = (action: 'READ' | 'INITIALIZE' | 'PREPARE_ENROLLMENT' | 'START' | 'STOP') => {
+    const guard = (action: 'READ' | PilotOperation['action']) => {
       const checkedKeys = ['STOP', 'READ'].includes(action) ? configKeys.slice(0, 2) : configKeys;
       if (
         getServerEnvironment().APP_ENV !== environment ||

@@ -5,12 +5,14 @@ import {
   parsePilotOperation,
   parsePersonalLearningPreparationAuthority,
   parsePersonalLearningCallAdmissionPolicy,
+  programDefinitionJson,
   type PilotOperation,
   type PersonalLearningPreparationAuthority,
   type PersonalLearningCallAdmissionPolicy,
 } from '@bunshin/application';
 import {
   createAiTrainingV1Definition,
+  createPersonalLearningProgramDefinition,
   parsePilotParticipantPolicy,
   personalLearningPilotAllows,
   AI_TRAINING_LEARNING_DEFINITION_FIXTURES,
@@ -37,6 +39,7 @@ const digest = (value: unknown) =>
     .digest('hex');
 const token = (p: ServiceProgram) => digest({ id: p.id, status: p.status, settings: p.settings });
 type Guard = (action: PilotOperation['action'] | 'READ') => void;
+const absentToken = (a: PersonalLearningPreparationAuthority) => digest({ ...a, state: 'ABSENT' });
 
 /** No env mutation, Provider calls, Definition approval or automatic Seat admission. */
 export class PrismaPersonalLearningPilotOperations {
@@ -49,7 +52,7 @@ export class PrismaPersonalLearningPilotOperations {
   private async authorized<T>(
     actorUserId: string,
     action: PilotOperation['action'] | 'READ',
-    work: (tx: Prisma.TransactionClient, p: ServiceProgram) => Promise<T>,
+    work: (tx: Prisma.TransactionClient, p: ServiceProgram | null) => Promise<T>,
   ) {
     const a = parsePersonalLearningPreparationAuthority(this.authority);
     if (!a || !/^[a-f0-9-]{36}$/.test(actorUserId)) throw unavailable();
@@ -70,10 +73,17 @@ export class PrismaPersonalLearningPilotOperations {
           const rows = await tx.$queryRaw<
             { id: string }[]
           >`SELECT id FROM service_programs WHERE id=${a.serviceProgramId}::uuid AND workspace_id=${a.workspaceId}::uuid AND group_id=${a.groupId}::uuid FOR UPDATE`;
-          if (rows.length !== 1) throw unavailable();
-          const p = await tx.serviceProgram.findUniqueOrThrow({
+          if (rows.length !== 1 && !['READ', 'CREATE_PROGRAM'].includes(action))
+            throw unavailable();
+          const p = await tx.serviceProgram.findUnique({
             where: { id: a.serviceProgramId },
           });
+          if (p && (p.workspaceId !== a.workspaceId || p.groupId !== a.groupId))
+            throw unavailable();
+          if (!p) {
+            this.guard(action);
+            return work(tx, null);
+          }
           if (!['ACTIVE', 'SUSPENDED'].includes(p.status)) throw unavailable();
           if (!p.settings || typeof p.settings !== 'object' || Array.isArray(p.settings))
             throw unavailable();
@@ -94,6 +104,7 @@ export class PrismaPersonalLearningPilotOperations {
     });
     const s = p.settings as Prisma.JsonObject;
     return {
+      exists: true,
       stateToken: token(p),
       status: p.status,
       initialized: Object.hasOwn(s, 'personalLearningPilot'),
@@ -103,12 +114,165 @@ export class PrismaPersonalLearningPilotOperations {
     };
   }
   read(actorUserId: string) {
-    return this.authorized(actorUserId, 'READ', (tx, p) => this.snapshot(tx, p));
+    return this.authorized(actorUserId, 'READ', async (tx, p) => {
+      if (p) return this.snapshot(tx, p);
+      return {
+        exists: false,
+        stateToken: absentToken(this.authority),
+        status: 'ABSENT' as const,
+        initialized: false,
+        enabled: false,
+        openCallCount: 0,
+        drainStatus: 'UNKNOWN' as const,
+      };
+    });
+  }
+  private async createProgram(
+    tx: Prisma.TransactionClient,
+    actorUserId: string,
+    c: PilotOperation,
+    p: ServiceProgram | null,
+  ) {
+    const a = this.authority;
+    const auditKey = `PILOT_OPERATION_${c.operationId}`;
+    if (p) {
+      const prior = await tx.programAuditLog.findFirst({
+        where: {
+          workspaceId: a.workspaceId,
+          groupId: a.groupId,
+          resourceType: 'SERVICE_PROGRAM',
+          resourceId: p.id,
+          action: auditKey,
+        },
+      });
+      const receipt = prior?.afterData as
+        { digest?: string; programOfferingId?: string } | undefined;
+      if (!prior || prior.performedByUserId !== actorUserId || receipt?.digest !== digest(c))
+        throw conflict('PILOT_PROGRAM_ALREADY_EXISTS');
+      return {
+        replayed: true,
+        programEnrollmentId: undefined,
+        programOfferingId: receipt.programOfferingId,
+        ...(await this.snapshot(tx, p)),
+      };
+    }
+    if (c.expectedStateToken !== absentToken(a)) throw conflict('PILOT_STATE_CHANGED');
+    if (
+      await tx.serviceProgram.count({
+        where: {
+          workspaceId: a.workspaceId,
+          groupId: a.groupId,
+          settings: { path: ['moduleKey'], equals: 'AI_TRAINING_V1' },
+        },
+      })
+    )
+      throw conflict('PILOT_EMPTY_DEDICATED_PROGRAM_REQUIRED');
+    const definition = programDefinitionJson(createPersonalLearningProgramDefinition());
+    const template = await tx.programTemplate.create({
+      data: {
+        workspaceId: a.workspaceId,
+        ownerGroupId: a.groupId,
+        name: 'マナベルスタイル Personal Learning',
+        description: '本人がAIを使えるようになるための期限なし個別学習。',
+        category: 'AI_TRAINING',
+        targetAudience: '限定Pilot参加者',
+        status: 'ACTIVE',
+        visibility: 'PRIVATE',
+        createdByUserId: actorUserId,
+      },
+    });
+    const version = await tx.programTemplateVersion.create({
+      data: {
+        workspaceId: a.workspaceId,
+        programTemplateId: template.id,
+        version: 1,
+        status: 'PUBLISHED',
+        publishedAt: new Date(),
+        definition,
+        createdByUserId: actorUserId,
+      },
+    });
+    const program = await tx.serviceProgram.create({
+      data: {
+        workspaceId: a.workspaceId,
+        groupId: a.groupId,
+        id: a.serviceProgramId,
+        programTemplateVersionId: version.id,
+        displayName: template.name,
+        description: template.description,
+        status: 'SUSPENDED',
+        createdByUserId: actorUserId,
+        settings: {
+          moduleKey: 'AI_TRAINING_V1',
+          supportModes: ['GUIDED'],
+          participation: 'INVITATION_ONLY',
+          personalLearningProgramVersion: 'PERSONAL_LEARNING_OPEN_ENDED_V1',
+          personalLearningPilot: { enabled: false, enrollmentIds: [] },
+          trainingOperations: { notificationsEnabled: false, postponedReminderEnabled: false },
+          personalLearningPilotOperations: { version: 'PILOT_OPERATIONS_V1', revision: 1 },
+        },
+      },
+    });
+    const offering = await tx.programOffering.create({
+      data: {
+        workspaceId: a.workspaceId,
+        groupId: a.groupId,
+        serviceProgramId: program.id,
+        version: 1,
+        status: 'ACTIVE',
+        isFree: true,
+        startsAt: null,
+        endsAt: null,
+        seller: 'SERVICE',
+        priceOwner: 'SERVICE',
+        paymentOwner: 'SERVICE',
+        apiCostOwner: 'SERVICE',
+        supportOwner: 'SERVICE',
+        contentOwner: 'SERVICE',
+        characterOwner: 'SERVICE',
+        termsSnapshot: {
+          supportModes: ['GUIDED'],
+          participation: 'INVITATION_ONLY',
+          manualEnrollment: true,
+        },
+        createdByUserId: actorUserId,
+      },
+    });
+    this.guard(c.action);
+    await tx.programAuditLog.create({
+      data: {
+        workspaceId: a.workspaceId,
+        groupId: a.groupId,
+        resourceType: 'SERVICE_PROGRAM',
+        resourceId: program.id,
+        action: auditKey,
+        performedByUserId: actorUserId,
+        beforeData: { stateToken: absentToken(a), status: 'ABSENT' },
+        afterData: {
+          digest: digest(c),
+          operation: c.action,
+          reviewEvidenceKey: c.reviewEvidenceKey,
+          programTemplateVersionId: version.id,
+          programOfferingId: offering.id,
+          stateToken: token(program),
+          status: program.status,
+          revision: 1,
+        },
+      },
+    });
+    return {
+      replayed: false,
+      programEnrollmentId: undefined,
+      programOfferingId: offering.id,
+      ...(await this.snapshot(tx, program)),
+    };
   }
   change(actorUserId: string, raw: PilotOperation) {
     const c = parsePilotOperation(raw);
     if (!c) throw new ApplicationError('VALIDATION_ERROR', 'valid reviewed operation required');
     return this.authorized(actorUserId, c.action, async (tx, p) => {
+      if (c.action === 'CREATE_PROGRAM') return this.createProgram(tx, actorUserId, c, p);
+      if (!p) throw unavailable();
       const a = this.authority;
       const settings = p.settings as Prisma.JsonObject;
       const operations = settings.trainingOperations;
@@ -152,6 +316,7 @@ export class PrismaPersonalLearningPilotOperations {
         return {
           replayed: true,
           programEnrollmentId: receipt.programEnrollmentId,
+          programOfferingId: undefined,
           ...(await this.snapshot(tx, p)),
         };
       }
@@ -420,7 +585,12 @@ export class PrismaPersonalLearningPilotOperations {
           },
         },
       });
-      return { replayed: false, programEnrollmentId, ...(await this.snapshot(tx, updated)) };
+      return {
+        replayed: false,
+        programEnrollmentId,
+        programOfferingId: undefined,
+        ...(await this.snapshot(tx, updated)),
+      };
     });
   }
 }

@@ -266,6 +266,7 @@ export * from './learning-scope';
 export * from './pilot-participant-cap';
 export * from './learning-profile-goal';
 export * from './learning-definition-fixtures';
+export * from './personal-learning-program-definition';
 export * from './learning-consultation';
 export * from './learning-router';
 export {
