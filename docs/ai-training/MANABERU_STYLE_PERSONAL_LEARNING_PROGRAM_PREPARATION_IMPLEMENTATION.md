@@ -58,7 +58,8 @@ schema/migration/UI/LINE/Provider設定変更なし。
 - Web operations/LINE isolation/preparation access/participant admin: 4 files / 43 tests PASS。
 - DB integration追加: stopped/open-ended作成、旧Program非変更、承認/Seat/Enrollment非作成、再送/改ざん/二重作成拒否、CAS、cross actor/service、commit前失効rollback、同時作成、期限なしEnrollment準備、30日経過後の3Definition Mission/Assessment/Router完走。
 - 使い捨てPostgreSQL 16（127.0.0.1の専用port、独立DB名とmarkerをpreflight検証）: 対象7 tests PASS / 162非対象skipped。Production credential使用なし。本番DBでは実行しない。
-- DB typecheck、変更TypeScriptのESLint、architecture check / 10 tests PASS。全format/typecheck/lint/test/build、DB統合全体はPR CIのverify/database結果を採用SHAに対応させて確認する。対象外ケースのskippedをPASSとは扱わない。
+- 続いて同じ使い捨てDBで統合全体169 tests PASS。テスト後に今回作成した専用container/volumeのみ削除した。
+- DB/Web/capability-training typecheck、変更TypeScriptのESLint、architecture check / 10 tests PASS。全format/typecheck/lint/test/buildはPR CIのverify/database結果を採用SHAに対応させて確認する。
 
 ## 未実装・Rollback
 
