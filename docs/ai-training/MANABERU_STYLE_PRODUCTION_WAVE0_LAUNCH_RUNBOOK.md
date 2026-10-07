@@ -127,6 +127,10 @@ Safety: 本人がCreator、代行制作/業務戦略決定なし、個人情報/
 
 ### 期限なし専用Programの新規準備（レビュー後の人間操作）
 
+管理者の最小操作画面は `/s/{serviceSlug}/manage/programs/personal-learning-preparation`。準備authorityが当該Serviceと一致し、運用flag ON・両実行flag OFFの場合だけ既存Program管理からリンクを表示する。未設定時は直接URLで設定名の読み取り専用案内だけ表示する。環境設定の登録は別の人間承認操作であり、画面から変更しない。
+
+画面で対象Service・予約Program IDを確認→「現在の状態を確認」→未作成の場合のみ人間レビュー記録識別子と確認チェック→「停止状態で作成」。応答喪失時は同一操作の再送だけを行う。既存Programは変更せず、作成後もDefinition承認・Participant・STARTには進まない。詳細と未確認事項は [管理画面実装報告](MANABERU_STYLE_PROGRAM_PREPARATION_UI_IMPLEMENTATION.md)。
+
 1. 専用ServiceのACTIVE Workspace/Group、SERVICE_OWNERまたはSERVICE_ADMINを確認。他AI_TRAINING_V1 Programが存在するServiceでは実行しない。
 2. 新規のlowercase UUIDをProgram IDとして予約し、PERSONAL_LEARNING_PRODUCTION_PREPARATIONのserviceProgramIdへ指定する。workspaceId/groupIdは既存の正しいService境界を指定する。値の変更は人間承認、今回の文書更新では実施しない。
 3. PERSONAL_LEARNING_PILOT_OPERATIONS=true、両実行flag=falseを確認。管理者sessionで `GET /api/services/{serviceSlug}/ai-training/pilot-operations`。`data.exists=false`、`data.status=ABSENT`、stateTokenを確認する。別scopeの既存IDや権限不整合では404。GETで作成はしない。
