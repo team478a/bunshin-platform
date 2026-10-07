@@ -115,7 +115,7 @@ describe('trusted Pilot operations HTTP', () => {
     expect((await response(request(), 'slug')).status).toBe(200);
     expect(f.runtime).not.toHaveBeenCalled();
   });
-  it.each(['INITIALIZE', 'PREPARE_ENROLLMENT', 'START'])(
+  it.each(['INITIALIZE', 'CREATE_PROGRAM', 'PREPARE_ENROLLMENT', 'START'])(
     'runtime enabled denies %s',
     async (action) => {
       vi.stubEnv('PERSONAL_LEARNING_PILOT', 'true');
@@ -127,6 +127,17 @@ describe('trusted Pilot operations HTTP', () => {
       expect(f.change).not.toHaveBeenCalled();
     },
   );
+  it('creates only through the reviewed operation without Provider configuration', async () => {
+    expect((await response(request({ ...command, action: 'CREATE_PROGRAM' }), 'slug')).status).toBe(
+      200,
+    );
+    expect(f.change).toHaveBeenCalledWith(id, { ...command, action: 'CREATE_PROGRAM' });
+    expect(f.runtime).not.toHaveBeenCalled();
+    expect(
+      (await response(request({ ...command, action: 'CREATE_PROGRAM', settings: {} }), 'slug'))
+        .status,
+    ).toBe(400);
+  });
   it('START requires closed preparation, model match and reviewed pricing', async () => {
     expect((await response(request({ ...command, action: 'START' }), 'slug')).status).toBe(200);
     vi.stubEnv('PERSONAL_LEARNING_AI_PRICING', '[]');

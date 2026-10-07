@@ -123,7 +123,29 @@ Safety: 本人がCreator、代行制作/業務戦略決定なし、個人情報/
 
 ## Phase E — Pilot Configuration（人間承認候補、未設定）
 
-専用Serviceに他AI_TRAINING_V1 Program（終了/停止含む）があれば準備は拒否。旧V1 Programへmarkerを後付けしない。既存scope作成/Program初期化/ON/OFFのtrusted操作は未確定Blocker。
+専用Serviceに他AI_TRAINING_V1 Program（終了/停止含む）があれば準備は拒否。旧V1 Programへmarkerを後付けしない。新規Programは下記CREATE_PROGRAMで直接準備し、旧30日Templateの採用・固定研修期限の設定は不要。既存Program用INITIALIZEは互換操作として残す。本番での実行担当・設定承認・適用SHAは別Gate。
+
+### 期限なし専用Programの新規準備（レビュー後の人間操作）
+
+1. 専用ServiceのACTIVE Workspace/Group、SERVICE_OWNERまたはSERVICE_ADMINを確認。他AI_TRAINING_V1 Programが存在するServiceでは実行しない。
+2. 新規のlowercase UUIDをProgram IDとして予約し、PERSONAL_LEARNING_PRODUCTION_PREPARATIONのserviceProgramIdへ指定する。workspaceId/groupIdは既存の正しいService境界を指定する。値の変更は人間承認、今回の文書更新では実施しない。
+3. PERSONAL_LEARNING_PILOT_OPERATIONS=true、両実行flag=falseを確認。管理者sessionで `GET /api/services/{serviceSlug}/ai-training/pilot-operations`。`data.exists=false`、`data.status=ABSENT`、stateTokenを確認する。別scopeの既存IDや権限不整合では404。GETで作成はしない。
+4. 同origin管理者操作で同endpointへ以下をPOSTする。stateTokenは直前GET、operationIdは新規UUID、reviewEvidenceKeyは承認記録の識別子。session Cookie/secretを転記しない。
+
+```json
+{
+  "action": "CREATE_PROGRAM",
+  "operationId": "<new-lowercase-uuid>",
+  "expectedStateToken": "<GET-stateToken>",
+  "confirmation": "CONFIRM_PILOT_OPERATION",
+  "reviewEvidenceKey": "<human-review-record-key>"
+}
+```
+
+5. receiptのstatus=SUSPENDED、enabled=false、initialized=true、programOfferingIdを保管する。TemplateはPRIVATE、duration=OPEN_ENDED、Offeringは無料/招待/GUIDED限定、startsAt/endsAt=null、通知OFF、allowlist空。再送は同一body/operationIdを使用、異なる操作による既存Programの上書きは拒否。
+6. Programの構造版PUBLISHEDはLearning Definition APPROVEDを意味しない。Definition承認・参加者準備・STARTは別の人間承認を必要とする。INITIALIZEの追加実行は不要。
+
+ProgramDefinitionの必須phase表示範囲・schedule/cadenceは既存schemaを満たす参照metadataであり、学習期限ではない。実際の進行はConfirmed Plan/Routerで決め、旧30日Schedulerから隔離する。詳細・検証は [専用Program準備実装報告](MANABERU_STYLE_PERSONAL_LEARNING_PROGRAM_PREPARATION_IMPLEMENTATION.md) を参照。
 
 | 実key/正本                                                                                                             | 停止準備 / Wave 0候補                                                                                                                                                                                                                             |
 | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -148,7 +170,7 @@ Safety: 本人がCreator、代行制作/業務戦略決定なし、個人情報/
 ## Phase F — Internal Participant Preparation
 
 1. 本人同意と内部1〜2人の非公開名簿、ACTIVE User/Workspace、専用ServiceのACTIVE PARTICIPANT Membershipを確認。管理者を本人の代用にしない。
-2. pilot-operationsのINITIALIZEで空の専用Programを停止・隔離し、下記CONFIGUREを先に行う。その後GETの最新stateTokenでPREPARE_ENROLLMENTを送る。管理者session、groupMembershipId/programOfferingIdを検証し、SUSPENDEDのままGUIDED Enrollmentを準備する。Goalは空、startsAtはserver設定。Seatはまだ付与しない。
+2. 新規ServiceはPhase EのCREATE_PROGRAMで期限なし専用Programを直接準備し、下記CONFIGUREを先に行う。既存の空Programの場合だけ互換INITIALIZEを検討。その後GETの最新stateTokenでPREPARE_ENROLLMENTを送る。管理者session、groupMembershipId/receiptのprogramOfferingIdを検証し、SUSPENDEDのままGUIDED Enrollmentを準備する。Goalは空、startsAtはserver設定、固定終了期限は設定しない。Seatはまだ付与しない。
 3. 従来のACTIVE専用Enrollment APIは変更しない。PilotでACTIVE↔SUSPENDEDを一時切替して登録する手順は採用しない。旧V1 setup/期間延長/30日V1変換なし。具体例は運用操作実装報告を参照。
 4. 停止状態で `GET /api/services/{serviceSlug}/ai-training/pilot-participants`。data.policy/seats、累計INTERNAL/EXTERNAL、revoked含むを確認。初回空台帳/allowlist、expectedRevision=0を確認。
 5. 人間管理者が同URLへPOST CONFIGURE。例の構造（値は承認後置換）:
