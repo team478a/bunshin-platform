@@ -1,5 +1,13 @@
 # BUNSHIN Platform Decision Log
 
+## 2026-10-07: Personal Learning専用Programは期限なし・停止状態で直接準備する
+
+- 人間指示に基づく最小PR。旧30日テンプレート採用を新サービス準備の必須経路としない。既存ProgramDefinitionのOPEN_ENDEDを利用し、新schemaは作らない。
+- 固定server authorityと管理者認可を持つ既存Pilot OperationsへCREATE_PROGRAMを追加する。対象Programが未存在であることをCAS・Service lock・Serializable transactionで確認し、専用Private Template/Version・SUSPENDED Program・無料招待Offering・監査を原子的に作成する。
+- 内容は既存3Definitionに対応する2つの既存Mission参照のみ。新教材・Definition承認・Enrollment・Seat・Profile・Goal・Planを作成しない。Program公開版は参照契約でありLearning Definitionの人間承認ではない。
+- enabled=false、allowlist空、通知false、GUIDEDのみ。期限はOPEN_ENDED、Offering/Enrollmentへ30日期限を設定しない。旧V1/INITIALIZE、実行・準備Gate、Tenant Boundary、費用・人数制約は維持する。
+- 実装完了はProduction設定・Deploy・Pilot開始承認ではない。実設定はレビュー後の別操作とする。
+
 ## 2026-10-07: AI研修の新規支援mode選択をLearning Firstへ制限する
 
 - 人間の監査・修正指示に基づく独立PR。AI_TRAINING_V1の新規設定・採用・無料登録・支援方針・本人希望・商品設定・新規CheckoutはGUIDEDのみとし、完成品代行を商品選択にしない。

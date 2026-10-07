@@ -8,7 +8,7 @@ const c = {
   reviewEvidenceKey: 'human-review',
 };
 describe('bounded Pilot operation contract', () => {
-  it.each(['STOP', 'START', 'INITIALIZE'])('accepts explicit %s', (action) =>
+  it.each(['STOP', 'START', 'INITIALIZE', 'CREATE_PROGRAM'])('accepts explicit %s', (action) =>
     expect(parsePilotOperation({ ...c, action })).not.toBeNull(),
   );
   it('requires explicit Enrollment references', () => {
@@ -31,6 +31,9 @@ describe('bounded Pilot operation contract', () => {
     { ...c, action: 'DEPLOY' },
     { ...c, action: ['START'] },
     { ...c, outcome: 'secret body' },
+    { ...c, action: 'CREATE_PROGRAM', settings: {} },
+    { ...c, action: 'CREATE_PROGRAM', duration: { type: 'FIXED_DAYS', days: 30 } },
+    { ...c, action: 'CREATE_PROGRAM', serviceProgramId: c.operationId },
   ])('rejects extra authority, implicit confirmation and out-of-scope action', (input) =>
     expect(parsePilotOperation(input)).toBeNull(),
   );
