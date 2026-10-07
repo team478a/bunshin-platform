@@ -3,10 +3,11 @@ import type { PrismaClient } from '@bunshin/database';
 
 vi.mock('server-only', () => ({}));
 vi.mock('../src/payments/program-purchase-context', () => ({
-  validatedDirectPurchaseContext: async () => ({
-    program: { settings: { moduleKey: 'AI_TRAINING_V1' } },
-    terms: { supportMode: 'READY_TO_USE' },
-  }),
+  validatedDirectPurchaseContext: () =>
+    Promise.resolve({
+      program: { settings: { moduleKey: 'AI_TRAINING_V1' } },
+      terms: { supportMode: 'READY_TO_USE' },
+    }),
 }));
 import { createDirectProgramCheckout } from '../src/payments/program-purchase-checkout';
 
