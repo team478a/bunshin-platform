@@ -3,6 +3,7 @@ import { Prisma, type PrismaClient, prisma } from './client';
 import { enqueueRegistrationCompleteEmail } from './service-registration-email';
 import { groupMembershipRecord } from './service-records';
 import { latestServiceLegalDocuments } from './service-legal-latest';
+import { recordOemRegistration, endOemRegistration } from './oem-billing-history';
 
 export class PrismaServiceParticipationMembershipRepository {
   constructor(private readonly client: PrismaClient = prisma) {}
@@ -215,6 +216,13 @@ export class PrismaServiceParticipationMembershipRepository {
         where: { id: membership.id },
         data: { status: 'REVOKED', revokedAt: input.now },
       });
+      await endOemRegistration(
+        tx,
+        membership,
+        input.actorUserId,
+        input.now,
+        'service withdrawal requested by member',
+      );
       await tx.groupMembershipAuditLog.create({
         data: {
           workspaceId: configuration.workspaceId,
@@ -293,6 +301,7 @@ export class PrismaServiceParticipationMembershipRepository {
         where: { id: target.id },
         data: { status: 'ACTIVE' },
       });
+      await recordOemRegistration(tx, updated, input.actorUserId, input.now, input.reason);
       await tx.groupMembershipAuditLog.create({
         data: {
           workspaceId: input.workspaceId,

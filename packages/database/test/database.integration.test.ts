@@ -1,4 +1,5 @@
 import { reserveVideoMedia, finishVideoMedia } from '../src/video-media-quota';
+import { registerOemBillingIntegrationCases } from './oem-billing.integration-cases';
 import { randomUUID } from 'node:crypto';
 import { registerImprovementTriageIntegrationCases } from './improvement-triage.integration-cases';
 import { registerImprovementRetentionJobIntegrationCases } from './improvement-retention-jobs.integration-cases';
@@ -141,6 +142,9 @@ describe('database ownership boundaries', () => {
 
   beforeAll(async () => {
     await verifyLiveDatabase(client);
+    await client.$executeRawUnsafe(
+      'TRUNCATE TABLE commercial_pricing_audits, commercial_pricing_schedules, oem_billing_policies, oem_registration_periods, oem_offering_periods, oem_contract_periods, tenant_monthly_usage, organization_commercial_contracts, commercial_billing_audits CASCADE',
+    );
     await client.socialImageSample.deleteMany();
     await client.campaignActivity.deleteMany();
     await client.campaignParticipation.deleteMany();
@@ -214,6 +218,7 @@ describe('database ownership boundaries', () => {
   registerImprovementRetentionJobIntegrationCases(client);
   registerTrainingSupportSkillLifecycleIntegrationCases(client);
   registerPersonalLearningPersistenceIntegrationCases(client);
+  registerOemBillingIntegrationCases(client);
 
   it('fixture cleanup regression: program and training residue is absent before new fixtures', async () => {
     expect(

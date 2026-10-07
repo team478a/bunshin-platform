@@ -2478,6 +2478,8 @@ model AuthIdentity {
 }
 
 model Workspace {
+  oemBillingPolicy OemBillingPolicy?
+  oemContractPeriods OemContractPeriod[]
   id                              String                                @id @default(uuid()) @db.Uuid
   type                            WorkspaceType
   name                            String                                @db.VarChar(120)
@@ -2776,6 +2778,7 @@ model OrganizationEntitlementAudit {
 }
 
 model Group {
+  oemOfferingPeriods OemOfferingPeriod[]
   learningDefinitionApprovals     LearningDefinitionApproval[]
   id                              String                           @id @default(uuid()) @db.Uuid
   workspaceId                     String                           @map("workspace_id") @db.Uuid
@@ -3396,6 +3399,7 @@ model ServiceMemberBusinessProfile {
 }
 
 model GroupMembership {
+  oemRegistrationPeriods OemRegistrationPeriod[]
   id                           String                           @id @default(uuid()) @db.Uuid
   personalLearningGoalConfirmations PersonalLearningGoalConfirmation[]
   workspaceId                  String                           @map("workspace_id") @db.Uuid
@@ -3478,6 +3482,14 @@ model TenantMonthlyUsage {
   periodEnd          DateTime                 @map("period_end") @db.Date
   timeZone           String                   @default("Asia/Tokyo") @map("time_zone") @db.VarChar(80)
   mau                Int
+  billableUserCount  Int? @map("billable_user_count")
+  registeredUserCount Int? @map("registered_user_count")
+  freeActiveUserCount Int? @map("free_active_user_count")
+  overlapUserCount Int? @map("overlap_user_count")
+  billingRuleVersion String? @map("billing_rule_version") @db.VarChar(80)
+  billingEvidence Json? @map("billing_evidence")
+  pricingScheduleId String? @map("pricing_schedule_id") @db.Uuid
+  pricingSchedule CommercialPricingSchedule? @relation(fields: [pricingScheduleId], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "usage_pricing_schedule_fk")
   pricingTierKey     String                   @map("pricing_tier_key") @db.VarChar(40)
   calculatedPriceYen Int?                     @map("calculated_price_yen")
   pricingVersion     String                   @map("pricing_version") @db.VarChar(80)
@@ -3498,15 +3510,94 @@ model TenantMonthlyUsage {
 
 /// OEM MAU料金表。適用開始月以降の未確定利用量だけが参照する。
 model CommercialPricingSchedule {
+  audits CommercialPricingAudit[]
+  monthlyUsage TenantMonthlyUsage[]
+  invoices TenantInvoice[]
   id              String   @id @default(uuid()) @db.Uuid
   version         String   @unique @db.VarChar(80)
-  effectiveFrom   DateTime @unique @map("effective_from") @db.Date
+  effectiveFrom   DateTime @map("effective_from") @db.Date
+  name String @default("OEM料金表") @db.VarChar(120)
+  status String @default("PUBLISHED") @db.VarChar(20)
+  revision Int @default(1)
+  changeReason String @default("legacy schedule") @map("change_reason") @db.VarChar(1000)
   tiers           Json
   createdByUserId String   @map("created_by_user_id") @db.Uuid
   createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   @@index([effectiveFrom])
   @@map("commercial_pricing_schedules")
+}
+
+model CommercialPricingAudit {
+  schedule CommercialPricingSchedule @relation(fields: [scheduleId], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "pricing_audit_schedule_fk")
+  id String @id @default(uuid()) @db.Uuid
+  scheduleId String @map("schedule_id") @db.Uuid
+  actorUserId String @map("actor_user_id") @db.Uuid
+  action String @db.VarChar(20)
+  reason String @db.VarChar(1000)
+  beforeData Json? @map("before_data")
+  afterData Json @map("after_data")
+  occurredAt DateTime @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  @@index([scheduleId, occurredAt])
+  @@map("commercial_pricing_audits")
+}
+
+/// Human-selected future cutover. No automatic backfill.
+model OemBillingPolicy {
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "oem_policy_workspace_fk")
+  workspaceId String @id @map("workspace_id") @db.Uuid
+  effectiveFrom DateTime @map("effective_from") @db.Date
+  ruleVersion String @map("rule_version") @db.VarChar(80)
+  historyReadyAt DateTime? @map("history_ready_at") @db.Timestamptz(6)
+  actorUserId String @map("actor_user_id") @db.Uuid
+  reason String @db.VarChar(1000)
+  @@map("oem_billing_policies")
+}
+
+model OemRegistrationPeriod {
+  membership GroupMembership @relation(fields: [workspaceId, groupId, groupMembershipId, userId], references: [workspaceId, groupId, id, userId], onDelete: Restrict, onUpdate: NoAction, map: "oem_registration_membership_fk")
+  id String @id @default(uuid()) @db.Uuid
+  workspaceId String @map("workspace_id") @db.Uuid
+  groupId String @map("group_id") @db.Uuid
+  groupMembershipId String @map("group_membership_id") @db.Uuid
+  userId String @map("user_id") @db.Uuid
+  startsAt DateTime @map("starts_at") @db.Timestamptz(6)
+  endsAt DateTime? @map("ends_at") @db.Timestamptz(6)
+  registeredByUserId String @map("registered_by_user_id") @db.Uuid
+  endedByUserId String? @map("ended_by_user_id") @db.Uuid
+  reason String @db.VarChar(1000)
+  endReason String? @map("end_reason") @db.VarChar(1000)
+  @@unique([groupMembershipId, startsAt])
+  @@index([workspaceId, startsAt, endsAt])
+  @@map("oem_registration_periods")
+}
+
+model OemOfferingPeriod {
+  group Group @relation(fields: [workspaceId, groupId], references: [workspaceId, id], onDelete: Restrict, onUpdate: NoAction, map: "oem_offering_group_fk")
+  id String @id @default(uuid()) @db.Uuid
+  workspaceId String @map("workspace_id") @db.Uuid
+  groupId String @map("group_id") @db.Uuid
+  productPolicy String @map("product_policy") @db.VarChar(40)
+  classification String @db.VarChar(20)
+  startsAt DateTime @map("starts_at") @db.Timestamptz(6)
+  endsAt DateTime? @map("ends_at") @db.Timestamptz(6)
+  actorUserId String @map("actor_user_id") @db.Uuid
+  reason String @db.VarChar(1000)
+  @@unique([workspaceId, groupId, startsAt])
+  @@index([workspaceId, startsAt, endsAt])
+  @@map("oem_offering_periods")
+}
+
+model OemContractPeriod {
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "oem_contract_workspace_fk")
+  id String @id @default(uuid()) @db.Uuid
+  workspaceId String @map("workspace_id") @db.Uuid
+  startsAt DateTime @map("starts_at") @db.Timestamptz(6)
+  endsAt DateTime? @map("ends_at") @db.Timestamptz(6)
+  actorUserId String @map("actor_user_id") @db.Uuid
+  reason String @db.VarChar(1000)
+  @@unique([workspaceId, startsAt])
+  @@map("oem_contract_periods")
 }
 
 /// OEM運営団体の請求条件。決済Providerに依存せず、契約状態と請求先を一か所で管理する。
@@ -3659,6 +3750,7 @@ model OrganizationPaymentConfigurationAudit {
 
 /// 確定MAUから作る内部請求台帳。税務上の請求書番号・決済IDは外部参照として保持する。
 model TenantInvoice {
+  pricingSchedule CommercialPricingSchedule? @relation(fields: [pricingScheduleId], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "invoice_pricing_schedule_fk")
   id                       String            @id @default(uuid()) @db.Uuid
   workspaceId              String            @map("workspace_id") @db.Uuid
   contractId               String            @map("contract_id") @db.Uuid
@@ -3668,6 +3760,9 @@ model TenantInvoice {
   periodStart              DateTime          @map("period_start") @db.Date
   periodEnd                DateTime          @map("period_end") @db.Date
   mau                      Int
+  billableUserCount Int? @map("billable_user_count")
+  billingRuleVersion String? @map("billing_rule_version") @db.VarChar(80)
+  pricingScheduleId String? @map("pricing_schedule_id") @db.Uuid
   pricingTierKey           String            @map("pricing_tier_key") @db.VarChar(40)
   pricingVersion           String            @map("pricing_version") @db.VarChar(80)
   amountYen                Int               @map("amount_yen")

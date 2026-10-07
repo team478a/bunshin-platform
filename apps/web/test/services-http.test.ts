@@ -50,6 +50,8 @@ vi.mock('@bunshin/database', () => ({
           update: state.updateService,
         },
         serviceCommercialSetting: { upsert: state.upsertCommercialSetting },
+        organizationCommercialContract: { findUnique: vi.fn().mockResolvedValue(null) },
+        oemOfferingPeriod: { findFirst: vi.fn().mockResolvedValue(null) },
         organizationEntitlement: { findUnique: state.organizationEntitlement },
         serviceCustomDomain: {
           upsert: state.upsertCustomDomain,

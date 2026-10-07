@@ -1,4 +1,5 @@
 import 'server-only';
+import { invoiceBillableUserCount } from '@bunshin/application';
 import { requestIdFromHeader } from '@bunshin/observability';
 import { ApplicationError, toApiError } from '@bunshin/shared';
 import { currentUserProvider } from '../auth/current-user';
@@ -10,6 +11,8 @@ export function commercialBillingCsvRows(
     status: string;
     periodStart: Date;
     mau: number;
+    billableUserCount?: number | null;
+    billingRuleVersion?: string | null;
     pricingTierKey: string;
     pricingVersion: string;
     amountYen: number;
@@ -47,6 +50,8 @@ export function commercialBillingCsvRows(
       '入金参照番号',
       '外部顧客番号',
       'メモ',
+      '課金対象人数',
+      '課金ルール版',
     ],
     ...invoices.map((invoice) => [
       invoice.invoiceNumber,
@@ -67,6 +72,8 @@ export function commercialBillingCsvRows(
       invoice.paymentReference,
       invoice.contract.externalCustomerReference,
       invoice.notes,
+      invoiceBillableUserCount(invoice),
+      invoice.billingRuleVersion ?? 'LEGACY_MAU',
     ]),
   ];
 }

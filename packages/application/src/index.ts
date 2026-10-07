@@ -20,6 +20,7 @@ export * from './social-image-pilot-evidence';
 export * from './service-participation';
 export * from './service-notification-preference';
 export * from './commercial-usage';
+export * from './oem-registration-billing';
 export * from './commercial-billing';
 export * from './validation-metrics';
 export * from './ai-usage-governance';
