@@ -8,6 +8,7 @@ import {
   validatedPurchaseContext,
 } from './program-purchase-context';
 import { AesGcmPaymentSecretCrypto, StripeCheckoutAdapter } from './secure-configuration';
+import { requireTrainingLearningMode } from '../services/training-support-mode';
 
 type CheckoutDependencies = {
   crypto: Pick<AesGcmPaymentSecretCrypto, 'decrypt'>;
@@ -117,6 +118,7 @@ export async function createDirectProgramCheckout(
   },
 ) {
   const context = await validatedDirectPurchaseContext(client, input);
+  requireTrainingLearningMode(context.program.settings, [context.terms.supportMode]);
   const existing = await client.programPurchase.findUnique({
     where: {
       workspaceId_groupId_idempotencyKey: {

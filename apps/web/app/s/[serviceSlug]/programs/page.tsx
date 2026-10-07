@@ -10,6 +10,10 @@ import {
   TRAINING_ENROLLMENT_STATUS_LABELS,
 } from '@bunshin/capability-training';
 import { AiTrainingDataExportCard } from './[programEnrollmentId]/ai-training-data-export-card';
+import {
+  isTrainingProgram,
+  selectableTrainingModes,
+} from '../../../../src/services/training-support-mode';
 
 export const dynamic = 'force-dynamic';
 export default async function MemberProgramsPage({
@@ -176,7 +180,7 @@ export default async function MemberProgramsPage({
         });
   const products = parsedProducts.flatMap(({ offering, terms }) => {
     const program = productPrograms.find((item) => item.id === offering.serviceProgramId);
-    return program
+    return program && (!isTrainingProgram(program.settings) || terms.supportMode === 'GUIDED')
       ? [
           {
             offeringId: offering.id,
@@ -235,11 +239,22 @@ export default async function MemberProgramsPage({
               enrollmentId: enrollment.id,
               name: program?.displayName ?? '実践プログラム',
               guidance: policy?.guidance ?? '',
-              modes: (policy?.allowedSupportModes as string[] | undefined) ?? [
-                enrollment.supportMode,
-              ],
-              memberMayChoose: policy?.memberMayChoose ?? false,
-              preferredMode: preference?.preferredSupportMode ?? enrollment.supportMode,
+              modes: selectableTrainingModes(
+                (policy?.allowedSupportModes as string[] | undefined) ?? [enrollment.supportMode],
+                moduleKey === AI_TRAINING_V1_MODULE_KEY,
+              ),
+              memberMayChoose:
+                (policy?.memberMayChoose ?? false) &&
+                (moduleKey !== AI_TRAINING_V1_MODULE_KEY ||
+                  (
+                    (policy?.allowedSupportModes as string[] | undefined) ?? [
+                      enrollment.supportMode,
+                    ]
+                  ).includes('GUIDED')),
+              preferredMode:
+                moduleKey === AI_TRAINING_V1_MODULE_KEY
+                  ? 'GUIDED'
+                  : (preference?.preferredSupportMode ?? enrollment.supportMode),
               notes: preference?.notes ?? '',
               actionHref: ['AI_RESALE_V1', 'AI_TRAINING_V1'].includes(moduleKey ?? '')
                 ? `/s/${serviceSlug}/programs/${enrollment.id}`
