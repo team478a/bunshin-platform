@@ -25,10 +25,11 @@ export function participantSnapshot(value: unknown): ParticipantSnapshot | null 
   if ((v.policy !== null && !policy) || !Array.isArray(v.seats)) return null;
   let internalCount = 0;
   let externalCount = 0;
-  for (const seat of v.seats) {
+  for (const seat of v.seats as unknown[]) {
     if (!seat || typeof seat !== 'object') return null;
-    if (seat.kind === 'INTERNAL') internalCount++;
-    else if (seat.kind === 'EXTERNAL') externalCount++;
+    const kind = (seat as Record<string, unknown>).kind;
+    if (kind === 'INTERNAL') internalCount++;
+    else if (kind === 'EXTERNAL') externalCount++;
     else return null;
   }
   // Revoked seats still consume capacity. No participant identifiers enter UI state.
