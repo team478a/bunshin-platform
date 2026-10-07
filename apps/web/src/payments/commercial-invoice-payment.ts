@@ -77,8 +77,29 @@ export async function createCommercialInvoiceCheckout(
   if (!invoice) throw new ApplicationError('NOT_FOUND', '請求が見つかりません');
   if (invoice.status !== 'ISSUED')
     throw new ApplicationError('CONFLICT', '支払い可能な請求ではありません');
-  if (invoice.contract.status !== 'ACTIVE' || invoice.contract.billingMode !== 'EXTERNAL_BILLING') {
+  if (invoice.amountYen <= 0)
+    throw new ApplicationError('CONFLICT', 'この請求にオンライン支払いは不要です');
+  const endedFinalInvoice =
+    invoice.contract.status === 'ENDED' &&
+    invoice.billingRuleVersion !== null &&
+    invoice.billingRuleVersion !== undefined;
+  if (
+    (invoice.contract.status !== 'ACTIVE' && !endedFinalInvoice) ||
+    invoice.contract.billingMode !== 'EXTERNAL_BILLING'
+  ) {
     throw new ApplicationError('CONFLICT', 'オンライン決済が有効ではありません');
+  }
+  if (endedFinalInvoice) {
+    const start = new Date(invoice.periodStart.getTime() - 9 * 60 * 60 * 1000);
+    const end = new Date(invoice.periodEnd.getTime() - 9 * 60 * 60 * 1000);
+    const historical = await client.oemContractPeriod.findFirst({
+      where: {
+        workspaceId: input.workspaceId,
+        startsAt: { lt: end },
+        OR: [{ endsAt: null }, { endsAt: { gt: start } }],
+      },
+    });
+    if (!historical) throw new ApplicationError('FORBIDDEN', 'historical contract required');
   }
   if (
     invoice.checkoutUrl &&
@@ -98,7 +119,7 @@ export async function createCommercialInvoiceCheckout(
     amountYen: invoice.amountYen,
     successUrl: new URL(`${returnPath}?payment=success`, configuration.appUrl).toString(),
     cancelUrl: new URL(`${returnPath}?payment=cancelled`, configuration.appUrl).toString(),
-    savePaymentMethod: invoice.contract.automaticCollectionEnabled,
+    savePaymentMethod: !endedFinalInvoice && invoice.contract.automaticCollectionEnabled,
     customerId: invoice.contract.stripeCustomerId,
   });
   const updated = await client.tenantInvoice.updateMany({
@@ -192,6 +213,7 @@ export async function processCommercialBillingStripeEvent(
   }
   const savedPaymentMethod =
     identity.eventType === 'checkout.session.completed' &&
+    invoice.contract.status === 'ACTIVE' &&
     invoice.contract.automaticCollectionEnabled &&
     typeof paymentIntent === 'string'
       ? await paymentMethodAdapter.retrieve(platformStripeConfiguration().secretKey, paymentIntent)
@@ -258,6 +280,7 @@ export async function processCommercialBillingStripeEvent(
           where: {
             id: invoice.contractId,
             workspaceId: invoice.workspaceId,
+            status: 'ACTIVE',
             automaticCollectionEnabled: true,
           },
           data: {

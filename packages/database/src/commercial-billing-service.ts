@@ -16,6 +16,7 @@ import {
   type SaveOrganizationCommercialContractInput,
   type TransitionTenantInvoiceInput,
 } from './commercial-billing-support';
+import { requireTrainingOemOffering } from './oem-training-offering';
 
 export class PrismaCommercialBillingService {
   constructor(private readonly client: PrismaClient = prisma) {}
@@ -38,6 +39,8 @@ export class PrismaCommercialBillingService {
             status: true,
             periodStart: true,
             mau: true,
+            billableUserCount: true,
+            billingRuleVersion: true,
             amountYen: true,
             externalInvoiceReference: true,
             paymentReference: true,
@@ -87,6 +90,8 @@ export class PrismaCommercialBillingService {
           periodStart: true,
           periodEnd: true,
           mau: true,
+          billableUserCount: true,
+          billingRuleVersion: true,
           pricingTierKey: true,
           pricingVersion: true,
           amountYen: true,
@@ -152,9 +157,7 @@ export class PrismaCommercialBillingService {
       this.client.organizationCommercialContract.findFirst({
         where: {
           workspaceId: input.workspaceId,
-          status: 'ACTIVE',
-          OR: [{ startsAt: null }, { startsAt: { lte: now } }],
-          AND: [{ OR: [{ endsAt: null }, { endsAt: { gt: now } }] }],
+          status: { in: ['ACTIVE', 'SUSPENDED', 'ENDED'] },
         },
       }),
       this.client.tenantMonthlyUsage.findFirst({
@@ -169,6 +172,26 @@ export class PrismaCommercialBillingService {
     ]);
     if (!contract) throw new Error('active contract not found');
     if (!usage) throw new Error('custom quote usage not found');
+    if (usage.billingRuleVersion != null) {
+      if (usage.billableUserCount == null) throw new Error('REVIEW_REQUIRED: billable count');
+      const historical = await this.client.oemContractPeriod.findFirst({
+        where: {
+          workspaceId: input.workspaceId,
+          startsAt: { lt: new Date(usage.periodEnd.getTime() - 9 * 60 * 60 * 1000) },
+          OR: [
+            { endsAt: null },
+            { endsAt: { gt: new Date(usage.periodStart.getTime() - 9 * 60 * 60 * 1000) } },
+          ],
+        },
+      });
+      if (!historical) throw new Error('REVIEW_REQUIRED: historical invoice contract');
+    } else if (
+      contract.status !== 'ACTIVE' ||
+      (contract.startsAt && contract.startsAt > now) ||
+      (contract.endsAt && contract.endsAt <= now)
+    ) {
+      throw new Error('active contract not found');
+    }
     return this.client.$transaction(async (tx) => {
       const invoice = await tx.tenantInvoice.create({
         data: {
@@ -179,6 +202,9 @@ export class PrismaCommercialBillingService {
           periodStart: usage.periodStart,
           periodEnd: usage.periodEnd,
           mau: usage.mau,
+          billableUserCount: usage.billableUserCount,
+          billingRuleVersion: usage.billingRuleVersion,
+          pricingScheduleId: usage.pricingScheduleId,
           pricingTierKey: usage.pricingTierKey,
           pricingVersion: usage.pricingVersion,
           amountYen: input.amountYen,
@@ -241,6 +267,9 @@ export class PrismaCommercialBillingService {
       updatedByUserId: input.actorUserId,
     };
     return this.client.$transaction(async (tx) => {
+      await tx.$queryRaw(
+        Prisma.sql`SELECT "id" FROM "workspaces" WHERE "id" = ${input.workspaceId}::uuid FOR UPDATE`,
+      );
       const before = await tx.organizationCommercialContract.findUnique({
         where: { workspaceId: input.workspaceId },
       });
@@ -254,6 +283,84 @@ export class PrismaCommercialBillingService {
         create: { workspaceId: input.workspaceId, ...contractData, ...consentData },
         update: { ...contractData, ...consentData },
       });
+      if (input.status === 'ACTIVE') {
+        const programs = await tx.serviceProgram.findMany({
+          where: { workspaceId: input.workspaceId },
+          select: { groupId: true, programTemplateVersionId: true },
+        });
+        for (const program of programs) {
+          const version = await tx.programTemplateVersion.findFirstOrThrow({
+            where: { id: program.programTemplateVersionId, workspaceId: input.workspaceId },
+            select: { definition: true },
+          });
+          await requireTrainingOemOffering(tx, {
+            workspaceId: input.workspaceId,
+            groupId: program.groupId,
+            definition: version.definition,
+          });
+        }
+      }
+      const billingPolicy = await tx.oemBillingPolicy.findUnique({
+        where: { workspaceId: input.workspaceId },
+      });
+      if (billingPolicy) {
+        await tx.$queryRaw(
+          Prisma.sql`SELECT "id" FROM "workspaces" WHERE "id" = ${input.workspaceId}::uuid FOR UPDATE`,
+        );
+        if (input.status === 'ACTIVE') {
+          if (!input.startsAt) throw new Error('REVIEW_REQUIRED: explicit contract start');
+          const existingPeriod = await tx.oemContractPeriod.findUnique({
+            where: {
+              workspaceId_startsAt: { workspaceId: input.workspaceId, startsAt: input.startsAt },
+            },
+          });
+          if (existingPeriod) {
+            if (existingPeriod.endsAt?.getTime() !== input.endsAt?.getTime()) {
+              if (existingPeriod.endsAt || !input.endsAt)
+                throw new Error('REVIEW_REQUIRED: closed contract history is immutable');
+              await tx.oemContractPeriod.update({
+                where: { id: existingPeriod.id },
+                data: { endsAt: input.endsAt },
+              });
+            }
+          } else {
+            const overlap = await tx.oemContractPeriod.findFirst({
+              where: {
+                workspaceId: input.workspaceId,
+                ...(input.endsAt ? { startsAt: { lt: input.endsAt } } : {}),
+                OR: [{ endsAt: null }, { endsAt: { gt: input.startsAt } }],
+              },
+            });
+            if (overlap) throw new Error('REVIEW_REQUIRED: overlapping contract period');
+            await tx.oemContractPeriod.create({
+              data: {
+                workspaceId: input.workspaceId,
+                startsAt: input.startsAt,
+                endsAt: input.endsAt ?? null,
+                actorUserId: input.actorUserId,
+                reason: 'commercial contract activated',
+              },
+            });
+          }
+        }
+        if (input.status === 'ENDED') {
+          if (!input.endsAt) throw new Error('REVIEW_REQUIRED: explicit contract end');
+          const currentPeriod = await tx.oemContractPeriod.findFirst({
+            where: { workspaceId: input.workspaceId },
+            orderBy: { startsAt: 'desc' },
+          });
+          if (
+            !currentPeriod ||
+            currentPeriod.startsAt >= input.endsAt ||
+            (currentPeriod.endsAt && currentPeriod.endsAt.getTime() !== input.endsAt.getTime())
+          )
+            throw new Error('REVIEW_REQUIRED: contract end differs from reviewed history');
+          await tx.oemContractPeriod.updateMany({
+            where: { workspaceId: input.workspaceId, endsAt: null, startsAt: { lt: input.endsAt } },
+            data: { endsAt: input.endsAt },
+          });
+        }
+      }
       await tx.commercialBillingAudit.create({
         data: {
           workspaceId: input.workspaceId,
@@ -273,9 +380,7 @@ export class PrismaCommercialBillingService {
     const contract = await this.client.organizationCommercialContract.findFirst({
       where: {
         workspaceId,
-        status: 'ACTIVE',
-        OR: [{ startsAt: null }, { startsAt: { lte: now } }],
-        AND: [{ OR: [{ endsAt: null }, { endsAt: { gt: now } }] }],
+        status: { in: ['ACTIVE', 'SUSPENDED', 'ENDED'] },
       },
     });
     if (!contract) return { prepared: 0, skippedCustomQuote: 0 };
@@ -286,6 +391,26 @@ export class PrismaCommercialBillingService {
     let prepared = 0;
     let skippedCustomQuote = 0;
     for (const usage of usages) {
+      if (usage.billingRuleVersion !== null && usage.billingRuleVersion !== undefined) {
+        if (usage.billableUserCount === null || usage.billableUserCount === undefined)
+          throw new Error('REVIEW_REQUIRED: confirmed billable count missing');
+        const periodStart = new Date(usage.periodStart.getTime() - 9 * 60 * 60 * 1000);
+        const periodEnd = new Date(usage.periodEnd.getTime() - 9 * 60 * 60 * 1000);
+        const valid = await this.client.oemContractPeriod.findFirst({
+          where: {
+            workspaceId,
+            startsAt: { lt: periodEnd },
+            OR: [{ endsAt: null }, { endsAt: { gt: periodStart } }],
+          },
+        });
+        if (!valid) throw new Error('REVIEW_REQUIRED: historical invoice contract');
+      } else if (
+        contract.status !== 'ACTIVE' ||
+        (contract.startsAt && contract.startsAt > now) ||
+        (contract.endsAt && contract.endsAt <= now)
+      ) {
+        continue;
+      }
       if (usage.calculatedPriceYen === null) {
         skippedCustomQuote += 1;
         continue;
@@ -302,6 +427,9 @@ export class PrismaCommercialBillingService {
               periodStart: usage.periodStart,
               periodEnd: usage.periodEnd,
               mau: usage.mau,
+              billableUserCount: usage.billableUserCount,
+              billingRuleVersion: usage.billingRuleVersion,
+              pricingScheduleId: usage.pricingScheduleId,
               pricingTierKey: usage.pricingTierKey,
               pricingVersion: usage.pricingVersion,
               amountYen,
@@ -331,20 +459,25 @@ export class PrismaCommercialBillingService {
   async prepareAllFinalizedInvoices(now = new Date()) {
     const contracts = await this.client.organizationCommercialContract.findMany({
       where: {
-        status: 'ACTIVE',
-        OR: [{ startsAt: null }, { startsAt: { lte: now } }],
-        AND: [{ OR: [{ endsAt: null }, { endsAt: { gt: now } }] }],
+        status: { in: ['ACTIVE', 'SUSPENDED', 'ENDED'] },
       },
       select: { workspaceId: true },
     });
     let prepared = 0;
     let skippedCustomQuote = 0;
+    const reviewRequired: Array<{ workspaceId: string; reason: string }> = [];
     for (const contract of contracts) {
-      const result = await this.prepareWorkspaceInvoices(contract.workspaceId, now);
-      prepared += result.prepared;
-      skippedCustomQuote += result.skippedCustomQuote;
+      try {
+        const result = await this.prepareWorkspaceInvoices(contract.workspaceId, now);
+        prepared += result.prepared;
+        skippedCustomQuote += result.skippedCustomQuote;
+      } catch (error) {
+        if (error instanceof Error && error.message.startsWith('REVIEW_REQUIRED'))
+          reviewRequired.push({ workspaceId: contract.workspaceId, reason: error.message });
+        else throw error;
+      }
     }
-    return { organizations: contracts.length, prepared, skippedCustomQuote };
+    return { organizations: contracts.length, prepared, skippedCustomQuote, reviewRequired };
   }
 
   async transitionInvoice(input: TransitionTenantInvoiceInput) {

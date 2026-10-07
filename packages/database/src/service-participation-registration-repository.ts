@@ -5,6 +5,7 @@ import { Prisma, type PrismaClient, prisma } from './client';
 import { enqueueRegistrationCompleteEmail } from './service-registration-email';
 import { groupMembershipRecord } from './service-records';
 import { latestServiceLegalDocuments } from './service-legal-latest';
+import { recordOemRegistration } from './oem-billing-history';
 
 export class PrismaServiceParticipationRegistrationRepository {
   constructor(private readonly client: PrismaClient = prisma) {}
@@ -273,6 +274,13 @@ export class PrismaServiceParticipationRegistrationRepository {
             skipDuplicates: true,
           });
         if (status === 'ACTIVE') {
+          await recordOemRegistration(
+            tx,
+            membership,
+            input.actorUserId,
+            input.now,
+            'public service registration',
+          );
           await enqueueRegistrationCompleteEmail(tx, {
             workspaceId: configuration.workspaceId,
             groupId: configuration.groupId,

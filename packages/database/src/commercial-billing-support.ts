@@ -1,4 +1,8 @@
-import { tenantInvoiceDueAt, type TenantInvoiceAction } from '@bunshin/application';
+import {
+  tenantInvoiceDueAt,
+  invoiceBillableUserCount,
+  type TenantInvoiceAction,
+} from '@bunshin/application';
 import type { Prisma } from '@prisma/client';
 
 export interface SaveOrganizationCommercialContractInput {
@@ -66,6 +70,7 @@ export function invoiceDocumentSnapshot(
     periodStart: Date;
     periodEnd: Date;
     mau: number;
+    billableUserCount?: number | null;
     amountYen: number;
     workspace: { name: string; legalName: string | null; address: string | null };
     contract: { billingName: string; billingEmail: string; paymentTermsDays: number };
@@ -81,7 +86,10 @@ export function invoiceDocumentSnapshot(
     dueAt: tenantInvoiceDueAt(issuedAt, invoice.contract.paymentTermsDays).toISOString(),
     periodStart: invoice.periodStart.toISOString(),
     periodEnd: invoice.periodEnd.toISOString(),
-    description: `ワタシワークス OEM月額利用料（${invoice.mau.toLocaleString('ja-JP')} MAU）`,
+    description:
+      invoice.billableUserCount === null || invoice.billableUserCount === undefined
+        ? `ワタシワークス OEM月額利用料（${invoice.mau.toLocaleString('ja-JP')} MAU）`
+        : `ワタシワークス OEM月額利用料（課金対象 ${invoiceBillableUserCount(invoice).toLocaleString('ja-JP')}人）`,
     quantity: 1,
     taxRatePercent: 10,
     subtotalYen: invoice.amountYen - taxYen,

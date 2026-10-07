@@ -89,6 +89,8 @@ export { PrismaTrainingParticipantProfileRepository } from './training-profile';
 export { PrismaAiResaleOfferRepository } from './resale-offer';
 export { PrismaServiceNotificationPreferenceRepository } from './service-notification-preference';
 export { PrismaCommercialUsageService } from './commercial-usage';
+export { PrismaCommercialPricingAdminService } from './commercial-pricing-admin';
+export { PrismaOemBillingAdminService } from './oem-billing-admin';
 export { PrismaCommercialBillingService } from './commercial-billing';
 export type {
   SaveOrganizationCommercialContractInput,

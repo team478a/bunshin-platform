@@ -1,4 +1,5 @@
 import 'server-only';
+import { parseProgramDefinition } from '@bunshin/application';
 import { requestIdFromHeader } from '@bunshin/observability';
 import { ApplicationError, toApiError } from '@bunshin/shared';
 import { z } from 'zod';
@@ -20,6 +21,7 @@ const commercialSettingsSchema = z
     startsAt: z.string().datetime({ offset: true }).nullable(),
     endsAt: z.string().datetime({ offset: true }).nullable(),
     reason: z.string().trim().min(1).max(1000),
+    offeringClassification: z.enum(['FREE', 'PAID', 'PAID_BUNDLE']).optional(),
   })
   .strict();
 
@@ -42,7 +44,8 @@ export async function updateServiceCommercialSettingsResponse(
         value.monthlyPriceYen !== null &&
         value.monthlyPriceYen !== 0) ||
       (value.billingMode !== 'FREE' &&
-        (value.monthlyPriceYen === null || value.monthlyPriceYen < 1))
+        (value.monthlyPriceYen === null ||
+          (value.monthlyPriceYen < 1 && value.offeringClassification !== 'PAID_BUNDLE')))
     )
       throw new ApplicationError('VALIDATION_ERROR', 'invalid commercial price');
     const startsAt = value.startsAt === null ? null : new Date(value.startsAt);
@@ -63,6 +66,74 @@ export async function updateServiceCommercialSettingsResponse(
         include: { commercialSetting: true },
       });
       if (configuration === null) throw new ApplicationError('NOT_FOUND', 'service not found');
+      const oemContract = await tx.organizationCommercialContract.findUnique({
+        where: { workspaceId: configuration.workspaceId },
+        select: { id: true },
+      });
+      const programs = oemContract
+        ? await tx.serviceProgram.findMany({
+            where: { workspaceId: configuration.workspaceId, groupId: configuration.groupId },
+            select: { programTemplateVersionId: true },
+          })
+        : [];
+      const versions = programs.length
+        ? await tx.programTemplateVersion.findMany({
+            where: {
+              workspaceId: configuration.workspaceId,
+              id: { in: programs.map((p) => p.programTemplateVersionId) },
+            },
+            select: { definition: true },
+          })
+        : [];
+      const isOemTraining = versions.some((v) =>
+        parseProgramDefinition(v.definition).missions.some((m) => m.capability === 'AI_TRAINING'),
+      );
+      const currentOffering = await tx.oemOfferingPeriod.findFirst({
+        where: {
+          workspaceId: configuration.workspaceId,
+          groupId: configuration.groupId,
+          endsAt: null,
+        },
+      });
+      if (value.offeringClassification && !currentOffering)
+        throw new ApplicationError('VALIDATION_ERROR', '商品ポリシーの初期確認が必要です');
+      if (isOemTraining && (!currentOffering || currentOffering.productPolicy !== 'MANABERU_STYLE'))
+        throw new ApplicationError('VALIDATION_ERROR', 'AI研修の商品ポリシー確認が必要です');
+      if (
+        currentOffering?.productPolicy === 'MANABERU_STYLE' &&
+        (value.offeringClassification === 'FREE' ||
+          (value.billingMode === 'FREE' &&
+            (value.offeringClassification ?? currentOffering.classification) !== 'PAID_BUNDLE'))
+      )
+        throw new ApplicationError('VALIDATION_ERROR', 'MANABERU_OEM_FREE_FORBIDDEN');
+      if (
+        currentOffering &&
+        value.offeringClassification &&
+        value.offeringClassification !== currentOffering.classification
+      ) {
+        await tx.$queryRaw(
+          db.Prisma
+            .sql`SELECT "id" FROM "workspaces" WHERE "id" = ${configuration.workspaceId}::uuid FOR UPDATE`,
+        );
+        const now = new Date();
+        const closed = await tx.oemOfferingPeriod.updateMany({
+          where: { id: currentOffering.id, endsAt: null },
+          data: { endsAt: now },
+        });
+        if (closed.count !== 1)
+          throw new ApplicationError('CONFLICT', '提供区分が更新されています');
+        await tx.oemOfferingPeriod.create({
+          data: {
+            workspaceId: configuration.workspaceId,
+            groupId: configuration.groupId,
+            productPolicy: currentOffering.productPolicy,
+            classification: value.offeringClassification,
+            startsAt: now,
+            actorUserId: user.userId,
+            reason: value.reason,
+          },
+        });
+      }
       const beforeData = configuration.commercialSetting
         ? {
             planName: configuration.commercialSetting.planName,

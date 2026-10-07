@@ -1,5 +1,13 @@
 # BUNSHIN Platform Decision Log
 
+## 2026-10-07: OEM課金人数を正式登録と無料実利用の和集合へ分離する
+
+- 人間が承認したOEM Billing指示に基づく独立PR。提供区分FREE/PAID/PAID_BUNDLEを決済方式から分離し、Workspaceごとの課金人数をR∪Aで算出する。MAUは実利用指標として維持する。
+- 正式登録・明示終了・提供区分・契約期間を時点履歴で保持する。停止、学習開始、管理者昇格、現在status、updatedAtから課金期間を推測しない。初期履歴の人間確認と将来月cutoverがなければ旧方式を継続し、新方式で根拠不足ならREVIEW_REQUIREDで請求確定を止める。
+- 全OEM共通料金はSUPER_ADMINによる下書き/CAS/将来月公開/開始前取消で管理する。版と安定tier IDを保存し、公開料金・確定月・旧請求/PDFの改変を禁止する。新0人はNULLとは異なり、旧MAUへのfallbackをしない。
+- AI_TRAININGの内部DefinitionをOEM商品ポリシーへ対応付け、ブランドや0円設定でManaberu FREE制約を迂回させない。直営・内部PilotへOEM料金を強制しない。
+- [ADR](adr/OEM_REGISTRATION_BILLING_V2.md)と[実装報告](OEM_REGISTRATION_BILLING_V2_IMPLEMENTATION_REPORT.md)を参照。本番Migration/deploy/cutover/価格改定/実請求/実課金は今回実行せず、別レビューを必要とする。
+
 ## 2026-10-07: 専用Program準備UIはCREATE_PROGRAMのみを既存trusted APIへ接続する
 
 - 人間承認に基づく独立UI PR。現Service管理認可とserver-owned authorityを維持し、未設定・別scope・実行flag ONでは作成UIを開かない。

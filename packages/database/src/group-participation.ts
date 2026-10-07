@@ -1,6 +1,7 @@
 import type { GroupParticipationRepository } from '@bunshin/application';
 import { type PrismaClient, prisma } from './client';
 import { groupInvitationRecord, groupMembershipRecord, groupRecord } from './service-records';
+import { recordOemRegistration, endOemRegistration } from './oem-billing-history';
 export class PrismaGroupParticipationRepository implements GroupParticipationRepository {
   constructor(private readonly client: PrismaClient = prisma) {}
 
@@ -205,6 +206,14 @@ export class PrismaGroupParticipationRepository implements GroupParticipationRep
           revokedAt: null,
         },
       });
+      if (invitation.role === 'PARTICIPANT')
+        await recordOemRegistration(
+          tx,
+          membership,
+          input.actorUserId,
+          input.now,
+          'participant accepted invitation',
+        );
       return groupMembershipRecord(membership);
     });
   }
@@ -251,12 +260,20 @@ export class PrismaGroupParticipationRepository implements GroupParticipationRep
       },
     });
     if (membership === null) return null;
-    return groupMembershipRecord(
-      await this.client.groupMembership.update({
+    return this.client.$transaction(async (tx) => {
+      const updated = await tx.groupMembership.update({
         where: { id: membership.id },
         data: { status: 'REVOKED', revokedAt: input.now },
-      }),
-    );
+      });
+      await endOemRegistration(
+        tx,
+        membership,
+        input.actorUserId,
+        input.now,
+        'participant left group',
+      );
+      return groupMembershipRecord(updated);
+    });
   }
 
   async listMemberships(input: Parameters<GroupParticipationRepository['listMemberships']>[0]) {
@@ -347,6 +364,10 @@ export class PrismaGroupParticipationRepository implements GroupParticipationRep
             : target.status !== 'ACTIVE'
               ? 'REACTIVATED'
               : 'ROLE_CHANGED';
+      if (input.status === 'REVOKED')
+        await endOemRegistration(tx, target, input.actorUserId, input.now, input.reason);
+      if (input.status === 'ACTIVE' && target.status === 'REVOKED' && target.role === 'PARTICIPANT')
+        await recordOemRegistration(tx, updated, input.actorUserId, input.now, input.reason);
       await tx.groupMembershipAuditLog.create({
         data: {
           workspaceId: input.workspaceId,

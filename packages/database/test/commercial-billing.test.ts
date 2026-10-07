@@ -72,6 +72,7 @@ describe('PrismaCommercialBillingService', () => {
         findFirst: vi.fn().mockResolvedValue({
           id: 'contract',
           workspaceId: 'workspace-a',
+          status: 'ACTIVE',
           updatedByUserId: 'actor',
         }),
       },
@@ -196,6 +197,7 @@ describe('PrismaCommercialBillingService', () => {
         findFirst: vi.fn().mockResolvedValue({
           id: 'contract',
           workspaceId: 'workspace-a',
+          status: 'ACTIVE',
           updatedByUserId: 'actor',
         }),
       },
@@ -219,7 +221,9 @@ describe('PrismaCommercialBillingService', () => {
     const create = vi.fn().mockResolvedValue({ id: 'invoice-custom', amountYen: 250_000 });
     const rawClient = {
       organizationCommercialContract: {
-        findFirst: vi.fn().mockResolvedValue({ id: 'contract', updatedByUserId: 'owner' }),
+        findFirst: vi
+          .fn()
+          .mockResolvedValue({ id: 'contract', status: 'ACTIVE', updatedByUserId: 'owner' }),
       },
       tenantMonthlyUsage: {
         findFirst: vi.fn().mockResolvedValue({

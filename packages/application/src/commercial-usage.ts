@@ -45,19 +45,26 @@ export function quoteMauPrice(
   pricingVersion: string,
   tiers: readonly MauPricingTier[],
 ): MauPricingQuote {
-  if (!Number.isInteger(mau) || mau < 0) throw new Error('MAU must be a non-negative integer');
+  if (!Number.isSafeInteger(mau) || mau < 0 || mau > 2_147_483_646)
+    throw new Error('MAU must be a non-negative integer');
   if (!pricingVersion.trim() || tiers.length === 0) throw new Error('invalid pricing schedule');
-  let previousLimit = 0;
+  let previousLimit = -1;
+  const keys = new Set<string>();
   for (const tier of tiers) {
     if (
       !tier.tierKey.trim() ||
-      !Number.isInteger(tier.upperLimit) ||
+      tier.tierKey.length > 40 ||
+      keys.has(tier.tierKey) ||
+      !Number.isSafeInteger(tier.upperLimit) ||
+      tier.upperLimit > 2_147_483_646 ||
       tier.upperLimit <= previousLimit ||
-      !Number.isInteger(tier.priceYen) ||
+      !Number.isSafeInteger(tier.priceYen) ||
+      tier.priceYen > 2_147_483_646 ||
       tier.priceYen < 0
     )
       throw new Error('invalid pricing tier');
     previousLimit = tier.upperLimit;
+    keys.add(tier.tierKey);
   }
   const tier = tiers.find((candidate) => mau <= candidate.upperLimit);
   if (!tier) {
