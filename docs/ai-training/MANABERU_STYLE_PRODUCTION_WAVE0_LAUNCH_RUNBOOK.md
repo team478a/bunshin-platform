@@ -2,13 +2,29 @@
 
 ## 状態・対象・承認境界
 
-2026-10-07 JST、基準main `ffca75706af0d00e064088aa38bb899393ec3621`（#1164）。[main CI](https://github.com/team478a/bunshin-platform/actions/runs/37533639894)成功をGitHubメタデータで確認。Git上のproductionは `87c5fafcdf9b84c67dd33aef41860368415ca789`。実公開SHA・DB・設定は未確認。release対象SHAは人間が別途固定し、本書作成commitを自動的にdeploy対象にしない。
+初版は2026-10-07 JST、基準main `ffca75706af0d00e064088aa38bb899393ec3621`（#1164）。今回のRead-only更新はmain `c4d103a9b82df10f4e1fb57901c8a70c6899e0b6`（#1166）を基準とし、[main CI](https://github.com/team478a/bunshin-platform/actions/runs/37545719072)成功を確認。実公開SHAは `87c5fafcdf9b84c67dd33aef41860368415ca789`（#1143）、mainとDIVERGED。release対象SHAは人間が別途固定し、本書作成commitを自動的にdeploy対象にしない。
 
-**開始判定はNO-GO。文書は操作承認ではない。** 本書は将来の人間承認後に実行する順序を定義する。今回Production DB接続、Migration、deploy、設定、Definition承認、参加者登録、enable、key変更、実Provider利用は一切実施していない。以下のcommand/API例も未実行。
+**開始判定はNO-GO。文書は操作承認ではない。** 本書は将来の人間承認後に実行する順序を定義する。初版はProduction読取も未実施。今回の別指示によるRead-only監査では既存認証済みDashboard/CLI metadataとREAD ONLY transactionのSELECTのみ実施した。Migration、deploy、設定、Definition承認、参加者登録、enable、key変更、実Provider利用は一切実施していない。以下の変更command/API例は未実行。
 
 Wave 0は内部1〜2人の実環境E2Eであり、外部募集ではない。内部枠と外部100人枠を分離し、一般ユーザー・旧30日V1へ表示しない。内部Domain名は維持する。staging配備は必須でなく、隔離restore/DDL検証に使う環境は別途必要。
 
 実行記録は[Execution Checklist](MANABERU_STYLE_WAVE0_EXECUTION_CHECKLIST.md)へ。公開GitへUUID名簿、session、dump、secret、本文を貼らず、アクセス制限された証跡のキーのみ記録する。各Phaseの失敗/UNKNOWNでは次へ進まない。
+
+### 2026-10-07 Read-only監査で確定した状態
+
+正本は[Production Read-only Audit](MANABERU_STYLE_PRODUCTION_READ_ONLY_AUDIT.md)。以下は実読取のpoint-in-time結果であり、開始直前に再確認する。初版の実環境UNKNOWNは本追記/監査報告を優先し、過去の合成検証は本番の証明としない。
+
+| 項目                   | 結果 / 次の停止点                                                                                                                                                                       |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Application            | Vercel bunshin-platform-web / team478as-projects、正式URL https://www.watashi-works.com、production branch、Node24 / hnd1、公開87c5fafc。#1162/#1164/#1166を含む最新Pilot一式は未Deploy |
+| DB                     | Supabase bunshin-platform-prod / vtkzinaudznwbsjoyszk、Tokyo、PostgreSQL17.6、Healthy。実Application接続先との非秘密metadata照合・server role/poolはUNKNOWN                             |
+| Migration / RLS        | Prisma227件、最新20261005030000、未完了0。3 Personal Learning migrationはPENDING、必要5 table不存在。全履歴checksum/driftと適用後grants/RLS否定は未確認                                 |
+| Backup                 | 最新Physical Backupは2026-10-07 05:44:04 JST、COMPLETED。PITR無効、Storage object本体対象外。retention保証/隔離restore実績/RTOはUNKNOWN                                                 |
+| Provider               | Production ACTIVE OPENAI gpt-5-mini / credential SET / verified=true / paused=false。実API疎通・App runtime source一致は未検証                                                          |
+| Pilot                  | projectのPERSONAL_LEARNING系env全てNOT_SET、DB marker0。OFF相当/未準備。seat/approval table不存在なので人数を0 rowsと扱わず、3承認はNOT_FOUND                                           |
+| Cost / Hard Cap / STOP | main実装あり、本番はenv/table/公開コード未準備。利用可能PASSではない                                                                                                                    |
+
+**最初の人間操作は1つ:** 環境ownerが最新COMPLETED BackupをProductionとは別の隔離projectへ復元リハーサルする。Database→Backups→Restore to new project BETAの経路は確認済み。実行権限/費用/機密データ管理を人間承認し、Productionへ上書き/切替しない。Codexは実行していない。これが成功してもMigration/deploy承認を兼ねない。
 
 ## Emergency Stop — ON手順より先に読む
 
@@ -41,19 +57,19 @@ Wave 0は内部1〜2人の実環境E2Eであり、外部募集ではない。内
 
 ### Production正本とUNKNOWN
 
-| 項目                | Repositoryで確認できる正本/経路                                                                                                                               | 実環境で埋める情報                                            |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
-| Hosting / deploy    | `apps/web/vercel.json`、[Deployment Guide](../DEPLOYMENT_GUIDE.md)。Next.js、hnd1、production branchのみGit deploy                                            | Vercel project/team/owner/branch実設定/alias/公開SHAはUNKNOWN |
-| Database            | Prisma/PostgreSQL、Supabase接続変換（session pooler:5432）。DATABASE_URL/DIRECT_URL                                                                           | project/host/role/grants/接続pool/容量はUNKNOWN               |
-| env / secrets       | Vercel UI/secure integrationが運用経路。`.env`やGitは本番正本ではない                                                                                         | 編集者、secret保管/rotation owner/全instance反映はUNKNOWN     |
-| Provider credential | `AiProviderConfiguration`のencrypted key（ENCRYPTION_KEY、AI_PROVIDER_CONFIG_KEY_VERSION）。ACTIVE設定不存在時のみlegacy OPENAI_API_KEY/OPENAI_MODEL fallback | 現source/key健全性/契約/予算はUNKNOWN。復号・平文取得しない   |
-| feature flags       | server envと `service_programs.settings`、Seat台帳                                                                                                            | 現値と変更/停止手段はUNKNOWN                                  |
-| Migration           | Vercel build→`pnpm db:migrate:vercel`→Prisma migrate deploy。履歴は `_prisma_migrations`                                                                      | 実pending/実行者/backup/lock/RLSはUNKNOWN                     |
-| logs                | Vercel build/runtime logs、Job/ProgramActionEvent/ProgramAuditLog、P1-G SQL                                                                                   | log保持期間、閲覧権限、通知先、監視担当はUNKNOWN              |
+| 項目                | Repositoryで確認できる正本/経路                                             | 実環境で埋める情報                                                                                           |
+| ------------------- | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| Hosting / deploy    | `apps/web/vercel.json`、Vercel Build/Git production branch                  | 実project bunshin-platform-web / team478as-projects、公開87c5fafc、正式alias確認済み。release ownerはUNKNOWN |
+| Database            | Prisma/PostgreSQL、DATABASE_URL/DIRECT_URL、session pooler変換              | Supabase project/Tokyo/17.6確認済み。App接続先/role/grants/poolはUNKNOWN                                     |
+| env / secrets       | Vercel UI/secure integrationが運用経路。`.env`やGitは本番正本ではない       | 編集者、secret保管/rotation owner/全instance反映はUNKNOWN                                                    |
+| Provider credential | `AiProviderConfiguration`暗号化key、ACTIVE不存在時のみlegacy fallback       | Production OPENAI gpt-5-mini/key SET/verified。実App source/key有効性/予算はUNKNOWN。復号しない              |
+| feature flags       | server env、`service_programs.settings`、Seat台帳                           | project flags NOT_SET / marker0。OFF相当、START/STOPの公開コード未準備。全instance伝播は未実証               |
+| Migration           | Vercel build→`db:migrate:vercel`→Prisma全pending、`_prisma_migrations`      | 実227件/最新20261005030000、3 pending、5 table不存在。最新Backup成功。全drift/lock/restore/RLS否定は未済     |
+| logs                | Vercel build/runtime logs、Job/ProgramActionEvent/ProgramAuditLog、P1-G SQL | log保持期間、閲覧権限、通知先、監視担当はUNKNOWN                                                             |
 
 ## Phase B — Backup / Migration
 
-1. DB ownerとMigration担当の2者がSupabase Dashboardで対象project、backup方式、最終成功timestamp、保持期間を記録。[Backup / Restore Runbook](../BACKUP_RESTORE_RUNBOOK.md)はPro日次backupを方針としているが、現在の契約/backup実在はUNKNOWN。日次backupで許容RPOを満たさなければ追加方式をownerが承認する。
+1. DB ownerとMigration担当の2者がSupabase Dashboardで対象project、backup方式、最終成功timestamp、保持期間を記録。Read-only監査でPro日次Physical Backup実在と最新COMPLETED（2026-10-07 05:44:04 JST）を確認した。正式retention/実restore/RTOはUNKNOWN。実行直前の新しいBackupとRPOを再確認し、日次backupで許容RPOを満たさなければ追加方式をownerが承認する。Storage object本体は含まれない。
 2. 別の隔離projectへrestore rehearsal。restore可能性、実測RTO、RPO、FK/主要件数/schema/実roleを確認。Productionへ上書きしない。dumpはGitへ置かない。backup timestamp、担当者、restore結果がない場合停止。
 3. release全pendingを固定し、既存Goal unique index/triggerのlock時間と旧版write/deleteとの互換性を隔離環境で測定。lock/statement許容時間、writer停止/drain範囲、監視担当を人間が決める。SQLにはtimeoutがなく、additiveでも無停止保証はない。
 4. Migration実行を独立承認。標準はPhase CのVercel build先頭で**全pendingを辞書順で一括**適用する。各Migrationごとの人間停止点は現runnerにない。backup→一括Migration→全schema/RLS検証→公開検証の順序とする。
@@ -222,12 +238,12 @@ DBは原則rollbackせず履歴を保全しforward-fix。逆DROP/適用済みfil
 
 ## 残作業 / Blocker / 安全な支援
 
-1. 対象実環境・owner・role・公開SHA・backup/restore/DDL・pending全履歴・RLSを実読取で確定（現在UNKNOWN）。
+1. 実Application/公開SHA、Supabase project/17.6、最新成功Backup、3 pending/5 table不存在はRead-only監査で確定。残るApp↔DB接続照合・owner/role・全checksum/drift・隔離restore/RTO・lock/RLS実アクセスを確認する。Production側40/main側79の分岐履歴を保全してreleaseを別レビューする。
 2. pilot-operations実装PRを人間レビュー。停止中Enrollment準備とSTART/STOPの隔離環境試験を確認し、本番の停止担当・全instance反映/drainを確定する。APIの存在だけで本番GateをPASSにしない。運用flagとauthorityはSTOPのため維持し、通常準備flagを閉じることと混同しない。
 3. 内部人数/Provider source/model/価格/上限/予算/監視/Privacy保持・同意を人間承認。3Definitionの教育レビュー/APPROVE、内部Seat/Profile、全Release Gateを実証する。
 4. 別releaseと開始承認後にのみ実Provider/実スマートフォンE2E、Kill Switch、状態復元を実施しWave0結果を判定。
 
-Codexの安全な支援はGit/CI差分整理、SQL/command/API bodyのレビュー（秘密・実値なし）、隔離環境テスト、証跡の構造化と欠損整理まで。Production読み取りも今回の範囲外。人間が操作/承認するものはMigration、deploy、Definition承認、設定、内部参加者登録、本人Profile回答、enable、実課金、Wave1移行。文書作成後停止する。
+Codexの安全な支援はGit/CI差分整理、SQL/command/API bodyのレビュー（秘密なし）、隔離環境テスト、証跡の構造化と欠損整理まで。今回の別指示で許可されたProduction Read-only監査は完了し、追加操作へ自動継続しない。人間が別途操作/承認するものはBackup復元、Migration、deploy、Definition承認、設定、内部参加者登録、本人Profile回答、enable、実課金、Wave1移行。文書作成後停止する。
 
 ### 根拠と回帰試験の入口
 
