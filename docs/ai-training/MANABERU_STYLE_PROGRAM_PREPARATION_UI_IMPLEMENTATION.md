@@ -39,6 +39,8 @@ React静的描画・純粋client送信試験であり、実ブラウザ・実ses
 
 ## 残作業とrollback
 
+CI初回の全Web回帰で、新画面の認証returnToが許可一覧にない1件を検出（3018成功・1失敗）。同画面の正規pathのみを許可し、query/hash/encoded alias/余分なpath/外部URLの拒否テストを追加した。画面側・API側の管理認可は維持し、任意管理URLを許可する変更にはしない。修正後CIの成功は別途確認する。
+
 人間PRレビュー→CI確認→別承認のdeploy→準備authority/flag設定→実認証で状態確認→別承認の停止Program作成。環境設定未登録の間は作成不可。Wave 0開始や後続登録/承認へ自動で進まない。
 
 UI rollbackは本PRをrevertしてPR化。schema rollback不要。将来作成済みデータがある場合も削除しない。既存緊急停止APIの到達性と停止/drainは別Runbookに従う。
