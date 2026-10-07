@@ -1,4 +1,5 @@
 import { FORTUNE_WEEKLY_NOTIFICATION_TOPIC } from '@bunshin/capability-fortune';
+import { isPersonalLearningPilotProgram } from '@bunshin/capability-training';
 import type { LineConfigurationEnvironment } from '@bunshin/application';
 import type {
   ServiceLineBroadcastConfiguration,
@@ -121,7 +122,7 @@ export async function resolveServiceLineBroadcastRecipientIds(input: {
             programEnrollmentId: criteria.programEnrollmentId,
             status: 'PRESENTED',
           },
-          select: { id: true },
+          select: { id: true, targetResourceType: true },
         }),
       ]);
       const expectedModuleFilter =
@@ -137,7 +138,7 @@ export async function resolveServiceLineBroadcastRecipientIds(input: {
               status: 'ACTIVE',
               settings: expectedModuleFilter,
             },
-            select: { id: true },
+            select: { id: true, settings: true },
           })
         : null;
       for (const membershipId of eligibleMembershipIds) {
@@ -146,7 +147,10 @@ export async function resolveServiceLineBroadcastRecipientIds(input: {
           enrollment.groupMembershipId !== membershipId ||
           !progress ||
           !assignment ||
-          !program
+          !program ||
+          (criteria.kind === 'AI_TRAINING_ACTION' &&
+            (isPersonalLearningPilotProgram(program.settings) ||
+              assignment?.targetResourceType === 'PERSONAL_LEARNING_PLAN'))
         )
           eligibleMembershipIds.delete(membershipId);
       }

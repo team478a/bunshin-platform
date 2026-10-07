@@ -1,5 +1,76 @@
 # BUNSHIN Platform Decision Log
 
+## 2026-10-07: 本人Profile準備UIは停止中の専用Pilotに限定する
+
+- 状態: Proposed（#1163監査後の最小本人UI。実登録/本番操作なし）。
+- 既存受講者ページのreserved Pilot分岐内だけに準備UIを置き、既存sessionとProfile repositoryの読取認可、準備flag/authorityを再利用する。旧V1 setupや新API/保存正本を作らない。
+- role/aiLevel/dailyMinutesは未選択、本人確認必須。通信結果不明時は同じoperation UUID/回答で再送し、保存確認後もGoal/Plan/Pilot実行を自動開始しない。
+- 実認証・本番Migration/RLS・Definition/人数/費用・停止運用は別Gate。UI実装完了をWave 0開始承認としない。
+
+## 2026-10-06: Personal LearningはProduction Closed Pilotへ方針変更する
+
+- 状態: 方針は人間指示に基づき文書化、具体的release/実装/開始はレビュー待ち。現状NO-GO。
+- staging配備を開始必須条件から外し、Development/CI/Test→Production Release Gate→内部Wave 0（1〜2人）→人間レビュー付きWave拡大、累計最大100人とする。Production利用を一般公開と同一視しない。
+- 既存専用Program/flag/allowlist/旧V1除外/認可/保存/人間承認/Telemetryを再利用し、新Pilot Platformを作らない。現コードのproduction拒否・5人上限は今回変更しない。既存機構の存在を実環境Gate PASSへ置換しない。
+- 認可隔離と共有DB/worker/Provider/quotaの障害影響を区別し、Migration/人数制御/Provider停止直前/LINE最終配信/費用上限/実Authの未確認条件を残す。累計Hard Capと失敗再試行を含むcall admissionは最小別PR候補。
+- [Runbook](ai-training/PERSONAL_LEARNING_PRODUCTION_CLOSED_PILOT_RUNBOOK.md)と[Definitionレビュー票](ai-training/PERSONAL_LEARNING_PRODUCTION_DEFINITION_REVIEW_SHEET.md)へ根拠・不足PR計画を記録する。旧#1153方針は履歴として保持。本番Migration/deploy/enable/APPROVE/Enrollment登録/実課金/招待は別承認。
+
+## 2026-10-06: P1-Eは版固定Planから既存Assignmentへ明示Bridgeする
+
+- 状態: Proposed（独立PR。UI/LINE登録・本番migration・deployなし）
+- Routerは純粋契約とAI Packageの3Definition限定Completion Ruleに分離する。回答に保存された版付きAssessmentを利用し、ProfileのScoreだけで習得・Skipを推測しない。
+- Assignment/Answer/Assessment/Progressを既存実行正本として再利用する。Assignmentの参照metadataにPlan RevisionとDefinition Versionを記録し、同一Missionに対応するDefinitionも別々に実行する。新しいProgress/Assignment modelは作らない。
+- 同じEnrollment lockと再認可で現行Confirmed Plan・ACTIVE Goal・人間承認・契約期間を検証する。旧Revision、未評価、不明Evidenceは止める。既存V1の未完了Assignmentを置き換えず、Schedulerへ登録しない。
+- PLAN_COMPLETEDはRouter結果だけとし、Goal/Plan/Enrollment状態を自動変更しない。Teaching・UI・LINE・Provider・Definition拡張は別レビューとする。
+
+## 2026-10-06: P1-C-Sは既存Goal正本と参照だけのPlan Revisionを永続化する
+
+- 状態: Proposed（P1-C-S独立PRレビュー対象。本番migration/承認/Runtime接続なし）
+- ProgramMemberGoalをGoal正本とし、専用確認証跡・immutable構造のPlan Revision・Service scopeのcode-defined Definition承認だけを追加する。Eventは操作receipt/冪等性でありPlan正本ではない。
+- fixtureは自動承認しない。人間による承認recordと完全一致する版だけ新規利用でき、Deprecatedは履歴参照を残し新規利用を拒否する。承認管理UI/自動承認は作らない。
+- 既存Enrollment lockとtransaction内の再認可、Primary Goal拒否、expectedRevision CAS、操作内容hash付き再送照合を使う。P1-D candidateKeyだけでは保存せず再計算する。UI/API公開/Router/Teachingは別指示。
+
+## 2026-10-06: P1-Dは非永続の短い学習相談と本人選択候補に限定する
+
+- 状態: Proposed（今回のP1-D指示による独立PRレビュー対象）
+- P1-A判定を必ず通し、追加質問・成果物/自動化から学習への明示選択・Goal候補確認を最大3問の決定的Application契約にする。AI Mappingはtraining Packageへ置く。長期Chat/Provider/Teachingを作らない。
+- P1-B投影をscope照合して参照する。既知AIレベル/経験は再質問せず、UNKNOWNをNONEへ推定しない。回答は選択codeのみ、相談本文をProfile/Memoryへコピーしない。
+- P1-C fixtureは未承認。trusted callerの版固定承認参照がなければDefinition Gapにし、本PRで承認やFactoryを作らない。候補の本人選択も既存Goal保存・Confirmed Goal参照・Plan確定の代替ではない。
+- 既存setup UIはProfile/Goal保存と旧Runtimeを前提にするため、今回UI/APIは追加しない。P1-C-Sは相談契約のレビュー後に延期し、P1-E/永続化/本番接続は別指示を待つ。
+
+## 2026-10-06: P1-CをPlan/Definition参照のDomain契約へ限定し、Definition中心へ変更する
+
+- 状態: Proposed（今回のP1-C指示に基づくPRレビュー対象。旧P1-C永続化は延期）
+- Learning Definition Libraryを教える設計図の中心とし、完成教材の事前大量準備は必須にしない。Skill/Objective/Prerequisite/Concepts/Safety/Common Mistakes/Practice Pattern/Rubric参照は固定、説明/例/練習/Hint/復習等は別のPersonalization責務。
+- Core候補は版固定Definition参照・Confirmed Goalに紐付くPlan・Revision/前提/確認状態。AI固有内容はPackageの少数fixtureへ置く。Skill/Definition/Mission/Contentを別概念として維持する。
+- Definition Factoryは、欠けたDefinition→構造化Draft→Validation→Human Review→Approved Definitionを将来方向にする。Content生成は下位候補。今回Factory/Codex/LLM/Teachingは実装しない。
+- 永続化、CAS、Prisma、UI/API、Provider、P1-D/P1-E/実Runtime接続は別承認。旧Decisionと監査の時点情報は削除しない。
+
+## 2026-10-06: P1-Bは既存Profile/Goalの読取投影と未接続の意味契約に限定する
+
+- 状態: Proposed（P1-B指示に基づくPRレビュー対象。P1-C/保存/Runtime接続は別承認）
+- dailyMinutesと既存Goal IDだけを共通Learner投影にし、AIレベル/用途/テーマ/経験状態はtraining Packageへ残す。新保存正本や巨大JSONは作らない。
+- ProgramMemberGoalのACTIVE/ACHIEVED/PAUSED/CANCELLEDを再利用する。ACTIVEを本人確認の証拠とせず、Candidate・既存参照・明示確認receiptを区別する。旧Goal履歴を削除せず、複数ACTIVEは推測選択せず拒否する。
+- BEGINNER/NOT_YETから未経験NONEを推定しない。未回答UNKNOWNを維持する。既存ProfileのGoal keyから特定Goal IDを名前で推定しない。
+- Scope判定だけでGoalを確定しない。確認receiptは本人/scope/既存ID/意味版を照合する純粋契約であり、認可・永続化・実行の代替ではない。期間/終了状態をGoalへ投影しない。
+
+## 2026-10-06: P1-A Learning Scope契約を未接続の純粋Domainとして追加する
+
+- 状態: Proposed（P1-A実装指示に基づくPRレビュー対象。P1-B/本番接続は別承認）
+- 共通結果契約は既存application、AI固有の判定・学習候補はcapability-trainingに置く。新packageや汎用Intent Engineは作らない。
+- 6分類と判定不能のnullを区別し、未知/曖昧/混合/境界回避は確認待ち。primary分類は実行権限ではない。完成品/自動化の学習候補も未承認SuggestionでGoalではない。
+- 明示的な日本語Ruleのみを扱い、未対応表現は確認待ち。LLM/Provider/DB/UI依存と既存V1 Runtimeへの接続は追加しない。
+
+## 2026-10-06: Learning FirstのPersonal Learning監査と3層設計を実装から分離する
+
+- 状態: Proposed（人間レビュー対象。実装/共通Core化/本番変更の開始承認ではない）
+- 基準main: `9e063dd8ebc905b91b005bc317c43797e22a6931`。AI研修のOutcomeは本人が自分でAIを使えること。PlatformのOutcome Firstを維持し、実務代行/個社コンサル/完成成果物納品と学習を区別する。
+- Personal Learning Core候補、AI Training Package、Service / Operator / OEMの3層を責務として整理する。既存Program Runtimeを実行正本にし、AIで必要かつ非AIでも意味不変な最小責務だけ共通候補にする。今回MOVE/リファクタリングをしない。
+- Learner習熟SkillとService-owned支援手順Skillを区別する。AI固有Skill/Rubric/Policy/Tool経験をCoreへ混在させず、Bunshin Memoryや他Serviceへ暗黙共有しない。
+- 旧30日V1/公開済みTemplate/既存受講は変更しない。Goal型学習、期間/契約/Retention分離、Privacy inventory、新Plan保存先は人間レビュー後に小さなPRで判断する。マナベルスタイル採用・招待・LINE・Exposureは開始しない。
+- 仮想Sales Packageは契約の設計検証だけ。実第二Package、教材Factory/Codex連携、SDK/Marketplace/Plugin/汎用Frameworkは先行実装しない。
+- 成果物は`docs/ai-training/01_AI_TRAINING_PERSONAL_LEARNING_CURRENT_STATE.md`から`04_AI_TRAINING_PERSONAL_LEARNING_IMPLEMENTATION_PLAN.md`までの4文書。調査・文書PR完成で停止し、最初の実装PRも別承認を待つ。
+
 ## 2026-10-05: AI研修の作成・採用は既存Package定義を正本にして接続する
 
 - 状態: Proposed（独立PRレビュー対象。本番設定変更は含めない）
@@ -3638,3 +3709,38 @@
 - Persistence Contractは`@bunshin/capability-training`内の型、純粋な状態遷移、Repository Port、否定テストに限定する。ACTIVEな`SERVICE_OWNER / SERVICE_ADMIN`、expected revision、固定reason code、idempotencyを必須にし、UNKNOWNなrollback互換性では実行しない。
 - PersistenceはAI研修Package専用の3 table、additive migration、Prisma Repository、実DBテストに限定する。Service・管理Membership lock、現権限再確認、CAS、canonical digest再計算、immutable version、append-only監査を同一Transactionで扱い、rollback互換性5軸は全PASSEDのsnapshotだけを保存する。
 - 本DecisionはAPI、UI、Delivery、Exposure Event、Provider、共通Skill Registryの実装を承認しない。
+
+# 2026-10-06: P1-Hは累計unique participantの取消不能な枠消費を正本にする
+
+- 状態: Proposed（本番操作・人数設定は未承認）
+- 同一Programのunique Userを1人とする。既存Enrollmentは作成せず、明示付与された参加権だけを小さなseat台帳へ記録する。取消・離脱・期間終了でも累計枠は減らさず、自動再利用・再付与しない。
+- 外部枠はDB slot制約で絶対100、Waveは累計0/5/20/50/100。内部枠は別集計、未設定0で登録不可。内部人数は明示的な人間レビュー設定であり、本番既定値を設けない。
+- Program lock / Serializable / expectedRevision / operation UUID / 監査を組み合わせ、停止済みtrusted authorityだけで人数設定・参加権付与・取消を行う。既存allowlistは台帳の投影とし、本番では旧5件設定を実行許可の代用にしない。
+- 台帳には本文を保存しない。User識別はProgram単位digest（匿名ではない）、Enrollment参照はALL削除時に除去して参加権を失効させる。枠台帳は削除による上限回避に使わない。保持・RLS・本番roleはRelease Gateで人間確認する。
+- additive migrationは作成のみ。本番Migration/deploy/登録/enable/承認/課金/募集を実施しない。
+
+# 2026-10-06: Personal Learning Pilotの呼出しAdmissionを原価Telemetryから分離する
+
+- 状態: Proposed（人間レビュー待ち。本番操作を承認しない）
+- Pilotだけに、明示設定された単一ProgramのUTC日次attempt上限・未終了callの同時実行上限・送信JSON byte上限・出力token上限・model固定を追加する。未設定・不正設定はfail-closed。既存30日V1の呼出しを変更しない。
+- 月次Quotaの失敗refundやbest-effort Telemetryは暴走防止の正本にしない。小さな専用Admission ledgerを使用し、同一Job attemptの再送を拒否する。失敗も日次attemptとして残す。
+- transport/timeout等で終了不明なら同時実行枠を自動解放しない。TTLでの推測解放を禁止する。復旧はKill Switch停止・実行終了確認・人間レビュー後の別操作とし、今回復旧APIは作らない。
+- ledgerには相談・回答・成果物・Provider response・User/Enrollment参照を保存しない。Job attemptの不可逆digestは仮名化情報であり匿名とは主張しない。回答削除で上限を回避できないよう保存を分離する。
+- これは金額上限ではない。モデル価格、外部Provider予算、費用Alert、人間承認、Migration、Wave 0実認証は引き続き別Gate。Production準備操作と100人Hard Capは別PRへ残す。
+
+## 2026-10-06: Production準備は実行Gateと独立した単一authorityへ限定する
+
+- 状態: Proposed（実装PRレビュー待ち。本番操作は未承認）
+- 既存Definition管理・本人Profile初期化APIだけへ、既定無効のProduction準備authority設定を追加する。既存機能別flagと実session/Service認可を維持する。本人Profileを管理者が代入する経路は作らない。
+- authorityはserver設定のWorkspace/Service/Program完全一致。DB transaction内で停止済み専用Program、disabled Pilot/通知停止、既存bounded allowlistを再検証する。Service-owned Definition承認が別Programへ影響しないよう、同Serviceの他AI Training ProgramがあればProduction準備を拒否する。
+- Production実行flagが有効な間は準備APIを閉じる。開始後のProfile編集/新規登録や緊急撤回の別機構を完成させたとは扱わない。実行を停止しただけでProgram SUSPENDEDへの変更が完了したとはしない。
+- schema/Migration/UI/Provider/LINE/100人登録を追加しない。設定変更、実承認、実Profile登録、Migration、deploy、Pilot enableは別の人間承認を待つ。
+
+## 2026-10-07: Wave 0の運用操作を準備APIと分離する
+
+- 状態: Proposed（実装レビュー待ち。本番操作は未承認）
+- server-owned単一authority、既定無効の運用flag、現在のService管理者認証、同origin、明示確認とreview evidenceを必須にする。既存の空AI Training Programだけを専用Pilotへ初期化し、停止中に既存Enrollment契約で準備する。参加権は別のSeat付与操作であり自動付与しない。
+- 開始はWave 0の内部1〜2人のみ。Definition人間承認、本人Profile、現Seat/allowlist、通知隔離、Admission設定と未終了callなしを再検証する。環境flagは変更せず、実課金承認・backup・Migration・deploy等は人間のRelease Gateとして別に残す。
+- settings/statusのstate tokenと運用revisionによるCAS、Program lock、同actor/operation digestの冪等性、既存Auditを同transactionで扱う。STOPだけはstale tokenでも最新状態を停止可能とし、再開や設定の上書きをしない。
+- STOPは実行flagがONでも使える独立操作。専用marker・通知隔離・Seat・Goal・Plan・履歴を保持する。送信済みcallを取消したとは扱わず、drainは常に別確認とする。
+- schema、migration、Provider、UI、LINE、V1 Runtimeは変更しない。本番での操作、Definition承認、参加者登録、課金、Wave拡大は実行しない。

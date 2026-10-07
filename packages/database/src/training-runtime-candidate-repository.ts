@@ -1,5 +1,6 @@
 import {
   TRAINING_GOAL_KEYS,
+  isPersonalLearningPilotProgram,
   parseTrainingSkillScores,
   resolveTrainingWorkContext,
   type AiTrainingRuntimeCandidate,
@@ -13,7 +14,7 @@ export class PrismaAiTrainingRuntimeCandidateRepository {
 
   async findCandidate(input: Parameters<AiTrainingRuntimeRepository['findCandidate']>[0]) {
     const scope = await resolveScope(this.client, input, ['ACTIVE'], input.now);
-    if (!scope) return null;
+    if (!scope || isPersonalLearningPilotProgram(scope.program.settings)) return null;
     const [profile, progress, assignments, lastUserEvent, workUseCount] = await Promise.all([
       this.client.trainingParticipantProfile.findFirst({
         where: {
@@ -79,6 +80,7 @@ export class PrismaAiTrainingRuntimeCandidateRepository {
     ) {
       return null;
     }
+    if (assignments.some((a) => a.targetResourceType === 'PERSONAL_LEARNING_PLAN')) return null;
     const completed = assignments.filter(({ status }) => status === 'COMPLETED');
     const phase = ['FOUNDATION', 'PRACTICE', 'APPLICATION'].includes(progress?.phaseKey ?? '')
       ? (progress!.phaseKey as AiTrainingRuntimeCandidate['currentPhase'])

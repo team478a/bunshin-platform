@@ -11,6 +11,9 @@ const input = {
 const now = new Date('2026-09-28T12:00:00Z');
 function fixture() {
   const tx = {
+    personalLearningPilotSeat: { findMany: vi.fn().mockResolvedValue([]) },
+    personalLearningGoalConfirmation: { findMany: vi.fn().mockResolvedValue([]) },
+    personalLearningPlanRevision: { findMany: vi.fn().mockResolvedValue([]) },
     groupMembership: { findFirst: vi.fn().mockResolvedValue({ id: 'membership-a' }) },
     programEnrollment: {
       findFirst: vi.fn().mockResolvedValue({
@@ -88,6 +91,16 @@ describe('training personal data export isolation', () => {
       'updatedByUserId',
     );
     expect(tx.serviceProgram.findFirst.mock.calls[0]?.[0].where).not.toHaveProperty('status');
+    expect(tx.personalLearningPilotSeat.findMany).toHaveBeenCalledWith({
+      where: {
+        workspaceId: input.workspaceId,
+        groupId: input.groupId,
+        serviceProgramId: 'program-a',
+        participantHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+      },
+      select: { kind: true, cohort: true, seatNumber: true, admittedAt: true, revokedAt: true },
+      take: TRAINING_EXPORT_MAX_ROWS + 1,
+    });
   });
   it('stops before reading answers for a foreign/inactive user, foreign enrollment or other module', async () => {
     for (const blocked of ['groupMembership', 'programEnrollment', 'serviceProgram'] as const) {

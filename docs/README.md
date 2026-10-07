@@ -23,6 +23,10 @@
 7. [AI研修 Skill Factory V1 設計](ai-training/AI_TRAINING_SKILL_FACTORY_V1_DESIGN.md)
 8. [AI研修 Skill Lifecycle V1 設計](ai-training/AI_TRAINING_SKILL_LIFECYCLE_V1_DESIGN.md)
 9. [AI研修 Skill Exposure Pilot 運用設計](ai-training/AI_TRAINING_SKILL_EXPOSURE_PILOT_OPERATIONS.md)
+10. [パーソナルAI研修 現状監査](ai-training/01_AI_TRAINING_PERSONAL_LEARNING_CURRENT_STATE.md)
+11. [パーソナルAI研修 Gap Analysis](ai-training/02_AI_TRAINING_PERSONAL_LEARNING_GAP_ANALYSIS.md)
+12. [パーソナルAI研修 目標Architecture](ai-training/03_AI_TRAINING_PERSONAL_LEARNING_TARGET_ARCHITECTURE.md)
+13. [パーソナルAI研修 段階実装計画](ai-training/04_AI_TRAINING_PERSONAL_LEARNING_IMPLEMENTATION_PLAN.md)
 
 Phase 0実行ガイド、初期Codex指示、過去のPhase完了文書は実装履歴として参照し、単独で現在状態を判断しない。
 

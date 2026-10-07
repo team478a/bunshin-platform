@@ -1,5 +1,6 @@
 import {
   TRAINING_CHALLENGE_KEYS,
+  isPersonalLearningPilotProgram,
   TRAINING_GOAL_KEYS,
   TRAINING_TOPIC_KEYS,
   TRAINING_USE_CASE_KEYS,
@@ -20,7 +21,7 @@ export class PrismaAiTrainingRuntimeStateRepository {
       ['ACTIVE', 'COMPLETED', 'EXPIRED'],
       input.now,
     );
-    if (!scope) return null;
+    if (!scope || isPersonalLearningPilotProgram(scope.program.settings)) return null;
     const [profile, progress, goal] = await Promise.all([
       this.client.trainingParticipantProfile.findFirst({
         where: {
@@ -61,6 +62,7 @@ export class PrismaAiTrainingRuntimeStateRepository {
           },
         })
       : null;
+    if (assignment?.targetResourceType === 'PERSONAL_LEARNING_PLAN') return null;
     const submission = assignment
       ? await this.client.trainingMissionAnswer.findFirst({
           where: {

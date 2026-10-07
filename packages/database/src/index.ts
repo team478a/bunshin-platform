@@ -286,8 +286,25 @@ export { PrismaHassyPhotoQualityImprovementAdapter } from './hassy-improvement-p
 export { PrismaImprovementFeedbackRepository } from './improvement-feedback';
 export { PrismaImprovementFeedbackObservationAdapter } from './improvement-feedback-observation-adapter';
 export { PrismaImprovementFeedbackTriageRepository } from './improvement-feedback-triage';
+export { PrismaPersonalLearningPersistenceRepository } from './personal-learning-persistence';
 export { PrismaImprovementFeedbackRetentionJobRepository } from './improvement-feedback-retention-jobs';
 export {
   purgeExpiredImprovementFeedback,
   IMPROVEMENT_FEEDBACK_RETENTION_POLICY,
 } from './improvement-feedback-retention';
+export { PrismaPersonalLearningRouterBridge } from './personal-learning-router';
+export {
+  PrismaPersonalLearningPilotRepository,
+  PrismaPersonalLearningPilotRouter,
+} from './personal-learning-pilot';
+export { PrismaPersonalLearningAiCallRepository } from './personal-learning-ai-call';
+export { PrismaLearningDefinitionApprovalAdminRepository } from './learning-definition-approval-admin';
+export { PrismaPersonalLearningPilotProfileRepository } from './personal-learning-pilot-profile';
+export { PrismaPersonalLearningAssessmentGate } from './personal-learning-assessment-gate';
+export { PrismaGuidedPracticeRepository } from './guided-practice';
+export { PrismaPersonalLearningCallAdmission } from './personal-learning-call-admission';
+export { PrismaPersonalLearningPilotOperations } from './personal-learning-pilot-operations';
+export {
+  PrismaPersonalLearningParticipantAdminRepository,
+  type PilotParticipantCommand,
+} from './personal-learning-participant-admin';

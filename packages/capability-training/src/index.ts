@@ -4,6 +4,7 @@ import {
   type NextActionPolicy,
   type ProgramDefinitionV1,
 } from '@bunshin/application';
+export * from './guided-practice';
 import { AI_TRAINING_MISSION_QUALITY } from './mission-quality';
 import type { TrainingGoalKey } from './learning-catalog';
 
@@ -261,3 +262,14 @@ export * from './enrollment-expiry';
 export * from './skill-factory';
 export * from './skill-lifecycle';
 export * from './skill-exposure';
+export * from './learning-scope';
+export * from './pilot-participant-cap';
+export * from './learning-profile-goal';
+export * from './learning-definition-fixtures';
+export * from './learning-consultation';
+export * from './learning-router';
+export {
+  isPersonalLearningPilotProgram,
+  personalLearningPilotAllows,
+  personalLearningPilotProfilePreparationAllows,
+} from './personal-learning-pilot';

@@ -3,6 +3,7 @@ import { Prisma, type PrismaClient } from '@prisma/client';
 import { prisma } from './index';
 import { lockTrainingEnrollmentData } from './training-data-lock';
 import { trainingEnrollmentPeriodWhere } from './training-enrollment-period';
+import { requirePersonalLearningPilotSeat } from './personal-learning-pilot-seat';
 
 export type TrainingAnswerSubmissionResult =
   | {
@@ -64,9 +65,21 @@ export class PrismaTrainingAnswerRepository {
         status: 'ACTIVE',
         settings: { path: ['moduleKey'], equals: AI_TRAINING_V1_MODULE_KEY },
       },
-      select: { id: true },
+      select: { id: true, settings: true },
     });
     if (!program) return { outcome: 'NOT_FOUND' };
+    const capped = Object.hasOwn(
+      (program.settings as { personalLearningPilot?: object })?.personalLearningPilot ?? {},
+      'participantControl',
+    );
+    const seatScope = {
+      workspaceId: input.workspaceId,
+      groupId: input.groupId,
+      programEnrollmentId: input.programEnrollmentId,
+      userId: input.actorUserId,
+    };
+    if (capped)
+      await this.client.$transaction((tx) => requirePersonalLearningPilotSeat(tx, seatScope, true));
 
     const eventWhere = {
       workspaceId_groupId_idempotencyKey: {
@@ -81,6 +94,7 @@ export class PrismaTrainingAnswerRepository {
     try {
       return await this.client.$transaction(async (tx) => {
         await lockTrainingEnrollmentData(tx, input);
+        if (capped) await requirePersonalLearningPilotSeat(tx, seatScope, true);
         const active = await tx.programEnrollment.findFirst({
           where: {
             id: enrollment.id,
@@ -102,7 +116,7 @@ export class PrismaTrainingAnswerRepository {
             actionMode: 'WORK',
             status: { in: ['PRESENTED', 'STARTED'] },
           },
-          select: { id: true, missionDefinitionKey: true },
+          select: { id: true, missionDefinitionKey: true, targetResourceType: true, status: true },
         });
         if (!assignment) return { outcome: 'NOT_FOUND' } as const;
 
@@ -111,6 +125,21 @@ export class PrismaTrainingAnswerRepository {
           select: { id: true },
         });
         if (existingAnswer) return { outcome: 'CONFLICT' } as const;
+
+        // Pilot submission is itself a real start fact, not a fabricated HINT/HELP interaction.
+        // Legacy V1 remains unchanged. Enrollment lock keeps this atomic with the answer.
+        if (
+          assignment.targetResourceType === 'PERSONAL_LEARNING_PLAN' &&
+          assignment.status === 'PRESENTED'
+        ) {
+          await tx.programMissionAssignment.update({
+            where: { id: assignment.id },
+            data: {
+              status: 'STARTED',
+              startedAt: input.occurredAt,
+            },
+          });
+        }
 
         const answer = await tx.trainingMissionAnswer.create({
           data: {

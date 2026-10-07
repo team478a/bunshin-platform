@@ -1,0 +1,11 @@
+# Pilot Profileは本人による最小初期化だけを追加する
+
+2026-10-06。基準main `f3b05fc13504b6e5ee296c6e16c3d371be193b29`。
+
+既存TrainingParticipantProfileを正本として、本人のrole / aiLevel / dailyMinutesだけを明示確認して初回保存する。旧Profile保存はGoalの作成/取消を伴うため再利用しない。Goal keyはnullのまま、本人Goal確認へ委ねる。新Model、巨大JSON、Tool経験、Memory、Providerを追加しない。既存AI経験projectionはUNKNOWNを維持し、レベルと未経験を同一視しない。
+
+独立した非本番・既定無効の準備APIに限定する。専用marker付きAI Training ProgramはSUSPENDEDかつ通知停止、personalLearningPilot.enabled=false、準備対象Enrollmentを1〜5件の明示allowlistへ限定する。本人のACTIVE参加所属/利用期間内EnrollmentをDBで再検証する。準備でflag/Program/Enrollmentを有効化しない。管理者が他人の回答を代入するAPIを作らない。未回答をdefaultで埋めず、必須3項目が本人未回答ならProfileを作らない。Profile存在時の上書き、旧Goal/Assignmentの持込み、削除後の再作成を拒否する。
+
+既存Enrollment lockとSerializable、create-if-absentをCASとして使用する。同scope/actor/正規化回答のfingerprintを既存ProgramActionEventへ記録し、再送は同じUUID/内容のみ、失効権限でも再認可する。全文や業務情報をEventへコピーしない。既存Export/全データ削除の対象とし、新しいAudit正本は作らない。
+
+今回のゴールは準備APIと保存・復元・競合・Privacy検証まで。準備UI/本番配備/実参加者登録/実認証E2E/開始承認は別Gate。現行Pilotの初期設定不足表示と旧30日V1の処理は変更しない。

@@ -11,7 +11,10 @@ const fake = vi.hoisted(() => ({
   runtime: vi.fn(),
   evaluate: vi.fn(),
   usage: vi.fn(),
+  pilotPrepare: vi.fn(),
+  environment: 'development',
 }));
+vi.mock('@bunshin/config', () => ({ getServerEnvironment: () => ({ APP_ENV: fake.environment }) }));
 vi.mock('@bunshin/database', () => {
   const tx = {
     groupMembership: { findFirst: fake.membership },
@@ -34,6 +37,9 @@ vi.mock('../src/ai/runtime-provider-configuration', () => ({
   resolveOpenAiRuntimeConfiguration: fake.runtime,
 }));
 vi.mock('../src/observability/ai-usage', () => ({ recordAiUsageSafely: fake.usage }));
+vi.mock('../src/observability/personal-learning-ai-call', () => ({
+  preparePersonalLearningAiCall: fake.pilotPrepare,
+}));
 vi.mock('../src/organization-ai-generation-quota', () => ({
   withOrganizationAiGenerationQuota: ({ generate }: { generate: () => unknown }) => generate(),
 }));
@@ -61,10 +67,54 @@ describe('training evaluation period boundaries', () => {
     vi.resetAllMocks();
     vi.useFakeTimers();
     vi.setSystemTime(now);
+    fake.environment = 'development';
     fake.membership.mockResolvedValue({ id: 'membership' });
   });
   afterEach(() => {
     vi.useRealTimers();
+    vi.unstubAllEnvs();
+  });
+  it('rejects reserved Pilot queue and worker in production before any provider call', async () => {
+    fake.environment = 'production';
+    vi.stubEnv('PERSONAL_LEARNING_PILOT', 'true');
+    fake.enrollment.mockResolvedValue({ id: scope.enrollmentId, serviceProgramId: 'program' });
+    fake.program.mockResolvedValue({ id: 'program', settings: { personalLearningPilot: null } });
+    await expect(enqueueAiTrainingEvaluation(scope)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(createTrainingAnswerEvaluationJobHandler().execute(input)).rejects.toThrow();
+    expect(fake.runtime).not.toHaveBeenCalled();
+    expect(fake.evaluate).not.toHaveBeenCalled();
+    expect(fake.answer).not.toHaveBeenCalled();
+  });
+  it('rechecks Pilot settings immediately before a provider attempt', async () => {
+    const enrollmentId = '00000000-0000-4000-8000-000000000003';
+    vi.stubEnv('PERSONAL_LEARNING_PILOT', 'true');
+    fake.enrollment.mockResolvedValue({ id: enrollmentId, serviceProgramId: 'program' });
+    const settings = {
+      moduleKey: 'AI_TRAINING_V1',
+      personalLearningPilot: { enabled: true, enrollmentIds: [enrollmentId] },
+      trainingOperations: { notificationsEnabled: false, postponedReminderEnabled: false },
+    };
+    fake.program.mockResolvedValueOnce({ id: 'program', settings }).mockResolvedValue({
+      settings: {
+        ...settings,
+        personalLearningPilot: { ...settings.personalLearningPilot, enabled: false },
+      },
+    });
+    fake.answer.mockResolvedValue({
+      id: 'answer',
+      missionAssignmentId: 'assignment',
+      evaluationStatus: 'PENDING',
+    });
+    fake.assignment.mockResolvedValue({
+      missionDefinitionKey: 'PROMPT_BASIC',
+      displaySnapshot: {},
+    });
+    fake.runtime.mockResolvedValue({ model: 'synthetic', apiKey: 'synthetic-test-only' });
+    await expect(
+      createTrainingAnswerEvaluationJobHandler().execute({ ...input, enrollmentId }),
+    ).rejects.toThrow();
+    expect(fake.evaluate).not.toHaveBeenCalled();
+    expect(fake.save).not.toHaveBeenCalled();
   });
   it('refuses queue/retry after lock before reading private answers or resetting failures', async () => {
     fake.enrollment.mockResolvedValue(null);

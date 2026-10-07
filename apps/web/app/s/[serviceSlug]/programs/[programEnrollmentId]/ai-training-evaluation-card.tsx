@@ -22,6 +22,7 @@ export function AiTrainingEvaluationCard({
   saveToToolkit,
   saveWorkResult,
   loadNextMission,
+  pilot = false,
 }: {
   serviceSlug: string;
   state: TrainingParticipantState;
@@ -36,6 +37,7 @@ export function AiTrainingEvaluationCard({
   saveToToolkit: () => Promise<void>;
   saveWorkResult: (result: TrainingWorkResult) => Promise<void>;
   loadNextMission: () => Promise<void>;
+  pilot?: boolean;
 }) {
   return (
     <section className="service-entry__card training-card" aria-labelledby="training-result-title">
@@ -94,7 +96,7 @@ export function AiTrainingEvaluationCard({
       <p className="training-recommendation">{evaluation.nextRecommendation}</p>
       {message ? <p className="notice notice--success">{message}</p> : null}
       {error ? <p className="notice notice--error">{error}</p> : null}
-      {evaluation.result === 'PASS' ? (
+      {!pilot && evaluation.result === 'PASS' ? (
         <div className="training-toolkit-save">
           <h3>この方法を実際の仕事で使いましたか？</h3>
           <div className="training-support-actions">
@@ -121,7 +123,7 @@ export function AiTrainingEvaluationCard({
           </div>
         </div>
       ) : null}
-      {evaluation.result === 'PASS' ? (
+      {!pilot && evaluation.result === 'PASS' ? (
         <div className="training-toolkit-save">
           <h3>仕事でまた使う回答ですか？</h3>
           <p>必要なものだけを、自分専用のMy AI Toolkitへ保存できます。</p>
@@ -141,25 +143,27 @@ export function AiTrainingEvaluationCard({
           </button>
         </div>
       ) : null}
-      <a
-        className="button button--secondary button--full"
-        href={`/s/${encodeURIComponent(serviceSlug)}/programs/${state.enrollmentId}/toolkit`}
-      >
-        My AI Toolkitを見る
-      </a>
+      {!pilot ? (
+        <a
+          className="button button--secondary button--full"
+          href={`/s/${encodeURIComponent(serviceSlug)}/programs/${state.enrollmentId}/toolkit`}
+        >
+          My AI Toolkitを見る
+        </a>
+      ) : null}
       <button
         className="button button--primary button--full"
         type="button"
         onClick={() => {
           void loadNextMission();
         }}
-        disabled={saving || (evaluation.result === 'PASS' && workResult === null)}
+        disabled={saving || (!pilot && evaluation.result === 'PASS' && workResult === null)}
       >
         {saving
           ? '更新しています…'
           : evaluation.result === 'REVIEW'
             ? '復習してもう一度回答する'
-            : workResult === null
+            : !pilot && workResult === null
               ? '仕事で使ったかを選んでください'
               : '次の課題を見る'}
       </button>

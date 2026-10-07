@@ -26,6 +26,8 @@ function fixture() {
   });
   const tx = {
     $queryRaw: vi.fn().mockResolvedValue([]),
+    $executeRaw: vi.fn().mockResolvedValue(0),
+    personalLearningPilotSeat: table(),
     groupMembership: { findFirst: vi.fn().mockResolvedValue({ id: 'membership-a' }) },
     programEnrollment: {
       findFirst: vi.fn().mockResolvedValue({
@@ -97,6 +99,16 @@ describe('personal training data deletion', () => {
       await repository.delete({ ...all, revision: preview.preview.revision, now }),
     ).toMatchObject({ outcome: 'DELETED' });
     expect(tx.$queryRaw).toHaveBeenCalledOnce();
+    expect(tx.personalLearningPilotSeat.updateMany).toHaveBeenCalledWith({
+      where: {
+        workspaceId: scope.workspaceId,
+        groupId: scope.groupId,
+        programEnrollmentId: scope.programEnrollmentId,
+      },
+      data: { programEnrollmentId: null, revokedAt: expect.any(Date) },
+    });
+    expect(tx.personalLearningPilotSeat.deleteMany).not.toHaveBeenCalled();
+    expect(tx.$executeRaw).toHaveBeenCalledTimes(2);
     expect(tx.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
       tx.programAuditLog.findFirst.mock.invocationCallOrder[0]!,
     );

@@ -15,6 +15,20 @@ const http = [
 const worker = readFileSync(new URL('../src/http/job-worker.ts', import.meta.url), 'utf8');
 
 describe('AI training evaluation job boundary', () => {
+  it('rechecks the Pilot gate at enqueue and immediately before an existing provider attempt', () => {
+    expect(http).toContain(
+      'personalLearningPilotExecutionAllowed(program.settings, input.enrollmentId)',
+    );
+    const check = handler.indexOf(
+      'personalLearningPilotExecutionAllowed(currentProgram.settings, enrollment.id, true)',
+    );
+    const call = handler.indexOf('providerAttempted = true');
+    expect(check).toBeGreaterThan(0);
+    expect(check).toBeLessThan(call);
+    const authorization = handler.indexOf('.authorizeAssessment(');
+    expect(authorization).toBeGreaterThan(check);
+    expect(authorization).toBeLessThan(call);
+  });
   it('revalidates active enrollment after the data lock before saving a late evaluation', () => {
     const lock = handler.indexOf('await db.lockTrainingEnrollmentData');
     const active = handler.indexOf('const stillActive', lock);
