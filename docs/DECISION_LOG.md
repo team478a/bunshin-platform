@@ -1,5 +1,11 @@
 # BUNSHIN Platform Decision Log
 
+## 2026-10-07: 専用Program準備UIはCREATE_PROGRAMのみを既存trusted APIへ接続する
+
+- 人間承認に基づく独立UI PR。現Service管理認可とserver-owned authorityを維持し、未設定・別scope・実行flag ONでは作成UIを開かない。
+- 対象と停止状態を明示確認し、ABSENT snapshotのCASで作成する。結果不明は同一operation/bodyだけ再送し、新規操作の推測成功を禁止する。
+- OPEN_ENDED/GUIDED/招待制・停止状態は既存Repositoryの責務。環境設定変更、旧30日採用、Definition承認、参加者登録、START/STOP操作UI、Provider呼出しを追加しない。本番反映と設定は別承認。
+
 ## 2026-10-07: Personal Learning専用Programは期限なし・停止状態で直接準備する
 
 - 人間指示に基づく最小PR。旧30日テンプレート採用を新サービス準備の必須経路としない。既存ProgramDefinitionのOPEN_ENDEDを利用し、新schemaは作らない。

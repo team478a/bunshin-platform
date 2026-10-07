@@ -12,6 +12,15 @@ function pages(directory: URL, prefix = ''): string[] {
 }
 
 describe('service authentication route inventory', () => {
+  it.each([
+    '/s/service-a/manage/programs/personal-learning-preparation?start=true',
+    '/s/service-a/manage/programs/personal-learning-preparation/extra',
+    '/s/service-a/manage/programs/personal-learning-preparation#start',
+    '/s/service-a/manage/programs/%70ersonal-learning-preparation',
+    '//example.com/s/service-a/manage/programs/personal-learning-preparation',
+  ])('rejects preparation route aliases and unapproved extensions: %s', (path) => {
+    expect(safeLineAuthReturnPath(path)).toBeNull();
+  });
   it.each(pages(root).filter((page) => !['terms/page.tsx', 'privacy/page.tsx'].includes(page)))(
     'preserves existing project page %s',
     (page) => {
