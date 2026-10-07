@@ -33,7 +33,7 @@ DB/schema/migration/Application Domain/API/Provider/LINE/旧30日V1 Runtime変�
 
 ## 検証
 
-新UI/client gateと既存operations/preparation/program-management回帰: 4 files / 43 tests PASS。認証server page否定試験: 1 file / 4 tests PASS。Web全体typecheck、architecture check / 10 tests、git diff --check PASS。変更ファイルlintと全CI結果はPRの検証記録に対応させる。
+新UI/client gateと既存operations/preparation/program-management回帰: 4 files / 43 tests PASS。認証server page否定試験: 1 file / 4 tests PASS。Web全体typecheck、architecture check / 10 tests、変更TypeScript全ファイルESLint、git diff --check PASS。全CI結果はPRの検証記録に対応させる。
 
 React静的描画・純粋client送信試験であり、実ブラウザ・実session・スマートフォンE2Eとは区別する。実画面から既存API/DBまでの通し確認はリリース前の残Gate。全build/回帰はCIで確認し、未成功の状態を完了済みにしない。
 
