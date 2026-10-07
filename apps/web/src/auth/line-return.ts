@@ -85,7 +85,13 @@ export function safeLineAuthReturnPath(value: string | null | undefined): string
         return null;
       return `/account?service=${slug}`;
     }
-    if (servicePagePattern.test(url.pathname) && url.search === '') {
+    if (
+      (servicePagePattern.test(url.pathname) ||
+        new RegExp(`^/s/${serviceSlugPattern}/manage/programs/personal-learning-preparation$`).test(
+          url.pathname,
+        )) &&
+      url.search === ''
+    ) {
       return url.pathname;
     }
     if (videoAuthReturnProjectId(value)) return value;

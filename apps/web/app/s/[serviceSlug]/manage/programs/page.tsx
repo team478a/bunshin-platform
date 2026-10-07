@@ -4,6 +4,7 @@ import { parseAiResaleOfferTerms, parseAiResaleRuntimeSettings } from '@bunshin/
 import { currentUserProvider } from '../../../../../src/auth/current-user';
 import { currentPaymentEnvironment } from '../../../../../src/payments/secure-configuration';
 import { resolveManagedServiceContext } from '../../../../../src/services/public-service';
+import { programPreparationTarget } from '../../../../../src/services/personal-learning-program-preparation';
 import { PublicShell } from '../../../../ui/public-shell';
 import { ProgramManagementEditor } from './program-management-editor';
 import { ProgramProductAdmin } from './program-product-admin';
@@ -343,6 +344,13 @@ export default async function ServiceProgramsPage({
           <h1>実践プログラム</h1>
           <p>公式プログラムを選び、無料割り当てまたは有料販売の条件を設定します。</p>
           <a href={`/s/${serviceSlug}/home`}>← サービスのホームへ戻る</a>
+          {programPreparationTarget(service) && (
+            <p>
+              <a href={`/s/${serviceSlug}/manage/programs/personal-learning-preparation`}>
+                期限なしPersonal Learningの停止状態での準備
+              </a>
+            </p>
+          )}
         </header>
         <ProgramManagementEditor
           serviceSlug={serviceSlug}
