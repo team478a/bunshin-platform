@@ -100,3 +100,21 @@ metadata結果未取得のため、2Migrationの本番状態はともに**UNKNOW
 6. 初期履歴レビュー→shadow→将来月cutover/料金公開→請求は別承認とする。
 
 検証: 文書format/diff確認。今回コード無変更のため全回帰を再実行していない。#1176/main CIと実装報告の隔離DB結果を参照し、本番実測と混同しない。
+
+## 2026-10-08: Migration runner上限の実装追補
+
+基準main: `e98a4a4c9e81af9ba5728d7c30c89fba1f61c2bb`。branch: `codex/migration-execution-bounds`。commitは本節を含むPRのcommitを参照する。前節は2026-10-07の監査履歴として維持する。
+
+変更: Migration専用URLのstartup timeout、同じPrisma CLI/URLによる設定probe、probeとMigration合計の期限、Linux process group停止、固定reasonの非0終了を追加した。実装と上限値・復旧手順は[Deployment Guide](DEPLOYMENT_GUIDE.md#migration実行上限公開前レビュー必須)へ集約。schema/実migration/アプリのDB設定・課金・Pilotは変更しない。`test/fixtures/migration-bounds`のSQLは隔離テスト専用で、production migration directoryへ追加していない。
+
+ローカルの所有確認済みPostgreSQL 17.10、127.0.0.1:18998だけで検証。統合DBは`bunshin_disposable_71d38afe21254b9fb261`、実行ごとのmarkerを照合する既存preflightを維持。初回は既存172件成功・追加probe 3件がPrisma `db execute`のdatasource引数不足で失敗。`--schema`を明示し子processの両URLをMigration接続へ固定した後、**176/176成功**。
+
+- 実Prisma schema engine sessionのlock/statement/idle transaction設定をSQLで照合。
+- 長時間SQLとlock待ちを実DBでtimeoutさせ、holderを強制終了せず解放。
+- 新しい合成schemaの2 migrationで、1件目成功・2件目statement timeout・後続table不存在・失敗history保持を確認。適用済み全体がrollbackされたと誤認しない。
+- 別の合成DB `oem_bounds_runner`を230件適用済みtemplateから作成し、現runnerでOEM2件を適用して232件へ。no-pending再実行も成功。これは本番適用/本番backupからの復旧試験ではない。
+- 関連4suite 42/42成功（Migration単体32件を含む）、DB package回帰190 files・877/877成功。TypeScript strict（`tsc --noEmit`）、DB buildのTypeScript compile、変更テストの型付きlint、architecture check、変更ファイルformat、`git diff --check`成功。全monorepoの検証とLinux上の確認はPR CIで行う。
+
+未完了: 実Supabase session poolerの設定対応、実接続role、最新backup/許容RPO/RTO/復旧担当、pending全件の再照合、旧writer停止/drain、OEM offering/履歴レビュー。設定probeとmigrationは別sessionのため、起動設定を受け付けるpoolerの確認を省略しない。Migration SQL自体のtimeout上書きも事前レビューする。
+
+本番判定は**NO-GO継続**。本PRのマージは本番Migration/Deploy、料金cutover、Pilot開始の承認ではない。エラー後の再実行・resolve・DB rollbackは自動実行しない。今回のDB writeは合成ローカルDBだけで、Production操作/Provider呼出しなし。

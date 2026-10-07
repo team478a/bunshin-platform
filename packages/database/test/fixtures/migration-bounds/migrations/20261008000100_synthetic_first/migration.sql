@@ -1,0 +1,1 @@
+CREATE TABLE synthetic_first (id INTEGER PRIMARY KEY);

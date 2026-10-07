@@ -3773,3 +3773,12 @@
 - settings/statusのstate tokenと運用revisionによるCAS、Program lock、同actor/operation digestの冪等性、既存Auditを同transactionで扱う。STOPだけはstale tokenでも最新状態を停止可能とし、再開や設定の上書きをしない。
 - STOPは実行flagがONでも使える独立操作。専用marker・通知隔離・Seat・Goal・Plan・履歴を保持する。送信済みcallを取消したとは扱わず、drainは常に別確認とする。
 - schema、migration、Provider、UI、LINE、V1 Runtimeは変更しない。本番での操作、Definition承認、参加者登録、課金、Wave拡大は実行しない。
+
+## 2026-10-08: Migrationの実行上限と終了未確認時の停止を分離する
+
+- 状態: Proposed（実装PRレビュー待ち。本番Migration/Deployは未承認）
+- OEMの段階的公開監査を受け、Vercel build前のMigrationにconnection startupのlock/statement/idle transaction上限とCLI全体の期限を設ける。DB全体やroleの恒久設定、過去migrationのchecksumを変更しない。
+- 同じPrisma CLI/接続設定による非永続probeで実設定を確認してからMigrationへ進む。設定不正、probe失敗、期限、signal、Migration非0終了はfail-closedとし、自動retry/resolve/DB rollbackをしない。
+- process停止とDB session終了、SQL rollback、全writer drainを同一視しない。部分適用は残り得るため実schema/履歴/sessionを確認し、人間が復旧を判断する。
+- 原エラー・URL・SQL・子process出力は公開build logへ流さず固定reasonを記録する。診断・backup/restore・対象writer停止・pending一覧承認は別Gateとして維持する。
+- 設定上限はDeployment Guideに集約。新機能、schema、migration、Provider、課金、UI、Pilot運用を変更しない。全pendingを適用する既存仕様を、対象限定や本番承認済みとは扱わない。
