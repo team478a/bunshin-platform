@@ -3,6 +3,7 @@ import { currentUserProvider } from '../../../../../src/auth/current-user';
 import { resolveManagedServiceContext } from '../../../../../src/services/public-service';
 import { PublicShell } from '../../../../ui/public-shell';
 import { ProgramGoalsAdminEditor } from './program-goals-admin-editor';
+import { isTrainingProgram } from '../../../../../src/services/training-support-mode';
 
 export const dynamic = 'force-dynamic';
 
@@ -45,6 +46,7 @@ export default async function ProgramGoalsAdminPage({
           programs={programs.map((program) => ({
             id: program.id,
             name: program.displayName,
+            learningOnly: isTrainingProgram(program.settings),
             policy: policies.find((policy) => policy.serviceProgramId === program.id)
               ? {
                   modes: policies.find((policy) => policy.serviceProgramId === program.id)!

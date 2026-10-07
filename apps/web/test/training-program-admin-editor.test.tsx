@@ -26,7 +26,8 @@ describe('training program creation UI', () => {
     expect(duration).toMatch(/readonly/i);
     expect(duration).toContain('value="30"');
     expect(html).toContain('type="hidden" name="GUIDED" value="on"');
-    expect(html).toContain('type="hidden" name="READY_TO_USE" value="on"');
+    expect(html).not.toContain('name="READY_TO_USE"');
+    expect(html).toContain('完成品の代行制作は行いません');
     expect(html).not.toContain('name="IDEA_ONLY"');
     expect(html).toContain('サービスでの採用・受講登録は別操作です');
     expect(html).toContain('Skill提示やLINE配信は開始しません');

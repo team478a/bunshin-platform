@@ -148,7 +148,11 @@ export function ProgramProductAdmin({
                 <select
                   className="field__control"
                   name="supportMode"
-                  defaultValue={program.product?.supportMode ?? program.supportModes[0]}
+                  defaultValue={
+                    program.product && program.supportModes.includes(program.product.supportMode)
+                      ? program.product.supportMode
+                      : program.supportModes[0]
+                  }
                   required
                 >
                   {program.supportModes.map((mode) => (

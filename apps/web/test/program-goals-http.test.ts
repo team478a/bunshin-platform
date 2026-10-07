@@ -130,6 +130,32 @@ const writes = () => [
 ];
 const noWrites = () => writes().forEach((fn) => expect(fn).not.toHaveBeenCalled());
 
+it('rejects finished-output training support policy and preference without rewriting history', async () => {
+  m.program.mockResolvedValue({
+    id: programId,
+    settings: { moduleKey: AI_TRAINING_V1_MODULE_KEY },
+  });
+  expect(
+    (
+      await programGoalsResponse(
+        request({ ...bodies.SET_SUPPORT_POLICY, allowedSupportModes: ['GUIDED', 'READY_TO_USE'] }),
+        'private-a',
+      )
+    ).status,
+  ).toBe(400);
+  noWrites();
+  m.policy.mockResolvedValue({ memberMayChoose: true, allowedSupportModes: ['READY_TO_USE'] });
+  expect(
+    (
+      await programGoalsResponse(
+        request({ ...bodies.SAVE_PREFERENCE, preferredSupportMode: 'READY_TO_USE' }),
+        'private-a',
+      )
+    ).status,
+  ).toBe(400);
+  noWrites();
+});
+
 beforeEach(() => {
   vi.resetAllMocks();
   m.actor.mockResolvedValue({ userId: 'user-a' });
@@ -277,7 +303,7 @@ describe('manager policy and definition isolation', () => {
     expect((await programGoalsResponse(request(bodies[action]), 'private-a')).status).toBe(404);
     expect(m.program).toHaveBeenCalledWith({
       where: { id: programId, workspaceId: 'workspace-a', groupId: 'service-a', status: 'ACTIVE' },
-      select: { id: true },
+      select: { id: true, settings: true },
     });
     noWrites();
   });

@@ -1,5 +1,12 @@
 # BUNSHIN Platform Decision Log
 
+## 2026-10-07: AI研修の新規支援mode選択をLearning Firstへ制限する
+
+- 人間の監査・修正指示に基づく独立PR。AI_TRAINING_V1の新規設定・採用・無料登録・支援方針・本人希望・商品設定・新規CheckoutはGUIDEDのみとし、完成品代行を商品選択にしない。
+- 公開済み30日V1 DefinitionのGUIDED / READY_TO_USE配列は互換性識別のため不変。完全一致を使う採用/INITIALIZEを壊さず、設定入口と画面projectionで制限する。名称からModuleを推定しない。
+- 既存Enrollment/Preference/Offering/購入履歴を更新・削除しない。決済済み取引の履行/settlementは変更しない。新規Checkoutは旧完成品Offeringでも拒否する。他Program/PackageのREADY_TO_USEと共通enumは維持する。
+- DB/schema/migration/Provider/LINE/Router/既存受講Runtime変更なし。本番deploy/設定/Pilot開始は別承認。
+
 ## 2026-10-07: 本人Profile準備UIは停止中の専用Pilotに限定する
 
 - 状態: Proposed（#1163監査後の最小本人UI。実登録/本番操作なし）。

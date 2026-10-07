@@ -63,7 +63,7 @@ const body = {
   targetAudience: 'AI初心者',
   definitionPreset: 'AI_TRAINING_V1',
   standardDurationDays: 30,
-  supportModes: ['GUIDED', 'READY_TO_USE'],
+  supportModes: ['GUIDED'],
 };
 const adoption = {
   programTemplateVersionId: versionId,
@@ -117,6 +117,8 @@ describe('AI training program provisioning', () => {
   it.each([
     { standardDurationDays: 90 },
     { supportModes: ['IDEA_ONLY'] },
+    { supportModes: ['READY_TO_USE'] },
+    { supportModes: ['GUIDED', 'READY_TO_USE'] },
     { moduleKey: 'AI_TRAINING_V1' },
   ])('rejects incompatible training inputs %j', async (override) => {
     expect((await createOfficialProgramResponse(request({ ...body, ...override }))).status).toBe(
@@ -165,6 +167,20 @@ describe('AI training program provisioning', () => {
     m.manager.mockRejectedValue(new ApplicationError('FORBIDDEN', 'not managed'));
     expect((await adoptProgramResponse(request(adoption), 'manaberu-style')).status).toBe(403);
     expect(m.programCreate).not.toHaveBeenCalled();
+  });
+  it('rejects legacy finished-output adoption before writes while preserving its published definition', async () => {
+    const definition = createAiTrainingV1Definition();
+    expect(definition.supportModes).toEqual(['GUIDED', 'READY_TO_USE']);
+    expect(
+      (
+        await adoptProgramResponse(
+          request({ ...adoption, supportModes: ['READY_TO_USE'] }),
+          'manaberu-style',
+        )
+      ).status,
+    ).toBe(400);
+    expect(m.programCreate).not.toHaveBeenCalled();
+    expect(definition.supportModes).toEqual(['GUIDED', 'READY_TO_USE']);
   });
   it('rejects missing or unavailable template versions and duplicate adoption', async () => {
     m.versionFind.mockResolvedValue(null);
@@ -271,5 +287,29 @@ describe('AI training program provisioning', () => {
       ).status,
     ).toBe(400);
     expect(m.enrollmentCreate).toHaveBeenCalledOnce();
+  });
+  it('rejects finished-output enrollment even when a historical offering allows it', async () => {
+    m.membership.mockResolvedValue({ id: versionId });
+    m.programFind.mockResolvedValue({ id: versionId, settings: { moduleKey: 'AI_TRAINING_V1' } });
+    m.offeringFind.mockResolvedValue({
+      id: versionId,
+      termsSnapshot: { participation: 'INVITATION_ONLY', supportModes: ['GUIDED', 'READY_TO_USE'] },
+    });
+    m.enrollmentFind.mockResolvedValue(null);
+    expect(
+      (
+        await enrollProgramResponse(
+          request({
+            groupMembershipId: versionId,
+            programOfferingId: versionId,
+            supportMode: 'READY_TO_USE',
+            goal: '',
+          }),
+          'manaberu-style',
+          versionId,
+        )
+      ).status,
+    ).toBe(400);
+    expect(m.enrollmentCreate).not.toHaveBeenCalled();
   });
 });
