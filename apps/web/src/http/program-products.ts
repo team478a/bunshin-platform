@@ -10,6 +10,7 @@ import { z } from 'zod';
 import { currentUserProvider } from '../auth/current-user';
 import { requireSameOrigin } from '../auth/request-security';
 import { resolveManagedServiceContext } from '../services/public-service';
+import { requireTrainingLearningMode } from '../services/training-support-mode';
 
 const schema = z
   .object({
@@ -88,6 +89,7 @@ export async function configureProgramProductResponse(request: Request, serviceS
           },
         });
         if (!program) throw new ApplicationError('NOT_FOUND', 'program unavailable');
+        requireTrainingLearningMode(program.settings, [value.supportMode]);
         if (isAiResale(program.settings)) {
           throw new ApplicationError(
             'VALIDATION_ERROR',

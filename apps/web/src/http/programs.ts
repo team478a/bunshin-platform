@@ -13,6 +13,7 @@ import { currentUserProvider } from '../auth/current-user';
 import { requireSameOrigin } from '../auth/request-security';
 import { resolveManagedServiceContext } from '../services/public-service';
 import { adoptedProgramSettings } from '../services/training-program-definition';
+import { requireTrainingLearningMode } from '../services/training-support-mode';
 
 const OFFICIAL_PROGRAM_PRESETS = [...PROGRAM_DEFINITION_PRESETS, 'AI_TRAINING_V1'] as const;
 
@@ -83,8 +84,8 @@ export async function createOfficialProgramResponse(request: Request) {
     if (
       value.definitionPreset === 'AI_TRAINING_V1' &&
       (value.standardDurationDays !== 30 ||
-        value.supportModes.length !== trainingDefinition.supportModes.length ||
-        trainingDefinition.supportModes.some((mode) => !value.supportModes.includes(mode)))
+        value.supportModes.length !== 1 ||
+        value.supportModes[0] !== 'GUIDED')
     ) {
       throw new ApplicationError(
         'VALIDATION_ERROR',
@@ -347,6 +348,7 @@ export async function enrollProgramResponse(
       if (!membership || !program || !offering)
         throw new ApplicationError('NOT_FOUND', 'enrollment target unavailable');
       if (duplicate) throw new ApplicationError('CONFLICT', 'member already enrolled');
+      requireTrainingLearningMode(program.settings, [value.supportMode]);
       const terms = offering.termsSnapshot as {
         supportModes?: string[];
         participation?: string;

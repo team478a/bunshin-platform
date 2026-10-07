@@ -15,6 +15,7 @@ export function ProgramGoalsAdminEditor({
   programs: {
     id: string;
     name: string;
+    learningOnly?: boolean;
     policy: { modes: string[]; guidance: string } | null;
     goals: { id: string; name: string; unit: string }[];
   }[];
@@ -101,25 +102,29 @@ export function ProgramGoalsAdminEditor({
           <form className="form-stack" onSubmit={(event) => policy(event, program.id)}>
             <fieldset>
               <legend>参加者へ渡せる内容</legend>
-              {modes.map(([value, label]) => (
-                <label key={value}>
-                  <input
-                    type="checkbox"
-                    name={value}
-                    defaultChecked={program.policy?.modes.includes(value) ?? true}
-                  />{' '}
-                  {label}
-                </label>
-              ))}
+              {modes
+                .filter(([value]) => !program.learningOnly || value === 'GUIDED')
+                .map(([value, label]) => (
+                  <label key={value}>
+                    <input
+                      type="checkbox"
+                      name={value}
+                      defaultChecked={program.policy?.modes.includes(value) ?? true}
+                    />{' '}
+                    {label}
+                  </label>
+                ))}
             </fieldset>
             <label className="field">
               <span className="field__label">最初に選ぶ内容</span>
               <select className="field__control" name="defaultSupportMode">
-                {modes.map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
+                {modes
+                  .filter(([value]) => !program.learningOnly || value === 'GUIDED')
+                  .map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
               </select>
             </label>
             <label>

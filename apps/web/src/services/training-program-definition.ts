@@ -5,6 +5,7 @@ import {
 } from '@bunshin/capability-training';
 import { parseProgramDefinition, type ProgramDefinitionV1 } from '@bunshin/application';
 import { ApplicationError } from '@bunshin/shared';
+import { requireTrainingLearningMode } from './training-support-mode';
 
 // Infer the module only from the complete, server-owned published definition.
 // Names, category strings and client-supplied settings are not module authority.
@@ -20,6 +21,10 @@ export function adoptedProgramSettings(
     );
   }
   const training = isDeepStrictEqual(definition, createAiTrainingV1Definition());
+  requireTrainingLearningMode(
+    training ? { moduleKey: AI_TRAINING_V1_MODULE_KEY } : null,
+    supportModes,
+  );
   if (!training && definition.missions.some((mission) => mission.capability === 'AI_TRAINING')) {
     throw new ApplicationError('VALIDATION_ERROR', 'unsupported training definition');
   }

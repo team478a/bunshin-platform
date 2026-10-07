@@ -8,6 +8,10 @@ import { PublicShell } from '../../../../ui/public-shell';
 import { ProgramManagementEditor } from './program-management-editor';
 import { ProgramProductAdmin } from './program-product-admin';
 import { AiResaleOfferAdmin } from './ai-resale-offer-admin';
+import {
+  isTrainingProgram,
+  selectableTrainingModes,
+} from '../../../../../src/services/training-support-mode';
 
 export const dynamic = 'force-dynamic';
 type SupportMode = 'IDEA_ONLY' | 'GUIDED' | 'READY_TO_USE';
@@ -134,7 +138,20 @@ export default async function ServiceProgramsPage({
             versionId: version.id,
             name: template.name,
             description: template.description,
-            supportModes: readModes(version.definition),
+            supportModes: selectableTrainingModes(
+              readModes(version.definition),
+              !!version.definition &&
+                typeof version.definition === 'object' &&
+                !Array.isArray(version.definition) &&
+                Array.isArray(version.definition['missions']) &&
+                version.definition['missions'].some(
+                  (mission) =>
+                    !!mission &&
+                    typeof mission === 'object' &&
+                    !Array.isArray(mission) &&
+                    mission['capability'] === 'AI_TRAINING',
+                ),
+            ),
           }
         : null;
     })
@@ -150,7 +167,10 @@ export default async function ServiceProgramsPage({
         name: program.displayName,
         description: program.description,
         offeringId: offering.id,
-        supportModes: readModes(offering.termsSnapshot),
+        supportModes: selectableTrainingModes(
+          readModes(offering.termsSnapshot),
+          isTrainingProgram(program.settings),
+        ),
         enrolledMembershipIds: enrollments
           .filter((item) => item.serviceProgramId === program.id)
           .map((item) => item.groupMembershipId),
@@ -188,7 +208,7 @@ export default async function ServiceProgramsPage({
         id: program.id,
         name: program.displayName,
         description: program.description,
-        supportModes,
+        supportModes: selectableTrainingModes(supportModes, isTrainingProgram(program.settings)),
         product: productOffering && product ? { offeringId: productOffering.id, ...product } : null,
       };
     })

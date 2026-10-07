@@ -126,8 +126,7 @@ export function ProgramAdminEditor({ workspaces }: { workspaces: { id: string; n
           {preset === 'AI_TRAINING_V1' ? (
             <>
               <input name="GUIDED" type="hidden" value="on" />
-              <input name="READY_TO_USE" type="hidden" value="on" />
-              <p>作り方・台本・プロンプト／そのまま使える完成品（既存研修定義）</p>
+              <p>本人がAIを使えるようになるための学習支援。完成品の代行制作は行いません。</p>
             </>
           ) : (
             <>

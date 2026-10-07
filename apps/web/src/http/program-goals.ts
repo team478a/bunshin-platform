@@ -5,6 +5,7 @@ import { ApplicationError, toApiError } from '@bunshin/shared';
 import { z } from 'zod';
 import { currentUserProvider } from '../auth/current-user';
 import { requireSameOrigin } from '../auth/request-security';
+import { requireTrainingLearningMode } from '../services/training-support-mode';
 import {
   resolveManagedServiceContext,
   resolveMemberServiceContext,
@@ -83,7 +84,7 @@ export async function programGoalsResponse(request: Request, serviceSlug: string
           groupId: service.serviceId,
           status: 'ACTIVE',
         },
-        select: { id: true },
+        select: { id: true, settings: true },
       });
       if (!program) throw new ApplicationError('NOT_FOUND', 'program not found');
       if (value.action === 'CREATE_GOAL_DEFINITION') {
@@ -104,6 +105,10 @@ export async function programGoalsResponse(request: Request, serviceSlug: string
       }
       if (!value.allowedSupportModes.includes(value.defaultSupportMode))
         throw new ApplicationError('VALIDATION_ERROR', 'default support mode unavailable');
+      requireTrainingLearningMode(program.settings, [
+        ...value.allowedSupportModes,
+        value.defaultSupportMode,
+      ]);
       const row = await db.prisma.$transaction(async (tx) => {
         const current = await tx.serviceProgramSupportPolicy.findFirst({
           where: {
@@ -200,6 +205,8 @@ export async function programGoalsResponse(request: Request, serviceSlug: string
           select: { settings: true },
         });
         if (!program) throw new ApplicationError('NOT_FOUND', 'program not found');
+        if (value.action === 'SAVE_PREFERENCE')
+          requireTrainingLearningMode(program.settings, [value.preferredSupportMode]);
         const isTraining =
           program.settings !== null &&
           typeof program.settings === 'object' &&
