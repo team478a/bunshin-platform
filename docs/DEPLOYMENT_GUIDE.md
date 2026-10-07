@@ -37,6 +37,8 @@ SOCIAL Intelligenceを有効にする場合は、Productionだけにserver-only�
 
 ## Deployment Order
 
+OEM Registration Billing V2を含むリリースは[本番Migration安全監査](OEM_REGISTRATION_BILLING_V2_MIGRATION_SAFETY_AUDIT.md)の復元検証、実DBの全pending/既存データ適合、lock、旧Application互換Gateを先に満たす。Production buildは全pending Migrationを公開前に実行するため、Deployだけを先行しない。schema配備、初期履歴準備、料金公開/cutover、請求開始は別承認とする。
+
 Personal Learningの限定運用は[Production Closed Pilot Runbook](ai-training/PERSONAL_LEARNING_PRODUCTION_CLOSED_PILOT_RUNBOOK.md)を参照する。stagingは任意確認環境であり、Production Release Gateと人間承認を省略する理由ではない。現コードの本番拒否と少人数制限は別PRまで維持し、本番配備・利用開始・Provider利用を分離する。
 
 Personal Learning P1-C-S migration `20261006021000_personal_learning_persistence`を含むリリースは、[承認条件と手順](ai-training/AI_TRAINING_PERSONAL_LEARNING_P1CS_RELEASE_RUNBOOK.md)でBackup、実DBのpending一覧、旧V1との互換性、既存Goal indexのlock影響を確認する。保存基盤の配備、Definitionの人間承認、利用開始は別判断とし、review fixtureを自動承認しない。
