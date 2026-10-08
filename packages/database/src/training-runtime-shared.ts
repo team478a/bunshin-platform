@@ -12,6 +12,8 @@ import {
 } from '@bunshin/capability-training';
 import type { Prisma, PrismaClient } from '@prisma/client';
 import { trainingEnrollmentPeriodWhere } from './training-enrollment-period';
+import { requireTrainingLearnerRole } from './personal-learning-pilot-seat';
+import { ApplicationError } from '@bunshin/shared';
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -67,7 +69,7 @@ export async function resolveScope(
         workspaceId: input.workspaceId,
         groupId: input.groupId,
         userId: input.actorUserId,
-        serviceRole: 'PARTICIPANT',
+        serviceRole: { in: ['PARTICIPANT', 'SERVICE_OWNER'] },
         status: 'ACTIVE',
       },
     }),
@@ -82,6 +84,16 @@ export async function resolveScope(
     }),
   ]);
   if (!membership || !program) return null;
+  try {
+    await requireTrainingLearnerRole(
+      db,
+      { ...input, userId: input.actorUserId },
+      membership.serviceRole,
+    );
+  } catch (error) {
+    if (error instanceof ApplicationError && error.code === 'NOT_FOUND') return null;
+    throw error;
+  }
   const version = await db.programTemplateVersion.findFirst({
     where: {
       id: program.programTemplateVersionId,

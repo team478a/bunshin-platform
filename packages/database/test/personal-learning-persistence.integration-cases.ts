@@ -712,6 +712,29 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
         enabled: false,
       });
     });
+    it('internal owner prepares their own Enrollment/Profile and remains a service owner through START/STOP', async () => {
+      const f = await operationsFixture();
+      await client.groupMembership.update({
+        where: { id: f.member.id },
+        data: { serviceRole: 'SERVICE_OWNER' },
+      });
+      // Same authenticated learner owns this service; no role downgrade or copied Profile.
+      expect(await f.ops.read(f.scope.userId)).toMatchObject({ status: 'ACTIVE' });
+      await f.ready();
+      await f.ops.change(f.scope.userId, await f.command('START'));
+      expect(await f.ops.read(f.scope.userId)).toMatchObject({ status: 'ACTIVE', enabled: true });
+      await f.ops.change(f.scope.userId, await f.command('STOP'));
+      expect(await f.ops.read(f.scope.userId)).toMatchObject({
+        status: 'SUSPENDED',
+        enabled: false,
+      });
+      expect(
+        await client.groupMembership.findUniqueOrThrow({ where: { id: f.member.id } }),
+      ).toMatchObject({ serviceRole: 'SERVICE_OWNER', status: 'ACTIVE' });
+      expect(await client.personalLearningPilotSeat.findMany({ where: f.authority })).toMatchObject(
+        [{ kind: 'INTERNAL', cohort: 'INTERNAL' }],
+      );
+    });
     async function profilePreparation() {
       const f = await fixture(false);
       await client.serviceProgram.update({
@@ -1584,6 +1607,115 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
       }
       return { ...f, plan, bridge, request, assessed };
     }
+    it('internal owner completes the existing saved three-Definition path without entering legacy V1', async () => {
+      const f = await routerFixture();
+      await client.groupMembership.update({
+        where: { id: f.member.id },
+        data: { serviceRole: 'SERVICE_OWNER' },
+      });
+      // Existing role alone grants no learner access, even through the bare persistence port.
+      await expect(f.repo.read(f.actor)).rejects.toThrow();
+      const authority = {
+        workspaceId: f.scope.workspaceId,
+        groupId: f.scope.groupId,
+        serviceProgramId: f.enrollment.serviceProgramId,
+      };
+      await client.serviceProgram.update({
+        where: { id: authority.serviceProgramId },
+        data: {
+          status: 'SUSPENDED',
+          settings: {
+            moduleKey: 'AI_TRAINING_V1',
+            personalLearningPilot: { enabled: false, enrollmentIds: [] },
+            trainingOperations: { notificationsEnabled: false, postponedReminderEnabled: false },
+          },
+        },
+      });
+      const seats = new PrismaPersonalLearningParticipantAdminRepository(client, authority);
+      const common = {
+        operationId: randomUUID(),
+        confirmation: 'CONFIRM_PILOT_PARTICIPANT_OPERATION' as const,
+        reviewEvidenceKey: 'synthetic-owner-test',
+      };
+      await seats.change(f.scope.userId, {
+        ...common,
+        action: 'CONFIGURE',
+        expectedRevision: 0,
+        externalParticipantCap: 100,
+        internalParticipantCap: 1,
+        currentWave: 0,
+      });
+      await expect(
+        seats.change(f.scope.userId, {
+          ...common,
+          operationId: randomUUID(),
+          action: 'ADMIT',
+          expectedRevision: 1,
+          programEnrollmentId: f.enrollment.id,
+          kind: 'EXTERNAL',
+        }),
+      ).rejects.toThrow();
+      await seats.change(f.scope.userId, {
+        ...common,
+        operationId: randomUUID(),
+        action: 'ADMIT',
+        expectedRevision: 1,
+        programEnrollmentId: f.enrollment.id,
+        kind: 'INTERNAL',
+      });
+      const p = await client.serviceProgram.findUniqueOrThrow({
+        where: { id: authority.serviceProgramId },
+      });
+      const settings = p.settings as Prisma.JsonObject;
+      await client.serviceProgram.update({
+        where: { id: p.id },
+        data: {
+          status: 'ACTIVE',
+          settings: {
+            ...settings,
+            personalLearningPilot: {
+              ...(settings.personalLearningPilot as Prisma.JsonObject),
+              enabled: true,
+            },
+          },
+        },
+      });
+      const pilot = new PrismaPersonalLearningPilotRepository(client, () => now);
+      const router = new PrismaPersonalLearningPilotRouter(client, () => now);
+      expect((await pilot.read(f.actor)).plans[0]?.plan.status).toBe('CONFIRMED');
+      await expect(pilot.read({ ...f.actor, actorUserId: f.owner.id })).rejects.toThrow();
+      await expect(
+        pilot.read({ ...f.actor, scope: { ...f.scope, workspaceId: randomUUID() } }),
+      ).rejects.toThrow();
+      for (const [index, definition] of AI_TRAINING_LEARNING_DEFINITION_FIXTURES.entries()) {
+        const receipt = await router.bridge({ ...f.request, idempotencyKey: `owner-${index}` });
+        expect(receipt.result.definition).toEqual(definition.reference);
+        await f.assessed(receipt.assignmentId!);
+      }
+      expect(
+        (await router.bridge({ ...f.request, idempotencyKey: 'owner-completed' })).result.status,
+      ).toBe('PLAN_COMPLETED');
+      expect(
+        await new PrismaAiTrainingRuntimeStateRepository(client).findState({
+          workspaceId: f.scope.workspaceId,
+          groupId: f.scope.groupId,
+          programEnrollmentId: f.enrollment.id,
+          actorUserId: f.scope.userId,
+          now,
+        }),
+      ).toBeNull();
+      await client.personalLearningPilotSeat.updateMany({
+        where: authority,
+        data: { revokedAt: now },
+      });
+      await expect(pilot.read(f.actor)).rejects.toThrow();
+      expect(
+        await client.groupMembership.findUniqueOrThrow({ where: { id: f.member.id } }),
+      ).toMatchObject({ serviceRole: 'SERVICE_OWNER' });
+      expect(
+        await client.programEnrollment.findUniqueOrThrow({ where: { id: f.enrollment.id } }),
+      ).toMatchObject({ status: 'ACTIVE' });
+    });
     async function practiceFixture() {
       const f = await routerFixture();
       await client.serviceProgram.update({

@@ -11,6 +11,7 @@ import {
 import { isPersonalLearningPilotProgram } from '@bunshin/capability-training';
 import type { Prisma, PrismaClient } from '@prisma/client';
 import { lockTrainingEnrollmentData } from './training-data-lock';
+import { requireTrainingLearnerRole } from './personal-learning-pilot-seat';
 
 function denied(): never {
   throw new ApplicationError('NOT_FOUND', 'AI call learning scope unavailable');
@@ -34,11 +35,11 @@ export class PrismaPersonalLearningAiCallRepository {
         groupId: s.groupId,
         userId: s.userId,
         status: 'ACTIVE',
-        serviceRole: 'PARTICIPANT',
+        serviceRole: { in: ['PARTICIPANT', 'SERVICE_OWNER'] },
         user: { status: 'ACTIVE' },
         group: { status: 'ACTIVE', workspace: { status: 'ACTIVE' } },
       },
-      select: { id: true },
+      select: { id: true, serviceRole: true },
     });
     const enrollment = await tx.programEnrollment.findFirst({
       where: {
@@ -61,6 +62,7 @@ export class PrismaPersonalLearningAiCallRepository {
       : null;
     if (!membership || !enrollment || !program || !isPersonalLearningPilotProgram(program.settings))
       denied();
+    await requireTrainingLearnerRole(tx, s, membership.serviceRole);
     const deletion = await tx.programAuditLog.findFirst({
       where: {
         workspaceId: s.workspaceId,

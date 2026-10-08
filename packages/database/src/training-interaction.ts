@@ -10,6 +10,7 @@ import { Prisma, type PrismaClient } from '@prisma/client';
 import { prisma } from './index';
 import { lockTrainingEnrollmentData } from './training-data-lock';
 import { trainingEnrollmentPeriodWhere } from './training-enrollment-period';
+import { requireTrainingLearnerRole } from './personal-learning-pilot-seat';
 
 export type TrainingInteractionWriteResult =
   | {
@@ -201,10 +202,10 @@ export class PrismaTrainingInteractionRepository {
               workspaceId: input.workspaceId,
               groupId: input.groupId,
               userId: input.actorUserId,
-              serviceRole: 'PARTICIPANT',
+              serviceRole: { in: ['PARTICIPANT', 'SERVICE_OWNER'] },
               status: 'ACTIVE',
             },
-            select: { id: true },
+            select: { id: true, serviceRole: true },
           });
           if (!membership) return { outcome: 'NOT_FOUND' } as const;
           const enrollment = await tx.programEnrollment.findFirst({
@@ -220,6 +221,16 @@ export class PrismaTrainingInteractionRepository {
             select: { id: true, serviceProgramId: true },
           });
           if (!enrollment) return { outcome: 'NOT_FOUND' } as const;
+          await requireTrainingLearnerRole(
+            tx,
+            {
+              workspaceId: input.workspaceId,
+              groupId: input.groupId,
+              programEnrollmentId: input.programEnrollmentId,
+              userId: input.actorUserId,
+            },
+            membership.serviceRole,
+          );
           await tx.$queryRaw`SELECT id FROM service_programs
             WHERE id = ${enrollment.serviceProgramId}::uuid
               AND workspace_id = ${input.workspaceId}::uuid

@@ -12,6 +12,7 @@ const fake = vi.hoisted(() => ({
   evaluate: vi.fn(),
   usage: vi.fn(),
   pilotPrepare: vi.fn(),
+  learnerRole: vi.fn(),
   environment: 'development',
 }));
 vi.mock('@bunshin/config', () => ({ getServerEnvironment: () => ({ APP_ENV: fake.environment }) }));
@@ -27,6 +28,7 @@ vi.mock('@bunshin/database', () => {
   return {
     prisma: { ...tx, $transaction: (callback: (value: typeof tx) => unknown) => callback(tx) },
     lockTrainingEnrollmentData: fake.lock,
+    requireTrainingLearnerRole: fake.learnerRole,
     trainingEnrollmentPeriodWhere: (now: Date) => ({
       startsAt: { lte: now },
       OR: [{ endsAt: null }, { endsAt: { gt: now } }],
@@ -149,7 +151,7 @@ describe('training evaluation period boundaries', () => {
         where: expect.objectContaining({
           userId: 'user',
           status: 'ACTIVE',
-          serviceRole: 'PARTICIPANT',
+          serviceRole: { in: ['PARTICIPANT', 'SERVICE_OWNER'] },
         }),
       }),
     );
@@ -180,6 +182,18 @@ describe('training evaluation period boundaries', () => {
       }),
     );
     expect(fake.answer).not.toHaveBeenCalled();
+    expect(fake.runtime).not.toHaveBeenCalled();
+    expect(fake.evaluate).not.toHaveBeenCalled();
+  });
+  it('rejects an owner without an INTERNAL seat before queueing or resolving provider credentials', async () => {
+    fake.membership.mockResolvedValue({ id: 'membership', serviceRole: 'SERVICE_OWNER' });
+    fake.enrollment.mockResolvedValue({ id: 'enrollment', serviceProgramId: 'program' });
+    fake.learnerRole.mockRejectedValue(new Error('internal seat required'));
+    await expect(enqueueAiTrainingEvaluation(scope)).rejects.toThrow('internal seat required');
+    await expect(createTrainingAnswerEvaluationJobHandler().execute(input)).rejects.toThrow(
+      'internal seat required',
+    );
+    expect(fake.jobs).not.toHaveBeenCalled();
     expect(fake.runtime).not.toHaveBeenCalled();
     expect(fake.evaluate).not.toHaveBeenCalled();
   });

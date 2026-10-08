@@ -3,7 +3,10 @@ import { Prisma, type PrismaClient } from '@prisma/client';
 import { prisma } from './index';
 import { lockTrainingEnrollmentData } from './training-data-lock';
 import { trainingEnrollmentPeriodWhere } from './training-enrollment-period';
-import { requirePersonalLearningPilotSeat } from './personal-learning-pilot-seat';
+import {
+  requirePersonalLearningPilotSeat,
+  requireTrainingLearnerRole,
+} from './personal-learning-pilot-seat';
 
 export type TrainingAnswerSubmissionResult =
   | {
@@ -49,10 +52,10 @@ export class PrismaTrainingAnswerRepository {
           workspaceId: input.workspaceId,
           groupId: input.groupId,
           userId: input.actorUserId,
-          serviceRole: 'PARTICIPANT',
+          serviceRole: { in: ['PARTICIPANT', 'SERVICE_OWNER'] },
           status: 'ACTIVE',
         },
-        select: { id: true },
+        select: { id: true, serviceRole: true },
       }),
     ]);
     if (!enrollment || !membership || enrollment.groupMembershipId !== membership.id)
@@ -78,6 +81,10 @@ export class PrismaTrainingAnswerRepository {
       programEnrollmentId: input.programEnrollmentId,
       userId: input.actorUserId,
     };
+    if (membership.serviceRole !== 'PARTICIPANT')
+      await this.client.$transaction((tx) =>
+        requireTrainingLearnerRole(tx, seatScope, membership.serviceRole),
+      );
     if (capped)
       await this.client.$transaction((tx) => requirePersonalLearningPilotSeat(tx, seatScope, true));
 
@@ -94,6 +101,7 @@ export class PrismaTrainingAnswerRepository {
     try {
       return await this.client.$transaction(async (tx) => {
         await lockTrainingEnrollmentData(tx, input);
+        await requireTrainingLearnerRole(tx, seatScope, membership.serviceRole);
         if (capped) await requirePersonalLearningPilotSeat(tx, seatScope, true);
         const active = await tx.programEnrollment.findFirst({
           where: {

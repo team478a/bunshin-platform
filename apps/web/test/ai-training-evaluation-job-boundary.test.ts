@@ -42,7 +42,10 @@ describe('AI training evaluation job boundary', () => {
     expect(handler).toContain('workspaceId: input.workspaceId');
     expect(handler).toContain('groupId: input.groupId');
     expect(handler).toContain('userId: input.actorUserId');
-    expect(handler).toContain("serviceRole: 'PARTICIPANT'");
+    expect(handler).toContain("serviceRole: { in: ['PARTICIPANT', 'SERVICE_OWNER'] }");
+    expect(handler.indexOf('db.requireTrainingLearnerRole')).toBeLessThan(
+      handler.indexOf('await resolveOpenAiRuntimeConfiguration'),
+    );
     expect(handler).toContain('groupMembershipId: membership.id');
     expect(handler).toContain('programEnrollmentId: enrollment.id');
     expect(handler).toContain('AI_TRAINING_V1_MODULE_KEY');
