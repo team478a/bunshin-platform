@@ -7,7 +7,7 @@ export function LineConnectionForm({
   bunshinId,
 }: {
   serviceSlug: string;
-  bunshinId: string;
+  bunshinId?: string;
 }) {
   const [consented, setConsented] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -21,7 +21,11 @@ export function LineConnectionForm({
       onSubmit={() => setSubmitting(true)}
     >
       <input type="hidden" name="serviceSlug" value={serviceSlug} />
-      <input type="hidden" name="bunshinId" value={bunshinId} />
+      {bunshinId ? (
+        <input type="hidden" name="bunshinId" value={bunshinId} />
+      ) : (
+        <input type="hidden" name="linkTarget" value="LEARNING_MEMBER" />
+      )}
       <label className={`line-link-consent${consented ? ' is-checked' : ''}`}>
         <input
           type="checkbox"
