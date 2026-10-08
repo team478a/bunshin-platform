@@ -1,9 +1,13 @@
 import { notFound, redirect } from 'next/navigation';
 import { currentUserProvider } from '../../../../../../src/auth/current-user';
 import { resolveManagedServiceContext } from '../../../../../../src/services/public-service';
-import { programPreparationTarget } from '../../../../../../src/services/personal-learning-program-preparation';
+import {
+  programPreparationTarget,
+  participantConfigurationTarget,
+} from '../../../../../../src/services/personal-learning-program-preparation';
 import { PublicShell } from '../../../../../ui/public-shell';
 import { ProgramPreparationCard } from './card';
+import { ParticipantConfigurationCard } from './participant-card';
 
 export const dynamic = 'force-dynamic';
 export default async function ProgramPreparationPage({
@@ -20,6 +24,7 @@ export default async function ProgramPreparationPage({
   const service = await resolveManagedServiceContext(serviceSlug, actor.userId).catch(() => null);
   if (!service) notFound();
   const programId = programPreparationTarget(service);
+  const participantProgramId = participantConfigurationTarget(service);
   return (
     <PublicShell showPlatformBrand={false}>
       <main className="app-page stack">
@@ -38,6 +43,19 @@ export default async function ProgramPreparationPage({
             <p>
               PERSONAL_LEARNING_PILOT_OPERATIONS と PERSONAL_LEARNING_PRODUCTION_PREPARATION
               の対象一致、および両Pilot実行flagがOFFであることを確認してください。設定が不足・不一致の場合は作成しません。
+            </p>
+          </section>
+        )}
+        {participantProgramId ? (
+          <ParticipantConfigurationCard
+            serviceSlug={serviceSlug}
+            programId={participantProgramId}
+          />
+        ) : (
+          <section className="card stack">
+            <h2>人数設定操作は利用できません</h2>
+            <p>
+              環境担当者によるPERSONAL_LEARNING_PARTICIPANT_PREPARATIONと対象authorityの確認が必要です。両Pilot実行flagはOFFを維持してください。この画面から環境設定は変更しません。
             </p>
           </section>
         )}

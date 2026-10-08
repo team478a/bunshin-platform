@@ -1,6 +1,26 @@
 import 'server-only';
 import { getServerEnvironment } from '@bunshin/config';
 import { parsePersonalLearningPreparationAuthority } from '@bunshin/application';
+import { personalLearningPreparationAccess } from './personal-learning-preparation-access';
+
+/** UI availability only; API/repository reauthorize each read and write. */
+export function participantConfigurationTarget(service: {
+  workspaceId: string;
+  serviceId: string;
+}) {
+  try {
+    const authority = personalLearningPreparationAccess(
+      'PERSONAL_LEARNING_PARTICIPANT_PREPARATION',
+    );
+    return authority &&
+      authority.workspaceId === service.workspaceId &&
+      authority.groupId === service.serviceId
+      ? authority.serviceProgramId
+      : null;
+  } catch {
+    return null;
+  }
+}
 
 /** Presentation gate only: the existing HTTP and repository gates remain authoritative. */
 export function programPreparationTarget(service: { workspaceId: string; serviceId: string }) {

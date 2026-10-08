@@ -3765,6 +3765,14 @@
 - Production実行flagが有効な間は準備APIを閉じる。開始後のProfile編集/新規登録や緊急撤回の別機構を完成させたとは扱わない。実行を停止しただけでProgram SUSPENDEDへの変更が完了したとはしない。
 - schema/Migration/UI/Provider/LINE/100人登録を追加しない。設定変更、実承認、実Profile登録、Migration、deploy、Pilot enableは別の人間承認を待つ。
 
+## 2026-10-07: Wave 0人数設定UIは既存CONFIGUREの限定入口とする
+
+- 状態: Proposed（実装PRレビュー待ち。本番設定保存は別承認）
+- 既存Personal Learning準備ページへ人数設定だけ追加し、参加者準備flag・server authority・Service管理者認証・両実行flag OFFを維持する。既存API / Repositoryを迂回しない。
+- 内部2人・外部100人は未保存の初期候補。UIは内部1〜2、外部0〜100、Wave 0の外部受付0に限定。登録・取消・Wave昇格・開始・費用設定は含めない。
+- 最新GET、明示確認、review識別子、固定UUID/body、CASを使用し、保存receipt後の再GET一致を成功条件にする。不明応答は同操作の明示再送だけ、409の自動再試行は禁止する。
+- DB / schema / migration / Provider / V1 / LINEの変更、本番deploy、人数保存、参加者登録、承認、開始、実課金は行わない。
+
 ## 2026-10-07: Wave 0の運用操作を準備APIと分離する
 
 - 状態: Proposed（実装レビュー待ち。本番操作は未承認）

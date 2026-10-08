@@ -179,6 +179,8 @@ ProgramDefinitionの必須phase表示範囲・schedule/cadenceは既存schemaを
 4. 停止状態で `GET /api/services/{serviceSlug}/ai-training/pilot-participants`。data.policy/seats、累計INTERNAL/EXTERNAL、revoked含むを確認。初回空台帳/allowlist、expectedRevision=0を確認。
 5. 人間管理者が同URLへPOST CONFIGURE。例の構造（値は承認後置換）:
 
+   最小UI: `/s/{serviceSlug}/manage/programs/personal-learning-preparation`の「Wave 0の人数設定」。参加者準備flagとauthority一致・両実行flag OFFが必要。「現在の人数設定を確認」→上限をレビュー→識別子と確認checkbox→「停止状態で人数設定を保存」。内部2/外部100は未保存候補、Wave 0外部受付0固定。CONFIGUREのみで参加者登録・開始はしない。詳細は[人数設定UI実装報告](MANABERU_STYLE_WAVE0_CONFIGURATION_UI_IMPLEMENTATION.md)。
+
 ```json
 {
   "action": "CONFIGURE",
