@@ -1706,7 +1706,7 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
       ).toBeNull();
       await client.personalLearningPilotSeat.updateMany({
         where: authority,
-        data: { revokedAt: now },
+        data: { revokedAt: new Date() },
       });
       await expect(pilot.read(f.actor)).rejects.toThrow();
       expect(
