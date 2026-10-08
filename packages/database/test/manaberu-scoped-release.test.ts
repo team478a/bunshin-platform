@@ -44,3 +44,23 @@ test('readiness requires the latest migration that is actually included in this 
   assert.equal(LATEST_DATABASE_MIGRATION, '20261008140000_learning_member_line_link');
   assert.equal(migrations.at(-1), LATEST_DATABASE_MIGRATION);
 });
+
+test('internal-owner release exposes only the learner authority, not the main-only OEM services', () => {
+  const source = read('packages/database/src/index.ts');
+  assert.match(
+    source,
+    /export \{ requireTrainingLearnerRole \} from '\.\/personal-learning-pilot-seat'/,
+  );
+  assert.doesNotMatch(source, /PrismaOemBillingAdminService|PrismaCommercialPricingAdminService/);
+  for (const file of ['oem-billing-admin.ts', 'commercial-pricing-admin.ts'])
+    assert.equal(existsSync(new URL(`packages/database/src/${file}`, root)), false);
+});
+
+test('internal-owner authority retains the dedicated contract and live INTERNAL seat gate', () => {
+  const source = read('packages/database/src/personal-learning-pilot-seat.ts');
+  assert.match(source, /personalLearningPilotAllows\(/);
+  assert.match(source, /if \(required \|\| owner\) throw/);
+  assert.match(source, /seat\.kind !== 'INTERNAL' \|\| seat\.cohort !== 'INTERNAL'/);
+  assert.match(source, /revoked_at IS NULL FOR SHARE/);
+  assert.match(source, /await requirePersonalLearningPilotSeat\(tx, scope, true\)/);
+});
