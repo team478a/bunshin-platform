@@ -27,6 +27,7 @@ export class PrismaGroupLineConnectionRepository implements GroupLineConnectionR
           status: 'ACTIVE',
           lastVerifiedAt: { not: null },
           lastErrorCategory: null,
+          ...(input.rejectDestinationTransfer ? { globallyPaused: false } : {}),
           group: {
             lineRoutingPolicies: {
               some: { environment: input.environment, mode: 'DEDICATED', pilotEnabled: true },
@@ -57,6 +58,7 @@ export class PrismaGroupLineConnectionRepository implements GroupLineConnectionR
         }),
       ]);
       if (providerConnection && providerConnection.userId !== input.actorUserId) {
+        if (input.rejectDestinationTransfer) return false;
         // A verified LINE login proves control of the notification destination. Move the
         // destination from a stale/duplicate app registration and stop pending delivery
         // to that registration instead of asking the person to register again.

@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   configuration: vi.fn(),
   connection: vi.fn(),
   legalConsentView: vi.fn(),
+  programs: vi.fn(),
 }));
 vi.mock('../src/services/public-service', () => ({ resolveMemberServiceContext: mocks.context }));
 vi.mock('../src/line/secure-configuration', () => ({ currentLineEnvironment: () => 'PRODUCTION' }));
@@ -21,6 +22,7 @@ vi.mock('@bunshin/database', () => ({
     bunshin: { findMany: mocks.partners },
     groupLineChannelConfiguration: { findFirst: mocks.configuration },
     groupLineConnection: { findFirst: mocks.connection },
+    serviceProgram: { findMany: mocks.programs },
   },
 }));
 import { loadServiceLineSettings } from '../src/services/service-line-settings';
@@ -36,6 +38,7 @@ describe('participant LINE settings', () => {
     mocks.membership.mockResolvedValue({ id: 'membership-a', consentedAt: new Date() });
     mocks.policy.mockResolvedValue({ mode: 'DEDICATED', pilotEnabled: true });
     mocks.partners.mockResolvedValue([{ id: 'partner-a', name: '相棒' }]);
+    mocks.programs.mockResolvedValue([]);
     mocks.configuration.mockResolvedValue({
       id: 'config-a',
       lastVerifiedAt: new Date(),
@@ -129,5 +132,20 @@ describe('participant LINE settings', () => {
     expect(mocks.legalConsentView).toHaveBeenCalledWith(
       expect.objectContaining({ slug: 'service-a', actorUserId: 'user-a' }),
     );
+  });
+  it('recognizes reserved learning programs even when stopped, without requiring a partner', async () => {
+    mocks.partners.mockResolvedValue([]);
+    mocks.programs.mockResolvedValue([{ settings: { personalLearningPilot: { enabled: false } } }]);
+    const result = await loadServiceLineSettings('service-a', 'user-a');
+    expect(result.learningService).toBe(true);
+    expect(result.partners).toEqual([]);
+    expect(mocks.programs).toHaveBeenCalledWith({
+      where: {
+        workspaceId: 'workspace-a',
+        groupId: 'service-a',
+        status: { in: ['ACTIVE', 'SUSPENDED'] },
+      },
+      select: { settings: true },
+    });
   });
 });

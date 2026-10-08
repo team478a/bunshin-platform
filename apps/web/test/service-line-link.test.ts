@@ -20,6 +20,10 @@ const m = vi.hoisted(() => ({
   renderUpdate: vi.fn(),
   job: vi.fn(),
   log: vi.fn(),
+  learningSettings: vi.fn(),
+}));
+vi.mock('../src/services/service-line-settings', () => ({
+  loadServiceLineSettings: m.learningSettings,
 }));
 vi.mock('@bunshin/config', () => ({
   getServerEnvironment: () => ({ APP_URL: 'https://example.com' }),
@@ -142,10 +146,111 @@ beforeEach(() => {
   m.claim.mockResolvedValue({ count: 1 });
   m.verify.mockResolvedValue({ providerUserId: `U${'a'.repeat(32)}`, following: true });
   m.connect.mockResolvedValue(true);
+  m.learningSettings.mockResolvedValue({
+    learningService: true,
+    available: true,
+    consented: true,
+    service: { workspaceId: 'workspace', serviceId: 'group' },
+    membershipId: 'membership',
+    configurationId: 'configuration',
+  });
   m.connectionUpdate.mockResolvedValue({ count: 1 });
   m.allowed.mockResolvedValue(true);
   m.recipient.mockResolvedValue({ providerUserId: 'verified' });
   m.renderUpdate.mockResolvedValue({ count: 1 });
+});
+describe('learning member LINE link', () => {
+  const start = (override: Record<string, string> = {}, origin = 'https://example.com') =>
+    startServiceLineLink(
+      new Request('https://example.com/auth/service-line/start', {
+        method: 'POST',
+        headers: { origin },
+        body: new URLSearchParams({
+          serviceSlug: 'service',
+          linkTarget: 'LEARNING_MEMBER',
+          consent: 'yes',
+          ...override,
+        }),
+      }),
+    );
+  it('starts a single-use member attempt without a Bunshin or enrollment', async () => {
+    const response = await start();
+    expect(new URL(response.headers.get('location')!).hostname).toBe('access.line.me');
+    expect(m.createAttempt).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        bunshinId: null,
+        actorUserId: 'owner',
+        configurationId: 'configuration',
+      }),
+    });
+    expect(m.bunshin).not.toHaveBeenCalled();
+    expect(m.preference).not.toHaveBeenCalled();
+  });
+  it('returns to learning LINE without creating posting notification preferences', async () => {
+    m.attempt.mockResolvedValue({ ...attempt, bunshinId: null });
+    const response = await callback();
+    expect(outcome(response)).toBe('connected');
+    expect(new URL(response.headers.get('location')!).pathname).toBe('/s/service/line');
+    expect(m.connect).toHaveBeenCalledWith(
+      expect.objectContaining({ rejectDestinationTransfer: true }),
+    );
+    expect(m.preference).not.toHaveBeenCalled();
+    expect(m.bunshin).not.toHaveBeenCalled();
+    expect(m.job).not.toHaveBeenCalled();
+  });
+  it.each(['learningService', 'available', 'consented'])(
+    'rejects missing %s before LINE verification',
+    async (field) => {
+      m.learningSettings.mockResolvedValue({ ...(await m.learningSettings()), [field]: false });
+      m.attempt.mockResolvedValue({ ...attempt, bunshinId: null });
+      expect(outcome(await callback())).toBe('session-changed');
+      expect(m.verify).not.toHaveBeenCalled();
+      expect(m.connect).not.toHaveBeenCalled();
+    },
+  );
+  it('rejects another user and a replaced configuration', async () => {
+    m.attempt.mockResolvedValue({ ...attempt, bunshinId: null, actorUserId: 'other' });
+    expect(outcome(await callback())).toBe('session-changed');
+    expect(m.verify).not.toHaveBeenCalled();
+  });
+  it('revalidates preparation after the provider round trip', async () => {
+    m.attempt.mockResolvedValue({ ...attempt, bunshinId: null });
+    m.verify.mockImplementation(() => {
+      m.learningSettings.mockResolvedValue({ learningService: true, available: false });
+      return Promise.resolve({ providerUserId: `U${'a'.repeat(32)}`, following: true });
+    });
+    expect(outcome(await callback())).toBe('destination-in-use');
+    expect(m.connect).not.toHaveBeenCalled();
+  });
+  it('rejects mixed targets and missing consent', async () => {
+    expect(outcome(await start({ bunshinId: id }))).toBe('request-invalid');
+    expect(outcome(await start({ consent: 'no' }))).toBe('consent-required');
+    expect(outcome(await start({}, 'https://attacker.example'))).toBe('request-invalid');
+    expect(m.createAttempt).not.toHaveBeenCalled();
+  });
+  it('refuses a conflicting destination without creating notification preferences', async () => {
+    m.attempt.mockResolvedValue({ ...attempt, bunshinId: null });
+    m.connect.mockResolvedValue(false);
+    expect(outcome(await callback())).toBe('destination-in-use');
+    expect(m.preference).not.toHaveBeenCalled();
+  });
+  it.each(['cookie', 'expired', 'consumed', 'race', 'configuration'])(
+    'rejects %s on a learning attempt without saving a destination',
+    async (failure) => {
+      m.attempt.mockResolvedValue({ ...attempt, bunshinId: null });
+      if (failure === 'cookie') m.cookie.mockReturnValue({ value: 'other' });
+      if (failure === 'expired')
+        m.attempt.mockResolvedValue({ ...attempt, bunshinId: null, expiresAt: new Date(0) });
+      if (failure === 'consumed')
+        m.attempt.mockResolvedValue({ ...attempt, bunshinId: null, consumedAt: new Date() });
+      if (failure === 'race') m.claim.mockResolvedValue({ count: 0 });
+      if (failure === 'configuration')
+        m.configuration.mockResolvedValue({ ...config, id: 'changed' });
+      await callback();
+      expect(m.verify).not.toHaveBeenCalled();
+      expect(m.connect).not.toHaveBeenCalled();
+    },
+  );
 });
 describe('service LINE linking', () => {
   it('binds the proof to the current owner and sets a protected browser cookie', async () => {

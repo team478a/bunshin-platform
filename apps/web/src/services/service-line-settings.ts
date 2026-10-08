@@ -1,5 +1,6 @@
 import 'server-only';
 import { ApplicationError } from '@bunshin/shared';
+import { isPersonalLearningPilotProgram } from '@bunshin/capability-training';
 import { currentLineEnvironment } from '../line/secure-configuration';
 import { resolveMemberServiceContext } from './public-service';
 
@@ -30,7 +31,7 @@ export async function loadServiceLineSettings(serviceSlug: string, actorUserId: 
     legalConsent?.legalDocuments.every(({ id }) => legalConsent.acceptedDocumentIds.includes(id)) ??
     false;
   const scope = { workspaceId: service.workspaceId, groupId: service.serviceId };
-  const [policy, partners] = await Promise.all([
+  const [policy, partners, programs] = await Promise.all([
     db.prisma.groupLineRoutingPolicy.findUnique({
       where: { workspaceId_groupId_environment: { ...scope, environment } },
       select: { mode: true, pilotEnabled: true },
@@ -39,6 +40,10 @@ export async function loadServiceLineSettings(serviceSlug: string, actorUserId: 
       where: { ...scope, ownerUserId: actorUserId, status: { not: 'ARCHIVED' } },
       select: { id: true, name: true },
       orderBy: { createdAt: 'asc' },
+    }),
+    db.prisma.serviceProgram.findMany({
+      where: { ...scope, status: { in: ['ACTIVE', 'SUSPENDED'] } },
+      select: { settings: true },
     }),
   ]);
   const mode = policy?.mode ?? 'SHARED';
@@ -84,5 +89,8 @@ export async function loadServiceLineSettings(serviceSlug: string, actorUserId: 
     available,
     connected,
     consented,
+    learningService: programs.some((program) => isPersonalLearningPilotProgram(program.settings)),
+    membershipId: membership.id,
+    configurationId: configuration?.id ?? null,
   };
 }
