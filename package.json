@@ -30,6 +30,7 @@
     "db:migrate:dev": "pnpm --filter @bunshin/database db:migrate:dev",
     "db:migrate:deploy": "pnpm --filter @bunshin/database db:migrate:deploy",
     "db:migrate:vercel": "node packages/database/scripts/deploy-migrations-for-vercel.mjs",
+    "db:migration:probe": "node packages/database/scripts/probe-migration-connection.mjs",
     "db:assert-ready": "pnpm --filter @bunshin/database db:assert-ready"
   },
   "devDependencies": {

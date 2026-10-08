@@ -14,3 +14,7 @@ export function runVercelMigration(
   environment?: NodeJS.ProcessEnv,
   execute?: typeof import('./migration-process.mjs').runMigrationProcess,
 ): Promise<number>;
+export function runMigrationConnectionProbe(
+  environment?: NodeJS.ProcessEnv,
+  execute?: typeof import('./migration-process.mjs').runMigrationProcess,
+): Promise<number>;
