@@ -1,6 +1,9 @@
 import { createHash } from 'node:crypto';
 import type { Prisma } from '@prisma/client';
-import { parsePilotParticipantPolicy } from '@bunshin/capability-training';
+import {
+  personalLearningPilotAllows,
+  parsePilotParticipantPolicy,
+} from '@bunshin/capability-training';
 import { ApplicationError } from '@bunshin/shared';
 
 export const pilotParticipantHash = (programId: string, userId: string) =>
@@ -21,17 +24,18 @@ export async function requirePersonalLearningPilotSeat(
     select: { serviceProgramId: true, groupMembershipId: true },
   });
   if (!enrollment) throw new ApplicationError('NOT_FOUND', 'pilot unavailable');
-  const members = await tx.groupMembership.count({
+  const member = await tx.groupMembership.findFirst({
     where: {
       id: enrollment.groupMembershipId,
       workspaceId: scope.workspaceId,
       groupId: scope.groupId,
       userId: scope.userId,
       status: 'ACTIVE',
-      serviceRole: 'PARTICIPANT',
+      serviceRole: { in: ['PARTICIPANT', 'SERVICE_OWNER'] },
     },
   });
-  if (members !== 1) throw new ApplicationError('NOT_FOUND', 'pilot unavailable');
+  if (!member) throw new ApplicationError('NOT_FOUND', 'pilot unavailable');
+  const owner = member.serviceRole === 'SERVICE_OWNER';
   const program = await tx.serviceProgram.findFirst({
     where: {
       id: enrollment.serviceProgramId,
@@ -44,8 +48,18 @@ export async function requirePersonalLearningPilotSeat(
     | { personalLearningPilot?: { participantControl?: unknown; enrollmentIds?: string[] } }
     | undefined;
   const pilot = settings?.personalLearningPilot;
+  // Validate the dedicated learning/notification contract, not a marker alone.
+  // Projection supports stopped Profile preparation without enabling the stored Program.
+  if (
+    owner &&
+    !personalLearningPilotAllows(
+      { ...(program?.settings as object), personalLearningPilot: { ...pilot, enabled: true } },
+      scope.programEnrollmentId,
+    )
+  )
+    throw new ApplicationError('NOT_FOUND', 'internal owner pilot required');
   if (!pilot || !Object.hasOwn(pilot, 'participantControl')) {
-    if (required) throw new ApplicationError('NOT_FOUND', 'pilot seat required');
+    if (required || owner) throw new ApplicationError('NOT_FOUND', 'pilot seat required');
     return;
   }
   const policy = parsePilotParticipantPolicy(pilot.participantControl);
@@ -77,9 +91,22 @@ export async function requirePersonalLearningPilotSeat(
       !s.revokedAt,
   );
   if (!seat) throw new ApplicationError('NOT_FOUND', 'pilot participant unavailable');
+  if (owner && (seat.kind !== 'INTERNAL' || seat.cohort !== 'INTERNAL'))
+    throw new ApplicationError('NOT_FOUND', 'internal owner pilot required');
   // Synchronize revocation with an in-flight authorized transaction.
   const locked = await tx.$queryRaw<
     { id: string }[]
   >`SELECT id FROM personal_learning_pilot_seats WHERE id=${seat.id}::uuid AND revoked_at IS NULL FOR SHARE`;
   if (locked.length !== 1) throw new ApplicationError('NOT_FOUND', 'pilot participant unavailable');
+}
+
+/** Candidate role is not authority: owners must hold their own live INTERNAL Pilot seat. */
+export async function requireTrainingLearnerRole(
+  tx: Prisma.TransactionClient,
+  scope: { workspaceId: string; groupId: string; programEnrollmentId: string; userId: string },
+  role: string,
+) {
+  if (role === 'PARTICIPANT') return;
+  if (role !== 'SERVICE_OWNER') throw new ApplicationError('NOT_FOUND', 'learning unavailable');
+  await requirePersonalLearningPilotSeat(tx, scope, true);
 }

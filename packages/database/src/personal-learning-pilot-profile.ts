@@ -99,7 +99,7 @@ export class PrismaPersonalLearningPilotProfileRepository {
           JOIN groups g ON g.id=m.group_id AND g.workspace_id=m.workspace_id
           JOIN workspaces w ON w.id=g.workspace_id
           WHERE m.workspace_id=${s.workspaceId}::uuid AND m.group_id=${s.groupId}::uuid AND m.user_id=${s.actorUserId}::uuid
-            AND m.status::text='ACTIVE' AND m.service_role::text='PARTICIPANT'
+            AND m.status::text='ACTIVE' AND m.service_role::text IN ('PARTICIPANT','SERVICE_OWNER')
             AND u.status::text='ACTIVE' AND g.status::text='ACTIVE' AND w.status::text='ACTIVE' FOR SHARE OF m,u,g,w`;
           const member = members[0];
           if (!member || members.length !== 1) denied();

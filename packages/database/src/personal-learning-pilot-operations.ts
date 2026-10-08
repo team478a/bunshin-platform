@@ -381,7 +381,7 @@ export class PrismaPersonalLearningPilotOperations {
             { id: string }[]
           >`SELECT m.id FROM group_memberships m JOIN users u ON u.id=m.user_id
             WHERE m.id=${c.groupMembershipId}::uuid AND m.workspace_id=${a.workspaceId}::uuid AND m.group_id=${a.groupId}::uuid
-            AND m.status::text='ACTIVE' AND m.service_role::text='PARTICIPANT' AND u.status::text='ACTIVE' FOR SHARE OF m,u`;
+            AND m.status::text='ACTIVE' AND m.service_role::text IN ('PARTICIPANT','SERVICE_OWNER') AND u.status::text='ACTIVE' FOR SHARE OF m,u`;
           const offerings = await tx.$queryRaw<
             { id: string }[]
           >`SELECT id FROM program_offerings WHERE id=${c.programOfferingId}::uuid AND workspace_id=${a.workspaceId}::uuid AND group_id=${a.groupId}::uuid AND service_program_id=${p.id}::uuid FOR SHARE`;

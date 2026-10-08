@@ -32,10 +32,10 @@ export function createTrainingAnswerEvaluationJobHandler(): TrainingAnswerEvalua
           workspaceId: input.workspaceId,
           groupId: input.groupId,
           userId: input.actorUserId,
-          serviceRole: 'PARTICIPANT',
+          serviceRole: { in: ['PARTICIPANT', 'SERVICE_OWNER'] },
           status: 'ACTIVE',
         },
-        select: { id: true },
+        select: { id: true, serviceRole: true },
       });
       if (!membership) {
         throw new TrainingAnswerEvaluationJobError('TRAINING_EVALUATION_SCOPE_REVOKED', false);
@@ -54,6 +54,26 @@ export function createTrainingAnswerEvaluationJobHandler(): TrainingAnswerEvalua
       });
       if (!enrollment) {
         throw new TrainingAnswerEvaluationJobError('TRAINING_EVALUATION_SCOPE_REVOKED', false);
+      }
+      if (membership.serviceRole === 'SERVICE_OWNER') {
+        try {
+          await db.prisma.$transaction((tx) =>
+            db.requireTrainingLearnerRole(
+              tx,
+              {
+                workspaceId: input.workspaceId,
+                groupId: input.groupId,
+                programEnrollmentId: enrollment.id,
+                userId: input.actorUserId,
+              },
+              membership.serviceRole,
+            ),
+          );
+        } catch (error) {
+          if (error instanceof ApplicationError && error.code === 'NOT_FOUND')
+            throw new TrainingAnswerEvaluationJobError('TRAINING_EVALUATION_SCOPE_REVOKED', false);
+          throw error;
+        }
       }
       const program = await db.prisma.serviceProgram.findFirst({
         where: {

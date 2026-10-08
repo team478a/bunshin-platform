@@ -206,11 +206,17 @@ export class PrismaPersonalLearningParticipantAdminRepository {
             id: enrollment.groupMembershipId,
             workspaceId: a.workspaceId,
             groupId: a.groupId,
-            serviceRole: 'PARTICIPANT',
+            serviceRole: { in: ['PARTICIPANT', 'SERVICE_OWNER'] },
             ...(command.action === 'ADMIT' ? { status: 'ACTIVE' as const } : {}),
           },
         });
         if (!member) throw unavailable();
+        if (
+          command.action === 'ADMIT' &&
+          member.serviceRole === 'SERVICE_OWNER' &&
+          command.kind !== 'INTERNAL'
+        )
+          throw unavailable();
         const hash = pilotParticipantHash(a.serviceProgramId, member.userId);
         const priorSeat = seats.find((s) => s.participantHash === hash);
         if (command.action === 'REVOKE') {

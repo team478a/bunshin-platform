@@ -62,7 +62,7 @@ describe('ended training participant view', () => {
         },
       },
     });
-    fake.member.mockResolvedValue({ id: 'membership' });
+    fake.member.mockResolvedValue({ id: 'membership', serviceRole: 'PARTICIPANT' });
     fake.enrollment.mockResolvedValue({
       serviceProgramId: 'program',
       status: 'COMPLETED',
@@ -157,10 +157,10 @@ describe('ended training participant view', () => {
         workspaceId: 'workspace',
         groupId: 'group',
         userId: 'owner',
-        serviceRole: 'PARTICIPANT',
+        serviceRole: { in: ['PARTICIPANT', 'SERVICE_OWNER'] },
         status: 'ACTIVE',
       },
-      select: { id: true },
+      select: { id: true, serviceRole: true },
     });
     expect(fake.enrollment).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -179,6 +179,11 @@ describe('ended training participant view', () => {
     expect(fake.program).toHaveBeenCalledWith(
       expect.objectContaining({ select: { settings: true, displayName: true } }),
     );
+  });
+  it('does not let an owner enter the legacy V1 path using management role alone', async () => {
+    fake.member.mockResolvedValue({ id: 'membership', serviceRole: 'SERVICE_OWNER' });
+    await expect(renderPage()).rejects.toThrow('NOT_FOUND');
+    expect(fake.current).not.toHaveBeenCalled();
   });
   it.each(['membership', 'enrollment', 'program'])(
     'keeps missing/foreign/revoked %s inaccessible',

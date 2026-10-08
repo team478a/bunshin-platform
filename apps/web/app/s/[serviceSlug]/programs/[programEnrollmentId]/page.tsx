@@ -43,10 +43,10 @@ export default async function ProgramParticipantPage({
       workspaceId: service.workspaceId,
       groupId: service.serviceId,
       userId: actor.userId,
-      serviceRole: 'PARTICIPANT',
+      serviceRole: { in: ['PARTICIPANT', 'SERVICE_OWNER'] },
       status: 'ACTIVE',
     },
-    select: { id: true },
+    select: { id: true, serviceRole: true },
   });
   if (!membership) notFound();
   const enrollment = await db.prisma.programEnrollment.findFirst({
@@ -69,6 +69,12 @@ export default async function ProgramParticipantPage({
     select: { settings: true, displayName: true },
   });
   if (!program) notFound();
+  // Owners are learner candidates only in the dedicated Pilot; its branch rechecks their live INTERNAL seat.
+  if (
+    membership.serviceRole === 'SERVICE_OWNER' &&
+    !isPersonalLearningPilotProgram(program.settings)
+  )
+    notFound();
   const moduleKey =
     typeof program.settings === 'object' &&
     program.settings !== null &&
