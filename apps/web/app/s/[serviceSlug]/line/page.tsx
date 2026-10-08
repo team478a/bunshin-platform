@@ -64,7 +64,12 @@ export default async function ServiceLineSettingsPage({
               LINE接続だけで学習への参加や通知配信は開始しません。学習通知の開始は別途ご案内します。
             </p>
           </section>
-          <Link href={`/s/${slug}/programs` as Route}>学習プログラムへ戻る</Link>
+          <Link
+            className="button button--primary button--full"
+            href={`/s/${slug}/programs` as Route}
+          >
+            学習を始める・続ける
+          </Link>
           <Link href={`/account?service=${slug}` as Route}>アカウントへ戻る</Link>
         </main>
       </PublicShell>

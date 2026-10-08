@@ -36,6 +36,10 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm lint
       - run: pnpm test
+      - run: pnpm exec e2e-web install chromium --with-deps
+      - run: pnpm test:learning-ui
+        env:
+          E2E_TELEMETRY_DISABLED: '1'
       - run: pnpm build
 
   database:
