@@ -37,6 +37,26 @@ SOCIAL Intelligenceを有効にする場合は、Productionだけにserver-only�
 
 ## Deployment Order
 
+### Migration接続だけの確認（Migration / Deployなし）
+
+`pnpm db:migration:probe`は専用入口から同じPrisma CLI / Migration URL / timeout設定を使い、`BEGIN READ ONLY`内の設定検証だけで終了する。成功でも`migrate deploy`、schema変更、migration history更新、App buildへ進まない。通常のVercel build commandは変更しない。
+
+実行前にcredential管理者が、承認された非公開実行環境へ既存Productionの`DATABASE_URL`、`DIRECT_URL`、必要なら`SUPABASE_SESSION_POOLER_HOST`を安全に注入する。画面のsecret表示、chatへの貼付、URLをcommand引数へ埋める、PreviewへのProduction secret複製、Gitへの保存はしない。credentialの取得・注入とこのPRのコード承認は別判断。
+
+同じ実行環境で、値が秘密ではない次の2項目を設定して実行する（PowerShell例）:
+
+```powershell
+$env:VERCEL_ENV = 'production'
+$env:MIGRATION_PROBE_EXPECTED_PROJECT_REF = '<承認済み20文字Supabase project ref>'
+pnpm db:migration:probe
+```
+
+Node 24 / lockfileどおりのPrisma 6.19.3を使用する。probeの対象は`postgres` DB、`postgres` role（poolerでは`postgres.<project ref>`）へ限定し、両URLのproject一致、変換後session poolerのport 5432を接続前に検証する。別role / DB / transaction poolerを推測補正せず拒否する。timeout変数は実Vercelで使用する値と揃え、未設定時は下表の既定値を使う。
+
+期待結果: exit 0と`MIGRATION_CONNECTION_PROBE_PASSED: no migrate deploy started.`。非0なら停止して原因を非公開環境で確認する。原エラー/URL/SQL/子process出力は表示しない。probe専用実行環境へのsecretアクセス手段がなければ、実接続はUNKNOWNのまま残し、通常buildを代用しない。
+
+記録: 実行日時、実行者、code SHA、承認project ref、Prisma版、timeout値、exit / 固定reason、実行環境。ローカルprobe成功はVercel build hostからの到達性証明ではなく、probeとMigrationも別session。backup / pending / checksum / RLS / writer drain / OEM準備 / Migration・Deploy承認の代わりにしない。probeを実行するために本番サービスを停止する必要はない。
+
 ### Migration実行上限（公開前レビュー必須）
 
 `db:migrate:vercel`はproductionだけで、DBセッション設定の非永続probe → `prisma migrate deploy`を実行する。Prisma CLIを直接起動し、DB側の上限と両コマンド合計のprocess期限を分離する。

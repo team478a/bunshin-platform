@@ -3782,3 +3782,10 @@
 - process停止とDB session終了、SQL rollback、全writer drainを同一視しない。部分適用は残り得るため実schema/履歴/sessionを確認し、人間が復旧を判断する。
 - 原エラー・URL・SQL・子process出力は公開build logへ流さず固定reasonを記録する。診断・backup/restore・対象writer停止・pending一覧承認は別Gateとして維持する。
 - 設定上限はDeployment Guideに集約。新機能、schema、migration、Provider、課金、UI、Pilot運用を変更しない。全pendingを適用する既存仕様を、対象限定や本番承認済みとは扱わない。
+
+## 2026-10-08: 実Migration接続の確認をDeployから独立させる
+
+- 状態: Proposed（実装PRレビュー待ち。実接続・Migration・Deployは未実施）
+- 通常runnerはprobe成功後にMigrationへ進むため、確認だけの代用にしない。専用`db:migration:probe`入口を設け、同じPrisma CLI / URL変換 / timeout設定のread-only probe一回で終了する。成功・失敗どちらもMigrationやbuildへ進まない。
+- 確認対象Supabase project ref、両接続URL、postgres DB / role、変換後session poolerの5432を照合し、未知の接続先へ試行しない。secretの取得や配置を自動化せず、値と原エラーをログへ出さない。
+- 稼働中Appの停止はprobeの前提にしない。DB全体/role設定やschema、Vercel build command、料金、Pilotを変更しない。probe成功と本番host到達性、backup、pending、writer drain、本番操作承認は別の証拠とする。

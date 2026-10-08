@@ -60,8 +60,35 @@ export function resolveMigrationDirectUrl(directUrl, sessionPoolerHost) {
   return url.toString();
 }
 
-export async function runVercelMigration(environment = process.env, execute = runMigrationProcess) {
+export function runVercelMigration(environment = process.env, execute = runMigrationProcess) {
+  return runMigration(environment, execute, false);
+}
+
+export function runMigrationConnectionProbe(
+  environment = process.env,
+  execute = runMigrationProcess,
+) {
+  return runMigration(environment, execute, true);
+}
+
+function matchesExpectedProject(connection, projectRef) {
+  const url = new URL(connection);
+  const direct = url.hostname === `db.${projectRef}.supabase.co`;
+  const pooler = url.hostname.endsWith('.pooler.supabase.com');
+  const role = decodeURIComponent(url.username);
+  return (
+    ['postgres:', 'postgresql:'].includes(url.protocol) &&
+    url.pathname === '/postgres' &&
+    ((direct && role === 'postgres') || (pooler && role === `postgres.${projectRef}`))
+  );
+}
+
+async function runMigration(environment, execute, probeOnly) {
   if (environment.VERCEL_ENV !== 'production') {
+    if (probeOnly) {
+      console.error('[database] MIGRATION_PROBE_ENVIRONMENT_INVALID: production context required.');
+      return 1;
+    }
     console.log(
       `[database] Skipping migrations for Vercel environment: ${environment.VERCEL_ENV ?? 'local'}`,
     );
@@ -80,11 +107,31 @@ export async function runVercelMigration(environment = process.env, execute = ru
   let prismaCli;
 
   try {
+    if (probeOnly) {
+      const expectedProject = environment.MIGRATION_PROBE_EXPECTED_PROJECT_REF;
+      if (
+        !/^[a-z0-9]{20}$/.test(expectedProject ?? '') ||
+        !matchesExpectedProject(environment.DATABASE_URL, expectedProject) ||
+        !matchesExpectedProject(environment.DIRECT_URL, expectedProject)
+      ) {
+        throw new Error('MIGRATION_PROBE_TARGET_INVALID');
+      }
+    }
     bounds = resolveMigrationBounds(environment);
     migrationDirectUrl = withMigrationBounds(
       resolveMigrationDirectUrl(environment.DIRECT_URL, environment.SUPABASE_SESSION_POOLER_HOST),
       bounds,
     );
+    if (
+      probeOnly &&
+      (!matchesExpectedProject(
+        migrationDirectUrl,
+        environment.MIGRATION_PROBE_EXPECTED_PROJECT_REF,
+      ) ||
+        new URL(migrationDirectUrl).port !== '5432')
+    ) {
+      throw new Error('MIGRATION_PROBE_TARGET_INVALID');
+    }
     prismaCli = requireModule.resolve('prisma/build/index.js');
   } catch {
     console.error(
@@ -94,7 +141,7 @@ export async function runVercelMigration(environment = process.env, execute = ru
   }
 
   console.log(
-    `[database] Applying production migrations: lock=${bounds.lockTimeoutMs}ms statement=${bounds.statementTimeoutMs}ms process=${bounds.processTimeoutMs}ms.`,
+    `[database] ${probeOnly ? 'Probing migration connection only' : 'Applying production migrations'}: lock=${bounds.lockTimeoutMs}ms statement=${bounds.statementTimeoutMs}ms process=${bounds.processTimeoutMs}ms.`,
   );
   const childEnvironment = {
     ...environment,
@@ -113,12 +160,15 @@ export async function runVercelMigration(environment = process.env, execute = ru
         cwd: new URL('../', import.meta.url),
         env: childEnvironment,
         timeoutMs: bounds.processTimeoutMs,
-        input: `DO $$ BEGIN
+        input: `BEGIN READ ONLY;
+      DO $$ BEGIN
+        ${probeOnly ? "IF current_database() <> 'postgres' OR current_user <> 'postgres' THEN RAISE EXCEPTION 'MIGRATION_PROBE_IDENTITY_MISMATCH'; END IF;" : ''}
         IF current_setting('lock_timeout')::interval <> interval '${bounds.lockTimeoutMs} milliseconds'
            OR current_setting('statement_timeout')::interval <> interval '${bounds.statementTimeoutMs} milliseconds'
            OR current_setting('idle_in_transaction_session_timeout')::interval <> interval '${bounds.statementTimeoutMs} milliseconds'
         THEN RAISE EXCEPTION 'MIGRATION_BOUNDS_NOT_ACTIVE'; END IF;
-      END $$;`,
+      END $$;
+      COMMIT;`,
       },
     );
     const remainingMs = Math.floor(bounds.processTimeoutMs - (performance.now() - startedAt));
@@ -127,6 +177,10 @@ export async function runVercelMigration(environment = process.env, execute = ru
         '[database] MIGRATION_PREFLIGHT_FAILED: no migrate deploy started. Verify connection settings and DB sessions before retry.',
       );
       return 1;
+    }
+    if (probeOnly) {
+      console.log('[database] MIGRATION_CONNECTION_PROBE_PASSED: no migrate deploy started.');
+      return 0;
     }
     // Direct CLI avoids a package-manager shell between this runner and the Prisma engine.
     result = await execute(process.execPath, [prismaCli, 'migrate', 'deploy'], {
