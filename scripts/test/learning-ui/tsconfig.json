@@ -1,0 +1,17 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "noEmit": true,
+    "types": ["node"],
+    "paths": {
+      "react": ["../../../apps/web/node_modules/@types/react"],
+      "react/*": ["../../../apps/web/node_modules/@types/react/*"],
+      "react-dom/*": ["../../../apps/web/node_modules/@types/react-dom/*"],
+      "@bunshin/application": ["../../../packages/application/src/index.ts"],
+      "@bunshin/capability-training": ["../../../packages/capability-training/src/index.ts"]
+    }
+  },
+  "include": ["*.ts", "*.tsx"],
+  "exclude": [".e2e", "node_modules"]
+}

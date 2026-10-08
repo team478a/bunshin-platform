@@ -15,16 +15,19 @@
     }
   },
   "scripts": {
+    "test:learning-ui": "e2e run --config scripts/test/learning-ui/e2e.config.ts",
     "architecture:check": "node scripts/check-architecture-boundaries.mjs",
     "build": "turbo run build",
     "dev": "turbo run dev --parallel",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "lint": "pnpm architecture:check && turbo run lint",
+    "lint": "pnpm architecture:check && turbo run lint && pnpm lint:learning-ui",
+    "lint:learning-ui": "eslint scripts/test/learning-ui/*.ts scripts/test/learning-ui/*.tsx",
     "test": "pnpm test:architecture && turbo run test",
     "test:architecture": "node --test scripts/test/architecture-boundaries.test.mjs",
     "test:integration": "pnpm --filter @bunshin/database test:integration",
-    "typecheck": "turbo run typecheck",
+    "typecheck": "turbo run typecheck && pnpm typecheck:learning-ui",
+    "typecheck:learning-ui": "tsc -p scripts/test/learning-ui/tsconfig.json --noEmit",
     "db:generate": "pnpm --filter @bunshin/database db:generate",
     "db:validate": "pnpm --filter @bunshin/database db:validate",
     "db:migrate:dev": "pnpm --filter @bunshin/database db:migrate:dev",
@@ -34,8 +37,10 @@
     "db:assert-ready": "pnpm --filter @bunshin/database db:assert-ready"
   },
   "devDependencies": {
+    "@e2e-dev/web": "0.13.0",
     "@eslint/js": "^9.39.5",
     "@types/node": "^24.10.0",
+    "e2e": "0.18.0",
     "eslint": "^9.39.5",
     "eslint-config-prettier": "^10.1.8",
     "globals": "^16.5.0",
@@ -43,6 +48,7 @@
     "turbo": "2.10.10",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.46.2",
+    "vite": "8.2.1",
     "vitest": "^4.1.0"
   }
 }
