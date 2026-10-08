@@ -1,5 +1,13 @@
 # BUNSHIN Platform Decision Log
 
+## 2026-10-09: 内部テスター準備UIは停止中の本人に限定する
+
+- 状態: Proposed（PRレビュー待ち。本番操作は未実施）
+- 既存Program準備画面へSERVICE_OWNER本人だけの内部人数設定・Enrollment準備・INTERNAL Seat付与を追加する。対象IDは認証済みserver projectionから取得し、手入力で他参加者を選ばない。
+- 新しいGETは既存authority/停止中Repository認可で限定読取し、変更は既存CONFIGURE/PREPARE_ENROLLMENT/ADMIT APIへ分離する。初回人数は未選択、Wave 0のみ。既存人数設定をこの画面で上書きしない。
+- 各段階に人間確認とreview evidenceを要求する。通信結果不明は同じoperation UUID/bodyの再送に限定し、新規操作へ進まない。準備完了は学習開始承認ではない。
+- Profile代入、START/STOP、Definition承認、Provider呼出し、DB schema/migration、LINE/V1変更、本番deployを含めない。
+
 ## 2026-10-09: 所有者の内部学習は本人INTERNAL Seatで限定認可する
 
 - 同じログインアカウントで内部テストする人間承認に基づく最小修正。SERVICE_OWNERをPARTICIPANTへ降格せず、Membershipの二重作成もしない。

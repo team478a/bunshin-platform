@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 const f = vi.hoisted(() => ({ actor: vi.fn(), service: vi.fn(), target: vi.fn() }));
 vi.mock('next/navigation', () => ({
@@ -22,6 +22,7 @@ vi.mock('../app/ui/public-shell', () => ({
 import Page from '../app/s/[serviceSlug]/manage/programs/personal-learning-preparation/page';
 const props = { params: Promise.resolve({ serviceSlug: 'test' }) };
 describe('Program preparation server page', () => {
+  afterEach(() => vi.unstubAllEnvs());
   beforeEach(() => {
     vi.resetAllMocks();
     f.actor.mockResolvedValue({ userId: 'actor' });
@@ -50,5 +51,26 @@ describe('Program preparation server page', () => {
     expect(html).toContain('33333333-3333-4333-8333-333333333333');
     expect(html).toContain('現在の状態を確認');
     expect(html).not.toContain('停止状態で作成</button>');
+  });
+  it('shows own internal preparation only to SERVICE_OWNER with its preparation flag', async () => {
+    f.target.mockReturnValue('33333333-3333-4333-8333-333333333333');
+    vi.stubEnv('PERSONAL_LEARNING_PARTICIPANT_PREPARATION', 'true');
+    f.service.mockResolvedValue({
+      workspaceId: 'workspace',
+      serviceId: 'service',
+      serviceRole: 'SERVICE_OWNER',
+    });
+    expect(renderToStaticMarkup(await Page(props))).toContain('内部テスターとして本人を準備');
+    for (const serviceRole of ['SERVICE_ADMIN', 'CONTENT_EDITOR', 'PARTICIPANT']) {
+      f.service.mockResolvedValue({ workspaceId: 'workspace', serviceId: 'service', serviceRole });
+      expect(renderToStaticMarkup(await Page(props))).not.toContain('内部テスターとして本人を準備');
+    }
+    f.service.mockResolvedValue({
+      workspaceId: 'workspace',
+      serviceId: 'service',
+      serviceRole: 'SERVICE_OWNER',
+    });
+    vi.stubEnv('PERSONAL_LEARNING_PARTICIPANT_PREPARATION', 'false');
+    expect(renderToStaticMarkup(await Page(props))).not.toContain('内部テスターとして本人を準備');
   });
 });

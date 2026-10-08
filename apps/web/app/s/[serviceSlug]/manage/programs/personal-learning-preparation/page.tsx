@@ -4,6 +4,7 @@ import { resolveManagedServiceContext } from '../../../../../../src/services/pub
 import { programPreparationTarget } from '../../../../../../src/services/personal-learning-program-preparation';
 import { PublicShell } from '../../../../../ui/public-shell';
 import { ProgramPreparationCard } from './card';
+import { InternalPreparationCard } from './internal-card';
 
 export const dynamic = 'force-dynamic';
 export default async function ProgramPreparationPage({
@@ -41,6 +42,11 @@ export default async function ProgramPreparationPage({
             </p>
           </section>
         )}
+        {programId &&
+          service.serviceRole === 'SERVICE_OWNER' &&
+          process.env['PERSONAL_LEARNING_PARTICIPANT_PREPARATION'] === 'true' && (
+            <InternalPreparationCard serviceSlug={serviceSlug} />
+          )}
       </main>
     </PublicShell>
   );
