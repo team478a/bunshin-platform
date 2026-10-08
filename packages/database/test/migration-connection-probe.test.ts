@@ -2,7 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { runMigrationConnectionProbe } from '../scripts/deploy-migrations-for-vercel.mjs';
-import { runMigrationProcess } from '../scripts/migration-process.mjs';
+import type { runMigrationProcess } from '../scripts/migration-process.mjs';
 import type { MigrationProcessResult } from '../scripts/migration-process.mjs';
 
 const project = 'abcdefghijklmnopqrst';
