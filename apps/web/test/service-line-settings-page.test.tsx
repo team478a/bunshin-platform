@@ -23,7 +23,10 @@ vi.mock('../app/ui/public-shell', () => ({
 import ServiceLineSettingsPage from '../app/s/[serviceSlug]/line/page';
 const render = async () =>
   renderToStaticMarkup(
-    await ServiceLineSettingsPage({ params: Promise.resolve({ serviceSlug: 'service-a' }) }),
+    await ServiceLineSettingsPage({
+      params: Promise.resolve({ serviceSlug: 'service-a' }),
+      searchParams: Promise.resolve({}),
+    }),
   );
 describe('LINE connection entry page', () => {
   beforeEach(() => {
@@ -72,4 +75,30 @@ describe('LINE connection entry page', () => {
     await expect(render()).rejects.toThrow('REDIRECT:/login?returnTo=%2Fs%2Fservice-a%2Fline');
     expect(mocks.settings).not.toHaveBeenCalled();
   });
+  it('offers explicit learner consent without a posting partner', async () => {
+    mocks.settings.mockResolvedValue({
+      ...(await mocks.settings()),
+      learningService: true,
+      partners: [],
+    });
+    const html = await render();
+    expect(html).toContain('学習用LINEの接続');
+    expect(html).toContain('name="linkTarget" value="LEARNING_MEMBER"');
+    expect(html).toContain('name="consent"');
+    expect(html).not.toContain('name="bunshinId"');
+    expect(html).not.toContain('投稿パートナーを作る');
+    expect(html).not.toContain('動画');
+    expect(html).toContain('学習への参加や通知配信は開始しません');
+  });
+  it.each(['available', 'consented'])(
+    'does not offer the learner OAuth form without %s',
+    async (field) => {
+      mocks.settings.mockResolvedValue({
+        ...(await mocks.settings()),
+        learningService: true,
+        [field]: false,
+      });
+      expect(await render()).not.toContain('name="linkTarget"');
+    },
+  );
 });

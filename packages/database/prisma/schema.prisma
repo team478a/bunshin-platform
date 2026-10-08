@@ -8099,7 +8099,8 @@ model VideoNarration {
 model ServiceLineLinkAttempt {
   stateHash String @id @map("state_hash") @db.Char(64)
   actorUserId String @map("actor_user_id") @db.Uuid
-  bunshinId String @map("bunshin_id") @db.Uuid
+  // null identifies a service-member learning connection, not a fabricated Bunshin.
+  bunshinId String? @map("bunshin_id") @db.Uuid
   configurationId String @map("configuration_id") @db.Uuid
   serviceSlug String @map("service_slug") @db.VarChar(80)
   nonce String @db.VarChar(64)

@@ -12,6 +12,8 @@ export interface GroupLineConnectionRepository {
     actorUserId: string;
     verifiedProviderUserId: string;
     consentGranted: boolean;
+    /** Learning connections never take a destination away from another participant. */
+    rejectDestinationTransfer?: boolean;
   }): Promise<boolean>;
   applyWebhook(input: {
     environment: LineConfigurationEnvironment;
