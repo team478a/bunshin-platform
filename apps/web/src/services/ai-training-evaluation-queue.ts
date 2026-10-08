@@ -35,9 +35,9 @@ export async function enqueueAiTrainingEvaluation(input: {
         groupId: input.groupId,
         userId: input.actorUserId,
         status: 'ACTIVE',
-        serviceRole: 'PARTICIPANT',
+        serviceRole: { in: ['PARTICIPANT', 'SERVICE_OWNER'] },
       },
-      select: { id: true },
+      select: { id: true, serviceRole: true },
     });
     if (!membership) throw new ApplicationError('NOT_FOUND', 'training participant unavailable');
     const enrollment = await tx.programEnrollment.findFirst({
@@ -52,6 +52,17 @@ export async function enqueueAiTrainingEvaluation(input: {
       select: { id: true, serviceProgramId: true },
     });
     if (!enrollment) throw new ApplicationError('NOT_FOUND', 'training enrollment unavailable');
+    if (membership.serviceRole === 'SERVICE_OWNER')
+      await db.requireTrainingLearnerRole(
+        tx,
+        {
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          programEnrollmentId: input.enrollmentId,
+          userId: input.actorUserId,
+        },
+        membership.serviceRole,
+      );
     const program = await tx.serviceProgram.findFirst({
       where: {
         id: enrollment.serviceProgramId,

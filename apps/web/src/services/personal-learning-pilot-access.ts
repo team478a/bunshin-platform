@@ -46,10 +46,10 @@ export async function resolvePersonalLearningPilot(
       workspaceId: service.workspaceId,
       groupId: service.serviceId,
       userId,
-      serviceRole: 'PARTICIPANT',
+      serviceRole: { in: ['PARTICIPANT', 'SERVICE_OWNER'] },
       status: 'ACTIVE',
     },
-    select: { id: true },
+    select: { id: true, serviceRole: true },
   });
   if (!membership) throw new ApplicationError('NOT_FOUND', 'pilot unavailable');
   const scope = {
@@ -82,6 +82,7 @@ export async function resolvePersonalLearningPilot(
   if (!program || !personalLearningPilotExecutionAllowed(program.settings, enrollmentId, true))
     throw new ApplicationError('NOT_FOUND', 'pilot unavailable');
   if (
+    membership.serviceRole === 'SERVICE_OWNER' ||
     getServerEnvironment().APP_ENV === 'production' ||
     parsePilotParticipantPolicy(
       (program.settings as { personalLearningPilot?: { participantControl?: unknown } })

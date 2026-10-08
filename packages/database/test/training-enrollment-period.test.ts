@@ -18,7 +18,9 @@ const scope = {
 function fixture() {
   const tx = {
     $queryRaw: vi.fn().mockResolvedValue([]),
-    groupMembership: { findFirst: vi.fn().mockResolvedValue({ id: 'membership' }) },
+    groupMembership: {
+      findFirst: vi.fn().mockResolvedValue({ id: 'membership', serviceRole: 'PARTICIPANT' }),
+    },
     programEnrollment: { findFirst: vi.fn().mockResolvedValue(null) },
     serviceProgram: { findFirst: vi.fn().mockResolvedValue({ id: 'program' }) },
     programActionEvent: { findUnique: vi.fn().mockResolvedValue(null), create: vi.fn() },

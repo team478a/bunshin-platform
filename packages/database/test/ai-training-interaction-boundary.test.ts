@@ -8,7 +8,11 @@ describe('AI training interaction boundary', () => {
     expect(source).toContain('workspaceId: input.workspaceId');
     expect(source).toContain('groupId: input.groupId');
     expect(source).toContain('userId: input.actorUserId');
-    expect(source).toContain("serviceRole: 'PARTICIPANT'");
+    expect(source).toContain("serviceRole: { in: ['PARTICIPANT', 'SERVICE_OWNER'] }");
+    expect(source).toContain('await requireTrainingLearnerRole(');
+    expect(source.indexOf('await requireTrainingLearnerRole(')).toBeLessThan(
+      source.indexOf('await tx.programActionEvent.create(', source.indexOf('async record(')),
+    );
     expect(source).toContain('groupMembershipId: membership.id');
     expect(source).toContain('programEnrollmentId: enrollment.id');
     expect(source).toContain("actionMode: 'WORK'");

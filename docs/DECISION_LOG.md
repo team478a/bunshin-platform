@@ -1,5 +1,13 @@
 # BUNSHIN Platform Decision Log
 
+## 2026-10-09: 所有者の内部学習は本人INTERNAL Seatで限定認可する
+
+- 同じログインアカウントで内部テストする人間承認に基づく最小修正。SERVICE_OWNERをPARTICIPANTへ降格せず、Membershipの二重作成もしない。
+- 所有者の学習は専用Personal Learning Program・本人Enrollment・有効INTERNAL/cohort INTERNAL Seat・台帳/allowlist/人数制約の一致を必須とする。管理ロールだけでは学習できず、EXTERNAL Seatや旧V1のallowlist-only互換経路を認可根拠にしない。
+- 停止中の本人Profile準備と実行時の認可を区別する。準備時の契約projectionは保存設定を有効化しない。実行flag、Program状態、Definition承認、Provider直前認可・Call Admissionは既存Gateを維持する。
+- trusted PREPARE_ENROLLMENT / ADMITのみ所有者本人を候補として扱う。他管理ロール・他User・他Enrollmentのアクセスや旧V1/LINE Schedulerは拡張しない。
+- schema/migration/Provider設定変更なし。実装は本番deploy、Seat付与、Profile回答、Definition承認、START、実課金の承認ではない。[実装報告](ai-training/MANABERU_STYLE_INTERNAL_OWNER_LEARNING_IMPLEMENTATION.md)を参照。
+
 ## 2026-10-07: OEM課金人数を正式登録と無料実利用の和集合へ分離する
 
 - 人間が承認したOEM Billing指示に基づく独立PR。提供区分FREE/PAID/PAID_BUNDLEを決済方式から分離し、Workspaceごとの課金人数をR∪Aで算出する。MAUは実利用指標として維持する。

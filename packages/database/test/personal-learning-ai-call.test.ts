@@ -43,7 +43,9 @@ function fixture() {
       findFirst: vi.fn().mockResolvedValue({ settings: { personalLearningPilot: {} } }),
     },
     $queryRaw: vi.fn(),
-    groupMembership: { findFirst: vi.fn().mockResolvedValue({ id: 'member' }) },
+    groupMembership: {
+      findFirst: vi.fn().mockResolvedValue({ id: 'member', serviceRole: 'PARTICIPANT' }),
+    },
     programEnrollment: {
       findFirst: vi.fn().mockResolvedValue({
         serviceProgramId: 'program',

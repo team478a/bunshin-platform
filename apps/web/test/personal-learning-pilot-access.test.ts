@@ -5,10 +5,14 @@ const f = vi.hoisted(() => ({
   membership: vi.fn(),
   enrollment: vi.fn(),
   program: vi.fn(),
+  authorize: vi.fn(),
 }));
 vi.mock('@bunshin/config', () => ({ getServerEnvironment: () => ({ APP_ENV: f.environment }) }));
 vi.mock('../src/services/public-service', () => ({ resolveMemberServiceContext: f.service }));
 vi.mock('@bunshin/database', () => ({
+  PrismaPersonalLearningPilotRepository: class {
+    authorizeAccess = f.authorize;
+  },
   prisma: {
     groupMembership: { findFirst: f.membership },
     programEnrollment: { findFirst: f.enrollment },
@@ -56,7 +60,7 @@ describe('pilot server identity and exposure gate', () => {
     });
     expect(f.membership.mock.calls[0]?.[0].where).toMatchObject({
       userId: 'owner',
-      serviceRole: 'PARTICIPANT',
+      serviceRole: { in: ['PARTICIPANT', 'SERVICE_OWNER'] },
       status: 'ACTIVE',
     });
   });
@@ -68,6 +72,26 @@ describe('pilot server identity and exposure gate', () => {
     vi.stubEnv('PERSONAL_LEARNING_PILOT', 'false');
     await expect(resolvePersonalLearningPilot('slug', enrollmentId, 'owner')).rejects.toThrow();
     expect(f.service).not.toHaveBeenCalled();
+  });
+  it('requires live repository seat authorization for owners even outside production', async () => {
+    f.membership.mockResolvedValue({ id: 'member', serviceRole: 'SERVICE_OWNER' });
+    f.authorize.mockRejectedValue(new Error('missing internal seat'));
+    await expect(resolvePersonalLearningPilot('slug', enrollmentId, 'owner')).rejects.toThrow(
+      'missing internal seat',
+    );
+    expect(f.authorize).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorUserId: 'owner',
+        scope: expect.objectContaining({ userId: 'owner', groupMembershipId: 'member' }),
+      }),
+      false,
+    );
+    f.authorize.mockResolvedValue(true);
+    await expect(
+      resolvePersonalLearningPilot('slug', enrollmentId, 'owner'),
+    ).resolves.toMatchObject({ actorUserId: 'owner' });
+    vi.stubEnv('PERSONAL_LEARNING_PILOT', 'false');
+    await expect(resolvePersonalLearningPilot('slug', enrollmentId, 'owner')).rejects.toThrow();
   });
   it('requires two explicit production flags and never treats an expected Pilot as legacy', () => {
     f.environment = 'production';

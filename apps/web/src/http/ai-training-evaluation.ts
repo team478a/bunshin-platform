@@ -45,12 +45,25 @@ async function resolveScopedAnswer(
       workspaceId: service.workspaceId,
       groupId: service.serviceId,
       userId: actor.userId,
-      serviceRole: 'PARTICIPANT',
+      serviceRole: { in: ['PARTICIPANT', 'SERVICE_OWNER'] },
       status: 'ACTIVE',
     },
-    select: { id: true },
+    select: { id: true, serviceRole: true },
   });
   if (!membership) throw new ApplicationError('NOT_FOUND', 'training answer not found');
+  if (membership.serviceRole === 'SERVICE_OWNER')
+    await db.prisma.$transaction((tx) =>
+      db.requireTrainingLearnerRole(
+        tx,
+        {
+          workspaceId: service.workspaceId,
+          groupId: service.serviceId,
+          programEnrollmentId: enrollmentId,
+          userId: actor.userId,
+        },
+        membership.serviceRole,
+      ),
+    );
   const enrollment = await db.prisma.programEnrollment.findFirst({
     where: {
       id: enrollmentId,

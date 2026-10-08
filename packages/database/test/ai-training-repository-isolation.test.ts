@@ -54,7 +54,7 @@ describe('AI training repository isolation', () => {
         workspaceId: scope.workspaceId,
         groupId: scope.groupId,
         userId: scope.actorUserId,
-        serviceRole: 'PARTICIPANT',
+        serviceRole: { in: ['PARTICIPANT', 'SERVICE_OWNER'] },
         status: 'ACTIVE',
       },
     });

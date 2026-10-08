@@ -25,6 +25,7 @@ import {
 } from '@bunshin/capability-training';
 import { lockTrainingEnrollmentData } from './training-data-lock';
 import { trainingEnrollmentPeriodWhere } from './training-enrollment-period';
+import { requireTrainingLearnerRole } from './personal-learning-pilot-seat';
 
 type Tx = Prisma.TransactionClient;
 type Confirmation = Prisma.PersonalLearningGoalConfirmationGetPayload<{ include: { goal: true } }>;
@@ -71,16 +72,17 @@ export class PrismaPersonalLearningPersistenceRepository implements PersonalLear
       return await this.client.$transaction(
         async (tx) => {
           await lockTrainingEnrollmentData(tx, { ...s, actorUserId: input.actorUserId });
-          const members = await tx.$queryRaw<{ id: string }[]>`
-          SELECT m.id FROM group_memberships m JOIN users u ON u.id=m.user_id
+          const members = await tx.$queryRaw<{ id: string; serviceRole: string }[]>`
+          SELECT m.id, m.service_role::text AS "serviceRole" FROM group_memberships m JOIN users u ON u.id=m.user_id
           JOIN groups g ON g.id=m.group_id JOIN workspaces w ON w.id=g.workspace_id
           WHERE m.id=${s.groupMembershipId}::uuid AND m.workspace_id=${s.workspaceId}::uuid
             AND m.group_id=${s.groupId}::uuid AND m.user_id=${s.userId}::uuid
             AND g.workspace_id=${s.workspaceId}::uuid
-            AND m.status::text='ACTIVE' AND m.service_role::text='PARTICIPANT'
+            AND m.status::text='ACTIVE' AND m.service_role::text IN ('PARTICIPANT','SERVICE_OWNER')
             AND u.status::text='ACTIVE' AND g.status::text='ACTIVE' AND w.status::text='ACTIVE'
           FOR SHARE OF m,u,g,w`;
           if (members.length !== 1) denied();
+          await requireTrainingLearnerRole(tx, s, members[0]!.serviceRole);
           const now = this.now();
           const enrollment = await tx.programEnrollment.findFirst({
             where: {
