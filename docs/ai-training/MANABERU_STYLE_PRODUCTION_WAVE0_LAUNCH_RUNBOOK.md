@@ -179,7 +179,7 @@ ProgramDefinitionの必須phase表示範囲・schedule/cadenceは既存schemaを
 
 ## Phase F — Internal Participant Preparation
 
-1. 本人同意と内部1〜2人の非公開名簿、ACTIVE User/Workspace、専用ServiceのACTIVE PARTICIPANT Membershipを確認。管理者を本人の代用にしない。
+1. 本人同意と内部1〜2人の非公開名簿、ACTIVE User/Workspace、専用ServiceのACTIVE PARTICIPANT Membershipを確認。所有者本人も内部テスターになる場合のみ、ACTIVE SERVICE_OWNERを維持し、下記の本人EnrollmentとINTERNAL/cohort INTERNAL Seatを明示付与する。管理権限だけでは学習不可。降格・二重Membership・別人のProfile代入は行わない。例外の実装・回帰根拠は[所有者内部学習実装報告](MANABERU_STYLE_INTERNAL_OWNER_LEARNING_IMPLEMENTATION.md)を参照し、対象releaseへの反映を別途確認する。
 2. 新規ServiceはPhase EのCREATE_PROGRAMで期限なし専用Programを直接準備し、下記CONFIGUREを先に行う。既存の空Programの場合だけ互換INITIALIZEを検討。その後GETの最新stateTokenでPREPARE_ENROLLMENTを送る。管理者session、groupMembershipId/receiptのprogramOfferingIdを検証し、SUSPENDEDのままGUIDED Enrollmentを準備する。Goalは空、startsAtはserver設定、固定終了期限は設定しない。Seatはまだ付与しない。
 3. 従来のACTIVE専用Enrollment APIは変更しない。PilotでACTIVE↔SUSPENDEDを一時切替して登録する手順は採用しない。旧V1 setup/期間延長/30日V1変換なし。具体例は運用操作実装報告を参照。
 4. 停止状態で `GET /api/services/{serviceSlug}/ai-training/pilot-participants`。data.policy/seats、累計INTERNAL/EXTERNAL、revoked含むを確認。初回空台帳/allowlist、expectedRevision=0を確認。
