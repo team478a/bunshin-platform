@@ -2,6 +2,12 @@
 
 ## 状態・対象・承認境界
 
+### 2026-10-09 本人内部テスター準備UI（未本番反映）
+
+SERVICE_OWNER本人を内部テスターにする最小操作は、`/s/{serviceSlug}/manage/programs/personal-learning-preparation`へ追加する。詳細は[内部テスター準備UI](MANABERU_STYLE_INTERNAL_TESTER_PREPARATION_UI_IMPLEMENTATION.md)。本記載は実登録/本番deploy/STARTの証拠・承認ではない。
+
+停止中の専用Programと両実行flag OFF、既存operations/participant preparation flag・固定authorityが必要。「本人の準備状態を確認」→ 初回だけ内部上限1〜2を明示選択・確認 → CONFIGURE → 状態再確認 → 本人Enrollment準備 → 状態再確認 → INTERNAL参加権付与 → 状態再確認 → 本人Profile準備画面の順。各段階で人間レビュー証跡・本人対象確認をやり直す。稼働中、失効、不正/複数Offering、既存人数設定の修復、START/承認はこの画面で行わない。本文・secretの入力/手動SQLによる迂回を禁止する。
+
 ### 2026-10-08 学習導線照合（最新の限定観測）
 
 Vercelの実公開SHAは`24afc8a170097741844e068653b191bc822b1c2e`（#1180）。本番に期限なしPersonal Learning Programがあり、画面上の参加中は0人。main #1181の本人LINE接続は未公開。以下の2026-10-07公開SHA/DB状態は歴史的記録であり、現在のPASS/PENDING判定に流用しない。
