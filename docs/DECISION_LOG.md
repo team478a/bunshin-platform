@@ -3765,3 +3765,12 @@
 - settings/statusのstate tokenと運用revisionによるCAS、Program lock、同actor/operation digestの冪等性、既存Auditを同transactionで扱う。STOPだけはstale tokenでも最新状態を停止可能とし、再開や設定の上書きをしない。
 - STOPは実行flagがONでも使える独立操作。専用marker・通知隔離・Seat・Goal・Plan・履歴を保持する。送信済みcallを取消したとは扱わず、drainは常に別確認とする。
 - schema、migration、Provider、UI、LINE、V1 Runtimeは変更しない。本番での操作、Definition承認、参加者登録、課金、Wave拡大は実行しない。
+
+## 2026-10-08: DB credential rotationは現在のProductionコードの専用リリースへ分離する
+
+- 状態: Proposed（専用PRの作成のみ承認。本番変更・merge・Deployは未承認）
+- 基準は最後に確認したProduction SHA `4e2bc01eb0bb1181bcd967d3324c30448ebfaa72`。最新mainのOEM機能・未適用migrationを混在させない。
+- 本専用releaseだけVercel buildからMigration実行を除き、既存のread-only schema readiness gateと同じApplication buildを維持する。schema mismatchを無視せず停止する。ignore/cacheによる接続設定の更新漏れを防ぐ。
+- production向けDraft PRのmergeはGit連携Deployを開始するため、通常の「マージしました」運用で先行mergeしない。credential rotation、停止/drain、承認済みrelease、復旧を一つの人間承認された作業窓で行う。
+- 古いDeploymentの環境変数は更新されない。旧passwordが不明なため単純rollbackを復旧手段とせず、新credentialで同じ基準コードを再buildする。DB restoreでpasswordが戻ると推測しない。
+- 本番schema/データ、Migration history、Runtime、Cron定義、Provider、Pilot設定は変更しない。通常feature releaseではmainのMigration付きbuildへ戻すことを必須とする。
