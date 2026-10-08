@@ -5,13 +5,16 @@ import { currentUserProvider } from '../../../../src/auth/current-user';
 import { isRouteNotFound } from '../../../../src/navigation/route-not-found';
 import { loadServiceLineSettings } from '../../../../src/services/service-line-settings';
 import { PublicShell } from '../../../ui/public-shell';
+import { LineConnectionForm } from '../bunshins/[bunshinId]/line/line-connection-form';
 
 export const dynamic = 'force-dynamic';
 
 export default async function ServiceLineSettingsPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ serviceSlug: string }>;
+  searchParams: Promise<{ lineResult?: string }>;
 }) {
   const { serviceSlug } = await params;
   const actor = await (await currentUserProvider()).getCurrentUser();
@@ -24,6 +27,54 @@ export default async function ServiceLineSettingsPage({
   );
   const { service, mode, partners, available, connected, consented } = settings;
   const slug = service.configuration.slug;
+  if (settings.learningService) {
+    const result = (await searchParams).lineResult;
+    const ready = mode === 'DEDICATED' && available && consented;
+    return (
+      <PublicShell showPlatformBrand={false}>
+        <main className="app-page line-link-page">
+          <header className="app-page__heading">
+            <p className="eyebrow">{service.configuration.displayName}</p>
+            <h1>学習用LINEの接続</h1>
+            <p>
+              現在のアカウントに、このサービスの公式LINEを接続します。投稿パートナーの作成は不要です。
+            </p>
+          </header>
+          <section className="settings-card form-stack">
+            {result === 'follow-required' ? (
+              <p role="status">公式LINEを友だち追加してから、もう一度接続を確認してください。</p>
+            ) : result && result !== 'connected' ? (
+              <p role="alert">
+                LINE接続を完了できませんでした。この画面からもう一度お試しください。繰り返す場合は運営者へお問い合わせください。
+              </p>
+            ) : null}
+            {!consented ? (
+              <>
+                <p>サービスへの参加同意を確認してください。</p>
+                <Link href={`/s/${slug}/legal-consent` as Route}>利用規約などを確認する</Link>
+              </>
+            ) : !ready ? (
+              <p role="status">現在、学習用LINEへ接続できません。運営者へお問い合わせください。</p>
+            ) : connected ? (
+              <p role="status">公式LINEへの接続と友だち追加を確認しました。</p>
+            ) : (
+              <LineConnectionForm serviceSlug={slug} />
+            )}
+            <p>
+              LINE接続だけで学習への参加や通知配信は開始しません。学習通知の開始は別途ご案内します。
+            </p>
+          </section>
+          <Link
+            className="button button--primary button--full"
+            href={`/s/${slug}/programs` as Route}
+          >
+            学習を始める・続ける
+          </Link>
+          <Link href={`/account?service=${slug}` as Route}>アカウントへ戻る</Link>
+        </main>
+      </PublicShell>
+    );
+  }
   return (
     <PublicShell showPlatformBrand={false}>
       <main className="app-page line-link-page">

@@ -19,6 +19,10 @@ import type {
 } from './ai-training-types';
 import { AiTrainingMissionCard } from './ai-training-mission-card';
 import { AiTrainingEvaluationCard } from './ai-training-evaluation-card';
+import {
+  observeTrainingEvaluation,
+  type EvaluationObservation,
+} from '../../../../../src/services/training-evaluation-observer';
 
 const titles: Record<string, string> = {
   PROMPT_STRUCTURE: 'AIへの指示の基本構造',
@@ -67,7 +71,13 @@ export function PersonalLearningPilotCard({
   const [consultation, setConsultation] = useState<LearningConsultationResult | null>(null);
   const [router, setRouter] = useState<LearningRouterResult | null>(null);
   const [answer, setAnswer] = useState('');
-  const [evaluation, setEvaluation] = useState<TrainingEvaluation | null>(null);
+  const [evaluationView, setEvaluationView] = useState<{
+    identity: string;
+    result: EvaluationObservation<TrainingEvaluation> | null;
+    waiting: boolean;
+    failedRead: boolean;
+  } | null>(null);
+  const [evaluationRefresh, setEvaluationRefresh] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [hint, setHint] = useState(false);
@@ -128,6 +138,74 @@ export function PersonalLearningPilotCard({
   const current = snapshot?.state.plans.find((row) => row.isCurrent && row.goalActive);
   const goal = snapshot?.state.goals.find((row) => row.reference.reference.status === 'ACTIVE');
   const action = snapshot?.assignment;
+  const planCompleted = router?.status === 'PLAN_COMPLETED' || action?.planCompleted === true;
+  const answerId = action?.submission?.answerId;
+  const evaluationIdentity =
+    answerId && !planCompleted ? `${base}/${action?.id}/${answerId}` : null;
+  const observed = evaluationView?.identity === evaluationIdentity ? evaluationView : null;
+  const evaluation = observed?.result?.status === 'READY' ? observed.result.evaluation : null;
+  useEffect(() => {
+    if (!answerId || !evaluationIdentity) return;
+    const controller = new AbortController();
+    void observeTrainingEvaluation<TrainingEvaluation>({
+      signal: controller.signal,
+      read: async (signal) => {
+        const response = await fetch(`${base}/answers/${answerId}/evaluate`, {
+          cache: 'no-store',
+          signal: AbortSignal.any([signal, AbortSignal.timeout(10_000)]),
+        });
+        if (!response.ok) throw new Error(errorMessage);
+        const json = (await response.json()) as {
+          data: EvaluationObservation<TrainingEvaluation>;
+        };
+        if (
+          !['PENDING', 'READY', 'FAILED'].includes(json.data.status) ||
+          (json.data.status === 'READY' && !json.data.evaluation)
+        )
+          throw new Error(errorMessage);
+        return json.data;
+      },
+      onResult: (result) => {
+        setEvaluationView({
+          identity: evaluationIdentity,
+          result,
+          waiting: false,
+          failedRead: false,
+        });
+        if (result.status !== 'PENDING') {
+          setSnapshot((value) =>
+            value?.assignment?.submission?.answerId === answerId
+              ? {
+                  ...value,
+                  assignment: {
+                    ...value.assignment,
+                    submission: { answerId, evaluationStatus: result.status },
+                  },
+                }
+              : value,
+          );
+        }
+      },
+    })
+      .then((status) => {
+        if (!controller.signal.aborted && status === 'WAITING') {
+          setEvaluationView((value) =>
+            value?.identity === evaluationIdentity ? { ...value, waiting: true } : value,
+          );
+        }
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) {
+          setEvaluationView({
+            identity: evaluationIdentity,
+            result: null,
+            waiting: false,
+            failedRead: true,
+          });
+        }
+      });
+    return () => controller.abort();
+  }, [base, answerId, evaluationIdentity, evaluationRefresh]);
   const practice = snapshot?.practice;
   async function recordPractice(command: GuidedPracticeCommand) {
     if (!action) return;
@@ -138,7 +216,6 @@ export function PersonalLearningPilotCard({
     });
     await reload();
   }
-  const planCompleted = router?.status === 'PLAN_COMPLETED' || action?.planCompleted === true;
   async function consult(nextAnswers: LearningConsultationAnswer[] = []) {
     setAnswers(nextAnswers);
     setConsultation(
@@ -187,7 +264,7 @@ export function PersonalLearningPilotCard({
       ),
     });
     setRouter(value.result);
-    setEvaluation(null);
+    setEvaluationView(null);
     setAnswer('');
     setHint(false);
     setHelp(false);
@@ -202,6 +279,11 @@ export function PersonalLearningPilotCard({
     await run(async () => {
       if (!action) return;
       let answerId = action.submission?.answerId;
+      if (answerId && action.submission?.evaluationStatus !== 'FAILED') {
+        // A status check must not requeue a job or incur another Provider call.
+        setEvaluationRefresh((value) => value + 1);
+        return;
+      }
       if (!answerId) {
         const result = await api<{ answer: { id: string } }>(`${base}/answers`, {
           missionAssignmentId: action.id,
@@ -214,8 +296,15 @@ export function PersonalLearningPilotCard({
         `${base}/answers/${answerId}/evaluate`,
         { idempotencyKey: key(`evaluate_${answerId}`) },
       );
-      if (result.status === 'READY' && result.evaluation) setEvaluation(result.evaluation);
+      if (result.status === 'READY' && result.evaluation)
+        setEvaluationView({
+          identity: `${base}/${action.id}/${answerId}`,
+          result: { status: 'READY', evaluation: result.evaluation },
+          waiting: false,
+          failedRead: false,
+        });
       await reload();
+      setEvaluationRefresh((value) => value + 1);
     });
   }
   async function interaction(interactionType: TrainingInteractionType) {
@@ -251,6 +340,17 @@ export function PersonalLearningPilotCard({
       {error ? (
         <p className="notice notice--error" role="alert">
           {error}
+        </p>
+      ) : null}
+      {answerId && !evaluation && !planCompleted ? (
+        <p className="notice" role="status">
+          {observed?.failedRead
+            ? '回答は再送せず、評価状況だけを確認してください。学習状態を確認できませんでした。'
+            : observed?.result?.status === 'FAILED'
+              ? '回答は保存されています。評価をもう一度試すことができます。'
+              : observed?.waiting
+                ? '評価を続けています。評価状況を確認するか、後でこの画面に戻ってください。'
+                : '回答の評価を確認しています。画面を閉じても、戻ると結果を確認できます。'}
         </p>
       ) : null}
       {!snapshot ? (
@@ -506,7 +606,7 @@ export function PersonalLearningPilotCard({
               {practice.interactions.includes(interaction) ? ' — 記録済み' : ''}
             </button>
           ))}
-          {action.submission?.evaluationStatus === 'READY' ? (
+          {evaluation?.result === 'PASS' ? (
             <>
               <p>
                 課題の指示が合格したうえで、本人の操作・確認と完了申告がそろうと実践完了を記録できます。復習判定の場合は先に再挑戦してください。

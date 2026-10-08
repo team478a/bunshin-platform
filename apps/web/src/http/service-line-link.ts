@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { currentUserProvider } from '../auth/current-user';
 import { requireSameOrigin } from '../auth/request-security';
 import { resolveMemberServiceContext } from '../services/public-service';
+import { loadServiceLineSettings } from '../services/service-line-settings';
 import { AesGcmLineSecretCrypto, currentLineEnvironment } from '../line/secure-configuration';
 import {
   createLineLinkProof,
@@ -104,8 +105,50 @@ export async function serviceLineLinkScope(slug: string, bunshinId: string) {
   return { db, actor, service, bunshin, membership, configuration };
 }
 
-const returnPath = (slug: string, id: string) =>
-  `/s/${encodeURIComponent(slug)}/bunshins/${encodeURIComponent(id)}/line`;
+/** Connection preparation only: this does not authorize learning or enable its scheduler. */
+export async function learningMemberLineLinkScope(slug: string) {
+  if (!scopeSchema.shape.slug.safeParse(slug).success)
+    throw new ServiceLineLinkUnavailable('Invalid scope');
+  const actor = await (await currentUserProvider()).getCurrentUser();
+  if (!actor) throw new ServiceLineLinkUnavailable('Session required');
+  const settings = await loadServiceLineSettings(slug, actor.userId);
+  if (!settings.learningService || !settings.available || !settings.consented)
+    throw new ServiceLineLinkUnavailable('Learning LINE unavailable');
+  const db = await import('@bunshin/database');
+  const configuration = await db.prisma.groupLineChannelConfiguration.findFirst({
+    where: {
+      id: settings.configurationId!,
+      workspaceId: settings.service.workspaceId,
+      groupId: settings.service.serviceId,
+      environment: currentLineEnvironment(),
+      status: 'ACTIVE',
+      lastVerifiedAt: { not: null },
+      lastErrorCategory: null,
+      globallyPaused: false,
+      group: {
+        status: 'ACTIVE',
+        workspace: { status: 'ACTIVE' },
+        lineRoutingPolicies: {
+          some: { environment: currentLineEnvironment(), mode: 'DEDICATED', pilotEnabled: true },
+        },
+      },
+    },
+  });
+  if (!configuration) throw new ServiceLineLinkUnavailable('LINE configuration changed');
+  return {
+    db,
+    actor,
+    service: settings.service,
+    membership: { id: settings.membershipId },
+    configuration,
+    bunshin: null,
+  };
+}
+
+const returnPath = (slug: string, id: string | null) =>
+  id === null
+    ? `/s/${encodeURIComponent(slug)}/line`
+    : `/s/${encodeURIComponent(slug)}/bunshins/${encodeURIComponent(id)}/line`;
 const partnerPath = (slug: string, id: string) =>
   `/s/${encodeURIComponent(slug)}/bunshins/${encodeURIComponent(id)}`;
 const callbackUrl = () =>
@@ -123,14 +166,19 @@ export async function startServiceLineLink(request: Request) {
     requireSameOrigin(request);
     const form = await request.formData();
     const slug = z.string().parse(form.get('serviceSlug'));
-    const id = z.string().parse(form.get('bunshinId'));
+    const learning = form.get('linkTarget') === 'LEARNING_MEMBER';
+    if (form.has('linkTarget') && !learning) throw new Error('Invalid target');
+    if (learning && form.has('bunshinId')) throw new Error('Mixed target');
+    const id = learning ? null : z.string().uuid().parse(form.get('bunshinId'));
+    scopeSchema.shape.slug.parse(slug);
     destination = returnPath(slug, id);
     if (form.get('consent') !== 'yes') {
       result = 'consent-required';
       throw new Error('Consent required');
     }
     result = 'configuration-unavailable';
-    const scope = await serviceLineLinkScope(slug, id);
+    const scope =
+      id === null ? await learningMemberLineLinkScope(slug) : await serviceLineLinkScope(slug, id);
     result = 'attempt-limit';
     const browserCookies = await cookies();
     if (
@@ -208,7 +256,10 @@ export async function finishServiceLineLink(request: Request) {
     if (!attempt || attempt.consumedAt || attempt.expiresAt <= new Date())
       throw new Error('Expired attempt');
     result = 'session-changed';
-    const scope = await serviceLineLinkScope(attempt.serviceSlug, attempt.bunshinId);
+    const scope =
+      attempt.bunshinId === null
+        ? await learningMemberLineLinkScope(attempt.serviceSlug)
+        : await serviceLineLinkScope(attempt.serviceSlug, attempt.bunshinId);
     if (
       scope.actor.userId !== attempt.actorUserId ||
       scope.configuration.id !== attempt.configurationId
@@ -234,6 +285,15 @@ export async function finishServiceLineLink(request: Request) {
     });
     // The unique configuration/provider-subject constraint rejects a destination owned by another member.
     result = 'destination-in-use';
+    if (attempt.bunshinId === null) {
+      const current = await learningMemberLineLinkScope(attempt.serviceSlug);
+      if (
+        current.actor.userId !== attempt.actorUserId ||
+        current.configuration.id !== attempt.configurationId ||
+        current.membership.id !== scope.membership.id
+      )
+        throw new Error('Learning connection scope changed');
+    }
     const connected = await new db.PrismaGroupLineConnectionRepository().connectVerified({
       environment: currentLineEnvironment(),
       workspaceId: scope.service.workspaceId,
@@ -243,6 +303,7 @@ export async function finishServiceLineLink(request: Request) {
       actorUserId: scope.actor.userId,
       verifiedProviderUserId: verified.providerUserId,
       consentGranted: true,
+      ...(attempt.bunshinId === null ? { rejectDestinationTransfer: true } : {}),
     });
     if (!connected) throw new Error('Connection scope changed');
     result = 'save-failed';
@@ -250,6 +311,9 @@ export async function finishServiceLineLink(request: Request) {
       const updated = await tx.groupLineConnection.updateMany({
         where: {
           configurationId: scope.configuration.id,
+          workspaceId: scope.service.workspaceId,
+          groupId: scope.service.serviceId,
+          groupMembershipId: scope.membership.id,
           userId: scope.actor.userId,
           providerUserId: verified.providerUserId,
           status: 'ACTIVE',
@@ -263,26 +327,28 @@ export async function finishServiceLineLink(request: Request) {
         },
       });
       if (updated.count !== 1) throw new Error('Connection changed');
-      await tx.lineNotificationPreference.upsert({
-        where: {
-          workspaceId_userId_bunshinId: {
+      if (scope.bunshin)
+        await tx.lineNotificationPreference.upsert({
+          where: {
+            workspaceId_userId_bunshinId: {
+              workspaceId: scope.service.workspaceId,
+              userId: scope.actor.userId,
+              bunshinId: scope.bunshin.id,
+            },
+          },
+          create: {
             workspaceId: scope.service.workspaceId,
             userId: scope.actor.userId,
             bunshinId: scope.bunshin.id,
+            enabled: true,
+            notificationConsentAt: new Date(),
           },
-        },
-        create: {
-          workspaceId: scope.service.workspaceId,
-          userId: scope.actor.userId,
-          bunshinId: scope.bunshin.id,
-          enabled: true,
-          notificationConsentAt: new Date(),
-        },
-        update: { enabled: true, notificationConsentAt: new Date() },
-      });
+          update: { enabled: true, notificationConsentAt: new Date() },
+        });
     });
     result = verified.following ? 'connected' : 'follow-required';
-    if (verified.following) destination = partnerPath(attempt.serviceSlug, attempt.bunshinId);
+    if (verified.following && attempt.bunshinId !== null)
+      destination = partnerPath(attempt.serviceSlug, attempt.bunshinId);
   } catch {
     // No provider token, code, subject or callback URL is logged.
     reportFailure(request, 'callback', result);

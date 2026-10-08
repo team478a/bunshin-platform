@@ -1,5 +1,7 @@
 # BUNSHIN Platform 実装ロードマップ
 
+マナベルスタイルの学習用LINE本人接続は`docs/ai-training/MANABERU_STYLE_MEMBER_LINE_LINK_IMPLEMENTATION.md`を参照。投稿パートナー不要の専用LINE接続を追加し、既存短期OAuth試行・サービス参加同意・本人所属を再利用する。接続はEnrollment/Seatの参加権ではなく、旧V1通知除外・学習Execution Gateを維持する。学習通知/回答Bridge、LIFF、実端末確認、本番Migration/deployは別レビュー。
+
 Feedback maintenanceの起動経路/停止方式設計は`docs/improvement/IMPROVEMENT_MAINTENANCE_STOP_DESIGN.md`。PR #1106のverify/database成功を確認し、Cron単独停止の不足とユーザー/管理者/LINE callback等のJob writerを整理。既存Vercel Cron停止＋project入口Denyの運用候補を先に確認し、旧版/全domain/bypass/実行中処理を未確認のまま安全とはしない。指定Chromeでは対象設定404、別アカウントへ切替せず本番NO-GO維持。次の最小タスクは対象project閲覧権限での読取inventory。guardは不足経路確定・別承認後のみで、本番停止/設定変更/実装へ進まない。
 
 Feedback maintenanceの停止/drain条件再現は`docs/improvement/IMPROVEMENT_MAINTENANCE_DRAIN_REHEARSAL.md`。PR #1105 merge基準の実run HTTP＋実Application workerで、別executor/retentionが実行中でもempty batchのdrained=true、lease期限を過ぎても待機処理未終了、例外＋HTTP200/drained=trueをcharacterizationする。テスト用Portと本番停止方式の保証を分け、fakeに停止guardを実装して合格させない。使い捨てDBの既存migration/preflight回帰を確認し、本番コード/schema/設定は変更しない。本番の全到達経路停止・drain/backup復元後再削除は未完。次はownerによる停止方式と全起動元の確定。現行機能で証明できない場合だけ、最小停止guardを先行別PRとして設計・承認する。

@@ -2,6 +2,12 @@
 
 ## 状態・対象・承認境界
 
+### 2026-10-08 学習導線照合（最新の限定観測）
+
+Vercelの実公開SHAは`24afc8a170097741844e068653b191bc822b1c2e`（#1180）。本番に期限なしPersonal Learning Programがあり、画面上の参加中は0人。main #1181の本人LINE接続は未公開。以下の2026-10-07公開SHA/DB状態は歴史的記録であり、現在のPASS/PENDING判定に流用しない。
+
+詳細は[学習と本番の照合](MANABERU_STYLE_LEARNING_PRODUCTION_RECONCILIATION.md)、[評価待ち/再開修正](MANABERU_STYLE_LEARNING_FLOW_IMPLEMENTATION.md)。新しい画面修正を実課金E2E・Pilot START・main全体Deployの承認とみなさない。
+
 初版は2026-10-07 JST、基準main `ffca75706af0d00e064088aa38bb899393ec3621`（#1164）。今回のRead-only更新はmain `c4d103a9b82df10f4e1fb57901c8a70c6899e0b6`（#1166）を基準とし、[main CI](https://github.com/team478a/bunshin-platform/actions/runs/37545719072)成功を確認。実公開SHAは `87c5fafcdf9b84c67dd33aef41860368415ca789`（#1143）、mainとDIVERGED。release対象SHAは人間が別途固定し、本書作成commitを自動的にdeploy対象にしない。
 
 **開始判定はNO-GO。文書は操作承認ではない。** 本書は将来の人間承認後に実行する順序を定義する。初版はProduction読取も未実施。今回の別指示によるRead-only監査では既存認証済みDashboard/CLI metadataとREAD ONLY transactionのSELECTのみ実施した。Migration、deploy、設定、Definition承認、参加者登録、enable、key変更、実Provider利用は一切実施していない。以下の変更command/API例は未実行。

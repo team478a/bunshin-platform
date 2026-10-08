@@ -16,6 +16,42 @@ const scope = {
 };
 
 describe('LINE messaging persistence isolation', () => {
+  it('rejects transfer for a learner connection without changing either member or deliveries', async () => {
+    const tx = {
+      groupMembership: { findFirst: vi.fn().mockResolvedValue({ id: 'membership' }) },
+      groupLineChannelConfiguration: { findFirst: vi.fn().mockResolvedValue({ id: 'config' }) },
+      groupLineConnection: {
+        findUnique: vi
+          .fn()
+          .mockResolvedValueOnce({ id: 'connection', userId: 'other' })
+          .mockResolvedValueOnce(null),
+        delete: vi.fn(),
+        updateMany: vi.fn(),
+        upsert: vi.fn(),
+      },
+      lineMessageDelivery: { updateMany: vi.fn() },
+    };
+    const client = {
+      $transaction: (fn: (transaction: typeof tx) => unknown) => fn(tx),
+    } as unknown as PrismaClient;
+    expect(
+      await new PrismaGroupLineConnectionRepository(client).connectVerified({
+        environment: 'PRODUCTION',
+        workspaceId: 'workspace',
+        groupId: 'group',
+        configurationId: 'config',
+        groupMembershipId: 'membership',
+        actorUserId: 'learner',
+        verifiedProviderUserId: 'U-verified',
+        consentGranted: true,
+        rejectDestinationTransfer: true,
+      }),
+    ).toBe(false);
+    expect(tx.groupLineConnection.delete).not.toHaveBeenCalled();
+    expect(tx.groupLineConnection.updateMany).not.toHaveBeenCalled();
+    expect(tx.groupLineConnection.upsert).not.toHaveBeenCalled();
+    expect(tx.lineMessageDelivery.updateMany).not.toHaveBeenCalled();
+  });
   it('moves a verified dedicated LINE destination from a stale registration', async () => {
     const deleteConnection = vi.fn().mockResolvedValue({ id: 'actor-old-connection' });
     const moveConnection = vi.fn().mockResolvedValue({ count: 1 });
