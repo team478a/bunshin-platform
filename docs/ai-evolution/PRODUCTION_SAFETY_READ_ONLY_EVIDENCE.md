@@ -1,5 +1,7 @@
 # 本番安全条件の読取専用確認
 
+2026-10-09追加: [既存隔離復元環境の整合性確認とWave 0レビュー準備](RESTORE_INTEGRITY_WAVE0_REVIEW_PREPARATION.md)。隔離DBには学習tableがある一方、対応Prisma履歴がなく、復旧合格はUNKNOWN。本書の本番観測を隔離環境の証明に流用しない。
+
 ## 結論
 
 2026-10-09 JST、統合監査PR #1201マージ後の追加確認。基準main `2ca47be4b8fc5be0e44364b767b0eb741ea1e916`、branch `codex/production-safety-readonly-evidence`。

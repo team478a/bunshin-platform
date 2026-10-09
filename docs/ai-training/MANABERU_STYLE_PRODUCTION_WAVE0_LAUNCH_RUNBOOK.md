@@ -2,6 +2,12 @@
 
 ## 状態・対象・承認境界
 
+### 2026-10-09 最新読取証拠とレビュー準備
+
+[本番安全条件の読取証拠](../ai-evolution/PRODUCTION_SAFETY_READ_ONLY_EVIDENCE.md)を2026-10-07/08の観測より優先する。本番Prisma231件・学習5tableあり、Pilot停止・Seat0・承認0・人数policy未設定、Vercel project productionのCall Admission NOT_SET。これは開始許可ではない。
+
+[隔離復元確認・設定レビュー案](../ai-evolution/RESTORE_INTEGRITY_WAVE0_REVIEW_PREPARATION.md)では既存restoreの学習tableとPrisma履歴に不一致を確認。復旧リハーサル合格はUNKNOWN、Wave 0はNO-GOを維持する。Phase Bで新しい復元を反射的に実行せず、まずDB ownerが既存restoreの復元元Backup/復元後変更記録を照合する。Phase Eの既存候補と[3Definitionレビュー票](PERSONAL_LEARNING_PRODUCTION_DEFINITION_REVIEW_SHEET.md)は未承認。設定・承認・参加者登録・開始は別操作承認を待つ。
+
 ### 2026-10-09 本人内部テスター準備UI（未本番反映）
 
 SERVICE_OWNER本人を内部テスターにする最小操作は、`/s/{serviceSlug}/manage/programs/personal-learning-preparation`へ追加する。詳細は[内部テスター準備UI](MANABERU_STYLE_INTERNAL_TESTER_PREPARATION_UI_IMPLEMENTATION.md)。本記載は実登録/本番deploy/STARTの証拠・承認ではない。
