@@ -4,7 +4,8 @@
 
 - 基準main: `d761d233d33274c3e1010a0bd15958d796b5e346`（EVO-01 #1189マージ）。
 - branch: `codex/ai-evolution-evo02-transport-safety`。
-- commit: PRのコードcommitを参照（自己参照SHAを本文へ埋め込まない）。
+- 実行コードcommit: `61f57a5ce16f4fac4135b3c490a0c069c38e7cd6`。後続は評価結果・文書・ログ取得assertionの補強のみ。
+- PR: [#1190](https://github.com/team478a/bunshin-platform/pull/1190)。merge/deployはしない。
 - #1188監査版: `41daf16848308051baa548384855b8594eb2b8b2`。着手時OPEN。監査文書を本PRへ複製しない。
 - 実装前判断: [EVO02_DESIGN_DECISION.md](EVO02_DESIGN_DECISION.md)。最新mainとの差はEVO-01評価基盤の追加で、対象Providerの既存構造は監査と一致。
 
@@ -37,7 +38,16 @@ Weekly生成Serviceの失敗時は計画保存なし、FAILED usage（token不�
 - 失敗出力の非保存、本文なしFAILED usage、Strategy失敗の非保存。
 - Weekly分類・scope再検証・retry上限、既存週の重複生成防止。
 
-検証結果は完了後追記する。合成テストを実Provider品質・実認証・本番安全性の保証にしない。
+検証結果:
+
+- 全体回帰: `pnpm test:architecture`（10件）と`turbo run test --concurrency=1 -- --maxWorkers=2`成功、25/25 tasks。Web 463ファイル3,186件成功・実API用2件skip、Application 135ファイル867件、DB unit 192ファイル909件。研修Package 25ファイル288件。既存認可/Pilot/Provider Gate/LINE隔離/quota/生成/評価/冪等性を含む。
+- ログsinkがconsole.errorであることを確認し、取得assertionを補強した最終Weekly Serviceテスト16件も別実行成功。空のmockを根拠に非漏洩と判定しない。
+- 固定評価2ファイル35件成功。24ケース観測PASS/FAIL/UNKNOWN=10/13/1、期待外れ0、externalCalls=0、COMPARABLE/判定変更0、model/Prompt変更なし、品質/原価UNKNOWN。
+- 保存結果: [report](evo02-results/evo01-dff740ed-fce7-40c8-b4e7-cc6547c390bd/report.md)、[JSON](evo02-results/evo01-dff740ed-fce7-40c8-b4e7-cc6547c390bd/report.json)、[比較](evo02-results/evo01-dff740ed-fce7-40c8-b4e7-cc6547c390bd/comparison.json)。コードcommitは上記61f57a5c、dirty=false。ID/Ruleは既存EVO-01 runnerの版を維持。旧baselineは上書きしない。
+- architecture:check、全体format:checkと追加結果/最終テストのformat検査成功。
+- [GitHub CI run 37871154096](https://github.com/team478a/bunshin-platform/actions/runs/37871154096): verify成功（8m38s）、database成功（1m26s）。typecheck/lint/test/既存Learning UI E2E/build、使い捨てPostgreSQL serviceによるDB統合を含む。このrunは`cd275139`時点（実行コードは最終版と同一、最終ログassertion/報告追記前）。最終HEADのCIはPR checkを別確認する。
+
+初回変更ファイルlintではテストの型指摘2件を検出し、typed inputとError rejectionで修正した。既存timeoutを延長せず、テスト並列数を制限した。合成テストを実Provider品質・実認証・本番安全性の保証にしない。
 
 ## 未解決・次工程の条件
 

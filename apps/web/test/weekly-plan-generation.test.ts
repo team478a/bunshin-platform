@@ -276,7 +276,7 @@ describe('WeeklyPlanGenerationService', () => {
     const fetcher = vi.fn().mockResolvedValue(new Response(body, { status }));
     const planner = new OpenAIWeeklyPlanner({ apiKey: 'synthetic-key', fetch: fetcher });
     generate.mockImplementation((input: WeeklyPlannerInput) => planner.generate(input));
-    const log = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
     try {
       await expect(
         service().execute({
@@ -298,6 +298,8 @@ describe('WeeklyPlanGenerationService', () => {
           idempotencyKey: 'job:job-failure:weekly-plan',
         }),
       );
+      expect(log).toHaveBeenCalledTimes(1);
+      expect(log.mock.calls[0]?.[0]).toContain('AI_PROVIDER_UNAVAILABLE');
       expect(JSON.stringify([log.mock.calls, recordUsage.mock.calls])).not.toContain(
         'private-body',
       );
