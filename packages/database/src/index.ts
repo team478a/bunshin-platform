@@ -305,6 +305,7 @@ export { PrismaLearningDefinitionApprovalAdminRepository } from './learning-defi
 export { PrismaPersonalLearningPilotProfileRepository } from './personal-learning-pilot-profile';
 export { PrismaPersonalLearningAssessmentGate } from './personal-learning-assessment-gate';
 export { PrismaGuidedPracticeRepository } from './guided-practice';
+export { PrismaReproductionHistoryRepository } from './reproduction-history';
 export { PrismaPersonalLearningCallAdmission } from './personal-learning-call-admission';
 export { PrismaPersonalLearningPilotOperations } from './personal-learning-pilot-operations';
 export {

@@ -1,5 +1,12 @@
 # BUNSHIN Platform Decision Log
 
+## 2026-10-09: 再現履歴の比較は本人の整合Snapshotから非永続投影する
+
+- EVO-05 R2。明示された2AssignmentのみをRepeatableReadで読む。本人Enrollment/MembershipとR0 Privacy条件を再検証し、停止後の本人読取と新規学習認可を分離する。既存Export/削除の挙動を変更しない。
+- 完了metadataのPASS/verifiedを信頼せず、版固定参照、保存Plan、START/本人操作/支援、READY Answer、ANSWER_EVALUATED監査、対象Skill・時刻を照合する。欠落・削除・redaction・取得打切り・未知版はUNKNOWN。日時やscoreからpairを自動選択しない。
+- R1の全題材はDRAFTで、人間承認正本は未実装。整合する合成履歴でもHUMAN_REVIEW_REQUIREDでUNKNOWNを維持する。成功結果・本文・新Eventを保存せず、R3/R4・課題生成・本番操作には進まない。
+- [R2実装報告](ai-evolution/EVO05_R2_HISTORY_PROJECTION_IMPLEMENTATION.md)を参照。
+
 ## 2026-10-09: 再現練習の題材は版固定の合成Draft参照に限定する
 
 - EVO-05 R1。既存3Definition/既存Mission quality版へ対応する、EMAIL/REPORT/INFORMATION_SUMMARYの固定合成課題Draftとstrict参照契約をAI Training Package内へ追加する。新Definitionや成果物制作機能ではない。
