@@ -44,7 +44,9 @@
 ## 検証
 
 - ローカル限定3 unit files: 20 tests成功。合成fakeであり本番検証ではない。
-- 全体typecheck/lint/unit/build、format、architecture check、HTTP回帰、隔離PostgreSQL integrationの結果は検証追記/PR CIに記録する。実DB統合検証はCIのdisposable PostgreSQLのみ。Productionへ接続しない。
+- 初回CI `37886759328`: format/typecheck成功、database job成功（隔離PostgreSQL 178 tests）。verifyは追加テストの`expect.any(Date)`に対するlint違反1件で停止。型安全なDate assertionへ修正し再CIする。実DB統合検証はCIのdisposable PostgreSQLのみ。Productionへ接続しない。
+- ローカル全体unit: database 193 files / 919 tests成功、application 136 files / 895 tests成功等。webは463 files成功 / 1 file失敗 / 2 skipped。既存Daily Missionの2 testsが5秒timeout（全体並列実行時）。同じコードを単独再実行し10 tests成功。原因を確定せず、全体初回成功とは扱わない。
+- architecture checkと`git diff --check`成功。最終headの全体lint/unit/build・既存learning UI回帰等はPR CI最終結果で識別する。
 - 既存削除/評価競合・削除後書込拒否・保持・V1/LINE/Provider認可テストを変更せず回帰対象に含める。
 
 ## 未実装・引継ぎ・rollback

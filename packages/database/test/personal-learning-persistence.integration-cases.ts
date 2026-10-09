@@ -1783,10 +1783,11 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
       expect((await deletion.delete(deleteRequest)).outcome).toBe('DELETED');
       expect((await deletion.delete(deleteRequest)).outcome).toBe('ALREADY_DELETED');
       expect((await exporter.read(privacyScope)).outcome).toBe('FOUND');
-      expect(await client.personalLearningPilotSeat.findFirst({ where: authority })).toMatchObject({
-        programEnrollmentId: null,
-        revokedAt: expect.any(Date),
+      const deletedSeat = await client.personalLearningPilotSeat.findFirstOrThrow({
+        where: authority,
       });
+      expect(deletedSeat.programEnrollmentId).toBeNull();
+      expect(deletedSeat.revokedAt).toBeInstanceOf(Date);
       await expect(pilot.read(f.actor)).rejects.toThrow();
       expect(
         await client.groupMembership.findUniqueOrThrow({ where: { id: f.member.id } }),
