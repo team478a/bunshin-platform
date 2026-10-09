@@ -1,5 +1,11 @@
 # BUNSHIN Platform Decision Log
 
+## 2026-10-09: 題材レビューHTTPは専用flagと実session・deployment SHAに限定する
+
+- 既存review admin Repositoryへ認証済みactorを結線する。Service管理認可とserver-owned preparation authorityを照合し、専用`PERSONAL_LEARNING_CHALLENGE_REVIEW_ADMIN=true`、両学習実行flagの明示false、40桁VERCEL_GIT_COMMIT_SHAを必須とする。欠落は推測補完しない。
+- GETは既知合成題材keyのみを受け付け、POSTは同一Origin・bounded JSON・既存strict commandを利用する。環境/authority/flag/SHAの変化をtransaction guardと応答前で拒否する。UI・実人間レビュー・Runtime承認利用は別工程。executionPermission=NOT_GRANTED、全Draft/R2 UNKNOWNを維持する。
+- 本番設定変更、実承認、Provider、Migration、deployを含めない。
+
 ## 2026-10-09: 題材レビュー操作は停止中の専用Serviceで追記式監査として保持する
 
 - 既存ProgramAuditLogを「人間によるレビュー判断の事実」の正本に再利用する。Plan/Event payloadへ題材本文を保存せず、新schemaを先行しない。boundedな履歴から連続revisionとchainを検証して現在判断を投影する。
