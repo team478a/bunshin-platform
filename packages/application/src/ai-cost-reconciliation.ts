@@ -38,6 +38,8 @@ function invalid(): never {
 const symbol = (value: unknown) =>
   typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,199}$/.test(value);
 const amount = (value: unknown) => Number.isSafeInteger(value) && Number(value) >= 0;
+// Do not narrow an already typed readonly observation array to Array.isArray's any[].
+const array = (value: unknown): boolean => Array.isArray(value);
 const order = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 function keys(value: object, allowed: readonly string[]) {
   if (Object.keys(value).some((key) => !allowed.includes(key))) invalid();
@@ -73,8 +75,8 @@ export function reconcileAiCosts(input: {
   if (
     !symbol(input.scope.workspaceId) ||
     !symbol(input.scope.actorUserId) ||
-    !Array.isArray(input.usage) ||
-    !Array.isArray(input.pilot) ||
+    !array(input.usage) ||
+    !array(input.pilot) ||
     input.usage.length + input.pilot.length > 10_000 ||
     typeof input.readsComplete !== 'boolean'
   )
