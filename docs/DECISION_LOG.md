@@ -1,5 +1,12 @@
 # BUNSHIN Platform Decision Log
 
+## 2026-10-09: 題材レビュー操作は停止中の専用Serviceで追記式監査として保持する
+
+- 既存ProgramAuditLogを「人間によるレビュー判断の事実」の正本に再利用する。Plan/Event payloadへ題材本文を保存せず、新schemaを先行しない。boundedな履歴から連続revisionとchainを検証して現在判断を投影する。
+- server-owned preparation authority、現認可済み管理者、停止中Program/Pilot、固定server commitと資料digestをtransaction内で再照合する。CAS・操作UUIDによる同内容再送・明示取消を実装し、再送結果と現在判断を分離する。
+- 認証sessionとのcomposition/HTTP/UI、実人間レビューの実行、R3/Assignment/履歴比較への承認利用は今回未接続。保存記録もexecutionPermission=NOT_GRANTEDとし、R1全DRAFT/R2 UNKNOWN・既存Definition承認・Pilot Gateを維持する。
+- [実装報告](ai-evolution/EVO05_CHALLENGE_REVIEW_ADMIN_IMPLEMENTATION.md)を参照。
+
 ## 2026-10-09: 題材レビュー記録の形式検証と実行承認を分離する
 
 - EVO-05 R3の先行契約。AI Package内に版固定題材のレビュー資料と、Workspace/Service・reviewer・時刻・commit・digest・確認項目・判断を持つ最小記録契約を追加する。
