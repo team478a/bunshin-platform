@@ -106,6 +106,40 @@ describe('Personal Learning pilot HTTP composition', () => {
     expect(f.bridge).not.toHaveBeenCalled();
     expect(f.goal).not.toHaveBeenCalled();
   });
+  it('selects focus only from the server current Plan and exact saved Definition reference', async () => {
+    const definition = AI_TRAINING_LEARNING_DEFINITION_FIXTURES[1]!;
+    const plan = {
+      status: 'CONFIRMED',
+      planId: idempotencyKey,
+      revision: 1,
+      steps: [{ definition: definition.reference }],
+    };
+    f.read.mockResolvedValue({ goals: [], plans: [{ isCurrent: true, goalActive: true, plan }] });
+    const assignment = {
+      id: idempotencyKey,
+      actionKey: 'PROMPT_BASIC',
+      definitionKey: 'CONTEXT_SETTING',
+      definitionReference: definition.reference,
+    };
+    f.assignment.mockResolvedValue(assignment);
+    const result = await call();
+    expect((await result.json()).data.learningFocus.focus).toContain('前と同じ課題');
+    expect(f.assignment).toHaveBeenCalledWith({
+      scope,
+      actorUserId: scope.userId,
+      planId: idempotencyKey,
+      revision: 1,
+    });
+    f.assignment.mockResolvedValue({
+      ...assignment,
+      definitionReference: { ...definition.reference, version: 'UNKNOWN' },
+    });
+    expect((await (await call()).json()).data.learningFocus).toBeNull();
+    f.assignment.mockResolvedValue({ ...assignment, definitionReference: null });
+    expect((await (await call()).json()).data.learningFocus).toBeNull();
+    expect(f.bridge).not.toHaveBeenCalled();
+    expect(f.save).not.toHaveBeenCalled();
+  });
   it('records bounded practice through the authenticated server actor', async () => {
     const command = { action: 'START', supportLevel: 'GUIDED' };
     f.practice.mockResolvedValue({ saved: true });
