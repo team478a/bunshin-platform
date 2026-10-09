@@ -35,7 +35,7 @@
 - capability-training全29ファイル465テストPASS: Scope・Goal・Plan・Consultation・Router・Guided Practice等。
 - 追加のWeb回帰4ファイル22テストPASS: 旧受講者UI、評価結果観測、評価job境界、評価期間。合計537テストPASS。
 - database型チェック、変更した7コード/テストファイルのESLint、architecture check、diff checkはPASS。
-- 型チェック・lint・architecture・buildの最終結果はPR本文へ記録する。
+- Web `next build` PASS（コンパイル・TypeScript・34静的ページ生成）。最初の単体typecheckは古い `.next` validatorの存在しないroute参照で失敗し、`next typegen`で再生成した。単体再実行は重複負荷を避け中断し、build内TypeScriptで成功を確認した。アプリコードで回避していない。
 
 実Provider品質・実認証・実スマートフォン操作・本番E2Eは未検証。合成/静的描画テストを本番利用成功と扱わない。
 
