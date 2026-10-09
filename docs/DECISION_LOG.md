@@ -1,5 +1,13 @@
 # BUNSHIN Platform Decision Log
 
+## 2026-10-09: Wave 0の復旧証拠と作業単位の安全Gateを分離する
+
+- 状態: Proposed（運用文書レビュー待ち。本番操作・残リスクの受容は未承認）
+- 過去の復元元Backup日時/完全性/RTO/RPOのUNKNOWNを維持するが、同じ取得不能な画面の再探索を全準備作業の前提にしない。文書、教育レビュー、ローカルテスト、対象分離した読取検査は先行可能。
+- Migration/Deploy/STARTには現在の復旧準備、固定release、実認可/隔離、停止、費用、Definition承認、参加者準備を別々に要求する。過去日時の不足と現在の回復手順不足を区別し、残リスクはownerが明示判断する。Codexは復旧合格の推定や条件免除をしない。
+- 新しい有償Restore・契約Upgradeを自動要求せず、既存環境/記録を先に利用する。将来の操作時にはProvider UI履歴に依存しない非公開運用証跡を残す。
+- 正本: `docs/ai-evolution/WAVE0_SAFETY_GATE_REBASELINE.md`。新機能、コード、schema、Provider、本番操作を承認するDecisionではない。
+
 ## 2026-10-09: 題材レビュー操作は停止中の専用Serviceで追記式監査として保持する
 
 - 既存ProgramAuditLogを「人間によるレビュー判断の事実」の正本に再利用する。Plan/Event payloadへ題材本文を保存せず、新schemaを先行しない。boundedな履歴から連続revisionとchainを検証して現在判断を投影する。
