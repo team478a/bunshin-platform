@@ -1,5 +1,12 @@
 # BUNSHIN Platform Decision Log
 
+## 2026-10-09: 題材レビュー記録の形式検証と実行承認を分離する
+
+- EVO-05 R3の先行契約。AI Package内に版固定題材のレビュー資料と、Workspace/Service・reviewer・時刻・commit・digest・確認項目・判断を持つ最小記録契約を追加する。
+- APPROVEを含む形式上有効な記録も、本人認証・管理権限・人間による判断の証明ではない。trusted serverによる資料digest/actor照合、保存・取消・実行認可は未実装で別レビューとする。
+- 全題材DRAFT/NOT_REVIEWED、R1/R2のUNKNOWNを維持する。実承認、Assignment Bridge、DB/UI/Provider/本番操作へ接続しない。
+- [実装報告](ai-evolution/EVO05_CHALLENGE_REVIEW_CONTRACT_IMPLEMENTATION.md)を参照。
+
 ## 2026-10-09: 再現履歴の比較は本人の整合Snapshotから非永続投影する
 
 - EVO-05 R2。明示された2AssignmentのみをRepeatableReadで読む。本人Enrollment/MembershipとR0 Privacy条件を再検証し、停止後の本人読取と新規学習認可を分離する。既存Export/削除の挙動を変更しない。

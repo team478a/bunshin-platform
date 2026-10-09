@@ -1,5 +1,7 @@
 # EVO-05 R1 合成再現練習 Human Review Sheet
 
+記録形式の先行契約: [実装報告](EVO05_CHALLENGE_REVIEW_CONTRACT_IMPLEMENTATION.md)。形式上のAPPROVE記録も実承認ではなく、本資料のNOT_REVIEWED状態を変更しない。
+
 ## 状態と境界
 
 すべて **DRAFT / NOT_REVIEWED**。この資料の作成、テスト成功、PRのマージはHuman Approvalではない。利用可能なRuntime教材、承認済みDefinition、習得判定として扱わない。
