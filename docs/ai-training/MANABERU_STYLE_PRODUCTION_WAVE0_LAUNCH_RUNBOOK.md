@@ -1,5 +1,9 @@
 # マナベルスタイル by ワタシワークス — Production Wave 0 Launch Runbook
 
+### 2026-10-09 内部試験用の教育方針承認（本番操作の許可ではない）
+
+指示元ユーザーが3段階の教育方針を内部1〜2人の試験用として承認した。範囲と証跡は[人間レビュー票の最新追記](PERSONAL_LEARNING_PRODUCTION_DEFINITION_REVIEW_SHEET.md)。これは全checklistレビューや本番Definition APPROVE・deploy・参加者準備・STARTの承認ではない。未確認項目をPASSにせず、固定release・実認可・reviewDigest/revision等の既存Gateを維持する。
+
 ### 2026-10-09 Pilot学習の焦点表示（本番未検証）
 
 [焦点表示の実装報告](MANABERU_STYLE_PILOT_DEFINITION_FOCUS_IMPLEMENTATION.md)で、構造・背景・条件の違い、同じ課題の再利用、安全な架空題材、本人実践完了の記録案内をPilot画面へ追加した。Definition/Rubric/進級条件は変更しない。人間による教育レビュー・APPROVE・本番deploy・STARTの証拠や承認ではない。Phase Hでは実スマートフォン上で案内の理解と版照合を確認する。
