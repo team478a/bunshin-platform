@@ -1,5 +1,12 @@
 # BUNSHIN Platform Decision Log
 
+## 2026-10-09: 再現練習の題材は版固定の合成Draft参照に限定する
+
+- EVO-05 R1。既存3Definition/既存Mission quality版へ対応する、EMAIL/REPORT/INFORMATION_SUMMARYの固定合成課題Draftとstrict参照契約をAI Training Package内へ追加する。新Definitionや成果物制作機能ではない。
+- 参照はcontract/subject/challenge/Definition/Mission qualityの版を固定し、本文・本人情報・承認主張を受け付けない。形式検証と既知版の照合は人間承認や実行認可を意味しない。
+- 今回の全課題はDRAFT。人間のレビュー結果をAIが作らず、既知DraftもHUMAN_REVIEW_REQUIRED/UNKNOWNとして扱う。未知/旧履歴/不一致から推測補完しない。
+- 既存比較関数、Router、Assignment、保存、UI、Provider、Pilot/Privacy Gateを変更しない。R2以降・本番利用・題材承認は別指示。[R1実装報告](ai-evolution/EVO05_R1_SUBJECT_REFERENCE_IMPLEMENTATION.md)を参照。
+
 ## 2026-10-09: INTERNAL所有者本人のPrivacy権限を学習実行権限と分離する
 
 - EVO-05 R0。既存本人Enrollment/Membership照合を維持し、専用Pilot Programの本人INTERNAL/cohort INTERNAL Seat履歴を持つSERVICE_OWNERだけを個別学習データExport・削除へ追加する。管理ロール一般、EXTERNALのみ、他人、旧V1所有者は許可しない。
