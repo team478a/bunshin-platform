@@ -15,6 +15,7 @@
     }
   },
   "scripts": {
+    "test:ai-baseline": "pnpm --filter web exec vitest run test/ai-evolution-baseline.test.ts test/ai-evolution-report.test.ts",
     "test:learning-ui": "e2e run --config scripts/test/learning-ui/e2e.config.ts",
     "architecture:check": "node scripts/check-architecture-boundaries.mjs",
     "build": "turbo run build",
