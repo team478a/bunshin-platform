@@ -1,0 +1,1036 @@
+{
+  "schemaVersion": "EVO01_REPORT_V1",
+  "evaluationId": "evo01-f25f255e-fa1a-4a34-b7f1-a62f3863fdd6",
+  "codeCommit": "41564497fbd22ba0b5d019664d7c5d846dd3be23",
+  "workingTreeDirty": false,
+  "sourceDigest": "38dccff21982c1288952b84c6f689ef890090c18c442f65a37ad3b4dc50c4e1c",
+  "evaluatedAt": "2026-10-09T01:08:55.640Z",
+  "modelId": "gpt-5.2",
+  "executionMode": "OFFLINE_SYNTHETIC",
+  "externalCalls": 0,
+  "datasetVersion": "EVO01_SYNTHETIC_V1",
+  "datasetDigest": "32504edbbaa64d3804252700d06f2eb6d18b484c006e05dfa1ff1edff61eb0c0",
+  "evaluationRuleVersion": "EVO01_OFFLINE_RULES_V1",
+  "domainRuleVersions": {
+    "training": "AI_TRAINING_SKILL_RULES_V1"
+  },
+  "promptVersions": {
+    "DAILY_MISSION": "daily-mission-planner-v11-goal-planning",
+    "WEEKLY_PLAN": "weekly-planner-v8-goal-outcomes",
+    "ASSESSMENT": "ai-training-evaluation-v3"
+  },
+  "cases": [
+    {
+      "caseId": "daily-aligned",
+      "service": "HASHIEE",
+      "task": "DAILY_MISSION",
+      "promptVersion": "daily-mission-planner-v11-goal-planning",
+      "observed": "PASS",
+      "expected": "PASS",
+      "testResult": "PASS",
+      "checks": [
+        {
+          "rule": "FIXTURE_SHORT_TEXT_LIMIT",
+          "category": "COMPARATIVE",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "EXISTING_DUPLICATE_CONTENT_GATE",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "OUTPUT_SCHEMA",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "SCOPED_INPUT_FIXTURE",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "NO_FOREIGN_OR_UNVERIFIED_FACTS",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "CONTEXT_HISTORY_AND_SPECIFICITY",
+          "category": "COMPARATIVE",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        }
+      ]
+    },
+    {
+      "caseId": "daily-sparse-fabrication",
+      "service": "HASHIEE",
+      "task": "DAILY_MISSION",
+      "promptVersion": "daily-mission-planner-v11-goal-planning",
+      "observed": "FAIL",
+      "expected": "FAIL",
+      "testResult": "PASS",
+      "checks": [
+        {
+          "rule": "FIXTURE_SHORT_TEXT_LIMIT",
+          "category": "COMPARATIVE",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "EXISTING_DUPLICATE_CONTENT_GATE",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "OUTPUT_SCHEMA",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "SCOPED_INPUT_FIXTURE",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "NO_FOREIGN_OR_UNVERIFIED_FACTS",
+          "category": "MANDATORY",
+          "result": "FAIL",
+          "reason": "ORACLE_VIOLATION"
+        },
+        {
+          "rule": "CONTEXT_HISTORY_AND_SPECIFICITY",
+          "category": "COMPARATIVE",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        }
+      ]
+    },
+    {
+      "caseId": "daily-rejected-long-form",
+      "service": "HASHIEE",
+      "task": "DAILY_MISSION",
+      "promptVersion": "daily-mission-planner-v11-goal-planning",
+      "observed": "FAIL",
+      "expected": "FAIL",
+      "testResult": "PASS",
+      "checks": [
+        {
+          "rule": "FIXTURE_SHORT_TEXT_LIMIT",
+          "category": "COMPARATIVE",
+          "result": "FAIL",
+          "reason": "ORACLE_VIOLATION"
+        },
+        {
+          "rule": "EXISTING_DUPLICATE_CONTENT_GATE",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "OUTPUT_SCHEMA",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "SCOPED_INPUT_FIXTURE",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "NO_FOREIGN_OR_UNVERIFIED_FACTS",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "CONTEXT_HISTORY_AND_SPECIFICITY",
+          "category": "COMPARATIVE",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        }
+      ]
+    },
+    {
+      "caseId": "daily-repeated-content",
+      "service": "HASHIEE",
+      "task": "DAILY_MISSION",
+      "promptVersion": "daily-mission-planner-v11-goal-planning",
+      "observed": "FAIL",
+      "expected": "FAIL",
+      "testResult": "PASS",
+      "checks": [
+        {
+          "rule": "FIXTURE_SHORT_TEXT_LIMIT",
+          "category": "COMPARATIVE",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "EXISTING_DUPLICATE_CONTENT_GATE",
+          "category": "MANDATORY",
+          "result": "FAIL",
+          "reason": "ORACLE_VIOLATION"
+        },
+        {
+          "rule": "OUTPUT_SCHEMA",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "SCOPED_INPUT_FIXTURE",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "NO_FOREIGN_OR_UNVERIFIED_FACTS",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "CONTEXT_HISTORY_AND_SPECIFICITY",
+          "category": "COMPARATIVE",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        }
+      ]
+    },
+    {
+      "caseId": "daily-cross-owner",
+      "service": "HASHIEE",
+      "task": "DAILY_MISSION",
+      "promptVersion": "daily-mission-planner-v11-goal-planning",
+      "observed": "FAIL",
+      "expected": "FAIL",
+      "testResult": "PASS",
+      "checks": [
+        {
+          "rule": "FIXTURE_SHORT_TEXT_LIMIT",
+          "category": "COMPARATIVE",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "EXISTING_DUPLICATE_CONTENT_GATE",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "OUTPUT_SCHEMA",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "SCOPED_INPUT_FIXTURE",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "NO_FOREIGN_OR_UNVERIFIED_FACTS",
+          "category": "MANDATORY",
+          "result": "FAIL",
+          "reason": "ORACLE_VIOLATION"
+        },
+        {
+          "rule": "CONTEXT_HISTORY_AND_SPECIFICITY",
+          "category": "COMPARATIVE",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        }
+      ]
+    },
+    {
+      "caseId": "daily-other-user-personalization",
+      "service": "HASHIEE",
+      "task": "DAILY_MISSION",
+      "promptVersion": "daily-mission-planner-v11-goal-planning",
+      "observed": "PASS",
+      "expected": "PASS",
+      "testResult": "PASS",
+      "checks": [
+        {
+          "rule": "FIXTURE_SHORT_TEXT_LIMIT",
+          "category": "COMPARATIVE",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "EXISTING_DUPLICATE_CONTENT_GATE",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "OUTPUT_SCHEMA",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "SCOPED_INPUT_FIXTURE",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "NO_FOREIGN_OR_UNVERIFIED_FACTS",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "CONTEXT_HISTORY_AND_SPECIFICITY",
+          "category": "COMPARATIVE",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        }
+      ]
+    },
+    {
+      "caseId": "daily-invalid-output",
+      "service": "HASHIEE",
+      "task": "DAILY_MISSION",
+      "promptVersion": "daily-mission-planner-v11-goal-planning",
+      "observed": "FAIL",
+      "expected": "FAIL",
+      "testResult": "PASS",
+      "checks": [
+        {
+          "rule": "OUTPUT_SCHEMA_OR_EXISTING_GATE",
+          "category": "MANDATORY",
+          "result": "FAIL",
+          "reason": "VALIDATION_REJECTED"
+        },
+        {
+          "rule": "SCOPED_INPUT_FIXTURE",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        }
+      ]
+    },
+    {
+      "caseId": "weekly-unmeasured",
+      "service": "HASHIEE",
+      "task": "WEEKLY_PLAN",
+      "promptVersion": "weekly-planner-v8-goal-outcomes",
+      "observed": "PASS",
+      "expected": "PASS",
+      "testResult": "PASS",
+      "checks": [
+        {
+          "rule": "OUTPUT_SCHEMA",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "SCOPED_INPUT_FIXTURE",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "NO_FOREIGN_OR_UNVERIFIED_FACTS",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "CONTEXT_HISTORY_AND_SPECIFICITY",
+          "category": "COMPARATIVE",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        }
+      ]
+    },
+    {
+      "caseId": "weekly-false-success",
+      "service": "HASHIEE",
+      "task": "WEEKLY_PLAN",
+      "promptVersion": "weekly-planner-v8-goal-outcomes",
+      "observed": "FAIL",
+      "expected": "FAIL",
+      "testResult": "PASS",
+      "checks": [
+        {
+          "rule": "OUTPUT_SCHEMA",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "SCOPED_INPUT_FIXTURE",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "NO_FOREIGN_OR_UNVERIFIED_FACTS",
+          "category": "MANDATORY",
+          "result": "FAIL",
+          "reason": "ORACLE_VIOLATION"
+        },
+        {
+          "rule": "CONTEXT_HISTORY_AND_SPECIFICITY",
+          "category": "COMPARATIVE",
+          "result": "FAIL",
+          "reason": "ORACLE_VIOLATION"
+        }
+      ]
+    },
+    {
+      "caseId": "weekly-goal-changed",
+      "service": "HASHIEE",
+      "task": "WEEKLY_PLAN",
+      "promptVersion": "weekly-planner-v8-goal-outcomes",
+      "observed": "PASS",
+      "expected": "PASS",
+      "testResult": "PASS",
+      "checks": [
+        {
+          "rule": "OUTPUT_SCHEMA",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "SCOPED_INPUT_FIXTURE",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "NO_FOREIGN_OR_UNVERIFIED_FACTS",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "CONTEXT_HISTORY_AND_SPECIFICITY",
+          "category": "COMPARATIVE",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        }
+      ]
+    },
+    {
+      "caseId": "weekly-stale-goal",
+      "service": "HASHIEE",
+      "task": "WEEKLY_PLAN",
+      "promptVersion": "weekly-planner-v8-goal-outcomes",
+      "observed": "FAIL",
+      "expected": "FAIL",
+      "testResult": "PASS",
+      "checks": [
+        {
+          "rule": "OUTPUT_SCHEMA",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "SCOPED_INPUT_FIXTURE",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "NO_FOREIGN_OR_UNVERIFIED_FACTS",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "CONTEXT_HISTORY_AND_SPECIFICITY",
+          "category": "COMPARATIVE",
+          "result": "FAIL",
+          "reason": "ORACLE_VIOLATION"
+        }
+      ]
+    },
+    {
+      "caseId": "weekly-foreign-pillar",
+      "service": "HASHIEE",
+      "task": "WEEKLY_PLAN",
+      "promptVersion": "weekly-planner-v8-goal-outcomes",
+      "observed": "FAIL",
+      "expected": "FAIL",
+      "testResult": "PASS",
+      "checks": [
+        {
+          "rule": "OUTPUT_SCHEMA_OR_EXISTING_GATE",
+          "category": "MANDATORY",
+          "result": "FAIL",
+          "reason": "VALIDATION_REJECTED"
+        },
+        {
+          "rule": "SCOPED_INPUT_FIXTURE",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        }
+      ]
+    },
+    {
+      "caseId": "weekly-duplicate-days",
+      "service": "HASHIEE",
+      "task": "WEEKLY_PLAN",
+      "promptVersion": "weekly-planner-v8-goal-outcomes",
+      "observed": "FAIL",
+      "expected": "FAIL",
+      "testResult": "PASS",
+      "checks": [
+        {
+          "rule": "OUTPUT_SCHEMA_OR_EXISTING_GATE",
+          "category": "MANDATORY",
+          "result": "FAIL",
+          "reason": "VALIDATION_REJECTED"
+        },
+        {
+          "rule": "SCOPED_INPUT_FIXTURE",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        }
+      ]
+    },
+    {
+      "caseId": "weekly-daily-inconsistent",
+      "service": "HASHIEE",
+      "task": "WEEKLY_PLAN",
+      "promptVersion": "weekly-planner-v8-goal-outcomes",
+      "observed": "FAIL",
+      "expected": "FAIL",
+      "testResult": "PASS",
+      "checks": [
+        {
+          "rule": "OUTPUT_SCHEMA",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "SCOPED_INPUT_FIXTURE",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "NO_FOREIGN_OR_UNVERIFIED_FACTS",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "CONTEXT_HISTORY_AND_SPECIFICITY",
+          "category": "COMPARATIVE",
+          "result": "FAIL",
+          "reason": "ORACLE_VIOLATION"
+        }
+      ]
+    },
+    {
+      "caseId": "assessment-correct",
+      "service": "MANABERU_STYLE",
+      "task": "ASSESSMENT",
+      "promptVersion": "ai-training-evaluation-v3",
+      "observed": "PASS",
+      "expected": "PASS",
+      "testResult": "PASS",
+      "checks": [
+        {
+          "rule": "ASSESSMENT_GROUND_TRUTH",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "CAPABILITY_NOT_ARTIFACT_QUALITY",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "LEARNER_LEVEL_UNKNOWN",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "OUTPUT_SCHEMA",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "SCOPED_INPUT_FIXTURE",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "NO_FOREIGN_OR_UNVERIFIED_FACTS",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "CONTEXT_HISTORY_AND_SPECIFICITY",
+          "category": "COMPARATIVE",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        }
+      ]
+    },
+    {
+      "caseId": "assessment-partial",
+      "service": "MANABERU_STYLE",
+      "task": "ASSESSMENT",
+      "promptVersion": "ai-training-evaluation-v3",
+      "observed": "PASS",
+      "expected": "PASS",
+      "testResult": "PASS",
+      "checks": [
+        {
+          "rule": "ASSESSMENT_GROUND_TRUTH",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "CAPABILITY_NOT_ARTIFACT_QUALITY",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "LEARNER_LEVEL_UNKNOWN",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "OUTPUT_SCHEMA",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "SCOPED_INPUT_FIXTURE",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "NO_FOREIGN_OR_UNVERIFIED_FACTS",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "CONTEXT_HISTORY_AND_SPECIFICITY",
+          "category": "COMPARATIVE",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        }
+      ]
+    },
+    {
+      "caseId": "assessment-wrong",
+      "service": "MANABERU_STYLE",
+      "task": "ASSESSMENT",
+      "promptVersion": "ai-training-evaluation-v3",
+      "observed": "PASS",
+      "expected": "PASS",
+      "testResult": "PASS",
+      "checks": [
+        {
+          "rule": "ASSESSMENT_GROUND_TRUTH",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "CAPABILITY_NOT_ARTIFACT_QUALITY",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "LEARNER_LEVEL_UNKNOWN",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "OUTPUT_SCHEMA",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "SCOPED_INPUT_FIXTURE",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "NO_FOREIGN_OR_UNVERIFIED_FACTS",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "CONTEXT_HISTORY_AND_SPECIFICITY",
+          "category": "COMPARATIVE",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        }
+      ]
+    },
+    {
+      "caseId": "assessment-false-pass",
+      "service": "MANABERU_STYLE",
+      "task": "ASSESSMENT",
+      "promptVersion": "ai-training-evaluation-v3",
+      "observed": "FAIL",
+      "expected": "FAIL",
+      "testResult": "PASS",
+      "checks": [
+        {
+          "rule": "ASSESSMENT_GROUND_TRUTH",
+          "category": "MANDATORY",
+          "result": "FAIL",
+          "reason": "ORACLE_VIOLATION"
+        },
+        {
+          "rule": "CAPABILITY_NOT_ARTIFACT_QUALITY",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "LEARNER_LEVEL_UNKNOWN",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "OUTPUT_SCHEMA",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "SCOPED_INPUT_FIXTURE",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "NO_FOREIGN_OR_UNVERIFIED_FACTS",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "CONTEXT_HISTORY_AND_SPECIFICITY",
+          "category": "COMPARATIVE",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        }
+      ]
+    },
+    {
+      "caseId": "assessment-insufficient",
+      "service": "MANABERU_STYLE",
+      "task": "ASSESSMENT",
+      "promptVersion": "ai-training-evaluation-v3",
+      "observed": "PASS",
+      "expected": "PASS",
+      "testResult": "PASS",
+      "checks": [
+        {
+          "rule": "ASSESSMENT_GROUND_TRUTH",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "CAPABILITY_NOT_ARTIFACT_QUALITY",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "LEARNER_LEVEL_UNKNOWN",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "OUTPUT_SCHEMA",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "SCOPED_INPUT_FIXTURE",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "NO_FOREIGN_OR_UNVERIFIED_FACTS",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "CONTEXT_HISTORY_AND_SPECIFICITY",
+          "category": "COMPARATIVE",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        }
+      ]
+    },
+    {
+      "caseId": "assessment-missing-evidence",
+      "service": "MANABERU_STYLE",
+      "task": "ASSESSMENT",
+      "promptVersion": "ai-training-evaluation-v3",
+      "observed": "UNKNOWN",
+      "expected": "UNKNOWN",
+      "testResult": "PASS",
+      "checks": [
+        {
+          "rule": "ASSESSMENT_EVIDENCE",
+          "category": "MANDATORY",
+          "result": "UNKNOWN",
+          "reason": "NO_EVALUATION_AVAILABLE"
+        }
+      ]
+    },
+    {
+      "caseId": "assessment-invalid-score",
+      "service": "MANABERU_STYLE",
+      "task": "ASSESSMENT",
+      "promptVersion": "ai-training-evaluation-v3",
+      "observed": "FAIL",
+      "expected": "FAIL",
+      "testResult": "PASS",
+      "checks": [
+        {
+          "rule": "OUTPUT_SCHEMA_OR_EXISTING_GATE",
+          "category": "MANDATORY",
+          "result": "FAIL",
+          "reason": "VALIDATION_REJECTED"
+        },
+        {
+          "rule": "SCOPED_INPUT_FIXTURE",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        }
+      ]
+    },
+    {
+      "caseId": "assessment-cross-learner",
+      "service": "MANABERU_STYLE",
+      "task": "ASSESSMENT",
+      "promptVersion": "ai-training-evaluation-v3",
+      "observed": "FAIL",
+      "expected": "FAIL",
+      "testResult": "PASS",
+      "checks": [
+        {
+          "rule": "ASSESSMENT_GROUND_TRUTH",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "CAPABILITY_NOT_ARTIFACT_QUALITY",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "LEARNER_LEVEL_UNKNOWN",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "OUTPUT_SCHEMA",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "SCOPED_INPUT_FIXTURE",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "NO_FOREIGN_OR_UNVERIFIED_FACTS",
+          "category": "MANDATORY",
+          "result": "FAIL",
+          "reason": "ORACLE_VIOLATION"
+        },
+        {
+          "rule": "CONTEXT_HISTORY_AND_SPECIFICITY",
+          "category": "COMPARATIVE",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        }
+      ]
+    },
+    {
+      "caseId": "assessment-artifact-not-capability",
+      "service": "MANABERU_STYLE",
+      "task": "ASSESSMENT",
+      "promptVersion": "ai-training-evaluation-v3",
+      "observed": "PASS",
+      "expected": "PASS",
+      "testResult": "PASS",
+      "checks": [
+        {
+          "rule": "ASSESSMENT_GROUND_TRUTH",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "CAPABILITY_NOT_ARTIFACT_QUALITY",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "LEARNER_LEVEL_UNKNOWN",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "OUTPUT_SCHEMA",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "SCOPED_INPUT_FIXTURE",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "NO_FOREIGN_OR_UNVERIFIED_FACTS",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "CONTEXT_HISTORY_AND_SPECIFICITY",
+          "category": "COMPARATIVE",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        }
+      ]
+    },
+    {
+      "caseId": "assessment-level-unknown",
+      "service": "MANABERU_STYLE",
+      "task": "ASSESSMENT",
+      "promptVersion": "ai-training-evaluation-v3",
+      "observed": "PASS",
+      "expected": "PASS",
+      "testResult": "PASS",
+      "checks": [
+        {
+          "rule": "ASSESSMENT_GROUND_TRUTH",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "CAPABILITY_NOT_ARTIFACT_QUALITY",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "LEARNER_LEVEL_UNKNOWN",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "OUTPUT_SCHEMA",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "SCOPED_INPUT_FIXTURE",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "NO_FOREIGN_OR_UNVERIFIED_FACTS",
+          "category": "MANDATORY",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        },
+        {
+          "rule": "CONTEXT_HISTORY_AND_SPECIFICITY",
+          "category": "COMPARATIVE",
+          "result": "PASS",
+          "reason": "ORACLE_SATISFIED"
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "cases": 24,
+    "PASS": 10,
+    "FAIL": 13,
+    "UNKNOWN": 1,
+    "testFailures": 0
+  },
+  "unmeasured": [
+    "REAL_MODEL_QUALITY",
+    "LATENCY",
+    "INPUT_TOKENS",
+    "OUTPUT_TOKENS",
+    "API_COST",
+    "PROVIDER_ERROR_RATE",
+    "RUNTIME_AUTHORIZATION_CONTRACT_PILOT",
+    "PRODUCTION_TENANT_ISOLATION",
+    "HUMAN_SEMANTIC_REVIEW"
+  ],
+  "humanReview": {
+    "status": "PENDING"
+  },
+  "releaseVerdict": "UNKNOWN"
+}

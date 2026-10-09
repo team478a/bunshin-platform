@@ -86,7 +86,10 @@ Remove-Item Env:AI_BASELINE_COMPARE_WITH -ErrorAction SilentlyContinue
 - capability-social: 29ファイル305テスト成功。
 - Web関連回帰: 11ファイル79テスト成功（Daily/Weekly/Assessment Adapter、Daily品質/履歴、Weekly生成、Pilot HTTP、AI worker、Call Admission、LINE隔離）。
 - 合計67ファイル707テスト。実Provider、実認証、本番DB、実PilotのE2Eは実施していない。
-- architecture boundary check成功。全体typecheck/変更ファイルlint/formatの最終結果は提出時の検証記録を参照する。
+- architecture boundary check、全体typecheck、変更ファイルlint、全体format:check成功。
+- 全体`pnpm test`も試行したが、既存`daily-missions`の2ケースと`public-rls-schema`の1ケースが5秒timeout。Web全体は他Packageの失敗で完走せず、全体成功とは判定しない。該当ファイルを単独再実行するとDaily 10件/RLS 2件とも成功。既存の時間制限やコードは変更していない。CIの全体結果は別確認する。
+
+保存baseline: [report](evo01-results/evo01-f25f255e-fa1a-4a34-b7f1-a62f3863fdd6/report.md) / [JSON](evo01-results/evo01-f25f255e-fa1a-4a34-b7f1-a62f3863fdd6/report.json)。実行コードcommit `41564497fbd22ba0b5d019664d7c5d846dd3be23`、dirty=false、24ケースの観測PASS/FAIL/UNKNOWN=10/13/1、期待外れ0。後の文書/結果追加commitとは分けて記録する。別の追記実行をOS一時ディレクトリに保存してこのJSONと比較し、COMPARABLE/変更0（品質・原価UNKNOWN）を確認した。元baselineは上書きしていない。
 
 危険な高score固定出力を既存Adapterへ注入した負例で誤PASS検出を確認した。これは実モデルが同じ誤判定をした証拠ではなく、評価oracleが拒否できることの証拠である。
 
