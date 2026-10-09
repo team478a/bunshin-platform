@@ -4,6 +4,8 @@
 
 ### 2026-10-09 最新読取証拠とレビュー準備
 
+同日追加のLogs読取で、既存restoreへの10月7日09:29 JSTの学習3migration相当DDLリハーサルstatementを確認した。履歴不一致の変更経路は説明できるが、復旧合格はUNKNOWNのまま。現在は[復元報告の最新追記](../ai-evolution/RESTORE_INTEGRITY_WAVE0_REVIEW_PREPARATION.md)を優先し、Phase Bの残確認は元Backup日時/同時点完全性/権限/RTO/RPO。隔離Prisma履歴の修正や同DDL再実行を次操作にしない。
+
 [本番安全条件の読取証拠](../ai-evolution/PRODUCTION_SAFETY_READ_ONLY_EVIDENCE.md)を2026-10-07/08の観測より優先する。本番Prisma231件・学習5tableあり、Pilot停止・Seat0・承認0・人数policy未設定、Vercel project productionのCall Admission NOT_SET。これは開始許可ではない。
 
 [隔離復元確認・設定レビュー案](../ai-evolution/RESTORE_INTEGRITY_WAVE0_REVIEW_PREPARATION.md)では既存restoreの学習tableとPrisma履歴に不一致を確認。復旧リハーサル合格はUNKNOWN、Wave 0はNO-GOを維持する。Phase Bで新しい復元を反射的に実行せず、まずDB ownerが既存restoreの復元元Backup/復元後変更記録を照合する。Phase Eの既存候補と[3Definitionレビュー票](PERSONAL_LEARNING_PRODUCTION_DEFINITION_REVIEW_SHEET.md)は未承認。設定・承認・参加者登録・開始は別操作承認を待つ。
