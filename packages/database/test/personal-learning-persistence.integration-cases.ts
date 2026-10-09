@@ -1709,6 +1709,85 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
         data: { revokedAt: new Date() },
       });
       await expect(pilot.read(f.actor)).rejects.toThrow();
+      // Privacy is independent of current learning access: revoked seat + stopped program.
+      await client.serviceProgram.update({
+        where: { id: authority.serviceProgramId },
+        data: {
+          status: 'SUSPENDED',
+          settings: {
+            ...settings,
+            personalLearningPilot: {
+              ...(settings.personalLearningPilot as Prisma.JsonObject),
+              enabled: false,
+            },
+          },
+        },
+      });
+      const privacyScope = {
+        workspaceId: f.scope.workspaceId,
+        groupId: f.scope.groupId,
+        programEnrollmentId: f.enrollment.id,
+        actorUserId: f.scope.userId,
+      };
+      const exporter = new PrismaTrainingPersonalDataExportRepository(client);
+      const deletion = new PrismaTrainingPersonalDataDeletionRepository(client);
+      expect((await exporter.read(privacyScope)).outcome).toBe('FOUND');
+      for (const foreign of [
+        { actorUserId: f.owner.id },
+        { workspaceId: randomUUID() },
+        { groupId: randomUUID() },
+        { programEnrollmentId: randomUUID() },
+      ]) {
+        expect(await exporter.read({ ...privacyScope, ...foreign })).toEqual({
+          outcome: 'NOT_FOUND',
+        });
+        expect(
+          await deletion.preview({ ...privacyScope, ...foreign, target: { kind: 'ALL' } }),
+        ).toEqual({ outcome: 'NOT_FOUND' });
+      }
+      // Management role or EXTERNAL history alone cannot authorize own learning-data access.
+      await client.personalLearningPilotSeat.updateMany({
+        where: authority,
+        data: { kind: 'EXTERNAL', cohort: 'WAVE_1' },
+      });
+      expect(await exporter.read(privacyScope)).toEqual({ outcome: 'NOT_FOUND' });
+      expect(await deletion.preview({ ...privacyScope, target: { kind: 'ALL' } })).toEqual({
+        outcome: 'NOT_FOUND',
+      });
+      await client.personalLearningPilotSeat.updateMany({
+        where: authority,
+        data: { kind: 'INTERNAL', cohort: 'INTERNAL' },
+      });
+      const ownAnswer = await client.trainingMissionAnswer.findFirstOrThrow({
+        where: {
+          workspaceId: f.scope.workspaceId,
+          groupId: f.scope.groupId,
+          programEnrollmentId: f.enrollment.id,
+          userId: f.scope.userId,
+        },
+      });
+      const single = {
+        ...privacyScope,
+        target: { kind: 'ANSWER' as const, answerId: ownAnswer.id },
+      };
+      const answerPreview = await deletion.preview(single);
+      if (answerPreview.outcome !== 'PREVIEW') throw new Error('owner answer preview expected');
+      expect(
+        (await deletion.delete({ ...single, revision: answerPreview.preview.revision, now }))
+          .outcome,
+      ).toBe('DELETED');
+      const all = { ...privacyScope, target: { kind: 'ALL' as const } };
+      const allPreview = await deletion.preview(all);
+      if (allPreview.outcome !== 'PREVIEW') throw new Error('owner ALL preview expected');
+      const deleteRequest = { ...all, revision: allPreview.preview.revision, now };
+      expect((await deletion.delete(deleteRequest)).outcome).toBe('DELETED');
+      expect((await deletion.delete(deleteRequest)).outcome).toBe('ALREADY_DELETED');
+      expect((await exporter.read(privacyScope)).outcome).toBe('FOUND');
+      expect(await client.personalLearningPilotSeat.findFirst({ where: authority })).toMatchObject({
+        programEnrollmentId: null,
+        revokedAt: expect.any(Date),
+      });
+      await expect(pilot.read(f.actor)).rejects.toThrow();
       expect(
         await client.groupMembership.findUniqueOrThrow({ where: { id: f.member.id } }),
       ).toMatchObject({ serviceRole: 'SERVICE_OWNER' });
