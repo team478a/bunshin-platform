@@ -1,0 +1,10 @@
+{
+  "status": "COMPARABLE",
+  "changes": [],
+  "variants": {
+    "modelChanged": false,
+    "promptChanged": false,
+    "codeChanged": true
+  },
+  "qualityAndCostConclusion": "UNKNOWN"
+}
