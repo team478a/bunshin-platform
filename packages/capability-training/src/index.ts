@@ -8,6 +8,7 @@ export * from './guided-practice';
 export * from './learning-reproduction-evidence';
 export * from './reproduction-challenge-reference';
 export * from './reproduction-challenge-fixtures';
+export * from './reproduction-challenge-review';
 export * from './reproduction-history';
 import { AI_TRAINING_MISSION_QUALITY } from './mission-quality';
 import type { TrainingGoalKey } from './learning-catalog';
