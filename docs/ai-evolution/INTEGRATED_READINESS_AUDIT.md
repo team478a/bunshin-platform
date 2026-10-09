@@ -1,5 +1,7 @@
 # 実運用準備・AI進化対応 統合監査
 
+2026-10-09のマージ後追跡: [本番安全条件の読取証拠](PRODUCTION_SAFETY_READ_ONLY_EVIDENCE.md)。Personal Learningの対象4Migration/版一致、RLS、Program停止・Seat0・cap未設定・Approval0を実DBで確認。#1176の2MigrationはPENDINGへ更新。以下は#1201時点の監査記録として維持する。
+
 ## 結論と監査境界
 
 監査日: 2026-10-09 JST。対象は `team478a/bunshin-platform` のハッシー、マナベルスタイル、共通AI基盤、OEM。旧 `ai-sns-agent` / `InstagramOEM` は対象外。
