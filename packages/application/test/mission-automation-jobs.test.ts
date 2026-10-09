@@ -57,6 +57,54 @@ const scopes = (eligible = true): MissionAutomationScopeRepository => ({
 });
 
 describe('Mission automation jobs', () => {
+  it.each([
+    [{ reason: 'TIMEOUT' }, 'AI_PROVIDER_TIMEOUT', true],
+    [{ httpStatus: 429 }, 'AI_PROVIDER_HTTP_429', true],
+    [{ httpStatus: 503 }, 'AI_PROVIDER_HTTP_503', true],
+    [{ httpStatus: 401 }, 'AI_PROVIDER_HTTP_401', false],
+    [{ httpStatus: 429, providerErrorCode: 'insufficient_quota' }, 'AI_PROVIDER_QUOTA', false],
+    [{ reason: 'MALFORMED_RESPONSE' }, 'AI_PROVIDER_UNAVAILABLE', true],
+  ] as const)('reuses bounded Weekly retry policy (%s)', async (cause, category, retryable) => {
+    const repository = jobRepository();
+    const scope = scopes();
+    const handler = {
+      execute: vi
+        .fn()
+        .mockRejectedValue(
+          new ApplicationError('AI_PROVIDER_UNAVAILABLE', 'mission provider failed', cause),
+        ),
+    };
+    const registry = new MissionAutomationHandlerRegistry().register(
+      'WEEKLY_PLAN_PREPARE',
+      handler,
+    );
+    const executor = new ExecuteMissionAutomationJob(
+      scope,
+      registry,
+      new CompleteJob(repository, () => now),
+      new FailJob(repository, () => now),
+    );
+    const weekly = {
+      ...job,
+      jobType: 'WEEKLY_PLAN_PREPARE' as const,
+      payloadReference: 'weekly-plan:2026-08-24',
+    };
+    await executor.execute(weekly, 'worker-1');
+    expect(handler.execute).toHaveBeenCalledTimes(1);
+    expect(repository.complete).not.toHaveBeenCalled();
+    expect(repository.fail).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        failure: { errorCategory: category, retryable },
+        nextRetryAt: retryable ? new Date(now.getTime() + 30_000) : null,
+      }),
+    );
+    await executor.execute({ ...weekly, attemptCount: weekly.maxAttempts }, 'worker-1');
+    expect(repository.fail).toHaveBeenLastCalledWith(
+      expect.objectContaining({ nextRetryAt: null }),
+    );
+    expect(scope.validateWeekly).toHaveBeenCalledTimes(2);
+  });
+
   it('does not retry quota exhaustion even when HTTP status is 429', async () => {
     const repository = jobRepository();
     const registry = new MissionAutomationHandlerRegistry().register('DAILY_MISSION_GENERATE', {

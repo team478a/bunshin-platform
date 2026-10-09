@@ -1,5 +1,7 @@
 import type { ApplicationError } from '@bunshin/shared';
+import type { WeeklyPlannerInput } from '@bunshin/capability-social';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { OpenAIWeeklyPlanner } from '../src/providers/openai-weekly-planner';
 import {
   WeeklyPlanGenerationService,
   buildBusinessOutcomePlanningContext,
@@ -263,6 +265,45 @@ describe('WeeklyPlanGenerationService', () => {
       }),
     ).rejects.toMatchObject({ code: 'CONFLICT' } satisfies Partial<ApplicationError>);
     expect(generate).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [429, JSON.stringify({ error: { code: 'rate_limit', message: 'private-body' } })],
+    [503, '<html>private-body</html>'],
+    [200, JSON.stringify({ status: 'incomplete', output: [] })],
+    [200, '{private-body'],
+  ])('does not save failed Adapter output (HTTP %i)', async (status, body) => {
+    const fetcher = vi.fn().mockResolvedValue(new Response(body, { status }));
+    const planner = new OpenAIWeeklyPlanner({ apiKey: 'synthetic-key', fetch: fetcher });
+    generate.mockImplementation((input: WeeklyPlannerInput) => planner.generate(input));
+    const log = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      await expect(
+        service().execute({
+          ...scope,
+          weekStartDate: '2026-08-24',
+          usageIdempotencyKey: 'job:job-failure:weekly-plan',
+          existingPolicy: 'RETURN',
+        }),
+      ).rejects.toMatchObject({ code: 'AI_PROVIDER_UNAVAILABLE' });
+      expect(createGeneratedPlan).not.toHaveBeenCalled();
+      expect(fetcher).toHaveBeenCalledTimes(1);
+      expect(recordUsage).toHaveBeenCalledTimes(1);
+      expect(recordUsage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: 'FAILED',
+          errorCode: 'AI_PROVIDER_UNAVAILABLE',
+          inputTokens: null,
+          outputTokens: null,
+          idempotencyKey: 'job:job-failure:weekly-plan',
+        }),
+      );
+      expect(JSON.stringify([log.mock.calls, recordUsage.mock.calls])).not.toContain(
+        'private-body',
+      );
+    } finally {
+      log.mockRestore();
+    }
   });
 
   it('records a failed provider attempt without storing provider payloads', async () => {
