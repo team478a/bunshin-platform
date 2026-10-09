@@ -10,6 +10,7 @@ import { AI_TRAINING_LEARNING_DEFINITION_FIXTURES } from '@bunshin/capability-tr
 import { currentUserProvider } from '../auth/current-user';
 import { requireSameOrigin } from '../auth/request-security';
 import { resolvePersonalLearningPilot } from '../services/personal-learning-pilot-access';
+import { resolvePersonalLearningFocus } from '../services/personal-learning-focus';
 const logger = createLogger();
 
 const consultation = z
@@ -132,6 +133,7 @@ export async function personalLearningPilotResponse(
       return respond({
         state,
         assignment,
+        learningFocus: resolvePersonalLearningFocus(current?.plan, assignment),
         readiness: await repository.readiness(input),
         practice: await new db.PrismaGuidedPracticeRepository(db.prisma).readPractice(
           input,

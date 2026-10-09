@@ -19,6 +19,7 @@ import type {
 } from './ai-training-types';
 import { AiTrainingMissionCard } from './ai-training-mission-card';
 import { AiTrainingEvaluationCard } from './ai-training-evaluation-card';
+import type { PersonalLearningFocus } from '../../../../../src/services/personal-learning-focus';
 import {
   observeTrainingEvaluation,
   type EvaluationObservation,
@@ -46,12 +47,28 @@ export function personalLearningRouterMessage(status: string, reason?: string) {
   );
 }
 export type PersonalLearningPilotSnapshot = {
+  learningFocus?: PersonalLearningFocus | null;
   practice?: GuidedPracticeView;
   state: PersonalLearningState;
   assignment: (TrainingAction & { definitionKey: string | null; planCompleted?: boolean }) | null;
   readiness: { profileReady: boolean; approvalReady: boolean };
 };
 const errorMessage = '学習状態を確認できませんでした。もう一度お試しください。';
+
+export function PersonalLearningCompletionReminder({
+  assessmentPassed,
+  practice,
+}: {
+  assessmentPassed: boolean;
+  practice: GuidedPracticeView | undefined;
+}) {
+  if (!assessmentPassed || !practice?.started || practice.completed) return null;
+  return (
+    <p className="notice" role="status">
+      次の学習へ進む前に、自分で操作・確認できた場合は、上の「本人の実践完了を記録する」から記録できます。課題の合格だけでは実践完了や能力レベルの認定にはなりません。
+    </p>
+  );
+}
 
 export function PersonalLearningPilotCard({
   serviceSlug,
@@ -207,6 +224,7 @@ export function PersonalLearningPilotCard({
     return () => controller.abort();
   }, [base, answerId, evaluationIdentity, evaluationRefresh]);
   const practice = snapshot?.practice;
+  const learningFocus = snapshot?.learningFocus;
   async function recordPractice(command: GuidedPracticeCommand) {
     if (!action) return;
     await api(`${base}/personal-learning`, {
@@ -571,6 +589,25 @@ export function PersonalLearningPilotCard({
           </button>
         </section>
       ) : null}
+      {action && !planCompleted ? (
+        <section className="service-entry__card training-card" aria-label="今回の学習の焦点">
+          {learningFocus ? (
+            <>
+              <h2>{learningFocus.title}</h2>
+              <p>{learningFocus.focus}</p>
+              <p>{learningFocus.assessmentNote}</p>
+            </>
+          ) : (
+            <p role="status">今回の学習の焦点を確認できませんでした。運営者へ確認してください。</p>
+          )}
+          <p>
+            架空の勉強会や架空のお店など、安全な練習用の題材で構いません。実在する人の名前・連絡先・会社の秘密は入力しないでください。
+          </p>
+          <p>
+            提出するのは自分で組み立てたAIへの指示です。外部AIの完成した回答は貼り付けないでください。
+          </p>
+        </section>
+      ) : null}
       {action && practice?.started && !practice.completed ? (
         <section className="service-entry__card training-card">
           <h2>本人が操作・確認する</h2>
@@ -659,6 +696,10 @@ export function PersonalLearningPilotCard({
       ) : null}
       {evaluation ? (
         <>
+          <PersonalLearningCompletionReminder
+            assessmentPassed={evaluation.result === 'PASS'}
+            practice={practice}
+          />
           <AiTrainingEvaluationCard
             pilot
             serviceSlug={serviceSlug}

@@ -1,11 +1,16 @@
 import type { Prisma } from '@prisma/client';
-import type { PersonalLearningActor, LearningConsultationRequest } from '@bunshin/application';
+import type {
+  PersonalLearningActor,
+  LearningConsultationRequest,
+  LearningDefinitionReference,
+} from '@bunshin/application';
 import { ApplicationError } from '@bunshin/shared';
 import {
   consultAiTrainingLearning,
   projectAiTrainingLearnerProfiles,
   personalLearningPilotAllows,
   parseAiTrainingActionDisplay,
+  AI_TRAINING_LEARNING_DEFINITION_FIXTURES,
 } from '@bunshin/capability-training';
 import { PrismaPersonalLearningPersistenceRepository } from './personal-learning-persistence';
 import { PrismaPersonalLearningRouterBridge } from './personal-learning-router';
@@ -127,11 +132,26 @@ export class PrismaPersonalLearningPilotRepository extends PrismaPersonalLearnin
       });
       if (!row) return null;
       const snapshot = row.displaySnapshot as {
-        personalLearning?: { planRevision?: number; definition?: { definitionKey?: string } };
+        qualityVersion?: string;
+        personalLearning?: {
+          planRevision?: number;
+          definition?: Partial<LearningDefinitionReference>;
+        };
       };
       if (snapshot.personalLearning?.planRevision !== input.revision) return null;
       const display = parseAiTrainingActionDisplay(row.displaySnapshot);
       if (!display) throw new ApplicationError('CONFLICT', 'pilot assignment display unavailable');
+      // Expose only a known, version-pinned presentation reference. Do not infer a version
+      // from definitionKey or parseAiTrainingActionDisplay's legacy quality fallback.
+      const ref = snapshot.personalLearning?.definition;
+      const definition = AI_TRAINING_LEARNING_DEFINITION_FIXTURES.find(
+        (d) =>
+          d.reference.packageKey === ref?.packageKey &&
+          d.reference.definitionKey === ref.definitionKey &&
+          d.reference.version === ref.version &&
+          d.legacyMissionRef.actionKey === row.missionDefinitionKey &&
+          d.legacyMissionRef.qualityVersion === snapshot.qualityVersion,
+      );
       const answer = await tx.trainingMissionAnswer.findFirst({
         where: {
           workspaceId: s.workspaceId,
@@ -158,6 +178,7 @@ export class PrismaPersonalLearningPilotRepository extends PrismaPersonalLearnin
       return {
         planCompleted: completion !== null,
         definitionKey: snapshot.personalLearning?.definition?.definitionKey ?? null,
+        definitionReference: definition?.reference ?? null,
         id: row.id,
         sequence: row.sequence,
         actionKey: row.missionDefinitionKey,
