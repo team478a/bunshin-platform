@@ -27,8 +27,10 @@ function fixture() {
   const tx = {
     $queryRaw: vi.fn().mockResolvedValue([]),
     $executeRaw: vi.fn().mockResolvedValue(0),
-    personalLearningPilotSeat: table(),
-    groupMembership: { findFirst: vi.fn().mockResolvedValue({ id: 'membership-a' }) },
+    personalLearningPilotSeat: { ...table(), findFirst: vi.fn().mockResolvedValue(null) },
+    groupMembership: {
+      findFirst: vi.fn().mockResolvedValue({ id: 'membership-a', serviceRole: 'PARTICIPANT' }),
+    },
     programEnrollment: {
       findFirst: vi.fn().mockResolvedValue({
         id: scope.programEnrollmentId,
@@ -66,6 +68,38 @@ function fixture() {
   };
 }
 describe('personal training data deletion', () => {
+  it('requires INTERNAL owner history for both preview and confirmed deletion', async () => {
+    const { tx, repository } = fixture();
+    tx.groupMembership.findFirst.mockResolvedValue({
+      id: 'membership-a',
+      serviceRole: 'SERVICE_OWNER',
+    });
+    tx.serviceProgram.findFirst.mockResolvedValue({
+      id: 'program-a',
+      settings: {
+        moduleKey: 'AI_TRAINING_V1',
+        personalLearningPilot: { enabled: false },
+      },
+    });
+    expect(await repository.preview(all)).toEqual({ outcome: 'NOT_FOUND' });
+    expect(await repository.delete({ ...all, revision: 'a'.repeat(64), now })).toEqual({
+      outcome: 'NOT_FOUND',
+    });
+    expect(tx.trainingMissionAnswer.findMany).not.toHaveBeenCalled();
+    expect(tx.trainingMissionAnswer.deleteMany).not.toHaveBeenCalled();
+    tx.personalLearningPilotSeat.findFirst.mockResolvedValue({
+      programEnrollmentId: scope.programEnrollmentId,
+      revokedAt: now,
+    });
+    const preview = await repository.preview(all);
+    if (preview.outcome !== 'PREVIEW') throw new Error('owner preview expected');
+    // Removal between preview and confirm is revalidated before physical deletion.
+    tx.personalLearningPilotSeat.findFirst.mockResolvedValue(null);
+    expect(await repository.delete({ ...all, revision: preview.preview.revision, now })).toEqual({
+      outcome: 'NOT_FOUND',
+    });
+    expect(tx.trainingMissionAnswer.deleteMany).not.toHaveBeenCalled();
+  });
   it('previews only identifiers/counts, scopes every table, and never mutates on preview', async () => {
     const { tx, repository, client } = fixture();
     const result = await repository.preview(all);

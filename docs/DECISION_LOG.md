@@ -1,5 +1,12 @@
 # BUNSHIN Platform Decision Log
 
+## 2026-10-09: INTERNAL所有者本人のPrivacy権限を学習実行権限と分離する
+
+- EVO-05 R0。既存本人Enrollment/Membership照合を維持し、専用Pilot Programの本人INTERNAL/cohort INTERNAL Seat履歴を持つSERVICE_OWNERだけを個別学習データExport・削除へ追加する。管理ロール一般、EXTERNALのみ、他人、旧V1所有者は許可しない。
+- Pilot OFF、Program停止、Seat取消は新規学習を止めるが、本人の保存済みデータ操作を止めない。学習のlive GateはPrivacyへ流用しない。認証・所属/User/Group/Workspaceの有効条件、Enrollmentの対象状態は変更しない。
+- ALL削除でSeatのEnrollment参照がnullとなった後は、同一Scope/本人/EnrollmentのALL削除監査と取消済みINTERNAL履歴を照合する。一般的な過去参加だけで別Enrollmentを認可しない。再送時は既存revision監査とlockを再利用する。
+- 新Evidence保存、再現Bridge、UI、schema/migration、Provider、課金、LINE、保持期間、本番操作を含めない。[実装報告](ai-evolution/EVO05_R0_OWNER_PRIVACY_IMPLEMENTATION.md)を参照。退会・無効認証時の本人請求経路は別レビュー事項。
+
 ## 2026-10-09: 内部テスター準備UIは停止中の本人に限定する
 
 - 状態: Proposed（PRレビュー待ち。本番操作は未実施）

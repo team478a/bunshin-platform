@@ -11,10 +11,15 @@ const input = {
 const now = new Date('2026-09-28T12:00:00Z');
 function fixture() {
   const tx = {
-    personalLearningPilotSeat: { findMany: vi.fn().mockResolvedValue([]) },
+    personalLearningPilotSeat: {
+      findMany: vi.fn().mockResolvedValue([]),
+      findFirst: vi.fn().mockResolvedValue(null),
+    },
     personalLearningGoalConfirmation: { findMany: vi.fn().mockResolvedValue([]) },
     personalLearningPlanRevision: { findMany: vi.fn().mockResolvedValue([]) },
-    groupMembership: { findFirst: vi.fn().mockResolvedValue({ id: 'membership-a' }) },
+    groupMembership: {
+      findFirst: vi.fn().mockResolvedValue({ id: 'membership-a', serviceRole: 'PARTICIPANT' }),
+    },
     programEnrollment: {
       findFirst: vi.fn().mockResolvedValue({
         id: input.programEnrollmentId,
@@ -124,5 +129,26 @@ describe('training personal data export isolation', () => {
     expect(result.data.answers[0]?.['createdAt']).toBe(now.toISOString());
     expect(result.data.answers[0]?.['answer']).toBe('本人の回答');
     expect(result.data.profile).toBeNull();
+  });
+  it('requires INTERNAL owner history before reading any learning data', async () => {
+    const { tx, repository } = fixture();
+    tx.groupMembership.findFirst.mockResolvedValue({
+      id: 'membership-a',
+      serviceRole: 'SERVICE_OWNER',
+    });
+    tx.serviceProgram.findFirst.mockResolvedValue({
+      id: 'program-a',
+      settings: {
+        moduleKey: 'AI_TRAINING_V1',
+        personalLearningPilot: { enabled: false },
+      },
+    });
+    expect(await repository.read(input)).toEqual({ outcome: 'NOT_FOUND' });
+    expect(tx.trainingMissionAnswer.findMany).not.toHaveBeenCalled();
+    tx.personalLearningPilotSeat.findFirst.mockResolvedValue({
+      programEnrollmentId: input.programEnrollmentId,
+      revokedAt: now,
+    });
+    expect((await repository.read(input)).outcome).toBe('FOUND');
   });
 });
