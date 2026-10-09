@@ -3,7 +3,7 @@ import { web } from '@e2e-dev/web';
 import { fileURLToPath } from 'node:url';
 
 export default {
-  tests: ['learning.e2e.ts'],
+  tests: ['learning.e2e.ts', 'internal-preparation.e2e.ts'],
   workers: 1,
   actionTimeout: 10_000,
   timeout: 60_000,
