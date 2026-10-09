@@ -9,7 +9,7 @@ describe('daily mission AI runtime boundary', () => {
   it('owns runtime configuration, quota reservation, and usage audit details', () => {
     const runtime = read('src/services/daily-mission-ai-runtime.ts');
 
-    expect(runtime).toContain('resolveOpenAiRuntimeConfiguration()');
+    expect(runtime).toContain("resolveOpenAiRuntimeConfiguration(undefined, 'SOCIAL_PLANNER')");
     expect(runtime).toContain('withOrganizationAiGenerationQuota({');
     expect(runtime).toContain("status: 'SUCCESS'");
     expect(runtime).toContain("taskType: 'DAILY_MISSION_PIPELINE'");

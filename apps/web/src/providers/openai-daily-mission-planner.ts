@@ -5,6 +5,10 @@ import type {
   DailyMissionPlannerProviderInput,
 } from '@bunshin/capability-social';
 import { ApplicationError } from '@bunshin/shared';
+import {
+  OPENAI_TASK_RESPONSES_ENDPOINT,
+  serializeOpenAiTaskRequest,
+} from '../ai/openai-task-compatibility';
 
 export const DAILY_MISSION_PLANNER_PROMPT_VERSION = 'daily-mission-planner-v11-goal-planning';
 
@@ -91,13 +95,13 @@ export class OpenAIDailyMissionPlanner implements DailyMissionPlannerPort {
     const model = this.options.model ?? 'gpt-5.2';
     let response: Response;
     try {
-      response = await (this.options.fetch ?? fetch)('https://api.openai.com/v1/responses', {
+      response = await (this.options.fetch ?? fetch)(OPENAI_TASK_RESPONSES_ENDPOINT, {
         method: 'POST',
         headers: {
           authorization: `Bearer ${this.options.apiKey}`,
           'content-type': 'application/json',
         },
-        body: JSON.stringify({
+        body: serializeOpenAiTaskRequest('SOCIAL_PLANNER', {
           model,
           store: false,
           input: [
@@ -125,6 +129,7 @@ export class OpenAIDailyMissionPlanner implements DailyMissionPlannerPort {
         signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
       });
     } catch (error) {
+      if (error instanceof ApplicationError && error.code === 'CONFIGURATION_ERROR') throw error;
       const name = error instanceof Error ? error.name : '';
       throw unavailable(
         ['AbortError', 'TimeoutError'].includes(name) ? 'TIMEOUT' : 'NETWORK_ERROR',

@@ -60,81 +60,99 @@ const input = {
 };
 
 describe('OpenAIDailyMissionPlanner', () => {
-  it('uses strict Responses Structured Outputs without content fields', async () => {
-    const fetcher = vi.fn().mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          model: 'gpt-5.2',
-          usage: { input_tokens: 90, output_tokens: 30 },
-          output: [
-            {
-              content: [
-                {
-                  type: 'output_text',
-                  text: JSON.stringify({
-                    topic: '今日のテーマ',
-                    angle: '今日の切り口',
-                    reason: '選定理由',
-                    estimatedMinutes: 5,
-                    usedTrendIdea: false,
-                  }),
-                },
-              ],
-            },
-          ],
-        }),
-        { status: 200 },
-      ),
-    );
-    const result = await new OpenAIDailyMissionPlanner({
-      apiKey: 'test-key',
-      fetch: fetcher,
-    }).generate(input);
-
-    expect(result).toMatchObject({
-      model: 'gpt-5.2',
-      promptVersion: 'daily-mission-planner-v11-goal-planning',
-      inputTokens: 90,
-      outputTokens: 30,
+  it('rejects an unregistered model before a Provider call', async () => {
+    const fetcher = vi.fn<typeof fetch>();
+    await expect(
+      new OpenAIDailyMissionPlanner({
+        apiKey: 'synthetic',
+        model: 'unknown-model',
+        fetch: fetcher,
+      }).generate(input),
+    ).rejects.toMatchObject({
+      code: 'CONFIGURATION_ERROR',
+      cause: { reason: 'MODEL_NOT_REGISTERED' },
     });
-    const request = JSON.parse(fetcher.mock.calls[0]?.[1]?.body as string) as {
-      store: boolean;
-      text: {
-        format: {
-          type: string;
-          strict: boolean;
-          schema: { properties: Record<string, Record<string, unknown>> };
-        };
-      };
-      input: Array<{ content: string }>;
-    };
-    expect(request).toMatchObject({
-      store: false,
-      text: { format: { type: 'json_schema', strict: true } },
-    });
-    expect(Object.keys(request.text.format.schema.properties)).toEqual([
-      'topic',
-      'angle',
-      'reason',
-      'estimatedMinutes',
-      'usedTrendIdea',
-      'personalizationSourceTypes',
-      'personalizationReason',
-    ]);
-    expect(request.text.format.schema.properties.personalizationSourceTypes).not.toHaveProperty(
-      'uniqueItems',
-    );
-    expect(request.input[2]?.content).toContain('10年の経験');
-    expect(request.input[2]?.content).toContain('personality-version-2');
-    expect(request.input[2]?.content).toContain('いっしょに');
-    expect(request.input[2]?.content).toContain('初心者向け抽出教室');
-    expect(request.input[2]?.content).toContain('HELPFUL_EXPERTISE');
-    expect(request.input[2]?.content).toContain('前日のテーマ');
-    expect(request.input[2]?.content).toContain('職場環境');
-    expect(request.input[0]?.content).toContain('CTAの末尾だけで作らず');
-    expect(request.input[1]?.content).toContain('言い換えだけの企画を避け');
-    expect(request.input[1]?.content).toContain('一般的な生活・自己啓発テーマへ逸らしません');
+    expect(fetcher).not.toHaveBeenCalled();
   });
+  it.each(['gpt-5.2', 'gpt-5.2-2025-12-11', 'gpt-5-mini', 'gpt-5-mini-2025-08-07'])(
+    'uses strict Responses Structured Outputs without content fields for %s',
+    async (model) => {
+      const fetcher = vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            model,
+            usage: { input_tokens: 90, output_tokens: 30 },
+            output: [
+              {
+                content: [
+                  {
+                    type: 'output_text',
+                    text: JSON.stringify({
+                      topic: '今日のテーマ',
+                      angle: '今日の切り口',
+                      reason: '選定理由',
+                      estimatedMinutes: 5,
+                      usedTrendIdea: false,
+                    }),
+                  },
+                ],
+              },
+            ],
+          }),
+          { status: 200 },
+        ),
+      );
+      const result = await new OpenAIDailyMissionPlanner({
+        apiKey: 'test-key',
+        model,
+        fetch: fetcher,
+      }).generate(input);
+
+      expect(result).toMatchObject({
+        model,
+        promptVersion: 'daily-mission-planner-v11-goal-planning',
+        inputTokens: 90,
+        outputTokens: 30,
+      });
+      const request = JSON.parse(fetcher.mock.calls[0]?.[1]?.body as string) as {
+        store: boolean;
+        text: {
+          format: {
+            type: string;
+            strict: boolean;
+            schema: { properties: Record<string, Record<string, unknown>> };
+          };
+        };
+        input: Array<{ content: string }>;
+      };
+      expect(request).toMatchObject({
+        store: false,
+        text: { format: { type: 'json_schema', strict: true } },
+      });
+      expect(Object.keys(request.text.format.schema.properties)).toEqual([
+        'topic',
+        'angle',
+        'reason',
+        'estimatedMinutes',
+        'usedTrendIdea',
+        'personalizationSourceTypes',
+        'personalizationReason',
+      ]);
+      expect(request.text.format.schema.properties.personalizationSourceTypes).not.toHaveProperty(
+        'uniqueItems',
+      );
+      expect(request.input[2]?.content).toContain('10年の経験');
+      expect(request.input[2]?.content).toContain('personality-version-2');
+      expect(request.input[2]?.content).toContain('いっしょに');
+      expect(request.input[2]?.content).toContain('初心者向け抽出教室');
+      expect(request.input[2]?.content).toContain('HELPFUL_EXPERTISE');
+      expect(request.input[2]?.content).toContain('前日のテーマ');
+      expect(request.input[2]?.content).toContain('職場環境');
+      expect(request.input[0]?.content).toContain('CTAの末尾だけで作らず');
+      expect(request.input[1]?.content).toContain('言い換えだけの企画を避け');
+      expect(request.input[1]?.content).toContain('一般的な生活・自己啓発テーマへ逸らしません');
+    },
+  );
 
   it.each([
     [429, 'application/json', JSON.stringify({ error: { code: 'rate_limit' } }), 'rate_limit'],
