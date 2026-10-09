@@ -1,5 +1,36 @@
 # 隔離復元環境の読取確認とWave 0レビュー準備
 
+## 2026-10-09追記 — 復元後DDLの記録を確認
+
+基準main `2e636258f67382b1ad56faf58f274e7326025a85`（#1203）、branch `codex/restore-ddl-history-evidence`。本人から復元後操作は「不明」と回答を受け、別指示で既存ログを読取確認した。
+
+**履歴227件と学習5tableの不一致を説明する記録を確認した。** Supabaseの既存隔離project `ltumqqwkorcfwgwavfrm` → Logs → Last 7 days → Postgresで、`2026-10-07T00:29:03.205Z`（10月7日09:29:03.205 JST）のstatementログに、以下の隔離DDLリハーサルがある。
+
+- `BEGIN`、lock_timeout=3秒、statement_timeout=60秒。
+- 完了・未rollbackのPrisma履歴が227件で、学習5tableが未存在であることを検査するDO block。
+- `20261006021000_personal_learning_persistence`、`20261006120000_personal_learning_call_admission`、`20261006140000_personal_learning_pilot_seat` の見出しと、対応5table/index/FK/CHECK/RLS・Seat保全triggerのDDL。
+- `COMMIT`と、隔離環境用の完了確認SELECTを含む。Prisma履歴へのINSERT/UPDATEは当該statement内にない。sourceはdashboard。
+
+既存repositoryの3migrationの対象・構造と、前回の5table存在/件数0というcatalog結果に整合する。したがって、復元後にSQLを直接使ったDDLリハーサルが行われ、Prisma適用履歴を登録していないことが、観測された不一致の説明となる。これは本番のPrisma履歴破損の証拠ではなく、隔離環境の変更経路の証拠である。
+
+**限界:** statementログは送信SQLの記録であり、単独では全statementの成功・COMMIT結果を証明しない。現在のcatalogと合わせて確認しているが、全文byte一致/checksum、trigger全定義、履歴変更の全件追跡は未実施。実行者の本人同定、復元元Backup日時、復元データの同時点完全性、RTO/RPOは引き続きUNKNOWN。ログのsession識別子・生ログ・個人情報は文書へ転記しない。
+
+### 監査経路と今回行っていない操作
+
+SQL Editorのフル画面はアクセス不可の表示があり、SQL履歴一覧は取得できなかった。その後project一覧から同じ隔離projectへ戻り、閲覧可能なLogsで過去7日・Postgresフィルターを確認した。直近ログだけで不存在判定せず、復元日を含む期間の既存statementを確認した。組織全体の監査ログ・全期間の全件調査は行っていない。UI表示時刻とSQL内UTC日付は9時間差で一致する。
+
+今回DB queryの実行、SQL再実行、履歴修正、ログ設定変更、Migration、Backup/Restore、Deploy、Definition承認、Participant登録、START/STOP、Provider呼出しは一切行っていない。画面の期間/ログ種別フィルターだけを操作した。誤遷移時は画面を再確認し、保存や変更ボタンを押していない。
+
+### 更新された停止点
+
+下記初回報告の「restore後の変更経路が不明」は、**上記DDL記録あり**へ更新する。履歴不一致を消すためのmigration resolve/履歴INSERT/再Migrationは不要な監査外操作であり実施しない。この隔離環境は「未変更の復元snapshot」ではなく、DDL試験後の環境として扱う。
+
+Wave 0はNO-GO、復旧完全性はUNKNOWNを維持する。次の1確認は、DB ownerが復元元Backup日時・対象snapshotの記録を照合すること。既存ログの09:16頃のarchive recovery complete表示は復元起動の補助証拠であり、元Backup日時やRTOの代わりにはしない。新しい有償復元を自動開始しない。
+
+変更は本書と本番証拠/Launch Runbookの参照追記のみ。Markdown整形・diff確認を行い、コード/DBが変わらないため今回の追加でapplication test/buildは再実行しない。前回32件PASSは前回の結果であり、今回のログ調査や復旧合格の証明へ転用しない。
+
+以下は#1203時点の読取結果・未確認事項を残す履歴。現在の判断は本追記を優先する。
+
 ## 結論・実行境界
 
 2026-10-09 JST。基準main `600a336aa6f88bec46334632d0094bb4acfa697a`（#1202）、branch `codex/wave0-restore-review-preparation`。

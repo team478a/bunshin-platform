@@ -76,6 +76,8 @@ Vercel GET `/v10/projects/prj_2HlX8dPsGNKYP3BCvNoUEKBoXyvv/env` のproduction ta
 
 ## Backup / Restore
 
+2026-10-09追加読取: [隔離復元報告のDDL履歴追記](RESTORE_INTEGRITY_WAVE0_REVIEW_PREPARATION.md)で、10月7日09:29 JSTの隔離DDLリハーサルstatementを確認。学習5tableとPrisma227件の不一致を説明する記録は見つかったが、元Backup日時・本人同定・復元完全性・RTO/RPOはUNKNOWN。履歴修正/再Migrationは行わない。
+
 Supabase Database Backupsの既存表示のみを確認。
 
 - 日次Physical Backup、表示7件COMPLETED。最新は `2026-10-08 20:45:52 UTC` / `2026-10-09 05:45:52 JST`。
