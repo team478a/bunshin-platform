@@ -8,6 +8,10 @@
 
 ## 固定版・教育設計
 
+2026-10-09再照合: main `600a336aa6f88bec46334632d0094bb4acfa697a` の `learning-definition-fixtures.ts` と `mission-quality.ts` で下表の3件・版・Objective・prerequisite・concepts・practice・Mission対応を確認した。レビュー判断は引き続き3件ともUNKNOWN。この照合は教育承認でも本番APPROVEでもない。
+
+人間への今回の確認は、(1)本人がAIを操作する学習として妥当か、(2)CONTEXT_SETTINGの同一Mission再利用を独立Stepとして許容できるか、(3)現Rubricで構造/背景/条件を区別して評価できるか、(4)機密情報を使わず実践できるか、の4点。判断は末尾表へAPPROVE / REJECT / REVISION REQUIREDと理由・対象releaseを記録する。未記入を合格へ補完しない。
+
 全Definition packageKeyはAI_TRAINING、versionは `AI_TRAINING_DEFINITION_FIXTURE_V1`。Skill版 `AI_TRAINING_SKILL_RULES_V1`、Rubric/Mission Quality版 `AI_TRAINING_MISSION_QUALITY_V1`、Router版 `AI_TRAINING_LEARNING_ROUTER_V1`。版・scopeの不一致は利用不可。
 
 | 項目                           | PROMPT_STRUCTURE / 指示の基本構造                                                              | CONTEXT_SETTING / 背景情報の設定                                                  | CONSTRAINT_SETTING / 条件の指定                                 |
