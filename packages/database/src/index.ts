@@ -306,6 +306,11 @@ export { PrismaPersonalLearningPilotProfileRepository } from './personal-learnin
 export { PrismaPersonalLearningAssessmentGate } from './personal-learning-assessment-gate';
 export { PrismaGuidedPracticeRepository } from './guided-practice';
 export { PrismaReproductionHistoryRepository } from './reproduction-history';
+export {
+  PrismaReproductionChallengeReviewAdminRepository,
+  validateReproductionChallengeReviewAdminCommand,
+  type ReproductionChallengeReviewAdminCommand,
+} from './reproduction-challenge-review-admin';
 export { PrismaPersonalLearningCallAdmission } from './personal-learning-call-admission';
 export { PrismaPersonalLearningPilotOperations } from './personal-learning-pilot-operations';
 export {
