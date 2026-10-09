@@ -1,5 +1,28 @@
 # 隔離復元環境の読取確認とWave 0レビュー準備
 
+## 2026-10-09追加 — 復元元Backupの確認可能範囲
+
+基準main `5c73d14f49cd8dedd92b5e38289315aa507fdef8`（#1204）、branch `codex/restore-source-backup-audit`。追加の読取調査で、元projectと既存復元先の画面上の関連を確認した。ただし元Backup日時・復元完全性はUNKNOWN、Wave 0はNO-GOを維持する。
+
+| 確認入口                                                                                          | 観測                                                                                                                                         | 結論・限界                                                                                                               |
+| ------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| 本番 `vtkzinaudznwbsjoyszk` → Database → Backups → Restore to new project → Previous restorations | `bunshin-restore-rehearsal-20261007` / COMPLETED / `07 Oct 2026 00:13:30 (+0000)`。既存記録のリンク先は `ltumqqwkorcfwgwavfrm`               | 本番projectの復元一覧にこの隔離projectが登録されている関連は確認。表示日時を元Backup日時・完了時刻・所要時間と断定しない |
+| 同画面 Available Backups / Scheduled backups                                                      | 10月2〜8日の7件、Physical、Available側COMPLETED。最新 `2026-10-08 20:45:52 UTC`、復元記録より前の候補には `2026-10-06 20:44:04 UTC` 等がある | 個別復元とBackupとの対応ID/時刻は表示されない。「直前のBackupだったはず」と推定して確定しない                            |
+| Previous restorationsのリンクを閲覧                                                               | 既存隔離projectのoverviewへ遷移する                                                                                                          | 元Backupの詳細画面ではない。復元元snapshot/期待件数の証拠は取得できない                                                  |
+| Organization Settings → Audit Logs                                                                | 「Organization Audit Logs are not available on Free or Pro plans」、Team/EnterpriseへのUpgrade案内                                           | 現Pro契約ではこの画面の監査履歴は閲覧不能。履歴がないことの証拠ではない。Upgrade/購入は行わない                          |
+
+既存Backup一覧は物理Backupの存在を示すが、Storage object本体は含まれない旨の注意書きがある。現在の本番とDDL試験後の復元先は時点とschemaが異なる。元snapshotと同時点の件数・checksum・期待値なしに現在の両DBを比較しても、完全な復元合格やデータ損失なしは証明できない。学習5tableは復元後に追加された空tableなので、それらの件数0を利用者データ復旧の成功条件にしない。
+
+### 有償操作を増やさない停止点
+
+この調査で元Backup日時を確定できる証拠は得られなかった。次はDB ownerが、**既存復元時の操作記録/receipt/画面記録から元Backup ID・timestampを特定する**。記録が残っていなければ、Supabaseへ既存復元のsource snapshot metadataを確認できるか問い合わせることを人間が検討する。Codexは問い合わせ送信・非公開データ送信を行っていない。
+
+証拠が得られるまでは「不明」を何度確認してもPASSにならない。独立したDefinition教育レビュー等の準備は可能だが、元Backupの確認を省略したSTARTやDeploy承認にはしない。有料監査プラン・新project・新Restoreを自動追加せず、復元完全性/RTO/RPO/実role拒否は未確認のまま保留する。
+
+今回実行したのはDashboardの既存記録と監査ログ利用可否の閲覧のみ。DB query/SQL再実行、Migration、Deploy、Restore、Backup作成、設定変更、承認、登録、START/STOP、Provider呼出し、Upgradeは行っていない。変更は本書のみ、秘密・利用者本文・生ログを保存しない。Markdown整形とdiff検証を行い、application test/buildはコード変更がないため未実施。
+
+以下の記録は各調査時点の履歴。最新の停止点は本追記を優先する。
+
 ## 2026-10-09追記 — 復元後DDLの記録を確認
 
 基準main `2e636258f67382b1ad56faf58f274e7326025a85`（#1203）、branch `codex/restore-ddl-history-evidence`。本人から復元後操作は「不明」と回答を受け、別指示で既存ログを読取確認した。
