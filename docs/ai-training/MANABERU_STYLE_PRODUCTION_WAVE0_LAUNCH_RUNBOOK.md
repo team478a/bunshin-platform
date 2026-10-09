@@ -2,6 +2,12 @@
 
 ## 状態・対象・承認境界
 
+### 2026-10-09 安全条件の再整理（以下の過去の次操作より優先）
+
+[安全Gate再整理](../ai-evolution/WAVE0_SAFETY_GATE_REBASELINE.md)を現在の作業順序の正本とする。過去の元Backup日時・完全復元はUNKNOWNのまま。画面で取得できない履歴の探索を繰り返すことや、新しい有償Restore/Upgradeを準備全体の必須次操作にしない。復旧準備を省略・PASS扱いせず、現在の変更に必要なBackup/回復手順と残リスクのowner判断を別Gateにする。
+
+現在の開始はNO-GO（Call Admission未設定、Definition未承認、内部参加者未準備、公開release/実認可/停止の検証不足）。次は既存3Definitionの教育レビューと設定案・releaseの整理。実APPROVE/設定/登録/Deploy/STARTは別承認。この追記は過去の復旧証拠を変更せず、復元日時だけをすべてのレビュー・準備の停止理由とする運用を訂正する。
+
 ### 2026-10-09 最新読取証拠とレビュー準備
 
 同日追加のLogs読取で、既存restoreへの10月7日09:29 JSTの学習3migration相当DDLリハーサルstatementを確認した。履歴不一致の変更経路は説明できるが、復旧合格はUNKNOWNのまま。現在は[復元報告の最新追記](../ai-evolution/RESTORE_INTEGRITY_WAVE0_REVIEW_PREPARATION.md)を優先し、Phase Bの残確認は元Backup日時/同時点完全性/権限/RTO/RPO。隔離Prisma履歴の修正や同DDL再実行を次操作にしない。
@@ -90,7 +96,7 @@ Wave 0は内部1〜2人の実環境E2Eであり、外部募集ではない。内
 ## Phase B — Backup / Migration
 
 1. DB ownerとMigration担当の2者がSupabase Dashboardで対象project、backup方式、最終成功timestamp、保持期間を記録。Read-only監査でPro日次Physical Backup実在と最新COMPLETED（2026-10-07 05:44:04 JST）を確認した。正式retention/実restore/RTOはUNKNOWN。実行直前の新しいBackupとRPOを再確認し、日次backupで許容RPOを満たさなければ追加方式をownerが承認する。Storage object本体は含まれない。
-2. 別の隔離projectへrestore rehearsal。restore可能性、実測RTO、RPO、FK/主要件数/schema/実roleを確認。Productionへ上書きしない。dumpはGitへ置かない。backup timestamp、担当者、restore結果がない場合停止。
+2. 既存隔離projectの復元記録とDDL試験後の状態を先に利用する。元Backup日時・同時点完全性・実測RTO/RPOはUNKNOWNのままでよく、文書/教育レビュー/読取検査は先行可能。現在の本番変更を承認する前には、最新Backupと復元手順・権限・許容損失/停止時間・検証範囲をownerが確認し、残リスクを明示判断する。復旧準備自体が不明なら実変更を停止。追加restore rehearsalが必要かはこの判断で決め、費用と対象を別承認する。Productionへ上書きしない。dumpはGitへ置かない。過去の欠落だけを理由に有償再復元を自動要求しない。
 3. release全pendingを固定し、既存Goal unique index/triggerのlock時間と旧版write/deleteとの互換性を隔離環境で測定。lock/statement許容時間、writer停止/drain範囲、監視担当を人間が決める。SQLにはtimeoutがなく、additiveでも無停止保証はない。
 4. Migration実行を独立承認。標準はPhase CのVercel build先頭で**全pendingを辞書順で一括**適用する。各Migrationごとの人間停止点は現runnerにない。backup→一括Migration→全schema/RLS検証→公開検証の順序とする。
 5. 公開前に手動runnerを使いMigration/schema確認を分離する必要がある場合、接続先・credential供給・二重runner排除・失敗時公開防止を別レビュー。承認済みrunner上の `pnpm db:migrate:deploy` も全pending適用であり1件選択ではない。今回実行しない。
