@@ -29,6 +29,11 @@ export default async function ProgramPreparationPage({
           <h1>Personal Learning準備</h1>
           <p>対象Service: {serviceSlug}</p>
           <a href={`/s/${serviceSlug}/manage/programs`}>実践プログラムへ戻る</a>
+          {['SERVICE_OWNER', 'SERVICE_ADMIN'].includes(service.serviceRole) && (
+            <a href={`/s/${serviceSlug}/manage/programs/learning-definition-review`}>
+              学習設計のレビュー・承認準備
+            </a>
+          )}
         </header>
         {programId ? (
           <ProgramPreparationCard serviceSlug={serviceSlug} programId={programId} />
