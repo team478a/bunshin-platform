@@ -1,5 +1,13 @@
 # BUNSHIN Platform Decision Log
 
+## 2026-10-11: SNSインサイト画像読取をOpenAI費用予約の第2経路とする
+
+- 状態: Proposed（実装PRレビュー待ち。本番release・Provider送信は未承認）
+- SNSインサイト画像読取は、本人が生成するUUIDに固定prefixを付けた安定operation keyと、単一のResponses API送信境界、成功・失敗で共通の利用実績を持つため、週次投稿計画に続く原子的費用予約の対象とする。
+- 本人認証、Service参加同意、Bunshin所有、機能有効化、画像形式・サイズを確認した後にだけ予約する。Provider試行後は固定リクエスト原価、ローカル失敗は0円を記録し、Admission利用時は実績保存後だけ予約を確定する。
+- 利用実績保存または予約確定に失敗した場合はopen予約を維持し、同じoperation keyの再送を保守的に停止する。非本番legacy fallbackだけは予約なし・best-effort記録を維持する。
+- 画像内容、抽出結果、User、Workspace、Bunshinを予約台帳へ保存しない。他のOpenAI画像生成、音声、研修評価、複数call処理、本番操作は別判断とする。
+
 ## 2026-10-11: OpenAI原子的費用予約は週次投稿計画から経路単位で展開する
 
 - 状態: Proposed（実装PRレビュー待ち。本番release・Provider送信は未承認）

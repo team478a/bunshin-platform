@@ -1,5 +1,7 @@
 # BUNSHIN Platform 実装ロードマップ
 
+OpenAI SNSインサイト画像読取の原子的費用予約は`docs/ai-training/OPENAI_SOCIAL_INSIGHT_COST_ADMISSION_IMPLEMENTATION.md`を参照。本人・Service・Bunshin・画像のPrecondition後に既存Admission台帳へ予約し、Provider試行後の固定原価利用実績を厳格保存してから確定する。他のOpenAI経路、本番release・設定・送信は別Gate。
+
 OpenAI週次投稿計画の原子的費用予約は`docs/ai-training/OPENAI_WEEKLY_PLAN_COST_ADMISSION_IMPLEMENTATION.md`を参照。業務Precondition後・Provider送信前に既存Admission台帳へ予約し、利用実績の固定原価保存後だけ確定する。他のOpenAI文章・画像・音声・研修評価は未接続で、本番release・設定・送信は別Gate。
 
 Trend Providerの原子的費用予約は`docs/ai-training/AI_PROVIDER_TREND_COST_ADMISSION_IMPLEMENTATION.md`を参照。Grok／Exa／Firecrawlの週次調査をProvider・環境単位のDB lockと専用予約台帳へ接続し、並行呼出が同じ残予算を同時消費する経路を止める。OpenAI等への展開、本番Migration/release、Provider設定・送信は別Gate。
