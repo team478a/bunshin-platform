@@ -42,7 +42,7 @@ mainをproductionへmergeせず、レビュー済みPR #1213と#1214の実装コ
 - 全体build: 13/13 tasks成功。Next.js production build、TypeScript検査、静的ページ生成成功。
 - 変更ファイルPrettier、`git diff --check`成功。
 
-GitHub CI結果はrelease PR作成後に確認する。
+release PR #1215の初回GitHub CI run `38027597192` は、database 1分26秒、verify 8分26秒で成功した。verifyにはformat、typecheck、lint、全体test、学習UI E2E、buildが含まれる。報告更新後の最終head CIも確認する。
 
 ## 5. 未解決事項
 
