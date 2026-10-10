@@ -35,6 +35,8 @@ export async function createDailyMissionAiRuntime(input: {
       inputTokens: result.inputTokens,
       outputTokens: result.outputTokens,
       latencyMs: result.latencyMs,
+      estimatedCostUsdMicros: configuration.requestCostUsdMicros || null,
+      pricingVersion: configuration.requestCostUsdMicros ? 'admin-request-cost-v1' : null,
       idempotencyKey: `${input.usageIdempotencyPrefix}:${suffix}`,
     });
   const generateWithQuota = <T>(suffix: string, generate: () => Promise<T>) =>

@@ -181,6 +181,7 @@ export class PrismaAdminAlertRepository implements AdminAlertRepository {
               where: {
                 provider,
                 estimatedCostUsdMicros: null,
+                taskType: { not: 'DAILY_MISSION_PIPELINE' },
                 occurredAt: { gte: input.recentFrom, lt: input.now },
               },
             }),
