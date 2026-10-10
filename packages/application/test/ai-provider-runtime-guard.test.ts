@@ -66,12 +66,66 @@ describe('ResolveAiProviderRuntimeConfiguration', () => {
     ).rejects.toMatchObject({ code });
   });
 
-  it('stops at either daily or monthly budget', async () => {
+  it.each([
+    [
+      'daily',
+      {
+        dailySpentUsdMicros:
+          configuration.dailyBudgetUsdMicros - (configuration.requestCostUsdMicros ?? 0) + 1,
+      },
+      'daily provider budget reached',
+    ],
+    [
+      'monthly',
+      {
+        monthlySpentUsdMicros:
+          configuration.monthlyBudgetUsdMicros - (configuration.requestCostUsdMicros ?? 0) + 1,
+      },
+      'monthly provider budget reached',
+    ],
+  ] as const)(
+    'stops when the next request would exceed the %s budget',
+    async (_, override, message) => {
+      await expect(
+        new ResolveAiProviderRuntimeConfiguration(repository({ ...snapshot, ...override })).execute(
+          { environment: 'PRODUCTION', provider: 'OPENAI' },
+        ),
+      ).rejects.toMatchObject({ code: 'CONFLICT', message });
+    },
+  );
+
+  it('allows the next request when it reaches both budgets exactly', async () => {
+    const requestCostUsdMicros = configuration.requestCostUsdMicros ?? 0;
+    const atBoundary = {
+      ...snapshot,
+      dailySpentUsdMicros: configuration.dailyBudgetUsdMicros - requestCostUsdMicros,
+      monthlySpentUsdMicros: configuration.monthlyBudgetUsdMicros - requestCostUsdMicros,
+    };
+    await expect(
+      new ResolveAiProviderRuntimeConfiguration(repository(atBoundary)).execute({
+        environment: 'PRODUCTION',
+        provider: 'OPENAI',
+      }),
+    ).resolves.toEqual(atBoundary);
+  });
+
+  it('stops before the first request when its configured cost exceeds the budget', async () => {
     await expect(
       new ResolveAiProviderRuntimeConfiguration(
-        repository({ ...snapshot, dailySpentUsdMicros: configuration.dailyBudgetUsdMicros }),
+        repository({
+          ...snapshot,
+          configuration: {
+            ...configuration,
+            dailyBudgetUsdMicros: 249,
+            requestCostUsdMicros: 250,
+          },
+          dailySpentUsdMicros: 0,
+        }),
       ).execute({ environment: 'PRODUCTION', provider: 'OPENAI' }),
-    ).rejects.toMatchObject({ code: 'CONFLICT' });
+    ).rejects.toMatchObject({
+      code: 'CONFLICT',
+      message: 'daily provider budget reached',
+    });
   });
 
   it('fails closed when any usage cost in the current UTC month is unknown', async () => {
