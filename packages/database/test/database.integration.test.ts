@@ -1,4 +1,5 @@
 import { reserveVideoMedia, finishVideoMedia } from '../src/video-media-quota';
+import { registerMigrationBoundsIntegrationCases } from './migration-bounds.integration-cases';
 import { randomUUID } from 'node:crypto';
 import { registerImprovementTriageIntegrationCases } from './improvement-triage.integration-cases';
 import { registerImprovementRetentionJobIntegrationCases } from './improvement-retention-jobs.integration-cases';
@@ -214,6 +215,7 @@ describe('database ownership boundaries', () => {
   registerImprovementRetentionJobIntegrationCases(client);
   registerTrainingSupportSkillLifecycleIntegrationCases(client);
   registerPersonalLearningPersistenceIntegrationCases(client);
+  registerMigrationBoundsIntegrationCases(client);
 
   it('fixture cleanup regression: program and training residue is absent before new fixtures', async () => {
     expect(

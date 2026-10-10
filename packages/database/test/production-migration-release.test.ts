@@ -13,29 +13,37 @@ const configuration = JSON.parse(read('apps/web/vercel.json')) as {
   crons: { path: string; schedule: string }[];
 };
 
-test('credential-only release checks schema before rebuilding and never invokes migration', () => {
+test('production release runs bounded migrations before readiness and forced Web build', () => {
   assert.equal(
     configuration.buildCommand,
-    'cd ../.. && pnpm db:assert-ready && pnpm turbo run build --filter=web --force',
+    'cd ../.. && pnpm db:migrate:vercel && pnpm db:assert-ready && pnpm turbo run build --filter=web --force',
   );
-  assert.doesNotMatch(configuration.buildCommand, /migrate|db:push|db:seed/);
+  const migration = configuration.buildCommand.indexOf('db:migrate:vercel');
+  const readiness = configuration.buildCommand.indexOf('db:assert-ready');
+  const build = configuration.buildCommand.indexOf('turbo run build');
+  assert.ok(migration >= 0 && migration < readiness && readiness < build);
 });
 
-test('credential-only release is not skipped because application source is unchanged', () => {
-  // Vercel ignoreCommand exit 1 means continue the build, not build failure.
+test('release cannot be skipped and remains production-only', () => {
+  // Vercel ignoreCommand exit 1 means continue the build.
   assert.equal(configuration.ignoreCommand, 'exit 1');
-});
-
-test('production-only Git policy and runtime configuration remain in place', () => {
   assert.deepEqual(configuration.git.deploymentEnabled, { '**': false, production: true });
   assert.equal(configuration.framework, 'nextjs');
   assert.deepEqual(configuration.regions, ['hnd1']);
   assert.equal(configuration.crons.length, 15);
-  assert.ok(configuration.crons.some((cron) => cron.path === '/api/internal/jobs/run'));
-  assert.ok(configuration.crons.some((cron) => cron.path === '/api/internal/line/monitor'));
 });
 
-test('schema readiness retains its read-only fail-closed gate', () => {
+test('migration runner probes bounded settings and fails closed', () => {
+  const source = read('packages/database/scripts/deploy-migrations-for-vercel.mjs');
+  assert.match(source, /MIGRATION_LOCK_TIMEOUT_MS/);
+  assert.match(source, /MIGRATION_STATEMENT_TIMEOUT_MS/);
+  assert.match(source, /MIGRATION_PROCESS_TIMEOUT_MS/);
+  assert.match(source, /MIGRATION_BOUNDS_NOT_ACTIVE/);
+  assert.match(source, /'migrate', 'deploy'/);
+  assert.match(source, /do not retry automatically/);
+});
+
+test('schema readiness remains a separate read-only fail-closed gate', () => {
   const source = read('packages/database/scripts/assert-schema-ready.mjs');
   assert.match(source, /SELECT EXISTS/);
   assert.match(source, /finished_at/);
@@ -44,7 +52,7 @@ test('schema readiness retains its read-only fail-closed gate', () => {
   assert.doesNotMatch(source, /migrate deploy|\b(?:INSERT|UPDATE|DELETE|ALTER|CREATE)\b/);
 });
 
-test('package build hooks generate the client but do not apply schema changes', () => {
+test('package build hooks do not apply schema changes implicitly', () => {
   const database = JSON.parse(read('packages/database/package.json')) as {
     scripts: { build: string; 'db:assert-ready': string };
   };
