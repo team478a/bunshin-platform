@@ -3799,3 +3799,12 @@
 - Program単位advisory lock内で日次予約額を合計し、上限を超える呼出しを送信前に拒否する。失敗、retry、送信前停止も予約を保持し、別attemptによる予算迂回を許可しない。
 - Admission台帳へ予約額と価格版だけを追加する。既存行は推測backfillせずNULLのまま保持し、同日内に未価格行があれば新規呼出しを停止する。相談、回答、成果物、Provider response、API keyは保存しない。
 - この上限は対象Pilot Programの事前予約であり、Provider請求額、税・為替、他機能、Provider account全体のbudgetを保証しない。Provider側budget、請求照合、外部Alert、未知call復旧、全instance drainは別Gateとする。
+
+## 2026-10-10: Migrationの実行上限と終了未確認時の停止をproductionへ復帰する
+
+- 状態: Proposed（限定runner PRレビュー待ち。本番Migration/Deployは未承認）
+- credential rotation専用releaseで一時的に外したVercel build前Migrationを復帰し、connection startupのlock/statement/idle transaction上限とCLI全体の期限を設ける。DB全体やroleの恒久設定、過去migrationのchecksumを変更しない。
+- 同じPrisma CLI/接続設定による非永続probeで実設定を確認してからMigrationへ進む。設定不正、probe失敗、期限、signal、Migration非0終了はfail-closedとし、自動retry/resolve/DB rollbackをしない。
+- process停止とDB session終了、SQL rollback、全writer drainを同一視しない。部分適用は残り得るため実schema/履歴/sessionを確認し、人間が復旧を判断する。
+- 2026-10-10のread-only監査ではproduction系統231件の成功履歴が名前ハッシュまで一致し、unfinished/rolled-backは0件、pendingは`20261010070000_personal_learning_call_cost_reservation`の1件だけだった。対象tableは0行、追加列/制約は未作成、待機lockは0、最新物理Backupは2026-10-10 05:44:36 JSTだった。
+- PR作成はMigration/Deploy承認ではない。mergeがMigrationとApplication buildを開始するため別の明示承認を必須とし、Pilot、Provider送信、課金、参加者登録は変更しない。

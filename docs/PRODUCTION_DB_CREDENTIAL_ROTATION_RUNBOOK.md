@@ -1,6 +1,8 @@
 # Production DB credential rotation — reviewed release only
 
-2026-10-08 / status: preparation only, NO-GO for Reset / merge / Deploy.
+2026-10-08 / status: credential rotation release completed. The migration-free build was temporary.
+
+2026-10-10 successor note: the reviewed Personal Learning cost Hard Stop migration release restores the bounded production migration runner before schema readiness and Web build. Its PR creation does not authorize merge, Migration, Deploy, Pilot, Provider use or billing.
 
 ## Scope and release identity
 
