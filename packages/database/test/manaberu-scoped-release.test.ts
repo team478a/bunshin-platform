@@ -41,7 +41,7 @@ test('readiness requires the latest migration that is actually included in this 
     .filter((entry) => entry.isDirectory() && /^\d+_/.test(entry.name))
     .map((entry) => entry.name)
     .sort();
-  assert.equal(LATEST_DATABASE_MIGRATION, '20261008140000_learning_member_line_link');
+  assert.equal(LATEST_DATABASE_MIGRATION, '20261010070000_personal_learning_call_cost_reservation');
   assert.equal(migrations.at(-1), LATEST_DATABASE_MIGRATION);
 });
 
