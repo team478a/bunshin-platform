@@ -75,7 +75,7 @@ describe('member product content UI boundary', () => {
     expect(http).toContain('new GetBunshin');
     expect(http).toContain('getGenerationContext');
     expect(http).toContain("item.status === 'ACTIVE'");
-    expect(http).toContain('resolveOpenAiRuntimeConfiguration()');
+    expect(http).toContain('reserveOpenAiRuntimeConfiguration(operationKey)');
     expect(http).toContain('withOrganizationAiGenerationQuota');
     expect(http).toContain('groupId: scope.groupId');
     expect(http).toContain("taskType: 'MEMBER_PRODUCT_COPY_GENERATOR'");

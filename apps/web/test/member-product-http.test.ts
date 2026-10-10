@@ -16,6 +16,8 @@ const m = vi.hoisted(() => ({
   generate: vi.fn(),
   quota: vi.fn(),
   usage: vi.fn(),
+  usageSafe: vi.fn(),
+  settle: vi.fn(),
   generation: vi.fn(),
 }));
 vi.mock('@bunshin/config', () => ({
@@ -29,9 +31,13 @@ vi.mock('../src/services/public-service', () => ({
   resolvePublicServiceContext: m.public,
 }));
 vi.mock('../src/ai/runtime-provider-configuration', () => ({
-  resolveOpenAiRuntimeConfiguration: m.runtime,
+  reserveOpenAiRuntimeConfiguration: m.runtime,
+  settleProviderRuntimeAdmission: m.settle,
 }));
-vi.mock('../src/observability/ai-usage', () => ({ recordAiUsageSafely: m.usage }));
+vi.mock('../src/observability/ai-usage', () => ({
+  recordAiUsage: m.usage,
+  recordAiUsageSafely: m.usageSafe,
+}));
 vi.mock('../src/organization-ai-generation-quota', () => ({
   withOrganizationAiGenerationQuota: m.quota,
 }));
@@ -72,6 +78,12 @@ const id = '00000000-0000-4000-8000-000000000001';
 const linkId = '00000000-0000-4000-8000-000000000002';
 const bunshinId = '00000000-0000-4000-8000-000000000003';
 const requestId = '00000000-0000-4000-8000-000000000004';
+const admission = {
+  id: '33333333-3333-4333-8333-333333333333',
+  environment: 'DEVELOPMENT',
+  provider: 'OPENAI',
+  operationHash: 'b'.repeat(64),
+} as const;
 const product = { externalTrackingLinkId: linkId, name: '本人の商品', appealPoint: '使いやすい' };
 const official = {
   name: '公式商品',
@@ -153,7 +165,17 @@ const operations = [
   },
 ];
 function noEffects() {
-  for (const fn of [m.save, m.archive, m.event, m.quota, m.generate, m.generation, m.usage])
+  for (const fn of [
+    m.save,
+    m.archive,
+    m.event,
+    m.quota,
+    m.generate,
+    m.generation,
+    m.usage,
+    m.usageSafe,
+    m.settle,
+  ])
     expect(fn).not.toHaveBeenCalled();
 }
 beforeEach(() => {
@@ -173,6 +195,7 @@ beforeEach(() => {
     apiKey: 'mock-only',
     model: 'configured-model',
     requestCostUsdMicros: 123,
+    admission,
   });
   m.quota.mockImplementation((input: { generate: () => Promise<unknown> }) => input.generate());
   m.generate.mockResolvedValue({
@@ -184,6 +207,9 @@ beforeEach(() => {
     latencyMs: 20,
   });
   m.generation.mockResolvedValue({ id: 'activity-a', createdAt: new Date() });
+  m.usage.mockResolvedValue(undefined);
+  m.usageSafe.mockResolvedValue(undefined);
+  m.settle.mockResolvedValue(undefined);
 });
 
 describe.each(operations)('$name member product scope', ({ body, run, repo, status }) => {
@@ -384,6 +410,11 @@ describe('member product suggestion policies', () => {
         latencyMs: 20,
       }),
     );
+    expect(m.runtime).toHaveBeenCalledWith(`${requestId}:member-product-suggestions`);
+    expect(m.settle).toHaveBeenCalledWith(admission);
+    expect(m.usage.mock.invocationCallOrder[0]).toBeLessThan(
+      m.settle.mock.invocationCallOrder[0] ?? 0,
+    );
     expect(m.generation).toHaveBeenCalledWith(
       expect.objectContaining({
         workspaceId: 'workspace-b',
@@ -450,6 +481,10 @@ describe('member product suggestion policies', () => {
     ).toBe(403);
     expect(m.generate).not.toHaveBeenCalled();
     expect(m.generation).not.toHaveBeenCalled();
+    expect(m.usage).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'FAILED', estimatedCostUsdMicros: 0 }),
+    );
+    expect(m.settle).toHaveBeenCalledWith(admission);
   });
   it.each(['https://unapproved.example', '絶対おすすめ', '必ず効く'])(
     'rejects unsafe candidate %s without publishing or activity',
@@ -489,5 +524,33 @@ describe('member product suggestion policies', () => {
         estimatedCostUsdMicros: 123,
       }),
     );
+    expect(m.settle).toHaveBeenCalledWith(admission);
+  });
+  it('leaves the admission open when strict usage persistence fails', async () => {
+    m.usage.mockRejectedValue(new Error('synthetic usage persistence failure'));
+
+    const response = await generateMemberProductSuggestionsResponse(request(input), 'private-a');
+
+    expect(response.status).toBe(500);
+    expect(m.usage).toHaveBeenCalledOnce();
+    expect(m.settle).not.toHaveBeenCalled();
+    expect(m.generation).not.toHaveBeenCalled();
+  });
+  it('keeps the bounded non-production legacy fallback best-effort and reservation-free', async () => {
+    m.runtime.mockResolvedValue({
+      apiKey: 'mock-only',
+      model: 'configured-model',
+      requestCostUsdMicros: 123,
+      admission: null,
+    });
+
+    const response = await generateMemberProductSuggestionsResponse(request(input), 'private-a');
+
+    expect(response.status).toBe(200);
+    expect(m.usageSafe).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'SUCCESS', estimatedCostUsdMicros: 123 }),
+    );
+    expect(m.usage).not.toHaveBeenCalled();
+    expect(m.settle).not.toHaveBeenCalled();
   });
 });

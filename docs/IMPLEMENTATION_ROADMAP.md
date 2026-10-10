@@ -1,5 +1,7 @@
 # BUNSHIN Platform 実装ロードマップ
 
+OpenAI会員商品投稿案生成の原子的費用予約は`docs/ai-training/OPENAI_MEMBER_PRODUCT_COST_ADMISSION_IMPLEMENTATION.md`を参照。本人・Service・Bunshin・商品・外部リンクのPrecondition後に予約し、quota拒否は0円、Provider試行後は固定原価を記録してから確定する。研修評価の既存専用Admissionとの統合、本番release・設定・送信は別Gate。
+
 OpenAI SNSインサイト画像読取の原子的費用予約は`docs/ai-training/OPENAI_SOCIAL_INSIGHT_COST_ADMISSION_IMPLEMENTATION.md`を参照。本人・Service・Bunshin・画像のPrecondition後に既存Admission台帳へ予約し、Provider試行後の固定原価利用実績を厳格保存してから確定する。他のOpenAI経路、本番release・設定・送信は別Gate。
 
 OpenAI週次投稿計画の原子的費用予約は`docs/ai-training/OPENAI_WEEKLY_PLAN_COST_ADMISSION_IMPLEMENTATION.md`を参照。業務Precondition後・Provider送信前に既存Admission台帳へ予約し、利用実績の固定原価保存後だけ確定する。他のOpenAI文章・画像・音声・研修評価は未接続で、本番release・設定・送信は別Gate。
