@@ -1,5 +1,14 @@
 # BUNSHIN Platform Decision Log
 
+## 2026-10-11: Trend Provider予算は送信前の原子的予約で競合を止める
+
+- 状態: Proposed（実装PRレビュー待ち。本番Migration・release・Provider送信は未承認）
+- Grok／Exa／Firecrawlの週次トレンド調査は、Provider・環境単位のDB advisory lock内で、UTC日次／月次の利用実績と未確定予約を合算し、固定リクエスト原価1回分を送信前に予約する。
+- 予約台帳は設定version、固定原価、時刻、operation keyの不可逆digestだけを保持する。Workspace、User、Bunshin、query、Evidence、Provider response、API keyは保存しない。
+- Provider試行後は利用実績を先に永続化し、成功した場合だけ同じProvider lockで予約を確定済みにする。利用実績または確定処理が失敗した予約は自動解放せず、新規呼出しを保守的に停止させる。TTL、失敗refund、原価推測backfillを設けない。
+- 今回の接続先は単一送信境界を持つ週次Trendだけ。OpenAI、Creatomate、FAL、Runway、接続テスト、Provider側budget、請求照合へ適用済みとは扱わない。
+- additive migrationと新旧instance混在時の旧Trend経路による予約迂回があるため、Trend有効状態で混在Deployしない。本番Migration、release、設定変更、送信、課金は別承認とする。
+
 ## 2026-10-11: Provider接続確認で検索・scrapeを実行しない
 
 - 状態: Proposed（実装PRレビュー待ち。本番接続テスト・設定変更・Provider送信は未承認）

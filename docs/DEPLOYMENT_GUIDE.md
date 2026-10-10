@@ -1,5 +1,7 @@
 # Deployment Guide
 
+> `20261011180000_ai_provider_call_admission`を含むreleaseでは、旧Trend workerが予約台帳を迂回する。Grok／Exa／FirecrawlのRuntimeを有効にしたまま新旧instanceを混在させない。Migration、全instance更新、予約台帳／利用実績の確認は別々に行い、未確定予約をTTLや手動SQLで推測解放しない。本番Migration・設定変更・Provider送信には個別承認が必要。
+
 ## Vercel
 
 | 項目            | 設定                                                                                              |
