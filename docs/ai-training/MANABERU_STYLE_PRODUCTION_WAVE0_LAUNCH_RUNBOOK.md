@@ -1,5 +1,9 @@
 # マナベルスタイル by ワタシワークス — Production Wave 0 Launch Runbook
 
+### 2026-10-10 学習設計の承認登録UI（本番未反映）
+
+既存APIへの1件ずつのレビュー画面は[承認登録UI実装報告](MANABERU_STYLE_DEFINITION_REVIEW_UI_IMPLEMENTATION.md)。画面は `/s/{serviceSlug}/manage/programs/learning-definition-review`。初期表示は保存せず、GET後に人間が7項目・公開SHA・非公開証跡・最終確認を入力する。登録応答後もGET/監査で現在状態を確認。教育設計の人間承認と本番APPROVEは別段階。画面追加をDefinition管理flag変更・本番Deploy・APPROVE・START・課金同意としない。main/productionの分離releaseと既存Gateを維持する。
+
 ### 2026-10-09 Pilot学習の焦点表示（本番未検証）
 
 [焦点表示の実装報告](MANABERU_STYLE_PILOT_DEFINITION_FOCUS_IMPLEMENTATION.md)で、構造・背景・条件の違い、同じ課題の再利用、安全な架空題材、本人実践完了の記録案内をPilot画面へ追加した。Definition/Rubric/進級条件は変更しない。人間による教育レビュー・APPROVE・本番deploy・STARTの証拠や承認ではない。Phase Hでは実スマートフォン上で案内の理解と版照合を確認する。
