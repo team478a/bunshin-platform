@@ -3848,3 +3848,12 @@
 - 通常runnerはprobe成功後にMigrationへ進むため、確認だけの代用にしない。専用`db:migration:probe`入口を設け、同じPrisma CLI / URL変換 / timeout設定のread-only probe一回で終了する。成功・失敗どちらもMigrationやbuildへ進まない。
 - 確認対象Supabase project ref、両接続URL、postgres DB / role、変換後session poolerの5432を照合し、未知の接続先へ試行しない。secretの取得や配置を自動化せず、値と原エラーをログへ出さない。
 - 稼働中Appの停止はprobeの前提にしない。DB全体/role設定やschema、Vercel build command、料金、Pilotを変更しない。probe成功と本番host到達性、backup、pending、writer drain、本番操作承認は別の証拠とする。
+
+## 2026-10-10: Personal Learning PilotのUSD予算はProvider送信前の最大費用予約で止める
+
+- 状態: Proposed（実装PRレビュー待ち。本番価格・予算・Migration・Pilot開始は未承認）
+- 既存のcall回数・同時実行AdmissionとP1-G Pricing Registryを再利用し、単一ProgramのUTC日次`dailyCostLimitUsdMicros`を必須設定にする。未設定、旧8項目設定、価格不明、不正価格、モデル不一致はfail-closedとする。
+- 1回の予約はProvider request全体の最大UTF-8 bytesを入力token数の保守的上限、`maxOutputTokens`を出力上限として通常input/output単価から切り上げる。cached割引や呼出後の安い実績で当日予算を返金しない。
+- Program単位advisory lock内で日次予約額を合計し、上限を超える呼出しを送信前に拒否する。失敗、retry、送信前停止も予約を保持し、別attemptによる予算迂回を許可しない。
+- Admission台帳へ予約額と価格版だけを追加する。既存行は推測backfillせずNULLのまま保持し、同日内に未価格行があれば新規呼出しを停止する。相談、回答、成果物、Provider response、API keyは保存しない。
+- この上限は対象Pilot Programの事前予約であり、Provider請求額、税・為替、他機能、Provider account全体のbudgetを保証しない。Provider側budget、請求照合、外部Alert、未知call復旧、全instance drainは別Gateとする。

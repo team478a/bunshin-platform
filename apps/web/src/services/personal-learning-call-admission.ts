@@ -6,6 +6,7 @@ import {
   type PersonalLearningActor,
 } from '@bunshin/application';
 import { personalLearningPilotEnabled } from './personal-learning-pilot-access';
+import { personalLearningPricingRegistry } from '../observability/personal-learning-ai-call';
 
 export async function admitPersonalLearningCall(input: {
   actor: PersonalLearningActor;
@@ -13,6 +14,7 @@ export async function admitPersonalLearningCall(input: {
   answerId: string;
   jobId: string;
   attemptCount: number;
+  provider: string;
   model: string;
 }) {
   const denied = () =>
@@ -37,6 +39,7 @@ export async function admitPersonalLearningCall(input: {
     permit = await repo.admit({
       ...input,
       policy,
+      pricingRegistry: personalLearningPricingRegistry(),
       environment: environment[getServerEnvironment().APP_ENV],
     });
   } catch {

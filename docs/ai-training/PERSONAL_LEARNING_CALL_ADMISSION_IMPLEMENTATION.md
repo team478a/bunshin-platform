@@ -67,3 +67,13 @@ Pure policy、server wrapper、Provider、Worker、実PostgreSQL integrationを�
 ## 残るGate
 
 Productionは引き続きNO-GO。Production Migration安全確認、差分deploy計画、3 Definition Human Approval、Wave 0アカウントと実認証E2E、実Provider / 価格 / 費用Alert、trusted準備操作、100人Hard Cap、本番設定数値、未知枠復旧手順は未承認・別作業。今回の完了をPilot開始承認とみなさない。
+
+## 2026-10-10 金額予約Hard Stop拡張
+
+後続の独立PRで`dailyCostLimitUsdMicros`をAdmission設定の必須9項目目として追加した。既存8項目設定は新コードでは不正としてfail-closedになる。
+
+Provider送信前に、`maxRequestBytes`を保守的な入力token上限、`maxOutputTokens`を出力token上限として、現在有効な完全一致Provider/Model価格から1回の最大費用を切り上げ計算する。cached割引は予約計算に使わない。同一Programのadvisory lock内でUTC日次予約額を合計し、次の予約で`dailyCostLimitUsdMicros`を超える場合は送信前に拒否する。
+
+予約額と`pricingVersion`はAdmission台帳へ保存する。既存行はbackfillせずNULLのままとし、同じUTC日に未価格行が1件でもあれば新規呼出しを停止する。実績が予約額より安くても当日中は差額を再利用せず、失敗・retry・送信前停止も予約を保持する。これは予算の過小評価を避ける設計であり、Provider側請求額の完全一致、為替・税、Providerアカウント全体の予算を保証しない。
+
+追加Migrationは`20261010070000_personal_learning_call_cost_reservation`。既存行を更新せずnullable列と整合CHECKだけを追加する。本番Migration、環境値、価格、Pilot flag、Provider budgetは変更していない。
