@@ -4,9 +4,11 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  assertReleaseMigrationGuard,
+  buildReleasePreflightSql,
   resolveMigrationDirectUrl,
   resolveMigrationBounds,
-  withMigrationBounds,
+  withMigrationConnectionMetadata,
   runVercelMigration,
 } from '../scripts/deploy-migrations-for-vercel.mjs';
 import { runMigrationProcess } from '../scripts/migration-process.mjs';
@@ -79,22 +81,47 @@ describe('Vercel production migrations', () => {
     expect(resolveMigrationDirectUrl(directUrl, undefined)).toBe(directUrl);
   });
 
-  it('applies bounded DB startup settings while preserving identity and TLS', () => {
+  it('adds only connection metadata while preserving identity and TLS', () => {
     const url = new URL(
-      withMigrationBounds(
+      withMigrationConnectionMetadata(
         'postgresql://test:synthetic@localhost:5432/test?schema=public&sslmode=require&connect_timeout=0',
-        resolveMigrationBounds({}),
       ),
     );
-    expect(url.searchParams.get('options')).toBe(
-      '-c lock_timeout=5000 -c statement_timeout=60000 -c idle_in_transaction_session_timeout=60000',
-    );
+    expect(url.searchParams.has('options')).toBe(false);
     expect(url.searchParams.get('connect_timeout')).toBe('10');
     expect(url.searchParams.get('schema')).toBe('public');
     expect(url.searchParams.get('sslmode')).toBe('require');
     expect(url.searchParams.get('application_name')).toBe('bunshin_migration_bounded');
     expect(url.hostname).toBe('localhost');
     expect(url.password).toBe('synthetic');
+  });
+
+  it('pins the audited lineage and committed transaction-local target guard', () => {
+    const migrationNames = assertReleaseMigrationGuard();
+    expect(migrationNames).toHaveLength(232);
+    const preflight = buildReleasePreflightSql(migrationNames);
+    expect(preflight).toContain('20261010070000_personal_learning_call_cost_reservation');
+    expect(preflight).toContain('20261008140000_learning_member_line_link');
+    expect(preflight).toContain('successful_count <> 231');
+    expect(preflight).toContain('EXCEPT SELECT unnest(expected_names)');
+    expect(preflight).toContain('SELECT unnest(expected_names)');
+    expect(preflight).toContain('TARGET_MIGRATION_PREFLIGHT_CHANGED');
+  });
+
+  it('rejects incomplete or reordered release lineages before building SQL', () => {
+    expect(() =>
+      buildReleasePreflightSql([
+        '20261010070000_personal_learning_call_cost_reservation',
+        '20261008140000_learning_member_line_link',
+      ]),
+    ).toThrow('UNEXPECTED_MIGRATION_LINEAGE');
+    expect(() =>
+      buildReleasePreflightSql([
+        '20261008140000_learning_member_line_link',
+        'unsafe-name',
+        '20261010070000_personal_learning_call_cost_reservation',
+      ]),
+    ).toThrow('UNEXPECTED_MIGRATION_LINEAGE');
   });
 
   it.each(['0', '-1', '1.5', 'NaN', '', ' 5000', '5000ms', '10001', '9007199254740993'])(
@@ -128,7 +155,7 @@ describe('Vercel production migrations', () => {
     expect(execute).not.toHaveBeenCalled();
   });
 
-  it('uses a direct CLI, bounded connection, isolated env and no retry', async () => {
+  it('uses a direct CLI, audited preflight, isolated env and no retry', async () => {
     vi.spyOn(console, 'log').mockImplementation(() => {});
     const environment = {
       VERCEL_ENV: 'production',
@@ -148,7 +175,10 @@ describe('Vercel production migrations', () => {
       '--schema',
       'prisma/schema.prisma',
     ]);
-    expect(execute.mock.calls[0]![2].input).toContain('MIGRATION_BOUNDS_NOT_ACTIVE');
+    expect(execute.mock.calls[0]![2].input).toContain('UNEXPECTED_PRE_MIGRATION_HISTORY');
+    expect(execute.mock.calls[0]![2].input).toContain(
+      'personal_learning_call_admissions_cost_pair_check',
+    );
     const [command, args, options] = execute.mock.calls[1]!;
     expect(command).toBe(process.execPath);
     expect(args.slice(1)).toEqual(['migrate', 'deploy']);
@@ -156,8 +186,9 @@ describe('Vercel production migrations', () => {
     expect(options.timeoutMs).toBeGreaterThan(0);
     expect(options.timeoutMs).toBeLessThanOrEqual(300000);
     expect(options.env.PGOPTIONS).toBeUndefined();
-    expect(new URL(options.env.DIRECT_URL!).searchParams.get('options')).toContain(
-      'lock_timeout=5000',
+    expect(new URL(options.env.DIRECT_URL!).searchParams.has('options')).toBe(false);
+    expect(new URL(options.env.DIRECT_URL!).searchParams.get('application_name')).toBe(
+      'bunshin_migration_bounded',
     );
     expect(environment.DIRECT_URL).not.toContain('lock_timeout');
     expect(environment.PGOPTIONS).toContain('statement_timeout=0');
@@ -187,7 +218,7 @@ describe('Vercel production migrations', () => {
     expect(errorLog.mock.calls.flat().join(' ')).not.toContain('synthetic-secret');
   });
 
-  it('does not start migrate deploy when the settings probe fails', async () => {
+  it('does not start migrate deploy when the audited preflight fails', async () => {
     vi.spyOn(console, 'log').mockImplementation(() => {});
     const errorLog = vi.spyOn(console, 'error').mockImplementation(() => {});
     const execute = vi
