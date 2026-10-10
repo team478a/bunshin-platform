@@ -23,6 +23,10 @@ export interface OpenAiRuntimeConfiguration {
   source: 'ADMIN_CONFIGURATION' | 'LEGACY_ENVIRONMENT';
 }
 
+export interface AdmittedOpenAiRuntimeConfiguration extends OpenAiRuntimeConfiguration {
+  admission: AiProviderRuntimeAdmission | null;
+}
+
 export interface TrendRuntimeConfiguration {
   provider: 'GROK' | 'EXA' | 'FIRECRAWL';
   apiKey: string;
@@ -67,6 +71,32 @@ function isMissingActiveConfiguration(error: unknown) {
   );
 }
 
+function resolveLegacyOpenAiRuntimeConfiguration(
+  input: {
+    environment: LineConfigurationEnvironment;
+    legacyApiKey?: string | undefined;
+    legacyModel?: string | undefined;
+    legacyRequestCostUsdMicros?: number | undefined;
+  },
+  task?: OpenAiCompatibilityTask,
+): OpenAiRuntimeConfiguration {
+  const legacyApiKey = input.legacyApiKey ?? process.env['OPENAI_API_KEY'];
+  if (!legacyApiKey || input.environment === 'PRODUCTION')
+    throw new ApplicationError('CONFIGURATION_ERROR', 'active provider configuration required');
+  const model = input.legacyModel ?? process.env['OPENAI_MODEL'] ?? 'gpt-5.2';
+  if (task) assertOpenAiTaskModel(task, model);
+  const requestCostUsdMicros =
+    input.legacyRequestCostUsdMicros ?? Number(process.env['OPENAI_REQUEST_COST_USD_MICROS']);
+  if (!Number.isSafeInteger(requestCostUsdMicros) || requestCostUsdMicros <= 0)
+    throw new ApplicationError('CONFIGURATION_ERROR', 'legacy OpenAI request cost is required');
+  return {
+    apiKey: legacyApiKey,
+    model,
+    requestCostUsdMicros,
+    source: 'LEGACY_ENVIRONMENT',
+  };
+}
+
 export async function resolveOpenAiRuntimeConfiguration(
   dependencies?: Dependencies,
   task?: OpenAiCompatibilityTask,
@@ -94,22 +124,66 @@ export async function resolveOpenAiRuntimeConfiguration(
       source: 'ADMIN_CONFIGURATION',
     };
   } catch (error) {
-    const legacyApiKey = dependencies?.legacyApiKey ?? process.env['OPENAI_API_KEY'];
-    if (!isMissingActiveConfiguration(error) || !legacyApiKey || environment === 'PRODUCTION')
+    if (!isMissingActiveConfiguration(error)) throw error;
+    return resolveLegacyOpenAiRuntimeConfiguration(
+      {
+        environment,
+        legacyApiKey: dependencies?.legacyApiKey,
+        legacyModel: dependencies?.legacyModel,
+        legacyRequestCostUsdMicros: dependencies?.legacyRequestCostUsdMicros,
+      },
+      task,
+    );
+  }
+}
+
+export async function reserveOpenAiRuntimeConfiguration(
+  operationKey: string,
+  dependencies?: Omit<Dependencies, 'repository'> & {
+    repository: AiProviderConfigurationRepository & AiProviderRuntimeAdmissionRepository;
+  },
+  task?: OpenAiCompatibilityTask,
+): Promise<AdmittedOpenAiRuntimeConfiguration> {
+  const environment = dependencies?.environment ?? currentAiProviderEnvironment();
+  let repository = dependencies?.repository;
+  if (!repository) {
+    const db = await import('@bunshin/database');
+    repository = new db.PrismaAiProviderConfigurationRepository();
+  }
+  const crypto = dependencies?.crypto ?? new AesGcmAiProviderSecretCrypto();
+  try {
+    const reserved = await new ReserveAiProviderRuntimeCall(repository).execute({
+      environment,
+      provider: 'OPENAI',
+      operationKey,
+    });
+    try {
+      if (!reserved.configuration.model)
+        throw new ApplicationError('CONFIGURATION_ERROR', 'active OpenAI model is required');
+      if (task) assertOpenAiTaskModel(task, reserved.configuration.model);
+      return {
+        apiKey: crypto.decrypt(reserved.encryptedApiKey),
+        model: reserved.configuration.model,
+        requestCostUsdMicros: reserved.configuration.requestCostUsdMicros ?? 0,
+        source: 'ADMIN_CONFIGURATION',
+        admission: reserved.admission,
+      };
+    } catch (error) {
+      await new SettleAiProviderRuntimeCall(repository).execute(reserved.admission);
       throw error;
-    const model = dependencies?.legacyModel ?? process.env['OPENAI_MODEL'] ?? 'gpt-5.2';
-    if (task) assertOpenAiTaskModel(task, model);
-    const requestCostUsdMicros =
-      dependencies?.legacyRequestCostUsdMicros ??
-      Number(process.env['OPENAI_REQUEST_COST_USD_MICROS']);
-    if (!Number.isSafeInteger(requestCostUsdMicros) || requestCostUsdMicros <= 0)
-      throw new ApplicationError('CONFIGURATION_ERROR', 'legacy OpenAI request cost is required');
-    return {
-      apiKey: legacyApiKey,
-      model,
-      requestCostUsdMicros,
-      source: 'LEGACY_ENVIRONMENT',
-    };
+    }
+  } catch (error) {
+    if (!isMissingActiveConfiguration(error)) throw error;
+    const legacy = resolveLegacyOpenAiRuntimeConfiguration(
+      {
+        environment,
+        legacyApiKey: dependencies?.legacyApiKey,
+        legacyModel: dependencies?.legacyModel,
+        legacyRequestCostUsdMicros: dependencies?.legacyRequestCostUsdMicros,
+      },
+      task,
+    );
+    return { ...legacy, admission: null };
   }
 }
 

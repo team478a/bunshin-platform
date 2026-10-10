@@ -1,5 +1,13 @@
 # BUNSHIN Platform Decision Log
 
+## 2026-10-11: OpenAI原子的費用予約は週次投稿計画から経路単位で展開する
+
+- 状態: Proposed（実装PRレビュー待ち。本番release・Provider送信は未承認）
+- OpenAIは複数の実送信境界と複数callを持つため、Runtime resolver全体へ一律適用しない。最初の対象は単一Responses API callと安定したoperation keyを持つ週次投稿計画とする。
+- 業務Precondition後、組織quota前に予約し、quota拒否は0円、Provider試行後は固定リクエスト原価を記録する。Admission利用時は実績保存後だけ確定し、保存・確定失敗はopenのまま維持する。
+- productionは管理設定の原子的予約を必須とし、予約対象なしの後に設定を再検索しない。非本番legacy fallbackだけは従来互換として予約なしを許す。
+- 他のOpenAI文章・画像・音声・研修評価、複数call処理、open予約復旧、請求照合、本番操作は別判断とする。
+
 ## 2026-10-11: Trend Provider予算は送信前の原子的予約で競合を止める
 
 - 状態: Proposed（実装PRレビュー待ち。本番Migration・release・Provider送信は未承認）
