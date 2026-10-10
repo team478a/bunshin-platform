@@ -1,5 +1,7 @@
 # BUNSHIN Platform 実装ロードマップ
 
+OpenAI週次投稿計画の原子的費用予約は`docs/ai-training/OPENAI_WEEKLY_PLAN_COST_ADMISSION_IMPLEMENTATION.md`を参照。業務Precondition後・Provider送信前に既存Admission台帳へ予約し、利用実績の固定原価保存後だけ確定する。他のOpenAI文章・画像・音声・研修評価は未接続で、本番release・設定・送信は別Gate。
+
 Trend Providerの原子的費用予約は`docs/ai-training/AI_PROVIDER_TREND_COST_ADMISSION_IMPLEMENTATION.md`を参照。Grok／Exa／Firecrawlの週次調査をProvider・環境単位のDB lockと専用予約台帳へ接続し、並行呼出が同じ残予算を同時消費する経路を止める。OpenAI等への展開、本番Migration/release、Provider設定・送信は別Gate。
 
 Provider接続確認の非課金化は`docs/ai-training/AI_PROVIDER_NONBILLABLE_CONNECTION_TEST_IMPLEMENTATION.md`を参照。Exa検索とFirecrawl scrapeを接続テストから除き、公式のread-onlyなチーム情報／残クレジットendpointへ置き換える。本番接続テスト、設定変更、Provider送信、実課金は行わない。
@@ -476,6 +478,7 @@ SNS、投稿方法、BUNSHINが作る範囲を分離し、利用者が必要と�
 - E1: 環境別・版管理Provider Registry — 完了
 - E1安全補強: 既知の固定リクエスト原価を次回分まで含め、日次・月次予算超過が確定する呼出しを送信前に停止 — 実装済み（全Provider共通の原子的予約は未実装）
 - E1安全補強: Grok／Exa／Firecrawl週次調査の原子的な固定原価予約 — 実装済み（OpenAI等は未接続）
+- E1安全補強: OpenAI週次投稿計画の原子的な固定原価予約 — 実装済み（他のOpenAI経路は未接続）
 - E1安全補強: Exa／Firecrawl接続確認を検索・scrapeからread-onlyな認証endpointへ変更 — 実装済み（本番接続テストは未実施）
 - E2: 既存行動から作るPreference Read ModelとLearning Proposal — 完了
 - E3: 人間承認、前後KPI、rollbackを持つ変更提案 — 完了

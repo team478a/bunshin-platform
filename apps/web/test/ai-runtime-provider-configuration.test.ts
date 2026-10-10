@@ -6,6 +6,7 @@ import type {
   AiProviderRuntimeAdmissionRepository,
 } from '@bunshin/application';
 import {
+  reserveOpenAiRuntimeConfiguration,
   reserveTrendRuntimeConfiguration,
   resolveOpenAiRuntimeConfiguration,
   resolveVideoAiRuntimeConfiguration,
@@ -262,6 +263,107 @@ describe('OpenAI runtime configuration', () => {
         legacyApiKey: 'legacy-key',
       }),
     ).rejects.toMatchObject({ code: 'CONFIGURATION_ERROR', message: 'provider is paused' });
+  });
+
+  it('returns an atomic admin admission for an OpenAI operation', async () => {
+    const admission = {
+      id: '33333333-3333-4333-8333-333333333333',
+      environment: 'DEVELOPMENT' as const,
+      provider: 'OPENAI' as const,
+      operationHash: 'a'.repeat(64),
+    };
+    const repo = admissionRepository({
+      configuration: active,
+      encryptedApiKey: 'sealed',
+      dailySpentUsdMicros: 0,
+      monthlySpentUsdMicros: 0,
+      monthlyUnknownCostEvents: 0,
+      admission,
+    });
+
+    await expect(
+      reserveOpenAiRuntimeConfiguration(
+        'weekly-plan:1',
+        {
+          repository: repo,
+          crypto: { encrypt: vi.fn(), decrypt: vi.fn().mockReturnValue('plain-key') },
+        },
+        'SOCIAL_PLANNER',
+      ),
+    ).resolves.toEqual({
+      apiKey: 'plain-key',
+      model: active.model,
+      requestCostUsdMicros: active.requestCostUsdMicros,
+      source: 'ADMIN_CONFIGURATION',
+      admission,
+    });
+  });
+
+  it('settles an OpenAI reservation when local validation fails before Provider use', async () => {
+    const admission = {
+      id: '33333333-3333-4333-8333-333333333333',
+      environment: 'DEVELOPMENT' as const,
+      provider: 'OPENAI' as const,
+      operationHash: 'b'.repeat(64),
+    };
+    const repo = admissionRepository({
+      configuration: { ...active, model: 'unreviewed-model' },
+      encryptedApiKey: 'sealed',
+      dailySpentUsdMicros: 0,
+      monthlySpentUsdMicros: 0,
+      monthlyUnknownCostEvents: 0,
+      admission,
+    });
+    const decrypt = vi.fn();
+
+    await expect(
+      reserveOpenAiRuntimeConfiguration(
+        'weekly-plan:2',
+        { repository: repo, crypto: { encrypt: vi.fn(), decrypt } },
+        'SOCIAL_PLANNER',
+      ),
+    ).rejects.toMatchObject({ code: 'CONFIGURATION_ERROR' });
+    expect(decrypt).not.toHaveBeenCalled();
+    expect(repo.settleRuntimeAdmission).toHaveBeenCalledWith(admission);
+  });
+
+  it('keeps the bounded development legacy fallback without creating an admission', async () => {
+    const repo = admissionRepository(null);
+    await expect(
+      reserveOpenAiRuntimeConfiguration('weekly-plan:3', {
+        repository: repo,
+        crypto: { encrypt: vi.fn(), decrypt: vi.fn() },
+        legacyApiKey: 'legacy-key',
+        legacyModel: 'gpt-5.2',
+        legacyRequestCostUsdMicros: 300,
+      }),
+    ).resolves.toEqual({
+      apiKey: 'legacy-key',
+      model: 'gpt-5.2',
+      requestCostUsdMicros: 300,
+      source: 'LEGACY_ENVIRONMENT',
+      admission: null,
+    });
+    expect(repo.settleRuntimeAdmission).not.toHaveBeenCalled();
+  });
+
+  it('never re-resolves an unreserved admin configuration in production', async () => {
+    const getActiveForRuntime = vi.fn().mockResolvedValue(null);
+    const repo = { ...admissionRepository(null), getActiveForRuntime };
+    await expect(
+      reserveOpenAiRuntimeConfiguration('weekly-plan:4', {
+        repository: repo,
+        crypto: { encrypt: vi.fn(), decrypt: vi.fn() },
+        legacyApiKey: 'legacy-key',
+        legacyModel: 'gpt-5.2',
+        legacyRequestCostUsdMicros: 300,
+        environment: 'PRODUCTION',
+      }),
+    ).rejects.toMatchObject({
+      code: 'CONFIGURATION_ERROR',
+      message: 'active provider configuration required',
+    });
+    expect(getActiveForRuntime).not.toHaveBeenCalled();
   });
 });
 
