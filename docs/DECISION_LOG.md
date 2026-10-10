@@ -3790,3 +3790,12 @@
 - production向けDraft PRのmergeはGit連携Deployを開始するため、通常の「マージしました」運用で先行mergeしない。credential rotation、停止/drain、承認済みrelease、復旧を一つの人間承認された作業窓で行う。
 - 古いDeploymentの環境変数は更新されない。旧passwordが不明なため単純rollbackを復旧手段とせず、新credentialで同じ基準コードを再buildする。DB restoreでpasswordが戻ると推測しない。
 - 本番schema/データ、Migration history、Runtime、Cron定義、Provider、Pilot設定は変更しない。通常feature releaseではmainのMigration付きbuildへ戻すことを必須とする。
+
+## 2026-10-10: Personal Learning PilotのUSD予算はProvider送信前の最大費用予約で止める
+
+- 状態: Proposed（実装PRレビュー待ち。本番価格・予算・Migration・Pilot開始は未承認）
+- 既存のcall回数・同時実行AdmissionとP1-G Pricing Registryを再利用し、単一ProgramのUTC日次`dailyCostLimitUsdMicros`を必須設定にする。未設定、旧8項目設定、価格不明、不正価格、モデル不一致はfail-closedとする。
+- 1回の予約はProvider request全体の最大UTF-8 bytesを入力token数の保守的上限、`maxOutputTokens`を出力上限として通常input/output単価から切り上げる。cached割引や呼出後の安い実績で当日予算を返金しない。
+- Program単位advisory lock内で日次予約額を合計し、上限を超える呼出しを送信前に拒否する。失敗、retry、送信前停止も予約を保持し、別attemptによる予算迂回を許可しない。
+- Admission台帳へ予約額と価格版だけを追加する。既存行は推測backfillせずNULLのまま保持し、同日内に未価格行があれば新規呼出しを停止する。相談、回答、成果物、Provider response、API keyは保存しない。
+- この上限は対象Pilot Programの事前予約であり、Provider請求額、税・為替、他機能、Provider account全体のbudgetを保証しない。Provider側budget、請求照合、外部Alert、未知call復旧、全instance drainは別Gateとする。

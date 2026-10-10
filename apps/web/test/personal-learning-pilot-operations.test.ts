@@ -84,13 +84,14 @@ describe('trusted Pilot operations HTTP', () => {
         maxConcurrent: 1,
         maxRequestBytes: 16384,
         maxOutputTokens: 2048,
+        dailyCostLimitUsdMicros: 100000,
       }),
     );
     vi.stubEnv(
       'PERSONAL_LEARNING_AI_PRICING',
       JSON.stringify([
         {
-          provider: 'OPENAI',
+          provider: 'openai',
           model: 'reviewed-model',
           effectiveFrom: '2026-01-01T00:00:00Z',
           inputPriceMicrosPerMillion: 1,
@@ -140,6 +141,13 @@ describe('trusted Pilot operations HTTP', () => {
   });
   it('START requires closed preparation, model match and reviewed pricing', async () => {
     expect((await response(request({ ...command, action: 'START' }), 'slug')).status).toBe(200);
+    const admission = JSON.parse(process.env['PERSONAL_LEARNING_CALL_ADMISSION'] ?? '{}');
+    vi.stubEnv(
+      'PERSONAL_LEARNING_CALL_ADMISSION',
+      JSON.stringify({ ...admission, dailyCostLimitUsdMicros: 1 }),
+    );
+    expect((await response(request({ ...command, action: 'START' }), 'slug')).status).toBe(404);
+    vi.stubEnv('PERSONAL_LEARNING_CALL_ADMISSION', JSON.stringify(admission));
     vi.stubEnv('PERSONAL_LEARNING_AI_PRICING', '[]');
     expect((await response(request({ ...command, action: 'START' }), 'slug')).status).toBe(404);
     vi.stubEnv('PERSONAL_LEARNING_DEFINITION_ADMIN', 'true');

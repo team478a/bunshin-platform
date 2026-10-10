@@ -2,6 +2,8 @@ import { createHash } from 'node:crypto';
 import type { PrismaClient, LineConfigurationEnvironment } from '@prisma/client';
 import {
   parsePersonalLearningCallAdmissionPolicy,
+  reservePersonalLearningCallCost,
+  type AiTokenPricing,
   type PersonalLearningActor,
   type PersonalLearningCallAdmissionPolicy,
 } from '@bunshin/application';
@@ -24,8 +26,10 @@ export class PrismaPersonalLearningCallAdmission extends PrismaPersonalLearningA
     jobId: string;
     attemptCount: number;
     environment: LineConfigurationEnvironment;
+    provider: string;
     model: string;
     policy: PersonalLearningCallAdmissionPolicy;
+    pricingRegistry: readonly AiTokenPricing[];
   }) {
     const policy = parsePersonalLearningCallAdmissionPolicy(input.policy);
     const s = input.actor.scope;
@@ -77,16 +81,50 @@ export class PrismaPersonalLearningCallAdmission extends PrismaPersonalLearningA
       const dayStart = new Date(clock.now);
       dayStart.setUTCHours(0, 0, 0, 0);
       const nextDay = new Date(dayStart.getTime() + 86_400_000);
+      const reservation = reservePersonalLearningCallCost({
+        policy,
+        provider: input.provider,
+        pricingRegistry: input.pricingRegistry,
+        occurredAt: clock.now,
+      });
+      if (!reservation || reservation.reservedCostUsdMicros > policy.dailyCostLimitUsdMicros)
+        throw new ApplicationError('FORBIDDEN', 'pilot call cost unavailable');
       const attempts = await tx.personalLearningCallAdmission.count({
         where: { ...where, admittedAt: { gte: dayStart, lt: nextDay } },
       });
       const concurrent = await tx.personalLearningCallAdmission.count({
         where: { ...where, settledAt: null },
       });
-      if (attempts >= policy.dailyAttemptLimit || concurrent >= policy.maxConcurrent)
+      const [unknownCost, reservedCost] = await Promise.all([
+        tx.personalLearningCallAdmission.count({
+          where: {
+            ...where,
+            admittedAt: { gte: dayStart, lt: nextDay },
+            reservedCostUsdMicros: null,
+          },
+        }),
+        tx.personalLearningCallAdmission.aggregate({
+          where: { ...where, admittedAt: { gte: dayStart, lt: nextDay } },
+          _sum: { reservedCostUsdMicros: true },
+        }),
+      ]);
+      const nextReservedCost =
+        (reservedCost._sum.reservedCostUsdMicros ?? 0n) + BigInt(reservation.reservedCostUsdMicros);
+      if (
+        attempts >= policy.dailyAttemptLimit ||
+        concurrent >= policy.maxConcurrent ||
+        unknownCost > 0 ||
+        nextReservedCost > BigInt(policy.dailyCostLimitUsdMicros)
+      )
         throw new ApplicationError('FORBIDDEN', 'pilot call limit reached');
       return tx.personalLearningCallAdmission.create({
-        data: { ...where, operationHash, admittedAt: clock.now },
+        data: {
+          ...where,
+          operationHash,
+          admittedAt: clock.now,
+          reservedCostUsdMicros: BigInt(reservation.reservedCostUsdMicros),
+          pricingVersion: reservation.pricingVersion,
+        },
       });
     });
   }

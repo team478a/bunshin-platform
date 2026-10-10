@@ -4,6 +4,9 @@ vi.mock('@bunshin/config', () => ({ getServerEnvironment: () => ({ APP_ENV: 'sta
 vi.mock('../src/services/personal-learning-pilot-access', () => ({
   personalLearningPilotEnabled: () => fake.enabled,
 }));
+vi.mock('../src/observability/personal-learning-ai-call', () => ({
+  personalLearningPricingRegistry: () => ['pricing'],
+}));
 vi.mock('@bunshin/database', () => ({
   prisma: {},
   PrismaPersonalLearningCallAdmission: class {
@@ -21,6 +24,7 @@ const policy = {
   maxConcurrent: 1,
   maxRequestBytes: 10000,
   maxOutputTokens: 100,
+  dailyCostLimitUsdMicros: 1000,
 };
 const input = {
   actor: {
@@ -37,6 +41,7 @@ const input = {
   answerId: 'answer',
   jobId: 'job',
   attemptCount: 1,
+  provider: 'openai',
   model: 'synthetic',
 };
 describe('server Pilot call admission', () => {
@@ -76,7 +81,12 @@ describe('server Pilot call admission', () => {
   });
   it('uses the server environment and does not refund the daily attempt on settlement', async () => {
     const permit = await admitPersonalLearningCall(input);
-    expect(fake.admit).toHaveBeenCalledWith({ ...input, policy, environment: 'STAGING' });
+    expect(fake.admit).toHaveBeenCalledWith({
+      ...input,
+      policy,
+      pricingRegistry: ['pricing'],
+      environment: 'STAGING',
+    });
     expect(permit.requestLimits).toEqual({ maxRequestBytes: 10000, maxOutputTokens: 100 });
     await permit.settle();
     expect(fake.settle).toHaveBeenCalledWith({ id: 'permit' });
