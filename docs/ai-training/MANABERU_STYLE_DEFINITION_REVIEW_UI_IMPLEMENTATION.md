@@ -46,6 +46,7 @@ Definition管理flag既定無効を維持。既存Preparation Accessを再利用
 - 新UI/pageとService管理者境界の追加回帰: 29件成功（上記新UIテストの再実行を含むため合計へ重複加算しない）。
 - architecture check、Web typecheck、learning-ui typecheck、変更WebファイルESLint、learning-ui lint、diff check成功。初回Web型検査は旧checkoutの生成済み型で失敗し、最新mainのPrisma/Next型再生成後に成功。負例テストの意図的な余分fieldは型検査用castを明示して修正。
 - Web build / 最終format check成功。最終変更後の新UI/page単体22件も再実行成功。buildはローカルPrisma generate + next buildのみで、migration/deployを実行しない。
+- 初回GitHub CI `38009318451` はdatabase成功、format/typecheck/lint成功後、全体testの既存route inventoryが新画面のログイン復帰先未登録を1件検出して停止した。新画面の完全一致bare pathだけを既存allowlistへ追加し、query・子パス・fragment・percent-encoding別名・外部URL拒否を追加した。関連route inventory/LINE戻り先120件、変更ファイルESLint、Web typecheck、format/diff checkは成功。ローカル全体testでは該当assertionを含むWeb 464ファイル3,261件まで成功したが、Windowsの生成済みPrisma Clientが`#main-entry-point`を解決できず無関係な既存3 suiteが起動前失敗したため、最終headのクリーンLinux CIを正本とする。
 
 実認証・実DB統合の本UI操作、実スマートフォン、本番設定/承認・監査、START/STOP、課金E2Eは未検証/未実施。合成PASSを本番承認完了としない。最終headのCIも確認する。
 
