@@ -39,6 +39,7 @@ const snapshot = {
   encryptedApiKey: 'sealed',
   dailySpentUsdMicros: 100,
   monthlySpentUsdMicros: 200,
+  monthlyUnknownCostEvents: 0,
 };
 
 describe('ResolveAiProviderRuntimeConfiguration', () => {
@@ -70,5 +71,17 @@ describe('ResolveAiProviderRuntimeConfiguration', () => {
         repository({ ...snapshot, dailySpentUsdMicros: configuration.dailyBudgetUsdMicros }),
       ).execute({ environment: 'PRODUCTION', provider: 'OPENAI' }),
     ).rejects.toMatchObject({ code: 'CONFLICT' });
+  });
+
+  it('fails closed when any usage cost in the current UTC month is unknown', async () => {
+    await expect(
+      new ResolveAiProviderRuntimeConfiguration(
+        repository({ ...snapshot, monthlyUnknownCostEvents: 1 }),
+      ).execute({
+        environment: 'PRODUCTION',
+        provider: 'OPENAI',
+        now: new Date('2026-08-24T12:00:00Z'),
+      }),
+    ).rejects.toMatchObject({ code: 'CONFLICT', message: 'provider cost is unknown' });
   });
 });
