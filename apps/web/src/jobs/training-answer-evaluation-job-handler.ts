@@ -227,6 +227,7 @@ export function createTrainingAnswerEvaluationJobHandler(): TrainingAnswerEvalua
                   answerId: answer.id,
                   jobId: input.jobId,
                   attemptCount: input.attemptCount,
+                  provider: 'openai',
                   model: runtime.model,
                 })
               : null;

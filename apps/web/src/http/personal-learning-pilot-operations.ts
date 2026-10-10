@@ -5,6 +5,7 @@ import {
   parsePersonalLearningPreparationAuthority,
   parsePersonalLearningCallAdmissionPolicy,
   parseAiTokenPricingRegistry,
+  reservePersonalLearningCallCost,
   type PilotOperation,
 } from '@bunshin/application';
 import { ApplicationError, toApiError } from '@bunshin/shared';
@@ -131,14 +132,22 @@ export async function personalLearningPilotOperationsResponse(
         if (!admission) throw denied();
         // Resolve existing configuration only; no HTTP/Provider execution occurs here.
         const runtime = await resolveOpenAiRuntimeConfiguration();
+        let registry;
+        try {
+          registry = parseAiTokenPricingRegistry(pricing);
+        } catch {
+          throw denied();
+        }
+        const reservation = reservePersonalLearningCallCost({
+          policy: admission,
+          provider: 'openai',
+          pricingRegistry: registry,
+          occurredAt: new Date(),
+        });
         if (
           runtime.model !== admission.model ||
-          !parseAiTokenPricingRegistry(pricing).some(
-            (p) =>
-              p.provider === 'OPENAI' &&
-              p.model === runtime.model &&
-              Date.parse(p.effectiveFrom) <= Date.now(),
-          )
+          !reservation ||
+          reservation.reservedCostUsdMicros > admission.dailyCostLimitUsdMicros
         )
           throw denied();
       }
