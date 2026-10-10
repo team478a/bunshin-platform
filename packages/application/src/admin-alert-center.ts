@@ -28,7 +28,8 @@ export interface AdminAlertSnapshot {
     monthlyBudgetUsdMicros: number;
     dailySpentUsdMicros: number;
     monthlySpentUsdMicros: number;
-    recentFailures: number;
+    recentProviderFailures: number;
+    recentUnknownCostEvents: number;
   }>;
   line: {
     required: boolean;
@@ -110,13 +111,23 @@ export function buildAdminAlerts(snapshot: AdminAlertSnapshot): AdminAlert[] {
         count: null,
         href: '/admin/ai',
       });
-    if (item.recentFailures >= 3)
+    if (item.recentProviderFailures >= 3)
       alerts.push({
         code: `AI_${item.provider}_FAILURES`,
         severity: 'WARNING',
-        title: `${label}の処理が繰り返し失敗しています`,
-        guidance: '直近24時間の接続、モデル、利用上限を確認してください。',
-        count: item.recentFailures,
+        title: `${label}との通信・応答処理が繰り返し失敗しています`,
+        guidance: '直近24時間の接続、モデル、認証情報、利用上限を確認してください。',
+        count: item.recentProviderFailures,
+        href: '/admin/ai',
+      });
+    if (item.recentUnknownCostEvents > 0)
+      alerts.push({
+        code: `AI_${item.provider}_UNKNOWN_COST`,
+        severity: 'WARNING',
+        title: `${label}の利用料を算定できない処理記録があります`,
+        guidance:
+          '直近24時間のトークン使用量と価格設定を確認してください。未算定分がある間は表示予算を上限保証として扱わないでください。',
+        count: item.recentUnknownCostEvents,
         href: '/admin/ai',
       });
   }

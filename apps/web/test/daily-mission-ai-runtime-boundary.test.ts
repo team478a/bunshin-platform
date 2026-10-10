@@ -12,6 +12,8 @@ describe('daily mission AI runtime boundary', () => {
     expect(runtime).toContain('resolveOpenAiRuntimeConfiguration()');
     expect(runtime).toContain('withOrganizationAiGenerationQuota({');
     expect(runtime).toContain("status: 'SUCCESS'");
+    expect(runtime).toContain('estimatedCostUsdMicros: configuration.requestCostUsdMicros || null');
+    expect(runtime).toContain('pricingVersion: configuration.requestCostUsdMicros');
     expect(runtime).toContain("taskType: 'DAILY_MISSION_PIPELINE'");
     expect(runtime).toContain("status: 'FAILED'");
     expect(runtime).toContain(':daily-pipeline-failure`');

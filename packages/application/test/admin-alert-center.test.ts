@@ -16,7 +16,8 @@ const healthy = (): AdminAlertSnapshot => ({
       monthlyBudgetUsdMicros: 10_000_000,
       dailySpentUsdMicros: 100_000,
       monthlySpentUsdMicros: 100_000,
-      recentFailures: 0,
+      recentProviderFailures: 0,
+      recentUnknownCostEvents: 0,
     },
   ],
   line: {
@@ -56,6 +57,29 @@ describe('admin alert center', () => {
     expect(alerts[0]).toMatchObject({ severity: 'CRITICAL' });
     expect(alerts.map((item) => item.code)).toEqual(
       expect.arrayContaining(['AI_OPENAI_BUDGET', 'LINE_DELIVERY_FAILURES', 'OPEN_SUPPORT_CASES']),
+    );
+  });
+
+  it('reports provider failures separately from unknown-cost telemetry', () => {
+    const snapshot = healthy();
+    snapshot.ai[0]!.recentProviderFailures = 3;
+    snapshot.ai[0]!.recentUnknownCostEvents = 5;
+
+    expect(buildAdminAlerts(snapshot)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'AI_OPENAI_FAILURES',
+          severity: 'WARNING',
+          count: 3,
+          title: expect.stringContaining('通信・応答処理'),
+        }),
+        expect.objectContaining({
+          code: 'AI_OPENAI_UNKNOWN_COST',
+          severity: 'WARNING',
+          count: 5,
+          title: expect.stringContaining('利用料を算定できない'),
+        }),
+      ]),
     );
   });
 

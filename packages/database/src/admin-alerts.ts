@@ -138,23 +138,55 @@ export class PrismaAdminAlertRepository implements AdminAlertRepository {
     const ai = await Promise.all(
       configurations.map(async (configuration) => {
         const provider = configuration.provider.toLowerCase();
-        const [daily, monthly, recentFailures] = await Promise.all([
-          this.client.aiUsageEvent.aggregate({
-            where: { provider, occurredAt: { gte: input.dailyFrom, lt: input.now } },
-            _sum: { estimatedCostUsdMicros: true },
-          }),
-          this.client.aiUsageEvent.aggregate({
-            where: { provider, occurredAt: { gte: input.monthlyFrom, lt: input.now } },
-            _sum: { estimatedCostUsdMicros: true },
-          }),
-          this.client.aiUsageEvent.count({
-            where: {
-              provider,
-              status: 'FAILED',
-              occurredAt: { gte: input.recentFrom, lt: input.now },
-            },
-          }),
-        ]);
+        const [daily, monthly, recentProviderFailures, recentUnknownCostEvents] = await Promise.all(
+          [
+            this.client.aiUsageEvent.aggregate({
+              where: { provider, occurredAt: { gte: input.dailyFrom, lt: input.now } },
+              _sum: { estimatedCostUsdMicros: true },
+            }),
+            this.client.aiUsageEvent.aggregate({
+              where: { provider, occurredAt: { gte: input.monthlyFrom, lt: input.now } },
+              _sum: { estimatedCostUsdMicros: true },
+            }),
+            this.client.aiUsageEvent.count({
+              where: {
+                provider,
+                status: 'FAILED',
+                OR: [
+                  { errorCode: { startsWith: 'AI_PROVIDER_' } },
+                  {
+                    errorCode: {
+                      in: [
+                        'PROVIDER_UNAVAILABLE',
+                        'PROVIDER_ERROR',
+                        'PROVIDER_FAILED',
+                        'PROVIDER_GENERATION_FAILED',
+                        'PROVIDER_RENDER_FAILED',
+                        'PROVIDER_TIMEOUT',
+                        'TIMEOUT',
+                        'TIMEOUT_OR_NETWORK',
+                        'NETWORK_ERROR',
+                        'RATE_LIMIT',
+                        'RATE_LIMITED',
+                        'QUOTA_OR_RATE_LIMIT',
+                        'HTTP_ERROR',
+                      ],
+                    },
+                  },
+                ],
+                occurredAt: { gte: input.recentFrom, lt: input.now },
+              },
+            }),
+            this.client.aiUsageEvent.count({
+              where: {
+                provider,
+                estimatedCostUsdMicros: null,
+                taskType: { not: 'DAILY_MISSION_PIPELINE' },
+                occurredAt: { gte: input.recentFrom, lt: input.now },
+              },
+            }),
+          ],
+        );
         return {
           provider: configuration.provider,
           globallyPaused: configuration.globallyPaused,
@@ -163,7 +195,8 @@ export class PrismaAdminAlertRepository implements AdminAlertRepository {
           monthlyBudgetUsdMicros: Number(configuration.monthlyBudgetUsdMicros),
           dailySpentUsdMicros: safeNumber(daily._sum.estimatedCostUsdMicros),
           monthlySpentUsdMicros: safeNumber(monthly._sum.estimatedCostUsdMicros),
-          recentFailures,
+          recentProviderFailures,
+          recentUnknownCostEvents,
         };
       }),
     );
