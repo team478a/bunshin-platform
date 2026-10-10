@@ -143,25 +143,16 @@ export class AiProviderConnectionTestAdapter {
             },
           )
         : input.provider === 'EXA'
-          ? fetch('https://api.exa.ai/search', {
-              method: 'POST',
-              headers: { 'content-type': 'application/json', 'x-api-key': input.apiKey },
-              body: JSON.stringify({ query: 'provider connection test', numResults: 1 }),
+          ? fetch('https://api.exa.ai/v0/teams/me', {
+              headers: { 'x-api-key': input.apiKey },
               signal: AbortSignal.timeout(10_000),
             })
           : input.provider === 'FIRECRAWL'
-            ? fetch('https://api.firecrawl.dev/v2/scrape', {
-                method: 'POST',
+            ? fetch('https://api.firecrawl.dev/v2/team/credit-usage', {
                 headers: {
-                  'content-type': 'application/json',
                   authorization: `Bearer ${input.apiKey}`,
                 },
-                body: JSON.stringify({
-                  url: 'https://example.com',
-                  formats: ['markdown'],
-                  maxAge: 604800000,
-                }),
-                signal: AbortSignal.timeout(15_000),
+                signal: AbortSignal.timeout(10_000),
               })
             : fetch('https://api.creatomate.com/v2/templates', {
                 headers: { authorization: `Bearer ${input.apiKey}` },

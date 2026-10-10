@@ -32,6 +32,48 @@ describe('外部サービス接続確認', () => {
     );
   });
 
+  it('Exaは検索を実行せずread-onlyなチーム情報で接続確認する', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ id: 'team' }));
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(
+      new AiProviderConnectionTestAdapter().validate({
+        provider: 'EXA',
+        apiKey: 'exa-secret',
+        model: null,
+      }),
+    ).resolves.toEqual({ success: true, errorCategory: null });
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.exa.ai/v0/teams/me',
+      expect.objectContaining({
+        headers: { 'x-api-key': 'exa-secret' },
+      }),
+    );
+    expect(fetchMock.mock.calls[0]?.[1]).not.toHaveProperty('method');
+    expect(fetchMock.mock.calls[0]?.[1]).not.toHaveProperty('body');
+  });
+
+  it('Firecrawlはscrapeを実行せずread-onlyな残クレジット情報で接続確認する', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(Response.json({ success: true, data: { remainingCredits: 100 } }));
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(
+      new AiProviderConnectionTestAdapter().validate({
+        provider: 'FIRECRAWL',
+        apiKey: 'firecrawl-secret',
+        model: null,
+      }),
+    ).resolves.toEqual({ success: true, errorCategory: null });
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.firecrawl.dev/v2/team/credit-usage',
+      expect.objectContaining({
+        headers: { authorization: 'Bearer firecrawl-secret' },
+      }),
+    );
+    expect(fetchMock.mock.calls[0]?.[1]).not.toHaveProperty('method');
+    expect(fetchMock.mock.calls[0]?.[1]).not.toHaveProperty('body');
+  });
+
   it('Runwayは動画を生成せず存在しないタスクで接続確認する', async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response('', { status: 404 }));
     vi.stubGlobal('fetch', fetchMock);
