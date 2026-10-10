@@ -37,7 +37,7 @@ DB schema、migration、Provider実装、Pilot実行flag、本番設定は変更
 - 全体testは高並列時に既存DB RLS検査1件と既存Web 2 files / 3 testsが5秒timeoutで停止した。対象を単独再実行し、DB 2件、Web 12件が全件成功。新規application/databaseテストも全体実行内で成功。クリーンCIを最終正本とする。
 - 変更ファイルPrettier、全体format、diff check成功。
 
-最終headのGitHub CIは本報告作成時点で未確認。
+初回GitHub CI run `38020138034` はdatabase、format、typecheck、lint、全体test、学習UI E2E、buildを含めて成功。報告更新後の最終head CIも確認する。
 
 ## 5. 未解決事項
 
