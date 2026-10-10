@@ -3808,3 +3808,11 @@
 - process停止とDB session終了、SQL rollback、全writer drainを同一視しない。部分適用は残り得るため実schema/履歴/sessionを確認し、人間が復旧を判断する。
 - 2026-10-10のread-only監査ではproduction系統231件の成功履歴が名前ハッシュまで一致し、unfinished/rolled-backは0件、pendingは`20261010070000_personal_learning_call_cost_reservation`の1件だけだった。対象tableは0行、追加列/制約は未作成、待機lockは0、最新物理Backupは2026-10-10 05:44:36 JSTだった。
 - PR作成はMigration/Deploy承認ではない。mergeがMigrationとApplication buildを開始するため別の明示承認を必須とし、Pilot、Provider送信、課金、参加者登録は変更しない。
+
+## 2026-10-10: Supavisor経由のMigration上限は対象SQLのtransaction-local設定を正本にする
+
+- 状態: Proposed（hotfix PRレビュー待ち。再merge・再Deployは未承認）
+- PR #1218のProduction buildは、Supavisor session pooler接続後のprobeで`MIGRATION_BOUNDS_NOT_ACTIVE`となり、Migration開始前にfail-closed停止した。本番履歴・対象列・制約は未変更、待機lockとrunner sessionは0件だった。
+- Supavisorは接続startup `options`の一般GUCを反映する保証がないため、`lock_timeout` 5秒、`statement_timeout` 60秒、`idle_in_transaction_session_timeout` 60秒を未適用の対象Migration内で`BEGIN` / `SET LOCAL` / `COMMIT`として固定する。DB/roleの恒久設定は変更しない。
+- runnerは対象Migrationが最新、直前Migrationが所定値、対象SQLに固定上限があることをローカルで検査する。本番probeでは成功履歴の件数とmigration名集合、対象の未適用/適用済み状態、0行、列/制約未作成、待機lockなしを照合し、この限定release以外を実行しない。
+- Prisma migrate process 300秒の期限、非0/signal/期限時のfail-closed、自動retry/resolve/rollback禁止は維持する。再merge前にBackup、履歴、schema、lock、公開SHAを再確認する。

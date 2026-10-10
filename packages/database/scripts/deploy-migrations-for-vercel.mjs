@@ -1,11 +1,28 @@
 import { createRequire } from 'node:module';
+import { readFileSync, readdirSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { performance } from 'node:perf_hooks';
 import { runMigrationProcess } from './migration-process.mjs';
 
 const requireModule = createRequire(import.meta.url);
+const targetMigration = '20261010070000_personal_learning_call_cost_reservation';
+const expectedPredecessor = '20261008140000_learning_member_line_link';
+const migrationDirectory = new URL('../prisma/migrations/', import.meta.url);
+
+function releaseMigrationNames() {
+  return readdirSync(migrationDirectory, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && /^\d+_/.test(entry.name))
+    .map((entry) => entry.name)
+    .sort();
+}
 
 export function resolveMigrationBounds(environment) {
+  const fixed = (name, expected) => {
+    const raw = environment[name] ?? String(expected);
+    if (!/^[1-9][0-9]*$/.test(raw) || Number(raw) !== expected)
+      throw new Error('INVALID_MIGRATION_BOUNDS');
+    return expected;
+  };
   const bounded = (name, fallback, maximum) => {
     const raw = environment[name] ?? String(fallback);
     if (!/^[1-9][0-9]*$/.test(raw) || !Number.isSafeInteger(Number(raw)))
@@ -14,26 +31,136 @@ export function resolveMigrationBounds(environment) {
     if (value > maximum) throw new Error('INVALID_MIGRATION_BOUNDS');
     return value;
   };
-  const lockTimeoutMs = bounded('MIGRATION_LOCK_TIMEOUT_MS', 5000, 10000);
-  const statementTimeoutMs = bounded('MIGRATION_STATEMENT_TIMEOUT_MS', 60000, 120000);
+  // These two bounds are part of the committed target Migration and cannot drift at deploy time.
+  const lockTimeoutMs = fixed('MIGRATION_LOCK_TIMEOUT_MS', 5000);
+  const statementTimeoutMs = fixed('MIGRATION_STATEMENT_TIMEOUT_MS', 60000);
   const processTimeoutMs = bounded('MIGRATION_PROCESS_TIMEOUT_MS', 300000, 600000);
   if (lockTimeoutMs >= statementTimeoutMs || statementTimeoutMs >= processTimeoutMs)
     throw new Error('INVALID_MIGRATION_BOUNDS');
   return { lockTimeoutMs, statementTimeoutMs, processTimeoutMs };
 }
 
-export function withMigrationBounds(directUrl, bounds) {
+export function withMigrationConnectionMetadata(directUrl) {
   const url = new URL(directUrl);
   if (!['postgres:', 'postgresql:'].includes(url.protocol) || url.searchParams.has('options'))
     throw new Error('INVALID_MIGRATION_CONNECTION');
-  // Startup options apply to the actual migration engine connection, not another client.
-  url.searchParams.set(
-    'options',
-    `-c lock_timeout=${bounds.lockTimeoutMs} -c statement_timeout=${bounds.statementTimeoutMs} -c idle_in_transaction_session_timeout=${bounds.statementTimeoutMs}`,
-  );
   url.searchParams.set('connect_timeout', '10');
   url.searchParams.set('application_name', 'bunshin_migration_bounded');
   return url.toString();
+}
+
+export function assertReleaseMigrationGuard() {
+  const names = releaseMigrationNames();
+  if (!names.every((name) => /^\d{14}_[a-z0-9_]+$/.test(name)))
+    throw new Error('UNEXPECTED_MIGRATION_NAME');
+  if (names.at(-1) !== targetMigration || names.at(-2) !== expectedPredecessor)
+    throw new Error('UNEXPECTED_MIGRATION_LINEAGE');
+  const sql = readFileSync(new URL(`${targetMigration}/migration.sql`, migrationDirectory), 'utf8');
+  const executableSql = sql
+    .replace(/\r\n/g, '\n')
+    .replace(/^\s*--.*$/gm, '')
+    .trim();
+  const orderedGuards = [
+    'BEGIN;',
+    "SET LOCAL lock_timeout = '5s';",
+    "SET LOCAL statement_timeout = '60s';",
+    "SET LOCAL idle_in_transaction_session_timeout = '60s';",
+    'ALTER TABLE "personal_learning_call_admissions"',
+    'COMMIT;',
+  ];
+  let previousPosition = -1;
+  if (
+    !executableSql.startsWith('BEGIN;') ||
+    !executableSql.endsWith('COMMIT;') ||
+    orderedGuards.some((guard) => {
+      const position = executableSql.indexOf(guard);
+      const unique = position >= 0 && executableSql.indexOf(guard, position + guard.length) === -1;
+      const ordered = position > previousPosition;
+      previousPosition = position;
+      return !unique || !ordered;
+    })
+  )
+    throw new Error('TARGET_MIGRATION_GUARD_MISSING');
+  return names;
+}
+
+export function buildReleasePreflightSql(expectedMigrationNames) {
+  if (
+    !Array.isArray(expectedMigrationNames) ||
+    expectedMigrationNames.length < 2 ||
+    !expectedMigrationNames.every((name) => /^\d{14}_[a-z0-9_]+$/.test(name)) ||
+    expectedMigrationNames.at(-1) !== targetMigration ||
+    expectedMigrationNames.at(-2) !== expectedPredecessor
+  )
+    throw new Error('UNEXPECTED_MIGRATION_LINEAGE');
+  const expectedMigrationCount = expectedMigrationNames.length;
+  const expectedBefore = expectedMigrationCount - 1;
+  const sqlArray = (names) => `ARRAY[${names.map((name) => `'${name}'`).join(',')}]::text[]`;
+  const expectedBeforeNames = sqlArray(expectedMigrationNames.slice(0, -1));
+  const expectedAfterNames = sqlArray(expectedMigrationNames);
+  return `DO $$
+DECLARE
+  successful_count integer;
+  target_applied boolean;
+  expected_names text[];
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM "_prisma_migrations"
+    WHERE "finished_at" IS NULL OR "rolled_back_at" IS NOT NULL
+  ) THEN RAISE EXCEPTION 'MIGRATION_HISTORY_NOT_CLEAN'; END IF;
+
+  SELECT count(*) INTO successful_count
+  FROM "_prisma_migrations"
+  WHERE "finished_at" IS NOT NULL AND "rolled_back_at" IS NULL;
+  SELECT EXISTS (
+    SELECT 1 FROM "_prisma_migrations"
+    WHERE "migration_name" = '${targetMigration}'
+      AND "finished_at" IS NOT NULL AND "rolled_back_at" IS NULL
+  ) INTO target_applied;
+
+  IF target_applied THEN
+    expected_names := ${expectedAfterNames};
+    IF successful_count <> ${expectedMigrationCount} OR EXISTS (
+      SELECT "migration_name" FROM "_prisma_migrations"
+      WHERE "finished_at" IS NOT NULL AND "rolled_back_at" IS NULL
+      EXCEPT SELECT unnest(expected_names)
+    ) OR EXISTS (
+      SELECT unnest(expected_names)
+      EXCEPT SELECT "migration_name" FROM "_prisma_migrations"
+      WHERE "finished_at" IS NOT NULL AND "rolled_back_at" IS NULL
+    )
+    THEN RAISE EXCEPTION 'UNEXPECTED_POST_MIGRATION_HISTORY'; END IF;
+  ELSE
+    expected_names := ${expectedBeforeNames};
+    IF successful_count <> ${expectedBefore} OR EXISTS (
+      SELECT "migration_name" FROM "_prisma_migrations"
+      WHERE "finished_at" IS NOT NULL AND "rolled_back_at" IS NULL
+      EXCEPT SELECT unnest(expected_names)
+    ) OR EXISTS (
+      SELECT unnest(expected_names)
+      EXCEPT SELECT "migration_name" FROM "_prisma_migrations"
+      WHERE "finished_at" IS NOT NULL AND "rolled_back_at" IS NULL
+    ) THEN RAISE EXCEPTION 'UNEXPECTED_PRE_MIGRATION_HISTORY'; END IF;
+    IF EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'personal_learning_call_admissions'
+        AND column_name IN ('reserved_cost_usd_micros', 'pricing_version')
+    ) OR EXISTS (
+      SELECT 1 FROM pg_constraint
+      WHERE conname = 'personal_learning_call_admissions_cost_pair_check'
+    ) OR EXISTS (
+      SELECT 1 FROM public.personal_learning_call_admissions
+    ) OR EXISTS (
+      SELECT 1 FROM pg_locks l
+      JOIN pg_class c ON c.oid = l.relation
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname = 'public'
+        AND c.relname = 'personal_learning_call_admissions'
+        AND NOT l.granted
+    ) THEN RAISE EXCEPTION 'TARGET_MIGRATION_PREFLIGHT_CHANGED'; END IF;
+  END IF;
+END $$;`;
 }
 
 export function resolveMigrationDirectUrl(directUrl, sessionPoolerHost) {
@@ -78,12 +205,13 @@ export async function runVercelMigration(environment = process.env, execute = ru
   let migrationDirectUrl;
   let bounds;
   let prismaCli;
+  let expectedMigrationNames;
 
   try {
     bounds = resolveMigrationBounds(environment);
-    migrationDirectUrl = withMigrationBounds(
+    expectedMigrationNames = assertReleaseMigrationGuard();
+    migrationDirectUrl = withMigrationConnectionMetadata(
       resolveMigrationDirectUrl(environment.DIRECT_URL, environment.SUPABASE_SESSION_POOLER_HOST),
-      bounds,
     );
     prismaCli = requireModule.resolve('prisma/build/index.js');
   } catch {
@@ -105,7 +233,8 @@ export async function runVercelMigration(environment = process.env, execute = ru
   let result;
   try {
     const startedAt = performance.now();
-    // A pooler must not silently discard startup settings. Probe with the same CLI/URL.
+    // The target SQL owns transaction-local DB bounds; this probe limits the release to its
+    // audited lineage and preconditions before Prisma can start migrate deploy.
     const probe = await execute(
       process.execPath,
       [prismaCli, 'db', 'execute', '--stdin', '--schema', 'prisma/schema.prisma'],
@@ -113,12 +242,7 @@ export async function runVercelMigration(environment = process.env, execute = ru
         cwd: new URL('../', import.meta.url),
         env: childEnvironment,
         timeoutMs: bounds.processTimeoutMs,
-        input: `DO $$ BEGIN
-        IF current_setting('lock_timeout')::interval <> interval '${bounds.lockTimeoutMs} milliseconds'
-           OR current_setting('statement_timeout')::interval <> interval '${bounds.statementTimeoutMs} milliseconds'
-           OR current_setting('idle_in_transaction_session_timeout')::interval <> interval '${bounds.statementTimeoutMs} milliseconds'
-        THEN RAISE EXCEPTION 'MIGRATION_BOUNDS_NOT_ACTIVE'; END IF;
-      END $$;`,
+        input: buildReleasePreflightSql(expectedMigrationNames),
       },
     );
     const remainingMs = Math.floor(bounds.processTimeoutMs - (performance.now() - startedAt));

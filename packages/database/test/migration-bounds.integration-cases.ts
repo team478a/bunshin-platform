@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import type { PrismaClient } from '@prisma/client';
 import { describe, expect, it } from 'vitest';
-import { withMigrationBounds } from '../scripts/deploy-migrations-for-vercel.mjs';
+import { withMigrationConnectionMetadata } from '../scripts/deploy-migrations-for-vercel.mjs';
 import { runMigrationProcess } from '../scripts/migration-process.mjs';
 
 const requireModule = createRequire(import.meta.url);
@@ -13,11 +13,7 @@ const requireModule = createRequire(import.meta.url);
 export function registerMigrationBoundsIntegrationCases(client: PrismaClient) {
   const executeProbe = (sql: string) =>
     new Promise<{ status: number; lockTimeout: boolean; statementTimeout: boolean }>((resolve) => {
-      const directUrl = withMigrationBounds(process.env['DIRECT_URL']!, {
-        lockTimeoutMs: 100,
-        statementTimeoutMs: 1000,
-        processTimeoutMs: 20000,
-      });
+      const directUrl = withMigrationConnectionMetadata(process.env['DIRECT_URL']!);
       const child = spawn(
         process.execPath,
         [
@@ -56,7 +52,7 @@ export function registerMigrationBoundsIntegrationCases(client: PrismaClient) {
       child.stdin.end(sql);
     });
 
-  describe('actual Prisma schema engine startup bounds', () => {
+  describe('actual Prisma schema engine transaction-local bounds', () => {
     it('preserves an earlier migration, stops on SQL timeout, and does not resolve/retry failures', async () => {
       // A new synthetic schema inside the already verified disposable database only.
       const schema = `migration_bounds_${randomUUID().replaceAll('-', '')}`;
@@ -64,11 +60,7 @@ export function registerMigrationBoundsIntegrationCases(client: PrismaClient) {
       try {
         const url = new URL(process.env['DIRECT_URL']!);
         url.searchParams.set('schema', schema);
-        const boundedUrl = withMigrationBounds(url.toString(), {
-          lockTimeoutMs: 100,
-          statementTimeoutMs: 1000,
-          processTimeoutMs: 20000,
-        });
+        const boundedUrl = withMigrationConnectionMetadata(url.toString());
         const result = await runMigrationProcess(
           process.execPath,
           [
@@ -106,8 +98,12 @@ export function registerMigrationBoundsIntegrationCases(client: PrismaClient) {
       }
     }, 30000);
 
-    it('applies settings to the SQL engine session, not another client', async () => {
+    it('applies committed settings inside the SQL transaction', async () => {
       const result = await executeProbe(`
+        BEGIN;
+        SET LOCAL lock_timeout = '100ms';
+        SET LOCAL statement_timeout = '1s';
+        SET LOCAL idle_in_transaction_session_timeout = '1s';
         DO $$ BEGIN
           IF current_setting('lock_timeout')::interval <> interval '100 milliseconds'
              OR current_setting('statement_timeout')::interval <> interval '1 second'
@@ -115,12 +111,15 @@ export function registerMigrationBoundsIntegrationCases(client: PrismaClient) {
              OR current_setting('application_name') <> 'bunshin_migration_bounded'
           THEN RAISE EXCEPTION 'synthetic migration settings mismatch'; END IF;
         END $$;
+        ROLLBACK;
       `);
       expect(result.status).toBe(0);
     }, 30000);
 
     it('aborts a slow statement in the actual schema engine', async () => {
-      const result = await executeProbe('SELECT pg_sleep(2);');
+      const result = await executeProbe(
+        "BEGIN; SET LOCAL statement_timeout = '1s'; SELECT pg_sleep(2); COMMIT;",
+      );
       expect(result.status).not.toBe(0);
       expect(result.statementTimeout).toBe(true);
     }, 30000);
@@ -151,7 +150,7 @@ export function registerMigrationBoundsIntegrationCases(client: PrismaClient) {
       ]);
       try {
         const result = await executeProbe(
-          'BEGIN; LOCK TABLE public.workspaces IN ACCESS EXCLUSIVE MODE; ROLLBACK;',
+          "BEGIN; SET LOCAL lock_timeout = '100ms'; LOCK TABLE public.workspaces IN ACCESS EXCLUSIVE MODE; ROLLBACK;",
         );
         expect(result.status).not.toBe(0);
         expect(result.lockTimeout).toBe(true);
