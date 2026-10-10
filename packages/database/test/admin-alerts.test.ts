@@ -85,6 +85,7 @@ describe('PrismaAdminAlertRepository', () => {
         where: expect.objectContaining({
           provider: 'openai',
           estimatedCostUsdMicros: null,
+          taskType: { not: 'DAILY_MISSION_PIPELINE' },
         }),
       }),
     );
