@@ -33,6 +33,14 @@ test('release cannot be skipped and remains production-only', () => {
   assert.equal(configuration.crons.length, 15);
 });
 
+test('CI bootstraps its disposable database before exercising the production post-state gate', () => {
+  const workflow = read('.github/workflows/ci.yml');
+  const bootstrap = workflow.indexOf('- run: pnpm db:migrate:deploy');
+  const releaseGate = workflow.indexOf('- run: pnpm db:migrate:vercel');
+  const readiness = workflow.indexOf('- run: pnpm db:assert-ready');
+  assert.ok(bootstrap >= 0 && bootstrap < releaseGate && releaseGate < readiness);
+});
+
 test('migration runner pins the audited release and fails closed', () => {
   const source = read('packages/database/scripts/deploy-migrations-for-vercel.mjs');
   assert.match(source, /MIGRATION_LOCK_TIMEOUT_MS/);

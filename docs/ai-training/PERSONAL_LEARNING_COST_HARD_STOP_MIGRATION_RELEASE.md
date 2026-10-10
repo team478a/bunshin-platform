@@ -31,7 +31,7 @@ Production以外ではrunnerをskipする。Supavisor session poolerでは一般
 
 ## 4. 実行した検証
 
-- hotfix runner単体・release契約test: 2 files / 39 tests PASS
+- hotfix runner単体・release契約test: 2 files / 40 tests PASS
 - disposable PostgreSQLへのproduction系統全232 Migration適用: PASS（unfinished / rolled-back 0件、最新は対象Migration）
 - Migration boundsを含むDB統合test: 1 file / 176 tests PASS
 - 全体test: 25 tasks PASS（Web 3,116 tests、DB 900 testsを含む。live test 2件は既定どおりskip）
