@@ -1,5 +1,13 @@
 # BUNSHIN Platform Decision Log
 
+## 2026-10-11: 会員の商品投稿案生成をOpenAI費用予約の第3経路とする
+
+- 状態: Proposed（実装PRレビュー待ち。本番release・Provider送信は未承認）
+- 商品投稿案生成は、request ID由来の既存operation key、単一のProvider送信、成功・失敗で共通の利用実績を持つため、第3の原子的費用予約対象とする。
+- 本人・Service・Bunshin・商品・承認済み外部リンク・公式商品情報を確認した後に予約する。組織quota拒否は0円、Provider試行後とローカル安全検査失敗は固定リクエスト原価を記録する。
+- Admission利用時は利用実績をstrictに保存してから予約を確定し、保存・確定失敗はopenのまま維持する。非本番legacy fallbackだけは予約なし・best-effort記録を維持する。
+- 商品内容、投稿案、URL、User、Workspace、Bunshinを予約台帳へ保存しない。研修評価の二重Admission、複数call処理、本番操作は別判断とする。
+
 ## 2026-10-11: SNSインサイト画像読取をOpenAI費用予約の第2経路とする
 
 - 状態: Proposed（実装PRレビュー待ち。本番release・Provider送信は未承認）
