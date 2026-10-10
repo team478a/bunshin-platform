@@ -28,12 +28,13 @@ stagingとproductionで同じSupabase project、URL、secretを使用しない�
 | `NEXT_PUBLIC_SUPABASE_URL`             | public      | Supabase Auth project URL          |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | public      | Supabase publishable key           |
 | `OPENAI_API_KEY`                       | secret      | OpenAI server-side authentication  |
+| `OPENAI_REQUEST_COST_USD_MICROS`       | server-only | 旧OpenAI fallbackの1回固定原価     |
 | `OPENAI_STRATEGY_MODEL`                | server-only | Account Strategy model             |
 | `OPENAI_WEEKLY_PLANNER_MODEL`          | server-only | Weekly Planner model               |
 | `OPENAI_DAILY_MISSION_PLANNER_MODEL`   | server-only | Daily Mission Planner model        |
 | `OPENAI_CONTENT_GENERATOR_MODEL`       | server-only | Mission Content model              |
 | `OPENAI_MISSION_QUALITY_MODEL`         | server-only | Mission Quality model              |
 
-`NEXT_PUBLIC_*`には公開可能なSupabase URLとpublishable keyだけを設定する。service role key、DB credential、SMTP credentialは設定しない。server-only変数をClient Componentからimportしない。OpenAI keyはProductionだけへ設定し、PreviewへProduction DB credentialやProduction用AI keyを設定しない。`ENCRYPTION_KEY`は32文字以上の環境別の値とし、DB・管理画面・Previewへ置かない。Mission Deep Link署名には`ENCRYPTION_KEY`を直接渡さず、環境・用途・`LINE_DEEP_LINK_KEY_VERSION`を含むHKDF contextから専用HMAC鍵を導出する。
+`NEXT_PUBLIC_*`には公開可能なSupabase URLとpublishable keyだけを設定する。service role key、DB credential、SMTP credentialは設定しない。server-only変数をClient Componentからimportしない。OpenAI keyはProductionだけへ設定し、PreviewへProduction DB credentialやProduction用AI keyを設定しない。管理画面のactive Provider設定がない移行用fallbackでは、`OPENAI_REQUEST_COST_USD_MICROS`に1回あたりの確定原価を正の安全な整数で設定する。未設定や0を無料扱いせず送信を停止する。`ENCRYPTION_KEY`は32文字以上の環境別の値とし、DB・管理画面・Previewへ置かない。Mission Deep Link署名には`ENCRYPTION_KEY`を直接渡さず、環境・用途・`LINE_DEEP_LINK_KEY_VERSION`を含むHKDF contextから専用HMAC鍵を導出する。
 
 validation errorは不足した変数名だけを出し、値をlogへ出さない。

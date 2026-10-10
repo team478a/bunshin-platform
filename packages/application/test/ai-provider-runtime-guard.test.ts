@@ -16,6 +16,7 @@ const configuration: AiProviderConfiguration = {
   model: 'gpt-5-mini',
   dailyBudgetUsdMicros: 1_000_000,
   monthlyBudgetUsdMicros: 5_000_000,
+  requestCostUsdMicros: 250,
   globallyPaused: false,
   keyVersion: 1,
   lastVerifiedAt: new Date('2026-08-24T00:00:00Z'),
@@ -84,4 +85,28 @@ describe('ResolveAiProviderRuntimeConfiguration', () => {
       }),
     ).rejects.toMatchObject({ code: 'CONFLICT', message: 'provider cost is unknown' });
   });
+
+  it.each(['absent', 'zero'] as const)(
+    'fails before runtime handoff when the configured request cost is %s',
+    async (requestCost) => {
+      const unsafeConfiguration: AiProviderConfiguration = { ...configuration };
+      if (requestCost === 'zero') unsafeConfiguration.requestCostUsdMicros = 0;
+      else delete unsafeConfiguration.requestCostUsdMicros;
+      await expect(
+        new ResolveAiProviderRuntimeConfiguration(
+          repository({
+            ...snapshot,
+            configuration: unsafeConfiguration,
+          }),
+        ).execute({
+          environment: 'PRODUCTION',
+          provider: 'OPENAI',
+          now: new Date('2026-08-24T12:00:00Z'),
+        }),
+      ).rejects.toMatchObject({
+        code: 'CONFIGURATION_ERROR',
+        message: 'provider request cost is required',
+      });
+    },
+  );
 });

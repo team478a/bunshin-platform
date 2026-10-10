@@ -1,5 +1,7 @@
 # BUNSHIN Platform 実装ロードマップ
 
+共有AI Providerの原価UNKNOWN新規発生防止は`docs/ai-training/AI_PROVIDER_KNOWN_REQUEST_COST_IMPLEMENTATION.md`を参照。active Runtimeと設定有効化で正の固定リクエスト原価を必須化し、旧`OPENAI_API_KEY` fallbackも`OPENAI_REQUEST_COST_USD_MICROS`が正の安全な整数でなければ送信前に停止する。Draft作成、既存Event、価格そのもの、本番設定は変更しない。次はPRレビュー/CI後もproductionへ自動反映せず、正しい価格値・既存UNKNOWNの扱い・共有AI停止影響を別Gateで判断する。
+
 共有AI Providerの原価UNKNOWN fail-closedは`docs/ai-training/AI_PROVIDER_UNKNOWN_COST_FAIL_CLOSED_IMPLEMENTATION.md`を参照。active ProviderのUTC当月利用記録に原価NULLが1件でもあれば、API key復号・Provider到達前にRuntime解決を停止する。NULLを0円や安全へ補完せず、既知Daily Missionも推測除外しない。schema/migration/Provider/価格/本番設定は変更しない。次はPR CIと共有AI機能への停止影響をレビューし、UNKNOWN発生経路の原価記録修復を別PRへ分離する。本番release、Provider送信、課金、Pilot開始は別承認。
 
 マナベルスタイルの学習用LINE本人接続は`docs/ai-training/MANABERU_STYLE_MEMBER_LINE_LINK_IMPLEMENTATION.md`を参照。投稿パートナー不要の専用LINE接続を追加し、既存短期OAuth試行・サービス参加同意・本人所属を再利用する。接続はEnrollment/Seatの参加権ではなく、旧V1通知除外・学習Execution Gateを維持する。学習通知/回答Bridge、LIFF、実端末確認、本番Migration/deployは別レビュー。

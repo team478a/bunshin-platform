@@ -1,5 +1,13 @@
 # BUNSHIN Platform Decision Log
 
+## 2026-10-10: 共有Provider送信には正の固定リクエスト原価を必須化する
+
+- 状態: Accepted（コード上の送信前Gate。価格値、本番設定、releaseは未承認）
+- Provider設定は原価調査中でも停止Draftとして作成できるが、`requestCostUsdMicros`が正の安全な整数でなければ有効化とRuntime解決を拒否する。0を無料または確定原価とみなさない。
+- 移行用の旧`OPENAI_API_KEY` fallbackも、`OPENAI_REQUEST_COST_USD_MICROS`が正の安全な整数の場合だけ利用できる。設定なし・0・小数・範囲外はProvider到達前に停止する。
+- 過去の原価NULLを推測backfillせず、価格値をコードで決めない。既存UNKNOWNによる月次fail-closed、Provider側budget、同時呼出予約、接続テスト費用、本番releaseは別Gateとする。
+- [実装報告](ai-training/AI_PROVIDER_KNOWN_REQUEST_COST_IMPLEMENTATION.md)を参照。
+
 ## 2026-10-09: Wave 0の復旧証拠と作業単位の安全Gateを分離する
 
 - 状態: Proposed（運用文書レビュー待ち。本番操作・残リスクの受容は未承認）
