@@ -46,6 +46,7 @@ interface Dependencies {
   crypto: AiProviderSecretCryptoPort;
   legacyApiKey?: string;
   legacyModel?: string;
+  legacyRequestCostUsdMicros?: number;
 }
 
 function isMissingActiveConfiguration(error: unknown) {
@@ -86,10 +87,15 @@ export async function resolveOpenAiRuntimeConfiguration(
     if (!isMissingActiveConfiguration(error) || !legacyApiKey) throw error;
     const model = dependencies?.legacyModel ?? process.env['OPENAI_MODEL'] ?? 'gpt-5.2';
     if (task) assertOpenAiTaskModel(task, model);
+    const requestCostUsdMicros =
+      dependencies?.legacyRequestCostUsdMicros ??
+      Number(process.env['OPENAI_REQUEST_COST_USD_MICROS']);
+    if (!Number.isSafeInteger(requestCostUsdMicros) || requestCostUsdMicros <= 0)
+      throw new ApplicationError('CONFIGURATION_ERROR', 'legacy OpenAI request cost is required');
     return {
       apiKey: legacyApiKey,
       model,
-      requestCostUsdMicros: 0,
+      requestCostUsdMicros,
       source: 'LEGACY_ENVIRONMENT',
     };
   }

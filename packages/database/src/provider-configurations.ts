@@ -168,6 +168,8 @@ export class PrismaAiProviderConfigurationRepository implements AiProviderConfig
         target.lastErrorCategory
       )
         throw new ApplicationError('CONFLICT', 'successful connection test required');
+      if (target.requestCostUsdMicros <= 0)
+        throw new ApplicationError('CONFLICT', 'provider request cost is required');
       await tx.aiProviderConfiguration.updateMany({
         where: { environment: input.environment, provider: target.provider, status: 'ACTIVE' },
         data: { status: 'DISABLED', globallyPaused: true },
