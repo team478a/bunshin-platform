@@ -106,6 +106,60 @@ export interface AiProviderConfigurationRepository {
   } | null>;
 }
 
+export interface AiProviderRuntimeConfigurationSnapshot {
+  configuration: AiProviderConfiguration;
+  encryptedApiKey: string;
+  dailySpentUsdMicros: number;
+  monthlySpentUsdMicros: number;
+  monthlyUnknownCostEvents: number;
+}
+
+export function assertAiProviderRuntimeConfiguration(
+  input: { environment: LineConfigurationEnvironment; provider: AiProviderKey },
+  value: AiProviderRuntimeConfigurationSnapshot,
+) {
+  const { configuration } = value;
+  if (configuration.environment !== input.environment || configuration.provider !== input.provider)
+    throw new ApplicationError('CONFIGURATION_ERROR', 'provider configuration scope mismatch');
+  if (configuration.status !== 'ACTIVE' || configuration.globallyPaused)
+    throw new ApplicationError('CONFIGURATION_ERROR', 'provider is paused');
+  if (configuration.lastVerifiedAt === null || configuration.lastErrorCategory !== null)
+    throw new ApplicationError('CONFIGURATION_ERROR', 'verified provider configuration required');
+  if (value.monthlyUnknownCostEvents > 0)
+    throw new ApplicationError('CONFLICT', 'provider cost is unknown');
+  const requestCostUsdMicros = configuration.requestCostUsdMicros ?? 0;
+  if (!Number.isSafeInteger(requestCostUsdMicros) || requestCostUsdMicros <= 0)
+    throw new ApplicationError('CONFIGURATION_ERROR', 'provider request cost is required');
+  if (value.dailySpentUsdMicros > configuration.dailyBudgetUsdMicros - requestCostUsdMicros)
+    throw new ApplicationError('CONFLICT', 'daily provider budget reached');
+  if (value.monthlySpentUsdMicros > configuration.monthlyBudgetUsdMicros - requestCostUsdMicros)
+    throw new ApplicationError('CONFLICT', 'monthly provider budget reached');
+  return value;
+}
+
+export interface AiProviderRuntimeAdmission {
+  id: string;
+  environment: LineConfigurationEnvironment;
+  provider: AiProviderKey;
+  operationHash: string;
+}
+
+export interface AiProviderRuntimeAdmissionRepository {
+  reserveActiveForRuntime(input: {
+    environment: LineConfigurationEnvironment;
+    provider: AiProviderKey;
+    operationKey: string;
+  }): Promise<{
+    configuration: AiProviderConfiguration;
+    encryptedApiKey: string;
+    dailySpentUsdMicros: number;
+    monthlySpentUsdMicros: number;
+    monthlyUnknownCostEvents: number;
+    admission: AiProviderRuntimeAdmission;
+  } | null>;
+  settleRuntimeAdmission(input: AiProviderRuntimeAdmission): Promise<boolean>;
+}
+
 export class ListAiProviderConfigurations {
   constructor(private readonly repository: AiProviderConfigurationRepository) {}
   async execute(actorUserId: string, environment: LineConfigurationEnvironment) {
@@ -249,25 +303,32 @@ export class ResolveAiProviderRuntimeConfiguration {
     });
     if (value === null)
       throw new ApplicationError('CONFIGURATION_ERROR', 'active provider configuration required');
-    const { configuration } = value;
-    if (
-      configuration.environment !== input.environment ||
-      configuration.provider !== input.provider
-    )
-      throw new ApplicationError('CONFIGURATION_ERROR', 'provider configuration scope mismatch');
-    if (configuration.status !== 'ACTIVE' || configuration.globallyPaused)
-      throw new ApplicationError('CONFIGURATION_ERROR', 'provider is paused');
-    if (configuration.lastVerifiedAt === null || configuration.lastErrorCategory !== null)
-      throw new ApplicationError('CONFIGURATION_ERROR', 'verified provider configuration required');
-    if (value.monthlyUnknownCostEvents > 0)
-      throw new ApplicationError('CONFLICT', 'provider cost is unknown');
-    const requestCostUsdMicros = configuration.requestCostUsdMicros ?? 0;
-    if (!Number.isSafeInteger(requestCostUsdMicros) || requestCostUsdMicros <= 0)
-      throw new ApplicationError('CONFIGURATION_ERROR', 'provider request cost is required');
-    if (value.dailySpentUsdMicros > configuration.dailyBudgetUsdMicros - requestCostUsdMicros)
-      throw new ApplicationError('CONFLICT', 'daily provider budget reached');
-    if (value.monthlySpentUsdMicros > configuration.monthlyBudgetUsdMicros - requestCostUsdMicros)
-      throw new ApplicationError('CONFLICT', 'monthly provider budget reached');
+    return assertAiProviderRuntimeConfiguration(input, value);
+  }
+}
+
+export class ReserveAiProviderRuntimeCall {
+  constructor(private readonly repository: AiProviderRuntimeAdmissionRepository) {}
+
+  async execute(input: {
+    environment: LineConfigurationEnvironment;
+    provider: AiProviderKey;
+    operationKey: string;
+  }) {
+    if (!input.operationKey.trim() || input.operationKey.length > 200)
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid provider operation key');
+    const value = await this.repository.reserveActiveForRuntime(input);
+    if (value === null)
+      throw new ApplicationError('CONFIGURATION_ERROR', 'active provider configuration required');
     return value;
+  }
+}
+
+export class SettleAiProviderRuntimeCall {
+  constructor(private readonly repository: AiProviderRuntimeAdmissionRepository) {}
+
+  async execute(input: AiProviderRuntimeAdmission) {
+    const settled = await this.repository.settleRuntimeAdmission(input);
+    if (!settled) throw new ApplicationError('CONFLICT', 'provider call admission is not open');
   }
 }

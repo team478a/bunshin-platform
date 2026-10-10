@@ -1,8 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  ReserveAiProviderRuntimeCall,
   ResolveAiProviderRuntimeConfiguration,
+  SettleAiProviderRuntimeCall,
   type AiProviderConfiguration,
   type AiProviderConfigurationRepository,
+  type AiProviderRuntimeAdmissionRepository,
 } from '../src/index';
 
 const configuration: AiProviderConfiguration = {
@@ -163,4 +166,58 @@ describe('ResolveAiProviderRuntimeConfiguration', () => {
       });
     },
   );
+});
+
+describe('provider runtime call admission', () => {
+  const admission = {
+    id: '33333333-3333-4333-8333-333333333333',
+    environment: 'PRODUCTION' as const,
+    provider: 'EXA' as const,
+    operationHash: 'a'.repeat(64),
+  };
+
+  it('requires a bounded operation key before reserving', async () => {
+    const reserveActiveForRuntime = vi.fn();
+    const admissionRepository: AiProviderRuntimeAdmissionRepository = {
+      reserveActiveForRuntime,
+      settleRuntimeAdmission: vi.fn(),
+    };
+    await expect(
+      new ReserveAiProviderRuntimeCall(admissionRepository).execute({
+        environment: 'PRODUCTION',
+        provider: 'EXA',
+        operationKey: ' ',
+      }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+    expect(reserveActiveForRuntime).not.toHaveBeenCalled();
+  });
+
+  it('returns the atomic repository reservation', async () => {
+    const reserved = {
+      ...snapshot,
+      configuration: { ...configuration, provider: 'EXA' as const, model: null },
+      admission,
+    };
+    const admissionRepository: AiProviderRuntimeAdmissionRepository = {
+      reserveActiveForRuntime: vi.fn().mockResolvedValue(reserved),
+      settleRuntimeAdmission: vi.fn(),
+    };
+    await expect(
+      new ReserveAiProviderRuntimeCall(admissionRepository).execute({
+        environment: 'PRODUCTION',
+        provider: 'EXA',
+        operationKey: 'trend:week:1',
+      }),
+    ).resolves.toEqual(reserved);
+  });
+
+  it('fails closed when the exact open admission cannot be settled', async () => {
+    const admissionRepository: AiProviderRuntimeAdmissionRepository = {
+      reserveActiveForRuntime: vi.fn(),
+      settleRuntimeAdmission: vi.fn().mockResolvedValue(false),
+    };
+    await expect(
+      new SettleAiProviderRuntimeCall(admissionRepository).execute(admission),
+    ).rejects.toMatchObject({ code: 'CONFLICT' });
+  });
 });

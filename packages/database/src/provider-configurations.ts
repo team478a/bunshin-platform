@@ -5,7 +5,9 @@ import type {
   AiProviderConfigurationRepository,
   VideoAiProviderCostPolicyRepository,
 } from '@bunshin/application';
+import { assertAiProviderRuntimeConfiguration } from '@bunshin/application';
 import { ApplicationError } from '@bunshin/shared';
+import { createHash } from 'node:crypto';
 import { type Prisma, type PrismaClient, prisma } from './client';
 
 function aiProviderConfiguration(
@@ -258,6 +260,135 @@ export class PrismaAiProviderConfigurationRepository implements AiProviderConfig
       monthlySpentUsdMicros: safeNumber(monthly._sum.estimatedCostUsdMicros),
       monthlyUnknownCostEvents,
     };
+  }
+
+  async reserveActiveForRuntime(input: {
+    environment: Parameters<
+      AiProviderConfigurationRepository['getActiveForRuntime']
+    >[0]['environment'];
+    provider: Parameters<AiProviderConfigurationRepository['getActiveForRuntime']>[0]['provider'];
+    operationKey: string;
+  }) {
+    const operationHash = createHash('sha256').update(input.operationKey).digest('hex');
+    return this.client.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`ai-provider-call:${input.environment}:${input.provider}`}, 0))`;
+      const [clock] = await tx.$queryRaw<{ now: Date }[]>`SELECT clock_timestamp() AS now`;
+      if (!clock) throw new ApplicationError('CONFLICT', 'provider admission clock unavailable');
+      const row = await tx.aiProviderConfiguration.findFirst({
+        where: {
+          environment: input.environment,
+          provider: input.provider,
+          status: 'ACTIVE',
+        },
+      });
+      if (row?.encryptedApiKey == null) return null;
+      const existing = await tx.aiProviderCallAdmission.findUnique({
+        where: {
+          environment_provider_operationHash: {
+            environment: input.environment,
+            provider: input.provider,
+            operationHash,
+          },
+        },
+      });
+      if (existing)
+        throw new ApplicationError('CONFLICT', 'provider call operation already admitted');
+      const dailyFrom = new Date(
+        Date.UTC(clock.now.getUTCFullYear(), clock.now.getUTCMonth(), clock.now.getUTCDate()),
+      );
+      const monthlyFrom = new Date(
+        Date.UTC(clock.now.getUTCFullYear(), clock.now.getUTCMonth(), 1),
+      );
+      const provider = input.provider.toLowerCase();
+      const [daily, monthly, monthlyUnknownCostEvents, dailyOpen, monthlyOpen] = await Promise.all([
+        tx.aiUsageEvent.aggregate({
+          where: { provider, occurredAt: { gte: dailyFrom, lt: clock.now } },
+          _sum: { estimatedCostUsdMicros: true },
+        }),
+        tx.aiUsageEvent.aggregate({
+          where: { provider, occurredAt: { gte: monthlyFrom, lt: clock.now } },
+          _sum: { estimatedCostUsdMicros: true },
+        }),
+        tx.aiUsageEvent.count({
+          where: {
+            provider,
+            estimatedCostUsdMicros: null,
+            occurredAt: { gte: monthlyFrom, lt: clock.now },
+          },
+        }),
+        tx.aiProviderCallAdmission.aggregate({
+          where: {
+            environment: input.environment,
+            provider: input.provider,
+            settledAt: null,
+            admittedAt: { gte: dailyFrom, lt: clock.now },
+          },
+          _sum: { reservedCostUsdMicros: true },
+        }),
+        tx.aiProviderCallAdmission.aggregate({
+          where: {
+            environment: input.environment,
+            provider: input.provider,
+            settledAt: null,
+            admittedAt: { gte: monthlyFrom, lt: clock.now },
+          },
+          _sum: { reservedCostUsdMicros: true },
+        }),
+      ]);
+      const safeNumber = (value: bigint) =>
+        Number(value > BigInt(Number.MAX_SAFE_INTEGER) ? Number.MAX_SAFE_INTEGER : value);
+      const snapshot = assertAiProviderRuntimeConfiguration(input, {
+        configuration: aiProviderConfiguration(row),
+        encryptedApiKey: row.encryptedApiKey,
+        dailySpentUsdMicros: safeNumber(
+          (daily._sum.estimatedCostUsdMicros ?? 0n) + (dailyOpen._sum.reservedCostUsdMicros ?? 0n),
+        ),
+        monthlySpentUsdMicros: safeNumber(
+          (monthly._sum.estimatedCostUsdMicros ?? 0n) +
+            (monthlyOpen._sum.reservedCostUsdMicros ?? 0n),
+        ),
+        monthlyUnknownCostEvents,
+      });
+      const admission = await tx.aiProviderCallAdmission.create({
+        data: {
+          configurationId: row.id,
+          environment: input.environment,
+          provider: input.provider,
+          operationHash,
+          reservedCostUsdMicros: BigInt(snapshot.configuration.requestCostUsdMicros ?? 0),
+          admittedAt: clock.now,
+        },
+      });
+      return {
+        ...snapshot,
+        admission: {
+          id: admission.id,
+          environment: admission.environment,
+          provider: admission.provider,
+          operationHash: admission.operationHash,
+        },
+      };
+    });
+  }
+
+  async settleRuntimeAdmission(input: {
+    id: string;
+    environment: Parameters<
+      AiProviderConfigurationRepository['getActiveForRuntime']
+    >[0]['environment'];
+    provider: Parameters<AiProviderConfigurationRepository['getActiveForRuntime']>[0]['provider'];
+    operationHash: string;
+  }) {
+    return this.client.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`ai-provider-call:${input.environment}:${input.provider}`}, 0))`;
+      const changed = await tx.$executeRaw`
+        UPDATE ai_provider_call_admissions SET settled_at=clock_timestamp()
+        WHERE id=${input.id}::uuid
+          AND environment=${input.environment}::"LineConfigurationEnvironment"
+          AND provider=${input.provider}::"AiProviderKey"
+          AND operation_hash=${input.operationHash} AND settled_at IS NULL`;
+      return changed === 1;
+    });
   }
 }
 

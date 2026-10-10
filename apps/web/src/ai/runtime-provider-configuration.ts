@@ -1,7 +1,11 @@
 import 'server-only';
 import {
   ResolveAiProviderRuntimeConfiguration,
+  ReserveAiProviderRuntimeCall,
+  SettleAiProviderRuntimeCall,
   type AiProviderConfigurationRepository,
+  type AiProviderRuntimeAdmission,
+  type AiProviderRuntimeAdmissionRepository,
   type AiProviderSecretCryptoPort,
   type LineConfigurationEnvironment,
 } from '@bunshin/application';
@@ -26,6 +30,10 @@ export interface TrendRuntimeConfiguration {
   dailyBudgetUsdMicros: number;
   monthlyBudgetUsdMicros: number;
   requestCostUsdMicros: number;
+}
+
+export interface AdmittedTrendRuntimeConfiguration extends TrendRuntimeConfiguration {
+  admission: AiProviderRuntimeAdmission;
 }
 
 export interface CreatomateRuntimeConfiguration {
@@ -136,6 +144,62 @@ export async function resolveTrendRuntimeConfiguration(input?: {
     }
   }
   throw new ApplicationError('CONFIGURATION_ERROR', 'active trend provider configuration required');
+}
+
+export async function reserveTrendRuntimeConfiguration(
+  operationKey: string,
+  input?: {
+    repository?: AiProviderConfigurationRepository & AiProviderRuntimeAdmissionRepository;
+    crypto?: AiProviderSecretCryptoPort;
+    preferredProviders?: Array<'GROK' | 'EXA' | 'FIRECRAWL'>;
+  },
+): Promise<AdmittedTrendRuntimeConfiguration> {
+  let repository = input?.repository;
+  if (!repository) {
+    const db = await import('@bunshin/database');
+    repository = new db.PrismaAiProviderConfigurationRepository();
+  }
+  const crypto = input?.crypto ?? new AesGcmAiProviderSecretCrypto();
+  const providers = input?.preferredProviders ?? ['GROK', 'EXA', 'FIRECRAWL'];
+  for (const provider of providers) {
+    try {
+      const reserved = await new ReserveAiProviderRuntimeCall(repository).execute({
+        environment: currentAiProviderEnvironment(),
+        provider,
+        operationKey,
+      });
+      let apiKey: string;
+      try {
+        apiKey = crypto.decrypt(reserved.encryptedApiKey);
+      } catch (error) {
+        await new SettleAiProviderRuntimeCall(repository).execute(reserved.admission);
+        throw error;
+      }
+      return {
+        provider,
+        apiKey,
+        model: reserved.configuration.model,
+        dailyBudgetUsdMicros: reserved.configuration.dailyBudgetUsdMicros,
+        monthlyBudgetUsdMicros: reserved.configuration.monthlyBudgetUsdMicros,
+        requestCostUsdMicros: reserved.configuration.requestCostUsdMicros ?? 0,
+        admission: reserved.admission,
+      };
+    } catch (error) {
+      if (!isMissingActiveConfiguration(error)) throw error;
+    }
+  }
+  throw new ApplicationError('CONFIGURATION_ERROR', 'active trend provider configuration required');
+}
+
+export async function settleProviderRuntimeAdmission(
+  admission: AiProviderRuntimeAdmission,
+  repository?: AiProviderRuntimeAdmissionRepository,
+) {
+  if (!repository) {
+    const db = await import('@bunshin/database');
+    repository = new db.PrismaAiProviderConfigurationRepository();
+  }
+  await new SettleAiProviderRuntimeCall(repository).execute(admission);
 }
 
 export async function resolveCreatomateRuntimeConfiguration(input?: {
