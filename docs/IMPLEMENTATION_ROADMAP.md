@@ -468,6 +468,7 @@ SNS、投稿方法、BUNSHINが作る範囲を分離し、利用者が必要と�
 - Golden Dataset Core: version固定fixture、評価器、禁止結果テスト — 完了（外部接続なし）
 - Golden Regression Runner: 全件集計、欠落・重複・未知ケース検出 — 完了（fixture-only）
 - E1: 環境別・版管理Provider Registry — 完了
+- E1安全補強: 既知の固定リクエスト原価を次回分まで含め、日次・月次予算超過が確定する呼出しを送信前に停止 — 実装済み（同時呼出の原子的予約は未実装）
 - E2: 既存行動から作るPreference Read ModelとLearning Proposal — 完了
 - E3: 人間承認、前後KPI、rollbackを持つ変更提案 — 完了
 - E4: 管理されたSkill Registry（十分な行動データ確認後）

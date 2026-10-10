@@ -3874,3 +3874,11 @@
 - 日次NULLがなくても当月予算残高は確定できないため、判定窓は既存monthly budgetと同じUTC月初から現在までとする。既存のProvider単位集計境界を維持し、Workspace/User/Bunshinのデータを追加取得しない。
 - schema、migration、Provider Adapter、価格、既存Eventのbackfill/delete、管理UIは変更しない。UNKNOWNの解消は各記録経路で確定原価を保存する別作業とし、履歴改変でRuntimeを再開しない。
 - この変更は共有Providerを利用する既存機能を停止し得る。PRレビュー、影響確認、原価記録経路の修復、本番release、停止解除、Provider送信、実課金をそれぞれ別Gateとする。
+
+## 2026-10-11: 共有Provider予算は次回固定原価を含めて送信前に判定する
+
+- 状態: Proposed（実装PRレビュー待ち。本番反映・設定変更・Provider送信は未承認）
+- active Provider Runtimeは、日次・月次の使用済み額に確定済み固定リクエスト原価を加えた額が予算を超える場合、Provider送信前に`CONFLICT`で停止する。予算との完全一致は許可する。
+- 固定原価が予算自体を超える場合は使用済み0でも停止する。価格値や予算値をコードで補完せず、UNKNOWNをPASSへ変換しない。
+- schema、migration、Provider Adapter、価格、予算、本番設定は変更しない。Runtime解決と利用記録の間の同時実行競合は解消しないため、厳密な上限には原子的な送信前予約を別Gateで実装する。
+- production release、設定変更、Provider送信、実課金、Pilot STARTはそれぞれ別承認とする。

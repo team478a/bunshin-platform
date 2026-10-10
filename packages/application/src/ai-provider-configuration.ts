@@ -261,14 +261,12 @@ export class ResolveAiProviderRuntimeConfiguration {
       throw new ApplicationError('CONFIGURATION_ERROR', 'verified provider configuration required');
     if (value.monthlyUnknownCostEvents > 0)
       throw new ApplicationError('CONFLICT', 'provider cost is unknown');
-    if (
-      !Number.isSafeInteger(configuration.requestCostUsdMicros) ||
-      (configuration.requestCostUsdMicros ?? 0) <= 0
-    )
+    const requestCostUsdMicros = configuration.requestCostUsdMicros ?? 0;
+    if (!Number.isSafeInteger(requestCostUsdMicros) || requestCostUsdMicros <= 0)
       throw new ApplicationError('CONFIGURATION_ERROR', 'provider request cost is required');
-    if (value.dailySpentUsdMicros >= configuration.dailyBudgetUsdMicros)
+    if (value.dailySpentUsdMicros > configuration.dailyBudgetUsdMicros - requestCostUsdMicros)
       throw new ApplicationError('CONFLICT', 'daily provider budget reached');
-    if (value.monthlySpentUsdMicros >= configuration.monthlyBudgetUsdMicros)
+    if (value.monthlySpentUsdMicros > configuration.monthlyBudgetUsdMicros - requestCostUsdMicros)
       throw new ApplicationError('CONFLICT', 'monthly provider budget reached');
     return value;
   }
