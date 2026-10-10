@@ -206,6 +206,22 @@ describe('OpenAI runtime configuration', () => {
     });
   });
 
+  it('requires an active admin configuration in production even when the legacy key is set', async () => {
+    await expect(
+      resolveOpenAiRuntimeConfiguration({
+        repository: repository(null),
+        crypto: { encrypt: vi.fn(), decrypt: vi.fn() },
+        legacyApiKey: 'legacy-key',
+        legacyModel: 'legacy-model',
+        legacyRequestCostUsdMicros: 300,
+        environment: 'PRODUCTION',
+      }),
+    ).rejects.toMatchObject({
+      code: 'CONFIGURATION_ERROR',
+      message: 'active provider configuration required',
+    });
+  });
+
   it('does not use the legacy key when its request cost is absent', async () => {
     await expect(
       resolveOpenAiRuntimeConfiguration({

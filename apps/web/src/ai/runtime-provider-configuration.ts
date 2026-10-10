@@ -3,6 +3,7 @@ import {
   ResolveAiProviderRuntimeConfiguration,
   type AiProviderConfigurationRepository,
   type AiProviderSecretCryptoPort,
+  type LineConfigurationEnvironment,
 } from '@bunshin/application';
 import { ApplicationError } from '@bunshin/shared';
 import { assertOpenAiTaskModel, type OpenAiCompatibilityTask } from './openai-task-compatibility';
@@ -47,6 +48,7 @@ interface Dependencies {
   legacyApiKey?: string;
   legacyModel?: string;
   legacyRequestCostUsdMicros?: number;
+  environment?: LineConfigurationEnvironment;
 }
 
 function isMissingActiveConfiguration(error: unknown) {
@@ -61,6 +63,7 @@ export async function resolveOpenAiRuntimeConfiguration(
   dependencies?: Dependencies,
   task?: OpenAiCompatibilityTask,
 ): Promise<OpenAiRuntimeConfiguration> {
+  const environment = dependencies?.environment ?? currentAiProviderEnvironment();
   let repository: AiProviderConfigurationRepository;
   if (dependencies) repository = dependencies.repository;
   else {
@@ -70,7 +73,7 @@ export async function resolveOpenAiRuntimeConfiguration(
   const crypto = dependencies?.crypto ?? new AesGcmAiProviderSecretCrypto();
   try {
     const resolved = await new ResolveAiProviderRuntimeConfiguration(repository).execute({
-      environment: currentAiProviderEnvironment(),
+      environment,
       provider: 'OPENAI',
     });
     if (!resolved.configuration.model)
@@ -84,7 +87,8 @@ export async function resolveOpenAiRuntimeConfiguration(
     };
   } catch (error) {
     const legacyApiKey = dependencies?.legacyApiKey ?? process.env['OPENAI_API_KEY'];
-    if (!isMissingActiveConfiguration(error) || !legacyApiKey) throw error;
+    if (!isMissingActiveConfiguration(error) || !legacyApiKey || environment === 'PRODUCTION')
+      throw error;
     const model = dependencies?.legacyModel ?? process.env['OPENAI_MODEL'] ?? 'gpt-5.2';
     if (task) assertOpenAiTaskModel(task, model);
     const requestCostUsdMicros =
