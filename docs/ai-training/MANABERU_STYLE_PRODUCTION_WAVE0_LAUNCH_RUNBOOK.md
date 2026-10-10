@@ -1,5 +1,9 @@
 # マナベルスタイル by ワタシワークス — Production Wave 0 Launch Runbook
 
+### 2026-10-10 学習設計の承認登録UI（本番未反映）
+
+既存APIへの1件ずつのレビュー画面は[承認登録UI実装報告](MANABERU_STYLE_DEFINITION_REVIEW_UI_IMPLEMENTATION.md)。画面は `/s/{serviceSlug}/manage/programs/learning-definition-review`。初期表示は保存せず、GET後に人間が7項目・公開SHA・非公開証跡・最終確認を入力する。登録応答後もGET/監査で現在状態を確認。教育設計の人間承認と本番APPROVEは別段階。画面追加をDefinition管理flag変更・本番Deploy・APPROVE・START・課金同意としない。main/productionの分離releaseと既存Gateを維持する。
+
 ### 2026-10-09 内部試験用の教育方針承認（本番操作の許可ではない）
 
 指示元ユーザーが3段階の教育方針を内部1〜2人の試験用として承認した。範囲と証跡は[人間レビュー票の最新追記](PERSONAL_LEARNING_PRODUCTION_DEFINITION_REVIEW_SHEET.md)。これは全checklistレビューや本番Definition APPROVE・deploy・参加者準備・STARTの承認ではない。未確認項目をPASSにせず、固定release・実認可・reviewDigest/revision等の既存Gateを維持する。
