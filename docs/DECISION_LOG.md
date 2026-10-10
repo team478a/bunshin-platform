@@ -1,5 +1,13 @@
 # BUNSHIN Platform Decision Log
 
+## 2026-10-11: ProductionのOpenAI Runtimeは管理Provider設定だけを使用する
+
+- 状態: Proposed（実装PRレビュー待ち。本番release・設定変更・Provider送信は未承認）
+- `APP_ENV=production`では、activeな管理Provider設定がない場合に旧`OPENAI_API_KEY`が存在してもfallbackせず、Provider到達前に`CONFIGURATION_ERROR`で停止する。
+- development／stagingの移行用fallbackは維持し、既存の正の固定原価Gateとtask/model互換性検査を継続する。active設定の停止・検証失敗・予算超過・原価UNKNOWNをfallbackで迂回しない既存挙動も維持する。
+- productionの暗号化DB Provider設定は日次・月次予算、停止、接続検証、原価Gateの対象である。環境変数の存在を管理設定や予算Admissionの代用にしない。
+- schema、migration、鍵、価格、予算、本番環境は変更しない。production release、Provider設定、送信、実課金、Pilot STARTは別承認とする。
+
 ## 2026-10-10: 共有Provider送信には正の固定リクエスト原価を必須化する
 
 - 状態: Accepted（コード上の送信前Gate。価格値、本番設定、releaseは未承認）
