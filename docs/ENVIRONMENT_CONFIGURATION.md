@@ -38,3 +38,5 @@ stagingとproductionで同じSupabase project、URL、secretを使用しない�
 `NEXT_PUBLIC_*`には公開可能なSupabase URLとpublishable keyだけを設定する。service role key、DB credential、SMTP credentialは設定しない。server-only変数をClient Componentからimportしない。ProductionのOpenAI認証は暗号化DBのactive Provider設定だけを使用し、旧`OPENAI_API_KEY` fallbackを許可しない。development／stagingの移行用fallbackでは、`OPENAI_REQUEST_COST_USD_MICROS`に1回あたりの確定原価を正の安全な整数で設定する。未設定や0を無料扱いせず送信を停止する。PreviewへProduction DB credentialやProduction用AI keyを設定しない。`ENCRYPTION_KEY`は32文字以上の環境別の値とし、DB・管理画面・Previewへ置かない。Mission Deep Link署名には`ENCRYPTION_KEY`を直接渡さず、環境・用途・`LINE_DEEP_LINK_KEY_VERSION`を含むHKDF contextから専用HMAC鍵を導出する。
 
 validation errorは不足した変数名だけを出し、値をlogへ出さない。
+
+AI Provider管理画面の接続確認はProvider処理の代用ではない。Exaはread-onlyなチーム情報、Firecrawlはread-onlyな残クレジット情報を使用し、検索・scrapeを実行しない。接続成功を残高十分、検索品質、Runtime予算のPASSとして扱わない。

@@ -1,5 +1,7 @@
 # BUNSHIN Platform 実装ロードマップ
 
+Provider接続確認の非課金化は`docs/ai-training/AI_PROVIDER_NONBILLABLE_CONNECTION_TEST_IMPLEMENTATION.md`を参照。Exa検索とFirecrawl scrapeを接続テストから除き、公式のread-onlyなチーム情報／残クレジットendpointへ置き換える。本番接続テスト、設定変更、Provider送信、実課金は行わない。
+
 Production OpenAI fallback廃止は`docs/ai-training/AI_PROVIDER_PRODUCTION_ADMIN_ONLY_IMPLEMENTATION.md`を参照。production Runtimeは暗号化DBのactive Provider設定だけを使用し、旧`OPENAI_API_KEY`では管理予算・停止Gateを迂回できない。development／stagingの移行用fallback、価格、予算、schema、本番設定は変更しない。本番releaseは別承認。
 
 共有AI Providerの原価UNKNOWN新規発生防止は`docs/ai-training/AI_PROVIDER_KNOWN_REQUEST_COST_IMPLEMENTATION.md`を参照。active Runtimeと設定有効化で正の固定リクエスト原価を必須化し、旧`OPENAI_API_KEY` fallbackも`OPENAI_REQUEST_COST_USD_MICROS`が正の安全な整数でなければ送信前に停止する。Draft作成、既存Event、価格そのもの、本番設定は変更しない。次はPRレビュー/CI後もproductionへ自動反映せず、正しい価格値・既存UNKNOWNの扱い・共有AI停止影響を別Gateで判断する。
@@ -471,6 +473,7 @@ SNS、投稿方法、BUNSHINが作る範囲を分離し、利用者が必要と�
 - Golden Regression Runner: 全件集計、欠落・重複・未知ケース検出 — 完了（fixture-only）
 - E1: 環境別・版管理Provider Registry — 完了
 - E1安全補強: 既知の固定リクエスト原価を次回分まで含め、日次・月次予算超過が確定する呼出しを送信前に停止 — 実装済み（同時呼出の原子的予約は未実装）
+- E1安全補強: Exa／Firecrawl接続確認を検索・scrapeからread-onlyな認証endpointへ変更 — 実装済み（本番接続テストは未実施）
 - E2: 既存行動から作るPreference Read ModelとLearning Proposal — 完了
 - E3: 人間承認、前後KPI、rollbackを持つ変更提案 — 完了
 - E4: 管理されたSkill Registry（十分な行動データ確認後）

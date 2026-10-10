@@ -1,5 +1,13 @@
 # BUNSHIN Platform Decision Log
 
+## 2026-10-11: Provider接続確認で検索・scrapeを実行しない
+
+- 状態: Proposed（実装PRレビュー待ち。本番接続テスト・設定変更・Provider送信は未承認）
+- Exaの接続確認は検索APIではなく、認証済みチーム情報を返すread-onlyな`GET /v0/teams/me`を使用する。
+- Firecrawlの接続確認はscrape APIではなく、認証済みチームの残クレジットを返すread-onlyな`GET /v2/team/credit-usage`を使用する。
+- 接続確認は鍵の有効性とendpoint到達性だけを確認し、検索品質、scrape成功、残高十分、Runtimeモデル、予算設定、本番利用可能性を証明しない。
+- 既存の認可、秘密復号、結果監査、有効化Gateを維持する。実鍵、本番設定、接続テスト実行、Provider送信、実課金は変更しない。
+
 ## 2026-10-11: ProductionのOpenAI Runtimeは管理Provider設定だけを使用する
 
 - 状態: Proposed（実装PRレビュー待ち。本番release・設定変更・Provider送信は未承認）
