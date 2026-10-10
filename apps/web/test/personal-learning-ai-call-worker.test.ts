@@ -172,7 +172,12 @@ describe('Pilot Assessment AI call wiring', () => {
   it('settles a completed response, but retains an uncertain transport slot', async () => {
     await createTrainingAnswerEvaluationJobHandler().execute(input);
     expect(fake.admit).toHaveBeenCalledWith(
-      expect.objectContaining({ jobId: 'job', attemptCount: 1, model: 'unchanged-model' }),
+      expect.objectContaining({
+        jobId: 'job',
+        attemptCount: 1,
+        provider: 'openai',
+        model: 'unchanged-model',
+      }),
     );
     expect(fake.settle).toHaveBeenCalledOnce();
     fake.settle.mockClear();

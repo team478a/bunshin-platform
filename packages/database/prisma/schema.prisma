@@ -8059,6 +8059,8 @@ model PersonalLearningCallAdmission {
   groupId          String    @map("group_id") @db.Uuid
   serviceProgramId String    @map("service_program_id") @db.Uuid
   operationHash    String    @map("operation_hash") @db.Char(64)
+  reservedCostUsdMicros BigInt? @map("reserved_cost_usd_micros")
+  pricingVersion   String?   @map("pricing_version") @db.VarChar(120)
   admittedAt       DateTime  @default(now()) @map("admitted_at") @db.Timestamptz(3)
   settledAt        DateTime? @map("settled_at") @db.Timestamptz(3)
 

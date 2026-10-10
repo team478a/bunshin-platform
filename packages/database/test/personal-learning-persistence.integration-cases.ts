@@ -436,6 +436,7 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
         maxConcurrent: 1,
         maxOutputTokens: 512,
         maxRequestBytes: 2048,
+        dailyCostLimitUsdMicros: 100000,
       };
       const ops = new PrismaPersonalLearningPilotOperations(client, authority, () => {}, admission);
       async function command(action: 'INITIALIZE' | 'START' | 'STOP') {
@@ -1779,7 +1780,20 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
         model: 'synthetic',
         maxRequestBytes: 10000,
         maxOutputTokens: 100,
+        dailyCostLimitUsdMicros: 100000,
       };
+      const pricingRegistry = [
+        {
+          provider: 'openai',
+          model: 'synthetic',
+          effectiveFrom: '2026-01-01T00:00:00Z',
+          inputPriceMicrosPerMillion: 2_000_000,
+          outputPriceMicrosPerMillion: 8_000_000,
+          cachedInputPriceMicrosPerMillion: 200_000,
+          currency: 'USD' as const,
+          pricingVersion: 'synthetic-v1',
+        },
+      ];
       const repo = new PrismaPersonalLearningCallAdmission(client, () => now);
       const job = () =>
         client.job.create({
@@ -1804,8 +1818,10 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
         jobId: (await job()).id,
         attemptCount: 1,
         environment: 'STAGING' as const,
+        provider: 'openai',
         model: 'synthetic',
         policy,
+        pricingRegistry,
       });
       return { ...f, answer, policy, repo, request };
     }
@@ -1820,10 +1836,45 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
       await expect(f.repo.admit(await f.request())).rejects.toThrow();
       const rows = await client.personalLearningCallAdmission.findMany();
       expect(rows).toHaveLength(2);
-      expect(JSON.stringify(rows)).not.toContain('Synthetic admission answer');
+      expect(
+        rows.some((row) =>
+          Object.values(row).some(
+            (value) => typeof value === 'string' && value.includes('Synthetic admission answer'),
+          ),
+        ),
+      ).toBe(false);
       expect(rows[0]).not.toHaveProperty('userId');
       await client.trainingMissionAnswer.delete({ where: { id: f.answer.id } });
       expect(await client.personalLearningCallAdmission.count()).toBe(2);
+    });
+    it('reserves a conservative daily USD budget and fails closed on legacy unpriced rows', async () => {
+      const f = await admissionFixture();
+      const policy = {
+        ...f.policy,
+        maxConcurrent: 2,
+        dailyCostLimitUsdMicros: 30_000,
+      };
+      const requests = await Promise.all([f.request(), f.request()]);
+      const results = await Promise.allSettled(
+        requests.map((request) => f.repo.admit({ ...request, policy })),
+      );
+      expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+      expect(await client.personalLearningCallAdmission.findFirstOrThrow()).toMatchObject({
+        reservedCostUsdMicros: 20_800n,
+        pricingVersion: 'synthetic-v1',
+      });
+
+      await client.personalLearningCallAdmission.deleteMany();
+      await client.personalLearningCallAdmission.create({
+        data: {
+          workspaceId: f.scope.workspaceId,
+          groupId: f.scope.groupId,
+          serviceProgramId: f.enrollment.serviceProgramId,
+          operationHash: 'a'.repeat(64),
+          admittedAt: now,
+        },
+      });
+      await expect(f.repo.admit(await f.request())).rejects.toThrow();
     });
     it('P1-H Production admission requires a live seat, accepts admitted participant and denies revocation', async () => {
       const f = await admissionFixture();
