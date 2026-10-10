@@ -3857,3 +3857,12 @@
 - Program単位advisory lock内で日次予約額を合計し、上限を超える呼出しを送信前に拒否する。失敗、retry、送信前停止も予約を保持し、別attemptによる予算迂回を許可しない。
 - Admission台帳へ予約額と価格版だけを追加する。既存行は推測backfillせずNULLのまま保持し、同日内に未価格行があれば新規呼出しを停止する。相談、回答、成果物、Provider response、API keyは保存しない。
 - この上限は対象Pilot Programの事前予約であり、Provider請求額、税・為替、他機能、Provider account全体のbudgetを保証しない。Provider側budget、請求照合、外部Alert、未知call復旧、全instance drainは別Gateとする。
+
+## 2026-10-10: 共有Provider予算は当月原価UNKNOWNをfail-closedで停止する
+
+- 状態: Accepted（実装承認。本番反映・Provider送信・Pilot開始は未承認）
+- `AiUsageEvent`のProvider別UTC月次集計に`estimatedCostUsdMicros = null`が1件でもあれば、active Provider設定のRuntime解決を`CONFLICT`で停止する。NULLを0円として予算残高へ含めない。
+- 現行EventにはProvider送信済みを確定する列がない。SUCCESS、task type、error codeから費用未発生を推測して例外にすると上限保証にならないため、既知のDaily Missionを含めて除外を設けない。
+- 日次NULLがなくても当月予算残高は確定できないため、判定窓は既存monthly budgetと同じUTC月初から現在までとする。既存のProvider単位集計境界を維持し、Workspace/User/Bunshinのデータを追加取得しない。
+- schema、migration、Provider Adapter、価格、既存Eventのbackfill/delete、管理UIは変更しない。UNKNOWNの解消は各記録経路で確定原価を保存する別作業とし、履歴改変でRuntimeを再開しない。
+- この変更は共有Providerを利用する既存機能を停止し得る。PRレビュー、影響確認、原価記録経路の修復、本番release、停止解除、Provider送信、実課金をそれぞれ別Gateとする。

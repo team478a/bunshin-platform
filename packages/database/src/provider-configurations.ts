@@ -228,7 +228,7 @@ export class PrismaAiProviderConfigurationRepository implements AiProviderConfig
     });
     if (row?.encryptedApiKey == null) return null;
     const provider = input.provider.toLowerCase();
-    const [daily, monthly] = await Promise.all([
+    const [daily, monthly, monthlyUnknownCostEvents] = await Promise.all([
       this.client.aiUsageEvent.aggregate({
         where: { provider, occurredAt: { gte: input.dailyFrom, lt: input.now } },
         _sum: { estimatedCostUsdMicros: true },
@@ -236,6 +236,13 @@ export class PrismaAiProviderConfigurationRepository implements AiProviderConfig
       this.client.aiUsageEvent.aggregate({
         where: { provider, occurredAt: { gte: input.monthlyFrom, lt: input.now } },
         _sum: { estimatedCostUsdMicros: true },
+      }),
+      this.client.aiUsageEvent.count({
+        where: {
+          provider,
+          estimatedCostUsdMicros: null,
+          occurredAt: { gte: input.monthlyFrom, lt: input.now },
+        },
       }),
     ]);
     const safeNumber = (value: bigint | null) =>
@@ -247,6 +254,7 @@ export class PrismaAiProviderConfigurationRepository implements AiProviderConfig
       encryptedApiKey: row.encryptedApiKey,
       dailySpentUsdMicros: safeNumber(daily._sum.estimatedCostUsdMicros),
       monthlySpentUsdMicros: safeNumber(monthly._sum.estimatedCostUsdMicros),
+      monthlyUnknownCostEvents,
     };
   }
 }
