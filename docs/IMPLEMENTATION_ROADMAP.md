@@ -1,5 +1,7 @@
 # BUNSHIN Platform 実装ロードマップ
 
+OEM請求の返金要照合・運用通知統合は`docs/OEM_INVOICE_REFUND_REVIEW_ALERT_IMPLEMENTATION.md`を参照。処理済み返金通知が紐づく入金済み請求を請求単位で重複排除し、Platform管理者のAlert CenterへWARNING表示して返金絞り込み済み請求画面へつなぐ。外部通知、請求状態変更、通知解消、本番Webhook設定・返金は別Gate。
+
 OEM経理用CSVの返金要照合出力は`docs/OEM_INVOICE_REFUND_REVIEW_EXPORT_IMPLEMENTATION.md`を参照。各請求の最新の処理済み返金通知について区分、受信日時、Stripe Event IDを既存CSV末尾へ追加し、画面外の照合対象を識別できるようにする。返金額、会計状態、通知解消、本番Webhook設定・返金は別Gate。
 
 OEM請求の返金要照合・団体別調査導線は`docs/OEM_INVOICE_REFUND_REVIEW_DETAIL_IMPLEMENTATION.md`を参照。対象Workspaceの各請求に紐づく処理済み返金通知を団体別請求画面へ表示し、部分／全額、受信日時、Stripe Event IDを照合できるようにする。内部請求状態、返金額、解消状態は変更せず、本番Webhook設定・返金・会計確定は別Gate。
