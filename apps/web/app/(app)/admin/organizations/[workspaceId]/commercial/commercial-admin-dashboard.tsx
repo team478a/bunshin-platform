@@ -2,6 +2,7 @@ import Link from 'next/link';
 import type { CommercialAdminDashboardProps } from './commercial-admin-types';
 import { CommercialContractSection } from './commercial-contract-section';
 import { CommercialInvoiceSections } from './commercial-invoice-sections';
+import { OemBillingPreparationSection } from './oem-billing-preparation-section';
 
 function yen(value: number | null): string {
   return value === null ? '個別見積' : `${value.toLocaleString('ja-JP')}円`;
@@ -81,7 +82,9 @@ export function CommercialAdminDashboard(props: CommercialAdminDashboardProps) {
                       ? '請求案内メールを送信できませんでした。メール設定と送信サービスの状態を確認してください。'
                       : query.error === 'setupFee'
                         ? '初期費用の請求下書きを作成できませんでした。契約、対象商品のOffering期間、請求キー、合意日を確認してください。'
-                        : '保存または更新できませんでした。入力内容と現在の状態を確認してください。'}
+                        : query.error === 'oemPreparation'
+                          ? '正式登録課金の準備を更新できませんでした。証跡、現在の履歴、商品ポリシー、対象月を確認してください。'
+                          : '保存または更新できませんでした。入力内容と現在の状態を確認してください。'}
         </p>
       ) : null}
 
@@ -188,6 +191,15 @@ export function CommercialAdminDashboard(props: CommercialAdminDashboardProps) {
           </div>
         )}
       </section>
+
+      <OemBillingPreparationSection
+        dashboard={dashboard}
+        query={query}
+        oemPreparation={props.oemPreparation}
+        oemShadow={props.oemShadow}
+        oemShadowReviewRequired={props.oemShadowReviewRequired}
+        actions={actions}
+      />
 
       <CommercialContractSection dashboard={dashboard} billing={billing} actions={actions} />
       <CommercialInvoiceSections

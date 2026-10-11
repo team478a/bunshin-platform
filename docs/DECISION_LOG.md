@@ -4041,3 +4041,12 @@
 - Service Program定義が欠落・不正で安全に解析できない場合は、AI研修がないと推測せず`OEM_PROGRAM_DEFINITION_REVIEW_REQUIRED`としてブロックする。
 - 事前表示は実行許可の正本にしない。移行transaction内で現行Offering、対象版、適用日、商品状態、FREE可否、Capabilityを再検証する。
 - schema、migration、一括移行、参加者、請求、本番設定は変更しない。
+
+## 2026-10-12: OEM正式登録課金の初期準備は既存の履歴正本と操作境界を一画面へ投影する
+
+- 状態: Proposed（実装PRレビュー待ち。本番反映・履歴登録・cutoverは未承認）
+- Organization別の商用管理画面に、Serviceごとの現在Offering、確認対象参加者と登録履歴、OEM契約期間、既存Billing Policy、月次shadowを読み取り専用projectionとして表示する。現在状態や同意日時を確定済みの過去事実として自動保存しない。
+- 提供区分、正式登録、契約期間、cutoverの保存は既存`PrismaOemBillingAdminService`を使用し、session actorのSUPER_ADMIN再認可、Workspace境界、row lock、CAS、商品互換性、将来月、初期履歴完全性をtransaction内で再検証する。画面の準備完了表示は実行許可の正本にしない。
+- 正式登録日時には同意日時を編集可能な候補として表示するが、証跡確認と理由の入力なしでは保存しない。終了済み登録履歴がある参加者は初期登録を追加せず、訂正・再登録の別レビューへ止める。
+- shadowはRepeatable Readの既存計算だけを呼び、履歴不足を0人や旧MAUで補完しない。cutoverは全ServiceのOffering、契約期間、現在の参加者全員のopen登録履歴を表示上も満たした場合だけフォームを出し、既存Policyがあれば変更・取消入口を出さない。
+- schema、migration、課金計算、月次確定、請求、履歴訂正、本番設定を変更しない。本番の履歴登録、cutover、料金公開、請求確定、実課金はそれぞれ別の明示承認を待つ。

@@ -1,5 +1,7 @@
 # BUNSHIN Platform 実装ロードマップ
 
+OEM正式登録課金の初期履歴・cutover管理画面は`docs/OEM_BILLING_CUTOVER_ADMIN_UI_IMPLEMENTATION.md`を参照。Organization単位でService Product／提供区分、契約期間、同意済み参加者の正式登録履歴、月次shadow、将来月cutoverを同じ運用画面から確認する。各保存はSUPER_ADMIN再認可、証跡理由、明示確認、既存Workspace lock／CASを維持し、画面の準備表示を実行許可の正本にしない。過去日の推測、履歴訂正、cutover変更・取消、請求確定、本番操作は別Gate。
+
 OEM課金人数の根拠表示は`docs/OEM_BILLING_EVIDENCE_ADMIN_IMPLEMENTATION.md`を参照。現在月の既存shadowと確定月の保存済みスナップショットから、有料正式登録R、無料実利用A、重複、R∪A、課金方式、要確認理由を団体別管理画面へ表示する。旧月の内訳補完、履歴修正、cutover、本番Migration・請求確定は別Gate。
 
 OEM請求の返金要照合・運用通知統合は`docs/OEM_INVOICE_REFUND_REVIEW_ALERT_IMPLEMENTATION.md`を参照。処理済み返金通知が紐づく入金済み請求を請求単位で重複排除し、Platform管理者のAlert CenterへWARNING表示して返金絞り込み済み請求画面へつなぐ。外部通知、請求状態変更、通知解消、本番Webhook設定・返金は別Gate。
