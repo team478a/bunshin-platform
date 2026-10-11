@@ -1,5 +1,7 @@
 # BUNSHIN Platform 実装ロードマップ
 
+OEM初期費用の自動回収除外は`docs/OEM_SETUP_FEE_AUTOMATIC_COLLECTION_GUARD_IMPLEMENTATION.md`を参照。既存の明示同意は月額料金だけを対象とするため、日次自動回収候補を`MONTHLY_USAGE`へ限定し、初期費用を保存済みカードへ暗黙請求しない。本番Stripe、自動回収、請求状態変更は別Gate。
+
 OEM初期費用の決済・督促表示整合は`docs/OEM_SETUP_FEE_PAYMENT_COMMUNICATION_IMPLEMENTATION.md`を参照。Stripe Checkout、自動回収、手動・自動督促の表示を内部請求種別から決定し、初期費用を月額利用料と表示しない。本番Provider呼出し、メール送信、決済、請求状態変更は別Gate。
 
 OEM初期費用の共通請求基盤は`docs/OEM_SETUP_FEE_INVOICING_IMPLEMENTATION.md`を参照。契約証跡を人間が確認した初期費用をService Product単位の不変Snapshotとして月次人数料金から分離し、既存の請求書・入金・督促・CSV経路へ接続する。価格や先行社数をコードで推測しない。本番Migration/release、実価格登録、請求発行、決済は別Gate。

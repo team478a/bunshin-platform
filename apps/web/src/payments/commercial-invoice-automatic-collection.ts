@@ -22,6 +22,7 @@ export async function collectCommercialInvoices(
   const retryBefore = new Date(now.getTime() - 24 * 60 * 60 * 1000);
   const invoices = await client.tenantInvoice.findMany({
     where: {
+      kind: 'MONTHLY_USAGE',
       status: 'ISSUED',
       issuedAt: { not: null, lte: now },
       OR: [{ paymentAttemptedAt: null }, { paymentAttemptedAt: { lt: retryBefore } }],
