@@ -1,10 +1,14 @@
-import { ListAiProviderConfigurations } from '@bunshin/application';
+import {
+  ListAiProviderConfigurations,
+  ListOpenAiProviderRuntimeAdmissions,
+} from '@bunshin/application';
 import { ApplicationError } from '@bunshin/shared';
 import { notFound, redirect } from 'next/navigation';
 import Link from 'next/link';
 import { currentAiProviderEnvironment } from '../../../../src/ai/secure-provider-configuration';
 import { currentUserProvider } from '../../../../src/auth/current-user';
 import { AiProviderConfigurationEditor } from './provider-configuration-editor';
+import { AiProviderAdmissionRecovery } from './provider-admission-recovery';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,9 +18,11 @@ export default async function AiProviderConfigurationPage() {
   const db = await import('@bunshin/database');
   try {
     const environment = currentAiProviderEnvironment();
-    const configurations = await new ListAiProviderConfigurations(
-      new db.PrismaAiProviderConfigurationRepository(),
-    ).execute(user.userId, environment);
+    const repository = new db.PrismaAiProviderConfigurationRepository();
+    const [configurations, admissions] = await Promise.all([
+      new ListAiProviderConfigurations(repository).execute(user.userId, environment),
+      new ListOpenAiProviderRuntimeAdmissions(repository).execute(user.userId, environment),
+    ]);
     return (
       <main className="app-page">
         <header className="app-page__heading">
@@ -39,6 +45,14 @@ export default async function AiProviderConfigurationPage() {
             createdAt: value.createdAt.toISOString(),
             updatedAt: value.updatedAt.toISOString(),
           }))}
+        />
+        <AiProviderAdmissionRecovery
+          initialSummaries={admissions.summaries.map((summary) => ({
+            ...summary,
+            oldestAdmittedAt: summary.oldestAdmittedAt.toISOString(),
+          }))}
+          recoveryScanTruncated={admissions.recoveryScanTruncated}
+          canRecover={admissions.canRecover}
         />
         <section className="settings-card">
           <h2>トレンド調査サービスをくらべる</h2>

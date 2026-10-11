@@ -15,8 +15,11 @@ import { ApplicationError, toApiError } from '@bunshin/shared';
 import { z } from 'zod';
 import { currentUserProvider } from '../auth/current-user';
 import { requireSameOrigin } from '../auth/request-security';
-import { resolveOpenAiRuntimeConfiguration } from '../ai/runtime-provider-configuration';
-import { recordAiUsageSafely } from '../observability/ai-usage';
+import { recordOpenAiUsageAndSettle } from '../ai/openai-cost-admission';
+import {
+  reserveOpenAiRuntimeConfiguration,
+  type AdmittedOpenAiRuntimeConfiguration,
+} from '../ai/runtime-provider-configuration';
 import { withOrganizationAiGenerationQuota } from '../organization-ai-generation-quota';
 
 const createSchema = z
@@ -189,13 +192,14 @@ export function generateSocialAccountStrategyResponse(
     async () => {
       let usageActor: string | null = null;
       let providerAttempted = false;
+      let usagePersistenceStarted = false;
+      let runtime: AdmittedOpenAiRuntimeConfiguration | undefined;
       let runtimeModel = process.env['OPENAI_MODEL'] ?? 'gpt-5.2';
+      const operationKey = `${requestId}:strategy`;
       try {
         requireSameOrigin(request);
         const parsed = generateSchema.safeParse(await body(request));
         if (!parsed.success) throw new ApplicationError('VALIDATION_ERROR', 'invalid body');
-        const { apiKey, model } = await resolveOpenAiRuntimeConfiguration();
-        runtimeModel = model;
         const actor = await actorUserId();
         usageActor = actor;
         const { bunshins, grants, profiles, strategies, assignments } =
@@ -218,14 +222,20 @@ export function generateSocialAccountStrategyResponse(
           bunshinId,
           actorUserId: actor,
         });
+        const admittedRuntime = await reserveOpenAiRuntimeConfiguration(operationKey);
+        runtime = admittedRuntime;
+        runtimeModel = admittedRuntime.model;
         const { OpenAIStrategyGenerator } = await import('../providers/openai-strategy-generator');
-        providerAttempted = true;
         const result = await withOrganizationAiGenerationQuota({
           workspaceId,
-          operationKey: `${requestId}:strategy`,
-          generate: () =>
-            new GenerateSocialAccountStrategy(
-              new OpenAIStrategyGenerator({ apiKey, model }),
+          operationKey,
+          generate: () => {
+            providerAttempted = true;
+            return new GenerateSocialAccountStrategy(
+              new OpenAIStrategyGenerator({
+                apiKey: admittedRuntime.apiKey,
+                model: admittedRuntime.model,
+              }),
             ).execute({
               wizardTopic: parsed.data.wizardTopic,
               wizardAudience: parsed.data.wizardAudience,
@@ -248,7 +258,8 @@ export function generateSocialAccountStrategyResponse(
                 title,
                 content,
               })),
-            }),
+            });
+          },
         });
         logger.info('strategy generation complete', {
           status: 'success',
@@ -258,7 +269,8 @@ export function generateSocialAccountStrategyResponse(
           outputTokens: result.outputTokens,
           latency: result.latencyMs,
         });
-        await recordAiUsageSafely({
+        usagePersistenceStarted = true;
+        await recordOpenAiUsageAndSettle(admittedRuntime, {
           workspaceId,
           bunshinId,
           actorUserId: actor,
@@ -270,7 +282,9 @@ export function generateSocialAccountStrategyResponse(
           inputTokens: result.inputTokens,
           outputTokens: result.outputTokens,
           latencyMs: result.latencyMs,
-          idempotencyKey: `${requestId}:strategy`,
+          estimatedCostUsdMicros: admittedRuntime.requestCostUsdMicros,
+          pricingVersion: 'admin-request-cost-v1',
+          idempotencyKey: operationKey,
         });
         const {
           destinationDetail,
@@ -301,8 +315,9 @@ export function generateSocialAccountStrategyResponse(
           latency: Date.now() - started,
           errorCode: error instanceof ApplicationError ? error.code : 'INTERNAL_ERROR',
         });
-        if (usageActor && providerAttempted)
-          await recordAiUsageSafely({
+        if (runtime && usageActor && !usagePersistenceStarted) {
+          usagePersistenceStarted = true;
+          await recordOpenAiUsageAndSettle(runtime, {
             workspaceId,
             bunshinId,
             actorUserId: usageActor,
@@ -314,9 +329,12 @@ export function generateSocialAccountStrategyResponse(
             inputTokens: null,
             outputTokens: null,
             latencyMs: Date.now() - started,
+            estimatedCostUsdMicros: providerAttempted ? runtime.requestCostUsdMicros : 0,
+            pricingVersion: 'admin-request-cost-v1',
             errorCode: error instanceof ApplicationError ? error.code : 'INTERNAL_ERROR',
-            idempotencyKey: `${requestId}:strategy`,
+            idempotencyKey: operationKey,
           });
+        }
         throw error;
       }
     },

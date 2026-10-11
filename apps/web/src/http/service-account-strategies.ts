@@ -13,10 +13,10 @@ import {
 import { createLogger, requestIdFromHeader } from '@bunshin/observability';
 import { ApplicationError, toApiError } from '@bunshin/shared';
 import { z } from 'zod';
-import { resolveOpenAiRuntimeConfiguration } from '../ai/runtime-provider-configuration';
+import { recordOpenAiUsageAndSettle } from '../ai/openai-cost-admission';
+import { reserveOpenAiRuntimeConfiguration } from '../ai/runtime-provider-configuration';
 import { currentUserProvider } from '../auth/current-user';
 import { requireSameOrigin } from '../auth/request-security';
-import { recordAiUsageSafely } from '../observability/ai-usage';
 import { withOrganizationAiGenerationQuota } from '../organization-ai-generation-quota';
 import { resolveMemberServiceContext } from '../services/public-service';
 import { loadServiceGenerationKnowledge } from '../services/service-generation-knowledge';
@@ -168,7 +168,9 @@ export function generateServiceAccountStrategyResponse(
         route: '/service-account-strategies/generate',
       });
       const started = Date.now();
-      const { apiKey, model } = await resolveOpenAiRuntimeConfiguration();
+      const operationKey = `${requestId}:service-strategy`;
+      let providerAttempted = false;
+      let usagePersistenceStarted = false;
       const { assignments, bunshins, profiles, strategies } = await repositories();
       const bunshin = await new GetBunshin(bunshins).execute(input);
       const serviceKnowledge = await loadServiceGenerationKnowledge({
@@ -182,14 +184,20 @@ export function generateServiceAccountStrategyResponse(
       });
       if (!profile || profile.id !== parsed.data.socialProfileId)
         throw new ApplicationError('NOT_FOUND', 'social profile not found');
-      const { OpenAIStrategyGenerator } = await import('../providers/openai-strategy-generator');
+      const admittedRuntime = await reserveOpenAiRuntimeConfiguration(operationKey);
+      const { OpenAIStrategyGenerator, SOCIAL_ACCOUNT_STRATEGY_PROMPT_VERSION } =
+        await import('../providers/openai-strategy-generator');
       try {
         const result = await withOrganizationAiGenerationQuota({
           workspaceId: input.workspaceId,
-          operationKey: `${requestId}:service-strategy`,
-          generate: () =>
-            new GenerateSocialAccountStrategy(
-              new OpenAIStrategyGenerator({ apiKey, model }),
+          operationKey,
+          generate: () => {
+            providerAttempted = true;
+            return new GenerateSocialAccountStrategy(
+              new OpenAIStrategyGenerator({
+                apiKey: admittedRuntime.apiKey,
+                model: admittedRuntime.model,
+              }),
             ).execute({
               wizardTopic: parsed.data.wizardTopic,
               wizardAudience: parsed.data.wizardAudience,
@@ -208,7 +216,8 @@ export function generateServiceAccountStrategyResponse(
                 personality: bunshin.personality,
               },
               grantedKnowledge: serviceKnowledge.officialKnowledge,
-            }),
+            });
+          },
         });
         logger.info('service strategy generation complete', {
           status: 'success',
@@ -216,7 +225,8 @@ export function generateServiceAccountStrategyResponse(
           promptVersion: result.promptVersion,
           latency: result.latencyMs,
         });
-        await recordAiUsageSafely({
+        usagePersistenceStarted = true;
+        await recordOpenAiUsageAndSettle(admittedRuntime, {
           workspaceId: input.workspaceId,
           bunshinId,
           actorUserId: input.actorUserId,
@@ -228,7 +238,9 @@ export function generateServiceAccountStrategyResponse(
           inputTokens: result.inputTokens,
           outputTokens: result.outputTokens,
           latencyMs: result.latencyMs,
-          idempotencyKey: `${requestId}:service-strategy`,
+          estimatedCostUsdMicros: admittedRuntime.requestCostUsdMicros,
+          pricingVersion: 'admin-request-cost-v1',
+          idempotencyKey: operationKey,
         });
         return dto(
           await new CreateSocialAccountStrategy(strategies, assignments).execute({
@@ -251,10 +263,30 @@ export function generateServiceAccountStrategyResponse(
       } catch (error) {
         logger.error('service strategy generation failed', {
           status: 'failed',
-          model,
+          model: admittedRuntime.model,
           latency: Date.now() - started,
           errorCode: error instanceof ApplicationError ? error.code : 'INTERNAL_ERROR',
         });
+        if (!usagePersistenceStarted) {
+          usagePersistenceStarted = true;
+          await recordOpenAiUsageAndSettle(admittedRuntime, {
+            workspaceId: input.workspaceId,
+            bunshinId,
+            actorUserId: input.actorUserId,
+            taskType: 'STRATEGY_GENERATOR',
+            provider: 'openai',
+            model: admittedRuntime.model,
+            promptVersion: SOCIAL_ACCOUNT_STRATEGY_PROMPT_VERSION,
+            status: 'FAILED',
+            inputTokens: null,
+            outputTokens: null,
+            latencyMs: Date.now() - started,
+            estimatedCostUsdMicros: providerAttempted ? admittedRuntime.requestCostUsdMicros : 0,
+            pricingVersion: 'admin-request-cost-v1',
+            errorCode: error instanceof ApplicationError ? error.code : 'INTERNAL_ERROR',
+            idempotencyKey: operationKey,
+          });
+        }
         throw error;
       }
     },
