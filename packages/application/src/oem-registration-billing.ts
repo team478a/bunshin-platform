@@ -7,6 +7,8 @@ export interface OemProductPolicy {
   readonly freeOfferingAllowed: boolean;
   readonly requiredCapabilities: readonly string[];
 }
+export type OemOfferingPolicyBlocker =
+  'OEM_PRODUCT_FREE_OFFERING_FORBIDDEN' | 'OEM_PRODUCT_CAPABILITY_POLICY_REQUIRED';
 export interface BillingInterval {
   readonly startsAt: Date;
   readonly endsAt: Date | null;
@@ -29,17 +31,34 @@ export interface OemUsageEvidence {
   readonly eventType: CommercialUsageEventType;
 }
 
-export function assertOemOffering(
+export function oemOfferingPolicyBlockers(
   product: OemProductPolicy,
   classification: OemOfferingClassification,
-): void {
+  serviceRequiredCapabilities: readonly string[] = [],
+): OemOfferingPolicyBlocker[] {
   if (
     !/^[A-Z][A-Z0-9_]{1,39}$/.test(product.key) ||
     !['FREE', 'PAID', 'PAID_BUNDLE'].includes(classification)
   )
     throw new Error('invalid OEM offering');
+  const blockers: OemOfferingPolicyBlocker[] = [];
   if (classification === 'FREE' && !product.freeOfferingAllowed)
-    throw new Error('OEM_PRODUCT_FREE_OFFERING_FORBIDDEN');
+    blockers.push('OEM_PRODUCT_FREE_OFFERING_FORBIDDEN');
+  if (
+    serviceRequiredCapabilities.some(
+      (capability) => !product.requiredCapabilities.includes(capability),
+    )
+  )
+    blockers.push('OEM_PRODUCT_CAPABILITY_POLICY_REQUIRED');
+  return blockers;
+}
+
+export function assertOemOffering(
+  product: OemProductPolicy,
+  classification: OemOfferingClassification,
+): void {
+  const blocker = oemOfferingPolicyBlockers(product, classification)[0];
+  if (blocker) throw new Error(blocker);
 }
 
 function validateInterval(interval: BillingInterval): void {

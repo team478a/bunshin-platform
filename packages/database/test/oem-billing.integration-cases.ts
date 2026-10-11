@@ -351,6 +351,7 @@ export function registerOemBillingIntegrationCases(client: PrismaClient) {
       ).toMatchObject({
         productPolicyVersionId: product.policyVersions[0]!.id,
         product: { id: product.id },
+        targetPolicyReviews: [{ policyVersionId: revision.id, blockers: [] }],
       });
       const migrated = await service.migrateOfferingProductPolicy({
         workspaceId: workspace.id,

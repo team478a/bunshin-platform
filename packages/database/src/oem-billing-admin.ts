@@ -1,7 +1,7 @@
 import {
-  assertOemOffering,
   commercialMonthPeriod,
   dateInBusinessTimezone,
+  oemOfferingPolicyBlockers,
   parseProgramDefinition,
   OEM_REGISTRATION_BILLING_RULE_VERSION,
   type OemOfferingClassification,
@@ -61,14 +61,6 @@ export class PrismaOemBillingAdminService {
       requiredCapabilities: readonly string[];
     },
   ): Promise<void> {
-    assertOemOffering(
-      {
-        key: input.productKey,
-        freeOfferingAllowed: input.freeOfferingAllowed,
-        requiredCapabilities: input.requiredCapabilities,
-      },
-      input.classification,
-    );
     const programs = await tx.serviceProgram.findMany({
       where: { workspaceId: input.workspaceId, groupId: input.groupId },
       select: { programTemplateVersionId: true },
@@ -85,8 +77,16 @@ export class PrismaOemBillingAdminService {
         (mission) => mission.capability === 'AI_TRAINING',
       ),
     );
-    if (hasAiTraining && !input.requiredCapabilities.includes('AI_TRAINING'))
-      throw new Error('OEM_PRODUCT_CAPABILITY_POLICY_REQUIRED');
+    const blocker = oemOfferingPolicyBlockers(
+      {
+        key: input.productKey,
+        freeOfferingAllowed: input.freeOfferingAllowed,
+        requiredCapabilities: input.requiredCapabilities,
+      },
+      input.classification,
+      hasAiTraining ? ['AI_TRAINING'] : [],
+    )[0];
+    if (blocker) throw new Error(blocker);
   }
 
   private async authorizeSuperAdmin(
@@ -224,7 +224,7 @@ export class PrismaOemBillingAdminService {
       throw new Error('INVALID_OFFERING_POLICY_LIMIT');
     return this.client.$transaction(async (tx) => {
       await this.authorizeSuperAdmin(tx, actorUserId);
-      return tx.oemOfferingPeriod.findMany({
+      const offerings = await tx.oemOfferingPeriod.findMany({
         where: { endsAt: null, ...this.offeringPolicyFilter(filter) },
         include: {
           productPolicyVersion: true,
@@ -243,6 +243,57 @@ export class PrismaOemBillingAdminService {
         },
         orderBy: [{ productPolicy: 'asc' }, { workspaceId: 'asc' }, { groupId: 'asc' }],
         take: limit,
+      });
+      const programs = await tx.serviceProgram.findMany({
+        where: { groupId: { in: [...new Set(offerings.map((offering) => offering.groupId))] } },
+        select: { workspaceId: true, groupId: true, programTemplateVersionId: true },
+      });
+      const versions = await tx.programTemplateVersion.findMany({
+        where: {
+          id: { in: [...new Set(programs.map((program) => program.programTemplateVersionId))] },
+        },
+        select: { id: true, definition: true },
+      });
+      const definitions = new Map(versions.map((version) => [version.id, version.definition]));
+      const aiTrainingScopes = new Set<string>();
+      const invalidDefinitionScopes = new Set<string>();
+      for (const program of programs) {
+        const scope = `${program.workspaceId}:${program.groupId}`;
+        try {
+          if (
+            parseProgramDefinition(definitions.get(program.programTemplateVersionId)).missions.some(
+              (mission) => mission.capability === 'AI_TRAINING',
+            )
+          )
+            aiTrainingScopes.add(scope);
+        } catch {
+          invalidDefinitionScopes.add(scope);
+        }
+      }
+      return offerings.map((offering) => {
+        const scope = `${offering.workspaceId}:${offering.groupId}`;
+        return {
+          ...offering,
+          targetPolicyReviews: offering.product.policyVersions
+            .filter((policy) => policy.version > offering.productPolicyVersion.version)
+            .map((policy) => ({
+              policyVersionId: policy.id,
+              blockers: [
+                ...(invalidDefinitionScopes.has(scope)
+                  ? (['OEM_PROGRAM_DEFINITION_REVIEW_REQUIRED'] as const)
+                  : []),
+                ...oemOfferingPolicyBlockers(
+                  {
+                    key: offering.productPolicy,
+                    freeOfferingAllowed: policy.freeOfferingAllowed,
+                    requiredCapabilities: policy.requiredCapabilities,
+                  },
+                  offering.classification as OemOfferingClassification,
+                  aiTrainingScopes.has(scope) ? ['AI_TRAINING'] : [],
+                ),
+              ],
+            })),
+        };
       });
     });
   }

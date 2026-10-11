@@ -40,13 +40,13 @@ const offering = {
   endsAt: null,
   actorUserId: 'actor',
   reason: '=review',
-  productPolicyVersion: { version: 1 },
+  productPolicyVersion: { id: 'v1', version: 1 },
   product: {
     displayName: 'SNS支援',
     status: 'ACTIVE',
     policyVersions: [
-      { version: 1, effectiveFrom: new Date('2026-10-01T00:00:00Z') },
-      { version: 2, effectiveFrom: new Date('2026-10-10T00:00:00Z') },
+      { id: 'v1', version: 1, effectiveFrom: new Date('2026-10-01T00:00:00Z') },
+      { id: 'v2', version: 2, effectiveFrom: new Date('2026-10-10T00:00:00Z') },
     ],
   },
   group: {
@@ -54,6 +54,7 @@ const offering = {
     workspace: { name: 'Organization' },
     serviceConfiguration: { displayName: 'OEM Service', slug: 'oem-service' },
   },
+  targetPolicyReviews: [{ policyVersionId: 'v2', blockers: [] }],
 };
 
 describe('OEM offering policy CSV export', () => {
@@ -89,6 +90,25 @@ describe('OEM offering policy CSV export', () => {
     expect(response.status).toBe(200);
     expect(mocks.history).toHaveBeenCalledWith('actor', { query: 'OEM' }, 10_000);
     expect(await response.text()).toContain('管理者');
+  });
+
+  it('exports compatibility blockers and supports the blocked filter', async () => {
+    mocks.current.mockResolvedValue([
+      {
+        ...offering,
+        targetPolicyReviews: [
+          {
+            policyVersionId: 'v2',
+            blockers: ['OEM_PRODUCT_CAPABILITY_POLICY_REQUIRED'],
+          },
+        ],
+      },
+    ]);
+    const response = await oemOfferingPolicyExportResponse(request('?scope=current&state=BLOCKED'));
+    expect(response.status).toBe(200);
+    const body = await response.text();
+    expect(body).toContain('互換性ブロック');
+    expect(body).toContain('OEM_PRODUCT_CAPABILITY_POLICY_REQUIRED');
   });
 
   it('rejects oversized exports without returning a partial CSV', async () => {

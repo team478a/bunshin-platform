@@ -3974,3 +3974,11 @@
 - SUPER_ADMINだけが、管理画面と同じOrganization・Service・商品・移行要否条件で、現在の移行レビュー対象と期間台帳履歴を別CSVとして保存できる。
 - 10,000件を上限とし、10,001件目を検出した場合は部分CSVを返さず、検索条件による絞り込みを要求する。CSVセルは表計算ソフトの数式解釈を防止する。
 - 出力は読み取り専用で、Offering移行、履歴変更、一括適用、参加者・請求変更を行わない。schema、migration、本番設定も変更しない。
+
+## 2026-10-11: OEM Offeringの互換性違反は移行操作前にfail-closedで表示する
+
+- 状態: Proposed（実装PRレビュー待ち。本番反映・Offering移行は未承認）
+- FREE非対応の商品版、AI_TRAININGを含むService Programに必要Capabilityがない商品版は、移行フォームを表示せず固定reasonでブロックする。管理画面とレビューCSVの判定は、実行時検査と同じ純粋関数を使用する。
+- Service Program定義が欠落・不正で安全に解析できない場合は、AI研修がないと推測せず`OEM_PROGRAM_DEFINITION_REVIEW_REQUIRED`としてブロックする。
+- 事前表示は実行許可の正本にしない。移行transaction内で現行Offering、対象版、適用日、商品状態、FREE可否、Capabilityを再検証する。
+- schema、migration、一括移行、参加者、請求、本番設定は変更しない。

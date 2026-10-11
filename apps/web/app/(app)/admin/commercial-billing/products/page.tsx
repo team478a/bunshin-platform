@@ -119,7 +119,17 @@ function nextPolicyDate(latest: Date, today: string) {
   return next.toISOString().slice(0, 10) > today ? next.toISOString().slice(0, 10) : today;
 }
 
-const migrationState = z.enum(['ALL', 'NEEDS_MIGRATION', 'CURRENT']).catch('ALL');
+const migrationState = z.enum(['ALL', 'NEEDS_MIGRATION', 'BLOCKED', 'CURRENT']).catch('ALL');
+
+function blockerLabel(blocker: string) {
+  if (blocker === 'OEM_PRODUCT_FREE_OFFERING_FORBIDDEN')
+    return 'この商品版はFREE提供を許可していません';
+  if (blocker === 'OEM_PRODUCT_CAPABILITY_POLICY_REQUIRED')
+    return 'ServiceのAI研修に必要なAI_TRAINING Capabilityがありません';
+  if (blocker === 'OEM_PROGRAM_DEFINITION_REVIEW_REQUIRED')
+    return 'Program定義を確認できないため、安全に互換性判定できません';
+  return blocker;
+}
 
 export default async function OemProductPolicyPage({
   searchParams,
@@ -143,14 +153,23 @@ export default async function OemProductPolicyPage({
   ]);
   const today = dateInBusinessTimezone(new Date());
   const offeringMigrations = unfilteredOfferingMigrations.filter((offering) => {
-    const hasEffectiveNewerVersion = offering.product.policyVersions.some(
+    const effectiveTargets = offering.product.policyVersions.filter(
       (policy) =>
-        offering.product.status === 'ACTIVE' &&
         policy.version > offering.productPolicyVersion.version &&
         policy.effectiveFrom.toISOString().slice(0, 10) <= today,
     );
-    if (selectedState === 'NEEDS_MIGRATION') return hasEffectiveNewerVersion;
-    if (selectedState === 'CURRENT') return !hasEffectiveNewerVersion;
+    const reviews = new Map(
+      offering.targetPolicyReviews.map((review) => [review.policyVersionId, review.blockers]),
+    );
+    const hasCompatibleTarget =
+      offering.product.status === 'ACTIVE' &&
+      effectiveTargets.some((policy) => reviews.get(policy.id)?.length === 0);
+    const hasBlockedTarget = effectiveTargets.some(
+      (policy) => (reviews.get(policy.id)?.length ?? 1) > 0,
+    );
+    if (selectedState === 'NEEDS_MIGRATION') return hasCompatibleTarget;
+    if (selectedState === 'BLOCKED') return hasBlockedTarget;
+    if (selectedState === 'CURRENT') return !hasCompatibleTarget && !hasBlockedTarget;
     return true;
   });
   const currentExportParams = new URLSearchParams({ scope: 'current', state: selectedState });
@@ -196,6 +215,7 @@ export default async function OemProductPolicyPage({
             <select name="state" defaultValue={selectedState}>
               <option value="ALL">すべて</option>
               <option value="NEEDS_MIGRATION">現在適用できる新版あり</option>
+              <option value="BLOCKED">互換性確認が必要</option>
               <option value="CURRENT">現時点で移行不要</option>
             </select>
           </label>
@@ -312,7 +332,13 @@ export default async function OemProductPolicyPage({
                             target.requiredCapabilities,
                           );
                           const effective = target.effectiveFrom.toISOString().slice(0, 10);
-                          const canApply = product.status === 'ACTIVE' && effective <= today;
+                          const blockers = offering.targetPolicyReviews.find(
+                            (review) => review.policyVersionId === target.id,
+                          )?.blockers ?? ['OEM_PROGRAM_DEFINITION_REVIEW_REQUIRED'];
+                          const canApply =
+                            product.status === 'ACTIVE' &&
+                            effective <= today &&
+                            blockers.length === 0;
                           return (
                             <section key={target.id}>
                               <h4>
@@ -325,7 +351,16 @@ export default async function OemProductPolicyPage({
                                 {diff.added.join(', ') || 'なし'}／削除Capability:{' '}
                                 {diff.removed.join(', ') || 'なし'}
                               </p>
-                              {!canApply ? (
+                              {blockers.length > 0 ? (
+                                <div className="notice">
+                                  <strong>互換性確認が必要です。</strong>
+                                  <ul>
+                                    {blockers.map((blocker) => (
+                                      <li key={blocker}>{blockerLabel(blocker)}</li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              ) : !canApply ? (
                                 <p>適用開始日前、または廃止商品のため、現在は移行できません。</p>
                               ) : (
                                 <form action={migrateOfferingPolicy} className="form-stack">
