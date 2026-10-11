@@ -12,6 +12,13 @@ const invoiceSections = readFileSync(
   ),
   'utf8',
 );
+const dashboard = readFileSync(
+  new URL(
+    '../app/(app)/admin/organizations/[workspaceId]/commercial/commercial-admin-dashboard.tsx',
+    import.meta.url,
+  ),
+  'utf8',
+);
 const service = readFileSync(
   new URL('../../../packages/database/src/commercial-billing-service.ts', import.meta.url),
   'utf8',
@@ -25,6 +32,9 @@ describe('OEM setup fee admin', () => {
     expect(invoiceSections).toContain('name="chargeKey"');
     expect(invoiceSections).toContain('月額とは別請求');
     expect(invoiceSections).toContain('商品名や先行社数から自動計算しません');
+    expect(dashboard).toContain("query.setupFeeSaved === '1'");
+    expect(dashboard).toContain('初期費用の請求下書きを作成しました');
+    expect(dashboard).toContain("query.error === 'setupFee'");
   });
 
   it('fails closed on missing offering and uses a separate invoice source', () => {

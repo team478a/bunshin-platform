@@ -1,10 +1,15 @@
 import 'server-only';
 import { ApplicationError } from '@bunshin/shared';
+import {
+  commercialInvoiceItemLabel,
+  type CommercialInvoiceCopyKind,
+} from '../commercial-invoice-copy';
 
 export interface CommercialBillingReminderInput {
   apiKey: string;
   from: string;
   to: string;
+  invoiceKind: CommercialInvoiceCopyKind;
   invoiceNumber: string;
   billingName: string;
   amountYen: number;
@@ -60,9 +65,10 @@ export class CommercialBillingReminderResend {
 
   async send(input: CommercialBillingReminderInput): Promise<void> {
     const dueDate = input.dueAt.toLocaleDateString('ja-JP', { timeZone: 'Asia/Tokyo' });
+    const itemLabel = commercialInvoiceItemLabel(input.invoiceKind);
     const subject = input.overdue
-      ? `【ワタシワークス】お支払期限を過ぎています（${input.invoiceNumber}）`
-      : `【ワタシワークス】月額利用料のお支払い案内（${input.invoiceNumber}）`;
+      ? `【ワタシワークス】${itemLabel}のお支払期限を過ぎています（${input.invoiceNumber}）`
+      : `【ワタシワークス】${itemLabel}のお支払い案内（${input.invoiceNumber}）`;
     const payment = input.checkoutUrl
       ? ['', '以下のページからお支払いください。', input.checkoutUrl]
       : ['', 'お支払い方法は、別途ご案内している請求書をご確認ください。'];
@@ -84,8 +90,8 @@ export class CommercialBillingReminderResend {
           `${input.billingName} ご担当者様`,
           '',
           input.overdue
-            ? 'ワタシワークス月額利用料のお支払期限を過ぎています。行き違いでお支払い済みの場合はご容赦ください。'
-            : 'ワタシワークス月額利用料のお支払いをご案内します。',
+            ? `ワタシワークスの${itemLabel}のお支払期限を過ぎています。行き違いでお支払い済みの場合はご容赦ください。`
+            : `ワタシワークスの${itemLabel}のお支払いをご案内します。`,
           '',
           `請求番号: ${input.invoiceNumber}`,
           `請求金額: ${input.amountYen.toLocaleString('ja-JP')}円`,

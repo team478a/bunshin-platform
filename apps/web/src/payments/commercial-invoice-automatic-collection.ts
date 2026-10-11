@@ -2,6 +2,7 @@ import 'server-only';
 import type { Prisma, PrismaClient } from '@bunshin/database';
 import { platformBillingStripeSecretKey } from './commercial-invoice-payment';
 import { StripeCommercialInvoiceCollectionAdapter } from './secure-configuration';
+import { commercialInvoiceProviderDescription } from '../commercial-invoice-copy';
 
 type CollectionAdapter = Pick<StripeCommercialInvoiceCollectionAdapter, 'collect'>;
 
@@ -61,6 +62,7 @@ export async function collectCommercialInvoices(
         invoiceId: invoice.id,
         workspaceId: invoice.workspaceId,
         invoiceNumber: invoice.invoiceNumber,
+        description: commercialInvoiceProviderDescription(invoice.kind, invoice.invoiceNumber),
         amountYen: invoice.amountYen,
         customerId,
         paymentMethodId,

@@ -39,6 +39,9 @@ export function CommercialAdminDashboard(props: CommercialAdminDashboardProps) {
       {query.customQuoteSaved === '1' ? (
         <p className="notice notice--success">個別見積の金額で請求記録を作成しました。</p>
       ) : null}
+      {query.setupFeeSaved === '1' ? (
+        <p className="notice notice--success">初期費用の請求下書きを作成しました。</p>
+      ) : null}
       {query.reminderSent === '1' ? (
         <p className="notice notice--success">請求先へメールを送信し、履歴を保存しました。</p>
       ) : null}
@@ -61,7 +64,9 @@ export function CommercialAdminDashboard(props: CommercialAdminDashboardProps) {
                     ? 'この請求は案内メールを送れる状態ではありません。請求状態と支払期限を確認してください。'
                     : query.error === 'reminder-send'
                       ? '請求案内メールを送信できませんでした。メール設定と送信サービスの状態を確認してください。'
-                      : '保存または更新できませんでした。入力内容と現在の状態を確認してください。'}
+                      : query.error === 'setupFee'
+                        ? '初期費用の請求下書きを作成できませんでした。契約、対象商品のOffering期間、請求キー、合意日を確認してください。'
+                        : '保存または更新できませんでした。入力内容と現在の状態を確認してください。'}
         </p>
       ) : null}
 
