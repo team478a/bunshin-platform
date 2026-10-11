@@ -6233,11 +6233,13 @@ model AiProviderCallAdmission {
   reservedCostUsdMicros BigInt                       @map("reserved_cost_usd_micros")
   admittedAt            DateTime                     @default(now()) @map("admitted_at") @db.Timestamptz(3)
   settledAt             DateTime?                    @map("settled_at") @db.Timestamptz(3)
+  lastAlertedAt          DateTime?                    @map("last_alerted_at") @db.Timestamptz(3)
   configuration         AiProviderConfiguration      @relation(fields: [configurationId], references: [id], onDelete: Restrict)
 
   @@unique([environment, provider, operationHash], map: "ai_provider_call_admissions_operation_key")
   @@index([environment, provider, admittedAt], map: "ai_provider_call_admissions_day_idx")
   @@index([environment, provider, settledAt], map: "ai_provider_call_admissions_open_idx")
+  @@index([environment, settledAt, admittedAt, lastAlertedAt], map: "ai_provider_call_admissions_alert_idx")
   @@map("ai_provider_call_admissions")
 }
 

@@ -1,5 +1,7 @@
 # BUNSHIN Platform 実装ロードマップ
 
+AI Provider未精算費用予約の外部通知は`docs/ai-training/AI_PROVIDER_STALE_ADMISSION_ALERT_IMPLEMENTATION.md`を参照。15分超のOPEN予約を既存の環境別管理者メール設定へ集計通知し、成功後だけ1時間cooldownを記録する。通知は予約を解放・精算せず、operation key、利用者、Workspace、Bunshin、Promptを含めない。本番Migration、通知設定、実送信、請求照合、証跡のない予約復旧は別Gate。
+
 OpenAI会員商品投稿案生成の原子的費用予約は`docs/ai-training/OPENAI_MEMBER_PRODUCT_COST_ADMISSION_IMPLEMENTATION.md`を参照。本人・Service・Bunshin・商品・外部リンクのPrecondition後に予約し、quota拒否は0円、Provider試行後は固定原価を記録してから確定する。研修評価の既存専用Admissionとの統合、本番release・設定・送信は別Gate。
 
 OpenAI SNSインサイト画像読取の原子的費用予約は`docs/ai-training/OPENAI_SOCIAL_INSIGHT_COST_ADMISSION_IMPLEMENTATION.md`を参照。本人・Service・Bunshin・画像のPrecondition後に既存Admission台帳へ予約し、Provider試行後の固定原価利用実績を厳格保存してから確定する。他のOpenAI経路、本番release・設定・送信は別Gate。
