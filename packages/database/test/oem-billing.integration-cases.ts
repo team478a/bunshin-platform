@@ -312,6 +312,25 @@ export function registerOemBillingIntegrationCases(client: PrismaClient) {
         productPolicyVersionId: product.policyVersions[0]!.id,
         classification: 'PAID',
       });
+      const preparation = await service.preparationDashboard({
+        workspaceId: workspace.id,
+        actorUserId: actor.id,
+      });
+      expect(preparation).toMatchObject({
+        workspace: { id: workspace.id },
+        readiness: {
+          missingOfferingCount: 0,
+          missingRegistrationCount: 0,
+          contractHistoryReady: false,
+          readyToSchedule: false,
+        },
+      });
+      expect(preparation.services).toHaveLength(1);
+      expect(preparation.services[0]).toMatchObject({
+        groupId: group.id,
+        currentOffering: { id: paidOffering.id },
+      });
+      expect(preparation.products.map((candidate) => candidate.key)).toContain(key);
       await expect(
         client.commercialServiceProductPolicyVersion.update({
           where: { id: product.policyVersions[0]!.id },

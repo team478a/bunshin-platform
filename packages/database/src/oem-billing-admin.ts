@@ -14,6 +14,142 @@ import { oemBillingShadow } from './oem-billing-history';
 export class PrismaOemBillingAdminService {
   constructor(private readonly client: PrismaClient = prisma) {}
 
+  async preparationDashboard(input: { workspaceId: string; actorUserId: string; now?: Date }) {
+    const now = input.now ?? new Date();
+    if (!Number.isFinite(now.getTime())) throw new Error('INVALID_PREPARATION_TIME');
+    const effectiveOn = new Date(`${dateInBusinessTimezone(now)}T00:00:00.000Z`);
+    return this.client.$transaction(
+      async (tx) => {
+        await this.authorizeSuperAdmin(tx, input.actorUserId);
+        const workspace = await tx.workspace.findFirst({
+          where: { id: input.workspaceId, type: 'ORGANIZATION' },
+          select: { id: true, name: true },
+        });
+        if (!workspace) throw new Error('ORGANIZATION_NOT_FOUND');
+
+        const services = await tx.serviceConfiguration.findMany({
+          where: { workspaceId: input.workspaceId },
+          select: {
+            groupId: true,
+            displayName: true,
+            slug: true,
+            group: { select: { name: true } },
+          },
+          orderBy: [{ displayName: 'asc' }, { groupId: 'asc' }],
+        });
+        const groupIds = services.map((service) => service.groupId);
+        const [offerings, participants, registrations, contractPeriods, billingPolicy, products] =
+          await Promise.all([
+            tx.oemOfferingPeriod.findMany({
+              where: { workspaceId: input.workspaceId, groupId: { in: groupIds }, endsAt: null },
+              include: {
+                product: { select: { displayName: true, status: true } },
+                productPolicyVersion: { select: { version: true, effectiveFrom: true } },
+              },
+              orderBy: [{ startsAt: 'asc' }, { id: 'asc' }],
+            }),
+            tx.groupMembership.findMany({
+              where: {
+                workspaceId: input.workspaceId,
+                groupId: { in: groupIds },
+                role: 'PARTICIPANT',
+                status: { in: ['ACTIVE', 'SUSPENDED'] },
+                consentedAt: { not: null },
+              },
+              select: {
+                id: true,
+                groupId: true,
+                userId: true,
+                status: true,
+                consentedAt: true,
+                user: { select: { displayName: true } },
+              },
+              orderBy: [{ groupId: 'asc' }, { createdAt: 'asc' }, { id: 'asc' }],
+            }),
+            tx.oemRegistrationPeriod.findMany({
+              where: { workspaceId: input.workspaceId, groupId: { in: groupIds } },
+              orderBy: [{ startsAt: 'desc' }, { id: 'desc' }],
+            }),
+            tx.oemContractPeriod.findMany({
+              where: { workspaceId: input.workspaceId },
+              orderBy: [{ startsAt: 'desc' }, { id: 'desc' }],
+            }),
+            tx.oemBillingPolicy.findUnique({ where: { workspaceId: input.workspaceId } }),
+            tx.commercialServiceProduct.findMany({
+              where: { status: 'ACTIVE' },
+              select: {
+                id: true,
+                key: true,
+                displayName: true,
+                policyVersions: {
+                  where: { effectiveFrom: { lte: effectiveOn } },
+                  orderBy: [{ effectiveFrom: 'desc' }, { version: 'desc' }],
+                  take: 1,
+                  select: {
+                    id: true,
+                    version: true,
+                    freeOfferingAllowed: true,
+                    requiredCapabilities: true,
+                    effectiveFrom: true,
+                  },
+                },
+              },
+              orderBy: { key: 'asc' },
+            }),
+          ]);
+
+        const currentOfferings = new Map(offerings.map((offering) => [offering.groupId, offering]));
+        const registrationsByMembership = new Map<string, (typeof registrations)[number][]>();
+        for (const registration of registrations) {
+          const values = registrationsByMembership.get(registration.groupMembershipId) ?? [];
+          values.push(registration);
+          registrationsByMembership.set(registration.groupMembershipId, values);
+        }
+        const participantRows = participants.map((participant) => {
+          const history = registrationsByMembership.get(participant.id) ?? [];
+          return {
+            ...participant,
+            currentRegistration: history.find((period) => period.endsAt === null) ?? null,
+            latestRegistration: history[0] ?? null,
+          };
+        });
+        const serviceRows = services.map((service) => ({
+          ...service,
+          currentOffering: currentOfferings.get(service.groupId) ?? null,
+        }));
+        const missingOfferingCount = serviceRows.filter(
+          (service) => service.currentOffering === null,
+        ).length;
+        const missingRegistrationCount = participantRows.filter(
+          (participant) => participant.currentRegistration === null,
+        ).length;
+
+        return {
+          workspace,
+          services: serviceRows,
+          participants: participantRows,
+          contractPeriods,
+          billingPolicy,
+          products: products
+            .filter((product) => product.policyVersions.length === 1)
+            .map((product) => ({ ...product, currentPolicy: product.policyVersions[0]! })),
+          readiness: {
+            missingOfferingCount,
+            missingRegistrationCount,
+            contractHistoryReady: contractPeriods.length > 0,
+            readyToSchedule:
+              services.length > 0 &&
+              missingOfferingCount === 0 &&
+              missingRegistrationCount === 0 &&
+              contractPeriods.length > 0 &&
+              billingPolicy === null,
+          },
+        };
+      },
+      { isolationLevel: 'RepeatableRead' },
+    );
+  }
+
   private offeringPolicyFilter(input?: { query?: string; productKey?: string }) {
     const query = input?.query?.trim();
     const productKey = input?.productKey?.trim().toUpperCase();
