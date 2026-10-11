@@ -3550,6 +3550,9 @@ model CommercialServiceProduct {
   displayName     String                                  @map("display_name") @db.VarChar(120)
   status          String                                  @default("ACTIVE") @db.VarChar(20)
   createdByUserId String?                                 @map("created_by_user_id") @db.Uuid
+  retiredByUserId String?                                 @map("retired_by_user_id") @db.Uuid
+  retiredReason   String?                                 @map("retired_reason") @db.VarChar(1000)
+  retiredAt       DateTime?                               @map("retired_at") @db.Timestamptz(6)
   createdAt       DateTime                                @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt       DateTime                                @updatedAt @map("updated_at") @db.Timestamptz(6)
   policyVersions  CommercialServiceProductPolicyVersion[]

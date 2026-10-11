@@ -120,6 +120,125 @@ export class PrismaOemBillingAdminService {
     });
   }
 
+  async listProductPolicies(actorUserId: string) {
+    return this.client.$transaction(async (tx) => {
+      await this.authorizeSuperAdmin(tx, actorUserId);
+      const products = await tx.commercialServiceProduct.findMany({
+        include: {
+          policyVersions: {
+            orderBy: [{ effectiveFrom: 'desc' }, { version: 'desc' }],
+          },
+          _count: {
+            select: { offeringPeriods: { where: { endsAt: null } } },
+          },
+        },
+        orderBy: [{ status: 'asc' }, { key: 'asc' }],
+      });
+      if (products.some((product) => product.policyVersions.length === 0))
+        throw new Error('REVIEW_REQUIRED: service product policy version missing');
+      return products;
+    });
+  }
+
+  async reviseProductPolicy(input: {
+    productId: string;
+    expectedLatestPolicyId: string;
+    freeOfferingAllowed: boolean;
+    requiredCapabilities: readonly string[];
+    effectiveFrom: Date;
+    actorUserId: string;
+    reason: string;
+    now?: Date;
+  }) {
+    const reason = requiredText(input.reason, 1000);
+    const requiredCapabilities = [...new Set(input.requiredCapabilities.map((v) => v.trim()))];
+    const now = input.now ?? new Date();
+    const today = new Date(`${dateInBusinessTimezone(now)}T00:00:00.000Z`);
+    if (
+      requiredCapabilities.length > 20 ||
+      requiredCapabilities.some((v) => !/^[A-Z][A-Z0-9_]{1,79}$/.test(v)) ||
+      !Number.isFinite(input.effectiveFrom.getTime()) ||
+      input.effectiveFrom.toISOString().slice(10) !== 'T00:00:00.000Z' ||
+      input.effectiveFrom < today
+    )
+      throw new Error('INVALID_PRODUCT_POLICY_REVISION');
+    return this.client.$transaction(async (tx) => {
+      await this.authorizeSuperAdmin(tx, input.actorUserId);
+      await tx.$executeRaw(
+        Prisma.sql`SELECT pg_advisory_xact_lock(hashtext(${'oem-service-product:' + input.productId}))`,
+      );
+      const product = await tx.commercialServiceProduct.findUnique({
+        where: { id: input.productId },
+        include: { policyVersions: { orderBy: { version: 'desc' }, take: 1 } },
+      });
+      if (!product) throw new Error('PRODUCT_POLICY_NOT_FOUND');
+      if (product.status !== 'ACTIVE') throw new Error('PRODUCT_POLICY_RETIRED');
+      const latest = product.policyVersions[0];
+      if (!latest || latest.id !== input.expectedLatestPolicyId)
+        throw new Error('STALE_PRODUCT_POLICY');
+      if (input.effectiveFrom <= latest.effectiveFrom)
+        throw new Error('POLICY_EFFECTIVE_DATE_MUST_ADVANCE');
+      return tx.commercialServiceProductPolicyVersion.create({
+        data: {
+          productId: product.id,
+          version: latest.version + 1,
+          freeOfferingAllowed: input.freeOfferingAllowed,
+          requiredCapabilities,
+          effectiveFrom: input.effectiveFrom,
+          createdByUserId: input.actorUserId,
+          reason,
+        },
+      });
+    });
+  }
+
+  async retireProduct(input: {
+    productId: string;
+    expectedLatestPolicyId: string;
+    expectedUpdatedAt: Date;
+    actorUserId: string;
+    reason: string;
+    confirmed: boolean;
+    now?: Date;
+  }) {
+    const reason = requiredText(input.reason, 1000);
+    const now = input.now ?? new Date();
+    if (!input.confirmed || !Number.isFinite(input.expectedUpdatedAt.getTime()))
+      throw new Error('PRODUCT_RETIREMENT_CONFIRMATION_REQUIRED');
+    return this.client.$transaction(async (tx) => {
+      await this.authorizeSuperAdmin(tx, input.actorUserId);
+      await tx.$executeRaw(
+        Prisma.sql`SELECT pg_advisory_xact_lock(hashtext(${'oem-service-product:' + input.productId}))`,
+      );
+      const product = await tx.commercialServiceProduct.findUnique({
+        where: { id: input.productId },
+        include: { policyVersions: { orderBy: { version: 'desc' }, take: 1 } },
+      });
+      if (!product) throw new Error('PRODUCT_POLICY_NOT_FOUND');
+      if (
+        product.status === 'RETIRED' &&
+        product.retiredByUserId === input.actorUserId &&
+        product.retiredReason === reason
+      )
+        return product;
+      if (product.status !== 'ACTIVE') throw new Error('PRODUCT_POLICY_RETIRED');
+      if (
+        product.updatedAt.getTime() !== input.expectedUpdatedAt.getTime() ||
+        product.policyVersions[0]?.id !== input.expectedLatestPolicyId
+      )
+        throw new Error('STALE_PRODUCT_POLICY');
+      return tx.commercialServiceProduct.update({
+        where: { id: product.id },
+        data: {
+          status: 'RETIRED',
+          retiredByUserId: input.actorUserId,
+          retiredReason: reason,
+          retiredAt: now,
+        },
+      });
+    });
+  }
+
   async setOffering(input: {
     workspaceId: string;
     groupId: string;
