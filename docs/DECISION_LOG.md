@@ -1,5 +1,12 @@
 # BUNSHIN Platform Decision Log
 
+## 2026-10-11: OEM経理用CSVは最新の返金要照合通知を識別情報として出力する
+
+- 状態: Proposed（実装PRレビュー待ち。本番Webhook設定・返金・請求状態変更は未承認）
+- 経理用CSVの既存列を維持し、末尾へ返金要照合区分、通知受信日時、Stripe Event IDを追加する。対象は請求ごとの最新の処理済み部分／全額返金通知だけとする。
+- Provider Event IDにも既存のSpreadsheet Formula Injection対策を適用する。返金通知がない請求は追加列を空欄にする。
+- CSVを返金額、会計確定、返金済み請求状態の正本にしない。保存されていない返金額を推測せず、要照合の解消や`TenantInvoice`更新を行わない。
+
 # 2026-10-11: OEM請求の返金要照合は団体別請求画面でも既存通知履歴を表示する
 
 - 状態: Proposed（実装PRレビュー待ち。本番Webhook設定・返金・請求状態変更は未承認）

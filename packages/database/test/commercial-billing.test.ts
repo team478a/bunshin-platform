@@ -81,6 +81,7 @@ describe('PrismaCommercialBillingService', () => {
       id: 'event-full',
       workspaceId: 'workspace-a',
       invoiceId: 'invoice-a',
+      providerEventId: 'evt_refund_full',
       errorCategory: 'FULL_REFUND_REVIEW_REQUIRED',
       receivedAt: new Date('2026-10-11T02:00:00.000Z'),
     };
@@ -126,6 +127,11 @@ describe('PrismaCommercialBillingService', () => {
             in: ['PARTIAL_REFUND_REVIEW_REQUIRED', 'FULL_REFUND_REVIEW_REQUIRED'],
           },
         }),
+      }),
+    );
+    expect(findRefundEvents).toHaveBeenCalledWith(
+      expect.objectContaining({
+        select: expect.objectContaining({ providerEventId: true }),
       }),
     );
   });
