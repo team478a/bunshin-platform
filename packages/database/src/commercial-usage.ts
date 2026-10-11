@@ -524,7 +524,7 @@ export class PrismaCommercialUsageService {
       ...policies.map((row) => row.workspaceId),
     ]);
     const contractPeriods = await this.client.oemContractPeriod.findMany({
-      where: { workspaceId: { in: [...workspaceIds] } },
+      where: { workspaceId: { in: [...workspaceIds] }, supersededBy: { is: null } },
       select: { workspaceId: true, startsAt: true, endsAt: true },
     });
     const reviewedPolicies = new Set(

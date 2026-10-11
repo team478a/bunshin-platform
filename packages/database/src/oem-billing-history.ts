@@ -96,6 +96,7 @@ export async function oemBillingShadow(
     tx.oemContractPeriod.findMany({
       where: {
         workspaceId,
+        supersededBy: { is: null },
         startsAt: { lt: period.end },
         OR: [{ endsAt: null }, { endsAt: { gt: period.start } }],
       },

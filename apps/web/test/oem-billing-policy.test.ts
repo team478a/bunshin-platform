@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   admin: vi.fn(),
   registerProductPolicy: vi.fn(),
   setOffering: vi.fn(),
+  correctContractPeriod: vi.fn(),
   scheduleCutover: vi.fn(),
 }));
 vi.mock('server-only', () => ({}));
@@ -21,6 +22,7 @@ vi.mock('@bunshin/database', () => ({
   PrismaOemBillingAdminService: class {
     registerProductPolicy = mocks.registerProductPolicy;
     setOffering = mocks.setOffering;
+    correctContractPeriod = mocks.correctContractPeriod;
     scheduleCutover = mocks.scheduleCutover;
   },
 }));
@@ -52,6 +54,7 @@ describe('OEM billing preparation API', () => {
     mocks.admin.mockResolvedValue({ role: 'SUPER_ADMIN' });
     mocks.registerProductPolicy.mockResolvedValue({ id: 'third-service' });
     mocks.setOffering.mockResolvedValue({ id: 'reviewed-offering' });
+    mocks.correctContractPeriod.mockResolvedValue({ id: 'corrected-contract-period' });
   });
   it('uses the session actor and passes tenant identifiers to the reauthorizing service', async () => {
     expect((await oemBillingPolicyResponse(request())).status).toBe(200);
@@ -85,6 +88,30 @@ describe('OEM billing preparation API', () => {
   it('returns a review conflict rather than an invoice with a guessed zero', async () => {
     mocks.setOffering.mockRejectedValue(new Error('REVIEW_REQUIRED: tenant history missing'));
     expect((await oemBillingPolicyResponse(request())).status).toBe(409);
+  });
+  it('passes contract corrections with the session actor and explicit expected version', async () => {
+    const response = await oemBillingPolicyResponse(
+      request({
+        operation: 'CORRECT_CONTRACT',
+        workspaceId,
+        contractPeriodId: '33333333-3333-4333-8333-333333333333',
+        expectedStartsAt: '2026-09-01T00:00:00.000Z',
+        expectedEndsAt: null,
+        revisedStartsAt: '2026-09-02T00:00:00.000Z',
+        revisedEndsAt: null,
+        reason: '契約書原本に基づく開始日時の訂正',
+        confirmed: true,
+      }),
+    );
+    expect(response.status).toBe(200);
+    expect(mocks.correctContractPeriod).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceId,
+        actorUserId: 'server-actor',
+        expectedEndsAt: null,
+        confirmed: true,
+      }),
+    );
   });
   it('registers a third service product without a product-name code change', async () => {
     const response = await oemBillingPolicyResponse(

@@ -99,6 +99,7 @@ export async function createCommercialInvoiceCheckout(
     const historical = await client.oemContractPeriod.findFirst({
       where: {
         workspaceId: input.workspaceId,
+        supersededBy: { is: null },
         startsAt: { lt: end },
         OR: [{ endsAt: null }, { endsAt: { gt: start } }],
       },

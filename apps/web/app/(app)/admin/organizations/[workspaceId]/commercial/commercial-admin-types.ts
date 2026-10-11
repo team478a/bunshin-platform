@@ -36,6 +36,7 @@ export type CommercialAdminActions = {
   setOemOffering: CommercialServerAction;
   reviewOemRegistration: CommercialServerAction;
   reviewOemContract: CommercialServerAction;
+  correctOemContract: CommercialServerAction;
   scheduleOemCutover: CommercialServerAction;
 };
 

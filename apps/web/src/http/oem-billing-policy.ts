@@ -61,6 +61,17 @@ const schema = z.discriminatedUnion('operation', [
   z
     .object({
       ...common,
+      operation: z.literal('CORRECT_CONTRACT'),
+      contractPeriodId: z.string().uuid(),
+      expectedStartsAt: date,
+      expectedEndsAt: date.nullable(),
+      revisedStartsAt: date,
+      revisedEndsAt: date.nullable(),
+    })
+    .strict(),
+  z
+    .object({
+      ...common,
       operation: z.literal('SCHEDULE_CUTOVER'),
       month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/),
       historyReviewed: z.literal(true),
@@ -125,13 +136,25 @@ export async function oemBillingPolicyResponse(request: Request) {
                   startsAt: new Date(value.startsAt),
                   endsAt: value.endsAt ? new Date(value.endsAt) : null,
                 })
-              : await service.scheduleCutover({
-                  workspaceId: value.workspaceId,
-                  actorUserId,
-                  reason: value.reason,
-                  effectiveFrom: new Date(`${value.month}-01T00:00:00.000Z`),
-                  historyReviewed: value.historyReviewed,
-                });
+              : value.operation === 'CORRECT_CONTRACT'
+                ? await service.correctContractPeriod({
+                    workspaceId: value.workspaceId,
+                    contractPeriodId: value.contractPeriodId,
+                    expectedStartsAt: new Date(value.expectedStartsAt),
+                    expectedEndsAt: value.expectedEndsAt ? new Date(value.expectedEndsAt) : null,
+                    revisedStartsAt: new Date(value.revisedStartsAt),
+                    revisedEndsAt: value.revisedEndsAt ? new Date(value.revisedEndsAt) : null,
+                    actorUserId,
+                    reason: value.reason,
+                    confirmed: value.confirmed,
+                  })
+                : await service.scheduleCutover({
+                    workspaceId: value.workspaceId,
+                    actorUserId,
+                    reason: value.reason,
+                    effectiveFrom: new Date(`${value.month}-01T00:00:00.000Z`),
+                    historyReviewed: value.historyReviewed,
+                  });
     return Response.json(
       { data: result, requestId },
       { headers: { 'cache-control': 'private, no-store' } },

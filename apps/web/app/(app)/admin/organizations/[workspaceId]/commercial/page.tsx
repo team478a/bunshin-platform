@@ -94,6 +94,16 @@ const oemContractHistorySchema = z.object({
   reason: z.string().trim().min(10).max(1000),
   confirmed: z.literal('on'),
 });
+const oemContractCorrectionSchema = z.object({
+  workspaceId: z.uuid(),
+  contractPeriodId: z.uuid(),
+  expectedStartsAt: z.string().datetime({ offset: true }),
+  expectedEndsAt: z.union([z.literal(''), z.string().datetime({ offset: true })]),
+  revisedStartsAt: z.string().min(1),
+  revisedEndsAt: z.string().optional(),
+  reason: z.string().trim().min(10).max(1000),
+  confirmed: z.literal('on'),
+});
 const oemCutoverSchema = z.object({
   workspaceId: z.uuid(),
   month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/),
@@ -426,6 +436,31 @@ async function reviewOemContract(formData: FormData) {
   redirect(`${path}?oemPrepared=contract#oem-billing-preparation` as Route);
 }
 
+async function correctOemContract(formData: FormData) {
+  'use server';
+  const input = oemContractCorrectionSchema.safeParse(Object.fromEntries(formData));
+  if (!input.success) redirect('/admin/organizations?error=invalid');
+  const { actor, db } = await requireSuperAdmin();
+  const path = `/admin/organizations/${input.data.workspaceId}/commercial` as Route;
+  try {
+    await new db.PrismaOemBillingAdminService().correctContractPeriod({
+      workspaceId: input.data.workspaceId,
+      contractPeriodId: input.data.contractPeriodId,
+      expectedStartsAt: new Date(input.data.expectedStartsAt),
+      expectedEndsAt: input.data.expectedEndsAt ? new Date(input.data.expectedEndsAt) : null,
+      revisedStartsAt: requiredDate(input.data.revisedStartsAt),
+      revisedEndsAt: optionalDate(input.data.revisedEndsAt),
+      actorUserId: actor.userId,
+      reason: input.data.reason,
+      confirmed: true,
+    });
+  } catch {
+    redirect(`${path}?error=oemPreparation#oem-billing-preparation` as Route);
+  }
+  revalidatePath(path);
+  redirect(`${path}?oemPrepared=contract-correction#oem-billing-preparation` as Route);
+}
+
 async function scheduleOemCutover(formData: FormData) {
   'use server';
   const input = oemCutoverSchema.safeParse(Object.fromEntries(formData));
@@ -530,6 +565,7 @@ export default async function OrganizationCommercialPage({
         setOemOffering,
         reviewOemRegistration,
         reviewOemContract,
+        correctOemContract,
         scheduleOemCutover,
       }}
     />
