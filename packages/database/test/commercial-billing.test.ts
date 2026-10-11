@@ -39,6 +39,43 @@ describe('unresolvedCommercialReminderFailures', () => {
 });
 
 describe('PrismaCommercialBillingService', () => {
+  it('returns workspace-scoped refund review history with invoice details', async () => {
+    const findFirst = vi.fn().mockResolvedValue({
+      id: 'workspace-a',
+      tenantInvoices: [],
+      commercialBillingAudits: [],
+      tenantMonthlyUsage: [],
+    });
+    const client = {
+      workspace: { findFirst },
+      commercialServiceProduct: { findMany: vi.fn().mockResolvedValue([]) },
+    } as unknown as PrismaClient;
+
+    await new PrismaCommercialBillingService(client).dashboard('workspace-a');
+
+    expect(findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'workspace-a', type: 'ORGANIZATION' },
+        select: expect.objectContaining({
+          tenantInvoices: expect.objectContaining({
+            select: expect.objectContaining({
+              billingWebhookEvents: expect.objectContaining({
+                where: {
+                  status: 'PROCESSED',
+                  errorCategory: {
+                    in: ['PARTIAL_REFUND_REVIEW_REQUIRED', 'FULL_REFUND_REVIEW_REQUIRED'],
+                  },
+                },
+                orderBy: { receivedAt: 'desc' },
+                select: expect.objectContaining({ providerEventId: true, receivedAt: true }),
+              }),
+            }),
+          }),
+        }),
+      }),
+    );
+  });
+
   it('returns the latest refund review signal for each paid invoice', async () => {
     const latest = {
       id: 'event-full',
