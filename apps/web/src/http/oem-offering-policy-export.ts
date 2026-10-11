@@ -10,7 +10,7 @@ import { csv } from './admin-report-export';
 export const OEM_OFFERING_POLICY_EXPORT_LIMIT = 10_000;
 
 const productKey = z.string().regex(/^[A-Z][A-Z0-9_]{1,39}$/);
-const state = z.enum(['ALL', 'NEEDS_MIGRATION', 'CURRENT']);
+const state = z.enum(['ALL', 'NEEDS_MIGRATION', 'BLOCKED', 'CURRENT']);
 const scope = z.enum(['current', 'history']);
 
 function exportQuery(request: Request) {
@@ -52,6 +52,16 @@ function effectiveNewerPolicies(offering: CurrentOffering, today: string) {
   );
 }
 
+function effectivePolicyReviews(offering: CurrentOffering, today: string) {
+  const reviews = new Map(
+    offering.targetPolicyReviews.map((review) => [review.policyVersionId, review.blockers]),
+  );
+  return effectiveNewerPolicies(offering, today).map((policy) => ({
+    policy,
+    blockers: reviews.get(policy.id) ?? ['OEM_PROGRAM_DEFINITION_REVIEW_REQUIRED'],
+  }));
+}
+
 export function currentOfferingPolicyCsvRows(offerings: CurrentOffering[], today: string) {
   return [
     [
@@ -64,6 +74,7 @@ export function currentOfferingPolicyCsvRows(offerings: CurrentOffering[], today
       '現在版',
       '適用可能な最新版',
       '移行要否',
+      '互換性ブロック',
       '開始日時',
       '操作者ID',
       '理由',
@@ -72,8 +83,17 @@ export function currentOfferingPolicyCsvRows(offerings: CurrentOffering[], today
       'Group ID',
     ],
     ...offerings.map((offering) => {
-      const targets = effectiveNewerPolicies(offering, today);
-      const latest = targets.at(-1);
+      const reviews = effectivePolicyReviews(offering, today);
+      const compatible = reviews.filter((review) => review.blockers.length === 0);
+      const blocked = reviews.filter((review) => review.blockers.length > 0);
+      const latest = compatible.at(-1)?.policy;
+      const status = latest
+        ? blocked.length > 0
+          ? '要レビュー（別版にブロックあり）'
+          : '要レビュー'
+        : blocked.length > 0
+          ? '互換性ブロック'
+          : '現時点で不要';
       return [
         offering.group.workspace.name,
         offering.group.serviceConfiguration?.displayName ?? offering.group.name,
@@ -83,7 +103,10 @@ export function currentOfferingPolicyCsvRows(offerings: CurrentOffering[], today
         offering.classification,
         offering.productPolicyVersion.version,
         latest?.version ?? offering.productPolicyVersion.version,
-        latest ? '要レビュー' : '現時点で不要',
+        status,
+        blocked
+          .map(({ policy, blockers }) => `v${policy.version}:${[...new Set(blockers)].join('|')}`)
+          .join('; '),
         offering.startsAt.toISOString(),
         offering.actorUserId,
         offering.reason,
@@ -175,9 +198,12 @@ export async function oemOfferingPolicyExportResponse(request: Request) {
       if (candidates.length > OEM_OFFERING_POLICY_EXPORT_LIMIT) return limitExceeded(requestId);
       const today = dateInBusinessTimezone(new Date());
       const filtered = candidates.filter((offering) => {
-        const needsMigration = effectiveNewerPolicies(offering, today).length > 0;
+        const reviews = effectivePolicyReviews(offering, today);
+        const needsMigration = reviews.some((review) => review.blockers.length === 0);
+        const blocked = reviews.some((review) => review.blockers.length > 0);
         if (query.state === 'NEEDS_MIGRATION') return needsMigration;
-        if (query.state === 'CURRENT') return !needsMigration;
+        if (query.state === 'BLOCKED') return blocked;
+        if (query.state === 'CURRENT') return !needsMigration && !blocked;
         return true;
       });
       rows = currentOfferingPolicyCsvRows(filtered, today);

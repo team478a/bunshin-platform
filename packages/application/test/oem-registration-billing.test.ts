@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   assertOemOffering,
+  oemOfferingPolicyBlockers,
   commercialMonthPeriod,
   countOemBillableUsers,
   invoiceBillableUserCount,
@@ -163,6 +164,16 @@ describe('OEM registration billing V2', () => {
         'FREE',
       ),
     ).not.toThrow();
+    expect(oemOfferingPolicyBlockers(restricted, 'FREE', ['AI_TRAINING'])).toEqual([
+      'OEM_PRODUCT_FREE_OFFERING_FORBIDDEN',
+    ]);
+    expect(
+      oemOfferingPolicyBlockers(
+        { key: 'SOCIAL_SERVICE', freeOfferingAllowed: true, requiredCapabilities: ['SOCIAL'] },
+        'PAID',
+        ['AI_TRAINING'],
+      ),
+    ).toEqual(['OEM_PRODUCT_CAPABILITY_POLICY_REQUIRED']);
   });
   it('new zero count does not fall back to old MAU', () => {
     expect(invoiceBillableUserCount({ mau: 100, billableUserCount: 0 })).toBe(0);

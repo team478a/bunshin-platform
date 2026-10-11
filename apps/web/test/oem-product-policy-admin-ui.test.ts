@@ -23,6 +23,8 @@ describe('OEM Service Product policy admin UI', () => {
     expect(page).toContain('現在の移行レビュー対象をCSVで保存');
     expect(page).toContain('期間台帳の履歴をCSVで保存');
     expect(page).toContain('一部だけを保存せず');
+    expect(page).toContain('互換性確認が必要');
+    expect(page).toContain('OEM_PRODUCT_CAPABILITY_POLICY_REQUIRED');
   });
 
   it('states that revision and retirement do not mutate existing offerings or invoices', () => {
