@@ -304,6 +304,74 @@ export function registerOemBillingIntegrationCases(client: PrismaClient) {
           data: { freeOfferingAllowed: false },
         }),
       ).rejects.toThrow('immutable');
+      const revision = await service.reviseProductPolicy({
+        productId: product.id,
+        expectedLatestPolicyId: product.policyVersions[0]!.id,
+        freeOfferingAllowed: false,
+        requiredCapabilities: ['SOCIAL', 'AI_TRAINING'],
+        effectiveFrom: new Date('2026-10-12T00:00:00.000Z'),
+        actorUserId: actor.id,
+        reason: 'schedule reviewed v2 policy',
+        now: new Date('2026-10-11T00:00:00.000Z'),
+      });
+      expect(revision).toMatchObject({
+        version: 2,
+        freeOfferingAllowed: false,
+        requiredCapabilities: ['SOCIAL', 'AI_TRAINING'],
+      });
+      await expect(
+        service.reviseProductPolicy({
+          productId: product.id,
+          expectedLatestPolicyId: product.policyVersions[0]!.id,
+          freeOfferingAllowed: true,
+          requiredCapabilities: [],
+          effectiveFrom: new Date('2026-10-13T00:00:00.000Z'),
+          actorUserId: actor.id,
+          reason: 'stale revision must fail',
+          now: new Date('2026-10-11T00:00:00.000Z'),
+        }),
+      ).rejects.toThrow('STALE_PRODUCT_POLICY');
+      const retired = await service.retireProduct({
+        productId: product.id,
+        expectedLatestPolicyId: revision.id,
+        expectedUpdatedAt: product.updatedAt,
+        actorUserId: actor.id,
+        reason: 'stop future assignments only',
+        confirmed: true,
+        now: new Date('2026-10-11T01:00:00.000Z'),
+      });
+      expect(retired).toMatchObject({
+        status: 'RETIRED',
+        retiredByUserId: actor.id,
+        retiredReason: 'stop future assignments only',
+      });
+      await expect(
+        client.commercialServiceProduct.update({
+          where: { id: product.id },
+          data: {
+            status: 'ACTIVE',
+            retiredByUserId: null,
+            retiredReason: null,
+            retiredAt: null,
+          },
+        }),
+      ).rejects.toThrow('retirement is immutable');
+      const listed = await service.listProductPolicies(actor.id);
+      expect(listed.find((candidate) => candidate.id === product.id)).toMatchObject({
+        status: 'RETIRED',
+        _count: { offeringPeriods: 1 },
+      });
+      await expect(
+        service.setOffering({
+          workspaceId: workspace.id,
+          groupId: group.id,
+          actorUserId: actor.id,
+          productPolicy: key,
+          classification: 'PAID',
+          expectedCurrentId: offering.id,
+          reason: 'retired product cannot create a new offering period',
+        }),
+      ).rejects.toThrow('REVIEW_REQUIRED');
     });
 
     it('pricing edits use CAS, publish conflicts serialize, cancellation permits replacement but not historical mutation', async () => {

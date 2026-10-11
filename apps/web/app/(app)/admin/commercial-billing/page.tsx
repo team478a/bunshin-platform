@@ -69,6 +69,14 @@ export default async function CommercialBillingOperationsPage({
         <p>登録済み料金表: {pricingSchedules.length}件</p>
       </section>
 
+      <section className="settings-card">
+        <h2>Service Productポリシー</h2>
+        <p>ワタシワークスの商品、FREE提供可否、必要Capability、廃止状態を管理します。</p>
+        <Link className="button" href="/admin/commercial-billing/products">
+          商品ポリシーを管理
+        </Link>
+      </section>
+
       <section className="operations-overview" aria-label="請求状況の集計">
         <div>
           <span>契約中の団体</span>
