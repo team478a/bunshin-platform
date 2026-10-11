@@ -20,6 +20,9 @@ describe('OEM Service Product policy admin UI', () => {
     expect(page).toContain('listOfferingPolicyHistory');
     expect(page).toContain('NEEDS_MIGRATION');
     expect(page).toContain('Organization・Service・商品');
+    expect(page).toContain('現在の移行レビュー対象をCSVで保存');
+    expect(page).toContain('期間台帳の履歴をCSVで保存');
+    expect(page).toContain('一部だけを保存せず');
   });
 
   it('states that revision and retirement do not mutate existing offerings or invoices', () => {

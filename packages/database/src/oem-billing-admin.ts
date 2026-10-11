@@ -218,7 +218,10 @@ export class PrismaOemBillingAdminService {
   async listOfferingPolicyMigrations(
     actorUserId: string,
     filter?: { query?: string; productKey?: string },
+    limit = 200,
   ) {
+    if (!Number.isInteger(limit) || limit < 1 || limit > 10_001)
+      throw new Error('INVALID_OFFERING_POLICY_LIMIT');
     return this.client.$transaction(async (tx) => {
       await this.authorizeSuperAdmin(tx, actorUserId);
       return tx.oemOfferingPeriod.findMany({
@@ -239,7 +242,7 @@ export class PrismaOemBillingAdminService {
           },
         },
         orderBy: [{ productPolicy: 'asc' }, { workspaceId: 'asc' }, { groupId: 'asc' }],
-        take: 200,
+        take: limit,
       });
     });
   }
@@ -247,7 +250,10 @@ export class PrismaOemBillingAdminService {
   async listOfferingPolicyHistory(
     actorUserId: string,
     filter?: { query?: string; productKey?: string },
+    limit = 200,
   ) {
+    if (!Number.isInteger(limit) || limit < 1 || limit > 10_000)
+      throw new Error('INVALID_OFFERING_POLICY_LIMIT');
     return this.client.$transaction(async (tx) => {
       await this.authorizeSuperAdmin(tx, actorUserId);
       const periods = await tx.oemOfferingPeriod.findMany({
@@ -264,7 +270,7 @@ export class PrismaOemBillingAdminService {
           },
         },
         orderBy: [{ startsAt: 'desc' }, { id: 'desc' }],
-        take: 201,
+        take: limit + 1,
       });
       const actorIds = [...new Set(periods.map((period) => period.actorUserId))];
       const actors = await tx.user.findMany({
@@ -273,11 +279,11 @@ export class PrismaOemBillingAdminService {
       });
       const actorNames = new Map(actors.map((actor) => [actor.id, actor.displayName]));
       return {
-        entries: periods.slice(0, 200).map((period) => ({
+        entries: periods.slice(0, limit).map((period) => ({
           ...period,
           actorDisplayName: actorNames.get(period.actorUserId) ?? null,
         })),
-        truncated: periods.length > 200,
+        truncated: periods.length > limit,
       };
     });
   }

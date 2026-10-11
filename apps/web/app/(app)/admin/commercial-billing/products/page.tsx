@@ -153,6 +153,12 @@ export default async function OemProductPolicyPage({
     if (selectedState === 'CURRENT') return !hasEffectiveNewerVersion;
     return true;
   });
+  const currentExportParams = new URLSearchParams({ scope: 'current', state: selectedState });
+  const historyExportParams = new URLSearchParams({ scope: 'history' });
+  for (const params of [currentExportParams, historyExportParams]) {
+    if (searchQuery) params.set('q', searchQuery);
+    if (selectedProduct) params.set('product', selectedProduct);
+  }
 
   return (
     <main className="app-page">
@@ -198,6 +204,16 @@ export default async function OemProductPolicyPage({
           </button>
         </form>
         <p>現在のOffering: {offeringMigrations.length}件（最大200件）</p>
+        <p>
+          <a href={`/api/admin/commercial-billing/offering-policies/export?${currentExportParams}`}>
+            現在の移行レビュー対象をCSVで保存
+          </a>
+          {' ／ '}
+          <a href={`/api/admin/commercial-billing/offering-policies/export?${historyExportParams}`}>
+            期間台帳の履歴をCSVで保存
+          </a>
+        </p>
+        <p>10,000件を超える場合は一部だけを保存せず、検索条件による絞り込みを求めます。</p>
       </section>
 
       <section className="settings-card">
