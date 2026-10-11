@@ -210,6 +210,7 @@ export class PrismaCommercialBillingService {
               id: true,
               workspaceId: true,
               invoiceId: true,
+              providerEventId: true,
               errorCategory: true,
               receivedAt: true,
             },
