@@ -3648,7 +3648,11 @@ model OemContractPeriod {
   endsAt DateTime? @map("ends_at") @db.Timestamptz(6)
   actorUserId String @map("actor_user_id") @db.Uuid
   reason String @db.VarChar(1000)
-  @@unique([workspaceId, startsAt])
+  supersedesId String? @unique @map("supersedes_id") @db.Uuid
+  supersedes OemContractPeriod? @relation("OemContractPeriodSupersession", fields: [supersedesId], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "oem_contract_supersedes_fk")
+  supersededBy OemContractPeriod? @relation("OemContractPeriodSupersession")
+
+  @@index([workspaceId, startsAt])
   @@map("oem_contract_periods")
 }
 

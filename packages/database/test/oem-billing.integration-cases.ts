@@ -488,6 +488,102 @@ export function registerOemBillingIntegrationCases(client: PrismaClient) {
       ).rejects.toThrow('REVIEW_REQUIRED');
     });
 
+    it('appends contract corrections, keeps the original, and blocks finalized-month changes', async () => {
+      const actor = await client.user.create({
+        data: { displayName: 'Synthetic contract history reviewer' },
+      });
+      await client.platformAdmin.create({
+        data: { userId: actor.id, role: 'SUPER_ADMIN', status: 'ACTIVE' },
+      });
+      const workspace = await client.workspace.create({
+        data: { name: `contract-correction-${randomUUID()}`, type: 'ORGANIZATION' },
+      });
+      await client.organizationCommercialContract.create({
+        data: {
+          workspaceId: workspace.id,
+          status: 'ACTIVE',
+          billingMode: 'MANUAL_INVOICE',
+          billingName: 'Synthetic correction recipient',
+          billingEmail: 'correction@example.invalid',
+          updatedByUserId: actor.id,
+        },
+      });
+      const original = await client.oemContractPeriod.create({
+        data: {
+          workspaceId: workspace.id,
+          startsAt: new Date('2026-09-05T00:00:00.000Z'),
+          endsAt: null,
+          actorUserId: actor.id,
+          reason: 'initial reviewed contract evidence',
+        },
+      });
+      const service = new PrismaOemBillingAdminService(client);
+      const correctionInput = {
+        workspaceId: workspace.id,
+        contractPeriodId: original.id,
+        expectedStartsAt: original.startsAt,
+        expectedEndsAt: original.endsAt,
+        revisedStartsAt: new Date('2026-09-06T00:00:00.000Z'),
+        revisedEndsAt: null,
+        actorUserId: actor.id,
+        reason: 'signed agreement confirms the corrected start',
+        confirmed: true,
+      } as const;
+      const corrected = await service.correctContractPeriod(correctionInput);
+      expect(corrected).toMatchObject({
+        workspaceId: workspace.id,
+        startsAt: correctionInput.revisedStartsAt,
+        endsAt: null,
+        supersedesId: original.id,
+      });
+      expect((await service.correctContractPeriod(correctionInput)).id).toBe(corrected.id);
+      expect(
+        await client.oemContractPeriod.findUniqueOrThrow({ where: { id: original.id } }),
+      ).toMatchObject({ startsAt: original.startsAt, endsAt: null, supersedesId: null });
+      const preparation = await service.preparationDashboard({
+        workspaceId: workspace.id,
+        actorUserId: actor.id,
+      });
+      expect(preparation.contractPeriods.map((period) => period.id)).toEqual([corrected.id]);
+      expect(preparation.contractPeriodHistory).toHaveLength(2);
+      expect(
+        await client.commercialBillingAudit.count({
+          where: {
+            workspaceId: workspace.id,
+            entityType: 'OEM_CONTRACT_PERIOD',
+            entityId: corrected.id,
+            action: 'CORRECTED',
+          },
+        }),
+      ).toBe(1);
+
+      await client.tenantMonthlyUsage.create({
+        data: {
+          workspaceId: workspace.id,
+          periodStart: new Date('2026-09-01T00:00:00.000Z'),
+          periodEnd: new Date('2026-10-01T00:00:00.000Z'),
+          mau: 0,
+          pricingTierKey: 'synthetic-zero',
+          calculatedPriceYen: 0,
+          pricingVersion: 'synthetic-contract-correction',
+          status: 'FINALIZED',
+          finalizedAt: new Date('2026-10-01T00:00:00.000Z'),
+        },
+      });
+      await expect(
+        service.correctContractPeriod({
+          ...correctionInput,
+          contractPeriodId: corrected.id,
+          expectedStartsAt: corrected.startsAt,
+          revisedStartsAt: new Date('2026-09-04T00:00:00.000Z'),
+          reason: 'attempted correction across a finalized billing month',
+        }),
+      ).rejects.toThrow('FINALIZED_BILLING_PERIOD_IMMUTABLE');
+      expect(await client.oemContractPeriod.count({ where: { workspaceId: workspace.id } })).toBe(
+        2,
+      );
+    });
+
     it('pricing edits use CAS, publish conflicts serialize, cancellation permits replacement but not historical mutation', async () => {
       const actor = await client.user.create({
         data: { displayName: 'Synthetic pricing SUPER_ADMIN' },

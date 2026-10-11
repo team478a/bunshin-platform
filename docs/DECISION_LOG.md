@@ -1,5 +1,12 @@
 # BUNSHIN Platform Decision Log
 
+## 2026-10-12: OEM契約期間の訂正は元版を残す1対1 supersessionとする
+
+- `OemContractPeriod`の開始・終了日時を直接更新・削除せず、訂正版が直前版を`supersedesId`で参照する。課金計算・請求・対象外月分類は後続を持たない最新葉だけを参照する。
+- Workspace lock、期待開始・終了日時、最新葉判定でCASし、同一内容の再送だけを冪等成功させる。他の有効期間との重複、Workspace境界、SUPER_ADMIN権限、根拠理由、明示確認をtransaction内で再検証する。
+- 訂正前後の区間差分がJST境界で確定済み`TenantMonthlyUsage`と重なる場合は拒否する。元版と訂正版は削除せず、変更前後を`CommercialBillingAudit`へ追加する。
+- Offering、正式登録、cutover、確定済み月の取消・再確定、本番操作は別Gateとする。
+
 ## 2026-10-12: OEM契約終了後の月次キュー分離は確認済み契約期間だけを根拠にする
 
 - 正式登録課金V2の履歴レビュー済みポリシーがあり、対象月より前に開始した契約期間が1件以上存在し、その全件が対象月開始以前に明示終了しているWorkspaceだけを`CONTRACT_ENDED_BEFORE_PERIOD`として月次要確認キューから分離する。

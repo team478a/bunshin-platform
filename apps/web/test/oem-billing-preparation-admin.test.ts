@@ -49,7 +49,19 @@ describe('OEM billing initial history and cutover admin UI', () => {
     expect(section).toContain('ここから変更・取消はできません');
     expect(service).toContain('missingOfferingCount === 0');
     expect(service).toContain('missingRegistrationCount === 0');
-    expect(service).toContain('contractPeriods.length > 0');
+    expect(service).toContain('currentContractPeriods.length > 0');
     expect(service).toContain('billingPolicy === null');
+  });
+
+  it('offers append-only contract correction without changing finalized billing months', () => {
+    expect(section).toContain('この契約期間を訂正');
+    expect(section).toContain('元履歴を残して訂正版を追加します');
+    expect(section).toContain('確定済み請求月に影響する訂正は保存できません');
+    expect(section).toContain('過去の訂正前履歴を表示');
+    expect(page).toContain('.correctContractPeriod({');
+    expect(page).toContain('expectedStartsAt: new Date(input.data.expectedStartsAt)');
+    expect(service).toContain("throw new Error('FINALIZED_BILLING_PERIOD_IMMUTABLE')");
+    expect(service).toContain("action: 'CORRECTED'");
+    expect(service).toContain('supersedesId: current.id');
   });
 });

@@ -264,6 +264,7 @@ export class PrismaCommercialBillingService {
       const historical = await this.client.oemContractPeriod.findFirst({
         where: {
           workspaceId: input.workspaceId,
+          supersededBy: { is: null },
           startsAt: { lt: new Date(usage.periodEnd.getTime() - 9 * 60 * 60 * 1000) },
           OR: [
             { endsAt: null },
@@ -498,9 +499,11 @@ export class PrismaCommercialBillingService {
         );
         if (input.status === 'ACTIVE') {
           if (!input.startsAt) throw new Error('REVIEW_REQUIRED: explicit contract start');
-          const existingPeriod = await tx.oemContractPeriod.findUnique({
+          const existingPeriod = await tx.oemContractPeriod.findFirst({
             where: {
-              workspaceId_startsAt: { workspaceId: input.workspaceId, startsAt: input.startsAt },
+              workspaceId: input.workspaceId,
+              startsAt: input.startsAt,
+              supersededBy: { is: null },
             },
           });
           if (existingPeriod) {
@@ -516,6 +519,7 @@ export class PrismaCommercialBillingService {
             const overlap = await tx.oemContractPeriod.findFirst({
               where: {
                 workspaceId: input.workspaceId,
+                supersededBy: { is: null },
                 ...(input.endsAt ? { startsAt: { lt: input.endsAt } } : {}),
                 OR: [{ endsAt: null }, { endsAt: { gt: input.startsAt } }],
               },
@@ -535,7 +539,7 @@ export class PrismaCommercialBillingService {
         if (input.status === 'ENDED') {
           if (!input.endsAt) throw new Error('REVIEW_REQUIRED: explicit contract end');
           const currentPeriod = await tx.oemContractPeriod.findFirst({
-            where: { workspaceId: input.workspaceId },
+            where: { workspaceId: input.workspaceId, supersededBy: { is: null } },
             orderBy: { startsAt: 'desc' },
           });
           if (
@@ -544,8 +548,8 @@ export class PrismaCommercialBillingService {
             (currentPeriod.endsAt && currentPeriod.endsAt.getTime() !== input.endsAt.getTime())
           )
             throw new Error('REVIEW_REQUIRED: contract end differs from reviewed history');
-          await tx.oemContractPeriod.updateMany({
-            where: { workspaceId: input.workspaceId, endsAt: null, startsAt: { lt: input.endsAt } },
+          await tx.oemContractPeriod.update({
+            where: { id: currentPeriod.id },
             data: { endsAt: input.endsAt },
           });
         }
@@ -588,6 +592,7 @@ export class PrismaCommercialBillingService {
         const valid = await this.client.oemContractPeriod.findFirst({
           where: {
             workspaceId,
+            supersededBy: { is: null },
             startsAt: { lt: periodEnd },
             OR: [{ endsAt: null }, { endsAt: { gt: periodStart } }],
           },

@@ -224,12 +224,90 @@ export function OemBillingPreparationSection({
           <ul className="summary-list">
             {oemPreparation.contractPeriods.map((period) => (
               <li key={period.id}>
-                <span>{dateTime(period.startsAt)} から</span>
-                <strong>{period.endsAt ? dateTime(period.endsAt) : '継続中'}</strong>
+                <div>
+                  <span>{dateTime(period.startsAt)} から</span>
+                  <strong>{period.endsAt ? dateTime(period.endsAt) : '継続中'}</strong>
+                  {period.supersedesId ? <small>訂正版</small> : null}
+                </div>
+                <details>
+                  <summary>この契約期間を訂正</summary>
+                  <form className="form-stack" action={actions.correctOemContract}>
+                    <input type="hidden" name="workspaceId" value={workspaceId} />
+                    <input type="hidden" name="contractPeriodId" value={period.id} />
+                    <input
+                      type="hidden"
+                      name="expectedStartsAt"
+                      value={period.startsAt.toISOString()}
+                    />
+                    <input
+                      type="hidden"
+                      name="expectedEndsAt"
+                      value={period.endsAt?.toISOString() ?? ''}
+                    />
+                    <div className="form-grid form-grid--two">
+                      <label className="field">
+                        <span className="field__label">訂正後の契約開始</span>
+                        <input
+                          className="field__control"
+                          type="datetime-local"
+                          name="revisedStartsAt"
+                          defaultValue={dateTimeInput(period.startsAt)}
+                          required
+                        />
+                      </label>
+                      <label className="field">
+                        <span className="field__label">訂正後の契約終了</span>
+                        <input
+                          className="field__control"
+                          type="datetime-local"
+                          name="revisedEndsAt"
+                          defaultValue={dateTimeInput(period.endsAt)}
+                        />
+                      </label>
+                    </div>
+                    <label className="field">
+                      <span className="field__label">訂正根拠</span>
+                      <textarea
+                        className="field__control"
+                        name="reason"
+                        minLength={10}
+                        maxLength={1000}
+                        required
+                      />
+                    </label>
+                    <label className="field field--checkbox">
+                      <input type="checkbox" name="confirmed" required />
+                      <span>
+                        元履歴を残して訂正版を追加します。確定済み請求月に影響する訂正は保存できません
+                      </span>
+                    </label>
+                    <button className="button button--secondary" type="submit">
+                      契約期間の訂正版を保存
+                    </button>
+                  </form>
+                </details>
               </li>
             ))}
           </ul>
         )}
+        {oemPreparation.contractPeriodHistory.some((period) => period.supersededBy !== null) ? (
+          <details>
+            <summary>過去の訂正前履歴を表示</summary>
+            <ul className="summary-list">
+              {oemPreparation.contractPeriodHistory
+                .filter((period) => period.supersededBy !== null)
+                .map((period) => (
+                  <li key={period.id}>
+                    <span>
+                      {dateTime(period.startsAt)} から{' '}
+                      {period.endsAt ? dateTime(period.endsAt) : '継続中'}
+                    </span>
+                    <strong>訂正前・参照専用</strong>
+                  </li>
+                ))}
+            </ul>
+          </details>
+        ) : null}
         <form className="form-stack" action={actions.reviewOemContract}>
           <input type="hidden" name="workspaceId" value={workspaceId} />
           <div className="form-grid form-grid--two">
