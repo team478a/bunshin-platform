@@ -574,11 +574,83 @@ export function registerOemBillingIntegrationCases(client: PrismaClient) {
       ).rejects.toThrow('SUPER_ADMIN_REQUIRED');
     });
 
+    it('creates an idempotent setup fee invoice from reviewed agreement evidence and protects the snapshot', async () => {
+      const actor = await client.user.create({
+        data: { displayName: 'Synthetic setup fee reviewer' },
+      });
+      await client.platformAdmin.create({
+        data: { userId: actor.id, role: 'SUPER_ADMIN', status: 'ACTIVE' },
+      });
+      const workspace = await client.workspace.create({
+        data: { name: `oem-setup-fee-${randomUUID()}`, type: 'ORGANIZATION' },
+      });
+      const group = await client.group.create({
+        data: { workspaceId: workspace.id, name: 'Synthetic setup fee service' },
+      });
+      const product = await client.commercialServiceProduct.findUniqueOrThrow({
+        where: { key: 'HASSY' },
+        include: { policyVersions: { where: { version: 1 } } },
+      });
+      await client.oemOfferingPeriod.create({
+        data: {
+          workspaceId: workspace.id,
+          groupId: group.id,
+          productId: product.id,
+          productPolicyVersionId: product.policyVersions[0]!.id,
+          productPolicy: product.key,
+          classification: 'PAID',
+          startsAt: new Date('2026-10-01T00:00:00.000Z'),
+          actorUserId: actor.id,
+          reason: 'synthetic reviewed setup fee offering',
+        },
+      });
+      await client.organizationCommercialContract.create({
+        data: {
+          workspaceId: workspace.id,
+          status: 'ACTIVE',
+          billingMode: 'MANUAL_INVOICE',
+          billingName: 'Synthetic billing recipient',
+          billingEmail: 'billing@example.com',
+          startsAt: new Date('2026-10-01T00:00:00.000Z'),
+          updatedByUserId: actor.id,
+        },
+      });
+      const input = {
+        workspaceId: workspace.id,
+        productId: product.id,
+        actorUserId: actor.id,
+        chargeKey: `SIGNED_${randomUUID().replaceAll('-', '').toUpperCase()}`,
+        amountYen: 300_000,
+        description: '合成OEM導入初期設定費用',
+        agreementReference: `agreement-${randomUUID()}`,
+        agreedAt: new Date('2026-10-10T00:00:00.000Z'),
+        reason: '合成契約書の対象商品と税込金額を確認したため',
+        now: new Date('2026-10-11T00:00:00.000Z'),
+      };
+      const service = new PrismaCommercialBillingService(client);
+      const first = await service.prepareSetupFeeInvoice(input);
+      const repeated = await service.prepareSetupFeeInvoice(input);
+      expect(repeated.id).toBe(first.id);
+      expect(first.kind).toBe('SETUP_FEE');
+      expect(first.monthlyUsageId).toBeNull();
+      expect(first.amountYen).toBe(300_000);
+      const charge = await client.oemSetupFeeCharge.findFirstOrThrow({
+        where: { workspaceId: workspace.id, chargeKey: input.chargeKey },
+      });
+      expect(await client.tenantInvoice.count({ where: { setupFeeChargeId: charge.id } })).toBe(1);
+      await expect(
+        client.oemSetupFeeCharge.update({
+          where: { id: charge.id },
+          data: { amountYen: 800_000 },
+        }),
+      ).rejects.toThrow('OEM setup fee charge is immutable');
+    });
+
     it('RLS denies a non-owner role access to billing history and service product policies', async () => {
       await client.$executeRawUnsafe('CREATE ROLE test_oem_billing_public NOLOGIN');
       await client.$executeRawUnsafe('GRANT USAGE ON SCHEMA public TO test_oem_billing_public');
       await client.$executeRawUnsafe(
-        'GRANT SELECT, INSERT ON oem_billing_policies, oem_registration_periods, oem_offering_periods, oem_contract_periods, commercial_pricing_audits, commercial_service_products, commercial_service_product_policy_versions TO test_oem_billing_public',
+        'GRANT SELECT, INSERT ON oem_billing_policies, oem_registration_periods, oem_offering_periods, oem_contract_periods, oem_setup_fee_charges, commercial_pricing_audits, commercial_service_products, commercial_service_product_policy_versions TO test_oem_billing_public',
       );
       try {
         const counts = await client.$transaction(async (tx) => {
@@ -592,6 +664,7 @@ export function registerOemBillingIntegrationCases(client: PrismaClient) {
               audits: bigint;
               products: bigint;
               productPolicies: bigint;
+              setupFees: bigint;
             }>
           >`SELECT
             (SELECT count(*) FROM oem_billing_policies) AS policies,
@@ -600,7 +673,8 @@ export function registerOemBillingIntegrationCases(client: PrismaClient) {
             (SELECT count(*) FROM oem_contract_periods) AS contracts,
             (SELECT count(*) FROM commercial_pricing_audits) AS audits,
             (SELECT count(*) FROM commercial_service_products) AS products,
-            (SELECT count(*) FROM commercial_service_product_policy_versions) AS "productPolicies"`;
+            (SELECT count(*) FROM commercial_service_product_policy_versions) AS "productPolicies",
+            (SELECT count(*) FROM oem_setup_fee_charges) AS "setupFees"`;
         });
         expect(counts).toEqual([
           {
@@ -611,6 +685,7 @@ export function registerOemBillingIntegrationCases(client: PrismaClient) {
             audits: 0n,
             products: 0n,
             productPolicies: 0n,
+            setupFees: 0n,
           },
         ]);
         const policy = await client.oemBillingPolicy.findFirstOrThrow();
@@ -622,7 +697,7 @@ export function registerOemBillingIntegrationCases(client: PrismaClient) {
         ).rejects.toThrow('row-level security');
       } finally {
         await client.$executeRawUnsafe(
-          'REVOKE ALL ON oem_billing_policies, oem_registration_periods, oem_offering_periods, oem_contract_periods, commercial_pricing_audits, commercial_service_products, commercial_service_product_policy_versions FROM test_oem_billing_public',
+          'REVOKE ALL ON oem_billing_policies, oem_registration_periods, oem_offering_periods, oem_contract_periods, oem_setup_fee_charges, commercial_pricing_audits, commercial_service_products, commercial_service_product_policy_versions FROM test_oem_billing_public',
         );
         await client.$executeRawUnsafe(
           'REVOKE USAGE ON SCHEMA public FROM test_oem_billing_public',

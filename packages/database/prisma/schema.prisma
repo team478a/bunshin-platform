@@ -113,6 +113,11 @@ enum TenantInvoiceStatus {
   VOID
 }
 
+enum TenantInvoiceKind {
+  MONTHLY_USAGE
+  SETUP_FEE
+}
+
 enum PaymentProvider {
   STRIPE
 }
@@ -2391,6 +2396,7 @@ model User {
   serviceUsageEvents                ServiceUsageEvent[]                  @relation("ServiceUsageEventUser")
   organizationCommercialContractsUpdated OrganizationCommercialContract[] @relation("OrganizationCommercialContractUpdater")
   tenantInvoicesUpdated             TenantInvoice[]                     @relation("TenantInvoiceUpdater")
+  oemSetupFeeChargesCreated         OemSetupFeeCharge[]                  @relation("OemSetupFeeChargeCreator")
   commercialBillingAuditsPerformed CommercialBillingAudit[]            @relation("CommercialBillingAuditActor")
   paymentConfigurationsUpdated     OrganizationPaymentConfiguration[]   @relation("OrganizationPaymentConfigurationUpdater")
   paymentConfigurationAudits       OrganizationPaymentConfigurationAudit[] @relation("OrganizationPaymentConfigurationAuditActor")
@@ -2608,6 +2614,7 @@ model Workspace {
   tenantMonthlyUsage             TenantMonthlyUsage[]
   organizationCommercialContract OrganizationCommercialContract?
   tenantInvoices                 TenantInvoice[]
+  oemSetupFeeCharges             OemSetupFeeCharge[]
   commercialBillingAudits        CommercialBillingAudit[]
   paymentConfigurations          OrganizationPaymentConfiguration[]
   paymentConfigurationAudits     OrganizationPaymentConfigurationAudit[]
@@ -3557,6 +3564,7 @@ model CommercialServiceProduct {
   updatedAt       DateTime                                @updatedAt @map("updated_at") @db.Timestamptz(6)
   policyVersions  CommercialServiceProductPolicyVersion[]
   offeringPeriods OemOfferingPeriod[]
+  setupFeeCharges OemSetupFeeCharge[]
   @@unique([id, key])
   @@index([status, key])
   @@map("commercial_service_products")
@@ -3642,6 +3650,31 @@ model OemContractPeriod {
   reason String @db.VarChar(1000)
   @@unique([workspaceId, startsAt])
   @@map("oem_contract_periods")
+}
+
+/// 人間が契約証跡と金額を確認したOEM初期費用。月次人数料金とは混在させない。
+model OemSetupFeeCharge {
+  id                 String                   @id @default(uuid()) @db.Uuid
+  workspaceId        String                   @map("workspace_id") @db.Uuid
+  productId          String                   @map("product_id") @db.Uuid
+  chargeKey          String                   @map("charge_key") @db.VarChar(80)
+  amountYen          Int                      @map("amount_yen")
+  description        String                   @db.VarChar(200)
+  agreementReference String                   @map("agreement_reference") @db.VarChar(200)
+  agreedAt           DateTime                 @map("agreed_at") @db.Date
+  actorUserId        String                   @map("actor_user_id") @db.Uuid
+  reason             String                   @db.VarChar(1000)
+  createdAt          DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
+  workspace          Workspace                @relation(fields: [workspaceId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  product            CommercialServiceProduct @relation(fields: [productId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  actor              User                     @relation("OemSetupFeeChargeCreator", fields: [actorUserId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  invoice            TenantInvoice?
+
+  @@unique([workspaceId, productId, chargeKey])
+  @@unique([workspaceId, id])
+  @@index([workspaceId, agreedAt])
+  @@index([productId, agreedAt])
+  @@map("oem_setup_fee_charges")
 }
 
 /// OEM運営団体の請求条件。決済Providerに依存せず、契約状態と請求先を一か所で管理する。
@@ -3792,13 +3825,15 @@ model OrganizationPaymentConfigurationAudit {
   @@map("organization_payment_configuration_audits")
 }
 
-/// 確定MAUから作る内部請求台帳。税務上の請求書番号・決済IDは外部参照として保持する。
+/// 確定月額利用料または契約確認済み初期費用から作る内部請求台帳。税務上の請求書番号・決済IDは外部参照として保持する。
 model TenantInvoice {
   pricingSchedule CommercialPricingSchedule? @relation(fields: [pricingScheduleId], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "invoice_pricing_schedule_fk")
   id                       String            @id @default(uuid()) @db.Uuid
+  kind                     TenantInvoiceKind @default(MONTHLY_USAGE)
   workspaceId              String            @map("workspace_id") @db.Uuid
   contractId               String            @map("contract_id") @db.Uuid
-  monthlyUsageId           String            @unique @map("monthly_usage_id") @db.Uuid
+  monthlyUsageId           String?           @unique @map("monthly_usage_id") @db.Uuid
+  setupFeeChargeId         String?           @unique @map("setup_fee_charge_id") @db.Uuid
   invoiceNumber            String            @unique @map("invoice_number") @db.VarChar(80)
   status                   TenantInvoiceStatus @default(DRAFT)
   periodStart              DateTime          @map("period_start") @db.Date
@@ -3831,11 +3866,13 @@ model TenantInvoice {
   updatedAt                DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
   workspace                Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
   contract                 OrganizationCommercialContract @relation(fields: [workspaceId, contractId], references: [workspaceId, id], onDelete: Restrict)
-  monthlyUsage             TenantMonthlyUsage @relation(fields: [workspaceId, monthlyUsageId], references: [workspaceId, id], onDelete: Restrict)
+  monthlyUsage             TenantMonthlyUsage? @relation(fields: [workspaceId, monthlyUsageId], references: [workspaceId, id], onDelete: Restrict)
+  setupFeeCharge           OemSetupFeeCharge? @relation(fields: [workspaceId, setupFeeChargeId], references: [workspaceId, id], onDelete: Restrict, onUpdate: NoAction)
   updatedBy                User              @relation("TenantInvoiceUpdater", fields: [updatedByUserId], references: [id], onDelete: Restrict)
   billingWebhookEvents     CommercialBillingWebhookEvent[]
 
   @@unique([workspaceId, monthlyUsageId])
+  @@unique([workspaceId, setupFeeChargeId])
   @@unique([workspaceId, id])
   @@index([workspaceId, status, periodStart])
   @@index([status, dueAt])

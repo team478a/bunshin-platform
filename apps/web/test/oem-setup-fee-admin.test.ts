@@ -1,0 +1,36 @@
+import { readFileSync } from 'node:fs';
+import { describe, expect, it } from 'vitest';
+
+const page = readFileSync(
+  new URL('../app/(app)/admin/organizations/[workspaceId]/commercial/page.tsx', import.meta.url),
+  'utf8',
+);
+const invoiceSections = readFileSync(
+  new URL(
+    '../app/(app)/admin/organizations/[workspaceId]/commercial/commercial-invoice-sections.tsx',
+    import.meta.url,
+  ),
+  'utf8',
+);
+const service = readFileSync(
+  new URL('../../../packages/database/src/commercial-billing-service.ts', import.meta.url),
+  'utf8',
+);
+
+describe('OEM setup fee admin', () => {
+  it('requires explicit agreement evidence and confirmation before creating a separate draft', () => {
+    expect(page).toContain("confirmed: z.literal('on')");
+    expect(page).toContain('prepareSetupFeeInvoice');
+    expect(invoiceSections).toContain('name="agreementReference"');
+    expect(invoiceSections).toContain('name="chargeKey"');
+    expect(invoiceSections).toContain('月額とは別請求');
+    expect(invoiceSections).toContain('商品名や先行社数から自動計算しません');
+  });
+
+  it('fails closed on missing offering and uses a separate invoice source', () => {
+    expect(service).toContain('REVIEW_REQUIRED: product offering at agreement date required');
+    expect(service).toContain("kind: 'SETUP_FEE'");
+    expect(service).toContain('setupFeeChargeId: charge.id');
+    expect(service).toContain('pg_advisory_xact_lock');
+  });
+});

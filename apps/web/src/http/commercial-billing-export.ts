@@ -7,6 +7,7 @@ import { csv } from './admin-report-export';
 
 export function commercialBillingCsvRows(
   invoices: Array<{
+    kind?: 'MONTHLY_USAGE' | 'SETUP_FEE';
     invoiceNumber: string;
     status: string;
     periodStart: Date;
@@ -28,6 +29,11 @@ export function commercialBillingCsvRows(
       billingEmail: string;
       externalCustomerReference: string | null;
     };
+    setupFeeCharge?: {
+      description: string;
+      agreementReference: string;
+      product: { key: string; displayName: string };
+    } | null;
   }>,
 ) {
   return [
@@ -37,7 +43,11 @@ export function commercialBillingCsvRows(
       '法人名',
       '請求先名',
       '請求先メール',
-      '対象月',
+      '請求種別',
+      '対象月・合意日',
+      '商品',
+      '請求内容',
+      '契約証跡',
       'MAU',
       '料金帯',
       '料金版',
@@ -59,8 +69,14 @@ export function commercialBillingCsvRows(
       invoice.workspace.legalName,
       invoice.contract.billingName,
       invoice.contract.billingEmail,
-      invoice.periodStart.toISOString().slice(0, 7),
-      invoice.mau,
+      invoice.kind === 'SETUP_FEE' ? '初期費用' : '月額',
+      invoice.kind === 'SETUP_FEE'
+        ? invoice.periodStart.toISOString().slice(0, 10)
+        : invoice.periodStart.toISOString().slice(0, 7),
+      invoice.setupFeeCharge?.product.displayName ?? null,
+      invoice.setupFeeCharge?.description ?? null,
+      invoice.setupFeeCharge?.agreementReference ?? null,
+      invoice.kind === 'SETUP_FEE' ? null : invoice.mau,
       invoice.pricingTierKey,
       invoice.pricingVersion,
       invoice.amountYen,
@@ -72,8 +88,10 @@ export function commercialBillingCsvRows(
       invoice.paymentReference,
       invoice.contract.externalCustomerReference,
       invoice.notes,
-      invoiceBillableUserCount(invoice),
-      invoice.billingRuleVersion ?? 'LEGACY_MAU',
+      invoice.kind === 'SETUP_FEE' ? null : invoiceBillableUserCount(invoice),
+      invoice.kind === 'SETUP_FEE'
+        ? 'SETUP_FEE_AGREEMENT_V1'
+        : (invoice.billingRuleVersion ?? 'LEGACY_MAU'),
     ]),
   ];
 }

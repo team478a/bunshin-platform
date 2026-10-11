@@ -11,6 +11,7 @@ export type CommercialPageQuery = {
   prepared?: string;
   invoiceUpdated?: string;
   customQuoteSaved?: string;
+  setupFeeSaved?: string;
   reminderSent?: string;
   recipientTestSent?: string;
 };
@@ -23,6 +24,7 @@ export type CommercialAdminActions = {
   prepareInvoices: CommercialServerAction;
   transitionInvoice: CommercialServerAction;
   prepareCustomQuoteInvoice: CommercialServerAction;
+  prepareSetupFeeInvoice: CommercialServerAction;
   sendInvoiceReminder: CommercialServerAction;
   sendBillingRecipientTest: CommercialServerAction;
 };

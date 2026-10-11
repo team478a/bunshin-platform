@@ -43,13 +43,28 @@ const documentMigration = readFileSync(
   ),
   'utf8',
 );
+const setupFeeMigration = readFileSync(
+  join(
+    process.cwd(),
+    'prisma',
+    'migrations',
+    '20261011230000_oem_setup_fee_invoicing',
+    'migration.sql',
+  ),
+  'utf8',
+);
 
 describe('OEM contract and invoice schema', () => {
-  it('binds one invoice to one tenant monthly usage snapshot', () => {
+  it('binds each invoice to one monthly usage or one setup fee snapshot', () => {
     expect(schema).toContain('model OrganizationCommercialContract');
     expect(schema).toContain('model TenantInvoice');
     expect(schema).toContain('monthlyUsageId           String');
     expect(migration).toContain('CREATE UNIQUE INDEX "tenant_invoices_monthly_usage_id_key"');
+    expect(schema).toContain('model OemSetupFeeCharge');
+    expect(schema).toContain('kind                     TenantInvoiceKind');
+    expect(setupFeeMigration).toContain('"kind" = \'MONTHLY_USAGE\'');
+    expect(setupFeeMigration).toContain('"kind" = \'SETUP_FEE\'');
+    expect(setupFeeMigration).toContain('oem_setup_fee_charge_immutable');
   });
 
   it('uses tenant-scoped foreign keys and keeps billing mutations auditable', () => {

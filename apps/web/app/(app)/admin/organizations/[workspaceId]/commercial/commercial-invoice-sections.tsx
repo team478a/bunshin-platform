@@ -19,6 +19,7 @@ export function CommercialInvoiceSections({
     prepareInvoices,
     transitionInvoice,
     prepareCustomQuoteInvoice,
+    prepareSetupFeeInvoice,
     sendInvoiceReminder,
     finalizePreviousMonth,
   } = actions;
@@ -37,6 +38,88 @@ export function CommercialInvoiceSections({
             確定済みの月から請求記録を作る
           </button>
         </form>
+        <div className="settings-stack">
+          <h3>OEM初期費用の請求下書き</h3>
+          <p>
+            締結済み契約の金額と対象商品を確認して、月額とは別の請求記録を作ります。金額は商品名や先行社数から自動計算しません。
+          </p>
+          {billing.setupFeeProducts.length === 0 ? (
+            <p>現在提供中の商品がないため、初期費用は登録できません。</p>
+          ) : (
+            <form className="form-stack service-template-preview" action={prepareSetupFeeInvoice}>
+              <input type="hidden" name="workspaceId" value={billing.id} />
+              <label className="field">
+                <span className="field__label">対象商品</span>
+                <select className="field__control" name="productId" required>
+                  {billing.setupFeeProducts.map((product) => (
+                    <option value={product.id} key={product.id}>
+                      {product.displayName}（{product.key}）
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field">
+                <span className="field__label">一意の請求キー</span>
+                <input
+                  className="field__control"
+                  name="chargeKey"
+                  pattern="[A-Z0-9][A-Z0-9_-]{2,79}"
+                  placeholder="SIGNED_AGREEMENT_2026_A"
+                  required
+                />
+              </label>
+              <label className="field">
+                <span className="field__label">合意済み初期費用（税込・円）</span>
+                <input
+                  className="field__control"
+                  name="amountYen"
+                  type="number"
+                  min="1"
+                  max="1000000000"
+                  required
+                />
+              </label>
+              <label className="field">
+                <span className="field__label">請求内容</span>
+                <input className="field__control" name="description" maxLength={200} required />
+              </label>
+              <label className="field">
+                <span className="field__label">契約書・申込書の参照番号</span>
+                <input
+                  className="field__control"
+                  name="agreementReference"
+                  maxLength={200}
+                  required
+                />
+              </label>
+              <label className="field">
+                <span className="field__label">合意日</span>
+                <input className="field__control" name="agreedAt" type="date" required />
+              </label>
+              <label className="field">
+                <span className="field__label">登録理由</span>
+                <textarea
+                  className="field__control"
+                  name="reason"
+                  minLength={10}
+                  maxLength={1000}
+                  required
+                />
+              </label>
+              <label>
+                <input type="checkbox" name="confirmed" required />
+                契約証跡、対象商品、税込金額を確認し、月額とは別請求であることを確認しました
+              </label>
+              <button
+                className="button"
+                type="submit"
+                disabled={billing.organizationCommercialContract?.status !== 'ACTIVE'}
+              >
+                初期費用の請求下書きを作る
+              </button>
+            </form>
+          )}
+        </div>
         {billing.tenantMonthlyUsage.length > 0 ? (
           <div className="settings-stack">
             <h3>個別見積の金額を確定</h3>
@@ -82,10 +165,16 @@ export function CommercialInvoiceSections({
             {billing.tenantInvoices.map((invoice) => (
               <section className="service-template-preview" key={invoice.id}>
                 <h3>
-                  {invoice.periodStart.toISOString().slice(0, 7)} / {yen(invoice.amountYen)}
+                  {invoice.kind === 'SETUP_FEE'
+                    ? `初期費用／${invoice.setupFeeCharge?.product.displayName ?? '商品確認要'}`
+                    : invoice.periodStart.toISOString().slice(0, 7)}{' '}
+                  / {yen(invoice.amountYen)}
                 </h3>
                 <p>
-                  請求番号：{invoice.invoiceNumber} ／ MAU：{invoice.mau.toLocaleString('ja-JP')}人
+                  請求番号：{invoice.invoiceNumber} ／
+                  {invoice.kind === 'SETUP_FEE'
+                    ? ` 契約証跡：${invoice.setupFeeCharge?.agreementReference ?? '確認要'}`
+                    : ` MAU：${invoice.mau.toLocaleString('ja-JP')}人`}{' '}
                   ／ 状態：
                   {invoiceStatusLabel(invoice.status, invoice.dueAt)}
                 </p>
@@ -231,6 +320,8 @@ export function CommercialInvoiceSections({
                   {{
                     CREATED: '作成',
                     AUTO_CREATED: '自動作成',
+                    CUSTOM_CREATED: '個別見積で作成',
+                    SETUP_FEE_CREATED: '初期費用の請求下書き作成',
                     UPDATED: '更新',
                     ISSUE: '請求済み',
                     MARK_PAID: '入金済み',
