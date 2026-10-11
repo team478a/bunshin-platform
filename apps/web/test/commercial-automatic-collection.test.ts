@@ -74,37 +74,30 @@ describe('commercial automatic collection', () => {
     );
   });
 
-  it('uses a setup fee description for one-time automatic collection', async () => {
-    const updateMany = vi.fn().mockResolvedValue({ count: 1 });
+  it('selects monthly usage invoices only and never automatically collects setup fees', async () => {
+    const findMany = vi.fn().mockResolvedValue([]);
     const client = {
-      tenantInvoice: {
-        findMany: vi.fn().mockResolvedValue([
-          {
-            ...invoice,
-            kind: 'SETUP_FEE',
-            invoiceNumber: 'WW-SETUP-20261010-A',
-            amountYen: 300_000,
-          },
-        ]),
-        updateMany,
-      },
+      tenantInvoice: { findMany },
       $transaction: vi.fn(),
     } as unknown as PrismaClient;
-    const collect = vi.fn().mockResolvedValue({
-      paymentIntentId: 'pi_setup_action',
-      outcome: 'REQUIRES_ACTION',
-      failureCategory: 'REQUIRES_ACTION',
+    const collect = vi.fn();
+
+    await expect(collectCommercialInvoices(client, { now }, { collect })).resolves.toEqual({
+      candidates: 0,
+      paid: 0,
+      requiresAction: 0,
+      failed: 0,
     });
 
-    await collectCommercialInvoices(client, { now }, { collect });
-
-    expect(collect).toHaveBeenCalledWith(
+    expect(findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        amountYen: 300_000,
-        description: 'ワタシワークス OEM初期費用 WW-SETUP-20261010-A',
+        where: expect.objectContaining({
+          kind: 'MONTHLY_USAGE',
+          status: 'ISSUED',
+        }),
       }),
     );
-    expect(collect.mock.calls[0]?.[0].description).not.toContain('月額');
+    expect(collect).not.toHaveBeenCalled();
   });
 
   it('keeps an action-required invoice issued so hosted Checkout remains available', async () => {

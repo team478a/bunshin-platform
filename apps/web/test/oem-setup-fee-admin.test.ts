@@ -19,6 +19,13 @@ const dashboard = readFileSync(
   ),
   'utf8',
 );
+const contractSection = readFileSync(
+  new URL(
+    '../app/(app)/admin/organizations/[workspaceId]/commercial/commercial-contract-section.tsx',
+    import.meta.url,
+  ),
+  'utf8',
+);
 const service = readFileSync(
   new URL('../../../packages/database/src/commercial-billing-service.ts', import.meta.url),
   'utf8',
@@ -42,5 +49,10 @@ describe('OEM setup fee admin', () => {
     expect(service).toContain("kind: 'SETUP_FEE'");
     expect(service).toContain('setupFeeChargeId: charge.id');
     expect(service).toContain('pg_advisory_xact_lock');
+  });
+
+  it('explains that setup fees are outside monthly automatic collection consent', () => {
+    expect(contractSection).toContain('次回以降の月額料金を保存カードから回収する');
+    expect(contractSection).toContain('自動回収の対象は月額料金だけで、初期費用は対象外です');
   });
 });
