@@ -172,7 +172,7 @@ export default async function OrganizationUsagePage({
             <table>
               <thead>
                 <tr>
-                  <th>対象月</th>
+                  <th>請求種別・対象</th>
                   <th>課金対象人数</th>
                   <th>金額</th>
                   <th>状態</th>
@@ -186,10 +186,20 @@ export default async function OrganizationUsagePage({
                   .filter((invoice) => invoice.status !== 'DRAFT')
                   .map((invoice) => (
                     <tr key={invoice.id}>
-                      <td>{invoice.periodStart.toISOString().slice(0, 7)}</td>
                       <td>
-                        {invoice.billableUserCount ?? invoice.mau}人
-                        {invoice.billingRuleVersion ? '' : '（旧MAU）'}
+                        {invoice.kind === 'SETUP_FEE'
+                          ? `初期費用／${invoice.setupFeeCharge?.product.displayName ?? '商品'}`
+                          : `月額／${invoice.periodStart.toISOString().slice(0, 7)}`}
+                      </td>
+                      <td>
+                        {invoice.kind === 'SETUP_FEE' ? (
+                          '—'
+                        ) : (
+                          <>
+                            {invoice.billableUserCount ?? invoice.mau}人
+                            {invoice.billingRuleVersion ? '' : '（旧MAU）'}
+                          </>
+                        )}
                       </td>
                       <td>{yen(invoice.amountYen)}</td>
                       <td>{invoiceStatusLabel(invoice.status, invoice.dueAt)}</td>

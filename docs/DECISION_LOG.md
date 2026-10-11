@@ -1,5 +1,14 @@
 # BUNSHIN Platform Decision Log
 
+## 2026-10-11: OEM初期費用は月次人数料金と分離した契約証跡Snapshotとして請求する
+
+- 状態: Proposed（実装PRレビュー待ち。本番Migration・release・初期費用登録・請求発行・決済は未承認）
+- 初期費用は共通段階料金や月次`R ∪ A`から計算せず、SUPER_ADMINが締結済み契約の対象商品、税込金額、合意日、参照番号、理由を確認したときだけ不変Snapshotと請求下書きを同一transactionで作る。
+- 80万円、先行5社30万円などの価格・対象判定をコードへ固定しない。Organization・Service Product・一意の請求キーで再送を同じ請求へ収束させ、異なる内容の再利用は`REVIEW_REQUIRED`で停止する。
+- `TenantInvoice`は`MONTHLY_USAGE`と`SETUP_FEE`のsourceを排他的に保持する。初期費用も既存の発行、PDF、入金、督促、CSV、Stripe Checkout経路を使うが、課金対象人数・月額料金版として表示しない。
+- 初期費用SnapshotはDB triggerで更新・削除を拒否し、未提供商品、非Organization、無効契約、非SUPER_ADMIN、将来合意日では作成しない。
+- 本番の価格・契約証跡・既存Offering・Migration lock・Backup/復元・RLS roleは未確認とし、本番操作は別承認とする。
+
 ## 2026-10-11: OEM Service Productの改定は不変版追加、廃止は新規割当停止とする
 
 - 状態: Proposed（実装PRレビュー待ち。本番Migration・release・商品操作は未承認）

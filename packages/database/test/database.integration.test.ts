@@ -145,7 +145,7 @@ describe('database ownership boundaries', () => {
   beforeAll(async () => {
     await verifyLiveDatabase(client);
     await client.$executeRawUnsafe(
-      'TRUNCATE TABLE commercial_pricing_audits, commercial_pricing_schedules, oem_billing_policies, oem_registration_periods, oem_offering_periods, oem_contract_periods, tenant_monthly_usage, organization_commercial_contracts, commercial_billing_audits CASCADE',
+      'TRUNCATE TABLE commercial_pricing_audits, commercial_pricing_schedules, oem_billing_policies, oem_registration_periods, oem_offering_periods, oem_contract_periods, oem_setup_fee_charges, tenant_monthly_usage, organization_commercial_contracts, commercial_billing_audits CASCADE',
     );
     await client.socialImageSample.deleteMany();
     await client.campaignActivity.deleteMany();

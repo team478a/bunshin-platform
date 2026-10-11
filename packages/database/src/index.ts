@@ -95,6 +95,7 @@ export { PrismaCommercialBillingService } from './commercial-billing';
 export type {
   SaveOrganizationCommercialContractInput,
   PrepareCustomQuoteInvoiceInput,
+  PrepareOemSetupFeeInvoiceInput,
   TransitionTenantInvoiceInput,
 } from './commercial-billing';
 export type {

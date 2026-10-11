@@ -1,5 +1,7 @@
 # BUNSHIN Platform 実装ロードマップ
 
+OEM初期費用の共通請求基盤は`docs/OEM_SETUP_FEE_INVOICING_IMPLEMENTATION.md`を参照。契約証跡を人間が確認した初期費用をService Product単位の不変Snapshotとして月次人数料金から分離し、既存の請求書・入金・督促・CSV経路へ接続する。価格や先行社数をコードで推測しない。本番Migration/release、実価格登録、請求発行、決済は別Gate。
+
 OEM Service Product共通化は`docs/OEM_SERVICE_PRODUCT_POLICY_IMPLEMENTATION_REPORT.md`を参照。OEMを提供形態とし、ハッシー、マナベルスタイル、将来のワタシワークス商品を明示的な商品台帳・不変ポリシー版で扱う。Workspace内`R ∪ A`と共通料金表は維持する。本番Migration/release、商品登録、Offering変更、cutover、請求は別Gate。
 
 OpenAI会員商品投稿案生成の原子的費用予約は`docs/ai-training/OPENAI_MEMBER_PRODUCT_COST_ADMISSION_IMPLEMENTATION.md`を参照。本人・Service・Bunshin・商品・外部リンクのPrecondition後に予約し、quota拒否は0円、Provider試行後は固定原価を記録してから確定する。研修評価の既存専用Admissionとの統合、本番release・設定・送信は別Gate。

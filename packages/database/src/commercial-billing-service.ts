@@ -1,8 +1,10 @@
 import {
+  assertOemSetupFeeCharge,
   nextTenantInvoiceStatus,
   summarizeCommercialInvoices,
   tenantInvoiceDueAt,
   tenantInvoiceNumber,
+  tenantSetupFeeInvoiceNumber,
 } from '@bunshin/application';
 import { Prisma, type PrismaClient } from '@prisma/client';
 import { prisma } from './index';
@@ -13,6 +15,7 @@ import {
   requiredText,
   unresolvedCommercialReminderFailures,
   type PrepareCustomQuoteInvoiceInput,
+  type PrepareOemSetupFeeInvoiceInput,
   type SaveOrganizationCommercialContractInput,
   type TransitionTenantInvoiceInput,
 } from './commercial-billing-support';
@@ -22,59 +25,87 @@ export class PrismaCommercialBillingService {
   constructor(private readonly client: PrismaClient = prisma) {}
 
   async dashboard(workspaceId: string) {
-    return this.client.workspace.findFirst({
-      where: { id: workspaceId, type: 'ORGANIZATION' },
-      select: {
-        id: true,
-        name: true,
-        legalName: true,
-        contactEmail: true,
-        organizationCommercialContract: true,
-        tenantInvoices: {
-          orderBy: { periodStart: 'desc' },
-          take: 24,
-          select: {
-            id: true,
-            invoiceNumber: true,
-            status: true,
-            periodStart: true,
-            mau: true,
-            billableUserCount: true,
-            billingRuleVersion: true,
-            amountYen: true,
-            externalInvoiceReference: true,
-            paymentReference: true,
-            paymentProvider: true,
-            providerCheckoutSessionId: true,
-            checkoutExpiresAt: true,
-            paymentFailedAt: true,
-            paymentFailureCategory: true,
-            notes: true,
-            documentSnapshot: true,
-            issuedAt: true,
-            dueAt: true,
-            paidAt: true,
+    const now = new Date();
+    const [dashboard, setupFeeProducts] = await Promise.all([
+      this.client.workspace.findFirst({
+        where: { id: workspaceId, type: 'ORGANIZATION' },
+        select: {
+          id: true,
+          name: true,
+          legalName: true,
+          contactEmail: true,
+          organizationCommercialContract: true,
+          tenantInvoices: {
+            orderBy: { periodStart: 'desc' },
+            take: 24,
+            select: {
+              id: true,
+              kind: true,
+              invoiceNumber: true,
+              status: true,
+              periodStart: true,
+              mau: true,
+              billableUserCount: true,
+              billingRuleVersion: true,
+              amountYen: true,
+              externalInvoiceReference: true,
+              paymentReference: true,
+              paymentProvider: true,
+              providerCheckoutSessionId: true,
+              checkoutExpiresAt: true,
+              paymentFailedAt: true,
+              paymentFailureCategory: true,
+              notes: true,
+              documentSnapshot: true,
+              issuedAt: true,
+              dueAt: true,
+              paidAt: true,
+              setupFeeCharge: {
+                select: {
+                  chargeKey: true,
+                  description: true,
+                  agreementReference: true,
+                  agreedAt: true,
+                  product: { select: { key: true, displayName: true } },
+                },
+              },
+            },
+          },
+          commercialBillingAudits: {
+            orderBy: { occurredAt: 'desc' },
+            take: 20,
+            select: { id: true, entityType: true, entityId: true, action: true, occurredAt: true },
+          },
+          tenantMonthlyUsage: {
+            where: { status: 'FINALIZED', calculatedPriceYen: null, invoice: null },
+            orderBy: { periodStart: 'asc' },
+            select: {
+              id: true,
+              periodStart: true,
+              periodEnd: true,
+              mau: true,
+              pricingTierKey: true,
+              pricingVersion: true,
+            },
           },
         },
-        commercialBillingAudits: {
-          orderBy: { occurredAt: 'desc' },
-          take: 20,
-          select: { id: true, entityType: true, entityId: true, action: true, occurredAt: true },
-        },
-        tenantMonthlyUsage: {
-          where: { status: 'FINALIZED', calculatedPriceYen: null, invoice: null },
-          orderBy: { periodStart: 'asc' },
-          select: {
-            id: true,
-            periodStart: true,
-            periodEnd: true,
-            mau: true,
-            pricingTierKey: true,
-            pricingVersion: true,
+      }),
+      this.client.commercialServiceProduct.findMany({
+        where: {
+          status: 'ACTIVE',
+          offeringPeriods: {
+            some: {
+              workspaceId,
+              startsAt: { lte: now },
+              OR: [{ endsAt: null }, { endsAt: { gt: now } }],
+            },
           },
         },
-      },
-    });
+        orderBy: { key: 'asc' },
+        select: { id: true, key: true, displayName: true },
+      }),
+    ]);
+    return dashboard ? { ...dashboard, setupFeeProducts } : null;
   }
 
   async operationsDashboard(now = new Date()) {
@@ -84,6 +115,7 @@ export class PrismaCommercialBillingService {
         orderBy: [{ periodStart: 'desc' }, { createdAt: 'desc' }],
         select: {
           id: true,
+          kind: true,
           workspaceId: true,
           invoiceNumber: true,
           status: true,
@@ -102,6 +134,13 @@ export class PrismaCommercialBillingService {
           dueAt: true,
           paidAt: true,
           createdAt: true,
+          setupFeeCharge: {
+            select: {
+              description: true,
+              agreementReference: true,
+              product: { select: { key: true, displayName: true } },
+            },
+          },
           workspace: { select: { name: true, legalName: true } },
           contract: {
             select: { billingName: true, billingEmail: true, externalCustomerReference: true },
@@ -220,6 +259,108 @@ export class PrismaCommercialBillingService {
           entityId: invoice.id,
           action: 'CUSTOM_CREATED',
           afterData: jsonSnapshot(invoice),
+        },
+      });
+      return invoice;
+    });
+  }
+
+  async prepareSetupFeeInvoice(input: PrepareOemSetupFeeInvoiceInput) {
+    const now = input.now ?? new Date();
+    assertOemSetupFeeCharge(input, now);
+    const description = requiredText(input.description, 200);
+    const agreementReference = requiredText(input.agreementReference, 200);
+    const reason = requiredText(input.reason, 1_000);
+    return this.client.$transaction(async (tx) => {
+      await tx.$executeRaw(
+        Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${`oem-setup-fee:${input.workspaceId}:${input.productId}:${input.chargeKey}`}, 0))`,
+      );
+      const admin = await tx.platformAdmin.findFirst({
+        where: { userId: input.actorUserId, role: 'SUPER_ADMIN', status: 'ACTIVE' },
+        select: { id: true },
+      });
+      if (!admin) throw new Error('SUPER_ADMIN_REQUIRED');
+      const existing = await tx.oemSetupFeeCharge.findUnique({
+        where: {
+          workspaceId_productId_chargeKey: {
+            workspaceId: input.workspaceId,
+            productId: input.productId,
+            chargeKey: input.chargeKey,
+          },
+        },
+        include: { invoice: true },
+      });
+      if (existing) {
+        if (
+          existing.amountYen !== input.amountYen ||
+          existing.description !== description ||
+          existing.agreementReference !== agreementReference ||
+          existing.agreedAt.getTime() !== input.agreedAt.getTime() ||
+          existing.reason !== reason ||
+          !existing.invoice
+        )
+          throw new Error('REVIEW_REQUIRED: setup fee charge key conflict');
+        return existing.invoice;
+      }
+      const contract = await tx.organizationCommercialContract.findFirst({
+        where: {
+          workspaceId: input.workspaceId,
+          status: 'ACTIVE',
+          workspace: { type: 'ORGANIZATION' },
+          OR: [{ startsAt: null }, { startsAt: { lte: now } }],
+          AND: [{ OR: [{ endsAt: null }, { endsAt: { gt: now } }] }],
+        },
+      });
+      if (!contract) throw new Error('REVIEW_REQUIRED: active commercial contract required');
+      const offering = await tx.oemOfferingPeriod.findFirst({
+        where: {
+          workspaceId: input.workspaceId,
+          productId: input.productId,
+          startsAt: { lte: input.agreedAt },
+          OR: [{ endsAt: null }, { endsAt: { gt: input.agreedAt } }],
+        },
+        select: { id: true },
+      });
+      if (!offering)
+        throw new Error('REVIEW_REQUIRED: product offering at agreement date required');
+      const charge = await tx.oemSetupFeeCharge.create({
+        data: {
+          workspaceId: input.workspaceId,
+          productId: input.productId,
+          chargeKey: input.chargeKey,
+          amountYen: input.amountYen,
+          description,
+          agreementReference,
+          agreedAt: input.agreedAt,
+          actorUserId: input.actorUserId,
+          reason,
+        },
+      });
+      const invoice = await tx.tenantInvoice.create({
+        data: {
+          kind: 'SETUP_FEE',
+          workspaceId: input.workspaceId,
+          contractId: contract.id,
+          setupFeeChargeId: charge.id,
+          invoiceNumber: tenantSetupFeeInvoiceNumber(charge.agreedAt, charge.id),
+          periodStart: charge.agreedAt,
+          periodEnd: new Date(charge.agreedAt.getTime() + 86_400_000),
+          mau: 0,
+          pricingTierKey: 'SETUP_FEE',
+          pricingVersion: 'AGREEMENT_SNAPSHOT_V1',
+          amountYen: charge.amountYen,
+          notes: `契約証跡: ${agreementReference}`,
+          updatedByUserId: input.actorUserId,
+        },
+      });
+      await tx.commercialBillingAudit.create({
+        data: {
+          workspaceId: input.workspaceId,
+          actorUserId: input.actorUserId,
+          entityType: 'INVOICE',
+          entityId: invoice.id,
+          action: 'SETUP_FEE_CREATED',
+          afterData: jsonSnapshot({ invoice, charge }),
         },
       });
       return invoice;
@@ -487,6 +628,9 @@ export class PrismaCommercialBillingService {
         workspace: { select: { name: true, legalName: true, address: true } },
         contract: {
           select: { billingName: true, billingEmail: true, paymentTermsDays: true },
+        },
+        setupFeeCharge: {
+          include: { product: { select: { displayName: true } } },
         },
       },
     });

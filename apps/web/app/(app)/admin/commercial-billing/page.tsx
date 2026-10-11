@@ -179,7 +179,7 @@ export default async function CommercialBillingOperationsPage({
               <thead>
                 <tr>
                   <th>運営団体</th>
-                  <th>対象月</th>
+                  <th>請求種別・対象</th>
                   <th>請求番号</th>
                   <th>MAU</th>
                   <th>課金対象人数</th>
@@ -200,10 +200,26 @@ export default async function CommercialBillingOperationsPage({
                         <br />
                         {invoice.contract.billingEmail}
                       </td>
-                      <td>{invoice.periodStart.toISOString().slice(0, 7)}</td>
+                      <td>
+                        {invoice.kind === 'SETUP_FEE' ? (
+                          <>
+                            初期費用
+                            <br />
+                            {invoice.setupFeeCharge?.product.displayName ?? '商品確認要'}
+                          </>
+                        ) : (
+                          <>月額／{invoice.periodStart.toISOString().slice(0, 7)}</>
+                        )}
+                      </td>
                       <td>{invoice.invoiceNumber}</td>
-                      <td>{invoice.mau.toLocaleString('ja-JP')}</td>
-                      <td>{invoiceBillableUserCount(invoice).toLocaleString('ja-JP')}</td>
+                      <td>
+                        {invoice.kind === 'SETUP_FEE' ? '—' : invoice.mau.toLocaleString('ja-JP')}
+                      </td>
+                      <td>
+                        {invoice.kind === 'SETUP_FEE'
+                          ? '—'
+                          : invoiceBillableUserCount(invoice).toLocaleString('ja-JP')}
+                      </td>
                       <td>{yen(invoice.amountYen)}</td>
                       <td>{overdue ? '支払期限超過' : STATUS_LABELS[invoice.status]}</td>
                       <td>

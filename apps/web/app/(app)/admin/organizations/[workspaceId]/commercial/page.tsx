@@ -52,6 +52,20 @@ const customQuoteSchema = z.object({
   amountYen: z.coerce.number().int().positive().max(1_000_000_000),
   notes: z.string().trim().max(1000).optional(),
 });
+const setupFeeSchema = z.object({
+  workspaceId: z.uuid(),
+  productId: z.uuid(),
+  chargeKey: z
+    .string()
+    .trim()
+    .regex(/^[A-Z0-9][A-Z0-9_-]{2,79}$/),
+  amountYen: z.coerce.number().int().positive().max(1_000_000_000),
+  description: z.string().trim().min(1).max(200),
+  agreementReference: z.string().trim().min(1).max(200),
+  agreedAt: z.iso.date(),
+  reason: z.string().trim().min(10).max(1000),
+  confirmed: z.literal('on'),
+});
 const reminderSchema = z.object({ workspaceId: z.uuid(), invoiceId: z.uuid() });
 const recipientTestSchema = z.object({ workspaceId: z.uuid() });
 
@@ -158,6 +172,31 @@ async function prepareCustomQuoteInvoice(formData: FormData) {
   revalidatePath(`/admin/organizations/${input.data.workspaceId}/commercial`);
   revalidatePath('/admin/commercial-billing');
   redirect(`/admin/organizations/${input.data.workspaceId}/commercial?customQuoteSaved=1`);
+}
+
+async function prepareSetupFeeInvoice(formData: FormData) {
+  'use server';
+  const input = setupFeeSchema.safeParse(Object.fromEntries(formData));
+  if (!input.success) redirect('/admin/organizations?error=invalid');
+  const { actor, db } = await requireSuperAdmin();
+  try {
+    await new db.PrismaCommercialBillingService().prepareSetupFeeInvoice({
+      workspaceId: input.data.workspaceId,
+      productId: input.data.productId,
+      actorUserId: actor.userId,
+      chargeKey: input.data.chargeKey,
+      amountYen: input.data.amountYen,
+      description: input.data.description,
+      agreementReference: input.data.agreementReference,
+      agreedAt: new Date(`${input.data.agreedAt}T00:00:00.000Z`),
+      reason: input.data.reason,
+    });
+  } catch {
+    redirect(`/admin/organizations/${input.data.workspaceId}/commercial?error=setupFee`);
+  }
+  revalidatePath(`/admin/organizations/${input.data.workspaceId}/commercial`);
+  revalidatePath('/admin/commercial-billing');
+  redirect(`/admin/organizations/${input.data.workspaceId}/commercial?setupFeeSaved=1`);
 }
 
 async function sendInvoiceReminder(formData: FormData) {
@@ -293,6 +332,7 @@ export default async function OrganizationCommercialPage({
     prepared?: string;
     invoiceUpdated?: string;
     customQuoteSaved?: string;
+    setupFeeSaved?: string;
     reminderSent?: string;
     recipientTestSent?: string;
   }>;
@@ -332,6 +372,7 @@ export default async function OrganizationCommercialPage({
         prepareInvoices,
         transitionInvoice,
         prepareCustomQuoteInvoice,
+        prepareSetupFeeInvoice,
         sendInvoiceReminder,
         sendBillingRecipientTest,
       }}
