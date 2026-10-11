@@ -7,6 +7,19 @@ function yen(value: number | null): string {
   return value === null ? '個別見積' : `${value.toLocaleString('ja-JP')}円`;
 }
 
+const REVIEW_REASON_LABELS = {
+  BILLING_POLICY_NOT_READY: '課金ポリシーの準備または適用状態を確認してください。',
+  BILLING_HISTORY_INCOMPLETE: '契約・提供区分・正式登録の履歴が不足しています。',
+  OFFERING_TIMELINE_GAP: '正式登録期間を覆う提供区分の履歴に空白があります。',
+  USAGE_OFFERING_HISTORY_MISSING: '無料実利用時点の提供区分履歴が不足しています。',
+  FORMAL_REGISTRATION_EVIDENCE_MISSING: '有効な参加者に正式登録の根拠がありません。',
+  UNKNOWN: '要確認の理由を特定できません。履歴を推測せず運営担当者が確認してください。',
+} as const;
+
+function count(value: number | null): string {
+  return value === null ? '—' : `${value.toLocaleString('ja-JP')}人`;
+}
+
 export function CommercialAdminDashboard(props: CommercialAdminDashboardProps) {
   const { dashboard, billing, query, reminderFailures, actions } = props;
   const { current } = dashboard;
@@ -15,7 +28,9 @@ export function CommercialAdminDashboard(props: CommercialAdminDashboardProps) {
       <header className="app-page__heading">
         <p className="eyebrow">OEM商用管理</p>
         <h1>{dashboard.workspace.name}の利用量・料金</h1>
-        <p>参加者が実際にサービスを使った人数を、運営団体単位で月ごとに集計します。</p>
+        <p>
+          実利用人数（MAU）と、正式登録・無料実利用から算出した課金対象人数を月ごとに確認します。
+        </p>
         <Link href="/admin/organizations">← 運営団体一覧へ戻る</Link>
       </header>
 
@@ -70,29 +85,108 @@ export function CommercialAdminDashboard(props: CommercialAdminDashboardProps) {
         </p>
       ) : null}
 
+      {current.billingState === 'REVIEW_REQUIRED' ? (
+        <p className="notice notice--danger">
+          課金対象人数は未確定です。
+          {REVIEW_REASON_LABELS[current.billingReviewReason ?? 'UNKNOWN']}
+          不足履歴を確認するまで、0人やMAUで代用して請求を確定しないでください。
+        </p>
+      ) : null}
+
       <section className="operations-overview" aria-label="今月の商用利用状況">
         <div>
           <span>対象月</span>
           <strong>{current.month}</strong>
         </div>
         <div>
-          <span>今月のMAU</span>
+          <span>課金方式</span>
           <strong>
-            {current.mau} / {current.pricing.upperLimit ?? '見積'}人
+            {current.billingState === 'REGISTRATION_V2'
+              ? '正式登録課金 V2'
+              : current.billingState === 'LEGACY_MAU'
+                ? '旧MAU方式'
+                : '要確認'}
           </strong>
         </div>
         <div>
+          <span>有料の正式登録 R</span>
+          <strong>{count(current.registeredUserCount)}</strong>
+        </div>
+        <div>
+          <span>無料の実利用 A</span>
+          <strong>{count(current.freeActiveUserCount)}</strong>
+        </div>
+        <div>
+          <span>R・Aの重複</span>
+          <strong>{count(current.overlapUserCount)}</strong>
+        </div>
+        <div>
+          <span>最終課金人数 R∪A</span>
+          <strong>{count(current.billableUserCount)}</strong>
+        </div>
+        <div>
+          <span>今月のMAU</span>
+          <strong>{current.mau.toLocaleString('ja-JP')}人</strong>
+        </div>
+        <div>
           <span>現在の月額</span>
-          <strong>{yen(current.pricing.priceYen)}</strong>
+          <strong>
+            {current.billingState === 'REVIEW_REQUIRED'
+              ? '確認待ち（請求未確定）'
+              : yen(current.pricing.priceYen)}
+          </strong>
         </div>
         <div>
           <span>次の料金帯まで</span>
           <strong>
-            {current.pricing.remainingToNextTier === null
-              ? '個別見積'
-              : `あと${current.pricing.remainingToNextTier}人`}
+            {current.billingState === 'REVIEW_REQUIRED'
+              ? '—'
+              : current.pricing.remainingToNextTier === null
+                ? '個別見積'
+                : `あと${current.pricing.remainingToNextTier}人`}
           </strong>
         </div>
+      </section>
+
+      <section className="settings-card">
+        <h2>月ごとの課金人数根拠</h2>
+        <p>
+          確定時に保存した人数スナップショットです。旧MAU方式の月にはR・A・重複の内訳がないため、推測して補完しません。
+        </p>
+        {dashboard.history.length === 0 ? (
+          <p>確定済みの月はまだありません。</p>
+        ) : (
+          <div className="table-scroll">
+            <table className="admin-table">
+              <thead>
+                <tr>
+                  <th>対象月</th>
+                  <th>方式</th>
+                  <th>有料登録 R</th>
+                  <th>無料実利用 A</th>
+                  <th>重複</th>
+                  <th>最終課金人数</th>
+                  <th>MAU</th>
+                  <th>確定料金</th>
+                </tr>
+              </thead>
+              <tbody>
+                {dashboard.history.map((row) => (
+                  <tr key={row.month}>
+                    <td>{row.month}</td>
+                    <td>{row.billingRuleVersion ? '正式登録課金 V2' : '旧MAU方式'}</td>
+                    <td>{count(row.registeredUserCount)}</td>
+                    <td>{count(row.freeActiveUserCount)}</td>
+                    <td>{count(row.overlapUserCount)}</td>
+                    <td>{count(row.billableUserCount)}</td>
+                    <td>{count(row.mau)}</td>
+                    <td>{yen(row.priceYen)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
 
       <CommercialContractSection dashboard={dashboard} billing={billing} actions={actions} />
