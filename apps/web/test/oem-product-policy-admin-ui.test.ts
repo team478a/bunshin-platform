@@ -12,13 +12,18 @@ describe('OEM Service Product policy admin UI', () => {
     expect(page).toContain('registerProductPolicy');
     expect(page).toContain('reviseProductPolicy');
     expect(page).toContain('retireProduct');
+    expect(page).toContain('migrateOfferingProductPolicy');
     expect(page).toContain('expectedLatestPolicyId');
     expect(page).toContain('expectedUpdatedAt');
+    expect(page).toContain('expectedCurrentPolicyVersionId');
+    expect(page).toContain('targetPolicyVersionId');
   });
 
   it('states that revision and retirement do not mutate existing offerings or invoices', () => {
     expect(page).toContain('既存Offering・確定済み請求・参加者を自動変更しません');
     expect(page).toContain('新規割当だけを停止します');
     expect(page).toContain('既存Offeringと請求履歴を変更しないことを確認しました');
+    expect(page).toContain('このOffering 1件だけをv');
+    expect(page).toContain('参加者・請求履歴を変更しないことを確認しました');
   });
 });

@@ -89,6 +89,30 @@ async function retireProduct(data: FormData) {
   redirect('/admin/commercial-billing/products');
 }
 
+async function migrateOfferingPolicy(data: FormData) {
+  'use server';
+  const { db, actor } = await authority();
+  await new db.PrismaOemBillingAdminService().migrateOfferingProductPolicy({
+    workspaceId: z.string().uuid().parse(data.get('workspaceId')),
+    offeringId: z.string().uuid().parse(data.get('offeringId')),
+    expectedCurrentPolicyVersionId: z
+      .string()
+      .uuid()
+      .parse(data.get('expectedCurrentPolicyVersionId')),
+    targetPolicyVersionId: z.string().uuid().parse(data.get('targetPolicyVersionId')),
+    actorUserId: actor.userId,
+    reason: z.string().trim().min(1).max(1000).parse(data.get('reason')),
+    confirmed: data.get('confirmed') === 'on',
+  });
+  redirect('/admin/commercial-billing/products');
+}
+
+function capabilityDiff(current: readonly string[], target: readonly string[]) {
+  const added = target.filter((capability) => !current.includes(capability));
+  const removed = current.filter((capability) => !target.includes(capability));
+  return { added, removed };
+}
+
 function nextPolicyDate(latest: Date, today: string) {
   const next = new Date(latest);
   next.setUTCDate(next.getUTCDate() + 1);
@@ -97,7 +121,11 @@ function nextPolicyDate(latest: Date, today: string) {
 
 export default async function OemProductPolicyPage() {
   const { db, actor } = await authority();
-  const products = await new db.PrismaOemBillingAdminService().listProductPolicies(actor.userId);
+  const service = new db.PrismaOemBillingAdminService();
+  const [products, offeringMigrations] = await Promise.all([
+    service.listProductPolicies(actor.userId),
+    service.listOfferingPolicyMigrations(actor.userId),
+  ]);
   const today = dateInBusinessTimezone(new Date());
 
   return (
@@ -174,6 +202,98 @@ export default async function OemProductPolicyPage() {
                   </li>
                 ))}
               </ol>
+            </details>
+
+            <details>
+              <summary>既存Offeringへ新版を個別適用</summary>
+              {offeringMigrations
+                .filter((offering) => offering.productId === product.id)
+                .map((offering) => {
+                  const targets = offering.product.policyVersions.filter(
+                    (policy) => policy.version > offering.productPolicyVersion.version,
+                  );
+                  return (
+                    <article className="settings-card" key={offering.id}>
+                      <h3>
+                        {offering.group.serviceConfiguration?.displayName ?? offering.group.name}
+                      </h3>
+                      <p>
+                        Organization: {offering.group.workspace.name}／Service:{' '}
+                        {offering.group.serviceConfiguration?.slug ?? offering.groupId}
+                      </p>
+                      <p>
+                        現在: v{offering.productPolicyVersion.version}／{offering.classification}
+                        ／FREE
+                        {offering.productPolicyVersion.freeOfferingAllowed ? '可' : '不可'}
+                        ／必要Capability:{' '}
+                        {offering.productPolicyVersion.requiredCapabilities.join(', ') || 'なし'}
+                      </p>
+                      {targets.length === 0 ? (
+                        <p>適用できる新版はありません。</p>
+                      ) : (
+                        targets.map((target) => {
+                          const diff = capabilityDiff(
+                            offering.productPolicyVersion.requiredCapabilities,
+                            target.requiredCapabilities,
+                          );
+                          const effective = target.effectiveFrom.toISOString().slice(0, 10);
+                          const canApply = product.status === 'ACTIVE' && effective <= today;
+                          return (
+                            <section key={target.id}>
+                              <h4>
+                                移行先 v{target.version}（{effective}適用）
+                              </h4>
+                              <p>
+                                FREE可否:{' '}
+                                {offering.productPolicyVersion.freeOfferingAllowed ? '可' : '不可'}→
+                                {target.freeOfferingAllowed ? '可' : '不可'}／追加Capability:{' '}
+                                {diff.added.join(', ') || 'なし'}／削除Capability:{' '}
+                                {diff.removed.join(', ') || 'なし'}
+                              </p>
+                              {!canApply ? (
+                                <p>適用開始日前、または廃止商品のため、現在は移行できません。</p>
+                              ) : (
+                                <form action={migrateOfferingPolicy} className="form-stack">
+                                  <input
+                                    type="hidden"
+                                    name="workspaceId"
+                                    value={offering.workspaceId}
+                                  />
+                                  <input type="hidden" name="offeringId" value={offering.id} />
+                                  <input
+                                    type="hidden"
+                                    name="expectedCurrentPolicyVersionId"
+                                    value={offering.productPolicyVersionId}
+                                  />
+                                  <input
+                                    type="hidden"
+                                    name="targetPolicyVersionId"
+                                    value={target.id}
+                                  />
+                                  <label>
+                                    移行理由
+                                    <textarea name="reason" required maxLength={1000} />
+                                  </label>
+                                  <label>
+                                    <input name="confirmed" type="checkbox" required />
+                                    このOffering 1件だけをv{target.version}
+                                    へ移行し、参加者・請求履歴を変更しないことを確認しました
+                                  </label>
+                                  <button className="button button--secondary">
+                                    このOfferingだけを移行
+                                  </button>
+                                </form>
+                              )}
+                            </section>
+                          );
+                        })
+                      )}
+                    </article>
+                  );
+                })}
+              {offeringMigrations.every((offering) => offering.productId !== product.id) ? (
+                <p>現在のOfferingはありません。</p>
+              ) : null}
             </details>
 
             {product.status === 'ACTIVE' ? (

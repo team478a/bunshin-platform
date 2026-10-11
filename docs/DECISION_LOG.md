@@ -3,6 +3,7 @@
 ## 2026-10-11: OEM Service Productの改定は不変版追加、廃止は新規割当停止とする
 
 - 状態: Proposed（実装PRレビュー待ち。本番Migration・release・商品操作は未承認）
+- 既存OEM Offeringへの商品ポリシー新版適用は一括backfillせず、SUPER_ADMINがOrganization・Service・現在版・FREE可否・Capability差分を確認し、Offering 1件ごとに明示実行する。現在Offering IDと現在ポリシー版IDをCASとして使い、将来適用版、同版・旧版、廃止商品、サービス内容と互換性のない版は拒否する。切替は旧期間を終了して新期間を追加し、参加者・確定済み請求・過去期間を変更しない。
 - 商品ポリシー改定は既存版を更新せず、適用日付きの新しい版を追加する。過去日、同日、古い画面からの競合操作は拒否する。
 - 商品廃止は`RETIRED`へ一方向遷移し、新しいOffering割当だけを停止する。既存Offering、参加者、確定済み請求は自動変更しない。
 - 改定・廃止はSUPER_ADMIN、操作理由、明示確認、画面表示時の版との一致を必須とする。
