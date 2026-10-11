@@ -27,7 +27,7 @@ export function CommercialContractSection({
       <section className="settings-card">
         <h2>OEM契約と請求先</h2>
         <p>
-          MAU課金を請求へつなぐための契約情報です。税務上の請求書や決済は外部サービスで発行し、その番号と入金状態を下の請求台帳で管理します。
+          月次の課金対象人数を請求へつなぐための契約情報です。税務上の請求書や決済は外部サービスで発行し、その番号と入金状態を下の請求台帳で管理します。
         </p>
         <form className="form-stack" action={saveContract}>
           <input type="hidden" name="workspaceId" value={dashboard.workspace.id} />

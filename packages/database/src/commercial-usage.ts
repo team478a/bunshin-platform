@@ -29,10 +29,22 @@ export interface CommercialUsageSummary {
   month: string;
   mau: number;
   billableUserCount: number | null;
+  registeredUserCount: number | null;
+  freeActiveUserCount: number | null;
+  overlapUserCount: number | null;
   billingState: 'LEGACY_MAU' | 'REGISTRATION_V2' | 'REVIEW_REQUIRED';
+  billingReviewReason: CommercialBillingReviewReason | null;
   pricing: ReturnType<typeof quoteOemMauPrice>;
   eventCounts: Array<{ eventType: string; count: number }>;
 }
+
+export type CommercialBillingReviewReason =
+  | 'BILLING_POLICY_NOT_READY'
+  | 'BILLING_HISTORY_INCOMPLETE'
+  | 'OFFERING_TIMELINE_GAP'
+  | 'USAGE_OFFERING_HISTORY_MISSING'
+  | 'FORMAL_REGISTRATION_EVIDENCE_MISSING'
+  | 'UNKNOWN';
 
 export interface CommercialUsageDashboard {
   workspace: { id: string; name: string; oemEnabled: boolean };
@@ -41,6 +53,9 @@ export interface CommercialUsageDashboard {
     month: string;
     mau: number;
     billableUserCount: number;
+    registeredUserCount: number | null;
+    freeActiveUserCount: number | null;
+    overlapUserCount: number | null;
     billingRuleVersion: string | null;
     tierKey: string;
     priceYen: number | null;
@@ -48,6 +63,23 @@ export interface CommercialUsageDashboard {
     status: 'OPEN' | 'FINALIZED';
     finalizedAt: Date | null;
   }>;
+}
+
+function billingReviewReason(message: string): CommercialBillingReviewReason {
+  if (
+    message === 'REVIEW_REQUIRED: policy' ||
+    message === 'REVIEW_REQUIRED: billing policy' ||
+    message === 'REVIEW_REQUIRED: billing policy changed'
+  )
+    return 'BILLING_POLICY_NOT_READY';
+  if (message === 'REVIEW_REQUIRED: billing history incomplete')
+    return 'BILLING_HISTORY_INCOMPLETE';
+  if (message === 'REVIEW_REQUIRED: offering timeline gap') return 'OFFERING_TIMELINE_GAP';
+  if (message === 'REVIEW_REQUIRED: usage offering history missing')
+    return 'USAGE_OFFERING_HISTORY_MISSING';
+  if (message === 'REVIEW_REQUIRED: formal registration evidence missing')
+    return 'FORMAL_REGISTRATION_EVIDENCE_MISSING';
+  return 'UNKNOWN';
 }
 
 export interface CommercialProfitabilityRow {
@@ -89,7 +121,11 @@ export class PrismaCommercialUsageService {
     if (!policy || policy.effectiveFrom > snapshotDate(period.key))
       return {
         billableUserCount: mau,
+        registeredUserCount: null,
+        freeActiveUserCount: null,
+        overlapUserCount: null,
         billingState: 'LEGACY_MAU' as const,
+        billingReviewReason: null,
         pricing: await this.quote(mau, snapshotDate(period.key)),
       };
     try {
@@ -98,14 +134,22 @@ export class PrismaCommercialUsageService {
       const counts = await oemBillingShadow(this.client, workspaceId, period);
       return {
         billableUserCount: counts.billableUserCount,
+        registeredUserCount: counts.registeredUserCount,
+        freeActiveUserCount: counts.freeActiveUserCount,
+        overlapUserCount: counts.overlapUserCount,
         billingState: 'REGISTRATION_V2' as const,
+        billingReviewReason: null,
         pricing: await this.quote(counts.billableUserCount, snapshotDate(period.key)),
       };
     } catch (error) {
       if (!(error instanceof Error && error.message.startsWith('REVIEW_REQUIRED'))) throw error;
       return {
         billableUserCount: null,
+        registeredUserCount: null,
+        freeActiveUserCount: null,
+        overlapUserCount: null,
         billingState: 'REVIEW_REQUIRED' as const,
+        billingReviewReason: billingReviewReason(error.message),
         pricing: {
           pricingVersion: policy.ruleVersion,
           tierKey: 'REVIEW_REQUIRED',
@@ -256,6 +300,9 @@ export class PrismaCommercialUsageService {
         month: row.periodStart.toISOString().slice(0, 7),
         mau: row.mau,
         billableUserCount: row.billableUserCount ?? row.mau,
+        registeredUserCount: row.registeredUserCount,
+        freeActiveUserCount: row.freeActiveUserCount,
+        overlapUserCount: row.overlapUserCount,
         billingRuleVersion: row.billingRuleVersion,
         tierKey: row.pricingTierKey,
         priceYen: row.calculatedPriceYen,

@@ -133,4 +133,186 @@ describe('PrismaCommercialUsageService', () => {
       expect.objectContaining({ where: expect.objectContaining({ workspaceId: 'workspace-b' }) }),
     );
   });
+
+  it('projects current and finalized registration billing evidence without recomputing snapshots', async () => {
+    const workspaceId = '00000000-0000-4000-8000-000000000011';
+    const groupId = '00000000-0000-4000-8000-000000000012';
+    const freeGroupId = '00000000-0000-4000-8000-000000000014';
+    const userId = '00000000-0000-4000-8000-000000000013';
+    const registration = {
+      id: 'registration-1',
+      workspaceId,
+      groupId,
+      groupMembershipId: 'membership-1',
+      userId,
+      startsAt: new Date('2026-09-01T00:00:00.000Z'),
+      endsAt: null,
+    };
+    const client = {
+      workspace: {
+        findFirst: vi.fn().mockResolvedValue({
+          id: workspaceId,
+          name: '運営団体A',
+          organizationEntitlement: { oemEnabled: true },
+        }),
+      },
+      serviceUsageEvent: {
+        groupBy: vi.fn().mockResolvedValueOnce([]).mockResolvedValueOnce([]),
+        findMany: vi.fn().mockResolvedValue([
+          {
+            workspaceId,
+            groupId: freeGroupId,
+            userId,
+            eventType: 'POST_VIEW',
+            occurredAt: new Date('2026-10-05T00:00:00.000Z'),
+          },
+          {
+            workspaceId,
+            groupId: freeGroupId,
+            userId: '00000000-0000-4000-8000-000000000015',
+            eventType: 'POST_VIEW',
+            occurredAt: new Date('2026-10-06T00:00:00.000Z'),
+          },
+        ]),
+      },
+      tenantMonthlyUsage: {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            periodStart: new Date('2026-09-01T00:00:00.000Z'),
+            mau: 4,
+            billableUserCount: 7,
+            registeredUserCount: 6,
+            freeActiveUserCount: 3,
+            overlapUserCount: 2,
+            billingRuleVersion: 'OEM_REGISTRATION_BILLING_V2',
+            pricingTierKey: 'tier-1',
+            calculatedPriceYen: 19_800,
+            pricingVersion: '2026-09',
+            status: 'FINALIZED',
+            finalizedAt: new Date('2026-10-01T00:00:00.000Z'),
+          },
+        ]),
+      },
+      oemBillingPolicy: {
+        findUnique: vi.fn().mockResolvedValue({
+          effectiveFrom: new Date('2026-10-01T00:00:00.000Z'),
+          historyReadyAt: new Date('2026-09-30T00:00:00.000Z'),
+          ruleVersion: 'OEM_REGISTRATION_BILLING_V2',
+        }),
+      },
+      oemRegistrationPeriod: { findMany: vi.fn().mockResolvedValue([registration]) },
+      oemOfferingPeriod: {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            id: 'offering-1',
+            workspaceId,
+            groupId,
+            classification: 'PAID',
+            startsAt: new Date('2026-09-01T00:00:00.000Z'),
+            endsAt: null,
+          },
+          {
+            id: 'offering-2',
+            workspaceId,
+            groupId: freeGroupId,
+            classification: 'FREE',
+            startsAt: new Date('2026-09-01T00:00:00.000Z'),
+            endsAt: null,
+          },
+        ]),
+      },
+      oemContractPeriod: {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            id: 'contract-1',
+            startsAt: new Date('2026-09-01T00:00:00.000Z'),
+            endsAt: null,
+          },
+        ]),
+      },
+      groupMembership: { findMany: vi.fn().mockResolvedValue([]) },
+      commercialPricingSchedule: { findFirst: vi.fn().mockResolvedValue(null) },
+    } as unknown as PrismaClient;
+
+    const dashboard = await new PrismaCommercialUsageService(client).dashboard(
+      workspaceId,
+      new Date('2026-10-11T00:00:00.000Z'),
+    );
+
+    expect(dashboard?.current).toMatchObject({
+      billingState: 'REGISTRATION_V2',
+      billingReviewReason: null,
+      registeredUserCount: 1,
+      freeActiveUserCount: 2,
+      overlapUserCount: 1,
+      billableUserCount: 2,
+    });
+    expect(dashboard?.history[0]).toMatchObject({
+      registeredUserCount: 6,
+      freeActiveUserCount: 3,
+      overlapUserCount: 2,
+      billableUserCount: 7,
+    });
+  });
+
+  it('keeps missing billing history unpriced and exposes a safe review reason', async () => {
+    const workspaceId = '00000000-0000-4000-8000-000000000021';
+    const client = {
+      workspace: {
+        findFirst: vi.fn().mockResolvedValue({
+          id: workspaceId,
+          name: '運営団体B',
+          organizationEntitlement: { oemEnabled: true },
+        }),
+      },
+      serviceUsageEvent: {
+        groupBy: vi.fn().mockResolvedValueOnce([]).mockResolvedValueOnce([]),
+        findMany: vi.fn().mockResolvedValue([]),
+      },
+      tenantMonthlyUsage: { findMany: vi.fn().mockResolvedValue([]) },
+      oemBillingPolicy: {
+        findUnique: vi.fn().mockResolvedValue({
+          effectiveFrom: new Date('2026-10-01T00:00:00.000Z'),
+          historyReadyAt: new Date('2026-09-30T00:00:00.000Z'),
+          ruleVersion: 'OEM_REGISTRATION_BILLING_V2',
+        }),
+      },
+      oemRegistrationPeriod: {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            id: 'registration-1',
+            workspaceId,
+            groupId: '00000000-0000-4000-8000-000000000022',
+            groupMembershipId: 'membership-1',
+            userId: '00000000-0000-4000-8000-000000000023',
+            startsAt: new Date('2026-09-01T00:00:00.000Z'),
+            endsAt: null,
+          },
+        ]),
+      },
+      oemOfferingPeriod: { findMany: vi.fn().mockResolvedValue([]) },
+      oemContractPeriod: {
+        findMany: vi
+          .fn()
+          .mockResolvedValue([
+            { id: 'contract-1', startsAt: new Date('2026-09-01T00:00:00.000Z'), endsAt: null },
+          ]),
+      },
+    } as unknown as PrismaClient;
+
+    const dashboard = await new PrismaCommercialUsageService(client).dashboard(
+      workspaceId,
+      new Date('2026-10-11T00:00:00.000Z'),
+    );
+
+    expect(dashboard?.current).toMatchObject({
+      billingState: 'REVIEW_REQUIRED',
+      billingReviewReason: 'BILLING_HISTORY_INCOMPLETE',
+      registeredUserCount: null,
+      freeActiveUserCount: null,
+      overlapUserCount: null,
+      billableUserCount: null,
+      pricing: { priceYen: null, tierKey: 'REVIEW_REQUIRED' },
+    });
+  });
 });
