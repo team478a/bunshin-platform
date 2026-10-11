@@ -151,36 +151,68 @@ export class PrismaCommercialBillingService {
     const issuedInvoiceIds = invoices
       .filter((invoice) => invoice.status === 'ISSUED')
       .map((invoice) => invoice.id);
-    const reminderAudits = issuedInvoiceIds.length
-      ? await this.client.commercialBillingAudit.findMany({
-          where: {
-            entityType: 'INVOICE',
-            entityId: { in: issuedInvoiceIds },
-            action: {
-              in: [
-                'PAYMENT_GUIDANCE_SENT',
-                'OVERDUE_REMINDER_SENT',
-                'PAYMENT_GUIDANCE_FAILED',
-                'OVERDUE_REMINDER_FAILED',
-              ],
+    const paidInvoiceIds = invoices
+      .filter((invoice) => invoice.status === 'PAID')
+      .map((invoice) => invoice.id);
+    const [reminderAudits, refundEvents] = await Promise.all([
+      issuedInvoiceIds.length
+        ? this.client.commercialBillingAudit.findMany({
+            where: {
+              entityType: 'INVOICE',
+              entityId: { in: issuedInvoiceIds },
+              action: {
+                in: [
+                  'PAYMENT_GUIDANCE_SENT',
+                  'OVERDUE_REMINDER_SENT',
+                  'PAYMENT_GUIDANCE_FAILED',
+                  'OVERDUE_REMINDER_FAILED',
+                ],
+              },
             },
-          },
-          orderBy: { occurredAt: 'desc' },
-          take: 5000,
-          select: {
-            id: true,
-            workspaceId: true,
-            entityId: true,
-            action: true,
-            occurredAt: true,
-          },
-        })
-      : [];
+            orderBy: { occurredAt: 'desc' },
+            take: 5000,
+            select: {
+              id: true,
+              workspaceId: true,
+              entityId: true,
+              action: true,
+              occurredAt: true,
+            },
+          })
+        : [],
+      paidInvoiceIds.length
+        ? this.client.commercialBillingWebhookEvent.findMany({
+            where: {
+              invoiceId: { in: paidInvoiceIds },
+              status: 'PROCESSED',
+              errorCategory: {
+                in: ['PARTIAL_REFUND_REVIEW_REQUIRED', 'FULL_REFUND_REVIEW_REQUIRED'],
+              },
+            },
+            orderBy: { receivedAt: 'desc' },
+            take: 5000,
+            select: {
+              id: true,
+              workspaceId: true,
+              invoiceId: true,
+              errorCategory: true,
+              receivedAt: true,
+            },
+          })
+        : [],
+    ]);
+    const latestRefundReviewByInvoice = new Map<string, (typeof refundEvents)[number]>();
+    for (const event of refundEvents) {
+      if (!latestRefundReviewByInvoice.has(event.invoiceId)) {
+        latestRefundReviewByInvoice.set(event.invoiceId, event);
+      }
+    }
     return {
       activeContracts,
       summary: summarizeCommercialInvoices(invoices, now),
       invoices,
       reminderFailures: unresolvedCommercialReminderFailures(reminderAudits),
+      refundReviews: [...latestRefundReviewByInvoice.values()],
     };
   }
 

@@ -406,4 +406,122 @@ describe('commercial invoice Stripe payment', () => {
       ),
     ).rejects.toThrow('amount or payment mismatch');
   });
+
+  it.each([
+    {
+      amountRefunded: 4_000,
+      refunded: false,
+      category: 'PARTIAL_REFUND_REVIEW_REQUIRED',
+      refundKind: 'PARTIAL',
+    },
+    {
+      amountRefunded: 19_800,
+      refunded: true,
+      category: 'FULL_REFUND_REVIEW_REQUIRED',
+      refundKind: 'FULL',
+    },
+  ])(
+    'records a verified $refundKind refund for review without changing the paid invoice',
+    async ({ amountRefunded, refunded, category, refundKind }) => {
+      const create = vi.fn().mockResolvedValue({ id: 'refund-ledger-a' });
+      const findMany = vi.fn().mockResolvedValue([
+        {
+          ...invoice,
+          status: 'PAID',
+          paymentProvider: 'STRIPE',
+          providerPaymentIntentId: 'pi_platform_a',
+        },
+      ]);
+      const client = {
+        tenantInvoice: { findMany },
+        commercialBillingWebhookEvent: {
+          findUnique: vi.fn().mockResolvedValue(null),
+          create,
+        },
+      } as unknown as PrismaClient;
+
+      await expect(
+        processCommercialBillingStripeEvent(
+          client,
+          {
+            id: `evt_refund_${refundKind.toLowerCase()}`,
+            type: 'charge.refunded',
+            livemode: false,
+            data: {
+              object: {
+                id: 'ch_platform_a',
+                amount: 19_800,
+                amount_refunded: amountRefunded,
+                currency: 'jpy',
+                payment_intent: 'pi_platform_a',
+                refunded,
+              },
+            },
+          },
+          'refund-digest',
+        ),
+      ).resolves.toEqual({
+        ignored: false,
+        status: 'REFUND_REVIEW_REQUIRED',
+        refundKind,
+      });
+
+      expect(findMany).toHaveBeenCalledWith({
+        where: {
+          paymentProvider: 'STRIPE',
+          providerPaymentIntentId: 'pi_platform_a',
+        },
+        take: 2,
+      });
+      expect(create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          workspaceId: 'workspace-a',
+          invoiceId: 'invoice-a',
+          eventType: 'charge.refunded',
+          status: 'PROCESSED',
+          errorCategory: category,
+        }),
+      });
+    },
+  );
+
+  it('rejects a refund whose amount or paid invoice identity does not match', async () => {
+    const create = vi.fn();
+    const client = {
+      tenantInvoice: {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            ...invoice,
+            status: 'PAID',
+            paymentProvider: 'STRIPE',
+            providerPaymentIntentId: 'pi_platform_a',
+          },
+        ]),
+      },
+      commercialBillingWebhookEvent: { findUnique: vi.fn(), create },
+    } as unknown as PrismaClient;
+
+    await expect(
+      processCommercialBillingStripeEvent(
+        client,
+        {
+          id: 'evt_refund_mismatch',
+          type: 'charge.refunded',
+          livemode: false,
+          data: {
+            object: {
+              id: 'ch_platform_a',
+              amount: 29_800,
+              amount_refunded: 29_800,
+              currency: 'jpy',
+              payment_intent: 'pi_platform_a',
+              refunded: true,
+            },
+          },
+        },
+        'refund-digest',
+      ),
+    ).rejects.toThrow('refund identity mismatch');
+    expect(create).not.toHaveBeenCalled();
+  });
 });
