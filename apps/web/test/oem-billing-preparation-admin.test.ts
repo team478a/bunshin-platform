@@ -64,4 +64,16 @@ describe('OEM billing initial history and cutover admin UI', () => {
     expect(service).toContain("action: 'CORRECTED'");
     expect(service).toContain('supersedesId: current.id');
   });
+
+  it('offers append-only offering and registration corrections with immutable finalized months', () => {
+    expect(section).toContain('提供期間履歴を確認・訂正');
+    expect(section).toContain('正式登録期間を確認・訂正');
+    expect(section).toContain('訂正前の提供期間を表示');
+    expect(section).toContain('訂正前の正式登録期間を表示');
+    expect(page).toContain('.correctOfferingPeriod({');
+    expect(page).toContain('.correctRegistrationPeriod({');
+    expect(service).toContain("entityType: 'OEM_OFFERING_PERIOD'");
+    expect(service).toContain("entityType: 'OEM_REGISTRATION_PERIOD'");
+    expect(service).toContain('assertNoFinalizedBillingImpact');
+  });
 });

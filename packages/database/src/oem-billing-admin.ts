@@ -46,6 +46,18 @@ function changedContractWindows(before: ContractWindow, after: ContractWindow): 
   return changed;
 }
 
+function combinedWindow(before: ContractWindow, after: ContractWindow): ContractWindow {
+  return {
+    startsAt: before.startsAt < after.startsAt ? before.startsAt : after.startsAt,
+    endsAt:
+      before.endsAt === null || after.endsAt === null
+        ? null
+        : before.endsAt > after.endsAt
+          ? before.endsAt
+          : after.endsAt,
+  };
+}
+
 /** Explicit preparation; no inferred registration dates, payment mode or price classification. */
 export class PrismaOemBillingAdminService {
   constructor(private readonly client: PrismaClient = prisma) {}
@@ -77,10 +89,12 @@ export class PrismaOemBillingAdminService {
         const [offerings, participants, registrations, contractPeriods, billingPolicy, products] =
           await Promise.all([
             tx.oemOfferingPeriod.findMany({
-              where: { workspaceId: input.workspaceId, groupId: { in: groupIds }, endsAt: null },
+              where: { workspaceId: input.workspaceId, groupId: { in: groupIds } },
               include: {
                 product: { select: { displayName: true, status: true } },
                 productPolicyVersion: { select: { version: true, effectiveFrom: true } },
+                supersedes: { select: { id: true } },
+                supersededBy: { select: { id: true } },
               },
               orderBy: [{ startsAt: 'asc' }, { id: 'asc' }],
             }),
@@ -104,6 +118,10 @@ export class PrismaOemBillingAdminService {
             }),
             tx.oemRegistrationPeriod.findMany({
               where: { workspaceId: input.workspaceId, groupId: { in: groupIds } },
+              include: {
+                supersedes: { select: { id: true } },
+                supersededBy: { select: { id: true } },
+              },
               orderBy: [{ startsAt: 'desc' }, { id: 'desc' }],
             }),
             tx.oemContractPeriod.findMany({
@@ -141,13 +159,45 @@ export class PrismaOemBillingAdminService {
         const currentContractPeriods = contractPeriods.filter(
           (contractPeriod) => contractPeriod.supersededBy === null,
         );
+        const currentOfferingPeriods = offerings.filter(
+          (offering) => offering.supersededBy === null,
+        );
+        const currentRegistrationPeriods = registrations.filter(
+          (registration) => registration.supersededBy === null,
+        );
 
-        const currentOfferings = new Map(offerings.map((offering) => [offering.groupId, offering]));
+        const currentOfferings = new Map(
+          currentOfferingPeriods
+            .filter((offering) => offering.endsAt === null)
+            .map((offering) => [offering.groupId, offering]),
+        );
+        const offeringsByGroup = new Map<string, (typeof offerings)[number][]>();
+        for (const offering of currentOfferingPeriods) {
+          const values = offeringsByGroup.get(offering.groupId) ?? [];
+          values.push(offering);
+          offeringsByGroup.set(offering.groupId, values);
+        }
+        const supersededOfferingsByGroup = new Map<string, (typeof offerings)[number][]>();
+        for (const offering of offerings.filter((period) => period.supersededBy !== null)) {
+          const values = supersededOfferingsByGroup.get(offering.groupId) ?? [];
+          values.push(offering);
+          supersededOfferingsByGroup.set(offering.groupId, values);
+        }
         const registrationsByMembership = new Map<string, (typeof registrations)[number][]>();
-        for (const registration of registrations) {
+        for (const registration of currentRegistrationPeriods) {
           const values = registrationsByMembership.get(registration.groupMembershipId) ?? [];
           values.push(registration);
           registrationsByMembership.set(registration.groupMembershipId, values);
+        }
+        const supersededRegistrationsByMembership = new Map<
+          string,
+          (typeof registrations)[number][]
+        >();
+        for (const registration of registrations.filter((period) => period.supersededBy !== null)) {
+          const values =
+            supersededRegistrationsByMembership.get(registration.groupMembershipId) ?? [];
+          values.push(registration);
+          supersededRegistrationsByMembership.set(registration.groupMembershipId, values);
         }
         const participantRows = participants.map((participant) => {
           const history = registrationsByMembership.get(participant.id) ?? [];
@@ -155,11 +205,16 @@ export class PrismaOemBillingAdminService {
             ...participant,
             currentRegistration: history.find((period) => period.endsAt === null) ?? null,
             latestRegistration: history[0] ?? null,
+            registrationHistory: history,
+            supersededRegistrationHistory:
+              supersededRegistrationsByMembership.get(participant.id) ?? [],
           };
         });
         const serviceRows = services.map((service) => ({
           ...service,
           currentOffering: currentOfferings.get(service.groupId) ?? null,
+          offeringHistory: offeringsByGroup.get(service.groupId) ?? [],
+          supersededOfferingHistory: supersededOfferingsByGroup.get(service.groupId) ?? [],
         }));
         const missingOfferingCount = serviceRows.filter(
           (service) => service.currentOffering === null,
@@ -308,6 +363,28 @@ export class PrismaOemBillingAdminService {
     );
   }
 
+  private async assertNoFinalizedBillingImpact(
+    tx: Prisma.TransactionClient,
+    workspaceId: string,
+    affectedWindows: ContractWindow[],
+  ): Promise<void> {
+    const finalized = await tx.tenantMonthlyUsage.findMany({
+      where: { workspaceId, status: 'FINALIZED' },
+      select: { periodStart: true, periodEnd: true },
+    });
+    if (
+      finalized.some((usage) =>
+        affectedWindows.some((changed) =>
+          overlaps(changed, {
+            startsAt: new Date(usage.periodStart.getTime() - BUSINESS_TIMEZONE_OFFSET_MS),
+            endsAt: new Date(usage.periodEnd.getTime() - BUSINESS_TIMEZONE_OFFSET_MS),
+          }),
+        ),
+      )
+    )
+      throw new Error('FINALIZED_BILLING_PERIOD_IMMUTABLE');
+  }
+
   async registerProductPolicy(input: {
     key: string;
     displayName: string;
@@ -385,7 +462,9 @@ export class PrismaOemBillingAdminService {
             orderBy: [{ effectiveFrom: 'desc' }, { version: 'desc' }],
           },
           _count: {
-            select: { offeringPeriods: { where: { endsAt: null } } },
+            select: {
+              offeringPeriods: { where: { endsAt: null, supersededBy: { is: null } } },
+            },
           },
         },
         orderBy: [{ status: 'asc' }, { key: 'asc' }],
@@ -406,7 +485,11 @@ export class PrismaOemBillingAdminService {
     return this.client.$transaction(async (tx) => {
       await this.authorizeSuperAdmin(tx, actorUserId);
       const offerings = await tx.oemOfferingPeriod.findMany({
-        where: { endsAt: null, ...this.offeringPolicyFilter(filter) },
+        where: {
+          endsAt: null,
+          supersededBy: { is: null },
+          ...this.offeringPolicyFilter(filter),
+        },
         include: {
           productPolicyVersion: true,
           product: {
@@ -545,9 +628,9 @@ export class PrismaOemBillingAdminService {
       );
       const current = await tx.oemOfferingPeriod.findUnique({
         where: { id: input.offeringId },
-        include: { productPolicyVersion: true },
+        include: { productPolicyVersion: true, supersededBy: { select: { id: true } } },
       });
-      if (!current || current.endsAt) throw new Error('STALE_OFFERING');
+      if (!current || current.endsAt || current.supersededBy) throw new Error('STALE_OFFERING');
       if (current.workspaceId !== input.workspaceId) throw new Error('OFFERING_WORKSPACE_MISMATCH');
       if (current.productPolicyVersionId !== input.expectedCurrentPolicyVersionId)
         throw new Error('STALE_OFFERING_POLICY');
@@ -740,7 +823,12 @@ export class PrismaOemBillingAdminService {
         requiredCapabilities: productPolicy.requiredCapabilities,
       });
       const current = await tx.oemOfferingPeriod.findFirst({
-        where: { workspaceId: input.workspaceId, groupId: input.groupId, endsAt: null },
+        where: {
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          endsAt: null,
+          supersededBy: { is: null },
+        },
       });
       if ((current?.id ?? null) !== input.expectedCurrentId) throw new Error('STALE_OFFERING');
       if (current?.productPolicy && current.productPolicy !== input.productPolicy)
@@ -791,7 +879,11 @@ export class PrismaOemBillingAdminService {
         select: { groupId: true },
       });
       const offerings = await tx.oemOfferingPeriod.findMany({
-        where: { workspaceId: input.workspaceId, endsAt: null },
+        where: {
+          workspaceId: input.workspaceId,
+          endsAt: null,
+          supersededBy: { is: null },
+        },
       });
       if (groups.some((g) => !offerings.some((o) => o.groupId === g.groupId)))
         throw new Error('REVIEW_REQUIRED: service classification missing');
@@ -811,7 +903,11 @@ export class PrismaOemBillingAdminService {
         select: { id: true },
       });
       const registrations = await tx.oemRegistrationPeriod.findMany({
-        where: { workspaceId: input.workspaceId, endsAt: null },
+        where: {
+          workspaceId: input.workspaceId,
+          endsAt: null,
+          supersededBy: { is: null },
+        },
         select: { groupMembershipId: true },
       });
       if (participants.some((m) => !registrations.some((r) => r.groupMembershipId === m.id)))
@@ -863,8 +959,15 @@ export class PrismaOemBillingAdminService {
         },
       });
       if (!member) throw new Error('CONSENTED_REGISTERED_MEMBER_REQUIRED');
+      await tx.$queryRaw(
+        Prisma.sql`SELECT "id" FROM "group_memberships" WHERE "id" = ${member.id}::uuid FOR UPDATE`,
+      );
       const existing = await tx.oemRegistrationPeriod.findFirst({
-        where: { workspaceId: input.workspaceId, groupMembershipId: member.id },
+        where: {
+          workspaceId: input.workspaceId,
+          groupMembershipId: member.id,
+          supersededBy: { is: null },
+        },
       });
       if (existing) {
         if (
@@ -886,6 +989,231 @@ export class PrismaOemBillingAdminService {
           reason,
         },
       });
+    });
+  }
+
+  async correctOfferingPeriod(input: {
+    workspaceId: string;
+    offeringPeriodId: string;
+    expectedStartsAt: Date;
+    expectedEndsAt: Date | null;
+    expectedClassification: OemOfferingClassification;
+    revisedStartsAt: Date;
+    revisedEndsAt: Date | null;
+    revisedClassification: OemOfferingClassification;
+    actorUserId: string;
+    reason: string;
+    confirmed: boolean;
+  }) {
+    const reason = requiredText(input.reason, 1000);
+    if (
+      !input.confirmed ||
+      !Number.isFinite(input.expectedStartsAt.getTime()) ||
+      !Number.isFinite(input.revisedStartsAt.getTime()) ||
+      (input.expectedEndsAt && !Number.isFinite(input.expectedEndsAt.getTime())) ||
+      (input.revisedEndsAt &&
+        (!Number.isFinite(input.revisedEndsAt.getTime()) ||
+          input.revisedEndsAt <= input.revisedStartsAt))
+    )
+      throw new Error('OFFERING_CORRECTION_CONFIRMATION_REQUIRED');
+    return this.client.$transaction(async (tx) => {
+      await this.authorize(tx, input.workspaceId, input.actorUserId);
+      const current = await tx.oemOfferingPeriod.findFirst({
+        where: { id: input.offeringPeriodId, workspaceId: input.workspaceId },
+        include: { productPolicyVersion: true, supersededBy: true },
+      });
+      if (!current) throw new Error('OFFERING_PERIOD_NOT_FOUND');
+      if (current.supersededBy) {
+        if (
+          current.supersededBy.startsAt.getTime() === input.revisedStartsAt.getTime() &&
+          sameOptionalDate(current.supersededBy.endsAt, input.revisedEndsAt) &&
+          current.supersededBy.classification === input.revisedClassification &&
+          current.supersededBy.actorUserId === input.actorUserId &&
+          current.supersededBy.reason === reason
+        )
+          return current.supersededBy;
+        throw new Error('STALE_OFFERING_PERIOD');
+      }
+      if (
+        current.startsAt.getTime() !== input.expectedStartsAt.getTime() ||
+        !sameOptionalDate(current.endsAt, input.expectedEndsAt) ||
+        current.classification !== input.expectedClassification
+      )
+        throw new Error('STALE_OFFERING_PERIOD');
+      if (
+        current.startsAt.getTime() === input.revisedStartsAt.getTime() &&
+        sameOptionalDate(current.endsAt, input.revisedEndsAt) &&
+        current.classification === input.revisedClassification
+      )
+        throw new Error('OFFERING_CORRECTION_CHANGE_REQUIRED');
+
+      await this.assertOfferingPolicyCompatible(tx, {
+        workspaceId: current.workspaceId,
+        groupId: current.groupId,
+        productKey: current.productPolicy,
+        classification: input.revisedClassification,
+        freeOfferingAllowed: current.productPolicyVersion.freeOfferingAllowed,
+        requiredCapabilities: current.productPolicyVersion.requiredCapabilities,
+      });
+      const revisedWindow = {
+        startsAt: input.revisedStartsAt,
+        endsAt: input.revisedEndsAt,
+      };
+      await this.assertNoFinalizedBillingImpact(
+        tx,
+        input.workspaceId,
+        current.classification === input.revisedClassification
+          ? changedContractWindows(current, revisedWindow)
+          : [combinedWindow(current, revisedWindow)],
+      );
+      const otherCurrentPeriods = await tx.oemOfferingPeriod.findMany({
+        where: {
+          workspaceId: input.workspaceId,
+          groupId: current.groupId,
+          id: { not: current.id },
+          supersededBy: { is: null },
+        },
+        select: { startsAt: true, endsAt: true },
+      });
+      if (otherCurrentPeriods.some((period) => overlaps(revisedWindow, period)))
+        throw new Error('REVIEW_REQUIRED: overlapping offering period');
+
+      const corrected = await tx.oemOfferingPeriod.create({
+        data: {
+          workspaceId: current.workspaceId,
+          groupId: current.groupId,
+          productId: current.productId,
+          productPolicyVersionId: current.productPolicyVersionId,
+          productPolicy: current.productPolicy,
+          classification: input.revisedClassification,
+          startsAt: input.revisedStartsAt,
+          endsAt: input.revisedEndsAt,
+          actorUserId: input.actorUserId,
+          reason,
+          supersedesId: current.id,
+        },
+      });
+      await tx.commercialBillingAudit.create({
+        data: {
+          workspaceId: input.workspaceId,
+          actorUserId: input.actorUserId,
+          entityType: 'OEM_OFFERING_PERIOD',
+          entityId: corrected.id,
+          action: 'CORRECTED',
+          beforeData: jsonSnapshot(current),
+          afterData: jsonSnapshot(corrected),
+        },
+      });
+      return corrected;
+    });
+  }
+
+  async correctRegistrationPeriod(input: {
+    workspaceId: string;
+    registrationPeriodId: string;
+    expectedStartsAt: Date;
+    expectedEndsAt: Date | null;
+    revisedStartsAt: Date;
+    revisedEndsAt: Date | null;
+    actorUserId: string;
+    reason: string;
+    confirmed: boolean;
+  }) {
+    const reason = requiredText(input.reason, 1000);
+    if (
+      !input.confirmed ||
+      !Number.isFinite(input.expectedStartsAt.getTime()) ||
+      !Number.isFinite(input.revisedStartsAt.getTime()) ||
+      (input.expectedEndsAt && !Number.isFinite(input.expectedEndsAt.getTime())) ||
+      (input.revisedEndsAt &&
+        (!Number.isFinite(input.revisedEndsAt.getTime()) ||
+          input.revisedEndsAt < input.revisedStartsAt))
+    )
+      throw new Error('REGISTRATION_CORRECTION_CONFIRMATION_REQUIRED');
+    return this.client.$transaction(async (tx) => {
+      await this.authorize(tx, input.workspaceId, input.actorUserId);
+      const candidate = await tx.oemRegistrationPeriod.findFirst({
+        where: { id: input.registrationPeriodId, workspaceId: input.workspaceId },
+        select: { groupMembershipId: true },
+      });
+      if (!candidate) throw new Error('REGISTRATION_PERIOD_NOT_FOUND');
+      await tx.$queryRaw(
+        Prisma.sql`SELECT "id" FROM "group_memberships" WHERE "id" = ${candidate.groupMembershipId}::uuid FOR UPDATE`,
+      );
+      const current = await tx.oemRegistrationPeriod.findFirst({
+        where: { id: input.registrationPeriodId, workspaceId: input.workspaceId },
+        include: { supersededBy: true },
+      });
+      if (!current) throw new Error('REGISTRATION_PERIOD_NOT_FOUND');
+      if (current.supersededBy) {
+        if (
+          current.supersededBy.startsAt.getTime() === input.revisedStartsAt.getTime() &&
+          sameOptionalDate(current.supersededBy.endsAt, input.revisedEndsAt) &&
+          current.supersededBy.registeredByUserId === input.actorUserId &&
+          current.supersededBy.reason === reason
+        )
+          return current.supersededBy;
+        throw new Error('STALE_REGISTRATION_PERIOD');
+      }
+      if (
+        current.startsAt.getTime() !== input.expectedStartsAt.getTime() ||
+        !sameOptionalDate(current.endsAt, input.expectedEndsAt)
+      )
+        throw new Error('STALE_REGISTRATION_PERIOD');
+      if (
+        current.startsAt.getTime() === input.revisedStartsAt.getTime() &&
+        sameOptionalDate(current.endsAt, input.revisedEndsAt)
+      )
+        throw new Error('REGISTRATION_CORRECTION_CHANGE_REQUIRED');
+
+      const revisedWindow = {
+        startsAt: input.revisedStartsAt,
+        endsAt: input.revisedEndsAt,
+      };
+      await this.assertNoFinalizedBillingImpact(
+        tx,
+        input.workspaceId,
+        changedContractWindows(current, revisedWindow),
+      );
+      const otherCurrentPeriods = await tx.oemRegistrationPeriod.findMany({
+        where: {
+          workspaceId: input.workspaceId,
+          groupMembershipId: current.groupMembershipId,
+          id: { not: current.id },
+          supersededBy: { is: null },
+        },
+        select: { startsAt: true, endsAt: true },
+      });
+      if (otherCurrentPeriods.some((period) => overlaps(revisedWindow, period)))
+        throw new Error('REVIEW_REQUIRED: overlapping registration period');
+
+      const corrected = await tx.oemRegistrationPeriod.create({
+        data: {
+          workspaceId: current.workspaceId,
+          groupId: current.groupId,
+          groupMembershipId: current.groupMembershipId,
+          userId: current.userId,
+          startsAt: input.revisedStartsAt,
+          endsAt: input.revisedEndsAt,
+          registeredByUserId: input.actorUserId,
+          endedByUserId: input.revisedEndsAt ? input.actorUserId : null,
+          reason,
+          endReason: input.revisedEndsAt ? reason : null,
+          supersedesId: current.id,
+        },
+      });
+      await tx.commercialBillingAudit.create({
+        data: {
+          workspaceId: input.workspaceId,
+          actorUserId: input.actorUserId,
+          entityType: 'OEM_REGISTRATION_PERIOD',
+          entityId: corrected.id,
+          action: 'CORRECTED',
+          beforeData: jsonSnapshot(current),
+          afterData: jsonSnapshot(corrected),
+        },
+      });
+      return corrected;
     });
   }
 
@@ -1008,21 +1336,7 @@ export class PrismaOemBillingAdminService {
         startsAt: input.revisedStartsAt,
         endsAt: input.revisedEndsAt,
       });
-      const finalized = await tx.tenantMonthlyUsage.findMany({
-        where: { workspaceId: input.workspaceId, status: 'FINALIZED' },
-        select: { periodStart: true, periodEnd: true },
-      });
-      if (
-        finalized.some((usage) =>
-          affectedWindows.some((changed) =>
-            overlaps(changed, {
-              startsAt: new Date(usage.periodStart.getTime() - BUSINESS_TIMEZONE_OFFSET_MS),
-              endsAt: new Date(usage.periodEnd.getTime() - BUSINESS_TIMEZONE_OFFSET_MS),
-            }),
-          ),
-        )
-      )
-        throw new Error('FINALIZED_BILLING_PERIOD_IMMUTABLE');
+      await this.assertNoFinalizedBillingImpact(tx, input.workspaceId, affectedWindows);
 
       const otherCurrentPeriods = await tx.oemContractPeriod.findMany({
         where: {

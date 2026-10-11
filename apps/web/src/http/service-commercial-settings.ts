@@ -93,6 +93,7 @@ export async function updateServiceCommercialSettingsResponse(
           workspaceId: configuration.workspaceId,
           groupId: configuration.groupId,
           endsAt: null,
+          supersededBy: { is: null },
         },
         include: { productPolicyVersion: true },
       });
@@ -122,7 +123,7 @@ export async function updateServiceCommercialSettingsResponse(
         );
         const now = new Date();
         const closed = await tx.oemOfferingPeriod.updateMany({
-          where: { id: currentOffering.id, endsAt: null },
+          where: { id: currentOffering.id, endsAt: null, supersededBy: { is: null } },
           data: { endsAt: now },
         });
         if (closed.count !== 1)

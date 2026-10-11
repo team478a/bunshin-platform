@@ -3614,7 +3614,11 @@ model OemRegistrationPeriod {
   endedByUserId String? @map("ended_by_user_id") @db.Uuid
   reason String @db.VarChar(1000)
   endReason String? @map("end_reason") @db.VarChar(1000)
-  @@unique([groupMembershipId, startsAt])
+  supersedesId String? @unique @map("supersedes_id") @db.Uuid
+  supersedes OemRegistrationPeriod? @relation("OemRegistrationPeriodSupersession", fields: [supersedesId], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "oem_registration_supersedes_fk")
+  supersededBy OemRegistrationPeriod? @relation("OemRegistrationPeriodSupersession")
+
+  @@index([groupMembershipId, startsAt])
   @@index([workspaceId, startsAt, endsAt])
   @@map("oem_registration_periods")
 }
@@ -3634,7 +3638,11 @@ model OemOfferingPeriod {
   reason String @db.VarChar(1000)
   product CommercialServiceProduct @relation(fields: [productId, productPolicy], references: [id, key], onDelete: Restrict, onUpdate: NoAction, map: "oem_offering_product_fk")
   productPolicyVersion CommercialServiceProductPolicyVersion @relation(fields: [productId, productPolicyVersionId], references: [productId, id], onDelete: Restrict, onUpdate: NoAction, map: "oem_offering_product_policy_version_fk")
-  @@unique([workspaceId, groupId, startsAt])
+  supersedesId String? @unique @map("supersedes_id") @db.Uuid
+  supersedes OemOfferingPeriod? @relation("OemOfferingPeriodSupersession", fields: [supersedesId], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "oem_offering_supersedes_fk")
+  supersededBy OemOfferingPeriod? @relation("OemOfferingPeriodSupersession")
+
+  @@index([workspaceId, groupId, startsAt])
   @@index([workspaceId, startsAt, endsAt])
   @@index([productId, productPolicyVersionId])
   @@map("oem_offering_periods")

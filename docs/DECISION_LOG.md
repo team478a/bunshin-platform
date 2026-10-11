@@ -1,5 +1,12 @@
 # BUNSHIN Platform Decision Log
 
+## 2026-10-12: OEM提供・正式登録期間も元版を残す1対1 supersessionとする
+
+- `OemOfferingPeriod`と`OemRegistrationPeriod`を直接訂正せず、訂正版が直前版を`supersedesId`で参照する。月次計算、商品判定、cutover準備は後続を持たない葉だけを参照する。
+- Offering訂正は同じ商品・Policy Version内の期間境界と提供区分に限定し、正式登録訂正はWorkspace、Group、Membership、Userを固定して期間境界に限定する。
+- 期間差分または提供区分変更の対象区間がJSTの確定済み月へ触れる場合は拒否する。期待値CAS、Workspace/Membership lock、重複・商品ポリシー再検証、変更前後監査を必須にする。
+- cutover取消・差替え、商品自体の過去訂正、確定月の取消・再確定、本番操作は別Gateとする。
+
 ## 2026-10-12: OEM契約期間の訂正は元版を残す1対1 supersessionとする
 
 - `OemContractPeriod`の開始・終了日時を直接更新・削除せず、訂正版が直前版を`supersedesId`で参照する。課金計算・請求・対象外月分類は後続を持たない最新葉だけを参照する。

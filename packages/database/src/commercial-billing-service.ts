@@ -111,6 +111,7 @@ export class PrismaCommercialBillingService {
           offeringPeriods: {
             some: {
               workspaceId,
+              supersededBy: { is: null },
               startsAt: { lte: now },
               OR: [{ endsAt: null }, { endsAt: { gt: now } }],
             },
@@ -365,6 +366,7 @@ export class PrismaCommercialBillingService {
         where: {
           workspaceId: input.workspaceId,
           productId: input.productId,
+          supersededBy: { is: null },
           startsAt: { lte: input.agreedAt },
           OR: [{ endsAt: null }, { endsAt: { gt: input.agreedAt } }],
         },

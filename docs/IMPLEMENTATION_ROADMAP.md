@@ -1,6 +1,8 @@
 # BUNSHIN Platform 実装ロードマップ
 
-OEM契約期間のappend-only訂正は`docs/OEM_CONTRACT_HISTORY_CORRECTION_IMPLEMENTATION.md`を参照。元版を残す1対1 supersession、Workspace lockと期待値CAS、重複再検証、変更前後監査を用い、訂正差分がJSTの確定済み月へ触れる場合は拒否する。Offering・正式登録・cutoverの訂正、確定月の取消・再確定、本番Migration・訂正操作は別Gate。
+OEM提供期間・正式登録期間のappend-only訂正は`docs/OEM_OPERATIONAL_HISTORY_CORRECTION_IMPLEMENTATION.md`を参照。現在projectionを最新葉へ統一し、Offeringは同じ商品・Policy Version内の期間と提供区分、正式登録は同じMembershipの期間だけを訂正する。確定済み月へ影響する訂正、商品差替え、cutover訂正、本番操作は別Gate。
+
+OEM契約期間のappend-only訂正は`docs/OEM_CONTRACT_HISTORY_CORRECTION_IMPLEMENTATION.md`を参照。元版を残す1対1 supersession、Workspace lockと期待値CAS、重複再検証、変更前後監査を用い、訂正差分がJSTの確定済み月へ触れる場合は拒否する。cutoverの訂正、確定月の取消・再確定、本番Migration・訂正操作は別Gate。
 
 OEM契約終了後の月次キュー分離は`docs/OEM_CONTRACT_ENDED_QUEUE_SEPARATION_IMPLEMENTATION.md`を参照。履歴レビュー済みの正式登録課金V2で、確認済み契約期間が対象JST月開始以前にすべて明示終了している場合だけ通常の要確認キューから分離し、固定理由と最終終了日時を処理結果へ残す。0円利用スナップショット・請求書は作らず、履歴欠落、将来契約、期間重複は従来どおりfail-closed。本番反映・月次確定・請求発行は別Gate。
 
