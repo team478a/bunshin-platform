@@ -1,5 +1,7 @@
 # BUNSHIN Platform 実装ロードマップ
 
+OEM請求の返金要照合・団体別調査導線は`docs/OEM_INVOICE_REFUND_REVIEW_DETAIL_IMPLEMENTATION.md`を参照。対象Workspaceの各請求に紐づく処理済み返金通知を団体別請求画面へ表示し、部分／全額、受信日時、Stripe Event IDを照合できるようにする。内部請求状態、返金額、解消状態は変更せず、本番Webhook設定・返金・会計確定は別Gate。
+
 OEM請求のStripe返金要照合は`docs/OEM_INVOICE_REFUND_REVIEW_IMPLEMENTATION.md`を参照。部分／全額返金通知をPaymentIntent・元金額・通貨・環境で照合して既存Webhook台帳へ記録し、内部請求状態を自動変更せず全体請求画面へ表示する。会計確定、取消文書、通知解消、本番Webhook設定・返金は別Gate。
 
 OEM初期費用の自動回収除外は`docs/OEM_SETUP_FEE_AUTOMATIC_COLLECTION_GUARD_IMPLEMENTATION.md`を参照。既存の明示同意は月額料金だけを対象とするため、日次自動回収候補を`MONTHLY_USAGE`へ限定し、初期費用を保存済みカードへ暗黙請求しない。本番Stripe、自動回収、請求状態変更は別Gate。

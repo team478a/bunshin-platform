@@ -60,6 +60,21 @@ export class PrismaCommercialBillingService {
               issuedAt: true,
               dueAt: true,
               paidAt: true,
+              billingWebhookEvents: {
+                where: {
+                  status: 'PROCESSED',
+                  errorCategory: {
+                    in: ['PARTIAL_REFUND_REVIEW_REQUIRED', 'FULL_REFUND_REVIEW_REQUIRED'],
+                  },
+                },
+                orderBy: { receivedAt: 'desc' },
+                select: {
+                  id: true,
+                  providerEventId: true,
+                  errorCategory: true,
+                  receivedAt: true,
+                },
+              },
               setupFeeCharge: {
                 select: {
                   chargeKey: true,

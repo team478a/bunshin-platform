@@ -64,7 +64,11 @@ describe('OEM setup fee admin', () => {
     expect(operations).toContain('Stripe返金の要照合');
     expect(operations).toContain('内部請求状態は自動変更していません');
     expect(operations).toContain("status === 'REFUND_REVIEW'");
+    expect(invoiceSections).toContain('invoice.billingWebhookEvents');
+    expect(invoiceSections).toContain('Stripe Event ID');
+    expect(invoiceSections).toContain('内部請求状態は自動変更していません');
     expect(service).toContain('FULL_REFUND_REVIEW_REQUIRED');
     expect(service).toContain('PARTIAL_REFUND_REVIEW_REQUIRED');
+    expect(service).toContain('providerEventId: true');
   });
 });

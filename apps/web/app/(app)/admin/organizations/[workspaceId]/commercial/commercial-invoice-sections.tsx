@@ -184,6 +184,26 @@ export function CommercialInvoiceSections({
                     {invoice.dueAt.toLocaleDateString('ja-JP', { timeZone: 'Asia/Tokyo' })}
                   </p>
                 ) : null}
+                {invoice.billingWebhookEvents.length > 0 ? (
+                  <div className="notice notice--danger">
+                    <strong>Stripe返金の要照合</strong>
+                    <p>
+                      内部請求状態は自動変更していません。Stripeの返金記録、契約証跡、会計処理を照合してください。
+                    </p>
+                    <ul>
+                      {invoice.billingWebhookEvents.map((event) => (
+                        <li key={event.id}>
+                          {event.errorCategory === 'FULL_REFUND_REVIEW_REQUIRED'
+                            ? '全額返金通知'
+                            : '部分返金通知'}
+                          ／受信：
+                          {event.receivedAt.toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })}
+                          ／Stripe Event ID：<code>{event.providerEventId}</code>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
                 {invoice.documentSnapshot && invoice.status !== 'DRAFT' ? (
                   <a
                     className="button button--secondary"
