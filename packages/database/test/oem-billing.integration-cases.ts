@@ -298,6 +298,20 @@ export function registerOemBillingIntegrationCases(client: PrismaClient) {
           reason: 'must fail closed',
         }),
       ).rejects.toThrow('REVIEW_REQUIRED');
+      const paidOffering = await service.setOffering({
+        workspaceId: workspace.id,
+        groupId: group.id,
+        actorUserId: actor.id,
+        productPolicy: key,
+        classification: 'PAID',
+        expectedCurrentId: offering.id,
+        reason: 'explicit paid classification before policy migration',
+        now: new Date('2026-10-11T02:00:00.000Z'),
+      });
+      expect(paidOffering).toMatchObject({
+        productPolicyVersionId: product.policyVersions[0]!.id,
+        classification: 'PAID',
+      });
       await expect(
         client.commercialServiceProductPolicyVersion.update({
           where: { id: product.policyVersions[0]!.id },
@@ -319,6 +333,57 @@ export function registerOemBillingIntegrationCases(client: PrismaClient) {
         freeOfferingAllowed: false,
         requiredCapabilities: ['SOCIAL', 'AI_TRAINING'],
       });
+      await expect(
+        service.migrateOfferingProductPolicy({
+          workspaceId: workspace.id,
+          offeringId: paidOffering.id,
+          expectedCurrentPolicyVersionId: product.policyVersions[0]!.id,
+          targetPolicyVersionId: revision.id,
+          actorUserId: actor.id,
+          reason: 'future policy must remain unavailable',
+          confirmed: true,
+          now: new Date('2026-10-11T01:00:00.000Z'),
+        }),
+      ).rejects.toThrow('OFFERING_POLICY_TARGET_NOT_EFFECTIVE');
+      const migrationCandidates = await service.listOfferingPolicyMigrations(actor.id);
+      expect(
+        migrationCandidates.find((candidate) => candidate.id === paidOffering.id),
+      ).toMatchObject({
+        productPolicyVersionId: product.policyVersions[0]!.id,
+        product: { id: product.id },
+      });
+      const migrated = await service.migrateOfferingProductPolicy({
+        workspaceId: workspace.id,
+        offeringId: paidOffering.id,
+        expectedCurrentPolicyVersionId: product.policyVersions[0]!.id,
+        targetPolicyVersionId: revision.id,
+        actorUserId: actor.id,
+        reason: 'individually reviewed policy migration',
+        confirmed: true,
+        now: new Date('2026-10-12T01:00:00.000Z'),
+      });
+      expect(migrated).toMatchObject({
+        productPolicyVersionId: revision.id,
+        classification: 'PAID',
+        reason: 'individually reviewed policy migration',
+      });
+      expect(
+        await client.oemOfferingPeriod.findUniqueOrThrow({ where: { id: paidOffering.id } }),
+      ).toMatchObject({
+        endsAt: new Date('2026-10-12T01:00:00.000Z'),
+      });
+      await expect(
+        service.migrateOfferingProductPolicy({
+          workspaceId: workspace.id,
+          offeringId: paidOffering.id,
+          expectedCurrentPolicyVersionId: product.policyVersions[0]!.id,
+          targetPolicyVersionId: revision.id,
+          actorUserId: actor.id,
+          reason: 'stale retry must fail',
+          confirmed: true,
+          now: new Date('2026-10-12T02:00:00.000Z'),
+        }),
+      ).rejects.toThrow('STALE_OFFERING');
       await expect(
         service.reviseProductPolicy({
           productId: product.id,
@@ -368,7 +433,7 @@ export function registerOemBillingIntegrationCases(client: PrismaClient) {
           actorUserId: actor.id,
           productPolicy: key,
           classification: 'PAID',
-          expectedCurrentId: offering.id,
+          expectedCurrentId: migrated.id,
           reason: 'retired product cannot create a new offering period',
         }),
       ).rejects.toThrow('REVIEW_REQUIRED');
