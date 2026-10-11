@@ -86,9 +86,15 @@ vi.mock('../src/services/service-generation-knowledge', () => ({
   loadServiceGenerationKnowledge: m.knowledge,
 }));
 vi.mock('../src/ai/runtime-provider-configuration', () => ({
-  resolveOpenAiRuntimeConfiguration: m.runtime,
+  reserveOpenAiRuntimeConfiguration: m.runtime,
+}));
+vi.mock('../src/ai/openai-cost-admission', () => ({
+  recordOpenAiUsageAndSettle: (_runtime: unknown, usage: unknown) => {
+    m.usage(usage);
+  },
 }));
 vi.mock('../src/providers/openai-strategy-generator', () => ({
+  SOCIAL_ACCOUNT_STRATEGY_PROMPT_VERSION: 'social-account-strategy-v1',
   OpenAIStrategyGenerator: class {
     generate = m.strategyGenerate;
   },
@@ -331,7 +337,12 @@ beforeEach(() => {
     contentTerminologyPolicy: null,
     businessContentMixEnabled: false,
   });
-  m.runtime.mockResolvedValue({ apiKey: 'test-only-placeholder', model: 'mock-model' });
+  m.runtime.mockResolvedValue({
+    apiKey: 'test-only-placeholder',
+    model: 'mock-model',
+    requestCostUsdMicros: 100,
+    admission: { provider: 'OPENAI' },
+  });
   m.strategyGenerate.mockResolvedValue({
     output: strategyOutput,
     model: 'mock-model',

@@ -155,26 +155,75 @@ async function configuredScheduler(): Promise<MissionSchedulerPort> {
     new db.PrismaSocialActivityBarrierObservationRepository(db.prisma),
     new db.PrismaSocialActivityBarrierCaseRepository(db.prisma),
   );
-  const { resolveOpenAiRuntimeConfiguration } =
+  const { reserveOpenAiRuntimeConfiguration } =
     await import('../ai/runtime-provider-configuration');
-  const { OpenAIPersonalityLearningSuggestion } =
+  const { OpenAIPersonalityLearningSuggestion, PERSONALITY_LEARNING_PROMPT_VERSION } =
     await import('../providers/openai-personality-learning-suggestion');
-  const { recordAiUsageSafely } = await import('../observability/ai-usage');
+  const { recordOpenAiUsageAndSettle } = await import('../ai/openai-cost-admission');
+  const { withOrganizationAiGenerationQuota } = await import('../organization-ai-generation-quota');
   return {
     async execute(environment) {
       const personalityLearning = new RunWeeklyPersonalityLearningScheduler({
         async execute() {
-          const runtime = await resolveOpenAiRuntimeConfiguration();
           return new RunPersonalityLearningProposalJob(
             new db.PrismaPersonalityLearningCandidateRepository(),
             new GeneratePersonalityLearningProposal(
               new db.PrismaPersonalityLearningProposalRepository(),
-              new OpenAIPersonalityLearningSuggestion({
-                apiKey: runtime.apiKey,
-                model: runtime.model,
-                requestCostUsdMicros: runtime.requestCostUsdMicros,
-                recordUsage: recordAiUsageSafely,
-              }),
+              {
+                async suggest(input) {
+                  const runtime = await reserveOpenAiRuntimeConfiguration(
+                    input.usageIdempotencyKey,
+                  );
+                  const startedAt = Date.now();
+                  let providerAttempted = false;
+                  let usagePending = true;
+                  try {
+                    return await withOrganizationAiGenerationQuota({
+                      workspaceId: input.workspaceId,
+                      operationKey: input.usageIdempotencyKey,
+                      generate: () => {
+                        providerAttempted = true;
+                        return new OpenAIPersonalityLearningSuggestion({
+                          apiKey: runtime.apiKey,
+                          model: runtime.model,
+                          requestCostUsdMicros: runtime.requestCostUsdMicros,
+                          recordUsage: async (usage) => {
+                            usagePending = false;
+                            await recordOpenAiUsageAndSettle(runtime, usage);
+                          },
+                        }).suggest(input);
+                      },
+                    });
+                  } catch (error) {
+                    if (usagePending) {
+                      usagePending = false;
+                      await recordOpenAiUsageAndSettle(runtime, {
+                        workspaceId: input.workspaceId,
+                        bunshinId: input.bunshinId,
+                        actorUserId: input.actorUserId,
+                        taskType: 'PERSONALITY_LEARNING_PROPOSAL',
+                        provider: 'OPENAI',
+                        model: runtime.model,
+                        promptVersion: PERSONALITY_LEARNING_PROMPT_VERSION,
+                        status: 'FAILED',
+                        inputTokens: null,
+                        outputTokens: null,
+                        latencyMs: Date.now() - startedAt,
+                        estimatedCostUsdMicros: providerAttempted
+                          ? runtime.requestCostUsdMicros
+                          : 0,
+                        pricingVersion:
+                          providerAttempted && runtime.requestCostUsdMicros
+                            ? 'admin-request-cost-v1'
+                            : null,
+                        errorCode: 'INTERNAL_ERROR',
+                        idempotencyKey: input.usageIdempotencyKey,
+                      });
+                    }
+                    throw error;
+                  }
+                },
+              },
             ),
             10,
           ).execute();

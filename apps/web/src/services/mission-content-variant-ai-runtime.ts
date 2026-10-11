@@ -7,13 +7,23 @@ import {
   type MissionQualityCheckerOutput,
 } from '@bunshin/capability-social';
 import { ApplicationError } from '@bunshin/shared';
-import { resolveOpenAiRuntimeConfiguration } from '../ai/runtime-provider-configuration';
-import { recordAiUsageSafely } from '../observability/ai-usage';
+import {
+  reserveOpenAiRuntimeConfiguration,
+  type AdmittedOpenAiRuntimeConfiguration,
+} from '../ai/runtime-provider-configuration';
+import { recordOpenAiUsageAndSettle } from '../ai/openai-cost-admission';
 import { withOrganizationAiGenerationQuota } from '../organization-ai-generation-quota';
-import { OpenAIMissionContentGenerator } from '../providers/openai-mission-content-generator';
-import { OpenAIMissionQualityChecker } from '../providers/openai-mission-quality-checker';
+import {
+  MISSION_CONTENT_GENERATOR_PROMPT_VERSION,
+  OpenAIMissionContentGenerator,
+} from '../providers/openai-mission-content-generator';
+import {
+  MISSION_QUALITY_CHECKER_PROMPT_VERSION,
+  OpenAIMissionQualityChecker,
+} from '../providers/openai-mission-quality-checker';
 import {
   OpenAiPhotoFirstAnalyzer,
+  PHOTO_FIRST_ANALYSIS_PROMPT_VERSION,
   PhotoFirstAnalysisError,
   type PhotoFirstAnalysisResult,
 } from '../providers/openai-photo-first-analyzer';
@@ -66,83 +76,126 @@ export async function generateMissionContentVariantWithAi(input: {
   photoFirstConfirmation?: { question: string; answer: string };
   usageState: MissionContentVariantUsageState;
 }) {
-  const runtime = await resolveOpenAiRuntimeConfiguration();
-  input.usageState.runtimeModel = runtime.model;
-  const usage = async (
-    suffix: string,
-    taskType: string,
-    result: {
+  const executeAiStep = async <
+    T extends {
       model: string;
       promptVersion: string;
       inputTokens: number | null;
       outputTokens: number | null;
       latencyMs: number;
     },
-  ) => {
-    input.usageState.promptVersion = result.promptVersion;
-    if (result.inputTokens !== null) {
-      input.usageState.hasInputTokens = true;
-      input.usageState.totalInputTokens += result.inputTokens;
+  >(operation: {
+    suffix: string;
+    taskType: string;
+    promptVersion: string;
+    generate: (runtime: AdmittedOpenAiRuntimeConfiguration) => Promise<T>;
+  }) => {
+    const operationKey = `${input.usageIdempotencyPrefix}:${operation.suffix}`;
+    const runtime = await reserveOpenAiRuntimeConfiguration(operationKey);
+    input.usageState.runtimeModel = runtime.model;
+    const startedAt = Date.now();
+    let providerAttempted = false;
+    let usagePending = true;
+    try {
+      const result = await withOrganizationAiGenerationQuota({
+        workspaceId: input.scope.workspaceId,
+        ...(input.scope.groupId === undefined ? {} : { groupId: input.scope.groupId }),
+        operationKey,
+        generate: () => {
+          providerAttempted = true;
+          return operation.generate(runtime);
+        },
+      });
+      input.usageState.promptVersion = result.promptVersion;
+      if (result.inputTokens !== null) {
+        input.usageState.hasInputTokens = true;
+        input.usageState.totalInputTokens += result.inputTokens;
+      }
+      if (result.outputTokens !== null) {
+        input.usageState.hasOutputTokens = true;
+        input.usageState.totalOutputTokens += result.outputTokens;
+      }
+      input.usageState.estimatedCostMicros += runtime.requestCostUsdMicros;
+      input.usageState.requestCount += 1;
+      usagePending = false;
+      await recordOpenAiUsageAndSettle(runtime, {
+        contentVariantGenerationId: input.generationId,
+        ...input.scope,
+        taskType: operation.taskType,
+        provider: 'openai',
+        model: result.model,
+        promptVersion: result.promptVersion,
+        status: 'SUCCESS',
+        inputTokens: result.inputTokens,
+        outputTokens: result.outputTokens,
+        latencyMs: result.latencyMs,
+        estimatedCostUsdMicros: runtime.requestCostUsdMicros || null,
+        pricingVersion: runtime.requestCostUsdMicros ? 'admin-request-cost-v1' : null,
+        idempotencyKey: operationKey,
+      });
+      return result;
+    } catch (error) {
+      if (usagePending) {
+        usagePending = false;
+        if (providerAttempted) {
+          input.usageState.estimatedCostMicros += runtime.requestCostUsdMicros;
+          input.usageState.requestCount += 1;
+        }
+        await recordOpenAiUsageAndSettle(runtime, {
+          contentVariantGenerationId: input.generationId,
+          ...input.scope,
+          taskType: operation.taskType,
+          provider: 'openai',
+          model: runtime.model,
+          promptVersion: operation.promptVersion,
+          status: 'FAILED',
+          inputTokens: null,
+          outputTokens: null,
+          latencyMs: Date.now() - startedAt,
+          estimatedCostUsdMicros: providerAttempted ? runtime.requestCostUsdMicros : 0,
+          pricingVersion:
+            providerAttempted && runtime.requestCostUsdMicros ? 'admin-request-cost-v1' : null,
+          errorCode: error instanceof ApplicationError ? error.code : 'INTERNAL_ERROR',
+          idempotencyKey: operationKey,
+        });
+      }
+      throw error;
     }
-    if (result.outputTokens !== null) {
-      input.usageState.hasOutputTokens = true;
-      input.usageState.totalOutputTokens += result.outputTokens;
-    }
-    input.usageState.estimatedCostMicros += runtime.requestCostUsdMicros;
-    input.usageState.requestCount += 1;
-    await recordAiUsageSafely({
-      contentVariantGenerationId: input.generationId,
-      ...input.scope,
-      taskType,
-      provider: 'openai',
-      model: result.model,
-      promptVersion: result.promptVersion,
-      status: 'SUCCESS',
-      inputTokens: result.inputTokens,
-      outputTokens: result.outputTokens,
-      latencyMs: result.latencyMs,
-      estimatedCostUsdMicros: runtime.requestCostUsdMicros || null,
-      pricingVersion: runtime.requestCostUsdMicros ? 'admin-request-cost-v1' : null,
-      idempotencyKey: `${input.usageIdempotencyPrefix}:${suffix}`,
-    });
   };
-  const generateWithQuota = <T>(suffix: string, generate: () => Promise<T>) =>
-    withOrganizationAiGenerationQuota({
-      workspaceId: input.scope.workspaceId,
-      ...(input.scope.groupId === undefined ? {} : { groupId: input.scope.groupId }),
-      operationKey: `${input.usageIdempotencyPrefix}:${suffix}`,
-      generate,
-    });
   const { context, mission } = input;
   let photoFirst: PhotoFirstAnalysisResult | null = null;
   if (input.photoFirst) {
     try {
-      photoFirst = await generateWithQuota('photo-first-analysis', () =>
-        new OpenAiPhotoFirstAnalyzer({ apiKey: runtime.apiKey, model: runtime.model }).analyze({
-          ...input.photoFirst!,
-          company: {
-            name: context.bunshinContext.name,
-            objectiveSummary: context.bunshinContext.objectiveSummary,
-            audienceSummary: context.bunshinContext.audienceSummary,
-            personalitySummary: context.bunshinContext.personalitySummary,
-            businessProfile: context.businessProfile,
-          },
-          strategy: {
-            goal: context.strategyContext.goal,
-            goalPlanning: context.strategyContext.goalPlanning,
-            concept: context.strategyContext.concept,
-            positioning: context.strategyContext.positioning,
-            targetSummary: context.strategyContext.targetSummary,
-            ctaStrategy: context.strategyContext.ctaStrategy,
-          },
-          platform: context.profile.platform,
-          mission: { topic: mission.topic, angle: mission.angle, reason: mission.reason },
-          recentPosts: input.recentMissions
-            .slice(-12)
-            .map(({ topic, angle }) => ({ topic, angle })),
-          ...(input.photoFirstConfirmation ? { confirmation: input.photoFirstConfirmation } : {}),
-        }),
-      );
+      photoFirst = await executeAiStep({
+        suffix: 'photo-first-analysis',
+        taskType: 'PHOTO_FIRST_ANALYSIS',
+        promptVersion: PHOTO_FIRST_ANALYSIS_PROMPT_VERSION,
+        generate: (runtime) =>
+          new OpenAiPhotoFirstAnalyzer({ apiKey: runtime.apiKey, model: runtime.model }).analyze({
+            ...input.photoFirst!,
+            company: {
+              name: context.bunshinContext.name,
+              objectiveSummary: context.bunshinContext.objectiveSummary,
+              audienceSummary: context.bunshinContext.audienceSummary,
+              personalitySummary: context.bunshinContext.personalitySummary,
+              businessProfile: context.businessProfile,
+            },
+            strategy: {
+              goal: context.strategyContext.goal,
+              goalPlanning: context.strategyContext.goalPlanning,
+              concept: context.strategyContext.concept,
+              positioning: context.strategyContext.positioning,
+              targetSummary: context.strategyContext.targetSummary,
+              ctaStrategy: context.strategyContext.ctaStrategy,
+            },
+            platform: context.profile.platform,
+            mission: { topic: mission.topic, angle: mission.angle, reason: mission.reason },
+            recentPosts: input.recentMissions
+              .slice(-12)
+              .map(({ topic, angle }) => ({ topic, angle })),
+            ...(input.photoFirstConfirmation ? { confirmation: input.photoFirstConfirmation } : {}),
+          }),
+      });
     } catch (error) {
       if (error instanceof PhotoFirstAnalysisError)
         throw new ApplicationError(
@@ -152,7 +205,6 @@ export async function generateMissionContentVariantWithAi(input: {
         );
       throw error;
     }
-    await usage('photo-first-analysis', 'PHOTO_FIRST_ANALYSIS', photoFirst);
   }
   const brief = {
     missionDate: mission.missionDate,
@@ -192,18 +244,19 @@ export async function generateMissionContentVariantWithAi(input: {
       ...(input.variantInstructions ?? []),
     ],
   };
-  const generator = new GenerateMissionContent(
-    new OpenAIMissionContentGenerator({ apiKey: runtime.apiKey, model: runtime.model }),
-  );
-  let content = await generateWithQuota('variant-content:0', () => generator.execute(contentInput));
+  let content = await executeAiStep({
+    suffix: 'variant-content:0',
+    taskType: 'MISSION_CONTENT_VARIANT',
+    promptVersion: MISSION_CONTENT_GENERATOR_PROMPT_VERSION,
+    generate: (runtime) =>
+      new GenerateMissionContent(
+        new OpenAIMissionContentGenerator({ apiKey: runtime.apiKey, model: runtime.model }),
+      ).execute(contentInput),
+  });
   content = {
     ...content,
     output: applyServiceContentTerminology(content.output, context.contentTerminologyPolicy),
   };
-  await usage('variant-content:0', 'MISSION_CONTENT_VARIANT', content);
-  const checker = new CheckMissionQuality(
-    new OpenAIMissionQualityChecker({ apiKey: runtime.apiKey, model: runtime.model }),
-  );
   const qualityInput = () => ({
     platform: context.profile.platform,
     brief,
@@ -223,25 +276,46 @@ export async function generateMissionContentVariantWithAi(input: {
         }
       : {}),
   });
-  let quality = await generateWithQuota('variant-quality:0', () => checker.execute(qualityInput()));
+  let quality = await executeAiStep({
+    suffix: 'variant-quality:0',
+    taskType: 'QUALITY_CHECKER',
+    promptVersion: MISSION_QUALITY_CHECKER_PROMPT_VERSION,
+    generate: (runtime) =>
+      new CheckMissionQuality(
+        new OpenAIMissionQualityChecker({ apiKey: runtime.apiKey, model: runtime.model }),
+      ).execute(qualityInput()),
+  });
   input.usageState.qualityAttempts.push(quality.output);
-  await usage('variant-quality:0', 'QUALITY_CHECKER', quality);
   if (quality.output.verdict === 'REVISE') {
     input.usageState.qualityRepairCount += 1;
-    content = await generateWithQuota('variant-content:1', () =>
-      generator.execute({
-        ...contentInput,
-        repairInstructions: quality.output.issues.map(({ repairInstruction }) => repairInstruction),
-      }),
-    );
+    content = await executeAiStep({
+      suffix: 'variant-content:1',
+      taskType: 'MISSION_CONTENT_VARIANT_REPAIR',
+      promptVersion: MISSION_CONTENT_GENERATOR_PROMPT_VERSION,
+      generate: (runtime) =>
+        new GenerateMissionContent(
+          new OpenAIMissionContentGenerator({ apiKey: runtime.apiKey, model: runtime.model }),
+        ).execute({
+          ...contentInput,
+          repairInstructions: quality.output.issues.map(
+            ({ repairInstruction }) => repairInstruction,
+          ),
+        }),
+    });
     content = {
       ...content,
       output: applyServiceContentTerminology(content.output, context.contentTerminologyPolicy),
     };
-    await usage('variant-content:1', 'MISSION_CONTENT_VARIANT_REPAIR', content);
-    quality = await generateWithQuota('variant-quality:1', () => checker.execute(qualityInput()));
+    quality = await executeAiStep({
+      suffix: 'variant-quality:1',
+      taskType: 'QUALITY_CHECKER',
+      promptVersion: MISSION_QUALITY_CHECKER_PROMPT_VERSION,
+      generate: (runtime) =>
+        new CheckMissionQuality(
+          new OpenAIMissionQualityChecker({ apiKey: runtime.apiKey, model: runtime.model }),
+        ).execute(qualityInput()),
+    });
     input.usageState.qualityAttempts.push(quality.output);
-    await usage('variant-quality:1', 'QUALITY_CHECKER', quality);
   }
   if (quality.output.verdict !== 'PASS')
     throw new ApplicationError('CONTENT_REJECTED', 'generated variant failed quality check');

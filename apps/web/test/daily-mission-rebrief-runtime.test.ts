@@ -54,7 +54,6 @@ const passedBoundary = {
 describe('daily mission rebrief runtime', () => {
   it('uses one quota/usage suffix and returns a bounded revision snapshot draft', async () => {
     const quotaSuffixes: string[] = [];
-    const recordUsage = vi.fn().mockResolvedValue(undefined);
     const setStage = vi.fn();
     const planner = {
       generate: vi.fn().mockResolvedValue({
@@ -75,28 +74,26 @@ describe('daily mission rebrief runtime', () => {
     };
 
     const result = await runDailyMissionRebriefGeneration({
-      apiKey: 'not-used-by-fake',
-      model: 'configured-model',
       initialBrief,
       strategyVersion: 3,
       boundary: passedBoundary,
       disposition,
-      generateWithQuota: async (suffix, generate) => {
+      executeAiStep: async ({ suffix, generate }) => {
         quotaSuffixes.push(suffix);
-        return generate();
+        return generate({
+          apiKey: 'not-used-by-fake',
+          model: 'configured-model',
+          requestCostUsdMicros: 1,
+          source: 'ADMIN_CONFIGURATION',
+          admission: null,
+        });
       },
-      recordUsage,
       setStage,
       planner,
     });
 
     expect(planner.generate).toHaveBeenCalledTimes(1);
     expect(quotaSuffixes).toEqual(['decision-rebrief:1']);
-    expect(recordUsage).toHaveBeenCalledWith(
-      'decision-rebrief:1',
-      'DAILY_MISSION_REBRIEF',
-      expect.objectContaining({ promptVersion: 'daily-mission-rebrief-v1' }),
-    );
     expect(setStage).toHaveBeenCalledWith('decision-rebrief:1');
     expect(result.brief.output).toMatchObject({
       socialProfileId: 'profile-internal',
@@ -117,24 +114,21 @@ describe('daily mission rebrief runtime', () => {
   });
 
   it('rejects UNKNOWN safety before quota or provider execution', async () => {
-    const generateWithQuota = vi.fn();
+    const executeAiStep = vi.fn();
     const planner = { generate: vi.fn() };
 
     await expect(
       runDailyMissionRebriefGeneration({
-        apiKey: 'not-used',
-        model: 'model',
         initialBrief,
         strategyVersion: 3,
         boundary: { ...passedBoundary, safetyLegal: 'UNKNOWN' },
         disposition,
-        generateWithQuota,
-        recordUsage: vi.fn(),
+        executeAiStep,
         setStage: vi.fn(),
         planner,
       }),
     ).rejects.toThrow('decision rebrief boundary is not ready');
-    expect(generateWithQuota).not.toHaveBeenCalled();
+    expect(executeAiStep).not.toHaveBeenCalled();
     expect(planner.generate).not.toHaveBeenCalled();
   });
 });

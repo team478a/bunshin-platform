@@ -173,6 +173,7 @@ describe('PrismaAiProviderConfigurationRepository', () => {
       environment: 'PRODUCTION',
       provider: 'EXA',
       operationKey: 'trend:week:1',
+      requestCount: 2,
     });
 
     expect(result).toMatchObject({
@@ -188,9 +189,60 @@ describe('PrismaAiProviderConfigurationRepository', () => {
     expect(transactionClient.aiProviderCallAdmission.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         configurationId: row.id,
-        reservedCostUsdMicros: 250n,
+        reservedCostUsdMicros: 500n,
         admittedAt: now,
       }),
+    });
+  });
+
+  it('recovers only an open reservation with a matching known-cost usage event', async () => {
+    const operationKey = 'daily:mission:known';
+    const row = {
+      id: '33333333-3333-4333-8333-333333333333',
+      configurationId: '11111111-1111-4111-8111-111111111111',
+      provider: 'OPENAI' as const,
+      operationHash: createHash('sha256').update(operationKey).digest('hex'),
+      admittedAt: new Date('2026-10-11T10:00:00.000Z'),
+    };
+    const transactionClient = {
+      $executeRaw: vi.fn().mockResolvedValue(0),
+      aiProviderCallAdmission: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+      aiProviderConfigurationAudit: { create: vi.fn().mockResolvedValue({}) },
+    };
+    const client = {
+      platformAdmin: { findFirst: vi.fn().mockResolvedValue({ role: 'SUPER_ADMIN' }) },
+      aiProviderCallAdmission: {
+        findMany: vi.fn().mockResolvedValue([row]),
+        count: vi.fn().mockResolvedValue(0),
+      },
+      aiUsageEvent: {
+        findMany: vi
+          .fn()
+          .mockResolvedValue([
+            { idempotencyKey: operationKey },
+            { idempotencyKey: 'different-operation' },
+          ]),
+      },
+      $transaction: vi.fn((operation: (tx: typeof transactionClient) => Promise<unknown>) =>
+        operation(transactionClient),
+      ),
+    };
+
+    await expect(
+      new PrismaAiProviderConfigurationRepository(client as never).recoverRecordedRuntimeAdmissions(
+        {
+          actorUserId: '22222222-2222-4222-8222-222222222222',
+          environment: 'PRODUCTION',
+          reason: '使用量記録済み予約の精算を復旧',
+        },
+      ),
+    ).resolves.toEqual({ scanned: 1, recovered: 1, remainingOpen: 0 });
+    expect(transactionClient.aiProviderCallAdmission.updateMany).toHaveBeenCalledWith({
+      where: expect.objectContaining({ id: row.id, operationHash: row.operationHash }),
+      data: { settledAt: expect.any(Date) },
+    });
+    expect(transactionClient.aiProviderConfigurationAudit.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ action: 'RECOVER_RUNTIME_ADMISSION' }),
     });
   });
 
