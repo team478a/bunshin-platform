@@ -39,6 +39,60 @@ describe('unresolvedCommercialReminderFailures', () => {
 });
 
 describe('PrismaCommercialBillingService', () => {
+  it('returns the latest refund review signal for each paid invoice', async () => {
+    const latest = {
+      id: 'event-full',
+      workspaceId: 'workspace-a',
+      invoiceId: 'invoice-a',
+      errorCategory: 'FULL_REFUND_REVIEW_REQUIRED',
+      receivedAt: new Date('2026-10-11T02:00:00.000Z'),
+    };
+    const findRefundEvents = vi.fn().mockResolvedValue([
+      latest,
+      {
+        ...latest,
+        id: 'event-partial',
+        errorCategory: 'PARTIAL_REFUND_REVIEW_REQUIRED',
+        receivedAt: new Date('2026-10-11T01:00:00.000Z'),
+      },
+    ]);
+    const client = {
+      organizationCommercialContract: { count: vi.fn().mockResolvedValue(1) },
+      tenantInvoice: {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            id: 'invoice-a',
+            status: 'PAID',
+            amountYen: 19_800,
+            dueAt: new Date('2026-10-01T00:00:00.000Z'),
+          },
+        ]),
+      },
+      commercialBillingWebhookEvent: { findMany: findRefundEvents },
+    } as unknown as PrismaClient;
+
+    await expect(
+      new PrismaCommercialBillingService(client).operationsDashboard(
+        new Date('2026-10-11T03:00:00.000Z'),
+      ),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        refundReviews: [latest],
+      }),
+    );
+    expect(findRefundEvents).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          invoiceId: { in: ['invoice-a'] },
+          status: 'PROCESSED',
+          errorCategory: {
+            in: ['PARTIAL_REFUND_REVIEW_REQUIRED', 'FULL_REFUND_REVIEW_REQUIRED'],
+          },
+        }),
+      }),
+    );
+  });
+
   it('does not activate billing without an OEM entitlement', async () => {
     const client = {
       workspace: {

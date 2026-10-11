@@ -30,6 +30,10 @@ const service = readFileSync(
   new URL('../../../packages/database/src/commercial-billing-service.ts', import.meta.url),
   'utf8',
 );
+const operations = readFileSync(
+  new URL('../app/(app)/admin/commercial-billing/page.tsx', import.meta.url),
+  'utf8',
+);
 
 describe('OEM setup fee admin', () => {
   it('requires explicit agreement evidence and confirmation before creating a separate draft', () => {
@@ -54,5 +58,13 @@ describe('OEM setup fee admin', () => {
   it('explains that setup fees are outside monthly automatic collection consent', () => {
     expect(contractSection).toContain('次回以降の月額料金を保存カードから回収する');
     expect(contractSection).toContain('自動回収の対象は月額料金だけで、初期費用は対象外です');
+  });
+
+  it('shows Stripe refund notifications as review-required without auto-settling them', () => {
+    expect(operations).toContain('Stripe返金の要照合');
+    expect(operations).toContain('内部請求状態は自動変更していません');
+    expect(operations).toContain("status === 'REFUND_REVIEW'");
+    expect(service).toContain('FULL_REFUND_REVIEW_REQUIRED');
+    expect(service).toContain('PARTIAL_REFUND_REVIEW_REQUIRED');
   });
 });

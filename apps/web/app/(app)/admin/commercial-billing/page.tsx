@@ -38,10 +38,14 @@ export default async function CommercialBillingOperationsPage({
   const reminderFailureInvoiceIds = new Set(
     data.reminderFailures.map((failure) => failure.entityId),
   );
+  const refundReviewByInvoiceId = new Map(
+    data.refundReviews.map((review) => [review.invoiceId, review]),
+  );
   const invoicesById = new Map(data.invoices.map((invoice) => [invoice.id, invoice]));
   const invoices = data.invoices.filter((invoice) => {
     if (status === 'OVERDUE') return isTenantInvoiceOverdue(invoice, now);
     if (status === 'REMINDER_FAILED') return reminderFailureInvoiceIds.has(invoice.id);
+    if (status === 'REFUND_REVIEW') return refundReviewByInvoiceId.has(invoice.id);
     if (status === 'DRAFT' || status === 'ISSUED' || status === 'PAID' || status === 'VOID') {
       return invoice.status === status;
     }
@@ -104,6 +108,10 @@ export default async function CommercialBillingOperationsPage({
           <span>案内送信の要確認</span>
           <strong>{reminderFailureInvoiceIds.size}件</strong>
         </div>
+        <div>
+          <span>返金の要照合</span>
+          <strong>{refundReviewByInvoiceId.size}件</strong>
+        </div>
       </section>
 
       {data.reminderFailures.length > 0 ? (
@@ -126,6 +134,37 @@ export default async function CommercialBillingOperationsPage({
                   <strong>
                     <Link href={`/admin/organizations/${invoice.workspaceId}/commercial`}>
                       確認・再送
+                    </Link>
+                  </strong>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      ) : null}
+
+      {data.refundReviews.length > 0 ? (
+        <section className="settings-card">
+          <h2>Stripe返金の要照合</h2>
+          <p>
+            Stripeから返金通知を受信しました。内部請求状態は自動変更していません。Stripeの返金記録、契約証跡、会計処理を確認してください。
+          </p>
+          <ul className="summary-list">
+            {data.refundReviews.map((review) => {
+              const invoice = invoicesById.get(review.invoiceId);
+              if (!invoice) return null;
+              return (
+                <li key={review.id}>
+                  <span>
+                    {invoice.workspace.name}／{invoice.invoiceNumber}／
+                    {review.errorCategory === 'FULL_REFUND_REVIEW_REQUIRED'
+                      ? '全額返金通知'
+                      : '部分返金通知'}
+                    （{review.receivedAt.toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })}）
+                  </span>
+                  <strong>
+                    <Link href={`/admin/organizations/${invoice.workspaceId}/commercial`}>
+                      請求を確認
                     </Link>
                   </strong>
                 </li>
@@ -170,6 +209,12 @@ export default async function CommercialBillingOperationsPage({
           >
             案内送信失敗（{reminderFailureInvoiceIds.size}）
           </Link>
+          <Link
+            className="button button--secondary"
+            href="/admin/commercial-billing?status=REFUND_REVIEW"
+          >
+            返金要照合（{refundReviewByInvoiceId.size}）
+          </Link>
         </div>
         {invoices.length === 0 ? (
           <p>該当する請求はありません。</p>
@@ -187,6 +232,7 @@ export default async function CommercialBillingOperationsPage({
                   <th>状態</th>
                   <th>支払期限</th>
                   <th>自動案内</th>
+                  <th>返金</th>
                   <th>確認</th>
                 </tr>
               </thead>
@@ -227,6 +273,14 @@ export default async function CommercialBillingOperationsPage({
                           '—'}
                       </td>
                       <td>{reminderFailureInvoiceIds.has(invoice.id) ? '要確認' : '—'}</td>
+                      <td>
+                        {refundReviewByInvoiceId.get(invoice.id)?.errorCategory ===
+                        'FULL_REFUND_REVIEW_REQUIRED'
+                          ? '全額・要照合'
+                          : refundReviewByInvoiceId.has(invoice.id)
+                            ? '部分・要照合'
+                            : '—'}
+                      </td>
                       <td>
                         <Link href={`/admin/organizations/${invoice.workspaceId}/commercial`}>
                           詳細・更新

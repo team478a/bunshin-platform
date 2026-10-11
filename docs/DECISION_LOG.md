@@ -1,5 +1,13 @@
 # BUNSHIN Platform Decision Log
 
+## 2026-10-11: OEM請求のStripe返金通知は会計状態を変えず要照合として記録する
+
+- 状態: Proposed（実装PRレビュー待ち。本番Webhook設定・返金・請求状態変更は未承認）
+- `charge.refunded`は部分返金でも発生するため、署名・環境・PaymentIntent・元金額・通貨・累計返金額・全額フラグを照合した通知を既存Webhook台帳へ記録する。
+- 返金通知だけから`TenantInvoice`を`VOID`等へ遷移させず、部分／全額の要照合として全体請求画面へ表示する。売上認識、返金確定日、取消文書、税務処理をコードで推測しない。
+- 同じProvider Event IDは冪等に扱い、PaymentIntentに一致する請求が0件または複数、請求が未入金、金額・通貨・環境が不一致の場合は記録せずfail-closedとする。
+- 本番Webhook購読追加、Stripe返金、内部請求状態変更、通知解消操作は別Gateとする。
+
 ## 2026-10-11: OEM初期費用を月額料金の自動回収同意へ含めない
 
 - 状態: Proposed（実装PRレビュー待ち。本番Stripe、自動回収、請求状態変更は未承認）
