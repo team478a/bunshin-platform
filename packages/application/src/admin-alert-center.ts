@@ -16,6 +16,7 @@ export interface AdminAlert {
     | '/admin/deletions'
     | '/admin/guide'
     | '/admin/services'
+    | '/admin/commercial-billing?status=REFUND_REVIEW'
     | `/s/${string}/manage/line`;
 }
 
@@ -61,6 +62,7 @@ export interface AdminAlertSnapshot {
   blockedDeletions: number;
   openSupportCases: number;
   urgentSupportCases: number;
+  commercialBillingRefundReviews: number;
 }
 
 export interface AdminAlertRepository {
@@ -272,6 +274,16 @@ export function buildAdminAlerts(snapshot: AdminAlertSnapshot): AdminAlert[] {
       guidance: '停止理由を確認し、問題を解消してから再試行してください。',
       count: snapshot.blockedDeletions,
       href: '/admin/deletions',
+    });
+  if (snapshot.commercialBillingRefundReviews > 0)
+    alerts.push({
+      code: 'COMMERCIAL_BILLING_REFUND_REVIEWS',
+      severity: 'WARNING',
+      title: 'OEM請求に返金の要照合があります',
+      guidance:
+        'Stripeの返金記録、契約証跡、会計処理を照合してください。内部請求状態は自動変更されていません。',
+      count: snapshot.commercialBillingRefundReviews,
+      href: '/admin/commercial-billing?status=REFUND_REVIEW',
     });
   if (snapshot.openSupportCases > 0)
     alerts.push({
