@@ -215,6 +215,7 @@ async function sendInvoiceReminder(formData: FormData) {
     },
     select: {
       id: true,
+      kind: true,
       invoiceNumber: true,
       amountYen: true,
       dueAt: true,
@@ -235,6 +236,7 @@ async function sendInvoiceReminder(formData: FormData) {
       apiKey: new AesGcmAdminEmailSecretCrypto().decrypt(configuration.encryptedApiKey),
       from: configuration.configuration.fromEmail,
       to: invoice.contract.billingEmail,
+      invoiceKind: invoice.kind,
       invoiceNumber: invoice.invoiceNumber,
       billingName: invoice.contract.billingName,
       amountYen: invoice.amountYen,

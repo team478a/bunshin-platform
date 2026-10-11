@@ -6,6 +6,7 @@ import {
   StripeCommercialInvoiceCheckoutAdapter,
   StripePaymentMethodRetrievalAdapter,
 } from './secure-configuration';
+import { commercialInvoiceProviderDescription } from '../commercial-invoice-copy';
 
 type CheckoutAdapter = Pick<StripeCommercialInvoiceCheckoutAdapter, 'create'>;
 type PaymentMethodAdapter = Pick<StripePaymentMethodRetrievalAdapter, 'retrieve'>;
@@ -34,7 +35,7 @@ function platformStripeConfiguration() {
   ) {
     throw new ApplicationError(
       'CONFIGURATION_ERROR',
-      'ワタシワークス月額請求のStripe設定が完了していません',
+      'ワタシワークス請求のStripe設定が完了していません',
     );
   }
   return {
@@ -115,6 +116,7 @@ export async function createCommercialInvoiceCheckout(
     invoiceId: invoice.id,
     workspaceId: invoice.workspaceId,
     invoiceNumber: invoice.invoiceNumber,
+    itemName: commercialInvoiceProviderDescription(invoice.kind, invoice.invoiceNumber),
     billingEmail: invoice.contract.billingEmail,
     amountYen: invoice.amountYen,
     successUrl: new URL(`${returnPath}?payment=success`, configuration.appUrl).toString(),

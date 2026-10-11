@@ -51,6 +51,7 @@ export async function runCommercialBillingReminders(now = new Date()) {
     select: {
       id: true,
       workspaceId: true,
+      kind: true,
       invoiceNumber: true,
       amountYen: true,
       dueAt: true,
@@ -113,6 +114,7 @@ export async function runCommercialBillingReminders(now = new Date()) {
         apiKey,
         from: configuration.configuration.fromEmail,
         to: invoice.contract.billingEmail,
+        invoiceKind: invoice.kind,
         invoiceNumber: invoice.invoiceNumber,
         billingName: invoice.contract.billingName,
         amountYen: invoice.amountYen,

@@ -1,5 +1,7 @@
 # BUNSHIN Platform 実装ロードマップ
 
+OEM初期費用の決済・督促表示整合は`docs/OEM_SETUP_FEE_PAYMENT_COMMUNICATION_IMPLEMENTATION.md`を参照。Stripe Checkout、自動回収、手動・自動督促の表示を内部請求種別から決定し、初期費用を月額利用料と表示しない。本番Provider呼出し、メール送信、決済、請求状態変更は別Gate。
+
 OEM初期費用の共通請求基盤は`docs/OEM_SETUP_FEE_INVOICING_IMPLEMENTATION.md`を参照。契約証跡を人間が確認した初期費用をService Product単位の不変Snapshotとして月次人数料金から分離し、既存の請求書・入金・督促・CSV経路へ接続する。価格や先行社数をコードで推測しない。本番Migration/release、実価格登録、請求発行、決済は別Gate。
 
 OEM Service Product共通化は`docs/OEM_SERVICE_PRODUCT_POLICY_IMPLEMENTATION_REPORT.md`を参照。OEMを提供形態とし、ハッシー、マナベルスタイル、将来のワタシワークス商品を明示的な商品台帳・不変ポリシー版で扱う。Workspace内`R ∪ A`と共通料金表は維持する。本番Migration/release、商品登録、Offering変更、cutover、請求は別Gate。

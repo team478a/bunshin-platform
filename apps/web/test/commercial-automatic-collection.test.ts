@@ -15,6 +15,7 @@ import { collectCommercialInvoices } from '../src/payments/commercial-invoice-au
 const now = new Date('2026-09-21T00:30:00Z');
 const invoice = {
   id: 'invoice-a',
+  kind: 'MONTHLY_USAGE',
   workspaceId: 'workspace-a',
   invoiceNumber: 'WW-202609-A',
   amountYen: 19_800,
@@ -57,6 +58,7 @@ describe('commercial automatic collection', () => {
         idempotencyKey: 'platform-invoice-auto:invoice-a',
         workspaceId: 'workspace-a',
         amountYen: 19_800,
+        description: 'ワタシワークス OEM月額利用料 WW-202609-A',
       }),
     );
     expect(updateMany).toHaveBeenCalledWith(
@@ -70,6 +72,39 @@ describe('commercial automatic collection', () => {
         data: expect.objectContaining({ action: 'AUTO_PAYMENT_CONFIRMED' }),
       }),
     );
+  });
+
+  it('uses a setup fee description for one-time automatic collection', async () => {
+    const updateMany = vi.fn().mockResolvedValue({ count: 1 });
+    const client = {
+      tenantInvoice: {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            ...invoice,
+            kind: 'SETUP_FEE',
+            invoiceNumber: 'WW-SETUP-20261010-A',
+            amountYen: 300_000,
+          },
+        ]),
+        updateMany,
+      },
+      $transaction: vi.fn(),
+    } as unknown as PrismaClient;
+    const collect = vi.fn().mockResolvedValue({
+      paymentIntentId: 'pi_setup_action',
+      outcome: 'REQUIRES_ACTION',
+      failureCategory: 'REQUIRES_ACTION',
+    });
+
+    await collectCommercialInvoices(client, { now }, { collect });
+
+    expect(collect).toHaveBeenCalledWith(
+      expect.objectContaining({
+        amountYen: 300_000,
+        description: 'ワタシワークス OEM初期費用 WW-SETUP-20261010-A',
+      }),
+    );
+    expect(collect.mock.calls[0]?.[0].description).not.toContain('月額');
   });
 
   it('keeps an action-required invoice issued so hosted Checkout remains available', async () => {

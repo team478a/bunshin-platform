@@ -24,6 +24,7 @@ import {
 
 const invoice = {
   id: 'invoice-a',
+  kind: 'MONTHLY_USAGE',
   workspaceId: 'workspace-a',
   invoiceNumber: 'WW-202609-A',
   status: 'ISSUED',
@@ -93,6 +94,7 @@ describe('commercial invoice Stripe payment', () => {
         invoiceId: 'invoice-a',
         workspaceId: 'workspace-a',
         amountYen: 19_800,
+        itemName: 'ワタシワークス OEM月額利用料 WW-202609-A',
         billingEmail: 'billing@example.com',
         savePaymentMethod: false,
         customerId: null,
@@ -103,6 +105,40 @@ describe('commercial invoice Stripe payment', () => {
         where: { id: 'invoice-a', workspaceId: 'workspace-a', status: 'ISSUED' },
       }),
     );
+  });
+
+  it('labels a setup fee Checkout without calling it a monthly charge', async () => {
+    const create = vi.fn().mockResolvedValue({
+      id: 'cs_setup_fee',
+      url: 'https://checkout.stripe.com/setup-fee',
+      expiresAt: null,
+    });
+    const client = {
+      workspaceMembership: { findFirst: vi.fn().mockResolvedValue({ id: 'membership-a' }) },
+      tenantInvoice: {
+        findFirst: vi.fn().mockResolvedValue({
+          ...invoice,
+          kind: 'SETUP_FEE',
+          invoiceNumber: 'WW-SETUP-20261010-A',
+          amountYen: 300_000,
+        }),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+      },
+    } as unknown as PrismaClient;
+
+    await createCommercialInvoiceCheckout(
+      client,
+      { workspaceId: 'workspace-a', invoiceId: 'invoice-a', actorUserId: 'owner-a' },
+      { create },
+    );
+
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        amountYen: 300_000,
+        itemName: 'ワタシワークス OEM初期費用 WW-SETUP-20261010-A',
+      }),
+    );
+    expect(create.mock.calls[0]?.[0].itemName).not.toContain('月額');
   });
 
   it('stores Stripe references after an explicitly enabled first payment', async () => {
