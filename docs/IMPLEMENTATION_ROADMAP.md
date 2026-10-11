@@ -1,5 +1,7 @@
 # BUNSHIN Platform 実装ロードマップ
 
+OEM Service Product共通化は`docs/OEM_SERVICE_PRODUCT_POLICY_IMPLEMENTATION_REPORT.md`を参照。OEMを提供形態とし、ハッシー、マナベルスタイル、将来のワタシワークス商品を明示的な商品台帳・不変ポリシー版で扱う。Workspace内`R ∪ A`と共通料金表は維持する。本番Migration/release、商品登録、Offering変更、cutover、請求は別Gate。
+
 OpenAI会員商品投稿案生成の原子的費用予約は`docs/ai-training/OPENAI_MEMBER_PRODUCT_COST_ADMISSION_IMPLEMENTATION.md`を参照。本人・Service・Bunshin・商品・外部リンクのPrecondition後に予約し、quota拒否は0円、Provider試行後は固定原価を記録してから確定する。研修評価の既存専用Admissionとの統合、本番release・設定・送信は別Gate。
 
 OpenAI SNSインサイト画像読取の原子的費用予約は`docs/ai-training/OPENAI_SOCIAL_INSIGHT_COST_ADMISSION_IMPLEMENTATION.md`を参照。本人・Service・Bunshin・画像のPrecondition後に既存Admission台帳へ予約し、Provider試行後の固定原価利用実績を厳格保存してから確定する。他のOpenAI経路、本番release・設定・送信は別Gate。

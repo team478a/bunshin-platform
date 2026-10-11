@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   current: vi.fn(),
   admin: vi.fn(),
+  registerProductPolicy: vi.fn(),
   setOffering: vi.fn(),
   scheduleCutover: vi.fn(),
 }));
@@ -18,6 +19,7 @@ vi.mock('@bunshin/database', () => ({
     findActivePlatformAdminByUserId = mocks.admin;
   },
   PrismaOemBillingAdminService: class {
+    registerProductPolicy = mocks.registerProductPolicy;
     setOffering = mocks.setOffering;
     scheduleCutover = mocks.scheduleCutover;
   },
@@ -48,6 +50,7 @@ describe('OEM billing preparation API', () => {
     vi.resetAllMocks();
     mocks.current.mockResolvedValue({ userId: 'server-actor' });
     mocks.admin.mockResolvedValue({ role: 'SUPER_ADMIN' });
+    mocks.registerProductPolicy.mockResolvedValue({ id: 'third-service' });
     mocks.setOffering.mockResolvedValue({ id: 'reviewed-offering' });
   });
   it('uses the session actor and passes tenant identifiers to the reauthorizing service', async () => {
@@ -82,5 +85,23 @@ describe('OEM billing preparation API', () => {
   it('returns a review conflict rather than an invoice with a guessed zero', async () => {
     mocks.setOffering.mockRejectedValue(new Error('REVIEW_REQUIRED: tenant history missing'));
     expect((await oemBillingPolicyResponse(request())).status).toBe(409);
+  });
+  it('registers a third service product without a product-name code change', async () => {
+    const response = await oemBillingPolicyResponse(
+      request({
+        operation: 'REGISTER_PRODUCT_POLICY',
+        key: 'THIRD_SERVICE',
+        displayName: '第三サービス',
+        freeOfferingAllowed: true,
+        requiredCapabilities: ['SOCIAL'],
+        effectiveFrom: '2026-11-01',
+        reason: '新しいワタシワークス商品を明示登録',
+        confirmed: true,
+      }),
+    );
+    expect(response.status).toBe(200);
+    expect(mocks.registerProductPolicy).toHaveBeenCalledWith(
+      expect.objectContaining({ key: 'THIRD_SERVICE', actorUserId: 'server-actor' }),
+    );
   });
 });

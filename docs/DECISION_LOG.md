@@ -1,5 +1,14 @@
 # BUNSHIN Platform Decision Log
 
+## 2026-10-11: OEMを提供形態、ワタシワークスのService Productを商品台帳として分離する
+
+- 状態: Proposed（実装PRレビュー待ち。本番Migration・release・商品登録・課金は未承認）
+- OEMはハッシー固有の商品名ではなく、ワタシワークスのService ProductをOrganization Workspaceで運営する提供・契約形態とする。
+- 商品key、FREE許可、必要Capabilityをプラットフォーム管理の商品台帳と不変ポリシー版へ保存する。`HASSY / MANABERU_STYLE`のコード分岐は明示seedデータへ移行する。
+- Workspace内`R ∪ A`、複数ServiceのUser重複排除、共通料金表、確定月・請求書の不変性は維持する。商品別請求や初期費用は追加しない。
+- 未登録商品や将来適用ポリシーは`REVIEW_REQUIRED`で停止し、商品名、slug、金額、決済方式から推測しない。
+- [ADR](adr/OEM_SERVICE_PRODUCT_POLICY.md)と[実装報告](OEM_SERVICE_PRODUCT_POLICY_IMPLEMENTATION_REPORT.md)を参照。
+
 ## 2026-10-11: 会員の商品投稿案生成をOpenAI費用予約の第3経路とする
 
 - 状態: Proposed（実装PRレビュー待ち。本番release・Provider送信は未承認）

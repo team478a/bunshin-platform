@@ -17,8 +17,9 @@ export async function requireTrainingOemOffering(
   if (!contract) return; // Direct/internal pilot is not an OEM commercial offering.
   const offering = await tx.oemOfferingPeriod.findFirst({
     where: { workspaceId: input.workspaceId, groupId: input.groupId, endsAt: null },
+    include: { productPolicyVersion: true },
   });
-  if (!offering || offering.productPolicy !== 'MANABERU_STYLE')
+  if (!offering?.productPolicyVersion.requiredCapabilities.includes('AI_TRAINING'))
     throw new Error('REVIEW_REQUIRED: AI training OEM product policy');
-  if (offering.classification === 'FREE') throw new Error('MANABERU_OEM_FREE_FORBIDDEN');
+  if (offering.classification === 'FREE') throw new Error('OEM_PRODUCT_FREE_OFFERING_FORBIDDEN');
 }
