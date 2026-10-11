@@ -14,6 +14,42 @@ import { oemBillingShadow } from './oem-billing-history';
 export class PrismaOemBillingAdminService {
   constructor(private readonly client: PrismaClient = prisma) {}
 
+  private offeringPolicyFilter(input?: { query?: string; productKey?: string }) {
+    const query = input?.query?.trim();
+    const productKey = input?.productKey?.trim().toUpperCase();
+    if ((query?.length ?? 0) > 120 || (productKey && !/^[A-Z][A-Z0-9_]{1,39}$/.test(productKey)))
+      throw new Error('INVALID_OFFERING_POLICY_FILTER');
+    return {
+      ...(productKey ? { productPolicy: productKey } : {}),
+      ...(query
+        ? {
+            OR: [
+              { productPolicy: { contains: query, mode: Prisma.QueryMode.insensitive } },
+              { product: { displayName: { contains: query, mode: Prisma.QueryMode.insensitive } } },
+              { group: { name: { contains: query, mode: Prisma.QueryMode.insensitive } } },
+              {
+                group: {
+                  workspace: { name: { contains: query, mode: Prisma.QueryMode.insensitive } },
+                },
+              },
+              {
+                group: {
+                  serviceConfiguration: {
+                    is: {
+                      OR: [
+                        { displayName: { contains: query, mode: Prisma.QueryMode.insensitive } },
+                        { slug: { contains: query, mode: Prisma.QueryMode.insensitive } },
+                      ],
+                    },
+                  },
+                },
+              },
+            ],
+          }
+        : {}),
+    } satisfies Prisma.OemOfferingPeriodWhereInput;
+  }
+
   private async assertOfferingPolicyCompatible(
     tx: Prisma.TransactionClient,
     input: {
@@ -179,11 +215,14 @@ export class PrismaOemBillingAdminService {
     });
   }
 
-  async listOfferingPolicyMigrations(actorUserId: string) {
+  async listOfferingPolicyMigrations(
+    actorUserId: string,
+    filter?: { query?: string; productKey?: string },
+  ) {
     return this.client.$transaction(async (tx) => {
       await this.authorizeSuperAdmin(tx, actorUserId);
       return tx.oemOfferingPeriod.findMany({
-        where: { endsAt: null },
+        where: { endsAt: null, ...this.offeringPolicyFilter(filter) },
         include: {
           productPolicyVersion: true,
           product: {
@@ -200,7 +239,46 @@ export class PrismaOemBillingAdminService {
           },
         },
         orderBy: [{ productPolicy: 'asc' }, { workspaceId: 'asc' }, { groupId: 'asc' }],
+        take: 200,
       });
+    });
+  }
+
+  async listOfferingPolicyHistory(
+    actorUserId: string,
+    filter?: { query?: string; productKey?: string },
+  ) {
+    return this.client.$transaction(async (tx) => {
+      await this.authorizeSuperAdmin(tx, actorUserId);
+      const periods = await tx.oemOfferingPeriod.findMany({
+        where: this.offeringPolicyFilter(filter),
+        include: {
+          productPolicyVersion: true,
+          product: { select: { displayName: true } },
+          group: {
+            select: {
+              name: true,
+              workspace: { select: { name: true } },
+              serviceConfiguration: { select: { displayName: true, slug: true } },
+            },
+          },
+        },
+        orderBy: [{ startsAt: 'desc' }, { id: 'desc' }],
+        take: 201,
+      });
+      const actorIds = [...new Set(periods.map((period) => period.actorUserId))];
+      const actors = await tx.user.findMany({
+        where: { id: { in: actorIds } },
+        select: { id: true, displayName: true },
+      });
+      const actorNames = new Map(actors.map((actor) => [actor.id, actor.displayName]));
+      return {
+        entries: periods.slice(0, 200).map((period) => ({
+          ...period,
+          actorDisplayName: actorNames.get(period.actorUserId) ?? null,
+        })),
+        truncated: periods.length > 200,
+      };
     });
   }
 

@@ -367,6 +367,35 @@ export function registerOemBillingIntegrationCases(client: PrismaClient) {
         classification: 'PAID',
         reason: 'individually reviewed policy migration',
       });
+      const filteredCandidates = await service.listOfferingPolicyMigrations(actor.id, {
+        query: workspace.name,
+        productKey: key,
+      });
+      expect(filteredCandidates.map((candidate) => candidate.id)).toContain(migrated.id);
+      expect(
+        await service.listOfferingPolicyMigrations(actor.id, { query: 'not-a-real-service' }),
+      ).toHaveLength(0);
+      const history = await service.listOfferingPolicyHistory(actor.id, {
+        query: 'Third Watashi Works service',
+        productKey: key,
+      });
+      expect(history.truncated).toBe(false);
+      expect(history.entries).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: paidOffering.id,
+            productPolicyVersionId: product.policyVersions[0]!.id,
+            actorDisplayName: actor.displayName,
+            endsAt: new Date('2026-10-12T01:00:00.000Z'),
+          }),
+          expect.objectContaining({
+            id: migrated.id,
+            productPolicyVersionId: revision.id,
+            actorDisplayName: actor.displayName,
+            endsAt: null,
+          }),
+        ]),
+      );
       expect(
         await client.oemOfferingPeriod.findUniqueOrThrow({ where: { id: paidOffering.id } }),
       ).toMatchObject({

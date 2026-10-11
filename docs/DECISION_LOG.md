@@ -3959,3 +3959,11 @@
 - OPEN予約の復旧は、同一operation key digestに一致する既知費用`AiUsageEvent`が既に保存済みの場合だけ許可する。SUPER_ADMIN、理由、監査を必須とし、TTL、失敗種別、時間経過から推測解放しない。
 - 管理予算表示にはOPEN予約額を含め、15分超の未精算をAlert Centerに表示する。外部メール／LINE通知、Provider請求書照合、税・為替、使用量記録がない予約の復旧は完了扱いにしない。
 - Creatomate、FAL、Runwayの既存動画専用費用Policyは重複接続しない。本番設定、Deploy、Provider送信、実課金、Pilot開始は別の明示承認を待つ。
+
+## 2026-10-11: OEM Offering移行履歴は既存期間台帳を正本にする
+
+- 状態: Proposed（実装PRレビュー待ち。本番反映・Offering移行は未承認）
+- 新しい監査tableや履歴コピーを作らず、`OemOfferingPeriod`の開始・終了、商品ポリシー版、操作者、理由を移行履歴として読み取る。終了済み期間を更新・削除しない。
+- SUPER_ADMINだけがOrganization、Service、商品で検索できる。現在のOfferingは現時点で適用可能な新版の有無を表示し、最大200件に制限する。履歴も新しい順の最大200件とし、超過時は絞り込みを要求する。
+- 検索・履歴表示は一括移行の権限を与えない。既存の1 Offeringごとの明示確認、CAS、将来版・旧版・互換性違反の拒否を維持する。
+- schema、migration、請求、参加者、本番設定を変更しない。本番Application releaseと実Offering移行はそれぞれ別の明示承認を待つ。

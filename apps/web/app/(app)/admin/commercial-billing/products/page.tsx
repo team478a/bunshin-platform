@@ -119,14 +119,40 @@ function nextPolicyDate(latest: Date, today: string) {
   return next.toISOString().slice(0, 10) > today ? next.toISOString().slice(0, 10) : today;
 }
 
-export default async function OemProductPolicyPage() {
+const migrationState = z.enum(['ALL', 'NEEDS_MIGRATION', 'CURRENT']).catch('ALL');
+
+export default async function OemProductPolicyPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string; product?: string; state?: string }>;
+}) {
   const { db, actor } = await authority();
   const service = new db.PrismaOemBillingAdminService();
-  const [products, offeringMigrations] = await Promise.all([
+  const query = await searchParams;
+  const searchQuery = z.string().trim().max(120).catch('').parse(query.q);
+  const selectedProduct = productKey.optional().catch(undefined).parse(query.product);
+  const selectedState = migrationState.parse(query.state);
+  const filter = {
+    ...(searchQuery ? { query: searchQuery } : {}),
+    ...(selectedProduct ? { productKey: selectedProduct } : {}),
+  };
+  const [products, unfilteredOfferingMigrations, offeringHistory] = await Promise.all([
     service.listProductPolicies(actor.userId),
-    service.listOfferingPolicyMigrations(actor.userId),
+    service.listOfferingPolicyMigrations(actor.userId, filter),
+    service.listOfferingPolicyHistory(actor.userId, filter),
   ]);
   const today = dateInBusinessTimezone(new Date());
+  const offeringMigrations = unfilteredOfferingMigrations.filter((offering) => {
+    const hasEffectiveNewerVersion = offering.product.policyVersions.some(
+      (policy) =>
+        offering.product.status === 'ACTIVE' &&
+        policy.version > offering.productPolicyVersion.version &&
+        policy.effectiveFrom.toISOString().slice(0, 10) <= today,
+    );
+    if (selectedState === 'NEEDS_MIGRATION') return hasEffectiveNewerVersion;
+    if (selectedState === 'CURRENT') return !hasEffectiveNewerVersion;
+    return true;
+  });
 
   return (
     <main className="app-page">
@@ -140,6 +166,39 @@ export default async function OemProductPolicyPage() {
       <p className="notice">
         改定は新しい不変バージョンを追加します。既存Offering・確定済み請求・参加者を自動変更しません。廃止は新規割当だけを停止します。
       </p>
+
+      <section className="settings-card">
+        <h2>Offeringを検索・絞り込み</h2>
+        <form className="form-stack" method="get">
+          <label>
+            Organization・Service・商品
+            <input name="q" defaultValue={searchQuery} maxLength={120} />
+          </label>
+          <label>
+            Service Product
+            <select name="product" defaultValue={selectedProduct ?? ''}>
+              <option value="">すべて</option>
+              {products.map((product) => (
+                <option key={product.id} value={product.key}>
+                  {product.displayName}（{product.key}）
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            移行状態
+            <select name="state" defaultValue={selectedState}>
+              <option value="ALL">すべて</option>
+              <option value="NEEDS_MIGRATION">現在適用できる新版あり</option>
+              <option value="CURRENT">現時点で移行不要</option>
+            </select>
+          </label>
+          <button type="submit" className="button button--secondary">
+            表示を更新
+          </button>
+        </form>
+        <p>現在のOffering: {offeringMigrations.length}件（最大200件）</p>
+      </section>
 
       <section className="settings-card">
         <h2>新しいService Productを登録</h2>
@@ -376,6 +435,62 @@ export default async function OemProductPolicyPage() {
           </section>
         );
       })}
+
+      <section className="settings-card">
+        <h2>Offering移行履歴</h2>
+        <p>
+          Organization・Service・商品の検索条件に一致する期間台帳を新しい順に表示します。終了済み期間も変更せず、監査記録として保持します。
+        </p>
+        {offeringHistory.truncated ? (
+          <p className="notice">200件を超えています。検索条件を追加して絞り込んでください。</p>
+        ) : null}
+        {offeringHistory.entries.length === 0 ? (
+          <p>該当する履歴はありません。</p>
+        ) : (
+          <div className="validation-table-wrap">
+            <table className="validation-table">
+              <thead>
+                <tr>
+                  <th>Organization / Service</th>
+                  <th>商品・版</th>
+                  <th>分類</th>
+                  <th>期間</th>
+                  <th>操作者・理由</th>
+                </tr>
+              </thead>
+              <tbody>
+                {offeringHistory.entries.map((period) => (
+                  <tr key={period.id}>
+                    <td>
+                      {period.group.workspace.name}
+                      <br />
+                      {period.group.serviceConfiguration?.displayName ?? period.group.name}（
+                      {period.group.serviceConfiguration?.slug ?? period.groupId}）
+                    </td>
+                    <td>
+                      {period.product.displayName}（{period.productPolicy}）v
+                      {period.productPolicyVersion.version}
+                    </td>
+                    <td>{period.classification}</td>
+                    <td>
+                      {period.startsAt.toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })}
+                      {' 〜 '}
+                      {period.endsAt
+                        ? period.endsAt.toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })
+                        : '現在'}
+                    </td>
+                    <td>
+                      {period.actorDisplayName ?? period.actorUserId}
+                      <br />
+                      {period.reason}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
     </main>
   );
 }

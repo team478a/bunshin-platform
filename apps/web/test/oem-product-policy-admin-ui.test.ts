@@ -17,6 +17,9 @@ describe('OEM Service Product policy admin UI', () => {
     expect(page).toContain('expectedUpdatedAt');
     expect(page).toContain('expectedCurrentPolicyVersionId');
     expect(page).toContain('targetPolicyVersionId');
+    expect(page).toContain('listOfferingPolicyHistory');
+    expect(page).toContain('NEEDS_MIGRATION');
+    expect(page).toContain('Organization・Service・商品');
   });
 
   it('states that revision and retirement do not mutate existing offerings or invoices', () => {
@@ -25,5 +28,6 @@ describe('OEM Service Product policy admin UI', () => {
     expect(page).toContain('既存Offeringと請求履歴を変更しないことを確認しました');
     expect(page).toContain('このOffering 1件だけをv');
     expect(page).toContain('参加者・請求履歴を変更しないことを確認しました');
+    expect(page).toContain('終了済み期間も変更せず、監査記録として保持します');
   });
 });
