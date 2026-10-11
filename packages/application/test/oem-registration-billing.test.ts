@@ -147,11 +147,22 @@ describe('OEM registration billing V2', () => {
       'cross workspace',
     );
   });
-  it('Manaberu OEM free cannot be authorized by price or branding', () => {
-    expect(() => assertOemOffering('MANABERU_STYLE', 'FREE')).toThrow(
-      'MANABERU_OEM_FREE_FORBIDDEN',
+  it('uses explicit product policy rather than a product name, price or branding', () => {
+    const restricted = {
+      key: 'THIRD_SERVICE',
+      freeOfferingAllowed: false,
+      requiredCapabilities: ['AI_TRAINING'],
+    };
+    expect(() => assertOemOffering(restricted, 'FREE')).toThrow(
+      'OEM_PRODUCT_FREE_OFFERING_FORBIDDEN',
     );
-    expect(() => assertOemOffering('MANABERU_STYLE', 'PAID_BUNDLE')).not.toThrow();
+    expect(() => assertOemOffering(restricted, 'PAID_BUNDLE')).not.toThrow();
+    expect(() =>
+      assertOemOffering(
+        { key: 'FREE_SERVICE', freeOfferingAllowed: true, requiredCapabilities: [] },
+        'FREE',
+      ),
+    ).not.toThrow();
   });
   it('new zero count does not fall back to old MAU', () => {
     expect(invoiceBillableUserCount({ mau: 100, billableUserCount: 0 })).toBe(0);

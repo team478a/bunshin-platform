@@ -94,18 +94,23 @@ export async function updateServiceCommercialSettingsResponse(
           groupId: configuration.groupId,
           endsAt: null,
         },
+        include: { productPolicyVersion: true },
       });
       if (value.offeringClassification && !currentOffering)
         throw new ApplicationError('VALIDATION_ERROR', '商品ポリシーの初期確認が必要です');
-      if (isOemTraining && (!currentOffering || currentOffering.productPolicy !== 'MANABERU_STYLE'))
+      if (
+        isOemTraining &&
+        !currentOffering?.productPolicyVersion.requiredCapabilities.includes('AI_TRAINING')
+      )
         throw new ApplicationError('VALIDATION_ERROR', 'AI研修の商品ポリシー確認が必要です');
       if (
-        currentOffering?.productPolicy === 'MANABERU_STYLE' &&
+        currentOffering &&
+        !currentOffering.productPolicyVersion.freeOfferingAllowed &&
         (value.offeringClassification === 'FREE' ||
           (value.billingMode === 'FREE' &&
             (value.offeringClassification ?? currentOffering.classification) !== 'PAID_BUNDLE'))
       )
-        throw new ApplicationError('VALIDATION_ERROR', 'MANABERU_OEM_FREE_FORBIDDEN');
+        throw new ApplicationError('VALIDATION_ERROR', 'OEM_PRODUCT_FREE_OFFERING_FORBIDDEN');
       if (
         currentOffering &&
         value.offeringClassification &&
@@ -126,6 +131,8 @@ export async function updateServiceCommercialSettingsResponse(
           data: {
             workspaceId: configuration.workspaceId,
             groupId: configuration.groupId,
+            productId: currentOffering.productId,
+            productPolicyVersionId: currentOffering.productPolicyVersionId,
             productPolicy: currentOffering.productPolicy,
             classification: value.offeringClassification,
             startsAt: now,

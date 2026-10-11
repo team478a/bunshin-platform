@@ -37,6 +37,11 @@ export function registerOemBillingIntegrationCases(client: PrismaClient) {
           updatedByUserId: actor.id,
         },
       });
+      const hassy = await client.commercialServiceProduct.findUniqueOrThrow({
+        where: { key: 'HASSY' },
+        include: { policyVersions: { where: { version: 1 } } },
+      });
+      const hassyPolicy = hassy.policyVersions[0]!;
       const membership = await client.groupMembership.create({
         data: {
           workspaceId: workspace.id,
@@ -50,6 +55,8 @@ export function registerOemBillingIntegrationCases(client: PrismaClient) {
         data: {
           workspaceId: workspace.id,
           groupId: group.id,
+          productId: hassy.id,
+          productPolicyVersionId: hassyPolicy.id,
           productPolicy: 'HASSY',
           classification: 'PAID',
           startsAt: new Date('2026-10-31T15:00:00Z'),
@@ -204,18 +211,99 @@ export function registerOemBillingIntegrationCases(client: PrismaClient) {
         service.finalizePreviousMonth(workspace.id, new Date('2027-02-01Z')),
       ).rejects.toThrow('REVIEW_REQUIRED');
       await expect(
-        client.oemOfferingPeriod.create({
-          data: {
-            workspaceId: workspace.id,
-            groupId: group.id,
-            productPolicy: 'MANABERU_STYLE',
-            classification: 'FREE',
-            startsAt: new Date('2027-01-01T00:00:00Z'),
-            actorUserId: actor.id,
-            reason: 'forbidden free training',
-          },
-        }),
+        client.commercialServiceProduct
+          .findUniqueOrThrow({
+            where: { key: 'MANABERU_STYLE' },
+            include: { policyVersions: { where: { version: 1 } } },
+          })
+          .then((product) =>
+            client.oemOfferingPeriod.create({
+              data: {
+                workspaceId: workspace.id,
+                groupId: group.id,
+                productId: product.id,
+                productPolicyVersionId: product.policyVersions[0]!.id,
+                productPolicy: product.key,
+                classification: 'FREE',
+                startsAt: new Date('2027-01-01T00:00:00Z'),
+                actorUserId: actor.id,
+                reason: 'forbidden free training',
+              },
+            }),
+          ),
       ).rejects.toThrow();
+    });
+
+    it('registers and assigns a third Watashi Works service product without product-name branching', async () => {
+      const actor = await client.user.create({
+        data: { displayName: 'Synthetic product reviewer' },
+      });
+      await client.platformAdmin.create({
+        data: { userId: actor.id, role: 'SUPER_ADMIN', status: 'ACTIVE' },
+      });
+      const workspace = await client.workspace.create({
+        data: { name: `generic-product-${randomUUID()}`, type: 'ORGANIZATION' },
+      });
+      const group = await client.group.create({
+        data: { workspaceId: workspace.id, name: 'Third Watashi Works service' },
+      });
+      await client.serviceConfiguration.create({
+        data: {
+          workspaceId: workspace.id,
+          groupId: group.id,
+          slug: `third-${randomUUID()}`,
+          displayName: 'Third Watashi Works service',
+          description: 'synthetic generic OEM service',
+          operatorName: 'synthetic',
+          createdByUserId: actor.id,
+          updatedByUserId: actor.id,
+        },
+      });
+      const key = `THIRD_${randomUUID().replaceAll('-', '').slice(0, 12).toUpperCase()}`;
+      const service = new PrismaOemBillingAdminService(client);
+      const input = {
+        key,
+        displayName: '第三サービス',
+        freeOfferingAllowed: true,
+        requiredCapabilities: ['SOCIAL'],
+        effectiveFrom: new Date('2026-10-11T00:00:00.000Z'),
+        actorUserId: actor.id,
+        reason: 'explicit third product registration',
+      } as const;
+      const product = await service.registerProductPolicy(input);
+      expect((await service.registerProductPolicy(input)).id).toBe(product.id);
+      const offering = await service.setOffering({
+        workspaceId: workspace.id,
+        groupId: group.id,
+        actorUserId: actor.id,
+        productPolicy: key,
+        classification: 'FREE',
+        expectedCurrentId: null,
+        reason: 'explicit product assignment',
+        now: new Date('2026-10-10T15:00:00.000Z'),
+      });
+      expect(offering).toMatchObject({
+        productId: product.id,
+        productPolicy: key,
+        classification: 'FREE',
+      });
+      await expect(
+        service.setOffering({
+          workspaceId: workspace.id,
+          groupId: group.id,
+          actorUserId: actor.id,
+          productPolicy: 'UNKNOWN_SERVICE',
+          classification: 'PAID',
+          expectedCurrentId: offering.id,
+          reason: 'must fail closed',
+        }),
+      ).rejects.toThrow('REVIEW_REQUIRED');
+      await expect(
+        client.commercialServiceProductPolicyVersion.update({
+          where: { id: product.policyVersions[0]!.id },
+          data: { freeOfferingAllowed: false },
+        }),
+      ).rejects.toThrow('immutable');
     });
 
     it('pricing edits use CAS, publish conflicts serialize, cancellation permits replacement but not historical mutation', async () => {
@@ -323,11 +411,11 @@ export function registerOemBillingIntegrationCases(client: PrismaClient) {
       ).rejects.toThrow('SUPER_ADMIN_REQUIRED');
     });
 
-    it('RLS denies a non-owner role access to the five new billing history/audit tables', async () => {
+    it('RLS denies a non-owner role access to billing history and service product policies', async () => {
       await client.$executeRawUnsafe('CREATE ROLE test_oem_billing_public NOLOGIN');
       await client.$executeRawUnsafe('GRANT USAGE ON SCHEMA public TO test_oem_billing_public');
       await client.$executeRawUnsafe(
-        'GRANT SELECT, INSERT ON oem_billing_policies, oem_registration_periods, oem_offering_periods, oem_contract_periods, commercial_pricing_audits TO test_oem_billing_public',
+        'GRANT SELECT, INSERT ON oem_billing_policies, oem_registration_periods, oem_offering_periods, oem_contract_periods, commercial_pricing_audits, commercial_service_products, commercial_service_product_policy_versions TO test_oem_billing_public',
       );
       try {
         const counts = await client.$transaction(async (tx) => {
@@ -339,16 +427,28 @@ export function registerOemBillingIntegrationCases(client: PrismaClient) {
               offerings: bigint;
               contracts: bigint;
               audits: bigint;
+              products: bigint;
+              productPolicies: bigint;
             }>
           >`SELECT
             (SELECT count(*) FROM oem_billing_policies) AS policies,
             (SELECT count(*) FROM oem_registration_periods) AS registrations,
             (SELECT count(*) FROM oem_offering_periods) AS offerings,
             (SELECT count(*) FROM oem_contract_periods) AS contracts,
-            (SELECT count(*) FROM commercial_pricing_audits) AS audits`;
+            (SELECT count(*) FROM commercial_pricing_audits) AS audits,
+            (SELECT count(*) FROM commercial_service_products) AS products,
+            (SELECT count(*) FROM commercial_service_product_policy_versions) AS "productPolicies"`;
         });
         expect(counts).toEqual([
-          { policies: 0n, registrations: 0n, offerings: 0n, contracts: 0n, audits: 0n },
+          {
+            policies: 0n,
+            registrations: 0n,
+            offerings: 0n,
+            contracts: 0n,
+            audits: 0n,
+            products: 0n,
+            productPolicies: 0n,
+          },
         ]);
         const policy = await client.oemBillingPolicy.findFirstOrThrow();
         await expect(
@@ -359,7 +459,7 @@ export function registerOemBillingIntegrationCases(client: PrismaClient) {
         ).rejects.toThrow('row-level security');
       } finally {
         await client.$executeRawUnsafe(
-          'REVOKE ALL ON oem_billing_policies, oem_registration_periods, oem_offering_periods, oem_contract_periods, commercial_pricing_audits FROM test_oem_billing_public',
+          'REVOKE ALL ON oem_billing_policies, oem_registration_periods, oem_offering_periods, oem_contract_periods, commercial_pricing_audits, commercial_service_products, commercial_service_product_policy_versions FROM test_oem_billing_public',
         );
         await client.$executeRawUnsafe(
           'REVOKE USAGE ON SCHEMA public FROM test_oem_billing_public',

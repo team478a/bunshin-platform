@@ -2,7 +2,11 @@ import { COMMERCIAL_USAGE_EVENT_TYPES, type CommercialUsageEventType } from './c
 
 export const OEM_REGISTRATION_BILLING_RULE_VERSION = 'OEM_REGISTRATION_BILLING_V2';
 export type OemOfferingClassification = 'FREE' | 'PAID' | 'PAID_BUNDLE';
-export type OemProductPolicy = 'HASSY' | 'MANABERU_STYLE';
+export interface OemProductPolicy {
+  readonly key: string;
+  readonly freeOfferingAllowed: boolean;
+  readonly requiredCapabilities: readonly string[];
+}
 export interface BillingInterval {
   readonly startsAt: Date;
   readonly endsAt: Date | null;
@@ -30,12 +34,12 @@ export function assertOemOffering(
   classification: OemOfferingClassification,
 ): void {
   if (
-    !['HASSY', 'MANABERU_STYLE'].includes(product) ||
+    !/^[A-Z][A-Z0-9_]{1,39}$/.test(product.key) ||
     !['FREE', 'PAID', 'PAID_BUNDLE'].includes(classification)
   )
     throw new Error('invalid OEM offering');
-  if (product === 'MANABERU_STYLE' && classification === 'FREE')
-    throw new Error('MANABERU_OEM_FREE_FORBIDDEN');
+  if (classification === 'FREE' && !product.freeOfferingAllowed)
+    throw new Error('OEM_PRODUCT_FREE_OFFERING_FORBIDDEN');
 }
 
 function validateInterval(interval: BillingInterval): void {

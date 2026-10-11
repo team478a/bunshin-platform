@@ -3542,6 +3542,42 @@ model CommercialPricingAudit {
   @@map("commercial_pricing_audits")
 }
 
+/// ワタシワークスがOEM提供できるService Productの安定した識別子。
+/// 表示名やslugから商品を推測しない。
+model CommercialServiceProduct {
+  id              String                                  @id @default(uuid()) @db.Uuid
+  key             String                                  @unique @db.VarChar(40)
+  displayName     String                                  @map("display_name") @db.VarChar(120)
+  status          String                                  @default("ACTIVE") @db.VarChar(20)
+  createdByUserId String?                                 @map("created_by_user_id") @db.Uuid
+  createdAt       DateTime                                @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime                                @updatedAt @map("updated_at") @db.Timestamptz(6)
+  policyVersions  CommercialServiceProductPolicyVersion[]
+  offeringPeriods OemOfferingPeriod[]
+  @@unique([id, key])
+  @@index([status, key])
+  @@map("commercial_service_products")
+}
+
+/// 提供区分とCapabilityの制約を固定する不変の商品ポリシー版。
+model CommercialServiceProductPolicyVersion {
+  id                   String                   @id @default(uuid()) @db.Uuid
+  productId            String                   @map("product_id") @db.Uuid
+  version              Int
+  freeOfferingAllowed  Boolean                  @default(true) @map("free_offering_allowed")
+  requiredCapabilities String[]                 @map("required_capabilities")
+  effectiveFrom        DateTime                 @map("effective_from") @db.Date
+  createdByUserId      String?                  @map("created_by_user_id") @db.Uuid
+  reason               String                   @db.VarChar(1000)
+  createdAt            DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
+  product              CommercialServiceProduct @relation(fields: [productId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  offeringPeriods      OemOfferingPeriod[]
+  @@unique([productId, version])
+  @@unique([productId, id])
+  @@index([productId, effectiveFrom])
+  @@map("commercial_service_product_policy_versions")
+}
+
 /// Human-selected future cutover. No automatic backfill.
 model OemBillingPolicy {
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "oem_policy_workspace_fk")
@@ -3577,14 +3613,19 @@ model OemOfferingPeriod {
   id String @id @default(uuid()) @db.Uuid
   workspaceId String @map("workspace_id") @db.Uuid
   groupId String @map("group_id") @db.Uuid
+  productId String @map("product_id") @db.Uuid
+  productPolicyVersionId String @map("product_policy_version_id") @db.Uuid
   productPolicy String @map("product_policy") @db.VarChar(40)
   classification String @db.VarChar(20)
   startsAt DateTime @map("starts_at") @db.Timestamptz(6)
   endsAt DateTime? @map("ends_at") @db.Timestamptz(6)
   actorUserId String @map("actor_user_id") @db.Uuid
   reason String @db.VarChar(1000)
+  product CommercialServiceProduct @relation(fields: [productId, productPolicy], references: [id, key], onDelete: Restrict, onUpdate: NoAction, map: "oem_offering_product_fk")
+  productPolicyVersion CommercialServiceProductPolicyVersion @relation(fields: [productId, productPolicyVersionId], references: [productId, id], onDelete: Restrict, onUpdate: NoAction, map: "oem_offering_product_policy_version_fk")
   @@unique([workspaceId, groupId, startsAt])
   @@index([workspaceId, startsAt, endsAt])
+  @@index([productId, productPolicyVersionId])
   @@map("oem_offering_periods")
 }
 

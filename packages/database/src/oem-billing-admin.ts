@@ -1,10 +1,10 @@
 import {
   assertOemOffering,
   commercialMonthPeriod,
+  dateInBusinessTimezone,
   parseProgramDefinition,
   OEM_REGISTRATION_BILLING_RULE_VERSION,
   type OemOfferingClassification,
-  type OemProductPolicy,
 } from '@bunshin/application';
 import { Prisma, type PrismaClient, prisma } from './client';
 import { requiredText, jsonSnapshot } from './commercial-billing-support';
@@ -13,6 +13,22 @@ import { oemBillingShadow } from './oem-billing-history';
 /** Explicit preparation; no inferred registration dates, payment mode or price classification. */
 export class PrismaOemBillingAdminService {
   constructor(private readonly client: PrismaClient = prisma) {}
+
+  private async authorizeSuperAdmin(
+    tx: Prisma.TransactionClient,
+    actorUserId: string,
+  ): Promise<void> {
+    const admin = await tx.platformAdmin.findFirst({
+      where: {
+        userId: actorUserId,
+        role: 'SUPER_ADMIN',
+        status: 'ACTIVE',
+        user: { status: 'ACTIVE' },
+      },
+      select: { id: true },
+    });
+    if (!admin) throw new Error('SUPER_ADMIN_REQUIRED');
+  }
 
   private async authorize(tx: Prisma.TransactionClient, workspaceId: string, actorUserId: string) {
     const [admin, workspace] = await Promise.all([
@@ -36,19 +52,87 @@ export class PrismaOemBillingAdminService {
     );
   }
 
+  async registerProductPolicy(input: {
+    key: string;
+    displayName: string;
+    freeOfferingAllowed: boolean;
+    requiredCapabilities: readonly string[];
+    effectiveFrom: Date;
+    actorUserId: string;
+    reason: string;
+  }) {
+    const key = input.key.trim().toUpperCase();
+    const displayName = requiredText(input.displayName, 120);
+    const reason = requiredText(input.reason, 1000);
+    const requiredCapabilities = [...new Set(input.requiredCapabilities.map((v) => v.trim()))];
+    if (
+      !/^[A-Z][A-Z0-9_]{1,39}$/.test(key) ||
+      requiredCapabilities.length > 20 ||
+      requiredCapabilities.some((v) => !/^[A-Z][A-Z0-9_]{1,79}$/.test(v)) ||
+      !Number.isFinite(input.effectiveFrom.getTime()) ||
+      input.effectiveFrom.toISOString().slice(10) !== 'T00:00:00.000Z'
+    )
+      throw new Error('INVALID_PRODUCT_POLICY');
+    return this.client.$transaction(async (tx) => {
+      await this.authorizeSuperAdmin(tx, input.actorUserId);
+      await tx.$executeRaw(
+        Prisma.sql`SELECT pg_advisory_xact_lock(hashtext(${'oem-service-product:' + key}))`,
+      );
+      const existing = await tx.commercialServiceProduct.findUnique({
+        where: { key },
+        include: { policyVersions: { orderBy: { version: 'desc' }, take: 1 } },
+      });
+      if (existing) {
+        const policy = existing.policyVersions[0];
+        if (
+          existing.status === 'ACTIVE' &&
+          existing.displayName === displayName &&
+          policy?.version === 1 &&
+          policy.freeOfferingAllowed === input.freeOfferingAllowed &&
+          policy.effectiveFrom.getTime() === input.effectiveFrom.getTime() &&
+          policy.reason === reason &&
+          policy.createdByUserId === input.actorUserId &&
+          policy.requiredCapabilities.length === requiredCapabilities.length &&
+          policy.requiredCapabilities.every((v) => requiredCapabilities.includes(v))
+        )
+          return existing;
+        throw new Error('PRODUCT_POLICY_ALREADY_EXISTS');
+      }
+      return tx.commercialServiceProduct.create({
+        data: {
+          key,
+          displayName,
+          status: 'ACTIVE',
+          createdByUserId: input.actorUserId,
+          policyVersions: {
+            create: {
+              version: 1,
+              freeOfferingAllowed: input.freeOfferingAllowed,
+              requiredCapabilities,
+              effectiveFrom: input.effectiveFrom,
+              createdByUserId: input.actorUserId,
+              reason,
+            },
+          },
+        },
+        include: { policyVersions: true },
+      });
+    });
+  }
+
   async setOffering(input: {
     workspaceId: string;
     groupId: string;
     actorUserId: string;
-    productPolicy: OemProductPolicy;
+    productPolicy: string;
     classification: OemOfferingClassification;
     expectedCurrentId: string | null;
     reason: string;
     now?: Date;
   }) {
-    assertOemOffering(input.productPolicy, input.classification);
     const reason = requiredText(input.reason, 1000);
     const now = input.now ?? new Date();
+    const effectiveOn = new Date(`${dateInBusinessTimezone(now)}T00:00:00.000Z`);
     return this.client.$transaction(async (tx) => {
       await this.authorize(tx, input.workspaceId, input.actorUserId);
       const group = await tx.group.findFirst({
@@ -60,6 +144,27 @@ export class PrismaOemBillingAdminService {
         select: { id: true },
       });
       if (!group) throw new Error('SERVICE_NOT_FOUND');
+      const product = await tx.commercialServiceProduct.findFirst({
+        where: { key: input.productPolicy, status: 'ACTIVE' },
+        include: {
+          policyVersions: {
+            where: { effectiveFrom: { lte: effectiveOn } },
+            orderBy: [{ effectiveFrom: 'desc' }, { version: 'desc' }],
+            take: 1,
+          },
+        },
+      });
+      const productPolicy = product?.policyVersions[0];
+      if (!product || !productPolicy)
+        throw new Error('REVIEW_REQUIRED: unknown or future OEM service product policy');
+      assertOemOffering(
+        {
+          key: product.key,
+          freeOfferingAllowed: productPolicy.freeOfferingAllowed,
+          requiredCapabilities: productPolicy.requiredCapabilities,
+        },
+        input.classification,
+      );
       const programs = await tx.serviceProgram.findMany({
         where: { workspaceId: input.workspaceId, groupId: input.groupId },
         select: { programTemplateVersionId: true },
@@ -74,8 +179,8 @@ export class PrismaOemBillingAdminService {
       const training = versions.some((v) =>
         parseProgramDefinition(v.definition).missions.some((m) => m.capability === 'AI_TRAINING'),
       );
-      if (training && input.productPolicy !== 'MANABERU_STYLE')
-        throw new Error('AI_TRAINING_PRODUCT_POLICY_REQUIRED');
+      if (training && !productPolicy.requiredCapabilities.includes('AI_TRAINING'))
+        throw new Error('OEM_PRODUCT_CAPABILITY_POLICY_REQUIRED');
       const current = await tx.oemOfferingPeriod.findFirst({
         where: { workspaceId: input.workspaceId, groupId: input.groupId, endsAt: null },
       });
@@ -91,7 +196,9 @@ export class PrismaOemBillingAdminService {
         data: {
           workspaceId: input.workspaceId,
           groupId: input.groupId,
-          productPolicy: input.productPolicy,
+          productId: product.id,
+          productPolicyVersionId: productPolicy.id,
+          productPolicy: product.key,
           classification: input.classification,
           startsAt: now,
           actorUserId: input.actorUserId,

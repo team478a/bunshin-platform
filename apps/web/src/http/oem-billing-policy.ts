@@ -10,14 +10,34 @@ const common = {
   reason: z.string().trim().min(1).max(1000),
   confirmed: z.literal(true),
 };
+const productKey = z
+  .string()
+  .trim()
+  .regex(/^[A-Z][A-Z0-9_]{1,39}$/);
+const capabilityKey = z
+  .string()
+  .trim()
+  .regex(/^[A-Z][A-Z0-9_]{1,79}$/);
 const date = z.string().datetime({ offset: true });
 const schema = z.discriminatedUnion('operation', [
+  z
+    .object({
+      operation: z.literal('REGISTER_PRODUCT_POLICY'),
+      key: productKey,
+      displayName: z.string().trim().min(1).max(120),
+      freeOfferingAllowed: z.boolean(),
+      requiredCapabilities: z.array(capabilityKey).max(20),
+      effectiveFrom: z.string().date(),
+      reason: z.string().trim().min(1).max(1000),
+      confirmed: z.literal(true),
+    })
+    .strict(),
   z
     .object({
       ...common,
       operation: z.literal('SET_OFFERING'),
       groupId: z.string().uuid(),
-      productPolicy: z.enum(['HASSY', 'MANABERU_STYLE']),
+      productPolicy: productKey,
       classification: z.enum(['FREE', 'PAID', 'PAID_BUNDLE']),
       expectedCurrentId: z.string().uuid().nullable(),
     })
@@ -68,33 +88,50 @@ export async function oemBillingPolicyResponse(request: Request) {
     const value = parsed.data;
     const service = new db.PrismaOemBillingAdminService();
     const actorUserId = user.userId;
-    const base = { workspaceId: value.workspaceId, actorUserId, reason: value.reason };
     const result =
-      value.operation === 'SET_OFFERING'
-        ? await service.setOffering({
-            ...base,
-            groupId: value.groupId,
-            productPolicy: value.productPolicy,
-            classification: value.classification,
-            expectedCurrentId: value.expectedCurrentId,
+      value.operation === 'REGISTER_PRODUCT_POLICY'
+        ? await service.registerProductPolicy({
+            key: value.key,
+            displayName: value.displayName,
+            freeOfferingAllowed: value.freeOfferingAllowed,
+            requiredCapabilities: value.requiredCapabilities,
+            effectiveFrom: new Date(`${value.effectiveFrom}T00:00:00.000Z`),
+            actorUserId,
+            reason: value.reason,
           })
-        : value.operation === 'REVIEW_REGISTRATION'
-          ? await service.reviewInitialRegistration({
-              ...base,
-              groupMembershipId: value.groupMembershipId,
-              registeredAt: new Date(value.registeredAt),
+        : value.operation === 'SET_OFFERING'
+          ? await service.setOffering({
+              workspaceId: value.workspaceId,
+              actorUserId,
+              reason: value.reason,
+              groupId: value.groupId,
+              productPolicy: value.productPolicy,
+              classification: value.classification,
+              expectedCurrentId: value.expectedCurrentId,
             })
-          : value.operation === 'REVIEW_CONTRACT'
-            ? await service.reviewContractPeriod({
-                ...base,
-                startsAt: new Date(value.startsAt),
-                endsAt: value.endsAt ? new Date(value.endsAt) : null,
+          : value.operation === 'REVIEW_REGISTRATION'
+            ? await service.reviewInitialRegistration({
+                workspaceId: value.workspaceId,
+                actorUserId,
+                reason: value.reason,
+                groupMembershipId: value.groupMembershipId,
+                registeredAt: new Date(value.registeredAt),
               })
-            : await service.scheduleCutover({
-                ...base,
-                effectiveFrom: new Date(`${value.month}-01T00:00:00.000Z`),
-                historyReviewed: value.historyReviewed,
-              });
+            : value.operation === 'REVIEW_CONTRACT'
+              ? await service.reviewContractPeriod({
+                  workspaceId: value.workspaceId,
+                  actorUserId,
+                  reason: value.reason,
+                  startsAt: new Date(value.startsAt),
+                  endsAt: value.endsAt ? new Date(value.endsAt) : null,
+                })
+              : await service.scheduleCutover({
+                  workspaceId: value.workspaceId,
+                  actorUserId,
+                  reason: value.reason,
+                  effectiveFrom: new Date(`${value.month}-01T00:00:00.000Z`),
+                  historyReviewed: value.historyReviewed,
+                });
     return Response.json(
       { data: result, requestId },
       { headers: { 'cache-control': 'private, no-store' } },
@@ -107,7 +144,7 @@ export async function oemBillingPolicyResponse(request: Request) {
           : /REVIEW_REQUIRED|STALE_|ALREADY_EXISTS|REQUIRED|FORBIDDEN|IMMUTABLE|INVALID_|NOT_FOUND/.test(
                 error.message,
               )
-            ? new ApplicationError('CONFLICT', '履歴・商品区分・適用月を確認してください')
+            ? new ApplicationError('CONFLICT', '履歴・商品ポリシー・適用月を確認してください')
             : error
         : error;
     const mapped = toApiError(domainError, requestId);
