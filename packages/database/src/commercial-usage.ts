@@ -497,6 +497,7 @@ export class PrismaCommercialUsageService {
 
   async finalizeAllPreviousMonths(now = new Date()) {
     const period = commercialMonthPeriod(now, -1);
+    const periodStart = snapshotDate(period.key);
     const organizations = await this.client.workspace.findMany({
       where: {
         type: 'ORGANIZATION',
@@ -515,14 +516,63 @@ export class PrismaCommercialUsageService {
     const finalized = [];
     const reviewRequired: Array<{ workspaceId: string; reason: string }> = [];
     const policies = await this.client.oemBillingPolicy.findMany({
-      where: { effectiveFrom: { lte: snapshotDate(period.key) } },
-      select: { workspaceId: true },
+      where: { effectiveFrom: { lte: periodStart } },
+      select: { workspaceId: true, historyReadyAt: true, ruleVersion: true },
     });
     const workspaceIds = new Set([
       ...organizations.map((row) => row.id),
       ...policies.map((row) => row.workspaceId),
     ]);
+    const contractPeriods = await this.client.oemContractPeriod.findMany({
+      where: { workspaceId: { in: [...workspaceIds] } },
+      select: { workspaceId: true, startsAt: true, endsAt: true },
+    });
+    const reviewedPolicies = new Set(
+      policies
+        .filter(
+          (policy) =>
+            policy.historyReadyAt !== null &&
+            policy.ruleVersion === OEM_REGISTRATION_BILLING_RULE_VERSION,
+        )
+        .map((policy) => policy.workspaceId),
+    );
+    const periodsByWorkspace = new Map<string, typeof contractPeriods>();
+    for (const contractPeriod of contractPeriods) {
+      const rows = periodsByWorkspace.get(contractPeriod.workspaceId) ?? [];
+      rows.push(contractPeriod);
+      periodsByWorkspace.set(contractPeriod.workspaceId, rows);
+    }
+    const skippedOutsideContract: Array<{
+      workspaceId: string;
+      month: string;
+      reason: 'CONTRACT_ENDED_BEFORE_PERIOD';
+      lastContractEndedAt: Date;
+    }> = [];
     for (const workspaceId of workspaceIds) {
+      const reviewedContractPeriods = periodsByWorkspace.get(workspaceId) ?? [];
+      const explicitlyEndedBeforePeriod =
+        reviewedPolicies.has(workspaceId) &&
+        reviewedContractPeriods.length > 0 &&
+        reviewedContractPeriods.every(
+          (contractPeriod) =>
+            contractPeriod.startsAt < period.start &&
+            contractPeriod.endsAt !== null &&
+            contractPeriod.endsAt <= period.start,
+        );
+      if (explicitlyEndedBeforePeriod) {
+        const lastContractEndedAt = reviewedContractPeriods.reduce(
+          (latest, contractPeriod) =>
+            contractPeriod.endsAt! > latest ? contractPeriod.endsAt! : latest,
+          reviewedContractPeriods[0]!.endsAt!,
+        );
+        skippedOutsideContract.push({
+          workspaceId,
+          month: period.key,
+          reason: 'CONTRACT_ENDED_BEFORE_PERIOD',
+          lastContractEndedAt,
+        });
+        continue;
+      }
       try {
         finalized.push(await this.finalizePreviousMonth(workspaceId, now));
       } catch (error) {
@@ -531,6 +581,11 @@ export class PrismaCommercialUsageService {
         else throw error;
       }
     }
-    return { organizations: workspaceIds.size, finalized: finalized.length, reviewRequired };
+    return {
+      organizations: workspaceIds.size,
+      finalized: finalized.length,
+      skippedOutsideContract,
+      reviewRequired,
+    };
   }
 }

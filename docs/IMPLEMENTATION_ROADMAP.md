@@ -1,5 +1,7 @@
 # BUNSHIN Platform 実装ロードマップ
 
+OEM契約終了後の月次キュー分離は`docs/OEM_CONTRACT_ENDED_QUEUE_SEPARATION_IMPLEMENTATION.md`を参照。履歴レビュー済みの正式登録課金V2で、確認済み契約期間が対象JST月開始以前にすべて明示終了している場合だけ通常の要確認キューから分離し、固定理由と最終終了日時を処理結果へ残す。0円利用スナップショット・請求書は作らず、履歴欠落、将来契約、期間重複は従来どおりfail-closed。本番反映・月次確定・請求発行は別Gate。
+
 OEM正式登録課金の初期履歴・cutover管理画面は`docs/OEM_BILLING_CUTOVER_ADMIN_UI_IMPLEMENTATION.md`を参照。Organization単位でService Product／提供区分、契約期間、同意済み参加者の正式登録履歴、月次shadow、将来月cutoverを同じ運用画面から確認する。各保存はSUPER_ADMIN再認可、証跡理由、明示確認、既存Workspace lock／CASを維持し、画面の準備表示を実行許可の正本にしない。過去日の推測、履歴訂正、cutover変更・取消、請求確定、本番操作は別Gate。
 
 OEM課金人数の根拠表示は`docs/OEM_BILLING_EVIDENCE_ADMIN_IMPLEMENTATION.md`を参照。現在月の既存shadowと確定月の保存済みスナップショットから、有料正式登録R、無料実利用A、重複、R∪A、課金方式、要確認理由を団体別管理画面へ表示する。旧月の内訳補完、履歴修正、cutover、本番Migration・請求確定は別Gate。

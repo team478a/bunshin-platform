@@ -315,4 +315,124 @@ describe('PrismaCommercialUsageService', () => {
       pricing: { priceYen: null, tierKey: 'REVIEW_REQUIRED' },
     });
   });
+
+  it('separates an explicitly ended reviewed contract from the monthly review queue', async () => {
+    const workspaceId = '00000000-0000-4000-8000-000000000031';
+    const client = {
+      workspace: { findMany: vi.fn().mockResolvedValue([]) },
+      oemBillingPolicy: {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            workspaceId,
+            historyReadyAt: new Date('2026-08-31T00:00:00.000Z'),
+            ruleVersion: 'OEM_REGISTRATION_BILLING_V2',
+          },
+        ]),
+      },
+      oemContractPeriod: {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            workspaceId,
+            startsAt: new Date('2026-01-01T00:00:00.000Z'),
+            endsAt: new Date('2026-08-31T15:00:00.000Z'),
+          },
+        ]),
+      },
+    } as unknown as PrismaClient;
+    const service = new PrismaCommercialUsageService(client);
+    const finalize = vi.spyOn(service, 'finalizePreviousMonth');
+
+    await expect(
+      service.finalizeAllPreviousMonths(new Date('2026-10-12T00:00:00.000Z')),
+    ).resolves.toEqual({
+      organizations: 1,
+      finalized: 0,
+      skippedOutsideContract: [
+        {
+          workspaceId,
+          month: '2026-09',
+          reason: 'CONTRACT_ENDED_BEFORE_PERIOD',
+          lastContractEndedAt: new Date('2026-08-31T15:00:00.000Z'),
+        },
+      ],
+      reviewRequired: [],
+    });
+    expect(finalize).not.toHaveBeenCalled();
+  });
+
+  it('does not skip a contract that overlaps the business-timezone month boundary', async () => {
+    const workspaceId = '00000000-0000-4000-8000-000000000033';
+    const client = {
+      workspace: { findMany: vi.fn().mockResolvedValue([]) },
+      oemBillingPolicy: {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            workspaceId,
+            historyReadyAt: new Date('2026-08-31T00:00:00.000Z'),
+            ruleVersion: 'OEM_REGISTRATION_BILLING_V2',
+          },
+        ]),
+      },
+      oemContractPeriod: {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            workspaceId,
+            startsAt: new Date('2026-01-01T00:00:00.000Z'),
+            endsAt: new Date('2026-09-01T00:00:00.000Z'),
+          },
+        ]),
+      },
+    } as unknown as PrismaClient;
+    const service = new PrismaCommercialUsageService(client);
+    const finalize = vi
+      .spyOn(service, 'finalizePreviousMonth')
+      .mockRejectedValue(new Error('REVIEW_REQUIRED: billing history incomplete'));
+
+    const result = await service.finalizeAllPreviousMonths(new Date('2026-10-12T00:00:00.000Z'));
+
+    expect(result.skippedOutsideContract).toEqual([]);
+    expect(result.reviewRequired).toEqual([
+      { workspaceId, reason: 'REVIEW_REQUIRED: billing history incomplete' },
+    ]);
+    expect(finalize).toHaveBeenCalledOnce();
+  });
+
+  it('keeps incomplete or future contract history in the existing fail-closed flow', async () => {
+    const workspaceId = '00000000-0000-4000-8000-000000000032';
+    const client = {
+      workspace: { findMany: vi.fn().mockResolvedValue([]) },
+      oemBillingPolicy: {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            workspaceId,
+            historyReadyAt: new Date('2026-08-31T00:00:00.000Z'),
+            ruleVersion: 'OEM_REGISTRATION_BILLING_V2',
+          },
+        ]),
+      },
+      oemContractPeriod: {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            workspaceId,
+            startsAt: new Date('2026-10-01T00:00:00.000Z'),
+            endsAt: null,
+          },
+        ]),
+      },
+    } as unknown as PrismaClient;
+    const service = new PrismaCommercialUsageService(client);
+    const finalize = vi
+      .spyOn(service, 'finalizePreviousMonth')
+      .mockRejectedValue(new Error('REVIEW_REQUIRED: billing history incomplete'));
+
+    await expect(
+      service.finalizeAllPreviousMonths(new Date('2026-10-12T00:00:00.000Z')),
+    ).resolves.toEqual({
+      organizations: 1,
+      finalized: 0,
+      skippedOutsideContract: [],
+      reviewRequired: [{ workspaceId, reason: 'REVIEW_REQUIRED: billing history incomplete' }],
+    });
+    expect(finalize).toHaveBeenCalledWith(workspaceId, new Date('2026-10-12T00:00:00.000Z'));
+  });
 });
