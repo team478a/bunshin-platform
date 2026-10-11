@@ -5,6 +5,7 @@ import type {
   AiProviderConfigurationRepository,
   AiProviderKey,
   AiProviderRuntimeAdmissionAdminRepository,
+  AiProviderStaleAdmissionAlertRepository,
   VideoAiProviderCostPolicyRepository,
 } from '@bunshin/application';
 import { assertAiProviderRuntimeConfiguration } from '@bunshin/application';
@@ -49,7 +50,10 @@ function adminEmailConfiguration(
 }
 
 export class PrismaAiProviderConfigurationRepository
-  implements AiProviderConfigurationRepository, AiProviderRuntimeAdmissionAdminRepository
+  implements
+    AiProviderConfigurationRepository,
+    AiProviderRuntimeAdmissionAdminRepository,
+    AiProviderStaleAdmissionAlertRepository
 {
   constructor(private readonly client: PrismaClient = prisma) {}
 
@@ -200,6 +204,71 @@ export class PrismaAiProviderConfigurationRepository
       where: { environment: input.environment, settledAt: null },
     });
     return { scanned: rows.length, recovered, remainingOpen };
+  }
+
+  async listStaleAdmissionsForAlert(
+    input: Parameters<AiProviderStaleAdmissionAlertRepository['listStaleAdmissionsForAlert']>[0],
+  ) {
+    const rows = await this.client.aiProviderCallAdmission.findMany({
+      where: {
+        environment: input.environment,
+        settledAt: null,
+        admittedAt: { lte: input.staleBefore },
+        OR: [{ lastAlertedAt: null }, { lastAlertedAt: { lte: input.repeatBefore } }],
+      },
+      select: {
+        id: true,
+        provider: true,
+        reservedCostUsdMicros: true,
+        admittedAt: true,
+      },
+      orderBy: [{ admittedAt: 'asc' }, { id: 'asc' }],
+      take: input.limit + 1,
+    });
+    const selected = rows.slice(0, input.limit);
+    const summaries = new Map<
+      AiProviderKey,
+      { provider: AiProviderKey; openCount: number; reservedCost: bigint; oldestAdmittedAt: Date }
+    >();
+    for (const row of selected) {
+      const current = summaries.get(row.provider);
+      summaries.set(row.provider, {
+        provider: row.provider,
+        openCount: (current?.openCount ?? 0) + 1,
+        reservedCost: (current?.reservedCost ?? 0n) + row.reservedCostUsdMicros,
+        oldestAdmittedAt: current?.oldestAdmittedAt ?? row.admittedAt,
+      });
+    }
+    return {
+      admissionIds: selected.map(({ id }) => id),
+      summaries: [...summaries.values()]
+        .sort((left, right) => left.provider.localeCompare(right.provider))
+        .map(({ provider, openCount, reservedCost, oldestAdmittedAt }) => ({
+          provider,
+          openCount,
+          reservedCostUsdMicros: Number(
+            reservedCost > BigInt(Number.MAX_SAFE_INTEGER) ? Number.MAX_SAFE_INTEGER : reservedCost,
+          ),
+          oldestAdmittedAt,
+        })),
+      truncated: rows.length > input.limit,
+    };
+  }
+
+  async recordStaleAdmissionAlert(
+    input: Parameters<AiProviderStaleAdmissionAlertRepository['recordStaleAdmissionAlert']>[0],
+  ) {
+    if (input.admissionIds.length === 0) return 0;
+    const result = await this.client.aiProviderCallAdmission.updateMany({
+      where: {
+        id: { in: input.admissionIds },
+        environment: input.environment,
+        settledAt: null,
+        OR: [{ lastAlertedAt: null }, { lastAlertedAt: { lte: input.repeatBefore } }],
+      },
+      data: { lastAlertedAt: input.alertedAt },
+    });
+    return result.count;
   }
 
   async createVersion(input: Parameters<AiProviderConfigurationRepository['createVersion']>[0]) {

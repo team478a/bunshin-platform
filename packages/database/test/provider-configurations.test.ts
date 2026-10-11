@@ -297,4 +297,90 @@ describe('PrismaAiProviderConfigurationRepository', () => {
     ).rejects.toMatchObject({ code: 'CONFLICT', message: 'daily provider budget reached' });
     expect(transactionClient.aiProviderCallAdmission.create).not.toHaveBeenCalled();
   });
+
+  it('lists only stale reservations whose alert cooldown has elapsed', async () => {
+    const rows = [
+      {
+        id: '11111111-1111-4111-8111-111111111111',
+        provider: 'OPENAI' as const,
+        reservedCostUsdMicros: 250n,
+        admittedAt: new Date('2026-10-11T10:00:00.000Z'),
+      },
+      {
+        id: '22222222-2222-4222-8222-222222222222',
+        provider: 'OPENAI' as const,
+        reservedCostUsdMicros: 500n,
+        admittedAt: new Date('2026-10-11T10:05:00.000Z'),
+      },
+    ];
+    const findMany = vi.fn().mockResolvedValue(rows);
+    const client = { aiProviderCallAdmission: { findMany } };
+    const staleBefore = new Date('2026-10-11T11:45:00.000Z');
+    const repeatBefore = new Date('2026-10-11T11:00:00.000Z');
+
+    await expect(
+      new PrismaAiProviderConfigurationRepository(client as never).listStaleAdmissionsForAlert({
+        environment: 'PRODUCTION',
+        staleBefore,
+        repeatBefore,
+        limit: 1_000,
+      }),
+    ).resolves.toEqual({
+      admissionIds: rows.map(({ id }) => id),
+      summaries: [
+        {
+          provider: 'OPENAI',
+          openCount: 2,
+          reservedCostUsdMicros: 750,
+          oldestAdmittedAt: rows[0]!.admittedAt,
+        },
+      ],
+      truncated: false,
+    });
+    expect(findMany).toHaveBeenCalledWith({
+      where: {
+        environment: 'PRODUCTION',
+        settledAt: null,
+        admittedAt: { lte: staleBefore },
+        OR: [{ lastAlertedAt: null }, { lastAlertedAt: { lte: repeatBefore } }],
+      },
+      select: {
+        id: true,
+        provider: true,
+        reservedCostUsdMicros: true,
+        admittedAt: true,
+      },
+      orderBy: [{ admittedAt: 'asc' }, { id: 'asc' }],
+      take: 1_001,
+    });
+  });
+
+  it('records alert time only for still-open reservations inside the same environment', async () => {
+    const updateMany = vi.fn().mockResolvedValue({ count: 2 });
+    const client = { aiProviderCallAdmission: { updateMany } };
+    const repeatBefore = new Date('2026-10-11T11:00:00.000Z');
+    const alertedAt = new Date('2026-10-11T12:00:00.000Z');
+    const admissionIds = [
+      '11111111-1111-4111-8111-111111111111',
+      '22222222-2222-4222-8222-222222222222',
+    ];
+
+    await expect(
+      new PrismaAiProviderConfigurationRepository(client as never).recordStaleAdmissionAlert({
+        environment: 'PRODUCTION',
+        admissionIds,
+        repeatBefore,
+        alertedAt,
+      }),
+    ).resolves.toBe(2);
+    expect(updateMany).toHaveBeenCalledWith({
+      where: {
+        id: { in: admissionIds },
+        environment: 'PRODUCTION',
+        settledAt: null,
+        OR: [{ lastAlertedAt: null }, { lastAlertedAt: { lte: repeatBefore } }],
+      },
+      data: { lastAlertedAt: alertedAt },
+    });
+  });
 });

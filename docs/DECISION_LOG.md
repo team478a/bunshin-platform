@@ -1,5 +1,13 @@
 # BUNSHIN Platform Decision Log
 
+## 2026-10-11: 15分超のAI費用予約を集計メール通知する
+
+- 状態: Proposed（実装PRレビュー待ち。本番Migration・通知設定・実送信は未承認）
+- `ai_provider_call_admissions`のOPEN予約が15分を超えた場合、既存の環境別管理者メール設定を使い、Provider別件数・予約額・最古時刻だけを運用担当へ通知する。予約内容、operation key／digest、User、Workspace、Bunshin、Promptは通知しない。
+- 通知成功後だけ`last_alerted_at`を更新し、同一行は1時間cooldownとする。並行Cronは予約集合とUTC時間から同じResend idempotency keyを使う。失敗時は通知済みと推定しない。
+- 通知時刻は費用予約の精算・解放・復旧条件に使用しない。時間経過、通知成功、通知回数をProvider終了証跡とみなさない。
+- Database管理のメール設定が存在する環境ではlegacy secretへfallbackしない。productionで通知設定が利用不能ならmonitorを正常扱いにしない。本番Deploy、設定変更、実通知、Provider送信、実課金は別承認とする。
+
 ## 2026-10-11: 会員の商品投稿案生成をOpenAI費用予約の第3経路とする
 
 - 状態: Proposed（実装PRレビュー待ち。本番release・Provider送信は未承認）
