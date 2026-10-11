@@ -17,6 +17,7 @@ export async function commercialUsageFinalizationResponse(request: Request): Pro
       ...usage,
       invoicesPrepared: billing.prepared,
       customQuotesSkipped: billing.skippedCustomQuote,
+      outsideContractSkipped: usage.skippedOutsideContract.length,
     });
     return Response.json({ data: result, requestId });
   } catch (error) {
