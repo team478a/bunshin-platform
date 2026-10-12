@@ -9,13 +9,10 @@ import {
 import { createLogger, requestIdFromHeader } from '@bunshin/observability';
 import { ApplicationError, toApiError } from '@bunshin/shared';
 import { z } from 'zod';
-import {
-  reserveOpenAiRuntimeConfiguration,
-  settleProviderRuntimeAdmission,
-} from '../ai/runtime-provider-configuration';
+import { resolveOpenAiRuntimeConfiguration } from '../ai/runtime-provider-configuration';
 import { currentUserProvider } from '../auth/current-user';
 import { requireSameOrigin } from '../auth/request-security';
-import { recordAiUsage, recordAiUsageSafely } from '../observability/ai-usage';
+import { recordAiUsageSafely } from '../observability/ai-usage';
 import { withOrganizationAiGenerationQuota } from '../organization-ai-generation-quota';
 import {
   MEMBER_PRODUCT_SUGGESTION_PROMPT_VERSION,
@@ -37,7 +34,6 @@ export async function generateMemberProductSuggestionsResponse(
   serviceSlug: string,
 ) {
   const requestId = requestIdFromHeader(request.headers.get('x-request-id'));
-  const operationKey = `${requestId}:member-product-suggestions`;
   const started = Date.now();
   let usage:
     | {
@@ -46,11 +42,8 @@ export async function generateMemberProductSuggestionsResponse(
         actorUserId: string;
         model: string;
         requestCostUsdMicros: number;
-        admission: Awaited<ReturnType<typeof reserveOpenAiRuntimeConfiguration>>['admission'];
       }
     | undefined;
-  let providerAttempted = false;
-  let usagePersistenceStarted = false;
   try {
     requireSameOrigin(request);
     if (!request.headers.get('content-type')?.startsWith('application/json'))
@@ -69,7 +62,7 @@ export async function generateMemberProductSuggestionsResponse(
       groupId: service.serviceId,
       actorUserId: actor.userId,
     };
-    const [bunshin, profile, settings] = await Promise.all([
+    const [bunshin, profile, settings, runtime] = await Promise.all([
       new GetBunshin(new db.PrismaBunshinRepository()).execute({
         ...scope,
         bunshinId: input.bunshinId,
@@ -80,6 +73,7 @@ export async function generateMemberProductSuggestionsResponse(
       new ExternalTrackingMemberLinkService(
         new db.PrismaExternalTrackingLinkRepository(undefined, service.serviceId),
       ).list(scope),
+      resolveOpenAiRuntimeConfiguration(),
     ]);
     const link = settings.links.find(
       (item) => item.id === profile.externalTrackingLinkId && item.status === 'ACTIVE',
@@ -87,22 +81,19 @@ export async function generateMemberProductSuggestionsResponse(
     if (!link) throw new ApplicationError('NOT_FOUND', 'active member product profile unavailable');
     if (profile.productPackId && !profile.officialProduct)
       throw new ApplicationError('CONTENT_REJECTED', 'official product information unavailable');
-    const runtime = await reserveOpenAiRuntimeConfiguration(operationKey);
     usage = {
       workspaceId: scope.workspaceId,
       bunshinId: bunshin.id,
       actorUserId: actor.userId,
       model: runtime.model,
       requestCostUsdMicros: runtime.requestCostUsdMicros,
-      admission: runtime.admission,
     };
     const result = await withOrganizationAiGenerationQuota({
       workspaceId: scope.workspaceId,
       groupId: scope.groupId,
-      operationKey,
-      generate: () => {
-        providerAttempted = true;
-        return new OpenAIMemberProductSuggestionGenerator({
+      operationKey: `${requestId}:member-product-suggestions`,
+      generate: () =>
+        new OpenAIMemberProductSuggestionGenerator({
           apiKey: runtime.apiKey,
           model: runtime.model,
         }).generate({
@@ -123,8 +114,7 @@ export async function generateMemberProductSuggestionsResponse(
             preferredExpressions: bunshin.personality?.preferredExpressions ?? [],
             forbiddenExpressions: bunshin.personality?.forbiddenExpressions ?? [],
           },
-        });
-      },
+        }),
     });
     const candidates = result.candidates.map((draft) =>
       finalizeMemberProductCandidate({
@@ -138,7 +128,7 @@ export async function generateMemberProductSuggestionsResponse(
         ],
       }),
     );
-    const successUsage = {
+    await recordAiUsageSafely({
       workspaceId: scope.workspaceId,
       bunshinId: bunshin.id,
       actorUserId: actor.userId,
@@ -150,14 +140,11 @@ export async function generateMemberProductSuggestionsResponse(
       inputTokens: result.inputTokens,
       outputTokens: result.outputTokens,
       latencyMs: result.latencyMs,
-      estimatedCostUsdMicros: runtime.requestCostUsdMicros,
-      pricingVersion: 'admin-request-cost-v1',
-      idempotencyKey: operationKey,
-    } as const;
-    usagePersistenceStarted = true;
-    if (runtime.admission) await recordAiUsage(successUsage);
-    else await recordAiUsageSafely(successUsage);
-    if (runtime.admission) await settleProviderRuntimeAdmission(runtime.admission);
+      estimatedCostUsdMicros: runtime.requestCostUsdMicros || null,
+      pricingVersion: runtime.requestCostUsdMicros ? 'admin-request-cost-v1' : null,
+      idempotencyKey: `${requestId}:member-product-suggestions`,
+    });
+    usage = undefined;
     const activity = await new MemberProductActivityService(
       new db.PrismaMemberProductActivityRepository(),
     ).recordGeneration({
@@ -168,7 +155,7 @@ export async function generateMemberProductSuggestionsResponse(
       productPackId: profile.productPackId,
       platform: input.platform,
       candidateCount: candidates.length,
-      operationKey,
+      operationKey: `${requestId}:member-product-suggestions`,
     });
     logger.info('member product suggestions generated', {
       workspaceId: scope.workspaceId,
@@ -182,9 +169,9 @@ export async function generateMemberProductSuggestionsResponse(
       { headers: { 'cache-control': 'private, no-store' } },
     );
   } catch (error) {
-    if (usage && !usagePersistenceStarted) {
-      const { requestCostUsdMicros, admission, ...usageScope } = usage;
-      const failedUsage = {
+    if (usage) {
+      const { requestCostUsdMicros, ...usageScope } = usage;
+      await recordAiUsageSafely({
         ...usageScope,
         taskType: 'MEMBER_PRODUCT_COPY_GENERATOR',
         provider: 'openai',
@@ -193,15 +180,11 @@ export async function generateMemberProductSuggestionsResponse(
         inputTokens: null,
         outputTokens: null,
         latencyMs: Date.now() - started,
-        estimatedCostUsdMicros: providerAttempted ? requestCostUsdMicros : 0,
-        pricingVersion: 'admin-request-cost-v1',
+        estimatedCostUsdMicros: requestCostUsdMicros || null,
+        pricingVersion: requestCostUsdMicros ? 'admin-request-cost-v1' : null,
         errorCode: error instanceof ApplicationError ? error.code : 'INTERNAL_ERROR',
-        idempotencyKey: operationKey,
-      } as const;
-      usagePersistenceStarted = true;
-      if (admission) await recordAiUsage(failedUsage);
-      else await recordAiUsageSafely(failedUsage);
-      if (admission) await settleProviderRuntimeAdmission(admission);
+        idempotencyKey: `${requestId}:member-product-suggestions`,
+      });
     }
     const mapped = toApiError(error, requestId);
     return Response.json(mapped.body, {
