@@ -132,12 +132,15 @@ export function registerServiceImprovementProgressIntegrationCases(client: Prism
           missionDefinitionKey: 'SYNTHETIC',
           displaySnapshot: { private: 'DO_NOT_EXPORT' },
           ruleVersion: 'SYNTHETIC',
+          status: 'COMPLETED',
           presentedAt: at,
           startedAt: at,
           completedAt: at,
           updatedAt: at,
         },
       });
+      expect(assignment.status).toBe('COMPLETED');
+      expect(assignment.completedAt).toEqual(at);
       await client.trainingMissionAnswer.create({
         data: {
           workspaceId: workspace.id,
