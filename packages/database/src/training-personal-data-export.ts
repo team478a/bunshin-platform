@@ -158,12 +158,23 @@ export class PrismaTrainingPersonalDataExportRepository implements TrainingPerso
               eventType: true,
               missionAssignmentId: true,
               occurredAt: true,
-              metadata: true,
             },
             orderBy: [{ occurredAt: 'asc' }, { id: 'asc' }],
             take,
           }),
         ]);
+        // Only this learner's explicit practice notes may expose their content.
+        // General operational/admin activity metadata remains unselected.
+        const practiceNotes = await tx.programActionEvent.findMany({
+          where: {
+            ...scope,
+            actorUserId: input.actorUserId,
+            eventType: 'PERSONAL_LEARNING_PRACTICE_NOTE',
+          },
+          select: { id: true, missionAssignmentId: true, occurredAt: true, metadata: true },
+          orderBy: [{ occurredAt: 'asc' }, { id: 'asc' }],
+          take,
+        });
         const goals = await tx.programMemberGoal.findMany({
           where: { ...scope, groupMembershipId: membership.id },
           select: {
@@ -219,6 +230,7 @@ export class PrismaTrainingPersonalDataExportRepository implements TrainingPerso
             learningGoals,
             learningPlans,
             learningRequests,
+            practiceNotes,
           ].some((rows) => rows.length > TRAINING_EXPORT_MAX_ROWS)
         )
           return { outcome: 'TOO_LARGE' };
@@ -228,10 +240,16 @@ export class PrismaTrainingPersonalDataExportRepository implements TrainingPerso
             ...(learningGoals.length +
               learningPlans.length +
               pilotSeats.length +
-              learningRequests.length >
+              learningRequests.length +
+              practiceNotes.length >
             0
               ? {
                   personalLearning: [
+                    ...practiceNotes.map((row) => ({
+                      ...row,
+                      kind: 'PRACTICE_NOTE',
+                      occurredAt: iso(row.occurredAt),
+                    })),
                     ...learningRequests.map((row) => ({
                       ...row,
                       kind: 'LEARNING_REQUEST',
@@ -294,10 +312,9 @@ export class PrismaTrainingPersonalDataExportRepository implements TrainingPerso
               updatedAt: iso(row.updatedAt),
             })),
             toolkit: toolkit.map((row) => ({ ...row, createdAt: iso(row.createdAt) })),
-            activities: activities.map(({ metadata, ...row }) => ({
+            activities: activities.map((row) => ({
               ...row,
               occurredAt: iso(row.occurredAt),
-              ...(row.eventType === 'PERSONAL_LEARNING_PRACTICE_NOTE' ? { metadata } : {}),
             })),
             goals: goals.map((row) => ({
               ...row,

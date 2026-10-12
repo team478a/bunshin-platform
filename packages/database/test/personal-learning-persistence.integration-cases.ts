@@ -647,7 +647,7 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
       expect(exported.outcome).toBe('FOUND');
       if (exported.outcome !== 'FOUND') throw new Error('export required');
       expect(
-        exported.data.activities.find((row) => row.eventType === 'PERSONAL_LEARNING_PRACTICE_NOTE'),
+        exported.data.personalLearning?.find((row) => row.kind === 'PRACTICE_NOTE'),
       ).toMatchObject({
         metadata: { text: 'ここで止まった', evidenceLevel: 'SELF_REPORT' },
       });
