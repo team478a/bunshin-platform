@@ -49,7 +49,7 @@ export function validateLearningLessonProposal(value: unknown): LearningLessonPr
     return fail();
   if (!['READY', 'NEEDS_CONTEXT', 'OUT_OF_SCOPE'].includes(String(v.status))) return fail();
   for (const key of ['reason', 'outcome', 'explanation', 'example']) {
-    if (typeof v[key] !== 'string' || (v[key] as string).length > 1200) return fail();
+    if (typeof v[key] !== 'string' || v[key].length > 1200) return fail();
   }
   for (const key of ['questions', 'practice', 'evidence', 'criteria']) {
     const items = v[key];
