@@ -34,10 +34,14 @@ const raw = (p: unknown = proposal) => ({
 });
 describe('lesson Provider', () => {
   it('keeps original wish, unknown experience and non-storage request', () => {
-    const v = JSON.parse(body());
+    const v = JSON.parse(body()) as {
+      store: boolean;
+      max_output_tokens: number;
+      input: { content: string }[];
+    };
     expect(v.store).toBe(false);
     expect(v.max_output_tokens).toBe(2000);
-    expect(JSON.parse(v.input[1].content)).toMatchObject({
+    expect(JSON.parse(v.input[1]!.content)).toMatchObject({
       originalText: wish.originalText,
       experienceDescription: null,
     });

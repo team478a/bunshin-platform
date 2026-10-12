@@ -9,7 +9,7 @@ const f = vi.hoisted(() => ({
   generate: vi.fn(),
 }));
 vi.mock('../src/auth/current-user', () => ({
-  currentUserProvider: async () => ({ getCurrentUser: f.user }),
+  currentUserProvider: () => Promise.resolve({ getCurrentUser: f.user }),
 }));
 vi.mock('../src/auth/request-security', () => ({ requireSameOrigin: f.origin }));
 vi.mock('../src/services/personal-learning-request-access', () => ({

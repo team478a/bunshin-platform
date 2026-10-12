@@ -12,7 +12,7 @@ export const lessonWish: SavedPersonalLearningRequest = {
   experienceDescription: null,
   currentPosition: null,
 };
-export const lessonCandidate: SavedLearningLessonCandidate = {
+export const lessonCandidate = {
   id: '22222222-2222-4222-8222-222222222222',
   requestId: lessonWish.id,
   requestRevision: 1,
@@ -34,4 +34,4 @@ export const lessonCandidate: SavedLearningLessonCandidate = {
     evidence: ['修正前後の見出し'],
     criteria: ['希望に合う変更を説明できる'],
   },
-};
+} satisfies SavedLearningLessonCandidate;
