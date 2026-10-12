@@ -1,6 +1,6 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { safeLineAuthReturnPath } from '../src/auth/line-return';
+import { safeLineAuthReturnPath, serviceAuthLoginPath } from '../src/auth/line-return';
 
 const root = new URL('../app/s/[serviceSlug]/', import.meta.url);
 function pages(directory: URL, prefix = ''): string[] {
@@ -12,6 +12,20 @@ function pages(directory: URL, prefix = ''): string[] {
 }
 
 describe('service authentication route inventory', () => {
+  it('retains the exact learning request destination through the login entry', () => {
+    const path = '/s/service-a/programs/11111111-1111-4111-8111-111111111111/learning-request';
+    expect(serviceAuthLoginPath(path)).toBe(`/login?returnTo=${encodeURIComponent(path)}`);
+  });
+  it.each([
+    '/s/service-a/programs/11111111-1111-4111-8111-111111111111/learning-request?start=true',
+    '/s/service-a/programs/11111111-1111-4111-8111-111111111111/learning-request/extra',
+    '/s/service-a/programs/11111111-1111-4111-8111-111111111111/learning-request#start',
+    '/s/service-a/programs/11111111-1111-4111-8111-111111111111/%6cearning-request',
+    '//example.com/s/service-a/programs/11111111-1111-4111-8111-111111111111/learning-request',
+    '/s/service-a/programs/not-an-enrollment/learning-request',
+  ])('rejects learning request aliases and unapproved extensions: %s', (path) => {
+    expect(safeLineAuthReturnPath(path)).toBeNull();
+  });
   it.each([
     '/s/service-a/manage/improvement-overview?week=2026-10-05',
     '/s/service-a/manage/improvement-overview/extra',
