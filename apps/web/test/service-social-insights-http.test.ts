@@ -12,8 +12,6 @@ const m = vi.hoisted(() => ({
   extract: vi.fn(),
   runtime: vi.fn(),
   usage: vi.fn(),
-  usageStrict: vi.fn(),
-  settle: vi.fn(),
 }));
 vi.mock('@bunshin/config', () => ({
   getServerEnvironment: () => ({ APP_URL: 'https://example.com' }),
@@ -23,13 +21,9 @@ vi.mock('../src/auth/current-user', () => ({
 }));
 vi.mock('../src/services/public-service', () => ({ resolveMemberServiceContext: m.member }));
 vi.mock('../src/ai/runtime-provider-configuration', () => ({
-  reserveOpenAiRuntimeConfiguration: m.runtime,
-  settleProviderRuntimeAdmission: m.settle,
+  resolveOpenAiRuntimeConfiguration: m.runtime,
 }));
-vi.mock('../src/observability/ai-usage', () => ({
-  recordAiUsage: m.usageStrict,
-  recordAiUsageSafely: m.usage,
-}));
+vi.mock('../src/observability/ai-usage', () => ({ recordAiUsageSafely: m.usage }));
 vi.mock('../src/providers/openai-social-insight-extractor', () => ({
   OpenAiSocialInsightExtractor: class {
     extract = m.extract;
@@ -53,12 +47,6 @@ import {
   saveServicePostPerformanceResponse,
 } from '../src/http/service-social-insights';
 const id = '00000000-0000-4000-8000-000000000001';
-const admission = {
-  id: '33333333-3333-4333-8333-333333333333',
-  environment: 'DEVELOPMENT',
-  provider: 'OPENAI',
-  operationHash: 'a'.repeat(64),
-} as const;
 const insightBody = {
   socialProfileId: id,
   observedOn: '2026-09-29',
@@ -144,15 +132,7 @@ beforeEach(() => {
   m.snapshot.mockImplementation(({ create }: { create: Record<string, unknown> }) =>
     Promise.resolve({ id: 'snapshot-a', ...create }),
   );
-  m.runtime.mockResolvedValue({
-    apiKey: 'test-placeholder',
-    model: 'mock-model',
-    requestCostUsdMicros: 250,
-    admission,
-  });
-  m.usage.mockResolvedValue(undefined);
-  m.usageStrict.mockResolvedValue(undefined);
-  m.settle.mockResolvedValue(undefined);
+  m.runtime.mockResolvedValue({ apiKey: 'test-placeholder', model: 'mock-model' });
   m.extract.mockResolvedValue({
     extraction: { followers: 10 },
     model: 'mock-model',
@@ -265,66 +245,13 @@ describe('private service metrics scope', () => {
       }),
     );
     await extractServiceSocialInsightResponse(request(extractBody), 'private-a', 'bunshin-a');
-    expect(m.runtime).toHaveBeenCalledWith(`social-insight:${id}`);
-    expect(m.usageStrict).toHaveBeenCalledWith(
+    expect(m.usage).toHaveBeenCalledWith(
       expect.objectContaining({
         workspaceId: 'workspace-a',
         bunshinId: 'bunshin-a',
         actorUserId: 'member-a',
-        estimatedCostUsdMicros: 250,
-        pricingVersion: 'admin-request-cost-v1',
         idempotencyKey: `social-insight:${id}`,
       }),
     );
-    expect(m.settle).toHaveBeenCalledWith(admission);
-    expect(m.usageStrict.mock.invocationCallOrder[0]).toBeLessThan(
-      m.settle.mock.invocationCallOrder[0] ?? 0,
-    );
-  });
-
-  it('records and settles a failed Provider attempt at the configured request cost', async () => {
-    m.extract.mockRejectedValue(new Error('synthetic provider failure'));
-
-    expect(
-      (await extractServiceSocialInsightResponse(request(extractBody), 'private-a', 'bunshin-a'))
-        .status,
-    ).toBe(500);
-
-    expect(m.usageStrict).toHaveBeenCalledWith(
-      expect.objectContaining({ status: 'FAILED', estimatedCostUsdMicros: 250 }),
-    );
-    expect(m.settle).toHaveBeenCalledWith(admission);
-  });
-
-  it('leaves the admission open when strict usage persistence fails', async () => {
-    m.usageStrict.mockRejectedValue(new Error('synthetic usage persistence failure'));
-
-    expect(
-      (await extractServiceSocialInsightResponse(request(extractBody), 'private-a', 'bunshin-a'))
-        .status,
-    ).toBe(500);
-
-    expect(m.usageStrict).toHaveBeenCalledOnce();
-    expect(m.settle).not.toHaveBeenCalled();
-  });
-
-  it('keeps the bounded non-production legacy fallback best-effort and reservation-free', async () => {
-    m.runtime.mockResolvedValue({
-      apiKey: 'test-placeholder',
-      model: 'mock-model',
-      requestCostUsdMicros: 250,
-      admission: null,
-    });
-
-    expect(
-      (await extractServiceSocialInsightResponse(request(extractBody), 'private-a', 'bunshin-a'))
-        .status,
-    ).toBe(200);
-
-    expect(m.usage).toHaveBeenCalledWith(
-      expect.objectContaining({ status: 'SUCCESS', estimatedCostUsdMicros: 250 }),
-    );
-    expect(m.usageStrict).not.toHaveBeenCalled();
-    expect(m.settle).not.toHaveBeenCalled();
   });
 });

@@ -2,13 +2,10 @@ import 'server-only';
 import { requestIdFromHeader } from '@bunshin/observability';
 import { ApplicationError, toApiError } from '@bunshin/shared';
 import { z } from 'zod';
-import {
-  reserveOpenAiRuntimeConfiguration,
-  settleProviderRuntimeAdmission,
-} from '../ai/runtime-provider-configuration';
+import { resolveOpenAiRuntimeConfiguration } from '../ai/runtime-provider-configuration';
 import { currentUserProvider } from '../auth/current-user';
 import { requireSameOrigin } from '../auth/request-security';
-import { recordAiUsage, recordAiUsageSafely } from '../observability/ai-usage';
+import { recordAiUsageSafely } from '../observability/ai-usage';
 import {
   OpenAiSocialInsightExtractor,
   SOCIAL_INSIGHT_EXTRACTION_PROMPT_VERSION,
@@ -149,19 +146,14 @@ export function extractServiceSocialInsightResponse(
     if (!parsed.success) throw new ApplicationError('VALIDATION_ERROR', 'invalid body');
     const scope = await resolveScope(serviceSlug, bunshinId);
     const image = decodeImage(parsed.data.image);
-    const operationKey = `social-insight:${parsed.data.idempotencyKey}`;
-    const runtime = await reserveOpenAiRuntimeConfiguration(operationKey);
+    const runtime = await resolveOpenAiRuntimeConfiguration();
     const started = Date.now();
-    let providerAttempted = false;
-    let usagePersistenceStarted = false;
     try {
-      const extractor = new OpenAiSocialInsightExtractor({
+      const result = await new OpenAiSocialInsightExtractor({
         apiKey: runtime.apiKey,
         model: runtime.model,
-      });
-      providerAttempted = true;
-      const result = await extractor.extract({ ...image, mode: parsed.data.mode });
-      const usage = {
+      }).extract({ ...image, mode: parsed.data.mode });
+      await recordAiUsageSafely({
         workspaceId: scope.workspaceId,
         bunshinId: scope.bunshinId,
         actorUserId: scope.userId,
@@ -173,40 +165,30 @@ export function extractServiceSocialInsightResponse(
         inputTokens: result.inputTokens,
         outputTokens: result.outputTokens,
         latencyMs: result.latencyMs,
-        estimatedCostUsdMicros: runtime.requestCostUsdMicros,
-        pricingVersion: 'admin-request-cost-v1',
-        idempotencyKey: operationKey,
-      } as const;
-      usagePersistenceStarted = true;
-      if (runtime.admission) await recordAiUsage(usage);
-      else await recordAiUsageSafely(usage);
-      if (runtime.admission) await settleProviderRuntimeAdmission(runtime.admission);
+        estimatedCostUsdMicros: runtime.requestCostUsdMicros || null,
+        pricingVersion: runtime.requestCostUsdMicros ? 'admin-request-cost-v1' : null,
+        idempotencyKey: `social-insight:${parsed.data.idempotencyKey}`,
+      });
       return result.extraction;
     } catch (error) {
-      if (!usagePersistenceStarted) {
-        const usage = {
-          workspaceId: scope.workspaceId,
-          bunshinId: scope.bunshinId,
-          actorUserId: scope.userId,
-          taskType: 'SOCIAL_INSIGHT_EXTRACTION',
-          provider: 'OPENAI',
-          model: runtime.model,
-          promptVersion: SOCIAL_INSIGHT_EXTRACTION_PROMPT_VERSION,
-          status: 'FAILED',
-          inputTokens: null,
-          outputTokens: null,
-          latencyMs: Date.now() - started,
-          estimatedCostUsdMicros: providerAttempted ? runtime.requestCostUsdMicros : 0,
-          pricingVersion: 'admin-request-cost-v1',
-          errorCode:
-            error instanceof SocialInsightExtractionError ? error.category : 'UNEXPECTED_ERROR',
-          idempotencyKey: operationKey,
-        } as const;
-        usagePersistenceStarted = true;
-        if (runtime.admission) await recordAiUsage(usage);
-        else await recordAiUsageSafely(usage);
-        if (runtime.admission) await settleProviderRuntimeAdmission(runtime.admission);
-      }
+      await recordAiUsageSafely({
+        workspaceId: scope.workspaceId,
+        bunshinId: scope.bunshinId,
+        actorUserId: scope.userId,
+        taskType: 'SOCIAL_INSIGHT_EXTRACTION',
+        provider: 'OPENAI',
+        model: runtime.model,
+        promptVersion: SOCIAL_INSIGHT_EXTRACTION_PROMPT_VERSION,
+        status: 'FAILED',
+        inputTokens: null,
+        outputTokens: null,
+        latencyMs: Date.now() - started,
+        estimatedCostUsdMicros: runtime.requestCostUsdMicros || null,
+        pricingVersion: runtime.requestCostUsdMicros ? 'admin-request-cost-v1' : null,
+        errorCode:
+          error instanceof SocialInsightExtractionError ? error.category : 'UNEXPECTED_ERROR',
+        idempotencyKey: `social-insight:${parsed.data.idempotencyKey}`,
+      });
       if (error instanceof SocialInsightExtractionError)
         throw new ApplicationError(
           error.retryable ? 'AI_PROVIDER_UNAVAILABLE' : 'CONTENT_REJECTED',
