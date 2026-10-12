@@ -278,4 +278,5 @@ export {
   isPersonalLearningPilotProgram,
   personalLearningPilotAllows,
   personalLearningPilotProfilePreparationAllows,
+  personalLearningPublicRegistrationCapacity,
 } from './personal-learning-pilot';

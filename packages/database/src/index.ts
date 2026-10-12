@@ -318,3 +318,7 @@ export {
   PrismaPersonalLearningParticipantAdminRepository,
   type PilotParticipantCommand,
 } from './personal-learning-participant-admin';
+export {
+  admitPaidPersonalLearningRegistration,
+  type PersonalLearningPublicRegistrationResult,
+} from './personal-learning-public-registration';

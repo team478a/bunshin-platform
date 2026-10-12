@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { parsePilotParticipantPolicy, personalLearningPilotAllows } from '../src';
+import {
+  parsePilotParticipantPolicy,
+  personalLearningPilotAllows,
+  personalLearningPublicRegistrationCapacity,
+} from '../src';
 const policy = {
   version: 'PILOT_PARTICIPANT_CAP_V1',
   revision: 1,
@@ -57,5 +61,30 @@ describe('cumulative Pilot cap contract', () => {
         ids[100]!,
       ),
     ).toBe(false);
+  });
+
+  it('opens ordinary registration only within the explicitly enabled wave', () => {
+    const settings = {
+      moduleKey: 'AI_TRAINING_V1',
+      personalLearningPilot: {
+        enabled: true,
+        enrollmentIds: [],
+        participantControl: policy,
+      },
+      trainingOperations: { notificationsEnabled: false, postponedReminderEnabled: false },
+    };
+    expect(personalLearningPublicRegistrationCapacity(settings)).toBe(5);
+    expect(
+      personalLearningPublicRegistrationCapacity({
+        ...settings,
+        personalLearningPilot: { ...settings.personalLearningPilot, enabled: false },
+      }),
+    ).toBeNull();
+    expect(
+      personalLearningPublicRegistrationCapacity({
+        ...settings,
+        trainingOperations: { notificationsEnabled: true, postponedReminderEnabled: false },
+      }),
+    ).toBeNull();
   });
 });

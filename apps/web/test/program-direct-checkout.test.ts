@@ -1,4 +1,4 @@
-import type { PrismaClient } from '@bunshin/database';
+import { admitPaidPersonalLearningRegistration, type PrismaClient } from '@bunshin/database';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('server-only', () => ({}));
@@ -8,6 +8,7 @@ vi.mock('@bunshin/config', () => ({
 vi.mock('@bunshin/database', () => ({
   addProgramCalendarDays: (start: Date, days: number) =>
     new Date(start.getTime() + days * 24 * 60 * 60 * 1000),
+  admitPaidPersonalLearningRegistration: vi.fn().mockResolvedValue({ status: 'NOT_APPLICABLE' }),
 }));
 vi.mock('../src/payments/secure-configuration', () => ({
   currentPaymentEnvironment: () => 'TEST',
@@ -218,6 +219,100 @@ describe('direct program checkout', () => {
     });
   });
 
+  it('reserves the bounded learning seat before opening Stripe checkout', async () => {
+    const pilotSettings = {
+      moduleKey: 'AI_TRAINING_V1',
+      learningMode: 'GUIDED',
+      personalLearningPilot: {
+        enabled: true,
+        enrollmentIds: [],
+        participantControl: {
+          version: 'PILOT_PARTICIPANT_CAP_V1',
+          revision: 1,
+          externalParticipantCap: 5,
+          internalParticipantCap: 0,
+          currentWave: 1,
+          currentWaveCap: 5,
+        },
+      },
+      trainingOperations: { notificationsEnabled: false, postponedReminderEnabled: false },
+    };
+    const tx = {
+      $queryRaw: vi.fn().mockResolvedValue([{ id: 'program-a' }]),
+      programOffering: {
+        findFirst: vi.fn().mockResolvedValue({
+          id: 'offering-a',
+          serviceProgramId: 'program-a',
+          termsSnapshot: terms,
+        }),
+        findMany: vi.fn().mockResolvedValue([{ id: 'offering-a' }]),
+      },
+      organizationPaymentConfiguration: {
+        findUnique: vi.fn().mockResolvedValue({
+          id: 'configuration-a',
+          status: 'ACTIVE',
+          lastVerifiedAt: new Date(),
+          encryptedWebhookSecret: 'encrypted-webhook',
+          encryptedSecretKey: 'encrypted-key',
+        }),
+      },
+      groupMembership: { findFirst: vi.fn().mockResolvedValue({ id: 'membership-a' }) },
+      serviceLegalDocument: {
+        findMany: vi
+          .fn()
+          .mockResolvedValue([
+            { type: 'TERMS' },
+            { type: 'PRIVACY' },
+            { type: 'COMMERCE_DISCLOSURE' },
+          ]),
+      },
+      serviceProgram: {
+        findFirst: vi.fn().mockResolvedValue({
+          id: 'program-a',
+          displayName: '個別AI研修',
+          settings: pilotSettings,
+        }),
+      },
+      programEnrollment: { findFirst: vi.fn().mockResolvedValue(null) },
+      serviceConfiguration: { findFirst: vi.fn().mockResolvedValue({ id: 'service-a' }) },
+      serviceRegistrationPolicy: {
+        findFirst: vi.fn().mockResolvedValue({ id: 'registration-a' }),
+      },
+      serviceCommercialSetting: {
+        findFirst: vi.fn().mockResolvedValue({ includedMemberLimit: 5 }),
+      },
+      programPurchase: {
+        findUnique: vi.fn().mockResolvedValue(null),
+        findFirst: vi.fn().mockResolvedValue(null),
+        count: vi.fn().mockResolvedValue(0),
+        create: vi.fn(),
+      },
+      personalLearningPilotSeat: { count: vi.fn().mockResolvedValue(5) },
+    };
+    const client = {
+      ...tx,
+      $transaction: vi.fn(async (callback: (value: typeof tx) => Promise<unknown>) => callback(tx)),
+    } as unknown as PrismaClient;
+    const stripe = { create: vi.fn() };
+
+    await expect(
+      createDirectProgramCheckout(
+        client,
+        {
+          workspaceId: 'workspace-a',
+          groupId: 'group-a',
+          buyerUserId: 'user-a',
+          offeringId: 'offering-a',
+          idempotencyKey: '33333333-3333-4333-8333-333333333333',
+          serviceSlug: 'manaberu-style',
+        },
+        { crypto: { decrypt: () => 'sk_test_a' }, stripe },
+      ),
+    ).rejects.toMatchObject({ code: 'CONFLICT' });
+    expect(stripe.create).not.toHaveBeenCalled();
+    expect(tx.programPurchase.create).not.toHaveBeenCalled();
+  });
+
   it('creates a duration-limited enrollment after a verified direct payment', async () => {
     const enrollmentCreate = vi.fn().mockResolvedValue({ id: 'enrollment-paid' });
     const purchaseUpdate = vi.fn();
@@ -323,6 +418,14 @@ describe('direct program checkout', () => {
     );
     expect(webhookUpdate).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ status: 'PROCESSED' }) }),
+    );
+    expect(admitPaidPersonalLearningRegistration).toHaveBeenCalledWith(
+      tx,
+      expect.objectContaining({
+        serviceProgramId: 'program-a',
+        programEnrollmentId: 'enrollment-paid',
+        purchaseId: 'purchase-a',
+      }),
     );
   });
 });
