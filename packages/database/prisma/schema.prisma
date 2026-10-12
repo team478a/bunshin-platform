@@ -830,6 +830,8 @@ model PersonalLearningRequest {
   userId                String            @map("user_id") @db.Uuid
   revision              Int
   originalText          String            @map("original_text") @db.VarChar(2000)
+  lessonCandidate       Json?             @map("lesson_candidate")
+  candidateConfirmedAt  DateTime?         @map("candidate_confirmed_at") @db.Timestamptz(3)
   deviceType            String?           @map("device_type") @db.VarChar(16)
   toolDescription       String?           @map("tool_description") @db.VarChar(240)
   experienceDescription String?           @map("experience_description") @db.VarChar(300)

@@ -29,6 +29,7 @@ import {
 import { PrismaPersonalLearningPersistenceRepository } from '../src/personal-learning-persistence';
 import { PrismaPersonalLearningRequestRepository } from '../src/personal-learning-request';
 import { PrismaPersonalLearningTextOperationRepository } from '../src/personal-learning-text-operation';
+import { PrismaLearningCandidateRepository } from '../src/personal-learning-lesson-candidate';
 import { PrismaTrainingRetentionExecutionRepository } from '../src/training-retention-execution';
 import { PrismaAccountDeletionPurgeRepository } from '../src/account-deletion-purge';
 import { PrismaPersonalLearningRouterBridge } from '../src/personal-learning-router';
@@ -281,6 +282,138 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
       };
       return { ...f, requests, wish, repo, input, measurement };
     }
+    async function lessonFixture() {
+      const f = await textOperationFixture();
+      const request = await f.requests.saveRequest({
+        ...f.actor,
+        content: { ...requestContent, deviceType: 'PC', toolDescription: 'AIチャット' },
+        expectedRevision: 1,
+        idempotencyKey: randomUUID(),
+      });
+      const operation = {
+        ...f.input,
+        requestId: request.id,
+        expectedRequestRevision: request.revision,
+      };
+      const permit = await f.repo.admit(operation);
+      await f.repo.record({ operation, permit, measurement: f.measurement, requestFinished: true });
+      const candidates = new PrismaLearningCandidateRepository(client, () => now);
+      const proposal = {
+        status: 'READY' as const,
+        reason: '本人が実践',
+        questions: [],
+        outcome: '見出しを直せる',
+        explanation: '希望を伝える',
+        example: 'お店の紹介',
+        practice: ['本人がAIへ入力して修正する'],
+        evidence: ['修正前後の見出し'],
+        criteria: ['目的に合う修正を説明する'],
+      };
+      const input = {
+        actor: f.actor,
+        request,
+        proposal,
+        usageKey: `personal-learning-operation:${permit.operationHash}`,
+        promptVersion: operation.promptVersion,
+      };
+      return { ...f, request, candidates, input };
+    }
+    it('lesson candidate: stores once and confirms the displayed version without applying Plan or Assignment', async () => {
+      const f = await lessonFixture();
+      const first = await f.candidates.save(f.input);
+      expect(await f.candidates.save(f.input)).toEqual(first);
+      const confirmation = {
+        actor: f.actor,
+        requestId: f.request.id,
+        requestRevision: f.request.revision,
+        candidateId: first.id,
+      };
+      const confirmed = await f.candidates.confirm(confirmation);
+      expect(confirmed.confirmedAt).not.toBeNull();
+      expect(await f.candidates.confirm(confirmation)).toEqual(confirmed);
+      expect(await f.candidates.readCandidate(f.actor)).toEqual(confirmed);
+      expect(confirmed.originalText).toBe(requestContent.originalText);
+      expect(await client.personalLearningPlanRevision.count()).toBe(0);
+      expect(await client.programMissionAssignment.count()).toBe(0);
+      expect(await client.aiUsageEvent.count({ where: { workspaceId: f.scope.workspaceId } })).toBe(
+        1,
+      );
+      await expect(
+        f.candidates.confirm({ ...confirmation, candidateId: randomUUID() }),
+      ).rejects.toMatchObject({ code: 'CONFLICT' });
+    });
+    it('lesson candidate: reauthorizes ownership and rejects stale wish or absent durable costs', async () => {
+      const f = await lessonFixture();
+      await expect(
+        f.candidates.save({
+          ...f.input,
+          usageKey: `personal-learning-operation:${'a'.repeat(64)}`,
+        }),
+      ).rejects.toThrow();
+      const first = await f.candidates.save(f.input);
+      const other = { ...f.actor, actorUserId: randomUUID() };
+      await expect(f.candidates.readCandidate(other)).rejects.toThrow();
+      await f.requests.saveRequest({
+        ...f.actor,
+        content: { ...requestContent, originalText: 'AIで発表を練習したい' },
+        expectedRevision: 2,
+        idempotencyKey: randomUUID(),
+      });
+      await expect(f.candidates.save(f.input)).rejects.toMatchObject({ code: 'CONFLICT' });
+      await expect(
+        f.candidates.confirm({
+          actor: f.actor,
+          requestId: f.request.id,
+          requestRevision: 2,
+          candidateId: first.id,
+        }),
+      ).rejects.toMatchObject({ code: 'CONFLICT' });
+      expect(await f.candidates.readCandidate(f.actor)).toBeNull();
+    });
+    it('lesson candidate: exports confirmation as text and deletes material through existing ALL lifecycle', async () => {
+      const f = await lessonFixture();
+      const candidate = await f.candidates.save(f.input);
+      const confirmed = await f.candidates.confirm({
+        actor: f.actor,
+        requestId: f.request.id,
+        requestRevision: f.request.revision,
+        candidateId: candidate.id,
+      });
+      const input = {
+        workspaceId: f.scope.workspaceId,
+        groupId: f.scope.groupId,
+        programEnrollmentId: f.enrollment.id,
+        actorUserId: f.actor.actorUserId,
+      };
+      const exported = await new PrismaTrainingPersonalDataExportRepository(client).read(input);
+      if (exported.outcome !== 'FOUND') throw new Error('export missing');
+      expect(exported.data.personalLearning).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: f.request.id,
+            candidateConfirmedAt: confirmed.confirmedAt,
+            lessonCandidate: candidate,
+          }),
+        ]),
+      );
+      for (const key of ['workspaceId', 'groupId', 'programEnrollmentId', 'userId'] as const) {
+        await expect(
+          f.candidates.readCandidate({
+            ...f.actor,
+            scope: { ...f.scope, [key]: randomUUID() },
+          }),
+        ).rejects.toThrow();
+      }
+      const deletion = new PrismaTrainingPersonalDataDeletionRepository(client);
+      const target = { ...input, target: { kind: 'ALL' as const } };
+      const preview = await deletion.preview(target);
+      if (preview.outcome !== 'PREVIEW') throw new Error('preview missing');
+      expect(
+        (await deletion.delete({ ...target, revision: preview.preview.revision, now })).outcome,
+      ).toBe('DELETED');
+      expect(await client.personalLearningRequest.count({ where: f.scope })).toBe(0);
+      await expect(f.candidates.readCandidate(f.actor)).rejects.toThrow();
+    });
     it('text operation: normal learner without Profile, Assignment, Answer or Pilot records cost once', async () => {
       const f = await textOperationFixture();
       const permit = await f.repo.admit(f.input);

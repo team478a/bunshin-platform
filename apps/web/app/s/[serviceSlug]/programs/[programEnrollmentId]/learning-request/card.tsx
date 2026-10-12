@@ -1,16 +1,22 @@
 'use client';
 import { useState } from 'react';
+import { LearningCandidateCard } from './candidate-card';
 import type {
   SavedPersonalLearningRequest,
   PersonalLearningRequestContent,
+  SavedLearningLessonCandidate,
 } from '@bunshin/application';
 
 export function PersonalLearningRequestCard({
   endpoint,
   initial,
+  candidateEndpoint,
+  initialCandidate = null,
 }: {
   endpoint: string;
   initial: SavedPersonalLearningRequest | null;
+  candidateEndpoint?: string;
+  initialCandidate?: SavedLearningLessonCandidate | null;
 }) {
   const [content, setContent] = useState<PersonalLearningRequestContent>({
     originalText: initial?.originalText ?? '',
@@ -57,7 +63,9 @@ export function PersonalLearningRequestCard({
       <h1>AIを使って、何ができるようになりたいですか？</h1>
       <p>あなたの希望を元のまま保存します。未回答の経験や能力は推測しません。</p>
       <p>
-        この検証画面では希望の保存までです。教材の生成・確定はまだ行いません。現在の課題は切り替わりません。
+        {candidateEndpoint
+          ? 'この検証画面では教材候補の確認までです。実践課題の開始は準備中で、現在の課題は切り替わりません。'
+          : 'この検証画面では希望の保存までです。教材の生成・確定はまだ行いません。現在の課題は切り替わりません。'}
       </p>
       {saved && (
         <p>
@@ -124,6 +132,18 @@ export function PersonalLearningRequestCard({
         </button>
       </form>
       <p role="status">{message}</p>
+      {candidateEndpoint &&
+        saved &&
+        Object.entries(content).every(
+          ([key, value]) => value === saved[key as keyof PersonalLearningRequestContent],
+        ) && (
+          <LearningCandidateCard
+            key={saved.id}
+            endpoint={candidateEndpoint}
+            request={saved}
+            initial={initialCandidate?.requestId === saved.id ? initialCandidate : null}
+          />
+        )}
     </section>
   );
 }

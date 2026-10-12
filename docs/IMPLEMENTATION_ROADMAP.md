@@ -1,5 +1,7 @@
 # BUNSHIN Platform 実装ロードマップ
 
+自由希望の第5分割は`docs/ai-training/MANABERU_LESSON_CANDIDATE_IMPLEMENTATION.md`。保存した希望から教材候補を生成・保存し、本人が表示済み同版だけを確認する。既存の原価枠・共通台帳を再利用するが、実AI・本番確認は未実施。Goal/Plan/Assignment、途中支援・画像・動的評価・再開の一課題完成は次段階であり、候補確認を受講開始や達成と扱わない。
+
 自由希望の第4分割は`docs/ai-training/MANABERU_PREASSIGNMENT_AI_COST_IMPLEMENTATION.md`。課題作成前の希望解釈/教材生成用内部Portに、実操作・試行ID、既存Program予算と同時実行、共通利用台帳の費用記録を接続する。公開API/実Adapter/教材生成・同版確定の完成ではない。UNKNOWN原価の照合・回復、実Provider制限と候補保存を次に接続する。
 
 新規受講者の未回答推測の除去は `docs/ai-training/MANABERU_EXPLICIT_PROFILE_ANSWERS_IMPLEMENTATION.md` を参照。既存の通常Profile登録を再利用し、初心者/端末/固定目標を未回答から確定しない。自由希望の動的教材経路、途中支援・画像・実AI通し確認は引き続き次の実装対象。
