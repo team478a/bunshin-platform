@@ -12,6 +12,26 @@ export function isPersonalLearningPilotProgram(settings: unknown): boolean {
   return root !== null && Object.hasOwn(root, 'personalLearningPilot');
 }
 
+/**
+ * Capacity available to ordinary paid registrations while the bounded Pilot is running.
+ * A reserved but stopped/malformed Pilot deliberately returns null (fail closed).
+ */
+export function personalLearningPublicRegistrationCapacity(settings: unknown): number | null {
+  const root = object(settings);
+  const pilot = object(root?.['personalLearningPilot']);
+  const policy = parsePilotParticipantPolicy(pilot?.['participantControl']);
+  if (
+    root?.['moduleKey'] !== 'AI_TRAINING_V1' ||
+    pilot?.['enabled'] !== true ||
+    !policy ||
+    policy.currentWave < 1 ||
+    parseAiTrainingOperationsSettings(settings).notificationsEnabled ||
+    parseAiTrainingOperationsSettings(settings).postponedReminderEnabled
+  )
+    return null;
+  return Math.min(policy.externalParticipantCap, policy.currentWaveCap);
+}
+
 export function personalLearningPilotAllows(settings: unknown, enrollmentId: string): boolean {
   const root = object(settings);
   const pilot = object(root?.['personalLearningPilot']);

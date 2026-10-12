@@ -1,7 +1,11 @@
 import 'server-only';
 import { AI_RESALE_V1_MODULE_KEY } from '@bunshin/capability-resale';
+import {
+  isPersonalLearningPilotProgram,
+  personalLearningPublicRegistrationCapacity,
+} from '@bunshin/capability-training';
 import { getServerEnvironment } from '@bunshin/config';
-import type { PrismaClient } from '@bunshin/database';
+import type { Prisma, PrismaClient } from '@bunshin/database';
 import { ApplicationError } from '@bunshin/shared';
 import {
   validatedDirectPurchaseContext,
@@ -119,6 +123,9 @@ export async function createDirectProgramCheckout(
 ) {
   const context = await validatedDirectPurchaseContext(client, input);
   requireTrainingLearningMode(context.program.settings, [context.terms.supportMode]);
+  const personalLearningCapacity = isPersonalLearningPilotProgram(context.program.settings)
+    ? personalLearningPublicRegistrationCapacity(context.program.settings)
+    : null;
   const existing = await client.programPurchase.findUnique({
     where: {
       workspaceId_groupId_idempotencyKey: {
@@ -153,9 +160,8 @@ export async function createDirectProgramCheckout(
     select: { id: true },
   });
   if (unsettled) throw new ApplicationError('CONFLICT', 'purchase already exists');
-  const purchase =
-    existing ??
-    (await client.programPurchase.create({
+  const createPurchase = (db: PrismaClient | Prisma.TransactionClient) =>
+    db.programPurchase.create({
       data: {
         workspaceId: input.workspaceId,
         groupId: input.groupId,
@@ -172,7 +178,100 @@ export async function createDirectProgramCheckout(
           purchaseMode: context.terms.purchaseMode,
         },
       },
-    }));
+    });
+  const purchase = existing
+    ? existing
+    : personalLearningCapacity === null
+      ? await createPurchase(client)
+      : await client.$transaction(
+          async (tx) => {
+            await tx.$queryRaw`
+              SELECT id FROM service_programs
+              WHERE id=${context.program.id}::uuid
+                AND workspace_id=${input.workspaceId}::uuid
+                AND group_id=${input.groupId}::uuid
+              FOR UPDATE
+            `;
+            const lockedContext = await validatedDirectPurchaseContext(tx, input);
+            const lockedCapacity = personalLearningPublicRegistrationCapacity(
+              lockedContext.program.settings,
+            );
+            if (lockedCapacity === null)
+              throw new ApplicationError(
+                'CONFIGURATION_ERROR',
+                'personal learning public registration is not ready',
+              );
+            const concurrentExisting = await tx.programPurchase.findUnique({
+              where: {
+                workspaceId_groupId_idempotencyKey: {
+                  workspaceId: input.workspaceId,
+                  groupId: input.groupId,
+                  idempotencyKey: input.idempotencyKey,
+                },
+              },
+            });
+            if (concurrentExisting) {
+              if (
+                concurrentExisting.buyerUserId !== input.buyerUserId ||
+                concurrentExisting.sourceEnrollmentId !== null ||
+                concurrentExisting.programOfferingId !== input.offeringId
+              )
+                throw new ApplicationError('CONFLICT', 'idempotency key already used');
+              return concurrentExisting;
+            }
+            const concurrentPurchase = await tx.programPurchase.findFirst({
+              where: {
+                workspaceId: input.workspaceId,
+                groupId: input.groupId,
+                buyerUserId: input.buyerUserId,
+                programOfferingId: input.offeringId,
+                OR: [
+                  { status: 'PAID' },
+                  { status: 'DISPUTED' },
+                  { status: 'CREATED' },
+                  { status: 'CHECKOUT_OPEN' },
+                ],
+              },
+              select: { id: true },
+            });
+            if (concurrentPurchase)
+              throw new ApplicationError('CONFLICT', 'purchase already exists');
+            const offeringIds = await tx.programOffering.findMany({
+              where: {
+                workspaceId: input.workspaceId,
+                groupId: input.groupId,
+                serviceProgramId: context.program.id,
+              },
+              select: { id: true },
+            });
+            const [consumedSeats, reservedPurchases] = await Promise.all([
+              tx.personalLearningPilotSeat.count({
+                where: {
+                  workspaceId: input.workspaceId,
+                  groupId: input.groupId,
+                  serviceProgramId: context.program.id,
+                  kind: 'EXTERNAL',
+                },
+              }),
+              tx.programPurchase.count({
+                where: {
+                  workspaceId: input.workspaceId,
+                  groupId: input.groupId,
+                  sourceEnrollmentId: null,
+                  programOfferingId: { in: offeringIds.map(({ id }) => id) },
+                  OR: [
+                    { status: 'CREATED' },
+                    { status: 'CHECKOUT_OPEN' },
+                  ],
+                },
+              }),
+            ]);
+            if (consumedSeats + reservedPurchases >= lockedCapacity)
+              throw new ApplicationError('CONFLICT', 'personal learning registration is full');
+            return createPurchase(tx);
+          },
+          { isolationLevel: 'Serializable' },
+        );
   if (['PAID', 'DISPUTED', 'CHARGEBACK_LOST', 'REFUNDED'].includes(purchase.status)) {
     throw new ApplicationError('CONFLICT', 'purchase already settled');
   }
