@@ -9,10 +9,12 @@ export function LearningCandidateCard({
   endpoint,
   request,
   initial,
+  onConfirmed,
 }: {
   endpoint: string;
   request: SavedPersonalLearningRequest;
   initial: SavedLearningLessonCandidate | null;
+  onConfirmed?: (value: SavedLearningLessonCandidate) => void;
 }) {
   const [candidate, setCandidate] = useState(initial);
   const [pending, setPending] = useState(false);
@@ -40,9 +42,12 @@ export function LearningCandidateCard({
       if (!response.ok || !result.data)
         throw new Error(result.error?.message ?? '教材候補を取得できませんでした。');
       setCandidate(result.data);
+      if (action === 'CONFIRM') onConfirmed?.(result.data);
       setMessage(
         action === 'CONFIRM'
-          ? 'この教材候補を確認しました。実践課題の開始はまだ接続されていません。'
+          ? onConfirmed
+            ? 'この教材候補を確認しました。実践開始を確認してください。'
+            : 'この教材候補を確認しました。実践課題の開始はまだ接続されていません。'
           : '教材候補を保存しました。内容を確認してください。',
       );
     } catch (error) {
@@ -99,7 +104,11 @@ export function LearningCandidateCard({
                 。この確認だけで学習目標全体の達成や受講終了にはしません。
               </p>
               {candidate.confirmedAt ? (
-                <p>確認済みの候補です。同じ内容から再開します。実践課題への接続は準備中です。</p>
+                <p>
+                  {onConfirmed
+                    ? '確認済みの候補です。現在の実践を確認してください。'
+                    : '確認済みの候補です。同じ内容から再開します。実践課題への接続は準備中です。'}
+                </p>
               ) : (
                 <button type="button" disabled={pending} onClick={() => void submit('CONFIRM')}>
                   この内容を確認

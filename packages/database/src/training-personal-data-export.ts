@@ -117,6 +117,8 @@ export class PrismaTrainingPersonalDataExportRepository implements TrainingPerso
               startedAt: true,
               completedAt: true,
               skippedAt: true,
+              ruleVersion: true,
+              displaySnapshot: true,
             },
             orderBy: [{ sequence: 'asc' }, { id: 'asc' }],
             take,
@@ -152,7 +154,12 @@ export class PrismaTrainingPersonalDataExportRepository implements TrainingPerso
           }),
           tx.programActionEvent.findMany({
             where: { ...scope, actorUserId: input.actorUserId },
-            select: { eventType: true, missionAssignmentId: true, occurredAt: true },
+            select: {
+              eventType: true,
+              missionAssignmentId: true,
+              occurredAt: true,
+              metadata: true,
+            },
             orderBy: [{ occurredAt: 'asc' }, { id: 'asc' }],
             take,
           }),
@@ -272,8 +279,9 @@ export class PrismaTrainingPersonalDataExportRepository implements TrainingPerso
                   calculatedAt: iso(progress.calculatedAt),
                 }
               : null,
-            assignments: assignments.map((row) => ({
+            assignments: assignments.map(({ displaySnapshot, ruleVersion, ...row }) => ({
               ...row,
+              ...(ruleVersion === 'PERSONAL_LEARNING_PRACTICE_V1' ? { displaySnapshot } : {}),
               presentedAt: iso(row.presentedAt),
               startedAt: iso(row.startedAt),
               completedAt: iso(row.completedAt),
@@ -286,7 +294,11 @@ export class PrismaTrainingPersonalDataExportRepository implements TrainingPerso
               updatedAt: iso(row.updatedAt),
             })),
             toolkit: toolkit.map((row) => ({ ...row, createdAt: iso(row.createdAt) })),
-            activities: activities.map((row) => ({ ...row, occurredAt: iso(row.occurredAt) })),
+            activities: activities.map(({ metadata, ...row }) => ({
+              ...row,
+              occurredAt: iso(row.occurredAt),
+              ...(row.eventType === 'PERSONAL_LEARNING_PRACTICE_NOTE' ? { metadata } : {}),
+            })),
             goals: goals.map((row) => ({
               ...row,
               targetValue: row.targetValue.toString(),

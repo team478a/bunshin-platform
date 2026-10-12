@@ -264,7 +264,11 @@ export class PrismaTrainingInteractionRepository {
               variantKey: true,
             },
           });
-          if (!assignment) return { outcome: 'NOT_FOUND' } as const;
+          if (
+            !assignment ||
+            assignment.missionDefinitionKey === 'PERSONAL_LEARNING_DYNAMIC_PRACTICE'
+          )
+            return { outcome: 'NOT_FOUND' } as const;
           if (assignment.status === 'PRESENTED' && input.interactionType !== 'TRAINING_POSTPONED') {
             await tx.programMissionAssignment.update({
               where: { id: assignment.id },

@@ -1,5 +1,7 @@
 # 自由希望から本人の実践へ（2026-10-12）
 
+第6分割の開始・本人申告記録・同版再訪は`MANABERU_DYNAMIC_PRACTICE_START_IMPLEMENTATION.md`を参照。Service共通方針の明示設定と本人操作で既存Goal/Plan/Assignmentへ接続する。旧6技能評価への流用を拒否し、AI途中支援・画像・証拠別評価・次課題を完成とは扱わない。
+
 教材候補の生成・不変保存・同版確認の実装範囲は`MANABERU_LESSON_CANDIDATE_IMPLEMENTATION.md`を参照。これは一課題を通す完成ではなく、既存Goal/Plan/Assignment・支援・評価への接続は未完了。初版候補はツール非依存の実践に限定し、特定操作の参照根拠と確認時点の接続前に画面操作を確認済みと扱わない。
 
 基準main: `ad6fff672ad3e0ecc14e067aa607310a9f744468`（開始時にremoteを確認）。旧3Definition限定、個別教材の運営者手動承認待ちを新経路の条件にはしない。旧経路は互換性を維持する。
