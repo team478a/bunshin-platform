@@ -11,6 +11,7 @@ import { useRef, useState, type FormEvent } from 'react';
 import { AiTrainingEvaluationCard } from './ai-training-evaluation-card';
 import { AiTrainingMissionCard } from './ai-training-mission-card';
 import { AiTrainingSetupCard } from './ai-training-setup-card';
+import { trainingSetupError } from './ai-training-setup-validation';
 import type {
   TrainingAiLevel,
   TrainingEvaluation as Evaluation,
@@ -32,12 +33,10 @@ export function AiTrainingCard({
   initialState: TrainingParticipantState;
 }) {
   const [state, setState] = useState(initialState);
-  const [role, setRole] = useState<TrainingRole>(initialState.profile?.role ?? 'OTHER');
-  const [aiLevel, setAiLevel] = useState<TrainingAiLevel>(
-    initialState.profile?.aiLevel ?? 'BEGINNER',
-  );
+  const [role, setRole] = useState<TrainingRole | ''>(initialState.profile?.role ?? '');
+  const [aiLevel, setAiLevel] = useState<TrainingAiLevel | ''>(initialState.profile?.aiLevel ?? '');
   const [aiUseCases, setAiUseCases] = useState<TrainingUseCaseKey[]>(
-    initialState.profile?.aiUseCases ?? ['NOT_YET'],
+    initialState.profile?.aiUseCases ?? [],
   );
   const [workChallenges, setWorkChallenges] = useState<TrainingChallengeKey[]>(
     initialState.profile?.workChallenges ?? [],
@@ -45,11 +44,11 @@ export function AiTrainingCard({
   const [preferredTopics, setPreferredTopics] = useState<TrainingTopicKey[]>(
     initialState.profile?.preferredTopics ?? [],
   );
-  const [dailyMinutes, setDailyMinutes] = useState<5 | 10 | 15>(
-    initialState.profile?.dailyMinutes ?? 10,
+  const [dailyMinutes, setDailyMinutes] = useState<5 | 10 | 15 | ''>(
+    initialState.profile?.dailyMinutes ?? '',
   );
-  const [learningGoalKey, setLearningGoalKey] = useState<TrainingGoalKey>(
-    initialState.profile?.learningGoalKey ?? 'USE_AI_IN_DAILY_WORK',
+  const [learningGoalKey, setLearningGoalKey] = useState<TrainingGoalKey | ''>(
+    initialState.profile?.learningGoalKey ?? '',
   );
   const [workDescription, setWorkDescription] = useState(
     initialState.profile?.workContext?.workDescription ?? '',
@@ -60,8 +59,8 @@ export function AiTrainingCard({
   const [aiImprovementTarget, setAiImprovementTarget] = useState(
     initialState.profile?.workContext?.aiImprovementTarget ?? '',
   );
-  const [deviceType, setDeviceType] = useState<TrainingDeviceType>(
-    initialState.profile?.workContext?.deviceType ?? 'BOTH',
+  const [deviceType, setDeviceType] = useState<TrainingDeviceType | ''>(
+    initialState.profile?.workContext?.deviceType ?? '',
   );
   const [setupStep, setSetupStep] = useState(1);
   const [answer, setAnswer] = useState('');
@@ -107,9 +106,20 @@ export function AiTrainingCard({
     setMessage('');
     profileKey.current ??= crypto.randomUUID();
     try {
-      if (!workChallenges.length || !preferredTopics.length) {
-        throw new Error('困っていることと、学びたいテーマを1つ以上選んでください。');
-      }
+      const setupError = trainingSetupError({
+        role,
+        aiLevel,
+        aiUseCases,
+        workChallenges,
+        preferredTopics,
+        dailyMinutes,
+        learningGoalKey,
+        workDescription,
+        timeConsumingTask,
+        aiImprovementTarget,
+        deviceType,
+      });
+      if (setupError) throw new Error(setupError);
       const data = (await readPayload(
         await fetch(`${endpoint}/profile`, {
           method: 'POST',

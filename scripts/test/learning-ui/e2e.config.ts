@@ -8,6 +8,7 @@ export default {
     'internal-preparation.e2e.ts',
     'definition-review.e2e.ts',
     'improvement-overview.e2e.ts',
+    'training-setup.e2e.ts',
   ],
   workers: 1,
   actionTimeout: 10_000,

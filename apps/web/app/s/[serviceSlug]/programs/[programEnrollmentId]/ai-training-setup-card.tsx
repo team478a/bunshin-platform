@@ -12,6 +12,7 @@ import {
 import type { Dispatch, FormEvent, SetStateAction } from 'react';
 import type { TrainingAiLevel, TrainingRole } from './ai-training-types';
 import type { TrainingDeviceType } from './ai-training-types';
+import { trainingSetupStepError } from './ai-training-setup-validation';
 
 const roleLabels: Record<TrainingRole, string> = {
   SALES: '営業・接客',
@@ -56,34 +57,34 @@ export function AiTrainingSetupCard({
 }: {
   setupStep: number;
   setSetupStep: Dispatch<SetStateAction<number>>;
-  role: TrainingRole;
-  setRole: Dispatch<SetStateAction<TrainingRole>>;
-  aiLevel: TrainingAiLevel;
-  setAiLevel: Dispatch<SetStateAction<TrainingAiLevel>>;
+  role: TrainingRole | '';
+  setRole: Dispatch<SetStateAction<TrainingRole | ''>>;
+  aiLevel: TrainingAiLevel | '';
+  setAiLevel: Dispatch<SetStateAction<TrainingAiLevel | ''>>;
   aiUseCases: TrainingUseCaseKey[];
   setAiUseCases: Dispatch<SetStateAction<TrainingUseCaseKey[]>>;
   workChallenges: TrainingChallengeKey[];
   setWorkChallenges: Dispatch<SetStateAction<TrainingChallengeKey[]>>;
   preferredTopics: TrainingTopicKey[];
   setPreferredTopics: Dispatch<SetStateAction<TrainingTopicKey[]>>;
-  dailyMinutes: 5 | 10 | 15;
-  setDailyMinutes: Dispatch<SetStateAction<5 | 10 | 15>>;
-  learningGoalKey: TrainingGoalKey;
-  setLearningGoalKey: Dispatch<SetStateAction<TrainingGoalKey>>;
+  dailyMinutes: 5 | 10 | 15 | '';
+  setDailyMinutes: Dispatch<SetStateAction<5 | 10 | 15 | ''>>;
+  learningGoalKey: TrainingGoalKey | '';
+  setLearningGoalKey: Dispatch<SetStateAction<TrainingGoalKey | ''>>;
   workDescription: string;
   setWorkDescription: Dispatch<SetStateAction<string>>;
   timeConsumingTask: string;
   setTimeConsumingTask: Dispatch<SetStateAction<string>>;
   aiImprovementTarget: string;
   setAiImprovementTarget: Dispatch<SetStateAction<string>>;
-  deviceType: TrainingDeviceType;
-  setDeviceType: Dispatch<SetStateAction<TrainingDeviceType>>;
+  deviceType: TrainingDeviceType | '';
+  setDeviceType: Dispatch<SetStateAction<TrainingDeviceType | ''>>;
   saving: boolean;
   error: string;
   setError: Dispatch<SetStateAction<string>>;
   saveProfile: (event: FormEvent<HTMLFormElement>) => Promise<void>;
 }) {
-  const recommendedGoals = recommendedTrainingGoalKeys(role);
+  const recommendedGoals = role ? recommendedTrainingGoalKeys(role) : [];
   return (
     <section className="service-entry__card training-card" aria-labelledby="training-setup-title">
       <p className="eyebrow">最初のかんたん診断 {setupStep} / 5</p>
@@ -331,21 +332,21 @@ export function AiTrainingSetupCard({
               className="button button--primary"
               type="button"
               onClick={() => {
-                if (
-                  setupStep === 2 &&
-                  (!workDescription.trim() ||
-                    !timeConsumingTask.trim() ||
-                    !aiImprovementTarget.trim())
-                ) {
-                  setError('普段の仕事と、改善したい仕事を入力してください。');
-                  return;
-                }
-                if (setupStep === 3 && !workChallenges.length) {
-                  setError('困っていることを1つ以上選んでください。');
-                  return;
-                }
-                if (setupStep === 4 && !preferredTopics.length) {
-                  setError('学びたいテーマを1つ以上選んでください。');
+                const stepError = trainingSetupStepError(setupStep, {
+                  role,
+                  aiLevel,
+                  aiUseCases,
+                  workChallenges,
+                  preferredTopics,
+                  dailyMinutes,
+                  learningGoalKey,
+                  workDescription,
+                  timeConsumingTask,
+                  aiImprovementTarget,
+                  deviceType,
+                });
+                if (stepError) {
+                  setError(stepError);
                   return;
                 }
                 setError('');
