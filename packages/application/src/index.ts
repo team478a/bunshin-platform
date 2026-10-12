@@ -129,3 +129,4 @@ export * from './ai-cost-reconciliation';
 export * from './personal-learning-call-admission';
 export * from './personal-learning-preparation-authority';
 export * from './personal-learning-pilot-operations';
+export * from './personal-learning-revisions';

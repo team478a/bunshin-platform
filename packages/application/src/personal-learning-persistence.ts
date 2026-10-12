@@ -26,7 +26,10 @@ export interface PersonalLearningState {
   }[];
   readonly plans: readonly {
     readonly plan: PersonalLearningPlan;
+    /** Executing/finished confirmed version; latest draft only if never confirmed. */
     readonly isCurrent: boolean;
+    /** Additive read field; a proposal does not supersede the executing version. */
+    readonly isLatestProposal?: boolean;
     readonly goalActive: boolean;
     readonly createdAt: string;
     readonly confirmedAt: string | null;

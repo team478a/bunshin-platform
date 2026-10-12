@@ -4,6 +4,8 @@
 対象: Codex / Claude Code等のAI開発エージェント  
 状態: Initial approved specification
 
+現在の個別AI研修の追加仕様は `docs/ai-training/MANABERU_FREE_INTENT_PRACTICE.md` を参照する（2026-10-12の実装指示）。既存の所有境界・Capability・Provider分離を維持し、自由希望から本人の実践と再開へ接続する。追加仕様の記載は実装完了や本番提供開始を意味しない。
+
 ## 0. 最重要指示
 
 このプロジェクトはSNS投稿生成SaaSではありません。

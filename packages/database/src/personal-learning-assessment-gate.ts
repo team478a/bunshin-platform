@@ -50,14 +50,7 @@ export class PrismaPersonalLearningAssessmentGate extends PrismaPersonalLearning
       select: { id: true },
     });
     if (!answer) denied();
-    const row = await tx.personalLearningPlanRevision.findFirst({
-      where: {
-        ...s,
-        planId: assignment.targetResourceId,
-      },
-      orderBy: { revision: 'desc' },
-      include: { goalConfirmation: { include: { goal: true } } },
-    });
+    const row = await this.executablePlan(tx, actor, assignment.targetResourceId);
     if (!row || row.status !== 'CONFIRMED' || row.goalConfirmation.goal.status !== 'ACTIVE')
       denied();
     if (
