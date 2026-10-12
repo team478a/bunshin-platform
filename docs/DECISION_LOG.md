@@ -4035,17 +4035,6 @@
 - 固定原価が予算自体を超える場合は使用済み0でも停止する。価格値や予算値をコードで補完せず、UNKNOWNをPASSへ変換しない。
 - schema、migration、Provider Adapter、価格、予算、本番設定は変更しない。Runtime解決と利用記録の間の同時実行競合は解消しないため、厳密な上限には原子的な送信前予約を別Gateで実装する。
 - production release、設定変更、Provider送信、実課金、Pilot STARTはそれぞれ別承認とする。
-
-## 2026-10-11: OpenAI実送信はcall単位の原子的予約と記録済み実績による限定復旧を正本にする
-
-- 状態: Proposed（実装PRレビュー待ち。本番反映・設定変更・Provider送信は未承認）
-- OpenAIの予約単位はHTTP処理やJob全体ではなく、Providerへ送る各callとする。本文生成、品質判定、修復、再生成等を別operation keyにし、複数callの固定原価合計または文字数等から算定した保守的上限を送信前に原子的予約する。
-- Provider未送信のquota・権限拒否は既知の0円として記録する。送信後は成功／失敗の使用量をstrictに保存してから予約を精算し、保存・精算失敗時はOPENのまま保持する。UNKNOWNを0円へ補完しない。
-- Personal LearningのProgram専用AdmissionとProvider account全体Admissionは別Gateとして両方維持し、利用実績を二重計上しない。
-- OPEN予約の復旧は、同一operation key digestに一致する既知費用`AiUsageEvent`が既に保存済みの場合だけ許可する。SUPER_ADMIN、理由、監査を必須とし、TTL、失敗種別、時間経過から推測解放しない。
-- 管理予算表示にはOPEN予約額を含め、15分超の未精算をAlert Centerに表示する。外部メール／LINE通知、Provider請求書照合、税・為替、使用量記録がない予約の復旧は完了扱いにしない。
-- Creatomate、FAL、Runwayの既存動画専用費用Policyは重複接続しない。本番設定、Deploy、Provider送信、実課金、Pilot開始は別の明示承認を待つ。
-
 ## 2026-10-11: OEM Offering移行履歴は既存期間台帳を正本にする
 
 - 状態: Proposed（実装PRレビュー待ち。本番反映・Offering移行は未承認）

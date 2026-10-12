@@ -3,13 +3,10 @@ import { ApproveVideoPlan, GenerateVideoPlan } from '@bunshin/application';
 import { requestIdFromHeader } from '@bunshin/observability';
 import { ApplicationError, toApiError } from '@bunshin/shared';
 import { z } from 'zod';
-import { recordOpenAiUsageAndSettle } from '../ai/openai-cost-admission';
-import {
-  reserveOpenAiRuntimeConfiguration,
-  type AdmittedOpenAiRuntimeConfiguration,
-} from '../ai/runtime-provider-configuration';
+import { resolveOpenAiRuntimeConfiguration } from '../ai/runtime-provider-configuration';
 import { currentUserProvider } from '../auth/current-user';
 import { requireSameOrigin } from '../auth/request-security';
+import { recordAiUsageSafely } from '../observability/ai-usage';
 import { withOrganizationAiGenerationQuota } from '../organization-ai-generation-quota';
 import {
   OpenAIVideoPlanGenerator,
@@ -31,8 +28,6 @@ export async function generateVideoPlanResponse(
   let bunshinId: string | null = null;
   let model = 'unknown';
   let providerAttempted = false;
-  let usagePersistenceStarted = false;
-  let runtime: AdmittedOpenAiRuntimeConfiguration | undefined;
   const started = Date.now();
   let expectedRevision = 0;
   try {
@@ -55,33 +50,27 @@ export async function generateVideoPlanResponse(
     if (scoped.revision !== expectedRevision)
       throw new ApplicationError('CONFLICT', 'video project revision conflict');
     bunshinId = scoped.bunshinId;
+    const runtime = await resolveOpenAiRuntimeConfiguration();
+    model = runtime.model;
+    providerAttempted = true;
     const operationKey = `video-plan:${videoProjectId}:revision:${expectedRevision}`;
-    const admittedRuntime = await reserveOpenAiRuntimeConfiguration(operationKey);
-    runtime = admittedRuntime;
-    model = admittedRuntime.model;
     const generated = await withOrganizationAiGenerationQuota({
       workspaceId,
       operationKey,
-      generate: () => {
-        providerAttempted = true;
-        return new GenerateVideoPlan(
+      generate: () =>
+        new GenerateVideoPlan(
           projects,
           new db.PrismaVideoPlanningContextRepository(),
-          new OpenAIVideoPlanGenerator({
-            apiKey: admittedRuntime.apiKey,
-            model: admittedRuntime.model,
-          }),
+          new OpenAIVideoPlanGenerator({ apiKey: runtime.apiKey, model: runtime.model }),
         ).execute({
           workspaceId,
           groupId,
           actorUserId: actor.userId,
           videoProjectId,
           expectedRevision,
-        });
-      },
+        }),
     });
-    usagePersistenceStarted = true;
-    await recordOpenAiUsageAndSettle(admittedRuntime, {
+    await recordAiUsageSafely({
       workspaceId,
       bunshinId,
       actorUserId,
@@ -93,8 +82,6 @@ export async function generateVideoPlanResponse(
       inputTokens: generated.generation.inputTokens,
       outputTokens: generated.generation.outputTokens,
       latencyMs: generated.generation.latencyMs,
-      estimatedCostUsdMicros: admittedRuntime.requestCostUsdMicros,
-      pricingVersion: 'admin-request-cost-v1',
       idempotencyKey: operationKey,
     });
     return Response.json(
@@ -102,9 +89,8 @@ export async function generateVideoPlanResponse(
       { headers: { 'cache-control': 'private, no-store' } },
     );
   } catch (error) {
-    if (runtime && !usagePersistenceStarted && actorUserId && bunshinId) {
-      usagePersistenceStarted = true;
-      await recordOpenAiUsageAndSettle(runtime, {
+    if (providerAttempted && actorUserId && bunshinId)
+      await recordAiUsageSafely({
         workspaceId,
         bunshinId,
         actorUserId,
@@ -117,11 +103,8 @@ export async function generateVideoPlanResponse(
         outputTokens: null,
         latencyMs: Date.now() - started,
         errorCode: error instanceof ApplicationError ? error.code : 'INTERNAL_ERROR',
-        estimatedCostUsdMicros: providerAttempted ? runtime.requestCostUsdMicros : 0,
-        pricingVersion: 'admin-request-cost-v1',
-        idempotencyKey: `video-plan:${videoProjectId}:revision:${expectedRevision}`,
+        idempotencyKey: `video-plan:${videoProjectId}:revision:${expectedRevision}:failed`,
       });
-    }
     const mapped = toApiError(error, requestId);
     return Response.json(mapped.body, {
       status: mapped.status,

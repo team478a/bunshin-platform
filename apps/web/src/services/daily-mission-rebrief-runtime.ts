@@ -12,10 +12,7 @@ import {
   type SocialDecisionRepairDisposition,
 } from '@bunshin/capability-social';
 
-import {
-  DAILY_MISSION_REBRIEF_PROMPT_VERSION,
-  OpenAIDailyMissionRebriefPlanner,
-} from '../providers/openai-daily-mission-rebrief-planner';
+import { OpenAIDailyMissionRebriefPlanner } from '../providers/openai-daily-mission-rebrief-planner';
 import type { createDailyMissionAiRuntime } from './daily-mission-ai-runtime';
 import type { runDailyMissionBriefGeneration } from './daily-mission-brief-runtime';
 
@@ -53,11 +50,14 @@ function decisionReference(input: {
 }
 
 export async function runDailyMissionRebriefGeneration(input: {
+  apiKey: string;
+  model: string;
   initialBrief: BriefResult;
   strategyVersion: number;
   boundary: SocialDecisionBoundary;
   disposition: SocialDecisionRepairDisposition & { action: 'REBRIEF_REQUIRED' };
-  executeAiStep: DailyMissionAiRuntime['execute'];
+  generateWithQuota: DailyMissionAiRuntime['generateWithQuota'];
+  recordUsage: DailyMissionAiRuntime['recordUsage'];
   setStage: (stage: string) => void;
   planner?: Pick<OpenAIDailyMissionRebriefPlanner, 'generate'>;
 }) {
@@ -81,23 +81,19 @@ export async function runDailyMissionRebriefGeneration(input: {
     previousBrief: input.initialBrief.output,
   });
   input.setStage('decision-rebrief:1');
-  const generated = await input.executeAiStep({
-    suffix: 'decision-rebrief:1',
-    taskType: 'DAILY_MISSION_REBRIEF',
-    promptVersion: DAILY_MISSION_REBRIEF_PROMPT_VERSION,
-    generate: (runtime) => {
-      const planner =
-        input.planner ??
-        new OpenAIDailyMissionRebriefPlanner({
-          apiKey: runtime.apiKey,
-          model: runtime.model,
-        });
-      return planner.generate({
-        planningContext: input.initialBrief.planningContext,
-        revision: preparation,
-      });
-    },
-  });
+  const planner =
+    input.planner ??
+    new OpenAIDailyMissionRebriefPlanner({
+      apiKey: input.apiKey,
+      model: input.model,
+    });
+  const generated = await input.generateWithQuota('decision-rebrief:1', () =>
+    planner.generate({
+      planningContext: input.initialBrief.planningContext,
+      revision: preparation,
+    }),
+  );
+  await input.recordUsage('decision-rebrief:1', 'DAILY_MISSION_REBRIEF', generated);
   const output = finalizeSocialDecisionRebrief({
     preparation,
     previousBrief: input.initialBrief.output,

@@ -10,8 +10,8 @@ describe('daily mission brief runtime boundary', () => {
     const runtime = read('src/services/daily-mission-brief-runtime.ts');
 
     expect(runtime).toContain('new OpenAIDailyMissionPlanner({');
-    expect(runtime).toContain("suffix: 'daily-brief'");
-    expect(runtime).toContain("taskType: 'DAILY_MISSION_PLANNER'");
+    expect(runtime).toContain("input.generateWithQuota('daily-brief'");
+    expect(runtime).toContain("input.recordUsage('daily-brief', 'DAILY_MISSION_PLANNER', brief)");
   });
 
   it('keeps the generation orchestrator dependent on the brief runtime contract', () => {

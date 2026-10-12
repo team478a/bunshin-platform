@@ -143,8 +143,6 @@ export async function reserveOpenAiRuntimeConfiguration(
     repository: AiProviderConfigurationRepository & AiProviderRuntimeAdmissionRepository;
   },
   task?: OpenAiCompatibilityTask,
-  reservedCostUsdMicros?: number,
-  requestCount?: number,
 ): Promise<AdmittedOpenAiRuntimeConfiguration> {
   const environment = dependencies?.environment ?? currentAiProviderEnvironment();
   let repository = dependencies?.repository;
@@ -158,8 +156,6 @@ export async function reserveOpenAiRuntimeConfiguration(
       environment,
       provider: 'OPENAI',
       operationKey,
-      ...(reservedCostUsdMicros === undefined ? {} : { reservedCostUsdMicros }),
-      ...(requestCount === undefined ? {} : { requestCount }),
     });
     try {
       if (!reserved.configuration.model)

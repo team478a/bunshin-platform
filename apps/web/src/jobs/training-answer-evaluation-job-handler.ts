@@ -14,8 +14,8 @@ import {
 import { ApplicationError } from '@bunshin/shared';
 import { personalLearningPilotExecutionAllowed } from '../services/personal-learning-pilot-access';
 import { admitPersonalLearningCall } from '../services/personal-learning-call-admission';
-import { reserveOpenAiRuntimeConfiguration } from '../ai/runtime-provider-configuration';
-import { recordOpenAiUsageAndSettle } from '../ai/openai-cost-admission';
+import { resolveOpenAiRuntimeConfiguration } from '../ai/runtime-provider-configuration';
+import { recordAiUsageSafely } from '../observability/ai-usage';
 import { preparePersonalLearningAiCall } from '../observability/personal-learning-ai-call';
 import { withOrganizationAiGenerationQuota } from '../organization-ai-generation-quota';
 import {
@@ -121,13 +121,7 @@ export function createTrainingAnswerEvaluationJobHandler(): TrainingAnswerEvalua
         assignment.targetResourceType === 'PERSONAL_LEARNING_PLAN';
       if (!personalLearningPilotExecutionAllowed(program.settings, enrollment.id, requirePilot))
         throw new TrainingAnswerEvaluationJobError('TRAINING_EVALUATION_SCOPE_REVOKED', false);
-      const operationKey = `training-evaluation:${answer.id}:${input.jobId}:attempt:${input.attemptCount}`;
-      const usageKey = operationKey;
-      const runtime = await reserveOpenAiRuntimeConfiguration(
-        operationKey,
-        undefined,
-        'TRAINING_ASSESSMENT',
-      );
+      const runtime = await resolveOpenAiRuntimeConfiguration(undefined, 'TRAINING_ASSESSMENT');
       const pilot = requirePilot
         ? await preparePersonalLearningAiCall(
             {
@@ -145,11 +139,12 @@ export function createTrainingAnswerEvaluationJobHandler(): TrainingAnswerEvalua
           )
         : null;
       const observed: { measurement: AiCallMeasurement | null } = { measurement: null };
+      const operationKey = `training-evaluation:${answer.id}:${input.jobId}:attempt:${input.attemptCount}`;
+      const usageKey = operationKey;
       const started = Date.now();
       let providerAttempted = false;
       let providerSucceeded = false;
       let pilotRequestStarted = false;
-      let providerUsagePending = true;
       let evaluated: Awaited<ReturnType<OpenAiTrainingAnswerEvaluator['evaluate']>>;
       try {
         evaluated = await withOrganizationAiGenerationQuota({
@@ -283,8 +278,7 @@ export function createTrainingAnswerEvaluationJobHandler(): TrainingAnswerEvalua
         });
         providerSucceeded = true;
         const pilotCost = pilot && observed.measurement ? pilot.cost(observed.measurement) : null;
-        providerUsagePending = false;
-        await recordOpenAiUsageAndSettle(runtime, {
+        await recordAiUsageSafely({
           workspaceId: input.workspaceId,
           bunshinId: null,
           actorUserId: input.actorUserId,
@@ -309,6 +303,7 @@ export function createTrainingAnswerEvaluationJobHandler(): TrainingAnswerEvalua
           idempotencyKey: usageKey,
         });
       } catch (error) {
+        if (error instanceof TrainingAnswerEvaluationJobError) throw error;
         if (
           requirePilot &&
           !providerAttempted &&
@@ -316,39 +311,35 @@ export function createTrainingAnswerEvaluationJobHandler(): TrainingAnswerEvalua
           ['NOT_FOUND', 'FORBIDDEN', 'CONFLICT', 'VALIDATION_ERROR'].includes(error.code)
         )
           throw new TrainingAnswerEvaluationJobError('TRAINING_EVALUATION_SCOPE_REVOKED', false);
-        if (providerUsagePending) {
-          providerUsagePending = false;
-          await recordOpenAiUsageAndSettle(runtime, {
-            workspaceId: input.workspaceId,
-            bunshinId: null,
-            actorUserId: input.actorUserId,
-            taskType: 'AI_TRAINING_ANSWER_EVALUATION',
-            provider: 'openai',
-            model: pilot ? (observed.measurement?.model ?? 'unknown') : runtime.model,
-            promptVersion: TRAINING_EVALUATION_PROMPT_VERSION,
-            status: 'FAILED',
-            inputTokens: pilot ? (observed.measurement?.inputTokens ?? null) : null,
-            outputTokens: pilot ? (observed.measurement?.outputTokens ?? null) : null,
-            latencyMs: Date.now() - started,
-            estimatedCostUsdMicros: providerAttempted
-              ? pilot
-                ? observed.measurement
-                  ? pilot.cost(observed.measurement).totalCostUsdMicros
-                  : null
-                : runtime.requestCostUsdMicros
-              : 0,
-            pricingVersion: providerAttempted
-              ? pilot
-                ? observed.measurement
-                  ? (pilot.cost(observed.measurement).pricing?.pricingVersion ?? null)
-                  : null
-                : 'admin-request-cost-v1'
+        await recordAiUsageSafely({
+          workspaceId: input.workspaceId,
+          bunshinId: null,
+          actorUserId: input.actorUserId,
+          taskType: 'AI_TRAINING_ANSWER_EVALUATION',
+          provider: 'openai',
+          model: pilot ? (observed.measurement?.model ?? 'unknown') : runtime.model,
+          promptVersion: TRAINING_EVALUATION_PROMPT_VERSION,
+          status: 'FAILED',
+          inputTokens: pilot ? (observed.measurement?.inputTokens ?? null) : null,
+          outputTokens: pilot ? (observed.measurement?.outputTokens ?? null) : null,
+          latencyMs: Date.now() - started,
+          estimatedCostUsdMicros: pilot
+            ? observed.measurement
+              ? pilot.cost(observed.measurement).totalCostUsdMicros
+              : null
+            : providerAttempted && runtime.requestCostUsdMicros
+              ? runtime.requestCostUsdMicros
               : null,
-            errorCode: error instanceof ApplicationError ? error.code : 'INTERNAL_ERROR',
-            idempotencyKey: usageKey,
-          });
-        }
-        if (error instanceof TrainingAnswerEvaluationJobError) throw error;
+          pricingVersion: pilot
+            ? observed.measurement
+              ? (pilot.cost(observed.measurement).pricing?.pricingVersion ?? null)
+              : null
+            : providerAttempted && runtime.requestCostUsdMicros
+              ? 'admin-request-cost-v1'
+              : null,
+          errorCode: error instanceof ApplicationError ? error.code : 'INTERNAL_ERROR',
+          idempotencyKey: usageKey,
+        });
         if (error instanceof ApplicationError && error.code !== 'AI_PROVIDER_UNAVAILABLE') {
           throw new TrainingAnswerEvaluationJobError(
             `TRAINING_EVALUATION_${error.code}`,

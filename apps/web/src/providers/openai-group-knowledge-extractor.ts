@@ -14,8 +14,6 @@ export type ExtractedKnowledgeChunk = {
   confidence?: number | null;
 };
 
-export const GROUP_KNOWLEDGE_EXTRACTION_PROMPT_VERSION = 'group-knowledge-extraction-v1';
-
 const privateAddress = (address: string) =>
   /^(?:127\.|10\.|192\.168\.|169\.254\.|0\.|::1$|fc|fd|fe80)/iu.test(address) ||
   /^172\.(?:1[6-9]|2\d|3[01])\./u.test(address);
@@ -160,17 +158,9 @@ async function readVideo(response: Response) {
 }
 
 export class OpenAiGroupKnowledgeExtractor {
-  constructor(
-    private readonly options: {
-      apiKey: string;
-      model: string;
-      fetch?: typeof fetch;
-      onProviderAttempt?: () => void;
-    },
-  ) {}
+  constructor(private readonly options: { apiKey: string; model: string; fetch?: typeof fetch }) {}
 
   private async structured(content: Array<Record<string, unknown>>) {
-    this.options.onProviderAttempt?.();
     const response = await (this.options.fetch ?? fetch)('https://api.openai.com/v1/responses', {
       method: 'POST',
       headers: {
@@ -257,7 +247,6 @@ export class OpenAiGroupKnowledgeExtractor {
     const form = new FormData();
     form.set('model', 'gpt-4o-mini-transcribe');
     form.set('file', new Blob([bytes], { type: input.mimeType }), input.title);
-    this.options.onProviderAttempt?.();
     const response = await (this.options.fetch ?? fetch)(
       'https://api.openai.com/v1/audio/transcriptions',
       {

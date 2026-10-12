@@ -7,13 +7,10 @@ import {
 import { requestIdFromHeader } from '@bunshin/observability';
 import { ApplicationError, toApiError } from '@bunshin/shared';
 import { z } from 'zod';
-import { recordOpenAiUsageAndSettle } from '../ai/openai-cost-admission';
-import {
-  reserveOpenAiRuntimeConfiguration,
-  type AdmittedOpenAiRuntimeConfiguration,
-} from '../ai/runtime-provider-configuration';
+import { resolveOpenAiRuntimeConfiguration } from '../ai/runtime-provider-configuration';
 import { currentUserProvider } from '../auth/current-user';
 import { requireSameOrigin } from '../auth/request-security';
+import { recordAiUsageSafely } from '../observability/ai-usage';
 import { withOrganizationAiGenerationQuota } from '../organization-ai-generation-quota';
 import {
   NARRATION_MICROS_PER_CHARACTER,
@@ -108,10 +105,6 @@ export async function previewVideoProjectNarrationResponse(
   const started = Date.now();
   let usage:
     { workspaceId: string; bunshinId: string; actorUserId: string; key: string } | undefined;
-  let runtime: AdmittedOpenAiRuntimeConfiguration | undefined;
-  let providerAttempted = false;
-  let usagePersistenceStarted = false;
-  let estimatedCostUsdMicros = 0;
   try {
     requireSameOrigin(request);
     if (!request.headers.get('content-type')?.startsWith('application/json'))
@@ -126,29 +119,15 @@ export async function previewVideoProjectNarrationResponse(
       actorUserId: value.actor.userId,
       key: operationKey,
     };
-    estimatedCostUsdMicros = narrationCharacters(narration) * NARRATION_MICROS_PER_CHARACTER;
-    const admittedRuntime = await reserveOpenAiRuntimeConfiguration(
-      operationKey,
-      undefined,
-      undefined,
-      estimatedCostUsdMicros,
-    );
-    runtime = admittedRuntime;
+    const runtime = await resolveOpenAiRuntimeConfiguration();
     const audio = await withOrganizationAiGenerationQuota({
       workspaceId: value.safeWorkspaceId,
       groupId: value.safeGroupId,
       operationKey,
-      generate: () => {
-        providerAttempted = true;
-        return new OpenAIVideoNarration(admittedRuntime.apiKey).preview(
-          input.voice,
-          input.speed,
-          narration,
-        );
-      },
+      generate: () =>
+        new OpenAIVideoNarration(runtime.apiKey).preview(input.voice, input.speed, narration),
     });
-    usagePersistenceStarted = true;
-    await recordOpenAiUsageAndSettle(admittedRuntime, {
+    await recordAiUsageSafely({
       workspaceId: value.safeWorkspaceId,
       bunshinId: value.project.bunshinId,
       actorUserId: value.actor.userId,
@@ -160,7 +139,7 @@ export async function previewVideoProjectNarrationResponse(
       inputTokens: null,
       outputTokens: null,
       latencyMs: Date.now() - started,
-      estimatedCostUsdMicros,
+      estimatedCostUsdMicros: narrationCharacters(narration) * NARRATION_MICROS_PER_CHARACTER,
       pricingVersion: 'gpt-4o-mini-tts-character-estimate-2026-09-13',
       idempotencyKey: operationKey,
     });
@@ -179,9 +158,8 @@ export async function previewVideoProjectNarrationResponse(
             '音声を作れませんでした。少し待ってからもう一度お試しください。',
           )
         : error;
-    if (usage && runtime && !usagePersistenceStarted) {
-      usagePersistenceStarted = true;
-      await recordOpenAiUsageAndSettle(runtime, {
+    if (usage)
+      await recordAiUsageSafely({
         workspaceId: usage.workspaceId,
         bunshinId: usage.bunshinId,
         actorUserId: usage.actorUserId,
@@ -193,15 +171,12 @@ export async function previewVideoProjectNarrationResponse(
         inputTokens: null,
         outputTokens: null,
         latencyMs: Date.now() - started,
-        estimatedCostUsdMicros: providerAttempted ? estimatedCostUsdMicros : 0,
-        pricingVersion: 'gpt-4o-mini-tts-character-estimate-2026-09-13',
         idempotencyKey: usage.key,
         errorCode:
           error instanceof OpenAIVideoNarrationError
             ? `VIDEO_NARRATION_${error.category}`
             : 'VIDEO_NARRATION_PREVIEW_FAILED',
       });
-    }
     const mapped = toApiError(normalized, requestId);
     return Response.json(mapped.body, {
       status: mapped.status,

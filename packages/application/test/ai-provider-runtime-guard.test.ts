@@ -211,35 +211,6 @@ describe('provider runtime call admission', () => {
     ).resolves.toEqual(reserved);
   });
 
-  it('forwards one bounded explicit cost policy and rejects ambiguous reservations', async () => {
-    const reserveActiveForRuntime = vi.fn().mockResolvedValue({
-      ...snapshot,
-      admission,
-    });
-    const admissionRepository: AiProviderRuntimeAdmissionRepository = {
-      reserveActiveForRuntime,
-      settleRuntimeAdmission: vi.fn(),
-    };
-    await new ReserveAiProviderRuntimeCall(admissionRepository).execute({
-      environment: 'PRODUCTION',
-      provider: 'OPENAI',
-      operationKey: 'narration:1',
-      reservedCostUsdMicros: 1_250,
-    });
-    expect(reserveActiveForRuntime).toHaveBeenCalledWith(
-      expect.objectContaining({ reservedCostUsdMicros: 1_250 }),
-    );
-    await expect(
-      new ReserveAiProviderRuntimeCall(admissionRepository).execute({
-        environment: 'PRODUCTION',
-        provider: 'OPENAI',
-        operationKey: 'ambiguous:1',
-        reservedCostUsdMicros: 1_250,
-        requestCount: 2,
-      }),
-    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
-  });
-
   it('fails closed when the exact open admission cannot be settled', async () => {
     const admissionRepository: AiProviderRuntimeAdmissionRepository = {
       reserveActiveForRuntime: vi.fn(),

@@ -6,10 +6,9 @@ import {
   type SocialImageGenerationJobHandler,
   type SocialImageQualityReportRecord,
 } from '@bunshin/application';
-import { ApplicationError } from '@bunshin/shared';
 import { randomUUID } from 'node:crypto';
-import { recordOpenAiUsageAndSettle } from '../ai/openai-cost-admission';
-import { reserveOpenAiRuntimeConfiguration } from '../ai/runtime-provider-configuration';
+import { resolveOpenAiRuntimeConfiguration } from '../ai/runtime-provider-configuration';
+import { recordAiUsageSafely } from '../observability/ai-usage';
 import {
   OpenAiSocialImageGenerationAdapter,
   OpenAiSocialImageProviderError,
@@ -38,6 +37,12 @@ export function createSocialImageGenerationJobHandler(): SocialImageGenerationJo
       const context = await new ClaimSocialImageGenerationExecution(repository).execute(input);
       const { serviceMediaReservation, planPayment } =
         await authorizeSocialImageGeneration(context);
+      const runtime = await resolveOpenAiRuntimeConfiguration();
+      const provider = new OpenAiSocialImageGenerationAdapter({ apiKey: runtime.apiKey });
+      const qualityReviewer = new OpenAiSocialImageQualityReviewer({
+        apiKey: runtime.apiKey,
+        model: runtime.model,
+      });
       const usageKey = `social-image:${context.requestId}:attempt:${input.attemptCount}`;
       try {
         const referenceImage = context.referenceImage
@@ -56,14 +61,8 @@ export function createSocialImageGenerationJobHandler(): SocialImageGenerationJo
         ) => {
           const isQualityRetry = Boolean(repairInstruction);
           const pageUsageKey = `${usageKey}:page:${pageIndex + 1}${isQualityRetry ? ':quality-retry' : ''}`;
-          const runtime = await reserveOpenAiRuntimeConfiguration(pageUsageKey);
-          let providerAttempted = false;
-          let usagePersistenceStarted = false;
           try {
-            providerAttempted = true;
-            const generated = await new OpenAiSocialImageGenerationAdapter({
-              apiKey: runtime.apiKey,
-            }).generate({
+            const generated = await provider.generate({
               requestId: `${context.requestId}:page:${pageIndex + 1}${isQualityRetry ? ':quality-retry' : ''}`,
               prompt: [
                 socialImagePagePrompt(
@@ -85,8 +84,7 @@ export function createSocialImageGenerationJobHandler(): SocialImageGenerationJo
               model: context.model,
               quality: pageIndex === 0 ? 'high' : context.quality,
             });
-            usagePersistenceStarted = true;
-            await recordOpenAiUsageAndSettle(runtime, {
+            await recordAiUsageSafely({
               workspaceId: context.workspaceId,
               bunshinId: context.bunshinId,
               actorUserId: context.ownerUserId,
@@ -110,9 +108,8 @@ export function createSocialImageGenerationJobHandler(): SocialImageGenerationJo
             });
             return generated;
           } catch (error) {
-            if (!usagePersistenceStarted) {
-              usagePersistenceStarted = true;
-              await recordOpenAiUsageAndSettle(runtime, {
+            if (error instanceof OpenAiSocialImageProviderError)
+              await recordAiUsageSafely({
                 workspaceId: context.workspaceId,
                 bunshinId: context.bunshinId,
                 actorUserId: context.ownerUserId,
@@ -130,17 +127,11 @@ export function createSocialImageGenerationJobHandler(): SocialImageGenerationJo
                 inputTokens: null,
                 outputTokens: null,
                 latencyMs: 0,
-                estimatedCostUsdMicros: providerAttempted ? runtime.requestCostUsdMicros : 0,
-                pricingVersion: 'ADMIN_FIXED_REQUEST_COST_PER_PAGE',
-                errorCode:
-                  error instanceof OpenAiSocialImageProviderError
-                    ? error.category
-                    : error instanceof ApplicationError
-                      ? error.code
-                      : 'INTERNAL_ERROR',
+                estimatedCostUsdMicros: null,
+                pricingVersion: null,
+                errorCode: error.category,
                 idempotencyKey: pageUsageKey,
               });
-            }
             throw error;
           }
         };
@@ -154,15 +145,8 @@ export function createSocialImageGenerationJobHandler(): SocialImageGenerationJo
         const generatedPages = [coverAsset, ...remainingAssets];
         const reviewPages = async (round: 'initial' | 'final') => {
           const reviewUsageKey = `${usageKey}:quality-review:${round}`;
-          const runtime = await reserveOpenAiRuntimeConfiguration(reviewUsageKey);
-          let providerAttempted = false;
-          let usagePersistenceStarted = false;
           try {
-            providerAttempted = true;
-            const reviewed = await new OpenAiSocialImageQualityReviewer({
-              apiKey: runtime.apiKey,
-              model: runtime.model,
-            }).review({
+            const reviewed = await qualityReviewer.review({
               pages: layouts.map((layout, pageIndex) => ({
                 pageIndex,
                 headline: layout.headline,
@@ -171,8 +155,7 @@ export function createSocialImageGenerationJobHandler(): SocialImageGenerationJo
                 bytes: generatedPages[pageIndex]!.bytes,
               })),
             });
-            usagePersistenceStarted = true;
-            await recordOpenAiUsageAndSettle(runtime, {
+            await recordAiUsageSafely({
               workspaceId: context.workspaceId,
               bunshinId: context.bunshinId,
               actorUserId: context.ownerUserId,
@@ -190,9 +173,8 @@ export function createSocialImageGenerationJobHandler(): SocialImageGenerationJo
             });
             return reviewed.output;
           } catch (error) {
-            if (!usagePersistenceStarted) {
-              usagePersistenceStarted = true;
-              await recordOpenAiUsageAndSettle(runtime, {
+            if (error instanceof OpenAiSocialImageQualityReviewError)
+              await recordAiUsageSafely({
                 workspaceId: context.workspaceId,
                 bunshinId: context.bunshinId,
                 actorUserId: context.ownerUserId,
@@ -204,17 +186,11 @@ export function createSocialImageGenerationJobHandler(): SocialImageGenerationJo
                 inputTokens: null,
                 outputTokens: null,
                 latencyMs: 0,
-                estimatedCostUsdMicros: providerAttempted ? runtime.requestCostUsdMicros : 0,
-                pricingVersion: 'ADMIN_FIXED_REQUEST_COST_PER_REVIEW',
-                errorCode:
-                  error instanceof OpenAiSocialImageQualityReviewError
-                    ? error.category
-                    : error instanceof ApplicationError
-                      ? error.code
-                      : 'INTERNAL_ERROR',
+                estimatedCostUsdMicros: null,
+                pricingVersion: null,
+                errorCode: error.category,
                 idempotencyKey: reviewUsageKey,
               });
-            }
             throw error;
           }
         };

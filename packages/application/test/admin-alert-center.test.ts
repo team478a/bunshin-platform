@@ -18,7 +18,6 @@ const healthy = (): AdminAlertSnapshot => ({
       monthlySpentUsdMicros: 100_000,
       recentProviderFailures: 0,
       recentUnknownCostEvents: 0,
-      staleOpenAdmissions: 0,
     },
   ],
   line: {
@@ -80,21 +79,6 @@ describe('admin alert center', () => {
           severity: 'WARNING',
           count: 5,
           title: expect.stringContaining('利用料を算定できない'),
-        }),
-      ]),
-    );
-  });
-
-  it('keeps stale open cost reservations visible for explicit recovery', () => {
-    const snapshot = healthy();
-    snapshot.ai[0]!.staleOpenAdmissions = 2;
-    expect(buildAdminAlerts(snapshot)).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          code: 'AI_OPENAI_OPEN_ADMISSIONS',
-          severity: 'WARNING',
-          count: 2,
-          href: '/admin/ai',
         }),
       ]),
     );

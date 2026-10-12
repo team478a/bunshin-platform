@@ -4,11 +4,8 @@ import { ApplicationError, toApiError } from '@bunshin/shared';
 import { z } from 'zod';
 import { currentUserProvider } from '../auth/current-user';
 import { requireSameOrigin } from '../auth/request-security';
-import { recordOpenAiUsageAndSettle } from '../ai/openai-cost-admission';
-import { reserveOpenAiRuntimeConfiguration } from '../ai/runtime-provider-configuration';
-import { withOrganizationAiGenerationQuota } from '../organization-ai-generation-quota';
+import { resolveOpenAiRuntimeConfiguration } from '../ai/runtime-provider-configuration';
 import {
-  BUNSHIN_PROPOSAL_PROMPT_VERSION,
   OpenAIBunshinProposalGenerator,
   type BunshinProposal,
   type BunshinProposalInput,
@@ -83,77 +80,6 @@ export function fallbackBunshinProposals(input: BunshinProposalInput): BunshinPr
   ];
 }
 
-export async function generateBunshinProposalsWithCost(input: {
-  prompt: BunshinProposalInput;
-  workspaceId: string;
-  groupId?: string;
-  actorUserId: string;
-  operationKey: string;
-}) {
-  let runtime: Awaited<ReturnType<typeof reserveOpenAiRuntimeConfiguration>>;
-  try {
-    runtime = await reserveOpenAiRuntimeConfiguration(input.operationKey);
-  } catch {
-    return { proposals: fallbackBunshinProposals(input.prompt), source: 'FALLBACK' as const };
-  }
-  const started = Date.now();
-  let providerAttempted = false;
-  let usagePersistenceStarted = false;
-  try {
-    const proposals = await withOrganizationAiGenerationQuota({
-      workspaceId: input.workspaceId,
-      ...(input.groupId ? { groupId: input.groupId } : {}),
-      operationKey: input.operationKey,
-      generate: () => {
-        providerAttempted = true;
-        return new OpenAIBunshinProposalGenerator({
-          apiKey: runtime.apiKey,
-          model: runtime.model,
-        }).generate(input.prompt);
-      },
-    });
-    usagePersistenceStarted = true;
-    await recordOpenAiUsageAndSettle(runtime, {
-      workspaceId: input.workspaceId,
-      bunshinId: null,
-      actorUserId: input.actorUserId,
-      taskType: 'BUNSHIN_PROPOSAL_GENERATOR',
-      provider: 'openai',
-      model: runtime.model,
-      promptVersion: BUNSHIN_PROPOSAL_PROMPT_VERSION,
-      status: 'SUCCESS',
-      inputTokens: null,
-      outputTokens: null,
-      latencyMs: Date.now() - started,
-      estimatedCostUsdMicros: runtime.requestCostUsdMicros,
-      pricingVersion: 'admin-request-cost-v1',
-      idempotencyKey: input.operationKey,
-    });
-    return { proposals, source: 'AI' as const };
-  } catch (error) {
-    if (usagePersistenceStarted) throw error;
-    usagePersistenceStarted = true;
-    await recordOpenAiUsageAndSettle(runtime, {
-      workspaceId: input.workspaceId,
-      bunshinId: null,
-      actorUserId: input.actorUserId,
-      taskType: 'BUNSHIN_PROPOSAL_GENERATOR',
-      provider: 'openai',
-      model: runtime.model,
-      promptVersion: BUNSHIN_PROPOSAL_PROMPT_VERSION,
-      status: 'FAILED',
-      inputTokens: null,
-      outputTokens: null,
-      latencyMs: Date.now() - started,
-      estimatedCostUsdMicros: providerAttempted ? runtime.requestCostUsdMicros : 0,
-      pricingVersion: 'admin-request-cost-v1',
-      errorCode: error instanceof ApplicationError ? error.code : 'INTERNAL_ERROR',
-      idempotencyKey: input.operationKey,
-    });
-    return { proposals: fallbackBunshinProposals(input.prompt), source: 'FALLBACK' as const };
-  }
-}
-
 export async function bunshinProposalsResponse(
   request: Request,
   workspaceId: string,
@@ -174,12 +100,22 @@ export async function bunshinProposalsResponse(
       audience: labels.audience[parsed.data.audience],
       tone: labels.tone[parsed.data.tone],
     };
-    const { proposals, source } = await generateBunshinProposalsWithCost({
-      prompt: input,
-      workspaceId,
-      actorUserId: user.userId,
-      operationKey: `${requestId}:bunshin-proposals`,
-    });
+    let proposals: BunshinProposal[];
+    let source: 'AI' | 'FALLBACK' = 'FALLBACK';
+    try {
+      const { apiKey, model } = await resolveOpenAiRuntimeConfiguration();
+      try {
+        proposals = await new OpenAIBunshinProposalGenerator({
+          apiKey,
+          model,
+        }).generate(input);
+        source = 'AI';
+      } catch {
+        proposals = fallbackBunshinProposals(input);
+      }
+    } catch {
+      proposals = fallbackBunshinProposals(input);
+    }
     return Response.json(
       { data: { proposals, source }, requestId },
       { headers: { 'cache-control': 'no-store' } },

@@ -20,8 +20,7 @@ describe('mission content variant AI runtime boundary', () => {
 
   it('keeps quota, usage, terminology and quality enforcement together', () => {
     expect(runtimeSource).toContain('withOrganizationAiGenerationQuota');
-    expect(runtimeSource).toContain('recordOpenAiUsageAndSettle');
-    expect(runtimeSource).toContain('reserveOpenAiRuntimeConfiguration');
+    expect(runtimeSource).toContain('recordAiUsageSafely');
     expect(runtimeSource).toContain('applyServiceContentTerminology');
     expect(runtimeSource).toContain("'CONTENT_REJECTED'");
     expect(runtimeSource).toContain("'variant-content:1'");

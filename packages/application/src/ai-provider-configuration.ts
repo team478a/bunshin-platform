@@ -115,12 +115,7 @@ export interface AiProviderRuntimeConfigurationSnapshot {
 }
 
 export function assertAiProviderRuntimeConfiguration(
-  input: {
-    environment: LineConfigurationEnvironment;
-    provider: AiProviderKey;
-    reservedCostUsdMicros?: number;
-    requestCount?: number;
-  },
+  input: { environment: LineConfigurationEnvironment; provider: AiProviderKey },
   value: AiProviderRuntimeConfigurationSnapshot,
 ) {
   const { configuration } = value;
@@ -132,9 +127,7 @@ export function assertAiProviderRuntimeConfiguration(
     throw new ApplicationError('CONFIGURATION_ERROR', 'verified provider configuration required');
   if (value.monthlyUnknownCostEvents > 0)
     throw new ApplicationError('CONFLICT', 'provider cost is unknown');
-  const requestCostUsdMicros =
-    input.reservedCostUsdMicros ??
-    (configuration.requestCostUsdMicros ?? 0) * (input.requestCount ?? 1);
+  const requestCostUsdMicros = configuration.requestCostUsdMicros ?? 0;
   if (!Number.isSafeInteger(requestCostUsdMicros) || requestCostUsdMicros <= 0)
     throw new ApplicationError('CONFIGURATION_ERROR', 'provider request cost is required');
   if (value.dailySpentUsdMicros > configuration.dailyBudgetUsdMicros - requestCostUsdMicros)
@@ -156,8 +149,6 @@ export interface AiProviderRuntimeAdmissionRepository {
     environment: LineConfigurationEnvironment;
     provider: AiProviderKey;
     operationKey: string;
-    reservedCostUsdMicros?: number;
-    requestCount?: number;
   }): Promise<{
     configuration: AiProviderConfiguration;
     encryptedApiKey: string;
@@ -167,30 +158,6 @@ export interface AiProviderRuntimeAdmissionRepository {
     admission: AiProviderRuntimeAdmission;
   } | null>;
   settleRuntimeAdmission(input: AiProviderRuntimeAdmission): Promise<boolean>;
-}
-
-export interface AiProviderOpenAdmissionSummary {
-  provider: AiProviderKey;
-  openCount: number;
-  recoverableCount: number;
-  reservedCostUsdMicros: number;
-  oldestAdmittedAt: Date;
-}
-
-export interface AiProviderRuntimeAdmissionAdminRepository {
-  listOpenRuntimeAdmissions(input: {
-    actorUserId: string;
-    environment: LineConfigurationEnvironment;
-  }): Promise<{
-    summaries: AiProviderOpenAdmissionSummary[];
-    recoveryScanTruncated: boolean;
-    canRecover: boolean;
-  } | null>;
-  recoverRecordedRuntimeAdmissions(input: {
-    actorUserId: string;
-    environment: LineConfigurationEnvironment;
-    reason: string;
-  }): Promise<{ scanned: number; recovered: number; remainingOpen: number } | null>;
 }
 
 export class ListAiProviderConfigurations {
@@ -347,25 +314,9 @@ export class ReserveAiProviderRuntimeCall {
     environment: LineConfigurationEnvironment;
     provider: AiProviderKey;
     operationKey: string;
-    reservedCostUsdMicros?: number;
-    requestCount?: number;
   }) {
     if (!input.operationKey.trim() || input.operationKey.length > 200)
       throw new ApplicationError('VALIDATION_ERROR', 'invalid provider operation key');
-    if (
-      input.reservedCostUsdMicros !== undefined &&
-      (!Number.isSafeInteger(input.reservedCostUsdMicros) || input.reservedCostUsdMicros <= 0)
-    )
-      throw new ApplicationError('VALIDATION_ERROR', 'invalid provider reserved cost');
-    if (
-      input.requestCount !== undefined &&
-      (!Number.isSafeInteger(input.requestCount) ||
-        input.requestCount < 1 ||
-        input.requestCount > 100)
-    )
-      throw new ApplicationError('VALIDATION_ERROR', 'invalid provider request count');
-    if (input.reservedCostUsdMicros !== undefined && input.requestCount !== undefined)
-      throw new ApplicationError('VALIDATION_ERROR', 'ambiguous provider reservation');
     const value = await this.repository.reserveActiveForRuntime(input);
     if (value === null)
       throw new ApplicationError('CONFIGURATION_ERROR', 'active provider configuration required');
@@ -379,32 +330,5 @@ export class SettleAiProviderRuntimeCall {
   async execute(input: AiProviderRuntimeAdmission) {
     const settled = await this.repository.settleRuntimeAdmission(input);
     if (!settled) throw new ApplicationError('CONFLICT', 'provider call admission is not open');
-  }
-}
-
-export class ListOpenAiProviderRuntimeAdmissions {
-  constructor(private readonly repository: AiProviderRuntimeAdmissionAdminRepository) {}
-
-  async execute(actorUserId: string, environment: LineConfigurationEnvironment) {
-    const value = await this.repository.listOpenRuntimeAdmissions({ actorUserId, environment });
-    if (value === null) throw new ApplicationError('NOT_FOUND', 'admin page not found');
-    return value;
-  }
-}
-
-export class RecoverRecordedAiProviderRuntimeAdmissions {
-  constructor(private readonly repository: AiProviderRuntimeAdmissionAdminRepository) {}
-
-  async execute(input: {
-    actorUserId: string;
-    environment: LineConfigurationEnvironment;
-    reason: string;
-  }) {
-    const reason = input.reason.trim();
-    if (reason.length < 3 || reason.length > 500)
-      throw new ApplicationError('VALIDATION_ERROR', 'invalid reason');
-    const value = await this.repository.recoverRecordedRuntimeAdmissions({ ...input, reason });
-    if (value === null) throw new ApplicationError('FORBIDDEN', 'super admin required');
-    return value;
   }
 }

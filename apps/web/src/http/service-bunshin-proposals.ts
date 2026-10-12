@@ -3,7 +3,9 @@ import { requestIdFromHeader } from '@bunshin/observability';
 import { ApplicationError, toApiError } from '@bunshin/shared';
 import { currentUserProvider } from '../auth/current-user';
 import { requireSameOrigin } from '../auth/request-security';
-import { generateBunshinProposalsWithCost } from './bunshin-proposals';
+import { resolveOpenAiRuntimeConfiguration } from '../ai/runtime-provider-configuration';
+import { fallbackBunshinProposals } from './bunshin-proposals';
+import { OpenAIBunshinProposalGenerator } from '../providers/openai-bunshin-proposal-generator';
 import { resolveMemberServiceContext } from '../services/public-service';
 import {
   readServiceOnboardingAnswers,
@@ -79,14 +81,16 @@ export async function serviceBunshinProposalsResponse(request: Request, serviceS
       audience: '初回回答から、投稿を届けたい相手を具体化してください。',
       tone: '初心者にも使いやすく、誇張せず、本人の回答を尊重してください。',
     };
-    const { proposals: generatedProposals, source } = await generateBunshinProposalsWithCost({
-      prompt: input,
-      workspaceId: service.workspaceId,
-      groupId: service.serviceId,
-      actorUserId: actor.userId,
-      operationKey: `${requestId}:service-bunshin-proposals`,
-    });
-    const proposals = generatedProposals.map((proposal) => ({
+    let proposals = fallbackBunshinProposals(input);
+    let source: 'AI' | 'FALLBACK' = 'FALLBACK';
+    try {
+      const { apiKey, model } = await resolveOpenAiRuntimeConfiguration();
+      proposals = await new OpenAIBunshinProposalGenerator({ apiKey, model }).generate(input);
+      source = 'AI';
+    } catch {
+      // The deterministic proposals keep onboarding usable during provider outages.
+    }
+    proposals = proposals.map((proposal) => ({
       ...proposal,
       name: proposal.name.slice(0, 100),
       objectiveSummary: proposal.objectiveSummary.slice(0, 500),

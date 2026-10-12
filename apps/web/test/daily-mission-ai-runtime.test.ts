@@ -1,16 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
-  reserveConfiguration: vi.fn(),
+  resolveConfiguration: vi.fn(),
   recordUsage: vi.fn(),
   withQuota: vi.fn(),
 }));
 
 vi.mock('../src/ai/runtime-provider-configuration', () => ({
-  reserveOpenAiRuntimeConfiguration: mocks.reserveConfiguration,
-}));
-vi.mock('../src/ai/openai-cost-admission', () => ({
-  recordOpenAiUsageAndSettle: mocks.recordUsage,
+  resolveOpenAiRuntimeConfiguration: mocks.resolveConfiguration,
 }));
 vi.mock('../src/observability/ai-usage', () => ({
   recordAiUsageSafely: mocks.recordUsage,
@@ -24,12 +21,11 @@ import { createDailyMissionAiRuntime } from '../src/services/daily-mission-ai-ru
 describe('daily mission AI runtime', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.reserveConfiguration.mockResolvedValue({
+    mocks.resolveConfiguration.mockResolvedValue({
       apiKey: 'test-key',
       model: 'test-model',
       requestCostUsdMicros: 275,
       source: 'ADMIN_CONFIGURATION',
-      admission: { provider: 'OPENAI' },
     });
     mocks.recordUsage.mockResolvedValue(undefined);
     mocks.withQuota.mockImplementation(({ generate }: { generate: () => Promise<unknown> }) =>
@@ -38,7 +34,7 @@ describe('daily mission AI runtime', () => {
   });
 
   it('uses the same stable prefix and suffix for rebrief quota and Usage idempotency', async () => {
-    const runtime = createDailyMissionAiRuntime({
+    const runtime = await createDailyMissionAiRuntime({
       scope: {
         workspaceId: 'workspace-1',
         groupId: 'group-1',
@@ -55,12 +51,8 @@ describe('daily mission AI runtime', () => {
       latencyMs: 20,
     };
 
-    await runtime.execute({
-      suffix: 'decision-rebrief:1',
-      taskType: 'DAILY_MISSION_REBRIEF',
-      promptVersion: 'daily-mission-rebrief-v1',
-      generate: () => Promise.resolve(generated),
-    });
+    await runtime.generateWithQuota('decision-rebrief:1', () => Promise.resolve(generated));
+    await runtime.recordUsage('decision-rebrief:1', 'DAILY_MISSION_REBRIEF', generated);
 
     expect(mocks.withQuota).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -70,7 +62,6 @@ describe('daily mission AI runtime', () => {
       }),
     );
     expect(mocks.recordUsage).toHaveBeenCalledWith(
-      expect.objectContaining({ model: 'test-model' }),
       expect.objectContaining({
         taskType: 'DAILY_MISSION_REBRIEF',
         estimatedCostUsdMicros: 275,
@@ -81,14 +72,13 @@ describe('daily mission AI runtime', () => {
   });
 
   it('keeps cost unknown when no reviewed request estimate is configured', async () => {
-    mocks.reserveConfiguration.mockResolvedValue({
+    mocks.resolveConfiguration.mockResolvedValue({
       apiKey: 'test-key',
       model: 'test-model',
       requestCostUsdMicros: 0,
       source: 'ADMIN_CONFIGURATION',
-      admission: { provider: 'OPENAI' },
     });
-    const runtime = createDailyMissionAiRuntime({
+    const runtime = await createDailyMissionAiRuntime({
       scope: {
         workspaceId: 'workspace-1',
         bunshinId: 'bunshin-1',
@@ -97,22 +87,15 @@ describe('daily mission AI runtime', () => {
       usageIdempotencyPrefix: 'generation-key-2',
     });
 
-    await runtime.execute({
-      suffix: 'daily-brief',
-      taskType: 'DAILY_MISSION_PLANNER',
+    await runtime.recordUsage('daily-brief', 'DAILY_MISSION_PLANNER', {
+      model: 'test-model',
       promptVersion: 'daily-mission-planner-v1',
-      generate: () =>
-        Promise.resolve({
-          model: 'test-model',
-          promptVersion: 'daily-mission-planner-v1',
-          inputTokens: 10,
-          outputTokens: 5,
-          latencyMs: 20,
-        }),
+      inputTokens: 10,
+      outputTokens: 5,
+      latencyMs: 20,
     });
 
     expect(mocks.recordUsage).toHaveBeenCalledWith(
-      expect.objectContaining({ model: 'test-model' }),
       expect.objectContaining({
         estimatedCostUsdMicros: null,
         pricingVersion: null,

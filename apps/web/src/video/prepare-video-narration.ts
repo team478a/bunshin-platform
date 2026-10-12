@@ -3,11 +3,8 @@ import { createHash, randomUUID } from 'node:crypto';
 import { VideoRenderJobHandlerError, type VideoProjectRecord } from '@bunshin/application';
 import { DEFAULT_VIDEO_NARRATION_SPEED, DEFAULT_VIDEO_NARRATION_VOICE } from '@bunshin/application';
 import { ApplicationError } from '@bunshin/shared';
-import { recordOpenAiUsageAndSettle } from '../ai/openai-cost-admission';
-import {
-  reserveOpenAiRuntimeConfiguration,
-  type AdmittedOpenAiRuntimeConfiguration,
-} from '../ai/runtime-provider-configuration';
+import { resolveOpenAiRuntimeConfiguration } from '../ai/runtime-provider-configuration';
+import { recordAiUsageSafely } from '../observability/ai-usage';
 import { withOrganizationAiGenerationQuota } from '../organization-ai-generation-quota';
 import {
   composeNarration,
@@ -100,6 +97,7 @@ export async function prepareVideoNarration(
       false,
     );
 
+  const runtime = await resolveOpenAiRuntimeConfiguration();
   const id = existing?.id ?? randomUUID();
   const attemptCount = (existing?.attemptCount ?? 0) + 1;
   const claimed = existing
@@ -130,25 +128,14 @@ export async function prepareVideoNarration(
   const started = Date.now();
   let attemptedCharacters = 0;
   let totalAttemptedCharacters = existing?.attemptedCharacters ?? 0;
-  const operationKey = `video-narration:${renderId}:attempt:${attemptCount}`;
-  const reservedCostUsdMicros =
-    project.scenes.reduce((total, scene) => total + narrationCharacters(scene.narration), 0) *
-    NARRATION_MICROS_PER_CHARACTER;
   const key = `${scope.workspaceId}/${scope.ownerUserId}/${renderId}.wav`;
-  let runtime: AdmittedOpenAiRuntimeConfiguration | undefined;
+  const speech = new OpenAIVideoNarration(runtime.apiKey);
   let failure: unknown;
   try {
-    runtime = await reserveOpenAiRuntimeConfiguration(
-      operationKey,
-      undefined,
-      undefined,
-      reservedCostUsdMicros,
-    );
-    const speech = new OpenAIVideoNarration(runtime.apiKey);
     await withOrganizationAiGenerationQuota({
       workspaceId: scope.workspaceId,
       groupId: scope.groupId,
-      operationKey,
+      operationKey: `video-narration:${renderId}:attempt:${attemptCount}`,
       generate: async () => {
         const wav = await composeNarration(project.scenes, async (text, durationMs) => {
           await assertActive();
@@ -198,24 +185,23 @@ export async function prepareVideoNarration(
         }
       : { status: 'READY', storageKey: key, latencyMs, errorCode: null },
   });
-  if (runtime)
-    await recordOpenAiUsageAndSettle(runtime, {
-      workspaceId: scope.workspaceId,
-      bunshinId: project.bunshinId,
-      actorUserId: scope.ownerUserId,
-      taskType: 'VIDEO_NARRATION',
-      provider: 'OPENAI',
-      model: NARRATION_MODEL,
-      promptVersion: NARRATION_VERSION,
-      status: failure ? 'FAILED' : 'SUCCESS',
-      inputTokens: null,
-      outputTokens: null,
-      latencyMs,
-      estimatedCostUsdMicros: attemptedCharacters * NARRATION_MICROS_PER_CHARACTER,
-      pricingVersion: 'gpt-4o-mini-tts-character-estimate-2026-09-13',
-      idempotencyKey: operationKey,
-      errorCode: failure ? failureCode : null,
-    });
+  await recordAiUsageSafely({
+    workspaceId: scope.workspaceId,
+    bunshinId: project.bunshinId,
+    actorUserId: scope.ownerUserId,
+    taskType: 'VIDEO_NARRATION',
+    provider: 'OPENAI',
+    model: NARRATION_MODEL,
+    promptVersion: NARRATION_VERSION,
+    status: failure ? 'FAILED' : 'SUCCESS',
+    inputTokens: null,
+    outputTokens: null,
+    latencyMs,
+    estimatedCostUsdMicros: attemptedCharacters * NARRATION_MICROS_PER_CHARACTER,
+    pricingVersion: 'gpt-4o-mini-tts-character-estimate-2026-09-13',
+    idempotencyKey: `video-narration:${renderId}:attempt:${attemptCount}`,
+    errorCode: failure ? failureCode : null,
+  });
   if (failure)
     throw failure instanceof VideoRenderJobHandlerError
       ? failure

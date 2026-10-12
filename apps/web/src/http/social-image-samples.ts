@@ -6,17 +6,14 @@ import { normalizeSocialImageLayout, GroupFeatureEntitlementService } from '@bun
 import { ApplicationError, toApiError } from '@bunshin/shared';
 import { currentUserProvider } from '../auth/current-user';
 import { requireSameOrigin } from '../auth/request-security';
-import { recordOpenAiUsageAndSettle } from '../ai/openai-cost-admission';
-import {
-  reserveOpenAiRuntimeConfiguration,
-  type AdmittedOpenAiRuntimeConfiguration,
-} from '../ai/runtime-provider-configuration';
+import { resolveOpenAiRuntimeConfiguration } from '../ai/runtime-provider-configuration';
 import {
   OpenAiSocialImageGenerationAdapter,
   OpenAiSocialImageProviderError,
 } from '../providers/openai-social-image-generation';
 import { ManagedSocialImageRenderer, loadBundledSocialImageFonts } from '../social-image-renderer';
 import { SupabaseSocialImageStorage } from '../social-image-storage';
+import { recordAiUsageSafely } from '../observability/ai-usage';
 
 const schema = z
   .object({
@@ -79,13 +76,8 @@ export async function imageSampleScope(groupId: string, bunshinId?: string) {
 
 export async function createImageSample(request: Request) {
   let sampleId: string | undefined;
-  let usageBunshinId: string | undefined;
   let stage = 'ACCESS';
   let scope: Awaited<ReturnType<typeof imageSampleScope>> = null;
-  let runtime: AdmittedOpenAiRuntimeConfiguration | undefined;
-  let providerAttempted = false;
-  let usagePersistenceStarted = false;
-  let providerStartedAt = 0;
   try {
     requireSameOrigin(request);
     const raw = await request.text();
@@ -104,6 +96,7 @@ export async function createImageSample(request: Request) {
     const inputHash = createHash('sha256')
       .update(JSON.stringify({ ...input, layout }))
       .digest('hex');
+    const runtime = await resolveOpenAiRuntimeConfiguration();
     const now = new Date();
     const date = localDate(now);
     const dailyFrom = new Date(`${date}T00:00:00+09:00`);
@@ -152,7 +145,6 @@ export async function createImageSample(request: Request) {
     if (!result.created)
       return NextResponse.json({ id: result.sample.id, status: result.sample.status });
     sampleId = input.id;
-    usageBunshinId = input.bunshinId;
     const access = await new GroupFeatureEntitlementService(
       new db.PrismaGroupFeatureEntitlementRepository(),
     ).consumeAccess({
@@ -169,13 +161,8 @@ export async function createImageSample(request: Request) {
     stage = 'FONTS';
     const fonts = await loadBundledSocialImageFonts();
     stage = 'PROVIDER';
-    const operationKey = `image-sample:${input.id}`;
-    const admittedRuntime = await reserveOpenAiRuntimeConfiguration(operationKey);
-    runtime = admittedRuntime;
-    providerStartedAt = Date.now();
-    providerAttempted = true;
     const generated = await new OpenAiSocialImageGenerationAdapter({
-      apiKey: admittedRuntime.apiKey,
+      apiKey: runtime.apiKey,
     }).generate({
       requestId: input.id,
       model,
@@ -201,8 +188,7 @@ export async function createImageSample(request: Request) {
               `Communication theme: ${input.headline}. ${input.bodyLines.join(' / ')}`,
             ].join(' '),
     });
-    usagePersistenceStarted = true;
-    await recordOpenAiUsageAndSettle(admittedRuntime, {
+    await recordAiUsageSafely({
       workspaceId: member.workspaceId,
       bunshinId: input.bunshinId,
       actorUserId: actor.userId,
@@ -214,9 +200,9 @@ export async function createImageSample(request: Request) {
       inputTokens: generated.inputTokens,
       outputTokens: generated.outputTokens,
       latencyMs: generated.latencyMs,
-      estimatedCostUsdMicros: admittedRuntime.requestCostUsdMicros,
+      estimatedCostUsdMicros: runtime.requestCostUsdMicros,
       pricingVersion: 'ADMIN_FIXED_REQUEST_COST',
-      idempotencyKey: operationKey,
+      idempotencyKey: `image-sample:${input.id}`,
     });
     stage = 'COMPOSE';
     const rendered = await new ManagedSocialImageRenderer(fonts).render({
@@ -253,11 +239,10 @@ export async function createImageSample(request: Request) {
               : `SAMPLE_${stage}_FAILED`,
         },
       });
-      if (scope && runtime && usageBunshinId && !usagePersistenceStarted) {
-        usagePersistenceStarted = true;
-        await recordOpenAiUsageAndSettle(runtime, {
+      if (scope && error instanceof OpenAiSocialImageProviderError)
+        await recordAiUsageSafely({
           workspaceId: scope.member.workspaceId,
-          bunshinId: usageBunshinId,
+          bunshinId: scope.bunshins[0]!.id,
           actorUserId: scope.actor.userId,
           taskType: 'SOCIAL_IMAGE_GENERATION',
           provider: 'OPENAI',
@@ -266,18 +251,12 @@ export async function createImageSample(request: Request) {
           status: 'FAILED',
           inputTokens: null,
           outputTokens: null,
-          latencyMs: Math.max(0, Date.now() - providerStartedAt),
-          estimatedCostUsdMicros: providerAttempted ? runtime.requestCostUsdMicros : 0,
-          pricingVersion: 'ADMIN_FIXED_REQUEST_COST',
-          errorCode:
-            error instanceof OpenAiSocialImageProviderError
-              ? error.category
-              : error instanceof ApplicationError
-                ? error.code
-                : 'INTERNAL_ERROR',
+          latencyMs: 0,
+          estimatedCostUsdMicros: null,
+          pricingVersion: 'UNAVAILABLE',
+          errorCode: error.category,
           idempotencyKey: `image-sample:${sampleId}`,
         });
-      }
     }
     const safe =
       error instanceof OpenAiSocialImageProviderError

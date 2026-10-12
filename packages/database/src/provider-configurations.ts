@@ -3,8 +3,6 @@ import type {
   AdminEmailConfigurationRepository,
   AiProviderConfiguration,
   AiProviderConfigurationRepository,
-  AiProviderKey,
-  AiProviderRuntimeAdmissionAdminRepository,
   VideoAiProviderCostPolicyRepository,
 } from '@bunshin/application';
 import { assertAiProviderRuntimeConfiguration } from '@bunshin/application';
@@ -48,9 +46,7 @@ function adminEmailConfiguration(
   };
 }
 
-export class PrismaAiProviderConfigurationRepository
-  implements AiProviderConfigurationRepository, AiProviderRuntimeAdmissionAdminRepository
-{
+export class PrismaAiProviderConfigurationRepository implements AiProviderConfigurationRepository {
   constructor(private readonly client: PrismaClient = prisma) {}
 
   private admin(actorUserId: string) {
@@ -69,137 +65,6 @@ export class PrismaAiProviderConfigurationRepository
     return rows.map((row) =>
       aiProviderConfiguration(row, ['SUPER_ADMIN', 'OPERATOR'].includes(admin.role)),
     );
-  }
-
-  private async recoverableRuntimeAdmissionIds(
-    rows: Array<{
-      id: string;
-      provider: AiProviderKey;
-      operationHash: string;
-      admittedAt: Date;
-    }>,
-  ) {
-    const recoverable: string[] = [];
-    for (const row of rows) {
-      const usage = await this.client.aiUsageEvent.findMany({
-        where: {
-          provider: row.provider.toLowerCase(),
-          estimatedCostUsdMicros: { not: null },
-          occurredAt: { gte: row.admittedAt },
-        },
-        select: { idempotencyKey: true },
-        orderBy: { occurredAt: 'asc' },
-        take: 1_000,
-      });
-      if (
-        usage.some(
-          ({ idempotencyKey }) =>
-            createHash('sha256').update(idempotencyKey).digest('hex') === row.operationHash,
-        )
-      )
-        recoverable.push(row.id);
-    }
-    return recoverable;
-  }
-
-  async listOpenRuntimeAdmissions(
-    input: Parameters<AiProviderRuntimeAdmissionAdminRepository['listOpenRuntimeAdmissions']>[0],
-  ) {
-    const admin = await this.admin(input.actorUserId);
-    if (admin === null) return null;
-    const [groups, scanRows] = await Promise.all([
-      this.client.aiProviderCallAdmission.groupBy({
-        by: ['provider'],
-        where: { environment: input.environment, settledAt: null },
-        _count: { _all: true },
-        _sum: { reservedCostUsdMicros: true },
-        _min: { admittedAt: true },
-        orderBy: { provider: 'asc' },
-      }),
-      this.client.aiProviderCallAdmission.findMany({
-        where: { environment: input.environment, settledAt: null },
-        select: { id: true, provider: true, operationHash: true, admittedAt: true },
-        orderBy: { admittedAt: 'asc' },
-        take: 101,
-      }),
-    ]);
-    const recoveryScanTruncated = scanRows.length > 100;
-    const recoverableIds = new Set(
-      await this.recoverableRuntimeAdmissionIds(scanRows.slice(0, 100)),
-    );
-    return {
-      summaries: groups.map((group) => ({
-        provider: group.provider,
-        openCount: group._count._all,
-        recoverableCount: scanRows.filter(
-          (row) => row.provider === group.provider && recoverableIds.has(row.id),
-        ).length,
-        reservedCostUsdMicros: Number(
-          (group._sum.reservedCostUsdMicros ?? 0n) > BigInt(Number.MAX_SAFE_INTEGER)
-            ? Number.MAX_SAFE_INTEGER
-            : (group._sum.reservedCostUsdMicros ?? 0n),
-        ),
-        oldestAdmittedAt: group._min.admittedAt ?? new Date(0),
-      })),
-      recoveryScanTruncated,
-      canRecover: admin.role === 'SUPER_ADMIN',
-    };
-  }
-
-  async recoverRecordedRuntimeAdmissions(
-    input: Parameters<
-      AiProviderRuntimeAdmissionAdminRepository['recoverRecordedRuntimeAdmissions']
-    >[0],
-  ) {
-    const admin = await this.admin(input.actorUserId);
-    if (admin?.role !== 'SUPER_ADMIN') return null;
-    const rows = await this.client.aiProviderCallAdmission.findMany({
-      where: { environment: input.environment, settledAt: null },
-      select: {
-        id: true,
-        configurationId: true,
-        provider: true,
-        operationHash: true,
-        admittedAt: true,
-      },
-      orderBy: { admittedAt: 'asc' },
-      take: 100,
-    });
-    const recoverableIds = new Set(await this.recoverableRuntimeAdmissionIds(rows));
-    let recovered = 0;
-    for (const row of rows) {
-      if (!recoverableIds.has(row.id)) continue;
-      recovered += await this.client.$transaction(async (tx) => {
-        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`ai-provider-call:${input.environment}:${row.provider}`}, 0))`;
-        const changed = await tx.aiProviderCallAdmission.updateMany({
-          where: {
-            id: row.id,
-            environment: input.environment,
-            provider: row.provider,
-            operationHash: row.operationHash,
-            settledAt: null,
-          },
-          data: { settledAt: new Date() },
-        });
-        if (changed.count === 1)
-          await tx.aiProviderConfigurationAudit.create({
-            data: {
-              configurationId: row.configurationId,
-              environment: input.environment,
-              provider: row.provider,
-              actorUserId: input.actorUserId,
-              action: 'RECOVER_RUNTIME_ADMISSION',
-              reason: input.reason,
-              changedFields: ['runtimeAdmissionSettlement'],
-            },
-          });
-        return changed.count;
-      });
-    }
-    const remainingOpen = await this.client.aiProviderCallAdmission.count({
-      where: { environment: input.environment, settledAt: null },
-    });
-    return { scanned: rows.length, recovered, remainingOpen };
   }
 
   async createVersion(input: Parameters<AiProviderConfigurationRepository['createVersion']>[0]) {
@@ -403,8 +268,6 @@ export class PrismaAiProviderConfigurationRepository
     >[0]['environment'];
     provider: Parameters<AiProviderConfigurationRepository['getActiveForRuntime']>[0]['provider'];
     operationKey: string;
-    reservedCostUsdMicros?: number;
-    requestCount?: number;
   }) {
     const operationHash = createHash('sha256').update(input.operationKey).digest('hex');
     return this.client.$transaction(async (tx) => {
@@ -492,10 +355,7 @@ export class PrismaAiProviderConfigurationRepository
           environment: input.environment,
           provider: input.provider,
           operationHash,
-          reservedCostUsdMicros: BigInt(
-            input.reservedCostUsdMicros ??
-              (snapshot.configuration.requestCostUsdMicros ?? 0) * (input.requestCount ?? 1),
-          ),
+          reservedCostUsdMicros: BigInt(snapshot.configuration.requestCostUsdMicros ?? 0),
           admittedAt: clock.now,
         },
       });

@@ -6,8 +6,8 @@ import type {
 import { validateFortuneReadingOutput } from '@bunshin/capability-fortune';
 import { ApplicationError } from '@bunshin/shared';
 import { z } from 'zod';
-import { recordOpenAiUsageAndSettle } from '../ai/openai-cost-admission';
-import { reserveOpenAiRuntimeConfiguration } from '../ai/runtime-provider-configuration';
+import { resolveOpenAiRuntimeConfiguration } from '../ai/runtime-provider-configuration';
+import { recordAiUsageSafely } from '../observability/ai-usage';
 import { withOrganizationAiGenerationQuota } from '../organization-ai-generation-quota';
 
 export const FORTUNE_AI_PROMPT_VERSION = 'fortune-daily-reading-v3-participant-memory';
@@ -54,10 +54,10 @@ type ResponseValue = {
 
 export class OpenAiFortuneReadingGenerator implements FortuneAiReadingGenerator {
   async generate(input: Parameters<FortuneAiReadingGenerator['generate']>[0]) {
+    const runtime = await resolveOpenAiRuntimeConfiguration();
     const started = Date.now();
     const attempt = input.claim.jobAttempt;
     const operationKey = `fortune-reading:${input.claim.reading.id}${attempt ? `:${attempt.jobId}:attempt:${attempt.attemptCount}` : ''}`;
-    const runtime = await reserveOpenAiRuntimeConfiguration(operationKey);
     let usagePending = true;
     let providerAttempted = false;
     let observedInputTokens: number | null = null;
@@ -151,8 +151,7 @@ export class OpenAiFortuneReadingGenerator implements FortuneAiReadingGenerator 
           };
         },
       });
-      usagePending = false;
-      await recordOpenAiUsageAndSettle(runtime, {
+      await recordAiUsageSafely({
         workspaceId: input.claim.workspaceId,
         bunshinId: input.claim.bunshinId,
         actorUserId: input.actorUserId,
@@ -164,15 +163,15 @@ export class OpenAiFortuneReadingGenerator implements FortuneAiReadingGenerator 
         inputTokens: result.inputTokens,
         outputTokens: result.outputTokens,
         latencyMs: result.latencyMs,
-        estimatedCostUsdMicros: runtime.requestCostUsdMicros,
-        pricingVersion: 'admin-request-cost-v1',
+        estimatedCostUsdMicros: runtime.requestCostUsdMicros || null,
+        pricingVersion: runtime.requestCostUsdMicros ? 'admin-request-cost-v1' : null,
         idempotencyKey: operationKey,
       });
+      usagePending = false;
       return result;
     } catch (error) {
-      if (usagePending) {
-        usagePending = false;
-        await recordOpenAiUsageAndSettle(runtime, {
+      if (usagePending)
+        await recordAiUsageSafely({
           workspaceId: input.claim.workspaceId,
           bunshinId: input.claim.bunshinId,
           actorUserId: input.actorUserId,
@@ -184,13 +183,13 @@ export class OpenAiFortuneReadingGenerator implements FortuneAiReadingGenerator 
           inputTokens: observedInputTokens,
           outputTokens: observedOutputTokens,
           latencyMs: Date.now() - started,
-          estimatedCostUsdMicros: providerAttempted ? runtime.requestCostUsdMicros : 0,
+          estimatedCostUsdMicros:
+            providerAttempted && runtime.requestCostUsdMicros ? runtime.requestCostUsdMicros : null,
           pricingVersion:
             providerAttempted && runtime.requestCostUsdMicros ? 'admin-request-cost-v1' : null,
           errorCode: error instanceof ApplicationError ? error.code : 'INTERNAL_ERROR',
           idempotencyKey: operationKey,
         });
-      }
       throw error;
     }
   }

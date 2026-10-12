@@ -7,17 +7,14 @@ const fake = vi.hoisted(() => ({
   analyze: vi.fn(),
 }));
 vi.mock('../src/ai/runtime-provider-configuration', () => ({
-  reserveOpenAiRuntimeConfiguration: () =>
+  resolveOpenAiRuntimeConfiguration: () =>
     Promise.resolve({
       apiKey: 'dummy',
       model: 'fake',
       requestCostUsdMicros: 10,
-      admission: { provider: 'OPENAI' },
     }),
 }));
-vi.mock('../src/ai/openai-cost-admission', () => ({
-  recordOpenAiUsageAndSettle: (_runtime: unknown, usage: RecordAiUsageInput) => fake.record(usage),
-}));
+vi.mock('../src/observability/ai-usage', () => ({ recordAiUsageSafely: fake.record }));
 vi.mock('../src/organization-ai-generation-quota', () => ({
   withOrganizationAiGenerationQuota: async ({ generate }: { generate: () => Promise<unknown> }) =>
     generate(),
@@ -33,7 +30,6 @@ vi.mock('@bunshin/capability-social', async (original) => ({
   },
 }));
 vi.mock('../src/providers/openai-photo-first-analyzer', () => ({
-  PHOTO_FIRST_ANALYSIS_PROMPT_VERSION: 'photo-v3',
   OpenAiPhotoFirstAnalyzer: class {
     analyze = fake.analyze;
   },
@@ -149,13 +145,7 @@ describe('variant runtime explicit usage provenance (fake boundaries, no network
     await expect(generateMissionContentVariantWithAi(input())).rejects.toThrow(
       'synthetic analysis failure',
     );
-    expect(fake.record).toHaveBeenCalledWith(
-      expect.objectContaining({
-        taskType: 'PHOTO_FIRST_ANALYSIS',
-        status: 'FAILED',
-        estimatedCostUsdMicros: 10,
-      }),
-    );
+    expect(fake.record).not.toHaveBeenCalled();
     expect(fake.content).not.toHaveBeenCalled();
     expect(fake.quality).not.toHaveBeenCalled();
   });
@@ -169,7 +159,6 @@ describe('variant runtime explicit usage provenance (fake boundaries, no network
     ).toEqual([
       ['PHOTO_FIRST_ANALYSIS', generationId],
       ['MISSION_CONTENT_VARIANT', generationId],
-      ['QUALITY_CHECKER', generationId],
     ]);
     expect(fake.content).toHaveBeenCalledOnce();
   });

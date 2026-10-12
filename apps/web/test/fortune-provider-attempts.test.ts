@@ -7,13 +7,9 @@ const mocks = vi.hoisted(() => ({
   fetch: vi.fn(),
 }));
 vi.mock('../src/ai/runtime-provider-configuration', () => ({
-  reserveOpenAiRuntimeConfiguration: mocks.runtime,
+  resolveOpenAiRuntimeConfiguration: mocks.runtime,
 }));
-vi.mock('../src/ai/openai-cost-admission', () => ({
-  recordOpenAiUsageAndSettle: (_runtime: unknown, usage: unknown) => {
-    mocks.usage(usage);
-  },
-}));
+vi.mock('../src/observability/ai-usage', () => ({ recordAiUsageSafely: mocks.usage }));
 vi.mock('../src/organization-ai-generation-quota', () => ({
   withOrganizationAiGenerationQuota: mocks.quota,
 }));
@@ -51,7 +47,6 @@ beforeEach(() => {
     apiKey: 'test-only-not-a-real-key',
     model: 'mock-model',
     requestCostUsdMicros: 100,
-    admission: { provider: 'OPENAI' },
   });
   mocks.quota.mockImplementation((input: { generate(): Promise<unknown> }) => input.generate());
   mocks.usage.mockResolvedValue(undefined);
@@ -103,7 +98,7 @@ describe('fortune provider attempts', () => {
     ).rejects.toThrow('revoked');
     expect(mocks.fetch).not.toHaveBeenCalled();
     expect(mocks.usage).toHaveBeenCalledWith(
-      expect.objectContaining({ status: 'FAILED', estimatedCostUsdMicros: 0 }),
+      expect.objectContaining({ status: 'FAILED', estimatedCostUsdMicros: null }),
     );
   });
 
