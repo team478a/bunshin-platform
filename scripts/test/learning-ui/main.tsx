@@ -5,9 +5,28 @@ import { InternalPreparationCard } from '../../../apps/web/app/s/[serviceSlug]/m
 import { DefinitionReviewCard } from '../../../apps/web/app/s/[serviceSlug]/manage/programs/learning-definition-review/card';
 import { ServiceOverviewCard } from '../../../apps/web/app/s/[serviceSlug]/manage/improvement-overview/card';
 import '../../../apps/web/app/styles.css';
+import { PersonalLearningRequestCard } from '../../../apps/web/app/s/[serviceSlug]/programs/[programEnrollmentId]/learning-request/card';
 
 createRoot(document.getElementById('root')!).render(
-  new URLSearchParams(window.location.search).has('improvement-overview') ? (
+  new URLSearchParams(window.location.search).has('learning-request') ? (
+    <PersonalLearningRequestCard
+      endpoint="/api/services/synthetic/learning-request"
+      initial={
+        new URLSearchParams(window.location.search).has('resume')
+          ? {
+              id: 'synthetic',
+              revision: 1,
+              createdAt: '2026-10-12T00:00:00Z',
+              originalText: 'AIで発表の練習をしたい',
+              deviceType: 'PC',
+              toolDescription: null,
+              experienceDescription: null,
+              currentPosition: '発表の資料を作った',
+            }
+          : null
+      }
+    />
+  ) : new URLSearchParams(window.location.search).has('improvement-overview') ? (
     <ServiceOverviewCard
       endpoint="/api/services/synthetic/improvement-overview"
       packages={['SOCIAL', 'TRAINING']}

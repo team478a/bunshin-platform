@@ -129,6 +129,9 @@ export function AiTrainingDataDeletionCard({
             仕事情報・点数 {preview.counts.profiles}件 / 進捗 {preview.counts.progress}件 / 課題{' '}
             {preview.counts.assignments}件 / 活動履歴 {preview.counts.activities}件 / 目標{' '}
             {preview.counts.goals}件 / 研修設定 {preview.counts.preferences}件
+            {preview.counts.learningRequests !== undefined && (
+              <> / 自由な学習希望 {preview.counts.learningRequests}件</>
+            )}
           </p>
           <p>未完了の関連評価は停止します。外部AIへ送信済みの処理は撤回を保証できません。</p>
           <label>

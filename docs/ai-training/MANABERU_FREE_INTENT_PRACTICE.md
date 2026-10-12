@@ -26,3 +26,5 @@
 異なる希望で上記体験を完走してから完成とする。契約・schema・unit testだけでは完成ではない。本番設定・Migration適用・実課金・実送信・Pilot開始は別承認。合成テスト、実AI試験、実受講者の効果、本番反映を分けて報告する。
 
 第1分割は `MANABERU_PLAN_CONTINUITY_IMPLEMENTATION.md`。現在の確定Planを新しい提案から保護する前提修正であり、自由希望の生成・画像支援等の完成報告ではない。
+
+第3分割の自由希望入口は`MANABERU_FREE_INTENT_INTAKE_IMPLEMENTATION.md`。希望・任意の利用環境を`PersonalLearningRequest`へ保存するだけではGoal確認・教材提示としない。新規Profileがなくても有効な通常PARTICIPANTは希望を保存できるが、未回答を推測してProfileを作らない。教材生成・原価予約・候補確定まで接続する前は、本番では入口を公開しない。
