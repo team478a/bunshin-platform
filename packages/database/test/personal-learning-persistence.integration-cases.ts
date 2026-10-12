@@ -14,6 +14,8 @@ import {
   PERSONAL_LEARNING_PLAN_CONTRACT_VERSION,
   type PersonalLearningPlan,
   type LearningConsultationAnswer,
+  type PersonalLearningTextOperation,
+  type AiCallMeasurement,
 } from '@bunshin/application';
 import {
   AI_TRAINING_LEARNING_DEFINITION_FIXTURES,
@@ -26,6 +28,7 @@ import {
 } from '@bunshin/capability-training';
 import { PrismaPersonalLearningPersistenceRepository } from '../src/personal-learning-persistence';
 import { PrismaPersonalLearningRequestRepository } from '../src/personal-learning-request';
+import { PrismaPersonalLearningTextOperationRepository } from '../src/personal-learning-text-operation';
 import { PrismaTrainingRetentionExecutionRepository } from '../src/training-retention-execution';
 import { PrismaAccountDeletionPurgeRepository } from '../src/account-deletion-purge';
 import { PrismaPersonalLearningRouterBridge } from '../src/personal-learning-router';
@@ -220,6 +223,304 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
       experienceDescription: null,
       currentPosition: null,
     } as const;
+    async function textOperationFixture() {
+      const f = await fixture(false);
+      const requests = new PrismaPersonalLearningRequestRepository(client, () => now);
+      const wish = await requests.saveRequest({
+        ...f.actor,
+        content: requestContent,
+        expectedRevision: 0,
+        idempotencyKey: randomUUID(),
+      });
+      const repo = new PrismaPersonalLearningTextOperationRepository(client, () => now);
+      const input: PersonalLearningTextOperation = {
+        actor: f.actor,
+        requestId: wish.id,
+        expectedRequestRevision: wish.revision,
+        operationId: randomUUID(),
+        operationKind: 'LESSON_GENERATION',
+        attempt: 1,
+        provider: 'synthetic',
+        promptVersion: 'SYNTHETIC_V1',
+        policy: {
+          workspaceId: f.scope.workspaceId,
+          groupId: f.scope.groupId,
+          serviceProgramId: f.enrollment.serviceProgramId,
+          model: 'synthetic',
+          dailyAttemptLimit: 3,
+          maxConcurrent: 1,
+          maxRequestBytes: 1000,
+          maxOutputTokens: 100,
+          dailyCostLimitUsdMicros: 10000,
+        },
+        pricingRegistry: [
+          {
+            provider: 'synthetic',
+            model: 'synthetic',
+            effectiveFrom: '2026-01-01T00:00:00Z',
+            inputPriceMicrosPerMillion: 2_000_000,
+            outputPriceMicrosPerMillion: 8_000_000,
+            cachedInputPriceMicrosPerMillion: 200_000,
+            currency: 'USD',
+            pricingVersion: 'synthetic-v1',
+          },
+        ],
+      };
+      const measurement: AiCallMeasurement = {
+        provider: 'synthetic',
+        model: 'synthetic',
+        inputTokens: 10,
+        outputTokens: 5,
+        cachedInputTokens: 0,
+        latencyMs: 12,
+        success: true,
+        errorCategory: null,
+        validationResult: 'PASSED',
+        fallbackUsed: false,
+        occurredAt: new Date().toISOString(),
+      };
+      return { ...f, requests, wish, repo, input, measurement };
+    }
+    it('text operation: normal learner without Profile, Assignment, Answer or Pilot records cost once', async () => {
+      const f = await textOperationFixture();
+      const permit = await f.repo.admit(f.input);
+      expect(await client.programMissionAssignment.count()).toBe(0);
+      expect(await client.trainingMissionAnswer.count()).toBe(0);
+      expect(await client.trainingParticipantProfile.count()).toBe(0);
+      expect(await client.personalLearningPilotSeat.count()).toBe(0);
+      const record = {
+        operation: f.input,
+        permit,
+        measurement: f.measurement,
+        requestFinished: true,
+      };
+      await f.repo.record(record);
+      // PostgreSQL jsonb key ordering must not break an identical receipt replay.
+      await f.repo.record({
+        ...record,
+        measurement: Object.fromEntries(
+          Object.entries(f.measurement).reverse(),
+        ) as unknown as AiCallMeasurement,
+      });
+      expect(
+        await client.aiUsageEvent.findMany({ where: { workspaceId: f.scope.workspaceId } }),
+      ).toHaveLength(1);
+      expect(
+        await client.aiUsageEvent.findFirstOrThrow({ where: { workspaceId: f.scope.workspaceId } }),
+      ).toMatchObject({
+        estimatedCostUsdMicros: 60n,
+        pricingVersion: 'synthetic-v1',
+        status: 'SUCCESS',
+        bunshinId: null,
+      });
+      const row = await client.personalLearningCallAdmission.findUniqueOrThrow({
+        where: { id: permit.id },
+      });
+      expect(row.reservedCostUsdMicros).toBe(2800n);
+      expect(row.settledAt).not.toBeNull();
+      expect(JSON.stringify(row.operationContext)).not.toContain(requestContent.originalText);
+      expect(JSON.stringify(row.operationContext)).not.toContain(f.scope.userId);
+      await expect(f.repo.admit(f.input)).rejects.toMatchObject({ code: 'CONFLICT' });
+      await expect(
+        f.repo.record({ ...record, measurement: { ...f.measurement, outputTokens: 99 } }),
+      ).rejects.toMatchObject({ code: 'CONFLICT' });
+    });
+    it('text operation: checks user/service/enrollment and current wish version before reserving', async () => {
+      const f = await textOperationFixture();
+      for (const key of ['userId', 'groupId', 'programEnrollmentId'] as const) {
+        await expect(
+          f.repo.admit({
+            ...f.input,
+            actor: { ...f.actor, scope: { ...f.scope, [key]: randomUUID() } },
+          }),
+        ).rejects.toThrow();
+      }
+      await f.requests.saveRequest({
+        ...f.actor,
+        content: { ...requestContent, originalText: 'AIで発表を練習したい' },
+        expectedRevision: 1,
+        idempotencyKey: randomUUID(),
+      });
+      await expect(f.repo.admit(f.input)).rejects.toMatchObject({ code: 'CONFLICT' });
+      expect(await client.personalLearningCallAdmission.count()).toBe(0);
+    });
+    it('text operation: concurrent requests share the existing program slot', async () => {
+      const f = await textOperationFixture();
+      const outcomes = await Promise.allSettled([
+        f.repo.admit(f.input),
+        f.repo.admit({ ...f.input, operationId: randomUUID() }),
+      ]);
+      expect(outcomes.filter((v) => v.status === 'fulfilled')).toHaveLength(1);
+      expect(await client.personalLearningCallAdmission.count()).toBe(1);
+    });
+    it('text operation: charges each failed retry and stops after success or a daily limit', async () => {
+      const f = await textOperationFixture();
+      const failed: AiCallMeasurement = {
+        ...f.measurement,
+        success: false,
+        validationResult: 'FAILED',
+        errorCategory: 'INVALID_RESPONSE',
+      };
+      const first = await f.repo.admit(f.input);
+      await f.repo.record({
+        operation: f.input,
+        permit: first,
+        measurement: failed,
+        requestFinished: true,
+      });
+      const retry = { ...f.input, attempt: 2 };
+      const second = await f.repo.admit(retry);
+      await f.repo.record({
+        operation: retry,
+        permit: second,
+        measurement: f.measurement,
+        requestFinished: true,
+      });
+      expect(await client.aiUsageEvent.count({ where: { workspaceId: f.scope.workspaceId } })).toBe(
+        2,
+      );
+      await expect(f.repo.admit({ ...f.input, attempt: 3 })).rejects.toMatchObject({
+        code: 'CONFLICT',
+      });
+      await expect(
+        f.repo.admit({
+          ...f.input,
+          operationId: randomUUID(),
+          policy: { ...f.input.policy, dailyAttemptLimit: 2 },
+        }),
+      ).rejects.toThrow();
+    });
+    it('text operation: actual overspend raises the shared reservation and blocks the next call', async () => {
+      const f = await textOperationFixture();
+      const permit = await f.repo.admit(f.input);
+      await f.repo.record({
+        operation: f.input,
+        permit,
+        measurement: { ...f.measurement, inputTokens: 4000, outputTokens: 0 },
+        requestFinished: true,
+      });
+      expect(
+        (await client.personalLearningCallAdmission.findUniqueOrThrow({ where: { id: permit.id } }))
+          .reservedCostUsdMicros,
+      ).toBe(8000n);
+      await expect(f.repo.admit({ ...f.input, operationId: randomUUID() })).rejects.toMatchObject({
+        code: 'FORBIDDEN',
+      });
+      expect(await client.personalLearningCallAdmission.count()).toBe(1);
+    });
+    it('text operation: missing price and daily reservation overflow do not create permits', async () => {
+      const f = await textOperationFixture();
+      await expect(f.repo.admit({ ...f.input, pricingRegistry: [] })).rejects.toThrow();
+      await expect(
+        f.repo.admit({ ...f.input, policy: { ...f.input.policy, dailyCostLimitUsdMicros: 2799 } }),
+      ).rejects.toThrow();
+      expect(await client.personalLearningCallAdmission.count()).toBe(0);
+    });
+    it('text operation: unknown cost is not zero, retains the slot and blocks across UTC days', async () => {
+      const f = await textOperationFixture();
+      const permit = await f.repo.admit(f.input);
+      await new PrismaPersonalLearningCallAdmission(client).settle({
+        ...permit,
+        workspaceId: f.scope.workspaceId,
+        groupId: f.scope.groupId,
+        serviceProgramId: f.enrollment.serviceProgramId,
+      });
+      expect(
+        (await client.personalLearningCallAdmission.findUniqueOrThrow({ where: { id: permit.id } }))
+          .settledAt,
+      ).toBeNull();
+      await f.repo.record({
+        operation: f.input,
+        permit,
+        measurement: {
+          ...f.measurement,
+          success: false,
+          validationResult: 'NOT_RUN',
+          errorCategory: 'TIMEOUT',
+          inputTokens: null,
+          outputTokens: null,
+          cachedInputTokens: null,
+        },
+        requestFinished: false,
+      });
+      expect(
+        await client.aiUsageEvent.findFirstOrThrow({ where: { workspaceId: f.scope.workspaceId } }),
+      ).toMatchObject({ estimatedCostUsdMicros: null, status: 'FAILED' });
+      expect(
+        await client.personalLearningCallAdmission.findUniqueOrThrow({ where: { id: permit.id } }),
+      ).toMatchObject({ reservedCostUsdMicros: null, settledAt: null });
+      await client.personalLearningCallAdmission.update({
+        where: { id: permit.id },
+        data: { admittedAt: new Date(Date.now() - 2 * 86400000) },
+      });
+      await expect(
+        f.repo.admit({
+          ...f.input,
+          operationId: randomUUID(),
+          policy: { ...f.input.policy, maxConcurrent: 2 },
+        }),
+      ).rejects.toThrow();
+    });
+    it('text operation: costs settle after personal data deletion without restoring learner content', async () => {
+      const f = await textOperationFixture();
+      const permit = await f.repo.admit(f.input);
+      const deletion = new PrismaTrainingPersonalDataDeletionRepository(client);
+      const preview = await deletion.preview({
+        workspaceId: f.scope.workspaceId,
+        groupId: f.scope.groupId,
+        programEnrollmentId: f.enrollment.id,
+        actorUserId: f.scope.userId,
+        target: { kind: 'ALL' },
+      });
+      if (preview.outcome !== 'PREVIEW') throw new Error('preview missing');
+      await deletion.delete({
+        workspaceId: f.scope.workspaceId,
+        groupId: f.scope.groupId,
+        programEnrollmentId: f.enrollment.id,
+        actorUserId: f.scope.userId,
+        target: { kind: 'ALL' },
+        revision: preview.preview.revision,
+        now,
+      });
+      await f.repo.record({
+        operation: { ...f.input, pricingRegistry: [] },
+        permit,
+        measurement: f.measurement,
+        requestFinished: true,
+      });
+      expect(await client.personalLearningRequest.count()).toBe(0);
+      expect(await client.programActionEvent.count()).toBe(0);
+      expect(
+        await client.aiUsageEvent.findFirstOrThrow({ where: { workspaceId: f.scope.workspaceId } }),
+      ).toMatchObject({ estimatedCostUsdMicros: 60n });
+      await expect(f.repo.admit({ ...f.input, operationId: randomUUID() })).rejects.toThrow();
+    });
+    it('text operation: rejects a foreign permit and immutable receipt mutation', async () => {
+      const f = await textOperationFixture();
+      const permit = await f.repo.admit(f.input);
+      await expect(
+        f.repo.record({
+          operation: {
+            ...f.input,
+            actor: {
+              ...f.actor,
+              actorUserId: f.owner.id,
+              scope: { ...f.scope, userId: f.owner.id },
+            },
+          },
+          permit,
+          measurement: f.measurement,
+          requestFinished: true,
+        }),
+      ).rejects.toThrow();
+      expect(await client.aiUsageEvent.count({ where: { workspaceId: f.scope.workspaceId } })).toBe(
+        0,
+      );
+      expect(
+        (await client.personalLearningCallAdmission.findUniqueOrThrow({ where: { id: permit.id } }))
+          .settledAt,
+      ).toBeNull();
+    });
     it('free request: profile absent, exact wish preserved, replay and revision CAS', async () => {
       const f = await fixture(false);
       const repo = new PrismaPersonalLearningRequestRepository(client, () => now);

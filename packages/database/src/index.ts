@@ -328,3 +328,4 @@ export {
   type PersonalLearningPublicRegistrationResult,
 } from './personal-learning-public-registration';
 export * from './personal-learning-request';
+export * from './personal-learning-text-operation';
