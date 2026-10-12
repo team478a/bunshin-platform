@@ -7,6 +7,7 @@ import { registerImprovementRetentionJobIntegrationCases } from './improvement-r
 import { registerTrainingSupportSkillLifecycleIntegrationCases } from './training-support-skill-lifecycle.integration-cases';
 import { registerPersonalLearningPersistenceIntegrationCases } from './personal-learning-persistence.integration-cases';
 import { registerAiProviderCallAdmissionIntegrationCases } from './provider-call-admission.integration-cases';
+import { registerServiceImprovementProgressIntegrationCases } from './service-improvement-progress.integration-cases';
 import { cleanupProgramFixtures } from './program-fixture-cleanup';
 import {
   integrationDatabaseTarget,
@@ -224,6 +225,7 @@ describe('database ownership boundaries', () => {
   registerOemBillingIntegrationCases(client);
   registerMigrationBoundsIntegrationCases(client);
   registerAiProviderCallAdmissionIntegrationCases(client);
+  registerServiceImprovementProgressIntegrationCases(client);
 
   it('fixture cleanup regression: program and training residue is absent before new fixtures', async () => {
     expect(
