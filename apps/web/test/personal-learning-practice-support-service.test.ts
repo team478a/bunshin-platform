@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApplicationError } from '@bunshin/shared';
+import type * as ApplicationModule from '@bunshin/application';
 const f = vi.hoisted(() => ({
   prepare: vi.fn(),
   complete: vi.fn(),
@@ -23,7 +24,7 @@ vi.mock('@bunshin/database', () => ({
   PrismaPersonalLearningTextOperationRepository: class {},
 }));
 vi.mock('@bunshin/application', async (importOriginal) => {
-  const real = await importOriginal<typeof import('@bunshin/application')>();
+  const real = await importOriginal<typeof ApplicationModule>();
   return { ...real, executePersonalLearningTextOperation: f.execute };
 });
 vi.mock('../src/ai/runtime-provider-configuration', () => ({
