@@ -8323,6 +8323,7 @@ model PersonalLearningCallAdmission {
   pricingVersion   String?   @map("pricing_version") @db.VarChar(120)
   admittedAt       DateTime  @default(now()) @map("admitted_at") @db.Timestamptz(3)
   settledAt        DateTime? @map("settled_at") @db.Timestamptz(3)
+  operationContext Json?     @map("operation_context")
 
   @@unique([workspaceId, groupId, serviceProgramId, operationHash], map: "personal_learning_call_admissions_operation_key")
   @@index([workspaceId, groupId, serviceProgramId, admittedAt], map: "personal_learning_call_admissions_day_idx")
