@@ -20,7 +20,6 @@ const active: AiProviderConfiguration = {
   model: 'gpt-5-mini',
   dailyBudgetUsdMicros: 1_000_000,
   monthlyBudgetUsdMicros: 10_000_000,
-  requestCostUsdMicros: 250,
   globallyPaused: false,
   keyVersion: 1,
   lastVerifiedAt: new Date('2026-08-24T00:00:00Z'),
@@ -67,7 +66,6 @@ describe('OpenAI runtime configuration', () => {
         crypto: { encrypt: vi.fn(), decrypt: vi.fn().mockReturnValue('synthetic-key') },
         legacyApiKey: 'synthetic-legacy-key',
         legacyModel: 'gpt-5.2',
-        legacyRequestCostUsdMicros: 300,
       };
       await expect(resolveOpenAiRuntimeConfiguration(deps, task)).resolves.toMatchObject({
         model: active.model,
@@ -148,12 +146,6 @@ describe('OpenAI runtime configuration', () => {
       monthlySpentUsdMicros: 0,
       monthlyUnknownCostEvents: 1,
     },
-    {
-      configuration: { ...active, requestCostUsdMicros: 0 },
-      dailySpentUsdMicros: 0,
-      monthlySpentUsdMicros: 0,
-      monthlyUnknownCostEvents: 0,
-    },
   ])('keeps runtime gates before task compatibility %j', async (snapshot) => {
     const decrypt = vi.fn();
     await expect(
@@ -184,7 +176,7 @@ describe('OpenAI runtime configuration', () => {
     ).resolves.toEqual({
       apiKey: 'plain-key',
       model: 'gpt-5-mini',
-      requestCostUsdMicros: 250,
+      requestCostUsdMicros: 0,
       source: 'ADMIN_CONFIGURATION',
     });
   });
@@ -196,27 +188,12 @@ describe('OpenAI runtime configuration', () => {
         crypto: { encrypt: vi.fn(), decrypt: vi.fn() },
         legacyApiKey: 'legacy-key',
         legacyModel: 'legacy-model',
-        legacyRequestCostUsdMicros: 300,
       }),
     ).resolves.toEqual({
       apiKey: 'legacy-key',
       model: 'legacy-model',
-      requestCostUsdMicros: 300,
+      requestCostUsdMicros: 0,
       source: 'LEGACY_ENVIRONMENT',
-    });
-  });
-
-  it('does not use the legacy key when its request cost is absent', async () => {
-    await expect(
-      resolveOpenAiRuntimeConfiguration({
-        repository: repository(null),
-        crypto: { encrypt: vi.fn(), decrypt: vi.fn() },
-        legacyApiKey: 'legacy-key',
-        legacyModel: 'legacy-model',
-      }),
-    ).rejects.toMatchObject({
-      code: 'CONFIGURATION_ERROR',
-      message: 'legacy OpenAI request cost is required',
     });
   });
 
