@@ -33,6 +33,10 @@ export default async function Page({
         <PersonalLearningRequestCard
           endpoint={`/api/services/${serviceSlug}/ai-training/enrollments/${programEnrollmentId}/learning-request`}
           initial={initial}
+          candidateEndpoint={`/api/services/${serviceSlug}/ai-training/enrollments/${programEnrollmentId}/learning-request/candidate`}
+          initialCandidate={await new db.PrismaLearningCandidateRepository(db.prisma).readCandidate(
+            input,
+          )}
         />
       </main>
     );

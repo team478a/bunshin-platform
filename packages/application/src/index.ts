@@ -132,3 +132,4 @@ export * from './personal-learning-pilot-operations';
 export * from './personal-learning-revisions';
 export * from './personal-learning-request';
 export * from './personal-learning-text-operation';
+export * from './personal-learning-lesson-candidate';

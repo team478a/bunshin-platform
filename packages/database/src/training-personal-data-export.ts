@@ -228,6 +228,7 @@ export class PrismaTrainingPersonalDataExportRepository implements TrainingPerso
                     ...learningRequests.map((row) => ({
                       ...row,
                       kind: 'LEARNING_REQUEST',
+                      candidateConfirmedAt: iso(row.candidateConfirmedAt),
                       createdAt: iso(row.createdAt),
                       updatedAt: iso(row.updatedAt),
                     })),

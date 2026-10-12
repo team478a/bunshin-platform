@@ -1,5 +1,7 @@
 // Local browser harness only. No production route, credentials, DB or Provider.
 import { createRoot } from 'react-dom/client';
+import { LearningCandidateCard } from '../../../apps/web/app/s/[serviceSlug]/programs/[programEnrollmentId]/learning-request/candidate-card';
+import { lessonWish, lessonCandidate } from './lesson-fixture';
 import { PersonalLearningPilotCard } from '../../../apps/web/app/s/[serviceSlug]/programs/[programEnrollmentId]/personal-learning-pilot-card';
 import { InternalPreparationCard } from '../../../apps/web/app/s/[serviceSlug]/manage/programs/personal-learning-preparation/internal-card';
 import { DefinitionReviewCard } from '../../../apps/web/app/s/[serviceSlug]/manage/programs/learning-definition-review/card';
@@ -9,7 +11,17 @@ import '../../../apps/web/app/styles.css';
 import { PersonalLearningRequestCard } from '../../../apps/web/app/s/[serviceSlug]/programs/[programEnrollmentId]/learning-request/card';
 
 createRoot(document.getElementById('root')!).render(
-  new URLSearchParams(window.location.search).has('training-setup') ? (
+  new URLSearchParams(window.location.search).has('lesson-candidate') ? (
+    <LearningCandidateCard
+      endpoint="/api/synthetic/lesson-candidate"
+      request={lessonWish}
+      initial={
+        new URLSearchParams(window.location.search).has('confirmed')
+          ? { ...lessonCandidate, confirmedAt: '2026-10-13T00:00:00Z' }
+          : null
+      }
+    />
+  ) : new URLSearchParams(window.location.search).has('training-setup') ? (
     <AiTrainingCard
       serviceSlug="synthetic"
       initialState={{
