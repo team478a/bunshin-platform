@@ -33,6 +33,8 @@
 
 Migration `20261013000000_personal_learning_requests`は追加テーブル・index・所有FK・RLSのみ。隔離した合成DBへ適用。本番設定変更・Migration・Deploy・参加者登録・実送信・実課金は未実施。
 
+既存の本人データ出力・削除・保持・退会処理も新テーブルを参照するため、入口フラグが無効でも、このコードを配備する前に同Migrationの適用が必要。起動時の必要DB版も同Migrationへ更新し、未適用ならreadyと判定しない。既存のデプロイ前schema-ready gateはMigration一覧から最新を取得するため変更不要。本番への適用は別途承認された移行・release手順で行う。
+
 戻す時は検証フラグを無効化して入口を閉じる。既存Goal/Plan/Assignmentに変更がないため既存研修を継続できる。保存済み希望は破壊的down migrationで消さず、既存本人削除・保持処理を利用する。将来の本番releaseは全体受入条件とproduction基点の差分を確認して別途判断する。
 
 ## 検証
@@ -43,7 +45,8 @@ Migration `20261013000000_personal_learning_requests`は追加テーブル・ind
 - ソース`beb22fd3`のGitHub databaseはMigration/schema-ready/全200件成功（run `38269771185`）。後続で追加した退会削除1件はローカル実DBで成功（対象外200件）。退会の外部Auth削除や実受講者退会を実行した証拠ではない。後続headのCIは再確認する。
 - 初回型検査は保持件数の型定義位置で失敗し修正。修正後全体typecheckは25タスクとlearning-uiが成功。退会処理追加後にDatabaseの`tsc --noEmit`も成功。
 - 初回lintはテストmockの不要asyncで失敗し修正。`beb22fd3`のCIでは全package lintまで成功したがlearning-uiのJSON.parse由来のanyで失敗。E2E送信データをunknownから厳格に検査する形へ変更し、learning-ui lint/typecheckと新規3 E2Eを再実行して成功。途中のzod利用試行はroot依存がなくcollection/typecheckで失敗したため撤回し、新依存は追加していない。
-- 初回の全体formatは途中で修正したaccessファイルで失敗し、再整形・対象check成功。`beb22fd3`のCI全体formatは成功。最終headのCI・buildは確認中であり未完了をPASSとは記載しない。
+- 初回の全体formatは途中で修正したaccessファイルで失敗し、再整形・対象check成功。`599d5a7e`のCI（run `38271181094`）はformat/typecheck/lint成功、database結合201件成功。全体unitは必要DB版が旧Migrationのままであることを検出して失敗し、定義を最新へ更新した。最終headのCIは再確認する。
+- ローカル全体buildは`599d5a7e`で13タスク成功（11 cached、7分27秒）。プロセス内の合成staging設定によるbuildであり、実Auth・実AI・staging配備の証拠ではない。
 - 242番目のMigrationを、DB名・run ID・live marker確認済みの既存隔離DBへ適用成功。本番DBへの接続・適用なし。
 
 合成ブラウザーは実端末・通常登録画面・実Auth再ログイン・LINE送信・実AIの証拠ではない。最終確認結果はこの節を更新する。
