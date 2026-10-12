@@ -1,5 +1,12 @@
 # BUNSHIN Platform Decision Log
 
+## 2026-10-12: 自由希望の個別研修は共通提供方針と本人用の版固定課題を分離する
+
+- 状態: 実装指示受領。レビュー・本番操作は別Gate。
+- `docs/ai-training/MANABERU_FREE_INTENT_PRACTICE.md`を今回の方針とする。制作代行せず、元の希望、本人の環境、課題固有の到達点・証拠・評価基準を保持する。個別課題に架空の管理者承認を付けず、テーマ別コードや手動承認待ちを増やさない。
+- 候補をサーバー保存して本人がその同じ版を確認する。支援は課題の書換ではない。自己申告、提出物確認、別実践での再現、未確認を区別する。Profile/Goal/Plan/Assignment/Answer/Job/原価/保持・削除を既存基盤へ接続する。
+- DRAFT準備時のCONFIRMED失効を廃止し、明示確定時に未完了課題・期待版を再確認する。旧固定課題のDefinition承認や旧6技能評価を動的教材に転用しない。
+
 ## 2026-10-12: OEM初期cutoverの取消・差替えはappend-only訂正リビジョンとする
 
 - 初回予約の`OemBillingPolicy`を更新・削除せず、`OemBillingPolicyRevision`が直前の訂正を1対1でsupersedeする。後続を持たない最新葉を課金projectionとして扱う。

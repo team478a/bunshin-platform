@@ -92,11 +92,7 @@ export class PrismaGuidedPracticeRepository extends PrismaPersonalLearningPilotR
         },
       });
       if (!assignment?.targetResourceId) denied();
-      const row = await tx.personalLearningPlanRevision.findFirst({
-        where: { ...s, planId: assignment.targetResourceId },
-        orderBy: { revision: 'desc' },
-        include: { goalConfirmation: { include: { goal: true } } },
-      });
+      const row = await this.executablePlan(tx, actor, assignment.targetResourceId);
       if (!row || row.status !== 'CONFIRMED' || row.goalConfirmation.goal.status !== 'ACTIVE')
         denied();
       if (
