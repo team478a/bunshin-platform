@@ -285,6 +285,11 @@ export {
   PrismaServiceReferralRewardRuleRepository,
 } from './service-commercial-credit';
 export { PrismaHassySupportImprovementAdapter } from './hassy-improvement-support-adapter';
+export { PrismaServiceImprovementOverviewReader } from './service-improvement-overview';
+export {
+  PrismaSocialProgressImprovementAdapter,
+  PrismaTrainingProgressImprovementAdapter,
+} from './service-improvement-progress';
 export { PrismaHassyPhotoQualityImprovementAdapter } from './hassy-improvement-photo-quality-adapter';
 export { PrismaImprovementFeedbackRepository } from './improvement-feedback';
 export { PrismaImprovementFeedbackObservationAdapter } from './improvement-feedback-observation-adapter';
