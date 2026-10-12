@@ -30,9 +30,11 @@
 - その失敗した既存試験を同じ期限・同じassertionで対象単独実行し成功（1件成功、対象外192件）。build処理は同時進行していたため完全な負荷隔離とは扱わない。最後に旧writer状態の否定テストを追加したDB全194件を再実行し、全194件成功（148.28秒）。過去の失敗を隠さず、現行headのCIでも再確認する。
 - 全体`pnpm typecheck`、`pnpm lint`、`pnpm format:check`、architecture境界・`git diff --check`成功。lintは無関係な既存`apps/web/app/consent/page.tsx`のunused eslint-disable警告1件を残す（エラー0）。最後の旧writer否定Guard追加後はDBの`tsc --noEmit`と変更2ファイルのeslintも成功。リポジトリ全unit testの`pnpm test`はローカル未実行で、GitHub CIを別途確認する。
 
-初版buildはcompile、TypeScript、静的ページ生成、全13task完了の表示まで確認したが、完了付近の停止入力によってprocess exitは1だった。またそのcompile後に旧writer状態の否定Guardを追加したため、最終版のbuild成功とは扱わない。最終版`pnpm build`を再実行してから結果を記録する。
+初版buildはcompile、TypeScript、静的ページ生成、全13task完了の表示まで確認したが、完了付近の停止入力とともにprocess exit 1が返った。またそのcompile後に旧writer状態の否定Guardを追加したため、最終版のbuild成功とは扱わない。最終版の`pnpm build`を再実行し、全13task成功、exit 0を確認（6分26.69秒）。一時DBと合成Auth設定、build用`APP_ENV=staging`、空のAPIキー・Pilot無効で実行しており、実stagingのAI接続確認ではない。
 
-初回の全体typecheck/lintはDB統合試験と同時実行したため、Windowsの使用中Prisma DLLの置換でEPERM失敗。コードの型エラーとは異なる。試験終了後に直列で再実行し、未完了の検証をPASSとして記録しない。
+初回の全体typecheck/lintはDB統合試験との同時実行中に、WindowsのPrisma DLL置換がEPERMで失敗。型エラーの診断ではない。試験終了後に直列で再実行し成功。未完了の検証をPASSとして記録しない。
+
+検証用の合成DBは完了後に完全container IDとtask labelを再照合し、当該containerだけを停止・破棄する。既存アプリ・他container・元checkoutの未解決変更は触らない。再現には新しい一時DBを作成する。
 
 ## 未完了・次の作業
 
