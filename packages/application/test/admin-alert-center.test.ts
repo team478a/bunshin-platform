@@ -41,6 +41,7 @@ const healthy = (): AdminAlertSnapshot => ({
   blockedDeletions: 0,
   openSupportCases: 0,
   urgentSupportCases: 0,
+  commercialBillingRefundReviews: 0,
 });
 
 describe('admin alert center', () => {
@@ -121,6 +122,24 @@ describe('admin alert center', () => {
           severity: 'INFO',
           count: 2,
           href: '/admin/rewards',
+        }),
+      ]),
+    );
+  });
+
+  it('shows OEM invoice refund reviews without treating them as settled', () => {
+    const snapshot = healthy();
+    snapshot.commercialBillingRefundReviews = 2;
+
+    expect(buildAdminAlerts(snapshot)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'COMMERCIAL_BILLING_REFUND_REVIEWS',
+          severity: 'WARNING',
+          count: 2,
+          title: expect.stringContaining('返金の要照合'),
+          guidance: expect.stringContaining('内部請求状態は自動変更されていません'),
+          href: '/admin/commercial-billing?status=REFUND_REVIEW',
         }),
       ]),
     );

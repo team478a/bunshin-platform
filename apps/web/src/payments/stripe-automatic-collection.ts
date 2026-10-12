@@ -49,6 +49,7 @@ export class StripeCommercialInvoiceCollectionAdapter {
     invoiceId: string;
     workspaceId: string;
     invoiceNumber: string;
+    description: string;
     amountYen: number;
     customerId: string;
     paymentMethodId: string;
@@ -63,7 +64,7 @@ export class StripeCommercialInvoiceCollectionAdapter {
       payment_method: input.paymentMethodId,
       confirm: 'true',
       off_session: 'true',
-      description: `ワタシワークス OEM月額利用料 ${input.invoiceNumber}`,
+      description: input.description,
       'metadata[invoice_id]': input.invoiceId,
       'metadata[workspace_id]': input.workspaceId,
       'metadata[invoice_number]': input.invoiceNumber,

@@ -111,6 +111,7 @@ describe('OEM payment secure configuration', () => {
         invoiceId: 'invoice-id',
         workspaceId: 'workspace-id',
         invoiceNumber: 'WW-2026-09-001',
+        itemName: 'ワタシワークス OEM月額利用料 WW-2026-09-001',
         billingEmail: 'billing@example.com',
         amountYen: 19_800,
         successUrl: 'https://example.com/success',
@@ -128,6 +129,9 @@ describe('OEM payment secure configuration', () => {
     }
     expect(options.body.get('line_items[0][price_data][currency]')).toBe('jpy');
     expect(options.body.get('line_items[0][price_data][unit_amount]')).toBe('19800');
+    expect(options.body.get('line_items[0][price_data][product_data][name]')).toBe(
+      'ワタシワークス OEM月額利用料 WW-2026-09-001',
+    );
     expect(options.body.get('metadata[invoice_id]')).toBe('invoice-id');
     expect(options.body.get('metadata[workspace_id]')).toBe('workspace-id');
     expect(options.body.get('invoice_creation[enabled]')).toBe('true');
@@ -170,6 +174,7 @@ describe('OEM payment secure configuration', () => {
         invoiceId: 'invoice-id',
         workspaceId: 'workspace-id',
         invoiceNumber: 'WW-2026-09-001',
+        description: 'ワタシワークス OEM月額利用料 WW-2026-09-001',
         amountYen: 19_800,
         customerId: 'cus_platform123',
         paymentMethodId: 'pm_platform123',
@@ -189,6 +194,7 @@ describe('OEM payment secure configuration', () => {
     expect(body.get('currency')).toBe('jpy');
     expect(body.get('off_session')).toBe('true');
     expect(body.get('confirm')).toBe('true');
+    expect(body.get('description')).toBe('ワタシワークス OEM月額利用料 WW-2026-09-001');
     expect(body.get('metadata[workspace_id]')).toBe('workspace-id');
   });
 

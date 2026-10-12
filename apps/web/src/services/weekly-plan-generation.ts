@@ -405,7 +405,7 @@ export class WeeklyPlanGenerationService {
 }
 
 export async function createWeeklyPlanGenerationService() {
-  const { apiKey, model } = await resolveOpenAiRuntimeConfiguration();
+  const { apiKey, model } = await resolveOpenAiRuntimeConfiguration(undefined, 'SOCIAL_PLANNER');
   const db = await import('@bunshin/database');
   const preferences = new db.PrismaLineNotificationPreferenceRepository();
   return new WeeklyPlanGenerationService({

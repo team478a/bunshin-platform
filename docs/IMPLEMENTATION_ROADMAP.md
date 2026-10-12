@@ -1,5 +1,49 @@
 # BUNSHIN Platform 実装ロードマップ
 
+OEM初期cutoverのappend-only取消・差替えは`docs/OEM_CUTOVER_HISTORY_CORRECTION_IMPLEMENTATION.md`を参照。初回予約を不変証跡として残し、最新revisionが取消なら旧MAU継続、差替えなら再確認済み将来月を課金projectionにする。開始済みcutover、確定済み月、本番Migration・cutover操作は別Gate。
+
+OEM提供期間・正式登録期間のappend-only訂正は`docs/OEM_OPERATIONAL_HISTORY_CORRECTION_IMPLEMENTATION.md`を参照。現在projectionを最新葉へ統一し、Offeringは同じ商品・Policy Version内の期間と提供区分、正式登録は同じMembershipの期間だけを訂正する。確定済み月へ影響する訂正、商品差替え、本番操作は別Gate。
+
+OEM契約期間のappend-only訂正は`docs/OEM_CONTRACT_HISTORY_CORRECTION_IMPLEMENTATION.md`を参照。元版を残す1対1 supersession、Workspace lockと期待値CAS、重複再検証、変更前後監査を用い、訂正差分がJSTの確定済み月へ触れる場合は拒否する。確定月の取消・再確定、本番Migration・訂正操作は別Gate。
+
+OEM契約終了後の月次キュー分離は`docs/OEM_CONTRACT_ENDED_QUEUE_SEPARATION_IMPLEMENTATION.md`を参照。履歴レビュー済みの正式登録課金V2で、確認済み契約期間が対象JST月開始以前にすべて明示終了している場合だけ通常の要確認キューから分離し、固定理由と最終終了日時を処理結果へ残す。0円利用スナップショット・請求書は作らず、履歴欠落、将来契約、期間重複は従来どおりfail-closed。本番反映・月次確定・請求発行は別Gate。
+
+OEM正式登録課金の初期履歴・cutover管理画面は`docs/OEM_BILLING_CUTOVER_ADMIN_UI_IMPLEMENTATION.md`を参照。Organization単位でService Product／提供区分、契約期間、同意済み参加者の正式登録履歴、月次shadow、将来月cutoverを同じ運用画面から確認する。各保存はSUPER_ADMIN再認可、証跡理由、明示確認、既存Workspace lock／CASを維持し、画面の準備表示を実行許可の正本にしない。過去日の推測、請求確定、本番操作は別Gate。
+
+OEM課金人数の根拠表示は`docs/OEM_BILLING_EVIDENCE_ADMIN_IMPLEMENTATION.md`を参照。現在月の既存shadowと確定月の保存済みスナップショットから、有料正式登録R、無料実利用A、重複、R∪A、課金方式、要確認理由を団体別管理画面へ表示する。旧月の内訳補完、履歴修正、cutover、本番Migration・請求確定は別Gate。
+
+OEM請求の返金要照合・運用通知統合は`docs/OEM_INVOICE_REFUND_REVIEW_ALERT_IMPLEMENTATION.md`を参照。処理済み返金通知が紐づく入金済み請求を請求単位で重複排除し、Platform管理者のAlert CenterへWARNING表示して返金絞り込み済み請求画面へつなぐ。外部通知、請求状態変更、通知解消、本番Webhook設定・返金は別Gate。
+
+OEM経理用CSVの返金要照合出力は`docs/OEM_INVOICE_REFUND_REVIEW_EXPORT_IMPLEMENTATION.md`を参照。各請求の最新の処理済み返金通知について区分、受信日時、Stripe Event IDを既存CSV末尾へ追加し、画面外の照合対象を識別できるようにする。返金額、会計状態、通知解消、本番Webhook設定・返金は別Gate。
+
+OEM請求の返金要照合・団体別調査導線は`docs/OEM_INVOICE_REFUND_REVIEW_DETAIL_IMPLEMENTATION.md`を参照。対象Workspaceの各請求に紐づく処理済み返金通知を団体別請求画面へ表示し、部分／全額、受信日時、Stripe Event IDを照合できるようにする。内部請求状態、返金額、解消状態は変更せず、本番Webhook設定・返金・会計確定は別Gate。
+
+OEM請求のStripe返金要照合は`docs/OEM_INVOICE_REFUND_REVIEW_IMPLEMENTATION.md`を参照。部分／全額返金通知をPaymentIntent・元金額・通貨・環境で照合して既存Webhook台帳へ記録し、内部請求状態を自動変更せず全体請求画面へ表示する。会計確定、取消文書、通知解消、本番Webhook設定・返金は別Gate。
+
+OEM初期費用の自動回収除外は`docs/OEM_SETUP_FEE_AUTOMATIC_COLLECTION_GUARD_IMPLEMENTATION.md`を参照。既存の明示同意は月額料金だけを対象とするため、日次自動回収候補を`MONTHLY_USAGE`へ限定し、初期費用を保存済みカードへ暗黙請求しない。本番Stripe、自動回収、請求状態変更は別Gate。
+
+OEM初期費用の決済・督促表示整合は`docs/OEM_SETUP_FEE_PAYMENT_COMMUNICATION_IMPLEMENTATION.md`を参照。Stripe Checkout、自動回収、手動・自動督促の表示を内部請求種別から決定し、初期費用を月額利用料と表示しない。本番Provider呼出し、メール送信、決済、請求状態変更は別Gate。
+
+OEM初期費用の共通請求基盤は`docs/OEM_SETUP_FEE_INVOICING_IMPLEMENTATION.md`を参照。契約証跡を人間が確認した初期費用をService Product単位の不変Snapshotとして月次人数料金から分離し、既存の請求書・入金・督促・CSV経路へ接続する。価格や先行社数をコードで推測しない。本番Migration/release、実価格登録、請求発行、決済は別Gate。
+
+OEM Service Product共通化は`docs/OEM_SERVICE_PRODUCT_POLICY_IMPLEMENTATION_REPORT.md`を参照。OEMを提供形態とし、ハッシー、マナベルスタイル、将来のワタシワークス商品を明示的な商品台帳・不変ポリシー版で扱う。Workspace内`R ∪ A`と共通料金表は維持する。本番Migration/release、商品登録、Offering変更、cutover、請求は別Gate。
+
+OpenAI会員商品投稿案生成の原子的費用予約は`docs/ai-training/OPENAI_MEMBER_PRODUCT_COST_ADMISSION_IMPLEMENTATION.md`を参照。本人・Service・Bunshin・商品・外部リンクのPrecondition後に予約し、quota拒否は0円、Provider試行後は固定原価を記録してから確定する。研修評価の既存専用Admissionとの統合、本番release・設定・送信は別Gate。
+
+OpenAI SNSインサイト画像読取の原子的費用予約は`docs/ai-training/OPENAI_SOCIAL_INSIGHT_COST_ADMISSION_IMPLEMENTATION.md`を参照。本人・Service・Bunshin・画像のPrecondition後に既存Admission台帳へ予約し、Provider試行後の固定原価利用実績を厳格保存してから確定する。他のOpenAI経路、本番release・設定・送信は別Gate。
+
+OpenAI週次投稿計画の原子的費用予約は`docs/ai-training/OPENAI_WEEKLY_PLAN_COST_ADMISSION_IMPLEMENTATION.md`を参照。業務Precondition後・Provider送信前に既存Admission台帳へ予約し、利用実績の固定原価保存後だけ確定する。他のOpenAI文章・画像・音声・研修評価は未接続で、本番release・設定・送信は別Gate。
+
+Trend Providerの原子的費用予約は`docs/ai-training/AI_PROVIDER_TREND_COST_ADMISSION_IMPLEMENTATION.md`を参照。Grok／Exa／Firecrawlの週次調査をProvider・環境単位のDB lockと専用予約台帳へ接続し、並行呼出が同じ残予算を同時消費する経路を止める。OpenAI等への展開、本番Migration/release、Provider設定・送信は別Gate。
+
+Provider接続確認の非課金化は`docs/ai-training/AI_PROVIDER_NONBILLABLE_CONNECTION_TEST_IMPLEMENTATION.md`を参照。Exa検索とFirecrawl scrapeを接続テストから除き、公式のread-onlyなチーム情報／残クレジットendpointへ置き換える。本番接続テスト、設定変更、Provider送信、実課金は行わない。
+
+Production OpenAI fallback廃止は`docs/ai-training/AI_PROVIDER_PRODUCTION_ADMIN_ONLY_IMPLEMENTATION.md`を参照。production Runtimeは暗号化DBのactive Provider設定だけを使用し、旧`OPENAI_API_KEY`では管理予算・停止Gateを迂回できない。development／stagingの移行用fallback、価格、予算、schema、本番設定は変更しない。本番releaseは別承認。
+
+共有AI Providerの原価UNKNOWN新規発生防止は`docs/ai-training/AI_PROVIDER_KNOWN_REQUEST_COST_IMPLEMENTATION.md`を参照。active Runtimeと設定有効化で正の固定リクエスト原価を必須化し、旧`OPENAI_API_KEY` fallbackも`OPENAI_REQUEST_COST_USD_MICROS`が正の安全な整数でなければ送信前に停止する。Draft作成、既存Event、価格そのもの、本番設定は変更しない。次はPRレビュー/CI後もproductionへ自動反映せず、正しい価格値・既存UNKNOWNの扱い・共有AI停止影響を別Gateで判断する。
+
+共有AI Providerの原価UNKNOWN fail-closedは`docs/ai-training/AI_PROVIDER_UNKNOWN_COST_FAIL_CLOSED_IMPLEMENTATION.md`を参照。active ProviderのUTC当月利用記録に原価NULLが1件でもあれば、API key復号・Provider到達前にRuntime解決を停止する。NULLを0円や安全へ補完せず、既知Daily Missionも推測除外しない。schema/migration/Provider/価格/本番設定は変更しない。次はPR CIと共有AI機能への停止影響をレビューし、UNKNOWN発生経路の原価記録修復を別PRへ分離する。本番release、Provider送信、課金、Pilot開始は別承認。
+
 マナベルスタイルの学習用LINE本人接続は`docs/ai-training/MANABERU_STYLE_MEMBER_LINE_LINK_IMPLEMENTATION.md`を参照。投稿パートナー不要の専用LINE接続を追加し、既存短期OAuth試行・サービス参加同意・本人所属を再利用する。接続はEnrollment/Seatの参加権ではなく、旧V1通知除外・学習Execution Gateを維持する。学習通知/回答Bridge、LIFF、実端末確認、本番Migration/deployは別レビュー。
 
 Feedback maintenanceの起動経路/停止方式設計は`docs/improvement/IMPROVEMENT_MAINTENANCE_STOP_DESIGN.md`。PR #1106のverify/database成功を確認し、Cron単独停止の不足とユーザー/管理者/LINE callback等のJob writerを整理。既存Vercel Cron停止＋project入口Denyの運用候補を先に確認し、旧版/全domain/bypass/実行中処理を未確認のまま安全とはしない。指定Chromeでは対象設定404、別アカウントへ切替せず本番NO-GO維持。次の最小タスクは対象project閲覧権限での読取inventory。guardは不足経路確定・別承認後のみで、本番停止/設定変更/実装へ進まない。
@@ -464,6 +508,10 @@ SNS、投稿方法、BUNSHINが作る範囲を分離し、利用者が必要と�
 - Golden Dataset Core: version固定fixture、評価器、禁止結果テスト — 完了（外部接続なし）
 - Golden Regression Runner: 全件集計、欠落・重複・未知ケース検出 — 完了（fixture-only）
 - E1: 環境別・版管理Provider Registry — 完了
+- E1安全補強: 既知の固定リクエスト原価を次回分まで含め、日次・月次予算超過が確定する呼出しを送信前に停止 — 実装済み（全Provider共通の原子的予約は未実装）
+- E1安全補強: Grok／Exa／Firecrawl週次調査の原子的な固定原価予約 — 実装済み（OpenAI等は未接続）
+- E1安全補強: OpenAI週次投稿計画の原子的な固定原価予約 — 実装済み（他のOpenAI経路は未接続）
+- E1安全補強: Exa／Firecrawl接続確認を検索・scrapeからread-onlyな認証endpointへ変更 — 実装済み（本番接続テストは未実施）
 - E2: 既存行動から作るPreference Read ModelとLearning Proposal — 完了
 - E3: 人間承認、前後KPI、rollbackを持つ変更提案 — 完了
 - E4: 管理されたSkill Registry（十分な行動データ確認後）

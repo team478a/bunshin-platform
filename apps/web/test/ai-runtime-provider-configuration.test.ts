@@ -52,6 +52,101 @@ beforeEach(() => {
 });
 
 describe('OpenAI runtime configuration', () => {
+  it.each(['SOCIAL_PLANNER', 'TRAINING_ASSESSMENT'] as const)(
+    'reuses current admin and legacy configuration for %s',
+    async (task) => {
+      const deps = {
+        repository: repository({
+          configuration: active,
+          encryptedApiKey: 'sealed',
+          dailySpentUsdMicros: 0,
+          monthlySpentUsdMicros: 0,
+        }),
+        crypto: { encrypt: vi.fn(), decrypt: vi.fn().mockReturnValue('synthetic-key') },
+        legacyApiKey: 'synthetic-legacy-key',
+        legacyModel: 'gpt-5.2',
+      };
+      await expect(resolveOpenAiRuntimeConfiguration(deps, task)).resolves.toMatchObject({
+        model: active.model,
+        source: 'ADMIN_CONFIGURATION',
+      });
+      await expect(
+        resolveOpenAiRuntimeConfiguration({ ...deps, repository: repository(null) }, task),
+      ).resolves.toMatchObject({ model: 'gpt-5.2', source: 'LEGACY_ENVIRONMENT' });
+      await expect(
+        resolveOpenAiRuntimeConfiguration(
+          { ...deps, repository: repository(null), legacyModel: 'unknown-model' },
+          task,
+        ),
+      ).rejects.toMatchObject({
+        code: 'CONFIGURATION_ERROR',
+        cause: { reason: 'MODEL_NOT_REGISTERED' },
+      });
+    },
+  );
+  it('does not decrypt or fallback when the admin model is incompatible', async () => {
+    const decrypt = vi.fn();
+    await expect(
+      resolveOpenAiRuntimeConfiguration(
+        {
+          repository: repository({
+            configuration: { ...active, model: 'unreviewed-model' },
+            encryptedApiKey: 'sealed',
+            dailySpentUsdMicros: 0,
+            monthlySpentUsdMicros: 0,
+          }),
+          crypto: { encrypt: vi.fn(), decrypt },
+          legacyApiKey: 'synthetic',
+          legacyModel: 'gpt-5.2',
+        },
+        'SOCIAL_PLANNER',
+      ),
+    ).rejects.toMatchObject({
+      code: 'CONFIGURATION_ERROR',
+      cause: { reason: 'MODEL_NOT_REGISTERED' },
+    });
+    expect(decrypt).not.toHaveBeenCalled();
+  });
+  it.each([
+    {
+      configuration: { ...active, globallyPaused: true },
+      dailySpentUsdMicros: 0,
+      monthlySpentUsdMicros: 0,
+    },
+    {
+      configuration: { ...active, lastVerifiedAt: null },
+      dailySpentUsdMicros: 0,
+      monthlySpentUsdMicros: 0,
+    },
+    {
+      configuration: { ...active, environment: 'STAGING' as const },
+      dailySpentUsdMicros: 0,
+      monthlySpentUsdMicros: 0,
+    },
+    {
+      configuration: active,
+      dailySpentUsdMicros: active.dailyBudgetUsdMicros,
+      monthlySpentUsdMicros: 0,
+    },
+    {
+      configuration: active,
+      dailySpentUsdMicros: 0,
+      monthlySpentUsdMicros: active.monthlyBudgetUsdMicros,
+    },
+  ])('keeps runtime gates before task compatibility %j', async (snapshot) => {
+    const decrypt = vi.fn();
+    await expect(
+      resolveOpenAiRuntimeConfiguration(
+        {
+          repository: repository({ ...snapshot, encryptedApiKey: 'sealed' }),
+          crypto: { encrypt: vi.fn(), decrypt },
+          legacyApiKey: 'synthetic',
+        },
+        'TRAINING_ASSESSMENT',
+      ),
+    ).rejects.toThrow();
+    expect(decrypt).not.toHaveBeenCalled();
+  });
   it('uses and decrypts the active admin configuration', async () => {
     await expect(
       resolveOpenAiRuntimeConfiguration({

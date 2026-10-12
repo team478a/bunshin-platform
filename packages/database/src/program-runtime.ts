@@ -1,4 +1,5 @@
 import type { ProgramCoreRepository } from '@bunshin/application';
+import { requireTrainingOemOffering } from './oem-training-offering';
 import { type Prisma, type PrismaClient, prisma } from './client';
 
 export class PrismaProgramCoreRepository implements ProgramCoreRepository {
@@ -133,6 +134,11 @@ export class PrismaProgramCoreRepository implements ProgramCoreRepository {
         select: { id: true },
       });
       if (template === null) return null;
+      await requireTrainingOemOffering(tx, {
+        workspaceId: input.workspaceId,
+        groupId: input.groupId,
+        definition: version.definition,
+      });
       const row = await tx.serviceProgram.create({
         data: {
           workspaceId: input.workspaceId,
@@ -171,6 +177,15 @@ export class PrismaProgramCoreRepository implements ProgramCoreRepository {
         },
       });
       if (program === null) return null;
+      const definition = await tx.programTemplateVersion.findFirst({
+        where: { id: program.programTemplateVersionId, workspaceId: input.workspaceId },
+      });
+      if (!definition) return null;
+      await requireTrainingOemOffering(tx, {
+        workspaceId: input.workspaceId,
+        groupId: input.groupId,
+        definition: definition.definition,
+      });
       const latest = await tx.programOffering.aggregate({
         where: { serviceProgramId: program.id },
         _max: { version: true },

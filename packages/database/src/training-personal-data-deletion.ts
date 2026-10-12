@@ -11,6 +11,7 @@ import { Prisma, type PrismaClient } from '@prisma/client';
 import { prisma } from './index';
 import { lockTrainingEnrollmentData } from './training-data-lock';
 import { TRAINING_ENROLLMENT_EXPIRED_EVENT } from './training-audit-events';
+import { trainingPersonalDataRoleAllows } from './training-personal-data-privacy';
 
 const auditAction = 'TRAINING_PERSONAL_DATA_DELETED';
 
@@ -215,12 +216,12 @@ export class PrismaTrainingPersonalDataDeletionRepository implements TrainingPer
         workspaceId: input.workspaceId,
         groupId: input.groupId,
         userId: input.actorUserId,
-        serviceRole: 'PARTICIPANT',
+        serviceRole: { in: ['PARTICIPANT', 'SERVICE_OWNER'] },
         status: 'ACTIVE',
         user: { status: 'ACTIVE' },
         group: { status: 'ACTIVE', workspace: { status: 'ACTIVE' } },
       },
-      select: { id: true },
+      select: { id: true, serviceRole: true },
     });
     if (!membership) return null;
     const enrollment = await tx.programEnrollment.findFirst({
@@ -241,9 +242,10 @@ export class PrismaTrainingPersonalDataDeletionRepository implements TrainingPer
         groupId: input.groupId,
         settings: { path: ['moduleKey'], equals: AI_TRAINING_V1_MODULE_KEY },
       },
-      select: { id: true },
+      select: { id: true, settings: true },
     });
-    return program
+    return program &&
+      (await trainingPersonalDataRoleAllows(tx, input, membership.serviceRole, program))
       ? { membershipId: membership.id, enrollmentUpdatedAt: enrollment.updatedAt }
       : null;
   }

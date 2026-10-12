@@ -2,6 +2,7 @@ import 'server-only';
 import type { Prisma, PrismaClient } from '@bunshin/database';
 import { platformBillingStripeSecretKey } from './commercial-invoice-payment';
 import { StripeCommercialInvoiceCollectionAdapter } from './secure-configuration';
+import { commercialInvoiceProviderDescription } from '../commercial-invoice-copy';
 
 type CollectionAdapter = Pick<StripeCommercialInvoiceCollectionAdapter, 'collect'>;
 
@@ -21,6 +22,7 @@ export async function collectCommercialInvoices(
   const retryBefore = new Date(now.getTime() - 24 * 60 * 60 * 1000);
   const invoices = await client.tenantInvoice.findMany({
     where: {
+      kind: 'MONTHLY_USAGE',
       status: 'ISSUED',
       issuedAt: { not: null, lte: now },
       OR: [{ paymentAttemptedAt: null }, { paymentAttemptedAt: { lt: retryBefore } }],
@@ -61,6 +63,7 @@ export async function collectCommercialInvoices(
         invoiceId: invoice.id,
         workspaceId: invoice.workspaceId,
         invoiceNumber: invoice.invoiceNumber,
+        description: commercialInvoiceProviderDescription(invoice.kind, invoice.invoiceNumber),
         amountYen: invoice.amountYen,
         customerId,
         paymentMethodId,

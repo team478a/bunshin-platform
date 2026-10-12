@@ -121,7 +121,7 @@ export function createTrainingAnswerEvaluationJobHandler(): TrainingAnswerEvalua
         assignment.targetResourceType === 'PERSONAL_LEARNING_PLAN';
       if (!personalLearningPilotExecutionAllowed(program.settings, enrollment.id, requirePilot))
         throw new TrainingAnswerEvaluationJobError('TRAINING_EVALUATION_SCOPE_REVOKED', false);
-      const runtime = await resolveOpenAiRuntimeConfiguration();
+      const runtime = await resolveOpenAiRuntimeConfiguration(undefined, 'TRAINING_ASSESSMENT');
       const pilot = requirePilot
         ? await preparePersonalLearningAiCall(
             {

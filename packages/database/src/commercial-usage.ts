@@ -5,10 +5,16 @@ import {
   type MauPricingTier,
   quoteMauPrice,
   quoteOemMauPrice,
+  OEM_REGISTRATION_BILLING_RULE_VERSION,
 } from '@bunshin/application';
 import { Prisma } from '@prisma/client';
 import type { PrismaClient } from '@prisma/client';
 import { prisma } from './index';
+import { oemBillingShadow } from './oem-billing-history';
+import {
+  listOemBillingPolicyProjections,
+  resolveOemBillingPolicy,
+} from './oem-billing-policy-projection';
 
 export interface RecordCommercialUsageInput {
   workspaceId: string;
@@ -26,9 +32,23 @@ export type RecordCommercialUsageResult = 'RECORDED' | 'DUPLICATE' | 'NOT_BILLAB
 export interface CommercialUsageSummary {
   month: string;
   mau: number;
+  billableUserCount: number | null;
+  registeredUserCount: number | null;
+  freeActiveUserCount: number | null;
+  overlapUserCount: number | null;
+  billingState: 'LEGACY_MAU' | 'REGISTRATION_V2' | 'REVIEW_REQUIRED';
+  billingReviewReason: CommercialBillingReviewReason | null;
   pricing: ReturnType<typeof quoteOemMauPrice>;
   eventCounts: Array<{ eventType: string; count: number }>;
 }
+
+export type CommercialBillingReviewReason =
+  | 'BILLING_POLICY_NOT_READY'
+  | 'BILLING_HISTORY_INCOMPLETE'
+  | 'OFFERING_TIMELINE_GAP'
+  | 'USAGE_OFFERING_HISTORY_MISSING'
+  | 'FORMAL_REGISTRATION_EVIDENCE_MISSING'
+  | 'UNKNOWN';
 
 export interface CommercialUsageDashboard {
   workspace: { id: string; name: string; oemEnabled: boolean };
@@ -36,12 +56,34 @@ export interface CommercialUsageDashboard {
   history: Array<{
     month: string;
     mau: number;
+    billableUserCount: number;
+    registeredUserCount: number | null;
+    freeActiveUserCount: number | null;
+    overlapUserCount: number | null;
+    billingRuleVersion: string | null;
     tierKey: string;
     priceYen: number | null;
     pricingVersion: string;
     status: 'OPEN' | 'FINALIZED';
     finalizedAt: Date | null;
   }>;
+}
+
+function billingReviewReason(message: string): CommercialBillingReviewReason {
+  if (
+    message === 'REVIEW_REQUIRED: policy' ||
+    message === 'REVIEW_REQUIRED: billing policy' ||
+    message === 'REVIEW_REQUIRED: billing policy changed'
+  )
+    return 'BILLING_POLICY_NOT_READY';
+  if (message === 'REVIEW_REQUIRED: billing history incomplete')
+    return 'BILLING_HISTORY_INCOMPLETE';
+  if (message === 'REVIEW_REQUIRED: offering timeline gap') return 'OFFERING_TIMELINE_GAP';
+  if (message === 'REVIEW_REQUIRED: usage offering history missing')
+    return 'USAGE_OFFERING_HISTORY_MISSING';
+  if (message === 'REVIEW_REQUIRED: formal registration evidence missing')
+    return 'FORMAL_REGISTRATION_EVIDENCE_MISSING';
+  return 'UNKNOWN';
 }
 
 export interface CommercialProfitabilityRow {
@@ -74,38 +116,72 @@ function validateText(value: string, maximum: number, label: string): string {
 export class PrismaCommercialUsageService {
   constructor(private readonly client: PrismaClient = prisma) {}
 
-  async listPricingSchedules() {
-    return this.client.commercialPricingSchedule.findMany({ orderBy: { effectiveFrom: 'desc' } });
+  private async currentBilling(
+    workspaceId: string,
+    period: ReturnType<typeof commercialMonthPeriod>,
+    mau: number,
+  ) {
+    const policy = await resolveOemBillingPolicy(this.client, workspaceId);
+    if (
+      !policy ||
+      policy.status === 'CANCELLED' ||
+      !policy.effectiveFrom ||
+      policy.effectiveFrom > snapshotDate(period.key)
+    )
+      return {
+        billableUserCount: mau,
+        registeredUserCount: null,
+        freeActiveUserCount: null,
+        overlapUserCount: null,
+        billingState: 'LEGACY_MAU' as const,
+        billingReviewReason: null,
+        pricing: await this.quote(mau, snapshotDate(period.key)),
+      };
+    try {
+      if (!policy.historyReadyAt || policy.ruleVersion !== OEM_REGISTRATION_BILLING_RULE_VERSION)
+        throw new Error('REVIEW_REQUIRED: policy');
+      const counts = await oemBillingShadow(this.client, workspaceId, period);
+      return {
+        billableUserCount: counts.billableUserCount,
+        registeredUserCount: counts.registeredUserCount,
+        freeActiveUserCount: counts.freeActiveUserCount,
+        overlapUserCount: counts.overlapUserCount,
+        billingState: 'REGISTRATION_V2' as const,
+        billingReviewReason: null,
+        pricing: await this.quote(counts.billableUserCount, snapshotDate(period.key)),
+      };
+    } catch (error) {
+      if (!(error instanceof Error && error.message.startsWith('REVIEW_REQUIRED'))) throw error;
+      return {
+        billableUserCount: null,
+        registeredUserCount: null,
+        freeActiveUserCount: null,
+        overlapUserCount: null,
+        billingState: 'REVIEW_REQUIRED' as const,
+        billingReviewReason: billingReviewReason(error.message),
+        pricing: {
+          pricingVersion: policy.ruleVersion ?? 'REVIEW_REQUIRED',
+          tierKey: 'REVIEW_REQUIRED',
+          mau,
+          priceYen: null,
+          upperLimit: null,
+          remainingToNextTier: null,
+          customQuoteRequired: false,
+        },
+      };
+    }
   }
 
-  async createPricingSchedule(input: {
-    version: string;
-    effectiveFrom: Date;
-    tiers: MauPricingTier[];
-    createdByUserId: string;
-    now?: Date;
-  }) {
-    quoteMauPrice(0, input.version, input.tiers);
-    const nextMonth = snapshotDate(commercialMonthPeriod(input.now ?? new Date(), 1).key);
-    if (
-      Number.isNaN(input.effectiveFrom.getTime()) ||
-      input.effectiveFrom.getUTCDate() !== 1 ||
-      input.effectiveFrom < nextMonth
-    )
-      throw new Error('pricing schedule must start in a future month');
-    return this.client.commercialPricingSchedule.create({
-      data: {
-        version: input.version,
-        effectiveFrom: input.effectiveFrom,
-        createdByUserId: input.createdByUserId,
-        tiers: input.tiers as unknown as Prisma.InputJsonValue,
-      },
+  async listPricingSchedules() {
+    return this.client.commercialPricingSchedule.findMany({
+      orderBy: { effectiveFrom: 'desc' },
+      include: { audits: { orderBy: { occurredAt: 'desc' }, take: 20 } },
     });
   }
 
   private async quote(mau: number, periodStart: Date) {
     const schedule = await this.client.commercialPricingSchedule.findFirst({
-      where: { effectiveFrom: { lte: periodStart } },
+      where: { effectiveFrom: { lte: periodStart }, status: 'PUBLISHED' },
       orderBy: { effectiveFrom: 'desc' },
     });
     if (!schedule) return quoteOemMauPrice(mau);
@@ -223,7 +299,7 @@ export class PrismaCommercialUsageService {
       current: {
         month: period.key,
         mau: users.length,
-        pricing: await this.quote(users.length, snapshotDate(period.key)),
+        ...(await this.currentBilling(workspaceId, period, users.length)),
         eventCounts: eventCounts.map((row) => ({
           eventType: row.eventType,
           count: row._count._all,
@@ -232,6 +308,11 @@ export class PrismaCommercialUsageService {
       history: history.map((row) => ({
         month: row.periodStart.toISOString().slice(0, 7),
         mau: row.mau,
+        billableUserCount: row.billableUserCount ?? row.mau,
+        registeredUserCount: row.registeredUserCount,
+        freeActiveUserCount: row.freeActiveUserCount,
+        overlapUserCount: row.overlapUserCount,
+        billingRuleVersion: row.billingRuleVersion,
         tierKey: row.pricingTierKey,
         priceYen: row.calculatedPriceYen,
         pricingVersion: row.pricingVersion,
@@ -280,7 +361,7 @@ export class PrismaCommercialUsageService {
             },
           }),
         ]);
-        const pricing = await this.quote(users.length, snapshotDate(period.key));
+        const { pricing } = await this.currentBilling(organization.id, period, users.length);
         const aiCost = pricedAi._sum.estimatedCostUsdMicros ?? 0n;
         if (aiCost > BigInt(Number.MAX_SAFE_INTEGER)) throw new Error('AI cost is too large');
         return {
@@ -305,6 +386,77 @@ export class PrismaCommercialUsageService {
       where: { workspaceId_periodStart: { workspaceId, periodStart } },
     });
     if (existing?.status === 'FINALIZED') return existing;
+
+    const policy = await resolveOemBillingPolicy(this.client, workspaceId);
+    if (
+      policy?.status === 'SCHEDULED' &&
+      policy.effectiveFrom &&
+      policy.effectiveFrom <= periodStart
+    ) {
+      if (!policy.historyReadyAt || policy.ruleVersion !== OEM_REGISTRATION_BILLING_RULE_VERSION)
+        throw new Error('REVIEW_REQUIRED: billing policy');
+      return this.client.$transaction(async (tx) => {
+        await tx.$queryRaw(
+          Prisma.sql`SELECT "id" FROM "workspaces" WHERE "id" = ${workspaceId}::uuid FOR UPDATE`,
+        );
+        const finalized = await tx.tenantMonthlyUsage.findUnique({
+          where: { workspaceId_periodStart: { workspaceId, periodStart } },
+        });
+        if (finalized?.status === 'FINALIZED') return finalized;
+        const currentPolicy = await resolveOemBillingPolicy(tx, workspaceId);
+        if (
+          currentPolicy?.status !== 'SCHEDULED' ||
+          !currentPolicy.effectiveFrom ||
+          !currentPolicy.historyReadyAt ||
+          currentPolicy.effectiveFrom > periodStart ||
+          currentPolicy.ruleVersion !== OEM_REGISTRATION_BILLING_RULE_VERSION
+        )
+          throw new Error('REVIEW_REQUIRED: billing policy changed');
+        const result = await oemBillingShadow(tx, workspaceId, period);
+        const actual = await tx.serviceUsageEvent.groupBy({
+          by: ['userId'],
+          where: { workspaceId, occurredAt: { gte: period.start, lt: period.end } },
+        });
+        const schedule = await tx.commercialPricingSchedule.findFirst({
+          where: { status: 'PUBLISHED', effectiveFrom: { lte: periodStart } },
+          orderBy: { effectiveFrom: 'desc' },
+        });
+        const pricing = schedule
+          ? quoteMauPrice(
+              result.billableUserCount,
+              schedule.version,
+              schedule.tiers as unknown as MauPricingTier[],
+            )
+          : quoteOemMauPrice(result.billableUserCount);
+        const data = {
+          mau: actual.length,
+          billableUserCount: result.billableUserCount,
+          registeredUserCount: result.registeredUserCount,
+          freeActiveUserCount: result.freeActiveUserCount,
+          overlapUserCount: result.overlapUserCount,
+          billingRuleVersion: result.ruleVersion,
+          billingEvidence: result.evidence,
+          pricingScheduleId: schedule?.id ?? null,
+          pricingTierKey: pricing.tierKey,
+          calculatedPriceYen: pricing.priceYen,
+          pricingVersion: pricing.pricingVersion,
+          status: 'FINALIZED' as const,
+          calculatedAt: now,
+          finalizedAt: now,
+        };
+        return tx.tenantMonthlyUsage.upsert({
+          where: { workspaceId_periodStart: { workspaceId, periodStart } },
+          create: {
+            ...data,
+            workspaceId,
+            periodStart,
+            periodEnd: nextSnapshotDate(period.key),
+            timeZone: period.timeZone,
+          },
+          update: data,
+        });
+      });
+    }
 
     const organization = await this.client.workspace.findFirst({
       where: {
@@ -358,6 +510,7 @@ export class PrismaCommercialUsageService {
 
   async finalizeAllPreviousMonths(now = new Date()) {
     const period = commercialMonthPeriod(now, -1);
+    const periodStart = snapshotDate(period.key);
     const organizations = await this.client.workspace.findMany({
       where: {
         type: 'ORGANIZATION',
@@ -374,9 +527,80 @@ export class PrismaCommercialUsageService {
       select: { id: true },
     });
     const finalized = [];
-    for (const organization of organizations) {
-      finalized.push(await this.finalizePreviousMonth(organization.id, now));
+    const reviewRequired: Array<{ workspaceId: string; reason: string }> = [];
+    const policies = (await listOemBillingPolicyProjections(this.client)).filter(
+      (policy) =>
+        policy.status === 'SCHEDULED' &&
+        policy.effectiveFrom !== null &&
+        policy.effectiveFrom <= periodStart,
+    );
+    const workspaceIds = new Set([
+      ...organizations.map((row) => row.id),
+      ...policies.map((row) => row.workspaceId),
+    ]);
+    const contractPeriods = await this.client.oemContractPeriod.findMany({
+      where: { workspaceId: { in: [...workspaceIds] }, supersededBy: { is: null } },
+      select: { workspaceId: true, startsAt: true, endsAt: true },
+    });
+    const reviewedPolicies = new Set(
+      policies
+        .filter(
+          (policy) =>
+            policy.historyReadyAt !== null &&
+            policy.ruleVersion === OEM_REGISTRATION_BILLING_RULE_VERSION,
+        )
+        .map((policy) => policy.workspaceId),
+    );
+    const periodsByWorkspace = new Map<string, typeof contractPeriods>();
+    for (const contractPeriod of contractPeriods) {
+      const rows = periodsByWorkspace.get(contractPeriod.workspaceId) ?? [];
+      rows.push(contractPeriod);
+      periodsByWorkspace.set(contractPeriod.workspaceId, rows);
     }
-    return { organizations: organizations.length, finalized: finalized.length };
+    const skippedOutsideContract: Array<{
+      workspaceId: string;
+      month: string;
+      reason: 'CONTRACT_ENDED_BEFORE_PERIOD';
+      lastContractEndedAt: Date;
+    }> = [];
+    for (const workspaceId of workspaceIds) {
+      const reviewedContractPeriods = periodsByWorkspace.get(workspaceId) ?? [];
+      const explicitlyEndedBeforePeriod =
+        reviewedPolicies.has(workspaceId) &&
+        reviewedContractPeriods.length > 0 &&
+        reviewedContractPeriods.every(
+          (contractPeriod) =>
+            contractPeriod.startsAt < period.start &&
+            contractPeriod.endsAt !== null &&
+            contractPeriod.endsAt <= period.start,
+        );
+      if (explicitlyEndedBeforePeriod) {
+        const lastContractEndedAt = reviewedContractPeriods.reduce(
+          (latest, contractPeriod) =>
+            contractPeriod.endsAt! > latest ? contractPeriod.endsAt! : latest,
+          reviewedContractPeriods[0]!.endsAt!,
+        );
+        skippedOutsideContract.push({
+          workspaceId,
+          month: period.key,
+          reason: 'CONTRACT_ENDED_BEFORE_PERIOD',
+          lastContractEndedAt,
+        });
+        continue;
+      }
+      try {
+        finalized.push(await this.finalizePreviousMonth(workspaceId, now));
+      } catch (error) {
+        if (error instanceof Error && error.message.startsWith('REVIEW_REQUIRED'))
+          reviewRequired.push({ workspaceId, reason: error.message });
+        else throw error;
+      }
+    }
+    return {
+      organizations: workspaceIds.size,
+      finalized: finalized.length,
+      skippedOutsideContract,
+      reviewRequired,
+    };
   }
 }

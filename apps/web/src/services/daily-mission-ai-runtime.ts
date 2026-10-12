@@ -23,7 +23,7 @@ export async function createDailyMissionAiRuntime(input: {
   scope: DailyMissionAiScope;
   usageIdempotencyPrefix: string;
 }) {
-  const configuration = await resolveOpenAiRuntimeConfiguration();
+  const configuration = await resolveOpenAiRuntimeConfiguration(undefined, 'SOCIAL_PLANNER');
   const recordUsage = (suffix: string, taskType: string, result: AiOperationResult) =>
     recordAiUsageSafely({
       ...input.scope,

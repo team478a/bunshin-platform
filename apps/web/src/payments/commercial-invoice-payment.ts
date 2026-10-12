@@ -6,6 +6,7 @@ import {
   StripeCommercialInvoiceCheckoutAdapter,
   StripePaymentMethodRetrievalAdapter,
 } from './secure-configuration';
+import { commercialInvoiceProviderDescription } from '../commercial-invoice-copy';
 
 type CheckoutAdapter = Pick<StripeCommercialInvoiceCheckoutAdapter, 'create'>;
 type PaymentMethodAdapter = Pick<StripePaymentMethodRetrievalAdapter, 'retrieve'>;
@@ -18,9 +19,12 @@ export interface StripeCommercialBillingEvent {
     object?: {
       id?: unknown;
       amount_total?: unknown;
+      amount?: unknown;
+      amount_refunded?: unknown;
       currency?: unknown;
       payment_status?: unknown;
       payment_intent?: unknown;
+      refunded?: unknown;
       metadata?: Record<string, unknown>;
     };
   };
@@ -34,7 +38,7 @@ function platformStripeConfiguration() {
   ) {
     throw new ApplicationError(
       'CONFIGURATION_ERROR',
-      'ワタシワークス月額請求のStripe設定が完了していません',
+      'ワタシワークス請求のStripe設定が完了していません',
     );
   }
   return {
@@ -77,8 +81,30 @@ export async function createCommercialInvoiceCheckout(
   if (!invoice) throw new ApplicationError('NOT_FOUND', '請求が見つかりません');
   if (invoice.status !== 'ISSUED')
     throw new ApplicationError('CONFLICT', '支払い可能な請求ではありません');
-  if (invoice.contract.status !== 'ACTIVE' || invoice.contract.billingMode !== 'EXTERNAL_BILLING') {
+  if (invoice.amountYen <= 0)
+    throw new ApplicationError('CONFLICT', 'この請求にオンライン支払いは不要です');
+  const endedFinalInvoice =
+    invoice.contract.status === 'ENDED' &&
+    invoice.billingRuleVersion !== null &&
+    invoice.billingRuleVersion !== undefined;
+  if (
+    (invoice.contract.status !== 'ACTIVE' && !endedFinalInvoice) ||
+    invoice.contract.billingMode !== 'EXTERNAL_BILLING'
+  ) {
     throw new ApplicationError('CONFLICT', 'オンライン決済が有効ではありません');
+  }
+  if (endedFinalInvoice) {
+    const start = new Date(invoice.periodStart.getTime() - 9 * 60 * 60 * 1000);
+    const end = new Date(invoice.periodEnd.getTime() - 9 * 60 * 60 * 1000);
+    const historical = await client.oemContractPeriod.findFirst({
+      where: {
+        workspaceId: input.workspaceId,
+        supersededBy: { is: null },
+        startsAt: { lt: end },
+        OR: [{ endsAt: null }, { endsAt: { gt: start } }],
+      },
+    });
+    if (!historical) throw new ApplicationError('FORBIDDEN', 'historical contract required');
   }
   if (
     invoice.checkoutUrl &&
@@ -94,11 +120,12 @@ export async function createCommercialInvoiceCheckout(
     invoiceId: invoice.id,
     workspaceId: invoice.workspaceId,
     invoiceNumber: invoice.invoiceNumber,
+    itemName: commercialInvoiceProviderDescription(invoice.kind, invoice.invoiceNumber),
     billingEmail: invoice.contract.billingEmail,
     amountYen: invoice.amountYen,
     successUrl: new URL(`${returnPath}?payment=success`, configuration.appUrl).toString(),
     cancelUrl: new URL(`${returnPath}?payment=cancelled`, configuration.appUrl).toString(),
-    savePaymentMethod: invoice.contract.automaticCollectionEnabled,
+    savePaymentMethod: !endedFinalInvoice && invoice.contract.automaticCollectionEnabled,
     customerId: invoice.contract.stripeCustomerId,
   });
   const updated = await client.tenantInvoice.updateMany({
@@ -146,12 +173,99 @@ function requiredEventIdentity(event: StripeCommercialBillingEvent) {
   };
 }
 
+async function processCommercialBillingRefundReview(
+  client: PrismaClient,
+  event: StripeCommercialBillingEvent,
+  payloadDigest: string,
+) {
+  const object = event.data?.object;
+  if (
+    typeof event.id !== 'string' ||
+    !event.id.startsWith('evt_') ||
+    event.type !== 'charge.refunded' ||
+    typeof event.livemode !== 'boolean' ||
+    typeof object?.id !== 'string' ||
+    !object.id.startsWith('ch_') ||
+    typeof object.payment_intent !== 'string' ||
+    !object.payment_intent.startsWith('pi_') ||
+    typeof object.amount !== 'number' ||
+    !Number.isSafeInteger(object.amount) ||
+    object.amount <= 0 ||
+    typeof object.amount_refunded !== 'number' ||
+    !Number.isSafeInteger(object.amount_refunded) ||
+    object.amount_refunded <= 0 ||
+    object.amount_refunded > object.amount ||
+    object.currency !== 'jpy' ||
+    typeof object.refunded !== 'boolean' ||
+    object.refunded !== (object.amount_refunded === object.amount)
+  ) {
+    throw new ApplicationError('VALIDATION_ERROR', 'incomplete Stripe refund event');
+  }
+  const expectedLiveMode = getServerEnvironment().APP_ENV === 'production';
+  if (event.livemode !== expectedLiveMode)
+    throw new ApplicationError('FORBIDDEN', 'Stripe billing environment mismatch');
+
+  const invoices = await client.tenantInvoice.findMany({
+    where: {
+      paymentProvider: 'STRIPE',
+      providerPaymentIntentId: object.payment_intent,
+    },
+    take: 2,
+  });
+  if (invoices.length === 0)
+    throw new ApplicationError('NOT_FOUND', 'billing invoice for refund not found');
+  if (invoices.length !== 1)
+    throw new ApplicationError('CONFLICT', 'ambiguous billing invoice for refund');
+  const invoice = invoices[0]!;
+  if (invoice.status !== 'PAID' || invoice.amountYen !== object.amount) {
+    throw new ApplicationError('FORBIDDEN', 'Stripe billing refund identity mismatch');
+  }
+  const previous = await client.commercialBillingWebhookEvent.findUnique({
+    where: {
+      provider_providerEventId: { provider: 'STRIPE', providerEventId: event.id },
+    },
+  });
+  if (previous) return { ignored: true, reason: 'DUPLICATE_EVENT' };
+
+  const errorCategory = object.refunded
+    ? 'FULL_REFUND_REVIEW_REQUIRED'
+    : 'PARTIAL_REFUND_REVIEW_REQUIRED';
+  try {
+    await client.commercialBillingWebhookEvent.create({
+      data: {
+        workspaceId: invoice.workspaceId,
+        invoiceId: invoice.id,
+        provider: 'STRIPE',
+        providerEventId: event.id,
+        eventType: event.type,
+        status: 'PROCESSED',
+        payloadDigest,
+        errorCategory,
+        processedAt: new Date(),
+      },
+    });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      return { ignored: true, reason: 'DUPLICATE_EVENT' };
+    }
+    throw error;
+  }
+  return {
+    ignored: false,
+    status: 'REFUND_REVIEW_REQUIRED',
+    refundKind: object.refunded ? ('FULL' as const) : ('PARTIAL' as const),
+  };
+}
+
 export async function processCommercialBillingStripeEvent(
   client: PrismaClient,
   event: StripeCommercialBillingEvent,
   payloadDigest: string,
   paymentMethodAdapter: PaymentMethodAdapter = new StripePaymentMethodRetrievalAdapter(),
 ) {
+  if (event.type === 'charge.refunded') {
+    return processCommercialBillingRefundReview(client, event, payloadDigest);
+  }
   const identity = requiredEventIdentity(event);
   if (!['checkout.session.completed', 'checkout.session.expired'].includes(identity.eventType)) {
     return { ignored: true, reason: 'EVENT_NOT_SUPPORTED' };
@@ -192,6 +306,7 @@ export async function processCommercialBillingStripeEvent(
   }
   const savedPaymentMethod =
     identity.eventType === 'checkout.session.completed' &&
+    invoice.contract.status === 'ACTIVE' &&
     invoice.contract.automaticCollectionEnabled &&
     typeof paymentIntent === 'string'
       ? await paymentMethodAdapter.retrieve(platformStripeConfiguration().secretKey, paymentIntent)
@@ -258,6 +373,7 @@ export async function processCommercialBillingStripeEvent(
           where: {
             id: invoice.contractId,
             workspaceId: invoice.workspaceId,
+            status: 'ACTIVE',
             automaticCollectionEnabled: true,
           },
           data: {

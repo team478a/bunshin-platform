@@ -8,6 +8,7 @@ const input = {
   apiKey: 'secret',
   from: 'billing@example.com',
   to: 'customer@example.com',
+  invoiceKind: 'MONTHLY_USAGE' as const,
   invoiceNumber: 'WW-2026-09-001',
   billingName: '運営会社A',
   amountYen: 39_800,
@@ -36,6 +37,24 @@ describe('CommercialBillingReminderResend', () => {
     expect(payload.text).toContain('39,800円');
     expect(payload.text).toContain(input.checkoutUrl);
     expect(new Headers(init?.headers).get('idempotency-key')).toBe(input.idempotencyKey);
+  });
+
+  it('identifies setup fees without monthly wording', async () => {
+    const request = vi.fn<typeof fetch>().mockResolvedValue(new Response(null, { status: 200 }));
+
+    await new CommercialBillingReminderResend(request).send({
+      ...input,
+      invoiceKind: 'SETUP_FEE',
+      invoiceNumber: 'WW-SETUP-20261010-A',
+      amountYen: 300_000,
+    });
+
+    const [, init] = request.mock.calls[0]!;
+    const payload = JSON.parse(init?.body as string) as { subject: string; text: string };
+    expect(payload.subject).toContain('OEM初期費用のお支払い案内');
+    expect(payload.text).toContain('ワタシワークスのOEM初期費用');
+    expect(payload.subject).not.toContain('月額');
+    expect(payload.text).not.toContain('月額');
   });
 
   it('uses an overdue subject and does not invent a payment URL', async () => {

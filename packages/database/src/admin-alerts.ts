@@ -26,6 +26,7 @@ export class PrismaAdminAlertRepository implements AdminAlertRepository {
       staleBadgeProcessing,
       stoppedPointServices,
       blockedDeletions,
+      commercialBillingRefundReviews,
       openSupportCases,
       urgentSupportCases,
     ] = await Promise.all([
@@ -104,6 +105,17 @@ export class PrismaAdminAlertRepository implements AdminAlertRepository {
         where: { pointIssuanceStopped: true, group: { status: 'ACTIVE' } },
       }),
       this.client.accountDeletionRequest.count({ where: { status: 'BLOCKED' } }),
+      this.client.commercialBillingWebhookEvent.findMany({
+        where: {
+          status: 'PROCESSED',
+          errorCategory: {
+            in: ['PARTIAL_REFUND_REVIEW_REQUIRED', 'FULL_REFUND_REVIEW_REQUIRED'],
+          },
+          invoice: { status: 'PAID' },
+        },
+        distinct: ['invoiceId'],
+        select: { invoiceId: true },
+      }),
       this.client.supportCase.count({ where: { status: 'OPEN' } }),
       this.client.supportCase.count({ where: { status: 'OPEN', priority: 'URGENT' } }),
     ]);
@@ -229,6 +241,7 @@ export class PrismaAdminAlertRepository implements AdminAlertRepository {
         stoppedServices: stoppedPointServices,
       },
       blockedDeletions,
+      commercialBillingRefundReviews: commercialBillingRefundReviews.length,
       openSupportCases,
       urgentSupportCases,
     };

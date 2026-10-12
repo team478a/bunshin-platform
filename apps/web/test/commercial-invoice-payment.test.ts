@@ -24,6 +24,7 @@ import {
 
 const invoice = {
   id: 'invoice-a',
+  kind: 'MONTHLY_USAGE',
   workspaceId: 'workspace-a',
   invoiceNumber: 'WW-202609-A',
   status: 'ISSUED',
@@ -48,6 +49,22 @@ const transactionWith = <T>(value: T) =>
 
 describe('commercial invoice Stripe payment', () => {
   beforeEach(() => vi.clearAllMocks());
+
+  it('does not call the payment provider for a zero amount invoice', async () => {
+    const create = vi.fn();
+    const client = {
+      workspaceMembership: { findFirst: vi.fn().mockResolvedValue({ id: 'membership-a' }) },
+      tenantInvoice: { findFirst: vi.fn().mockResolvedValue({ ...invoice, amountYen: 0 }) },
+    } as unknown as PrismaClient;
+    await expect(
+      createCommercialInvoiceCheckout(
+        client,
+        { workspaceId: 'workspace-a', invoiceId: 'invoice-a', actorUserId: 'owner-a' },
+        { create },
+      ),
+    ).rejects.toThrow();
+    expect(create).not.toHaveBeenCalled();
+  });
 
   it('creates a tenant-scoped hosted checkout from the immutable invoice amount', async () => {
     const create = vi.fn().mockResolvedValue({
@@ -77,6 +94,7 @@ describe('commercial invoice Stripe payment', () => {
         invoiceId: 'invoice-a',
         workspaceId: 'workspace-a',
         amountYen: 19_800,
+        itemName: 'ワタシワークス OEM月額利用料 WW-202609-A',
         billingEmail: 'billing@example.com',
         savePaymentMethod: false,
         customerId: null,
@@ -87,6 +105,40 @@ describe('commercial invoice Stripe payment', () => {
         where: { id: 'invoice-a', workspaceId: 'workspace-a', status: 'ISSUED' },
       }),
     );
+  });
+
+  it('labels a setup fee Checkout without calling it a monthly charge', async () => {
+    const create = vi.fn().mockResolvedValue({
+      id: 'cs_setup_fee',
+      url: 'https://checkout.stripe.com/setup-fee',
+      expiresAt: null,
+    });
+    const client = {
+      workspaceMembership: { findFirst: vi.fn().mockResolvedValue({ id: 'membership-a' }) },
+      tenantInvoice: {
+        findFirst: vi.fn().mockResolvedValue({
+          ...invoice,
+          kind: 'SETUP_FEE',
+          invoiceNumber: 'WW-SETUP-20261010-A',
+          amountYen: 300_000,
+        }),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+      },
+    } as unknown as PrismaClient;
+
+    await createCommercialInvoiceCheckout(
+      client,
+      { workspaceId: 'workspace-a', invoiceId: 'invoice-a', actorUserId: 'owner-a' },
+      { create },
+    );
+
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        amountYen: 300_000,
+        itemName: 'ワタシワークス OEM初期費用 WW-SETUP-20261010-A',
+      }),
+    );
+    expect(create.mock.calls[0]?.[0].itemName).not.toContain('月額');
   });
 
   it('stores Stripe references after an explicitly enabled first payment', async () => {
@@ -148,6 +200,7 @@ describe('commercial invoice Stripe payment', () => {
       where: {
         id: 'contract-a',
         workspaceId: 'workspace-a',
+        status: 'ACTIVE',
         automaticCollectionEnabled: true,
       },
       data: {
@@ -172,6 +225,95 @@ describe('commercial invoice Stripe payment', () => {
       ),
     ).rejects.toThrow('団体管理者');
     expect(create).not.toHaveBeenCalled();
+  });
+
+  it('allows an issued V2 final invoice after contract end without saving an automatic payment method', async () => {
+    const create = vi.fn().mockResolvedValue({
+      id: 'cs_final',
+      url: 'https://checkout.stripe.com/final',
+      expiresAt: null,
+    });
+    const historical = vi.fn().mockResolvedValue({ id: 'reviewed-period' });
+    const client = {
+      workspaceMembership: { findFirst: vi.fn().mockResolvedValue({ id: 'current-owner' }) },
+      oemContractPeriod: { findFirst: historical },
+      tenantInvoice: {
+        findFirst: vi.fn().mockResolvedValue({
+          ...invoice,
+          billingRuleVersion: 'OEM_REGISTRATION_BILLING_V2',
+          periodStart: new Date('2026-09-01Z'),
+          periodEnd: new Date('2026-10-01Z'),
+          contract: { ...invoice.contract, status: 'ENDED', automaticCollectionEnabled: true },
+        }),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+      },
+    } as unknown as PrismaClient;
+    await createCommercialInvoiceCheckout(
+      client,
+      { workspaceId: invoice.workspaceId, invoiceId: invoice.id, actorUserId: 'owner-a' },
+      { create },
+    );
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({ savePaymentMethod: false, amountYen: invoice.amountYen }),
+    );
+    historical.mockResolvedValue(null);
+    create.mockClear();
+    await expect(
+      createCommercialInvoiceCheckout(
+        client,
+        { workspaceId: invoice.workspaceId, invoiceId: invoice.id, actorUserId: 'owner-a' },
+        { create },
+      ),
+    ).rejects.toThrow('historical contract');
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('does not retrieve or store a payment method when the contract ended before the checkout webhook', async () => {
+    const retrieve = vi.fn();
+    const contractUpdate = vi.fn();
+    const tx = {
+      commercialBillingWebhookEvent: {
+        create: vi.fn().mockResolvedValue({ id: 'ledger-ended' }),
+        update: vi.fn(),
+      },
+      tenantInvoice: { update: vi.fn().mockResolvedValue({ ...invoice, status: 'PAID' }) },
+      organizationCommercialContract: { updateMany: contractUpdate },
+      commercialBillingAudit: { create: vi.fn() },
+    };
+    const client = {
+      tenantInvoice: {
+        findFirst: vi.fn().mockResolvedValue({
+          ...invoice,
+          paymentProvider: 'STRIPE',
+          providerCheckoutSessionId: 'cs_ended',
+          contract: { ...invoice.contract, status: 'ENDED', automaticCollectionEnabled: true },
+        }),
+      },
+      commercialBillingWebhookEvent: { findUnique: vi.fn().mockResolvedValue(null) },
+      $transaction: transactionWith(tx),
+    } as unknown as PrismaClient;
+    await processCommercialBillingStripeEvent(
+      client,
+      {
+        id: 'evt_ended',
+        type: 'checkout.session.completed',
+        livemode: false,
+        data: {
+          object: {
+            id: 'cs_ended',
+            amount_total: invoice.amountYen,
+            currency: 'jpy',
+            payment_status: 'paid',
+            payment_intent: 'pi_ended',
+            metadata: { invoice_id: invoice.id, workspace_id: invoice.workspaceId },
+          },
+        },
+      },
+      'digest',
+      { retrieve },
+    );
+    expect(retrieve).not.toHaveBeenCalled();
+    expect(contractUpdate).not.toHaveBeenCalled();
   });
 
   it('marks only the matching issued invoice paid after a verified Stripe event', async () => {
@@ -263,5 +405,123 @@ describe('commercial invoice Stripe payment', () => {
         'digest',
       ),
     ).rejects.toThrow('amount or payment mismatch');
+  });
+
+  it.each([
+    {
+      amountRefunded: 4_000,
+      refunded: false,
+      category: 'PARTIAL_REFUND_REVIEW_REQUIRED',
+      refundKind: 'PARTIAL',
+    },
+    {
+      amountRefunded: 19_800,
+      refunded: true,
+      category: 'FULL_REFUND_REVIEW_REQUIRED',
+      refundKind: 'FULL',
+    },
+  ])(
+    'records a verified $refundKind refund for review without changing the paid invoice',
+    async ({ amountRefunded, refunded, category, refundKind }) => {
+      const create = vi.fn().mockResolvedValue({ id: 'refund-ledger-a' });
+      const findMany = vi.fn().mockResolvedValue([
+        {
+          ...invoice,
+          status: 'PAID',
+          paymentProvider: 'STRIPE',
+          providerPaymentIntentId: 'pi_platform_a',
+        },
+      ]);
+      const client = {
+        tenantInvoice: { findMany },
+        commercialBillingWebhookEvent: {
+          findUnique: vi.fn().mockResolvedValue(null),
+          create,
+        },
+      } as unknown as PrismaClient;
+
+      await expect(
+        processCommercialBillingStripeEvent(
+          client,
+          {
+            id: `evt_refund_${refundKind.toLowerCase()}`,
+            type: 'charge.refunded',
+            livemode: false,
+            data: {
+              object: {
+                id: 'ch_platform_a',
+                amount: 19_800,
+                amount_refunded: amountRefunded,
+                currency: 'jpy',
+                payment_intent: 'pi_platform_a',
+                refunded,
+              },
+            },
+          },
+          'refund-digest',
+        ),
+      ).resolves.toEqual({
+        ignored: false,
+        status: 'REFUND_REVIEW_REQUIRED',
+        refundKind,
+      });
+
+      expect(findMany).toHaveBeenCalledWith({
+        where: {
+          paymentProvider: 'STRIPE',
+          providerPaymentIntentId: 'pi_platform_a',
+        },
+        take: 2,
+      });
+      expect(create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          workspaceId: 'workspace-a',
+          invoiceId: 'invoice-a',
+          eventType: 'charge.refunded',
+          status: 'PROCESSED',
+          errorCategory: category,
+        }),
+      });
+    },
+  );
+
+  it('rejects a refund whose amount or paid invoice identity does not match', async () => {
+    const create = vi.fn();
+    const client = {
+      tenantInvoice: {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            ...invoice,
+            status: 'PAID',
+            paymentProvider: 'STRIPE',
+            providerPaymentIntentId: 'pi_platform_a',
+          },
+        ]),
+      },
+      commercialBillingWebhookEvent: { findUnique: vi.fn(), create },
+    } as unknown as PrismaClient;
+
+    await expect(
+      processCommercialBillingStripeEvent(
+        client,
+        {
+          id: 'evt_refund_mismatch',
+          type: 'charge.refunded',
+          livemode: false,
+          data: {
+            object: {
+              id: 'ch_platform_a',
+              amount: 29_800,
+              amount_refunded: 29_800,
+              currency: 'jpy',
+              payment_intent: 'pi_platform_a',
+              refunded: true,
+            },
+          },
+        },
+        'refund-digest',
+      ),
+    ).rejects.toThrow('refund identity mismatch');
+    expect(create).not.toHaveBeenCalled();
   });
 });

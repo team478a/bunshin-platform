@@ -41,6 +41,9 @@ describe('PrismaAdminAlertRepository', () => {
       badgeProcessingEvent: { count: vi.fn().mockResolvedValue(0) },
       serviceConfiguration: { count: vi.fn().mockResolvedValue(0) },
       accountDeletionRequest: { count: vi.fn().mockResolvedValue(0) },
+      commercialBillingWebhookEvent: {
+        findMany: vi.fn().mockResolvedValue([{ invoiceId: 'invoice-a' }]),
+      },
       supportCase: { count: vi.fn().mockResolvedValue(0) },
       aiUsageEvent: {
         aggregate: vi.fn().mockResolvedValue({ _sum: { estimatedCostUsdMicros: 0n } }),
@@ -61,6 +64,18 @@ describe('PrismaAdminAlertRepository', () => {
       provider: 'OPENAI',
       recentProviderFailures: 3,
       recentUnknownCostEvents: 5,
+    });
+    expect(snapshot?.commercialBillingRefundReviews).toBe(1);
+    expect(client.commercialBillingWebhookEvent.findMany).toHaveBeenCalledWith({
+      where: {
+        status: 'PROCESSED',
+        errorCategory: {
+          in: ['PARTIAL_REFUND_REVIEW_REQUIRED', 'FULL_REFUND_REVIEW_REQUIRED'],
+        },
+        invoice: { status: 'PAID' },
+      },
+      distinct: ['invoiceId'],
+      select: { invoiceId: true },
     });
     expect(aiUsageCount).toHaveBeenNthCalledWith(
       1,

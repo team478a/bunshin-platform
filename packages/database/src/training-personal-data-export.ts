@@ -8,6 +8,7 @@ import {
 import { Prisma, type PrismaClient } from '@prisma/client';
 import { prisma } from './index';
 import { pilotParticipantHash } from './personal-learning-pilot-seat';
+import { trainingPersonalDataRoleAllows } from './training-personal-data-privacy';
 
 const iso = (value: Date | null) => value?.toISOString() ?? null;
 
@@ -22,12 +23,12 @@ export class PrismaTrainingPersonalDataExportRepository implements TrainingPerso
             workspaceId: input.workspaceId,
             groupId: input.groupId,
             userId: input.actorUserId,
-            serviceRole: 'PARTICIPANT',
+            serviceRole: { in: ['PARTICIPANT', 'SERVICE_OWNER'] },
             status: 'ACTIVE',
             user: { status: 'ACTIVE' },
             group: { status: 'ACTIVE', workspace: { status: 'ACTIVE' } },
           },
-          select: { id: true },
+          select: { id: true, serviceRole: true },
         });
         if (!membership) return { outcome: 'NOT_FOUND' };
         const enrollment = await tx.programEnrollment.findFirst({
@@ -57,9 +58,11 @@ export class PrismaTrainingPersonalDataExportRepository implements TrainingPerso
             groupId: input.groupId,
             settings: { path: ['moduleKey'], equals: AI_TRAINING_V1_MODULE_KEY },
           },
-          select: { id: true },
+          select: { id: true, settings: true },
         });
         if (!program) return { outcome: 'NOT_FOUND' };
+        if (!(await trainingPersonalDataRoleAllows(tx, input, membership.serviceRole, program)))
+          return { outcome: 'NOT_FOUND' };
         const scope = {
           workspaceId: input.workspaceId,
           groupId: input.groupId,

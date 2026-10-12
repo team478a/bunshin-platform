@@ -1,4 +1,8 @@
-import { tenantInvoiceDueAt, type TenantInvoiceAction } from '@bunshin/application';
+import {
+  tenantInvoiceDueAt,
+  invoiceBillableUserCount,
+  type TenantInvoiceAction,
+} from '@bunshin/application';
 import type { Prisma } from '@prisma/client';
 
 export interface SaveOrganizationCommercialContractInput {
@@ -43,6 +47,19 @@ export interface PrepareCustomQuoteInvoiceInput {
   notes?: string | null;
 }
 
+export interface PrepareOemSetupFeeInvoiceInput {
+  workspaceId: string;
+  productId: string;
+  actorUserId: string;
+  chargeKey: string;
+  amountYen: number;
+  description: string;
+  agreementReference: string;
+  agreedAt: Date;
+  reason: string;
+  now?: Date;
+}
+
 export function optionalText(value: string | null | undefined, maximum: number): string | null {
   const normalized = value?.trim() ?? '';
   if (!normalized) return null;
@@ -62,13 +79,20 @@ export function jsonSnapshot(value: unknown): Prisma.InputJsonValue {
 
 export function invoiceDocumentSnapshot(
   invoice: {
+    kind?: 'MONTHLY_USAGE' | 'SETUP_FEE';
     invoiceNumber: string;
     periodStart: Date;
     periodEnd: Date;
     mau: number;
+    billableUserCount?: number | null;
     amountYen: number;
     workspace: { name: string; legalName: string | null; address: string | null };
     contract: { billingName: string; billingEmail: string; paymentTermsDays: number };
+    setupFeeCharge?: {
+      description: string;
+      agreementReference: string;
+      product: { displayName: string };
+    } | null;
   },
   issuer: NonNullable<TransitionTenantInvoiceInput['documentIssuer']>,
   issuedAt: Date,
@@ -81,7 +105,15 @@ export function invoiceDocumentSnapshot(
     dueAt: tenantInvoiceDueAt(issuedAt, invoice.contract.paymentTermsDays).toISOString(),
     periodStart: invoice.periodStart.toISOString(),
     periodEnd: invoice.periodEnd.toISOString(),
-    description: `ワタシワークス OEM月額利用料（${invoice.mau.toLocaleString('ja-JP')} MAU）`,
+    description:
+      invoice.kind === 'SETUP_FEE' && invoice.setupFeeCharge
+        ? `${invoice.setupFeeCharge.product.displayName} OEM初期費用（${invoice.setupFeeCharge.description}）`
+        : invoice.billableUserCount === null || invoice.billableUserCount === undefined
+          ? `ワタシワークス OEM月額利用料（${invoice.mau.toLocaleString('ja-JP')} MAU）`
+          : `ワタシワークス OEM月額利用料（課金対象 ${invoiceBillableUserCount(invoice).toLocaleString('ja-JP')}人）`,
+    itemKind: invoice.kind ?? 'MONTHLY_USAGE',
+    agreementReference:
+      invoice.kind === 'SETUP_FEE' ? (invoice.setupFeeCharge?.agreementReference ?? null) : null,
     quantity: 1,
     taxRatePercent: 10,
     subtotalYen: invoice.amountYen - taxYen,

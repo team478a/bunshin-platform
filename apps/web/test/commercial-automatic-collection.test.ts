@@ -15,6 +15,7 @@ import { collectCommercialInvoices } from '../src/payments/commercial-invoice-au
 const now = new Date('2026-09-21T00:30:00Z');
 const invoice = {
   id: 'invoice-a',
+  kind: 'MONTHLY_USAGE',
   workspaceId: 'workspace-a',
   invoiceNumber: 'WW-202609-A',
   amountYen: 19_800,
@@ -57,6 +58,7 @@ describe('commercial automatic collection', () => {
         idempotencyKey: 'platform-invoice-auto:invoice-a',
         workspaceId: 'workspace-a',
         amountYen: 19_800,
+        description: 'ワタシワークス OEM月額利用料 WW-202609-A',
       }),
     );
     expect(updateMany).toHaveBeenCalledWith(
@@ -70,6 +72,32 @@ describe('commercial automatic collection', () => {
         data: expect.objectContaining({ action: 'AUTO_PAYMENT_CONFIRMED' }),
       }),
     );
+  });
+
+  it('selects monthly usage invoices only and never automatically collects setup fees', async () => {
+    const findMany = vi.fn().mockResolvedValue([]);
+    const client = {
+      tenantInvoice: { findMany },
+      $transaction: vi.fn(),
+    } as unknown as PrismaClient;
+    const collect = vi.fn();
+
+    await expect(collectCommercialInvoices(client, { now }, { collect })).resolves.toEqual({
+      candidates: 0,
+      paid: 0,
+      requiresAction: 0,
+      failed: 0,
+    });
+
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          kind: 'MONTHLY_USAGE',
+          status: 'ISSUED',
+        }),
+      }),
+    );
+    expect(collect).not.toHaveBeenCalled();
   });
 
   it('keeps an action-required invoice issued so hosted Checkout remains available', async () => {
