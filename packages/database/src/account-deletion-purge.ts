@@ -76,6 +76,9 @@ export class PrismaAccountDeletionPurgeRepository implements AccountDeletionPurg
           : await tx.bunshin.findMany({ where: scope, select: { id: true } });
       const bunshinIds = personalBunshins.map(({ id }) => id);
       await eraseAccountImprovementFeedback(tx, input.userId);
+      const learningRequests = await tx.personalLearningRequest.deleteMany({
+        where: { userId: input.userId },
+      });
 
       const [identities, lineConnections, linePreferences, deepLinks, posts, activities] =
         await Promise.all([
@@ -296,6 +299,7 @@ export class PrismaAccountDeletionPurgeRepository implements AccountDeletionPurg
             postRecordsSanitized: posts.count,
             activitiesSanitized: activities.count,
             membershipsRevoked: memberships.count,
+            learningRequestsDeleted: learningRequests.count,
             personalWorkspacesArchived: workspaceIds.length,
           },
         },
