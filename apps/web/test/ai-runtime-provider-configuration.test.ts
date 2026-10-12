@@ -3,10 +3,8 @@ vi.mock('server-only', () => ({}));
 import type {
   AiProviderConfiguration,
   AiProviderConfigurationRepository,
-  AiProviderRuntimeAdmissionRepository,
 } from '@bunshin/application';
 import {
-  reserveTrendRuntimeConfiguration,
   resolveOpenAiRuntimeConfiguration,
   resolveVideoAiRuntimeConfiguration,
 } from '../src/ai/runtime-provider-configuration';
@@ -42,16 +40,6 @@ function repository(
     activate: vi.fn(),
     pause: vi.fn(),
     getActiveForRuntime: vi.fn().mockResolvedValue(value),
-  };
-}
-
-function admissionRepository(
-  value: Awaited<ReturnType<AiProviderRuntimeAdmissionRepository['reserveActiveForRuntime']>>,
-) {
-  return {
-    ...repository(null),
-    reserveActiveForRuntime: vi.fn().mockResolvedValue(value),
-    settleRuntimeAdmission: vi.fn().mockResolvedValue(true),
   };
 }
 
@@ -305,58 +293,5 @@ describe('video AI runtime configuration', () => {
       code: 'CONFIGURATION_ERROR',
       message: 'active provider configuration required',
     });
-  });
-});
-
-describe('trend provider runtime admission', () => {
-  const admission = {
-    id: '33333333-3333-4333-8333-333333333333',
-    environment: 'DEVELOPMENT' as const,
-    provider: 'EXA' as const,
-    operationHash: 'a'.repeat(64),
-  };
-  const reserved = {
-    configuration: { ...active, provider: 'EXA' as const, model: null },
-    encryptedApiKey: 'sealed',
-    dailySpentUsdMicros: 0,
-    monthlySpentUsdMicros: 0,
-    monthlyUnknownCostEvents: 0,
-    admission,
-  };
-
-  it('returns the atomically admitted trend configuration', async () => {
-    const repo = admissionRepository(reserved);
-    await expect(
-      reserveTrendRuntimeConfiguration('trend:week:1', {
-        repository: repo,
-        preferredProviders: ['EXA'],
-        crypto: { encrypt: vi.fn(), decrypt: vi.fn().mockReturnValue('plain-exa-key') },
-      }),
-    ).resolves.toEqual({
-      provider: 'EXA',
-      apiKey: 'plain-exa-key',
-      model: null,
-      dailyBudgetUsdMicros: active.dailyBudgetUsdMicros,
-      monthlyBudgetUsdMicros: active.monthlyBudgetUsdMicros,
-      requestCostUsdMicros: active.requestCostUsdMicros,
-      admission,
-    });
-  });
-
-  it('settles without provider use when secret decryption fails after reservation', async () => {
-    const repo = admissionRepository(reserved);
-    await expect(
-      reserveTrendRuntimeConfiguration('trend:week:1', {
-        repository: repo,
-        preferredProviders: ['EXA'],
-        crypto: {
-          encrypt: vi.fn(),
-          decrypt: vi.fn(() => {
-            throw new Error('synthetic decrypt failure');
-          }),
-        },
-      }),
-    ).rejects.toThrow('synthetic decrypt failure');
-    expect(repo.settleRuntimeAdmission).toHaveBeenCalledWith(admission);
   });
 });
