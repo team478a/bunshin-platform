@@ -50,6 +50,7 @@ Node 24 / repository指定pnpmを利用。本番DB・実API・顧客データは
 - Application/Database `tsc --noEmit`、変更したコード/テストのeslint、`architecture:check`、境界テスト10件、変更ファイルのPrettier check、`git diff --check`：PASS。
 - Application/Database package build（Prisma生成・コンパイル）：PASS。Web buildはローカル未実行、通常CIで検証する。
 - 最終変更後の追加unit再実行：Application 28件、Database 26件 PASS。
+- 初回CIのdatabaseは189件PASS/追加1件FAIL。追加fixtureの状態が既定PRESENTEDなのに開始・完了日時を持ち、既存 `program_mission_assignments_status_time_check` に拒否された。fixtureをCOMPLETEDへ修正し、保存状態・完了日時のassertionを追加。DB制約、Migration、Reader、既存試験は変更しない。修正後の隔離DB検証はCI再実行で確認する。
 - スマートフォン・LINE・Web E2E：UI/HTTP変更なしのため今回は実行していない。
 
 テスト件数を利用開始可能性の代わりにしない。新SQL・実データ分布・本番の読取費用/速度・原本捕捉率は未確認。
