@@ -259,10 +259,7 @@ export async function createDirectProgramCheckout(
                   groupId: input.groupId,
                   sourceEnrollmentId: null,
                   programOfferingId: { in: offeringIds.map(({ id }) => id) },
-                  OR: [
-                    { status: 'CREATED' },
-                    { status: 'CHECKOUT_OPEN' },
-                  ],
+                  OR: [{ status: 'CREATED' }, { status: 'CHECKOUT_OPEN' }],
                 },
               }),
             ]);
