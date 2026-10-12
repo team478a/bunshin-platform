@@ -24,7 +24,7 @@
 - 既存認可transactionでACTIVE User/Workspace/Service/Membership/Program、受講期間とALL削除を再確認。通常PARTICIPANTのみ。予約されたPilotのプログラムやSERVICE_OWNERを新入口から迂回して利用させない。
 - Enrollment lock、期待版、Serializable transaction、操作キーと内容digestで競合・二重適用を拒否。古い操作の再送はその操作の同じ保存版を返す。AI呼出し・長い外部通信はない。
 - 内容の未知フィールドをApplication/HTTPで拒否。HTTPはsame-origin、JSON、16KB上限、UUID、厳格な入力検証。本人文をエラー応答やログへ出さず、private/no-store。
-- 既存の本人データ出力へ`LEARNING_REQUEST`として接続。ALL削除の版確認・削除件数に含め、削除後の再作成を拒否。仕事情報の保持期限（終了後90日）でも削除し、進捗の1年保持まで原文を残さない。保持previewの版に含める。
+- 既存の本人データ出力へ`LEARNING_REQUEST`として接続。ALL削除の版確認・削除件数に含め、削除後の再作成を拒否。仕事情報の保持期限（終了後90日）でも削除し、進捗の1年保持まで原文を残さない。保持previewの版に含める。アカウント退会は物理User削除ではないため、既存の退会purgeにも本人userIdの希望削除と件数記録を明示接続する。
 - 既存の出力上限を超える履歴を増やさないため、Enrollmentあたり最大`TRAINING_EXPORT_MAX_ROWS`版で新しい保存を止める。再送は既存版を返せる。上限時は運営による正式な本人データ整理が必要で、勝手に過去希望を破棄しない。
 
 ## 公開・移行・戻し方
@@ -39,8 +39,11 @@ Migration `20261013000000_personal_learning_requests`は追加テーブル・ind
 
 - Application contract 7件、Web HTTP/access 15件、既存export/deletion/retention unit 22件が成功。
 - 390×844合成E2Eは新規3件を含む5ファイル21件成功。希望保存、再訪の環境復元、競合時入力維持、送信失敗後の同じ操作キー再試行を確認。
-- 初回の対象DB結合4件成功。全体200件は195成功・5失敗。追加した保持fixtureの期間逆転1件を修正し、残る4件はタイムアウト（1件では終了後処理との競合も発生）。メモリ逼迫下で型検査/lintと並行したため、上限変更なしでDB全体を単独再実行中。
-- 初回型検査は保持件数の型定義位置で失敗し修正。初回lintはテストmockの不要asyncで失敗し修正。全体formatは途中で修正したaccessファイルで失敗し、再整形・対象check成功。最終の全体チェックは実行待ちでありPASSとは扱わない。
+- 初回の対象DB結合4件成功。全体200件は195成功・5失敗。追加した保持fixtureの期間逆転1件を修正し、残る4件はタイムアウト（1件では終了後処理との競合も発生）。メモリ逼迫下で型検査/lintと並行していた。上限変更なしで単独全体再実行は198成功・既存2件タイムアウト。その2件の単独再確認は1成功・既存export 1件タイムアウト。これをローカル全体PASSとは扱わない。
+- ソース`beb22fd3`のGitHub databaseはMigration/schema-ready/全200件成功（run `38269771185`）。後続で追加した退会削除1件はローカル実DBで成功（対象外200件）。退会の外部Auth削除や実受講者退会を実行した証拠ではない。後続headのCIは再確認する。
+- 初回型検査は保持件数の型定義位置で失敗し修正。修正後全体typecheckは25タスクとlearning-uiが成功。退会処理追加後にDatabaseの`tsc --noEmit`も成功。
+- 初回lintはテストmockの不要asyncで失敗し修正。`beb22fd3`のCIでは全package lintまで成功したがlearning-uiのJSON.parse由来のanyで失敗。E2E送信データをunknownから厳格に検査する形へ変更し、learning-ui lint/typecheckと新規3 E2Eを再実行して成功。途中のzod利用試行はroot依存がなくcollection/typecheckで失敗したため撤回し、新依存は追加していない。
+- 初回の全体formatは途中で修正したaccessファイルで失敗し、再整形・対象check成功。`beb22fd3`のCI全体formatは成功。最終headのCI・buildは確認中であり未完了をPASSとは記載しない。
 - 242番目のMigrationを、DB名・run ID・live marker確認済みの既存隔離DBへ適用成功。本番DBへの接続・適用なし。
 
 合成ブラウザーは実端末・通常登録画面・実Auth再ログイン・LINE送信・実AIの証拠ではない。最終確認結果はこの節を更新する。

@@ -27,6 +27,7 @@ import {
 import { PrismaPersonalLearningPersistenceRepository } from '../src/personal-learning-persistence';
 import { PrismaPersonalLearningRequestRepository } from '../src/personal-learning-request';
 import { PrismaTrainingRetentionExecutionRepository } from '../src/training-retention-execution';
+import { PrismaAccountDeletionPurgeRepository } from '../src/account-deletion-purge';
 import { PrismaPersonalLearningRouterBridge } from '../src/personal-learning-router';
 import { PrismaTrainingAnswerRepository } from '../src/training-answer';
 import { PrismaPersonalLearningAiCallRepository } from '../src/personal-learning-ai-call';
@@ -413,6 +414,45 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
       const result = await maintenance.execute({ ...input, revision: preview.preview.revision });
       expect(result.outcome).toBe('APPLIED');
       expect(await client.personalLearningRequest.count()).toBe(0);
+    });
+    it('free request: account deletion erases only the retiring learner requests', async () => {
+      const f = await fixture(false);
+      const other = await fixture(false);
+      const repo = new PrismaPersonalLearningRequestRepository(client, () => now);
+      for (const learner of [f, other])
+        await repo.saveRequest({
+          ...learner.actor,
+          content: requestContent,
+          expectedRevision: 0,
+          idempotencyKey: randomUUID(),
+        });
+      await client.user.update({ where: { id: f.scope.userId }, data: { status: 'SUSPENDED' } });
+      const request = await client.accountDeletionRequest.create({
+        data: {
+          userId: f.scope.userId,
+          scheduledFor: now,
+          status: 'PROCESSING',
+          leaseOwner: 'synthetic-worker',
+          leaseExpiresAt: new Date(now.getTime() + 60000),
+        },
+      });
+      const result = await new PrismaAccountDeletionPurgeRepository(
+        client,
+      ).completeAfterAuthDeletion({
+        userId: f.scope.userId,
+        requestId: request.id,
+        workerId: 'synthetic-worker',
+        now,
+      });
+      expect(result?.status).toBe('COMPLETED');
+      expect(
+        await client.personalLearningRequest.count({ where: { userId: f.scope.userId } }),
+      ).toBe(0);
+      expect(await repo.readRequest(other.actor)).toMatchObject({
+        originalText: requestContent.originalText,
+      });
+      await expect(repo.readRequest(f.actor)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+      await client.accountDeletionRequest.delete({ where: { id: request.id } });
     });
     it('free request: saving a new wish does not replace the executing plan', async () => {
       const f = await fixture();

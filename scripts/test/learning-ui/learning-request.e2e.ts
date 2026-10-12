@@ -1,14 +1,70 @@
 import { test } from '@e2e-dev/web';
 import { expect } from 'e2e';
 
+type RequestBody = {
+  expectedRevision: number;
+  idempotencyKey: string;
+  content: {
+    originalText: string;
+    deviceType: 'SMARTPHONE' | 'PC' | 'BOTH' | null;
+    toolDescription: string | null;
+    experienceDescription: string | null;
+    currentPosition: string | null;
+  };
+};
+function object(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value))
+    throw new Error('request object required');
+  return value as Record<string, unknown>;
+}
+function nullableText(value: unknown, max: number): string | null {
+  if (value === null) return null;
+  if (typeof value !== 'string' || !value.trim() || value.length > max)
+    throw new Error('invalid context text');
+  return value;
+}
+function parseRequest(body: string | null | undefined): RequestBody {
+  const row = object(JSON.parse(body ?? '{}') as unknown);
+  const c = object(row.content);
+  if (
+    Object.keys(row).sort().join(',') !== 'content,expectedRevision,idempotencyKey' ||
+    Object.keys(c).sort().join(',') !==
+      'currentPosition,deviceType,experienceDescription,originalText,toolDescription' ||
+    typeof row.expectedRevision !== 'number' ||
+    !Number.isSafeInteger(row.expectedRevision) ||
+    row.expectedRevision < 0 ||
+    typeof row.idempotencyKey !== 'string' ||
+    !/^[0-9a-f-]{36}$/i.test(row.idempotencyKey) ||
+    typeof c.originalText !== 'string' ||
+    !c.originalText.trim() ||
+    c.originalText.length > 2000 ||
+    (c.deviceType !== null &&
+      c.deviceType !== 'SMARTPHONE' &&
+      c.deviceType !== 'PC' &&
+      c.deviceType !== 'BOTH')
+  )
+    throw new Error('invalid or extra request fields');
+  return {
+    expectedRevision: row.expectedRevision,
+    idempotencyKey: row.idempotencyKey,
+    content: {
+      originalText: c.originalText,
+      deviceType: c.deviceType,
+      toolDescription: nullableText(c.toolDescription, 240),
+      experienceDescription: nullableText(c.experienceDescription, 300),
+      currentPosition: nullableText(c.currentPosition, 500),
+    },
+  };
+}
+
 test('free wish on smartphone: no inferred environment, preserve wish, save result', async ({
   app,
   screen,
   browser,
 }) => {
-  let captured: Record<string, unknown> | null = null;
+  let captured: RequestBody | null = null;
   await browser.route('**/api/services/**', async (route) => {
-    const payload = JSON.parse(route.request.postData ?? '{}');
+    const payload = parseRequest(route.request.postData);
     captured = payload;
     await route.fulfill({
       json: {
@@ -48,7 +104,7 @@ test('resume saved free wish: environment and position restored, no generation o
   };
   await browser.route('**/api/services/**', async (route) => {
     writes++;
-    captured = JSON.parse(route.request.postData ?? '{}');
+    captured = parseRequest(route.request.postData);
     await route.fulfill({
       status: 409,
       json: { error: { message: '保存内容が更新されています。再読込してから確認してください。' } },
@@ -82,7 +138,7 @@ test('network failure keeps input and reuses the same operation key', async ({
 }) => {
   const keys: string[] = [];
   await browser.route('**/api/services/**', async (route) => {
-    const payload = JSON.parse(route.request.postData ?? '{}');
+    const payload = parseRequest(route.request.postData);
     keys.push(payload.idempotencyKey);
     if (keys.length === 1) await route.abort();
     else
