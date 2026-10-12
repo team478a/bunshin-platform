@@ -198,6 +198,7 @@ describe('PrismaCommercialUsageService', () => {
           effectiveFrom: new Date('2026-10-01T00:00:00.000Z'),
           historyReadyAt: new Date('2026-09-30T00:00:00.000Z'),
           ruleVersion: 'OEM_REGISTRATION_BILLING_V2',
+          revisions: [],
         }),
       },
       oemRegistrationPeriod: { findMany: vi.fn().mockResolvedValue([registration]) },
@@ -275,6 +276,7 @@ describe('PrismaCommercialUsageService', () => {
           effectiveFrom: new Date('2026-10-01T00:00:00.000Z'),
           historyReadyAt: new Date('2026-09-30T00:00:00.000Z'),
           ruleVersion: 'OEM_REGISTRATION_BILLING_V2',
+          revisions: [],
         }),
       },
       oemRegistrationPeriod: {
@@ -324,8 +326,10 @@ describe('PrismaCommercialUsageService', () => {
         findMany: vi.fn().mockResolvedValue([
           {
             workspaceId,
+            effectiveFrom: new Date('2026-09-01T00:00:00.000Z'),
             historyReadyAt: new Date('2026-08-31T00:00:00.000Z'),
             ruleVersion: 'OEM_REGISTRATION_BILLING_V2',
+            revisions: [],
           },
         ]),
       },
@@ -368,8 +372,10 @@ describe('PrismaCommercialUsageService', () => {
         findMany: vi.fn().mockResolvedValue([
           {
             workspaceId,
+            effectiveFrom: new Date('2026-09-01T00:00:00.000Z'),
             historyReadyAt: new Date('2026-08-31T00:00:00.000Z'),
             ruleVersion: 'OEM_REGISTRATION_BILLING_V2',
+            revisions: [],
           },
         ]),
       },
@@ -405,8 +411,10 @@ describe('PrismaCommercialUsageService', () => {
         findMany: vi.fn().mockResolvedValue([
           {
             workspaceId,
+            effectiveFrom: new Date('2026-09-01T00:00:00.000Z'),
             historyReadyAt: new Date('2026-08-31T00:00:00.000Z'),
             ruleVersion: 'OEM_REGISTRATION_BILLING_V2',
+            revisions: [],
           },
         ]),
       },

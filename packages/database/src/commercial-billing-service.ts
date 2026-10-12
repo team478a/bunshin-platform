@@ -20,6 +20,7 @@ import {
   type TransitionTenantInvoiceInput,
 } from './commercial-billing-support';
 import { requireTrainingOemOffering } from './oem-training-offering';
+import { resolveOemBillingPolicy } from './oem-billing-policy-projection';
 
 export class PrismaCommercialBillingService {
   constructor(private readonly client: PrismaClient = prisma) {}
@@ -492,10 +493,8 @@ export class PrismaCommercialBillingService {
           });
         }
       }
-      const billingPolicy = await tx.oemBillingPolicy.findUnique({
-        where: { workspaceId: input.workspaceId },
-      });
-      if (billingPolicy) {
+      const billingPolicy = await resolveOemBillingPolicy(tx, input.workspaceId);
+      if (billingPolicy?.status === 'SCHEDULED') {
         await tx.$queryRaw(
           Prisma.sql`SELECT "id" FROM "workspaces" WHERE "id" = ${input.workspaceId}::uuid FOR UPDATE`,
         );

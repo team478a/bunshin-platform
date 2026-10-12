@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   correctRegistrationPeriod: vi.fn(),
   correctContractPeriod: vi.fn(),
   scheduleCutover: vi.fn(),
+  correctCutover: vi.fn(),
 }));
 vi.mock('server-only', () => ({}));
 vi.mock('@bunshin/config', () => ({
@@ -28,6 +29,7 @@ vi.mock('@bunshin/database', () => ({
     correctRegistrationPeriod = mocks.correctRegistrationPeriod;
     correctContractPeriod = mocks.correctContractPeriod;
     scheduleCutover = mocks.scheduleCutover;
+    correctCutover = mocks.correctCutover;
   },
 }));
 import { oemBillingPolicyResponse } from '../src/http/oem-billing-policy';
@@ -61,6 +63,7 @@ describe('OEM billing preparation API', () => {
     mocks.correctOfferingPeriod.mockResolvedValue({ id: 'corrected-offering' });
     mocks.correctRegistrationPeriod.mockResolvedValue({ id: 'corrected-registration' });
     mocks.correctContractPeriod.mockResolvedValue({ id: 'corrected-contract-period' });
+    mocks.correctCutover.mockResolvedValue({ id: 'corrected-cutover' });
   });
   it('uses the session actor and passes tenant identifiers to the reauthorizing service', async () => {
     expect((await oemBillingPolicyResponse(request())).status).toBe(200);
@@ -156,6 +159,29 @@ describe('OEM billing preparation API', () => {
     expect(registration.status).toBe(200);
     expect(mocks.correctRegistrationPeriod).toHaveBeenCalledWith(
       expect.objectContaining({ actorUserId: 'server-actor', expectedEndsAt: null }),
+    );
+  });
+  it('passes cutover cancellation and replacement with session actor CAS values', async () => {
+    const response = await oemBillingPolicyResponse(
+      request({
+        operation: 'CORRECT_CUTOVER',
+        workspaceId,
+        expectedEffectiveFrom: '2026-12-01T00:00:00.000Z',
+        revisedMonth: '2027-01',
+        reason: '承認済みの開始利用月を契約資料に基づいて訂正',
+        historyReviewed: true,
+        confirmed: true,
+      }),
+    );
+    expect(response.status).toBe(200);
+    expect(mocks.correctCutover).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceId,
+        actorUserId: 'server-actor',
+        expectedEffectiveFrom: new Date('2026-12-01T00:00:00.000Z'),
+        revisedEffectiveFrom: new Date('2027-01-01T00:00:00.000Z'),
+        historyReviewed: true,
+      }),
     );
   });
   it('registers a third service product without a product-name code change', async () => {

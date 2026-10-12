@@ -46,11 +46,21 @@ describe('OEM billing initial history and cutover admin UI', () => {
 
   it('keeps cutover fail-closed until offerings, contracts and registrations are ready', () => {
     expect(section).toContain('readiness.readyToSchedule');
-    expect(section).toContain('ここから変更・取消はできません');
+    expect(section).toContain('このcutoverは開始済みです');
     expect(service).toContain('missingOfferingCount === 0');
     expect(service).toContain('missingRegistrationCount === 0');
     expect(service).toContain('currentContractPeriods.length > 0');
     expect(service).toContain('billingPolicy === null');
+  });
+
+  it('offers append-only cutover cancellation and replacement before activation', () => {
+    expect(section).toContain('cutoverの元予約・訂正履歴を表示');
+    expect(section).toContain('空欄のまま保存すると取消');
+    expect(section).toContain('開始済みまたは確定済み月に影響する訂正は保存できません');
+    expect(page).toContain('.correctCutover({');
+    expect(service).toContain("action: input.revisedEffectiveFrom ? 'RESCHEDULED' : 'CANCELLED'");
+    expect(service).toContain("throw new Error('STARTED_CUTOVER_IMMUTABLE')");
+    expect(service).toContain('assertNoFinalizedCutoverImpact');
   });
 
   it('offers append-only contract correction without changing finalized billing months', () => {

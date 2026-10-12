@@ -133,6 +133,14 @@ const oemCutoverSchema = z.object({
   historyReviewed: z.literal('on'),
   confirmed: z.literal('on'),
 });
+const oemCutoverCorrectionSchema = z.object({
+  workspaceId: z.uuid(),
+  expectedEffectiveFrom: z.union([z.literal(''), z.string().datetime({ offset: true })]),
+  revisedMonth: z.union([z.literal(''), z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/)]),
+  reason: z.string().trim().min(10).max(1000),
+  historyReviewed: z.literal('on').optional(),
+  confirmed: z.literal('on'),
+});
 
 function optionalDate(value: string | undefined): Date | null {
   if (!value) return null;
@@ -556,6 +564,33 @@ async function scheduleOemCutover(formData: FormData) {
   redirect(`${path}?oemPrepared=cutover#oem-billing-preparation` as Route);
 }
 
+async function correctOemCutover(formData: FormData) {
+  'use server';
+  const input = oemCutoverCorrectionSchema.safeParse(Object.fromEntries(formData));
+  if (!input.success) redirect('/admin/organizations?error=invalid');
+  const { actor, db } = await requireSuperAdmin();
+  const path = `/admin/organizations/${input.data.workspaceId}/commercial` as Route;
+  try {
+    await new db.PrismaOemBillingAdminService().correctCutover({
+      workspaceId: input.data.workspaceId,
+      expectedEffectiveFrom: input.data.expectedEffectiveFrom
+        ? new Date(input.data.expectedEffectiveFrom)
+        : null,
+      revisedEffectiveFrom: input.data.revisedMonth
+        ? new Date(`${input.data.revisedMonth}-01T00:00:00.000Z`)
+        : null,
+      actorUserId: actor.userId,
+      reason: input.data.reason,
+      historyReviewed: input.data.historyReviewed === 'on',
+      confirmed: true,
+    });
+  } catch {
+    redirect(`${path}?error=oemPreparation#oem-billing-preparation` as Route);
+  }
+  revalidatePath(path);
+  redirect(`${path}?oemPrepared=cutover-correction#oem-billing-preparation` as Route);
+}
+
 export default async function OrganizationCommercialPage({
   params,
   searchParams,
@@ -643,6 +678,7 @@ export default async function OrganizationCommercialPage({
         reviewOemContract,
         correctOemContract,
         scheduleOemCutover,
+        correctOemCutover,
       }}
     />
   );

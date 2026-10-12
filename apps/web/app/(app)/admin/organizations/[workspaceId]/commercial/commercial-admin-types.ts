@@ -40,6 +40,7 @@ export type CommercialAdminActions = {
   reviewOemContract: CommercialServerAction;
   correctOemContract: CommercialServerAction;
   scheduleOemCutover: CommercialServerAction;
+  correctOemCutover: CommercialServerAction;
 };
 
 export type OemBillingPreparationDashboard = Awaited<
