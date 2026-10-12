@@ -90,6 +90,18 @@ export class PrismaTrainingParticipantProfileRepository {
           });
           if (!program || isPersonalLearningPilotProgram(program.settings))
             return { outcome: 'NOT_FOUND' } as const;
+          if (
+            await tx.programMissionAssignment.findFirst({
+              where: {
+                workspaceId: input.workspaceId,
+                groupId: input.groupId,
+                programEnrollmentId: enrollment.id,
+                targetResourceType: 'PERSONAL_LEARNING_PLAN',
+                status: { in: ['PRESENTED', 'STARTED'] },
+              },
+            })
+          )
+            return { outcome: 'CONFLICT' } as const;
           const profile = await tx.trainingParticipantProfile.upsert({
             where: { programEnrollmentId: enrollment.id },
             create: {

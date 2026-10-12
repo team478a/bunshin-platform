@@ -2,6 +2,7 @@
 import { createRoot } from 'react-dom/client';
 import { LearningCandidateCard } from '../../../apps/web/app/s/[serviceSlug]/programs/[programEnrollmentId]/learning-request/candidate-card';
 import { lessonWish, lessonCandidate } from './lesson-fixture';
+import { practiceFixture } from './practice-fixture';
 import { PersonalLearningPilotCard } from '../../../apps/web/app/s/[serviceSlug]/programs/[programEnrollmentId]/personal-learning-pilot-card';
 import { InternalPreparationCard } from '../../../apps/web/app/s/[serviceSlug]/manage/programs/personal-learning-preparation/internal-card';
 import { DefinitionReviewCard } from '../../../apps/web/app/s/[serviceSlug]/manage/programs/learning-definition-review/card';
@@ -11,7 +12,18 @@ import '../../../apps/web/app/styles.css';
 import { PersonalLearningRequestCard } from '../../../apps/web/app/s/[serviceSlug]/programs/[programEnrollmentId]/learning-request/card';
 
 createRoot(document.getElementById('root')!).render(
-  new URLSearchParams(window.location.search).has('lesson-candidate') ? (
+  new URLSearchParams(window.location.search).has('practice') ? (
+    <PersonalLearningRequestCard
+      endpoint="/api/synthetic/wish"
+      initial={lessonWish}
+      initialCandidate={practiceFixture.candidate}
+      practiceEndpoint="/api/synthetic/practice"
+      initialPractice={{
+        allowed: !new URLSearchParams(window.location.search).has('stopped'),
+        current: new URLSearchParams(window.location.search).has('resume') ? practiceFixture : null,
+      }}
+    />
+  ) : new URLSearchParams(window.location.search).has('lesson-candidate') ? (
     <LearningCandidateCard
       endpoint="/api/synthetic/lesson-candidate"
       request={lessonWish}

@@ -126,7 +126,8 @@ export class PrismaTrainingAnswerRepository {
           },
           select: { id: true, missionDefinitionKey: true, targetResourceType: true, status: true },
         });
-        if (!assignment) return { outcome: 'NOT_FOUND' } as const;
+        if (!assignment || assignment.missionDefinitionKey === 'PERSONAL_LEARNING_DYNAMIC_PRACTICE')
+          return { outcome: 'NOT_FOUND' } as const;
 
         const existingAnswer = await tx.trainingMissionAnswer.findUnique({
           where: { missionAssignmentId: assignment.id },
