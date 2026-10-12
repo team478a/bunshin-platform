@@ -87,6 +87,28 @@ const oemRegistrationSchema = z.object({
   reason: z.string().trim().min(10).max(1000),
   confirmed: z.literal('on'),
 });
+const oemRegistrationCorrectionSchema = z.object({
+  workspaceId: z.uuid(),
+  registrationPeriodId: z.uuid(),
+  expectedStartsAt: z.string().datetime({ offset: true }),
+  expectedEndsAt: z.union([z.literal(''), z.string().datetime({ offset: true })]),
+  revisedStartsAt: z.string().min(1),
+  revisedEndsAt: z.string().optional(),
+  reason: z.string().trim().min(10).max(1000),
+  confirmed: z.literal('on'),
+});
+const oemOfferingCorrectionSchema = z.object({
+  workspaceId: z.uuid(),
+  offeringPeriodId: z.uuid(),
+  expectedStartsAt: z.string().datetime({ offset: true }),
+  expectedEndsAt: z.union([z.literal(''), z.string().datetime({ offset: true })]),
+  expectedClassification: z.enum(['FREE', 'PAID', 'PAID_BUNDLE']),
+  revisedStartsAt: z.string().min(1),
+  revisedEndsAt: z.string().optional(),
+  revisedClassification: z.enum(['FREE', 'PAID', 'PAID_BUNDLE']),
+  reason: z.string().trim().min(10).max(1000),
+  confirmed: z.literal('on'),
+});
 const oemContractHistorySchema = z.object({
   workspaceId: z.uuid(),
   startsAt: z.string().min(1),
@@ -415,6 +437,58 @@ async function reviewOemRegistration(formData: FormData) {
   redirect(`${path}?oemPrepared=registration#oem-billing-preparation` as Route);
 }
 
+async function correctOemRegistration(formData: FormData) {
+  'use server';
+  const input = oemRegistrationCorrectionSchema.safeParse(Object.fromEntries(formData));
+  if (!input.success) redirect('/admin/organizations?error=invalid');
+  const { actor, db } = await requireSuperAdmin();
+  const path = `/admin/organizations/${input.data.workspaceId}/commercial` as Route;
+  try {
+    await new db.PrismaOemBillingAdminService().correctRegistrationPeriod({
+      workspaceId: input.data.workspaceId,
+      registrationPeriodId: input.data.registrationPeriodId,
+      expectedStartsAt: new Date(input.data.expectedStartsAt),
+      expectedEndsAt: input.data.expectedEndsAt ? new Date(input.data.expectedEndsAt) : null,
+      revisedStartsAt: requiredDate(input.data.revisedStartsAt),
+      revisedEndsAt: optionalDate(input.data.revisedEndsAt),
+      actorUserId: actor.userId,
+      reason: input.data.reason,
+      confirmed: true,
+    });
+  } catch {
+    redirect(`${path}?error=oemPreparation#oem-billing-preparation` as Route);
+  }
+  revalidatePath(path);
+  redirect(`${path}?oemPrepared=registration-correction#oem-billing-preparation` as Route);
+}
+
+async function correctOemOffering(formData: FormData) {
+  'use server';
+  const input = oemOfferingCorrectionSchema.safeParse(Object.fromEntries(formData));
+  if (!input.success) redirect('/admin/organizations?error=invalid');
+  const { actor, db } = await requireSuperAdmin();
+  const path = `/admin/organizations/${input.data.workspaceId}/commercial` as Route;
+  try {
+    await new db.PrismaOemBillingAdminService().correctOfferingPeriod({
+      workspaceId: input.data.workspaceId,
+      offeringPeriodId: input.data.offeringPeriodId,
+      expectedStartsAt: new Date(input.data.expectedStartsAt),
+      expectedEndsAt: input.data.expectedEndsAt ? new Date(input.data.expectedEndsAt) : null,
+      expectedClassification: input.data.expectedClassification,
+      revisedStartsAt: requiredDate(input.data.revisedStartsAt),
+      revisedEndsAt: optionalDate(input.data.revisedEndsAt),
+      revisedClassification: input.data.revisedClassification,
+      actorUserId: actor.userId,
+      reason: input.data.reason,
+      confirmed: true,
+    });
+  } catch {
+    redirect(`${path}?error=oemPreparation#oem-billing-preparation` as Route);
+  }
+  revalidatePath(path);
+  redirect(`${path}?oemPrepared=offering-correction#oem-billing-preparation` as Route);
+}
+
 async function reviewOemContract(formData: FormData) {
   'use server';
   const input = oemContractHistorySchema.safeParse(Object.fromEntries(formData));
@@ -563,7 +637,9 @@ export default async function OrganizationCommercialPage({
         sendInvoiceReminder,
         sendBillingRecipientTest,
         setOemOffering,
+        correctOemOffering,
         reviewOemRegistration,
+        correctOemRegistration,
         reviewOemContract,
         correctOemContract,
         scheduleOemCutover,

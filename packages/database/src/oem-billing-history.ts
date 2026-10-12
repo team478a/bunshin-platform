@@ -36,7 +36,12 @@ export async function recordOemRegistration(
   });
   if (!consented) throw new Error('CONSENTED_FORMAL_REGISTRATION_REQUIRED');
   const current = await tx.oemRegistrationPeriod.findFirst({
-    where: { workspaceId: membership.workspaceId, groupMembershipId: membership.id, endsAt: null },
+    where: {
+      workspaceId: membership.workspaceId,
+      groupMembershipId: membership.id,
+      endsAt: null,
+      supersededBy: { is: null },
+    },
   });
   if (current) return current;
   return tx.oemRegistrationPeriod.create({
@@ -68,6 +73,7 @@ export async function endOemRegistration(
       groupMembershipId: membership.id,
       endsAt: null,
       startsAt: { lte: now },
+      supersededBy: { is: null },
     },
     data: { endsAt: now, endedByUserId: actorUserId, endReason: reason },
   });
@@ -82,6 +88,7 @@ export async function oemBillingShadow(
     tx.oemRegistrationPeriod.findMany({
       where: {
         workspaceId,
+        supersededBy: { is: null },
         startsAt: { lt: period.end },
         OR: [{ endsAt: null }, { endsAt: { gte: period.start } }],
       },
@@ -89,6 +96,7 @@ export async function oemBillingShadow(
     tx.oemOfferingPeriod.findMany({
       where: {
         workspaceId,
+        supersededBy: { is: null },
         startsAt: { lt: period.end },
         OR: [{ endsAt: null }, { endsAt: { gt: period.start } }],
       },
@@ -173,7 +181,12 @@ export async function oemBillingShadow(
     select: { id: true },
   });
   const knownRegistrations = await tx.oemRegistrationPeriod.findMany({
-    where: { workspaceId, groupMembershipId: { in: participants.map((m) => m.id) }, endsAt: null },
+    where: {
+      workspaceId,
+      groupMembershipId: { in: participants.map((m) => m.id) },
+      endsAt: null,
+      supersededBy: { is: null },
+    },
     select: { groupMembershipId: true },
   });
   if (participants.some((m) => !knownRegistrations.some((r) => r.groupMembershipId === m.id)))

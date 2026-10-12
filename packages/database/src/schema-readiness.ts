@@ -1,1 +1,1 @@
-export const LATEST_DATABASE_MIGRATION = '20261012070000_oem_contract_period_supersession';
+export const LATEST_DATABASE_MIGRATION = '20261012080000_oem_operational_period_supersession';

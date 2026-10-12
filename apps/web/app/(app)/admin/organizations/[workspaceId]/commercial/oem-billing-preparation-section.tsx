@@ -34,13 +34,17 @@ export function OemBillingPreparationSection({
   const preparedMessage =
     query.oemPrepared === 'offering'
       ? '提供区分の履歴を保存しました。'
-      : query.oemPrepared === 'registration'
-        ? '正式登録の履歴を保存しました。'
-        : query.oemPrepared === 'contract'
-          ? 'OEM契約期間の履歴を保存しました。'
-          : query.oemPrepared === 'cutover'
-            ? '将来月のcutoverを予約しました。'
-            : null;
+      : query.oemPrepared === 'offering-correction'
+        ? '提供期間の訂正版を保存しました。'
+        : query.oemPrepared === 'registration'
+          ? '正式登録の履歴を保存しました。'
+          : query.oemPrepared === 'registration-correction'
+            ? '正式登録期間の訂正版を保存しました。'
+            : query.oemPrepared === 'contract'
+              ? 'OEM契約期間の履歴を保存しました。'
+              : query.oemPrepared === 'cutover'
+                ? '将来月のcutoverを予約しました。'
+                : null;
 
   return (
     <section className="settings-card" id="oem-billing-preparation">
@@ -159,6 +163,110 @@ export function OemBillingPreparationSection({
                 ) : (
                   <p className="notice notice--danger">提供区分の履歴がありません。</p>
                 )}
+                {service.offeringHistory.length > 0 ? (
+                  <details>
+                    <summary>提供期間履歴を確認・訂正</summary>
+                    <div className="settings-stack">
+                      {service.offeringHistory.map((period) => (
+                        <div className="settings-stack" key={period.id}>
+                          <p>
+                            {period.classification} / {dateTime(period.startsAt)} から{' '}
+                            {period.endsAt ? dateTime(period.endsAt) : '継続中'}
+                            {period.supersedesId ? '（訂正版）' : ''}
+                          </p>
+                          <form className="form-stack" action={actions.correctOemOffering}>
+                            <input type="hidden" name="workspaceId" value={workspaceId} />
+                            <input type="hidden" name="offeringPeriodId" value={period.id} />
+                            <input
+                              type="hidden"
+                              name="expectedStartsAt"
+                              value={period.startsAt.toISOString()}
+                            />
+                            <input
+                              type="hidden"
+                              name="expectedEndsAt"
+                              value={period.endsAt?.toISOString() ?? ''}
+                            />
+                            <input
+                              type="hidden"
+                              name="expectedClassification"
+                              value={period.classification}
+                            />
+                            <div className="form-grid form-grid--two">
+                              <label className="field">
+                                <span className="field__label">訂正後の開始</span>
+                                <input
+                                  className="field__control"
+                                  type="datetime-local"
+                                  name="revisedStartsAt"
+                                  defaultValue={dateTimeInput(period.startsAt)}
+                                  required
+                                />
+                              </label>
+                              <label className="field">
+                                <span className="field__label">訂正後の終了</span>
+                                <input
+                                  className="field__control"
+                                  type="datetime-local"
+                                  name="revisedEndsAt"
+                                  defaultValue={dateTimeInput(period.endsAt)}
+                                />
+                              </label>
+                            </div>
+                            <label className="field">
+                              <span className="field__label">訂正後の提供区分</span>
+                              <select
+                                className="field__control"
+                                name="revisedClassification"
+                                defaultValue={period.classification}
+                                required
+                              >
+                                <option value="FREE">FREE</option>
+                                <option value="PAID">PAID</option>
+                                <option value="PAID_BUNDLE">PAID_BUNDLE</option>
+                              </select>
+                            </label>
+                            <label className="field">
+                              <span className="field__label">訂正根拠</span>
+                              <textarea
+                                className="field__control"
+                                name="reason"
+                                minLength={10}
+                                maxLength={1000}
+                                required
+                              />
+                            </label>
+                            <label className="field field--checkbox">
+                              <input type="checkbox" name="confirmed" required />
+                              <span>
+                                元履歴を残して訂正版を追加します。確定済み請求月に影響する訂正は保存できません
+                              </span>
+                            </label>
+                            <button className="button button--secondary" type="submit">
+                              提供期間の訂正版を保存
+                            </button>
+                          </form>
+                        </div>
+                      ))}
+                    </div>
+                  </details>
+                ) : null}
+                {service.supersededOfferingHistory.length > 0 ? (
+                  <details>
+                    <summary>訂正前の提供期間を表示</summary>
+                    <ul className="summary-list">
+                      {service.supersededOfferingHistory.map((period) => (
+                        <li key={period.id}>
+                          <span>
+                            {period.classification} / {dateTime(period.startsAt)} から{' '}
+                            {period.endsAt ? dateTime(period.endsAt) : '継続中'}
+                          </span>
+                          <strong>訂正前・参照専用</strong>
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                ) : null}
                 <form className="form-stack" action={actions.setOemOffering}>
                   <input type="hidden" name="workspaceId" value={workspaceId} />
                   <input type="hidden" name="groupId" value={service.groupId} />
@@ -404,6 +512,92 @@ export function OemBillingPreparationSection({
                     </button>
                   </form>
                 )}
+                {participant.registrationHistory.length > 0 ? (
+                  <details>
+                    <summary>正式登録期間を確認・訂正</summary>
+                    <div className="settings-stack">
+                      {participant.registrationHistory.map((period) => (
+                        <div className="settings-stack" key={period.id}>
+                          <p>
+                            {dateTime(period.startsAt)} から{' '}
+                            {period.endsAt ? dateTime(period.endsAt) : '継続中'}
+                            {period.supersedesId ? '（訂正版）' : ''}
+                          </p>
+                          <form className="form-stack" action={actions.correctOemRegistration}>
+                            <input type="hidden" name="workspaceId" value={workspaceId} />
+                            <input type="hidden" name="registrationPeriodId" value={period.id} />
+                            <input
+                              type="hidden"
+                              name="expectedStartsAt"
+                              value={period.startsAt.toISOString()}
+                            />
+                            <input
+                              type="hidden"
+                              name="expectedEndsAt"
+                              value={period.endsAt?.toISOString() ?? ''}
+                            />
+                            <div className="form-grid form-grid--two">
+                              <label className="field">
+                                <span className="field__label">訂正後の登録開始</span>
+                                <input
+                                  className="field__control"
+                                  type="datetime-local"
+                                  name="revisedStartsAt"
+                                  defaultValue={dateTimeInput(period.startsAt)}
+                                  required
+                                />
+                              </label>
+                              <label className="field">
+                                <span className="field__label">訂正後の登録終了</span>
+                                <input
+                                  className="field__control"
+                                  type="datetime-local"
+                                  name="revisedEndsAt"
+                                  defaultValue={dateTimeInput(period.endsAt)}
+                                />
+                              </label>
+                            </div>
+                            <label className="field">
+                              <span className="field__label">訂正根拠</span>
+                              <textarea
+                                className="field__control"
+                                name="reason"
+                                minLength={10}
+                                maxLength={1000}
+                                required
+                              />
+                            </label>
+                            <label className="field field--checkbox">
+                              <input type="checkbox" name="confirmed" required />
+                              <span>
+                                元履歴を残して訂正版を追加します。確定済み請求月に影響する訂正は保存できません
+                              </span>
+                            </label>
+                            <button className="button button--secondary" type="submit">
+                              正式登録期間の訂正版を保存
+                            </button>
+                          </form>
+                        </div>
+                      ))}
+                    </div>
+                  </details>
+                ) : null}
+                {participant.supersededRegistrationHistory.length > 0 ? (
+                  <details>
+                    <summary>訂正前の正式登録期間を表示</summary>
+                    <ul className="summary-list">
+                      {participant.supersededRegistrationHistory.map((period) => (
+                        <li key={period.id}>
+                          <span>
+                            {dateTime(period.startsAt)} から{' '}
+                            {period.endsAt ? dateTime(period.endsAt) : '継続中'}
+                          </span>
+                          <strong>訂正前・参照専用</strong>
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                ) : null}
               </div>
             );
           })

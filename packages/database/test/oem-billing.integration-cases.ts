@@ -584,6 +584,161 @@ export function registerOemBillingIntegrationCases(client: PrismaClient) {
       );
     });
 
+    it('appends offering and registration corrections while preserving billing evidence', async () => {
+      const actor = await client.user.create({
+        data: { displayName: 'Synthetic operational history reviewer' },
+      });
+      await client.platformAdmin.create({
+        data: { userId: actor.id, role: 'SUPER_ADMIN', status: 'ACTIVE' },
+      });
+      const user = await client.user.create({ data: { displayName: 'Corrected learner' } });
+      const workspace = await client.workspace.create({
+        data: { name: `operational-correction-${randomUUID()}`, type: 'ORGANIZATION' },
+      });
+      const group = await client.group.create({
+        data: { workspaceId: workspace.id, name: 'Corrected service' },
+      });
+      await client.serviceConfiguration.create({
+        data: {
+          workspaceId: workspace.id,
+          groupId: group.id,
+          slug: `corrected-${randomUUID()}`,
+          displayName: 'Corrected OEM service',
+          description: 'synthetic',
+          operatorName: 'synthetic',
+          createdByUserId: actor.id,
+          updatedByUserId: actor.id,
+        },
+      });
+      const membership = await client.groupMembership.create({
+        data: {
+          workspaceId: workspace.id,
+          groupId: group.id,
+          userId: user.id,
+          status: 'ACTIVE',
+          consentedAt: new Date('2026-09-01T00:00:00.000Z'),
+        },
+      });
+      const product = await client.commercialServiceProduct.findUniqueOrThrow({
+        where: { key: 'HASSY' },
+        include: { policyVersions: { where: { version: 1 } } },
+      });
+      const originalOffering = await client.oemOfferingPeriod.create({
+        data: {
+          workspaceId: workspace.id,
+          groupId: group.id,
+          productId: product.id,
+          productPolicyVersionId: product.policyVersions[0]!.id,
+          productPolicy: product.key,
+          classification: 'PAID',
+          startsAt: new Date('2026-09-01T00:00:00.000Z'),
+          actorUserId: actor.id,
+          reason: 'initial reviewed offering evidence',
+        },
+      });
+      const originalRegistration = await client.oemRegistrationPeriod.create({
+        data: {
+          workspaceId: workspace.id,
+          groupId: group.id,
+          groupMembershipId: membership.id,
+          userId: user.id,
+          startsAt: new Date('2026-09-02T00:00:00.000Z'),
+          registeredByUserId: actor.id,
+          reason: 'initial reviewed registration evidence',
+        },
+      });
+      const service = new PrismaOemBillingAdminService(client);
+      const offeringInput = {
+        workspaceId: workspace.id,
+        offeringPeriodId: originalOffering.id,
+        expectedStartsAt: originalOffering.startsAt,
+        expectedEndsAt: originalOffering.endsAt,
+        expectedClassification: 'PAID' as const,
+        revisedStartsAt: new Date('2026-09-01T12:00:00.000Z'),
+        revisedEndsAt: null,
+        revisedClassification: 'PAID_BUNDLE' as const,
+        actorUserId: actor.id,
+        reason: 'signed evidence corrects offering classification and start',
+        confirmed: true,
+      };
+      const registrationInput = {
+        workspaceId: workspace.id,
+        registrationPeriodId: originalRegistration.id,
+        expectedStartsAt: originalRegistration.startsAt,
+        expectedEndsAt: originalRegistration.endsAt,
+        revisedStartsAt: new Date('2026-09-03T00:00:00.000Z'),
+        revisedEndsAt: null,
+        actorUserId: actor.id,
+        reason: 'approval evidence corrects formal registration start',
+        confirmed: true,
+      };
+      const correctedOffering = await service.correctOfferingPeriod(offeringInput);
+      const correctedRegistration = await service.correctRegistrationPeriod(registrationInput);
+      expect((await service.correctOfferingPeriod(offeringInput)).id).toBe(correctedOffering.id);
+      expect((await service.correctRegistrationPeriod(registrationInput)).id).toBe(
+        correctedRegistration.id,
+      );
+      expect(correctedOffering).toMatchObject({
+        supersedesId: originalOffering.id,
+        classification: 'PAID_BUNDLE',
+      });
+      expect(correctedRegistration).toMatchObject({
+        supersedesId: originalRegistration.id,
+        startsAt: registrationInput.revisedStartsAt,
+      });
+
+      const preparation = await service.preparationDashboard({
+        workspaceId: workspace.id,
+        actorUserId: actor.id,
+      });
+      expect(preparation.services[0]?.offeringHistory.map((period) => period.id)).toEqual([
+        correctedOffering.id,
+      ]);
+      expect(preparation.services[0]?.supersededOfferingHistory).toHaveLength(1);
+      expect(preparation.participants[0]?.registrationHistory.map((period) => period.id)).toEqual([
+        correctedRegistration.id,
+      ]);
+      expect(preparation.participants[0]?.supersededRegistrationHistory).toHaveLength(1);
+      expect(
+        await client.commercialBillingAudit.count({
+          where: { workspaceId: workspace.id, action: 'CORRECTED' },
+        }),
+      ).toBe(2);
+
+      await client.tenantMonthlyUsage.create({
+        data: {
+          workspaceId: workspace.id,
+          periodStart: new Date('2026-09-01T00:00:00.000Z'),
+          periodEnd: new Date('2026-10-01T00:00:00.000Z'),
+          mau: 0,
+          pricingTierKey: 'synthetic-zero',
+          calculatedPriceYen: 0,
+          pricingVersion: 'synthetic-operational-correction',
+          status: 'FINALIZED',
+          finalizedAt: new Date('2026-10-01T00:00:00.000Z'),
+        },
+      });
+      await expect(
+        service.correctOfferingPeriod({
+          ...offeringInput,
+          offeringPeriodId: correctedOffering.id,
+          expectedStartsAt: correctedOffering.startsAt,
+          expectedClassification: 'PAID_BUNDLE',
+          revisedClassification: 'PAID',
+          reason: 'attempted offering correction across finalized month',
+        }),
+      ).rejects.toThrow('FINALIZED_BILLING_PERIOD_IMMUTABLE');
+      await expect(
+        service.correctRegistrationPeriod({
+          ...registrationInput,
+          registrationPeriodId: correctedRegistration.id,
+          expectedStartsAt: correctedRegistration.startsAt,
+          revisedStartsAt: new Date('2026-09-04T00:00:00.000Z'),
+          reason: 'attempted registration correction across finalized month',
+        }),
+      ).rejects.toThrow('FINALIZED_BILLING_PERIOD_IMMUTABLE');
+    });
+
     it('pricing edits use CAS, publish conflicts serialize, cancellation permits replacement but not historical mutation', async () => {
       const actor = await client.user.create({
         data: { displayName: 'Synthetic pricing SUPER_ADMIN' },

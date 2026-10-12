@@ -5,6 +5,8 @@ const mocks = vi.hoisted(() => ({
   admin: vi.fn(),
   registerProductPolicy: vi.fn(),
   setOffering: vi.fn(),
+  correctOfferingPeriod: vi.fn(),
+  correctRegistrationPeriod: vi.fn(),
   correctContractPeriod: vi.fn(),
   scheduleCutover: vi.fn(),
 }));
@@ -22,6 +24,8 @@ vi.mock('@bunshin/database', () => ({
   PrismaOemBillingAdminService: class {
     registerProductPolicy = mocks.registerProductPolicy;
     setOffering = mocks.setOffering;
+    correctOfferingPeriod = mocks.correctOfferingPeriod;
+    correctRegistrationPeriod = mocks.correctRegistrationPeriod;
     correctContractPeriod = mocks.correctContractPeriod;
     scheduleCutover = mocks.scheduleCutover;
   },
@@ -54,6 +58,8 @@ describe('OEM billing preparation API', () => {
     mocks.admin.mockResolvedValue({ role: 'SUPER_ADMIN' });
     mocks.registerProductPolicy.mockResolvedValue({ id: 'third-service' });
     mocks.setOffering.mockResolvedValue({ id: 'reviewed-offering' });
+    mocks.correctOfferingPeriod.mockResolvedValue({ id: 'corrected-offering' });
+    mocks.correctRegistrationPeriod.mockResolvedValue({ id: 'corrected-registration' });
     mocks.correctContractPeriod.mockResolvedValue({ id: 'corrected-contract-period' });
   });
   it('uses the session actor and passes tenant identifiers to the reauthorizing service', async () => {
@@ -111,6 +117,45 @@ describe('OEM billing preparation API', () => {
         expectedEndsAt: null,
         confirmed: true,
       }),
+    );
+  });
+  it('passes offering and registration corrections with session actor CAS values', async () => {
+    const offering = await oemBillingPolicyResponse(
+      request({
+        operation: 'CORRECT_OFFERING',
+        workspaceId,
+        offeringPeriodId: '33333333-3333-4333-8333-333333333333',
+        expectedStartsAt: '2026-09-01T00:00:00.000Z',
+        expectedEndsAt: null,
+        expectedClassification: 'PAID',
+        revisedStartsAt: '2026-09-02T00:00:00.000Z',
+        revisedEndsAt: null,
+        revisedClassification: 'PAID_BUNDLE',
+        reason: '契約資料に基づく提供区分と開始日時の訂正',
+        confirmed: true,
+      }),
+    );
+    expect(offering.status).toBe(200);
+    expect(mocks.correctOfferingPeriod).toHaveBeenCalledWith(
+      expect.objectContaining({ actorUserId: 'server-actor', expectedClassification: 'PAID' }),
+    );
+
+    const registration = await oemBillingPolicyResponse(
+      request({
+        operation: 'CORRECT_REGISTRATION',
+        workspaceId,
+        registrationPeriodId: '44444444-4444-4444-8444-444444444444',
+        expectedStartsAt: '2026-09-01T00:00:00.000Z',
+        expectedEndsAt: null,
+        revisedStartsAt: '2026-09-03T00:00:00.000Z',
+        revisedEndsAt: null,
+        reason: '参加承認資料に基づく正式登録日時の訂正',
+        confirmed: true,
+      }),
+    );
+    expect(registration.status).toBe(200);
+    expect(mocks.correctRegistrationPeriod).toHaveBeenCalledWith(
+      expect.objectContaining({ actorUserId: 'server-actor', expectedEndsAt: null }),
     );
   });
   it('registers a third service product without a product-name code change', async () => {

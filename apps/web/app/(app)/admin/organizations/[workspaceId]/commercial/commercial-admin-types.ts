@@ -34,7 +34,9 @@ export type CommercialAdminActions = {
   sendInvoiceReminder: CommercialServerAction;
   sendBillingRecipientTest: CommercialServerAction;
   setOemOffering: CommercialServerAction;
+  correctOemOffering: CommercialServerAction;
   reviewOemRegistration: CommercialServerAction;
+  correctOemRegistration: CommercialServerAction;
   reviewOemContract: CommercialServerAction;
   correctOemContract: CommercialServerAction;
   scheduleOemCutover: CommercialServerAction;

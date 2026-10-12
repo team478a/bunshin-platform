@@ -53,6 +53,30 @@ const schema = z.discriminatedUnion('operation', [
   z
     .object({
       ...common,
+      operation: z.literal('CORRECT_OFFERING'),
+      offeringPeriodId: z.string().uuid(),
+      expectedStartsAt: date,
+      expectedEndsAt: date.nullable(),
+      expectedClassification: z.enum(['FREE', 'PAID', 'PAID_BUNDLE']),
+      revisedStartsAt: date,
+      revisedEndsAt: date.nullable(),
+      revisedClassification: z.enum(['FREE', 'PAID', 'PAID_BUNDLE']),
+    })
+    .strict(),
+  z
+    .object({
+      ...common,
+      operation: z.literal('CORRECT_REGISTRATION'),
+      registrationPeriodId: z.string().uuid(),
+      expectedStartsAt: date,
+      expectedEndsAt: date.nullable(),
+      revisedStartsAt: date,
+      revisedEndsAt: date.nullable(),
+    })
+    .strict(),
+  z
+    .object({
+      ...common,
       operation: z.literal('REVIEW_CONTRACT'),
       startsAt: date,
       endsAt: date.nullable(),
@@ -120,26 +144,32 @@ export async function oemBillingPolicyResponse(request: Request) {
               classification: value.classification,
               expectedCurrentId: value.expectedCurrentId,
             })
-          : value.operation === 'REVIEW_REGISTRATION'
-            ? await service.reviewInitialRegistration({
+          : value.operation === 'CORRECT_OFFERING'
+            ? await service.correctOfferingPeriod({
                 workspaceId: value.workspaceId,
+                offeringPeriodId: value.offeringPeriodId,
+                expectedStartsAt: new Date(value.expectedStartsAt),
+                expectedEndsAt: value.expectedEndsAt ? new Date(value.expectedEndsAt) : null,
+                expectedClassification: value.expectedClassification,
+                revisedStartsAt: new Date(value.revisedStartsAt),
+                revisedEndsAt: value.revisedEndsAt ? new Date(value.revisedEndsAt) : null,
+                revisedClassification: value.revisedClassification,
                 actorUserId,
                 reason: value.reason,
-                groupMembershipId: value.groupMembershipId,
-                registeredAt: new Date(value.registeredAt),
+                confirmed: value.confirmed,
               })
-            : value.operation === 'REVIEW_CONTRACT'
-              ? await service.reviewContractPeriod({
+            : value.operation === 'REVIEW_REGISTRATION'
+              ? await service.reviewInitialRegistration({
                   workspaceId: value.workspaceId,
                   actorUserId,
                   reason: value.reason,
-                  startsAt: new Date(value.startsAt),
-                  endsAt: value.endsAt ? new Date(value.endsAt) : null,
+                  groupMembershipId: value.groupMembershipId,
+                  registeredAt: new Date(value.registeredAt),
                 })
-              : value.operation === 'CORRECT_CONTRACT'
-                ? await service.correctContractPeriod({
+              : value.operation === 'CORRECT_REGISTRATION'
+                ? await service.correctRegistrationPeriod({
                     workspaceId: value.workspaceId,
-                    contractPeriodId: value.contractPeriodId,
+                    registrationPeriodId: value.registrationPeriodId,
                     expectedStartsAt: new Date(value.expectedStartsAt),
                     expectedEndsAt: value.expectedEndsAt ? new Date(value.expectedEndsAt) : null,
                     revisedStartsAt: new Date(value.revisedStartsAt),
@@ -148,13 +178,35 @@ export async function oemBillingPolicyResponse(request: Request) {
                     reason: value.reason,
                     confirmed: value.confirmed,
                   })
-                : await service.scheduleCutover({
-                    workspaceId: value.workspaceId,
-                    actorUserId,
-                    reason: value.reason,
-                    effectiveFrom: new Date(`${value.month}-01T00:00:00.000Z`),
-                    historyReviewed: value.historyReviewed,
-                  });
+                : value.operation === 'REVIEW_CONTRACT'
+                  ? await service.reviewContractPeriod({
+                      workspaceId: value.workspaceId,
+                      actorUserId,
+                      reason: value.reason,
+                      startsAt: new Date(value.startsAt),
+                      endsAt: value.endsAt ? new Date(value.endsAt) : null,
+                    })
+                  : value.operation === 'CORRECT_CONTRACT'
+                    ? await service.correctContractPeriod({
+                        workspaceId: value.workspaceId,
+                        contractPeriodId: value.contractPeriodId,
+                        expectedStartsAt: new Date(value.expectedStartsAt),
+                        expectedEndsAt: value.expectedEndsAt
+                          ? new Date(value.expectedEndsAt)
+                          : null,
+                        revisedStartsAt: new Date(value.revisedStartsAt),
+                        revisedEndsAt: value.revisedEndsAt ? new Date(value.revisedEndsAt) : null,
+                        actorUserId,
+                        reason: value.reason,
+                        confirmed: value.confirmed,
+                      })
+                    : await service.scheduleCutover({
+                        workspaceId: value.workspaceId,
+                        actorUserId,
+                        reason: value.reason,
+                        effectiveFrom: new Date(`${value.month}-01T00:00:00.000Z`),
+                        historyReviewed: value.historyReviewed,
+                      });
     return Response.json(
       { data: result, requestId },
       { headers: { 'cache-control': 'private, no-store' } },

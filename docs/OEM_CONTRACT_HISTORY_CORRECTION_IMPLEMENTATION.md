@@ -52,7 +52,7 @@
 
 ## 5. 未解決事項
 
-- Offering期間と正式登録期間の訂正は未実装。
+- Offering期間と正式登録期間の訂正は`docs/OEM_OPERATIONAL_HISTORY_CORRECTION_IMPLEMENTATION.md`で実装した。
 - 誤った初期cutoverの取消・差替えは未実装。
 - 確定済み月へ影響する訂正は自動で行わない。請求取消、会計、再確定を含む別の人間承認Runbookが必要。
 - 本番Migration、Deploy、履歴訂正、月次確定、請求発行、実課金は実施しない。
