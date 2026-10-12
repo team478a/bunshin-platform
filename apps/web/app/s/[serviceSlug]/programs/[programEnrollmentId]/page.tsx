@@ -24,6 +24,7 @@ import { PersonalLearningPilotCard } from './personal-learning-pilot-card';
 import { resolvePersonalLearningPilot } from '../../../../../src/services/personal-learning-pilot-access';
 import { readPersonalLearningProfilePreparation } from '../../../../../src/services/personal-learning-profile-preparation-page';
 import { PersonalLearningProfilePreparationCard } from './personal-learning-profile-preparation-card';
+import { personalLearningRequestEnabled } from '../../../../../src/services/personal-learning-request-access';
 
 export const dynamic = 'force-dynamic';
 
@@ -233,6 +234,11 @@ export default async function ProgramParticipantPage({
           <header className="service-entry__header">
             <p className="eyebrow">{trainingState.programName}</p>
             <h1>今日のAIトレーニング</h1>
+            {personalLearningRequestEnabled() && (
+              <a href={`/s/${serviceSlug}/programs/${programEnrollmentId}/learning-request`}>
+                自由な学習希望を保存（検証中）
+              </a>
+            )}
             <p>今の仕事と経験に合わせて、今日必要な課題を一つだけお届けします。</p>
           </header>
           <AiTrainingCard

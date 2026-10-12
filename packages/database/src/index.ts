@@ -327,3 +327,4 @@ export {
   admitPaidPersonalLearningRegistration,
   type PersonalLearningPublicRegistrationResult,
 } from './personal-learning-public-registration';
+export * from './personal-learning-request';

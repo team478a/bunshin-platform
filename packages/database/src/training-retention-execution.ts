@@ -187,6 +187,13 @@ export class PrismaTrainingRetentionExecutionRepository implements TrainingReten
             });
           }
           if (work || progress) {
+            await tx.personalLearningRequest.deleteMany({
+              where: {
+                ...personal,
+                groupMembershipId: owned.membership.id,
+                id: { in: snapshot.rows.learningRequests.map((row) => row.id) },
+              },
+            });
             await tx.programEnrollment.updateMany({
               where: {
                 workspaceId: input.workspaceId,

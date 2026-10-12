@@ -16,6 +16,7 @@ function fixture() {
       findFirst: vi.fn().mockResolvedValue(null),
     },
     personalLearningGoalConfirmation: { findMany: vi.fn().mockResolvedValue([]) },
+    personalLearningRequest: { findMany: vi.fn().mockResolvedValue([]) },
     personalLearningPlanRevision: { findMany: vi.fn().mockResolvedValue([]) },
     groupMembership: {
       findFirst: vi.fn().mockResolvedValue({ id: 'membership-a', serviceRole: 'PARTICIPANT' }),

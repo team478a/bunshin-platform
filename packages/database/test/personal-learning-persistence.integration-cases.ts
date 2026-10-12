@@ -25,6 +25,8 @@ import {
   getAiTrainingMissionQuality,
 } from '@bunshin/capability-training';
 import { PrismaPersonalLearningPersistenceRepository } from '../src/personal-learning-persistence';
+import { PrismaPersonalLearningRequestRepository } from '../src/personal-learning-request';
+import { PrismaTrainingRetentionExecutionRepository } from '../src/training-retention-execution';
 import { PrismaPersonalLearningRouterBridge } from '../src/personal-learning-router';
 import { PrismaTrainingAnswerRepository } from '../src/training-answer';
 import { PrismaPersonalLearningAiCallRepository } from '../src/personal-learning-ai-call';
@@ -210,6 +212,232 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
       }
       return { repo, actor, confirm, scope, enrollment, owner, group, member, plan };
     }
+    const requestContent = {
+      originalText: ' AIで自分のお店のホームページを作りたい\n',
+      deviceType: null,
+      toolDescription: null,
+      experienceDescription: null,
+      currentPosition: null,
+    } as const;
+    it('free request: profile absent, exact wish preserved, replay and revision CAS', async () => {
+      const f = await fixture(false);
+      const repo = new PrismaPersonalLearningRequestRepository(client, () => now);
+      const input = {
+        ...f.actor,
+        content: requestContent,
+        expectedRevision: 0,
+        idempotencyKey: randomUUID(),
+      };
+      expect(await repo.readRequest(f.actor)).toBeNull();
+      const first = await repo.saveRequest(input);
+      expect(first).toMatchObject({ ...requestContent, revision: 1 });
+      const second = await repo.saveRequest({
+        ...input,
+        idempotencyKey: randomUUID(),
+        expectedRevision: 1,
+        content: {
+          ...requestContent,
+          originalText: 'AIで自分の発表を練習したい',
+          deviceType: 'PC',
+          experienceDescription: '既に資料は作れます',
+        },
+      });
+      expect(second.revision).toBe(2);
+      expect(await repo.saveRequest(input)).toEqual(first);
+      expect(await repo.readRequest(f.actor)).toEqual(second);
+      await expect(
+        repo.saveRequest({ ...input, content: { ...requestContent, originalText: 'changed' } }),
+      ).rejects.toMatchObject({ code: 'CONFLICT' });
+      await expect(
+        repo.saveRequest({ ...input, idempotencyKey: randomUUID() }),
+      ).rejects.toMatchObject({ code: 'CONFLICT' });
+      expect(await client.trainingParticipantProfile.count()).toBe(0);
+      expect(await client.programMemberGoal.count()).toBe(0);
+      expect(await client.programMissionAssignment.count()).toBe(0);
+    });
+    it('free request: other user, service and expired enrollment denied; RLS enabled', async () => {
+      const f = await fixture(false);
+      const repo = new PrismaPersonalLearningRequestRepository(client, () => now);
+      await repo.saveRequest({
+        ...f.actor,
+        content: requestContent,
+        expectedRevision: 0,
+        idempotencyKey: randomUUID(),
+      });
+      for (const scope of [
+        { ...f.scope, userId: f.owner.id },
+        { ...f.scope, groupId: randomUUID() },
+        { ...f.scope, programEnrollmentId: randomUUID() },
+      ]) {
+        await expect(repo.readRequest({ scope, actorUserId: scope.userId })).rejects.toMatchObject({
+          code: 'NOT_FOUND',
+        });
+      }
+      const rls = await client.$queryRaw<
+        { enabled: boolean }[]
+      >`SELECT relrowsecurity AS enabled FROM pg_class WHERE relname='personal_learning_requests'`;
+      expect(rls).toEqual([{ enabled: true }]);
+      await client.programEnrollment.update({
+        where: { id: f.enrollment.id },
+        data: { endsAt: new Date(now.getTime() - 1) },
+      });
+      await expect(repo.readRequest(f.actor)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    });
+    it('free request: concurrent saves apply once and reserved Pilot is rejected', async () => {
+      const f = await fixture(false);
+      const repo = new PrismaPersonalLearningRequestRepository(client, () => now);
+      const results = await Promise.allSettled(
+        [1, 2].map(() =>
+          repo.saveRequest({
+            ...f.actor,
+            content: requestContent,
+            expectedRevision: 0,
+            idempotencyKey: randomUUID(),
+          }),
+        ),
+      );
+      expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+      expect(await client.personalLearningRequest.count()).toBe(1);
+      const program = await client.serviceProgram.findFirstOrThrow({
+        where: { workspaceId: f.scope.workspaceId, groupId: f.scope.groupId },
+      });
+      await client.serviceProgram.update({
+        where: { id: program.id },
+        data: {
+          settings: {
+            moduleKey: 'AI_TRAINING_V1',
+            personalLearningPilot: { enabled: true, enrollmentIds: [f.enrollment.id] },
+          },
+        },
+      });
+      await expect(repo.readRequest(f.actor)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    });
+    it('free request: export, ALL deletion CAS and blocked recreation', async () => {
+      const f = await fixture(false);
+      const repo = new PrismaPersonalLearningRequestRepository(client, () => now);
+      await repo.saveRequest({
+        ...f.actor,
+        content: requestContent,
+        expectedRevision: 0,
+        idempotencyKey: randomUUID(),
+      });
+      const input = {
+        workspaceId: f.scope.workspaceId,
+        groupId: f.scope.groupId,
+        programEnrollmentId: f.enrollment.id,
+        actorUserId: f.actor.actorUserId,
+      };
+      const exported = await new PrismaTrainingPersonalDataExportRepository(client).read(input);
+      expect(exported.outcome).toBe('FOUND');
+      if (exported.outcome !== 'FOUND') throw new Error('export missing');
+      expect(exported.data.personalLearning).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            kind: 'LEARNING_REQUEST',
+            originalText: requestContent.originalText,
+          }),
+        ]),
+      );
+      const deletion = new PrismaTrainingPersonalDataDeletionRepository(client);
+      const preview = await deletion.preview({ ...input, target: { kind: 'ALL' } });
+      if (preview.outcome !== 'PREVIEW') throw new Error('preview missing');
+      expect(preview.preview.counts.learningRequests).toBe(1);
+      await repo.saveRequest({
+        ...f.actor,
+        content: requestContent,
+        expectedRevision: 1,
+        idempotencyKey: randomUUID(),
+      });
+      expect(
+        (
+          await deletion.delete({
+            ...input,
+            target: { kind: 'ALL' },
+            revision: preview.preview.revision,
+            now,
+          })
+        ).outcome,
+      ).toBe('CONFLICT');
+      const updated = await deletion.preview({ ...input, target: { kind: 'ALL' } });
+      if (updated.outcome !== 'PREVIEW') throw new Error('preview missing');
+      expect(
+        (
+          await deletion.delete({
+            ...input,
+            target: { kind: 'ALL' },
+            revision: updated.preview.revision,
+            now,
+          })
+        ).outcome,
+      ).toBe('DELETED');
+      expect(await client.personalLearningRequest.count()).toBe(0);
+      await expect(
+        repo.saveRequest({
+          ...f.actor,
+          content: requestContent,
+          expectedRevision: 0,
+          idempotencyKey: randomUUID(),
+        }),
+      ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    });
+    it('free request: work retention includes requests before progress purge', async () => {
+      const f = await fixture(false);
+      await new PrismaPersonalLearningRequestRepository(client, () => now).saveRequest({
+        ...f.actor,
+        content: requestContent,
+        expectedRevision: 0,
+        idempotencyKey: randomUUID(),
+      });
+      await client.platformAdmin.create({
+        data: { userId: f.owner.id, role: 'SUPER_ADMIN', status: 'ACTIVE' },
+      });
+      await client.programEnrollment.update({
+        where: { id: f.enrollment.id },
+        data: {
+          status: 'EXPIRED',
+          startsAt: new Date(now.getTime() - 101 * 86400000),
+          endsAt: new Date(now.getTime() - 100 * 86400000),
+        },
+      });
+      const maintenance = new PrismaTrainingRetentionExecutionRepository(client);
+      const input = {
+        workspaceId: f.scope.workspaceId,
+        groupId: f.scope.groupId,
+        programEnrollmentId: f.enrollment.id,
+        operatorUserId: f.owner.id,
+        now,
+      };
+      const preview = await maintenance.preview(input);
+      if (preview.outcome !== 'PREVIEW') throw new Error('retention preview missing');
+      expect(preview.preview.counts.learningRequests).toBe(1);
+      const result = await maintenance.execute({ ...input, revision: preview.preview.revision });
+      expect(result.outcome).toBe('APPLIED');
+      expect(await client.personalLearningRequest.count()).toBe(0);
+    });
+    it('free request: saving a new wish does not replace the executing plan', async () => {
+      const f = await fixture();
+      const plan = await f.plan();
+      await f.repo.savePlan({
+        ...f.actor,
+        plan,
+        expectedRevision: 0,
+        idempotencyKey: randomUUID(),
+      });
+      await f.repo.confirmPlan({
+        ...f.actor,
+        planId: plan.planId,
+        expectedRevision: 1,
+        idempotencyKey: randomUUID(),
+      });
+      const before = await f.repo.read(f.actor);
+      await new PrismaPersonalLearningRequestRepository(client, () => now).saveRequest({
+        ...f.actor,
+        content: requestContent,
+        expectedRevision: 0,
+        idempotencyKey: randomUUID(),
+      });
+      expect(await f.repo.read(f.actor)).toEqual(before);
+    });
     async function creationFixture() {
       const f = await fixture(false);
       const group = await client.group.create({
