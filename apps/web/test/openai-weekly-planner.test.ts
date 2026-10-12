@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { weeklySocialGoalPlanningProfile } from '@bunshin/capability-social';
 import { OpenAIWeeklyPlanner } from '../src/providers/openai-weekly-planner';
+import { providerTransportCases } from './provider-transport-cases';
 
 const input = {
   weekStartDate: '2026-08-17',
@@ -146,6 +147,10 @@ describe('OpenAIWeeklyPlanner', () => {
       );
     await expect(
       new OpenAIWeeklyPlanner({ apiKey: 'secret', fetch: fetcher }).generate(input),
-    ).rejects.toMatchObject({ code: 'INTERNAL_ERROR' });
+    ).rejects.toMatchObject({ code: 'AI_PROVIDER_UNAVAILABLE' });
   });
+
+  providerTransportCases((fetcher) =>
+    new OpenAIWeeklyPlanner({ apiKey: 'synthetic-key', fetch: fetcher }).generate(input),
+  );
 });

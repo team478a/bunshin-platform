@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { OpenAIStrategyGenerator } from '../src/providers/openai-strategy-generator';
+import { providerTransportCases } from './provider-transport-cases';
 
 const input = {
   wizardTopic: 'SNS運用',
@@ -77,6 +78,10 @@ describe('OpenAIStrategyGenerator', () => {
       );
     await expect(
       new OpenAIStrategyGenerator({ apiKey: 'secret', fetch: fetcher }).generate(input),
-    ).rejects.toMatchObject({ code: 'INTERNAL_ERROR' });
+    ).rejects.toMatchObject({ code: 'AI_PROVIDER_UNAVAILABLE' });
   });
+
+  providerTransportCases((fetcher) =>
+    new OpenAIStrategyGenerator({ apiKey: 'synthetic-key', fetch: fetcher }).generate(input),
+  );
 });

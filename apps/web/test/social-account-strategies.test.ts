@@ -1,4 +1,5 @@
 import type { SocialAccountStrategy } from '@bunshin/capability-social';
+import { ApplicationError } from '@bunshin/shared';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 const now = new Date('2026-08-20T00:00:00Z');
 const strategy: SocialAccountStrategy = {
@@ -268,6 +269,33 @@ describe('Account Strategy HTTP', () => {
     expect(response.status).toBe(404);
     expect(state.generate).not.toHaveBeenCalled();
     expect(state.grantedKnowledge).not.toHaveBeenCalled();
+  });
+  it('does not persist a Strategy after sanitized Provider failure', async () => {
+    state.generate.mockRejectedValue(
+      new ApplicationError('AI_PROVIDER_UNAVAILABLE', 'mission provider failed', {
+        httpStatus: 503,
+      }),
+    );
+    const response = await generateSocialAccountStrategyResponse(
+      request(`${base}/generate`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          socialProfileId: strategy.socialProfileId,
+          platform: 'THREADS',
+          goal: 'FOLLOWERS',
+          availableMinutes: 5,
+          destinationType: 'PROFILE',
+          wizardTopic: '合成題材',
+          wizardAudience: '合成対象',
+        }),
+      }),
+      'workspace-1',
+      'bunshin-1',
+    );
+    expect(response.status).toBe(503);
+    expect(state.create).not.toHaveBeenCalled();
+    expect(state.generate).toHaveBeenCalledTimes(1);
   });
   it('rejects unauthenticated and unknown fields', async () => {
     state.user = null;

@@ -4,7 +4,7 @@ import type {
   StrategyGeneratorPort,
   StrategyGeneratorOutput,
 } from '@bunshin/capability-social';
-import { ApplicationError } from '@bunshin/shared';
+import { missionTransportFailure, readMissionProviderResponse } from './mission-provider-response';
 
 export const SOCIAL_ACCOUNT_STRATEGY_PROMPT_VERSION = 'social-account-strategy-v1';
 const schema = {
@@ -27,56 +27,42 @@ const schema = {
     'postingPolicy',
   ],
 } as const;
-type OpenAIResponse = {
-  output?: Array<{ content?: Array<{ type?: string; text?: string }> }>;
-  usage?: { input_tokens?: number; output_tokens?: number };
-  model?: string;
-  error?: { code?: string; message?: string };
-};
+const PROVIDER_TIMEOUT_MS = 55_000;
 export class OpenAIStrategyGenerator implements StrategyGeneratorPort {
   constructor(private readonly options: { apiKey: string; model?: string; fetch?: typeof fetch }) {}
   async generate(input: StrategyGeneratorInput) {
     const started = Date.now();
     const model = this.options.model ?? 'gpt-5.2';
-    const response = await (this.options.fetch ?? fetch)('https://api.openai.com/v1/responses', {
-      method: 'POST',
-      headers: {
-        authorization: `Bearer ${this.options.apiKey}`,
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify({
-        model,
-        store: false,
-        input: [
-          {
-            role: 'system',
-            content:
-              'あなたは投稿パートナーのSNS戦略担当です。提供された対象BunshinとGrant済みKnowledgeだけを使い、実行可能で誇張のない日本語戦略を作成してください。',
-          },
-          { role: 'user', content: JSON.stringify(input) },
-        ],
-        text: {
-          format: { type: 'json_schema', name: 'social_account_strategy', strict: true, schema },
-        },
-      }),
-    });
-    const value = (await response.json()) as OpenAIResponse;
-    if (!response.ok)
-      throw new ApplicationError('INTERNAL_ERROR', 'strategy provider failed', value.error);
-    const text = value.output
-      ?.flatMap((item) => item.content ?? [])
-      .find((item) => item.type === 'output_text')?.text;
-    if (!text) throw new ApplicationError('INTERNAL_ERROR', 'strategy provider returned no output');
-    let output: StrategyGeneratorOutput;
+    let response: Response;
     try {
-      output = JSON.parse(text) as StrategyGeneratorOutput;
+      response = await (this.options.fetch ?? fetch)('https://api.openai.com/v1/responses', {
+        signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${this.options.apiKey}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          model,
+          store: false,
+          input: [
+            {
+              role: 'system',
+              content:
+                'あなたは投稿パートナーのSNS戦略担当です。提供された対象BunshinとGrant済みKnowledgeだけを使い、実行可能で誇張のない日本語戦略を作成してください。',
+            },
+            { role: 'user', content: JSON.stringify(input) },
+          ],
+          text: {
+            format: { type: 'json_schema', name: 'social_account_strategy', strict: true, schema },
+          },
+        }),
+      });
     } catch (error) {
-      throw new ApplicationError(
-        'INTERNAL_ERROR',
-        'strategy provider returned invalid output',
-        error,
-      );
+      throw missionTransportFailure(error);
     }
+    const { value, output: parsed } = await readMissionProviderResponse(response);
+    const output = parsed as StrategyGeneratorOutput;
     return {
       output,
       model: value.model ?? model,
