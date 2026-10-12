@@ -88,6 +88,10 @@ describe('WeeklyPlanGenerationService', () => {
   const listPlans = vi.fn();
   const listPlanningContexts = vi.fn();
   const loadRecentPerformance = vi.fn();
+  const reserveProviderRuntime = vi.fn();
+  const settleProviderRuntime = vi.fn();
+  const recordUsageStrict = vi.fn();
+  const runWithQuota = vi.fn();
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -122,6 +126,15 @@ describe('WeeklyPlanGenerationService', () => {
       feedback: { good: 2, neutral: 0, bad: 1 },
       formats: [{ format: 'TEXT', postedCount: 3, goodFeedbackCount: 2, badFeedbackCount: 1 }],
     });
+    reserveProviderRuntime.mockResolvedValue({
+      planner: { generate },
+      model: 'gpt-test',
+      requestCostUsdMicros: 250,
+      admission: null,
+    });
+    settleProviderRuntime.mockResolvedValue(undefined);
+    recordUsageStrict.mockResolvedValue(undefined);
+    runWithQuota.mockImplementation((input: { generate(): Promise<unknown> }) => input.generate());
   });
 
   const service = () =>
@@ -146,13 +159,14 @@ describe('WeeklyPlanGenerationService', () => {
           .fn()
           .mockResolvedValue([{ type: 'SKILL', title: '経験', content: '10年の経験' }]),
       } as never,
-      planner: { generate },
       campaigns: { listPlanningContexts } as never,
-      providerModel: 'gpt-test',
+      reserveProviderRuntime,
+      settleProviderRuntime,
       resolveTimezone: vi.fn().mockResolvedValue('Asia/Tokyo'),
       loadRecentPerformance,
       recordUsage,
-      runWithQuota: (input) => input.generate(),
+      recordUsageStrict,
+      runWithQuota: runWithQuota as never,
       now: () => now.valueOf(),
     });
 
@@ -200,7 +214,12 @@ describe('WeeklyPlanGenerationService', () => {
       expect.objectContaining({ ...scope, goal: 'FOLLOWERS' }),
     );
     expect(recordUsage).toHaveBeenCalledWith(
-      expect.objectContaining({ status: 'SUCCESS', idempotencyKey: 'job:job-1:weekly-plan' }),
+      expect.objectContaining({
+        status: 'SUCCESS',
+        estimatedCostUsdMicros: 250,
+        pricingVersion: 'admin-request-cost-v1',
+        idempotencyKey: 'job:job-1:weekly-plan',
+      }),
     );
   });
 
@@ -252,6 +271,7 @@ describe('WeeklyPlanGenerationService', () => {
     expect(result.plan).toEqual(generatedPlan);
     expect(generate).not.toHaveBeenCalled();
     expect(recordUsage).not.toHaveBeenCalled();
+    expect(reserveProviderRuntime).not.toHaveBeenCalled();
   });
 
   it('keeps the manual API conflict behavior for an existing week', async () => {
@@ -326,6 +346,125 @@ describe('WeeklyPlanGenerationService', () => {
       }),
     );
     expect(JSON.stringify(recordUsage.mock.calls)).not.toContain('provider secret response');
+  });
+
+  it('settles an atomic OpenAI admission only after strict usage persistence', async () => {
+    const admission = {
+      id: '33333333-3333-4333-8333-333333333333',
+      environment: 'DEVELOPMENT',
+      provider: 'OPENAI',
+      operationHash: 'a'.repeat(64),
+    } as const;
+    reserveProviderRuntime.mockResolvedValue({
+      planner: { generate },
+      model: 'gpt-test',
+      requestCostUsdMicros: 250,
+      admission,
+    });
+
+    await service().execute({
+      ...scope,
+      weekStartDate: '2026-08-24',
+      usageIdempotencyKey: 'job:admitted:weekly-plan',
+      existingPolicy: 'RETURN',
+    });
+
+    expect(recordUsageStrict).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'SUCCESS', estimatedCostUsdMicros: 250 }),
+    );
+    expect(settleProviderRuntime).toHaveBeenCalledWith(admission);
+    expect(recordUsageStrict.mock.invocationCallOrder[0]).toBeLessThan(
+      settleProviderRuntime.mock.invocationCallOrder[0] ?? 0,
+    );
+  });
+
+  it('records zero cost and settles when organization quota rejects before Provider use', async () => {
+    const admission = {
+      id: '33333333-3333-4333-8333-333333333333',
+      environment: 'DEVELOPMENT',
+      provider: 'OPENAI',
+      operationHash: 'b'.repeat(64),
+    } as const;
+    reserveProviderRuntime.mockResolvedValue({
+      planner: { generate },
+      model: 'gpt-test',
+      requestCostUsdMicros: 250,
+      admission,
+    });
+    runWithQuota.mockRejectedValue(new Error('synthetic quota rejection'));
+
+    await expect(
+      service().execute({
+        ...scope,
+        weekStartDate: '2026-08-24',
+        usageIdempotencyKey: 'job:quota:weekly-plan',
+        existingPolicy: 'RETURN',
+      }),
+    ).rejects.toThrow('synthetic quota rejection');
+
+    expect(generate).not.toHaveBeenCalled();
+    expect(recordUsageStrict).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'FAILED', estimatedCostUsdMicros: 0 }),
+    );
+    expect(settleProviderRuntime).toHaveBeenCalledWith(admission);
+  });
+
+  it('records zero cost when local generation validation fails before the planner adapter', async () => {
+    const admission = {
+      id: '33333333-3333-4333-8333-333333333333',
+      environment: 'DEVELOPMENT',
+      provider: 'OPENAI',
+      operationHash: 'd'.repeat(64),
+    } as const;
+    reserveProviderRuntime.mockResolvedValue({
+      planner: { generate },
+      model: 'gpt-test',
+      requestCostUsdMicros: 250,
+      admission,
+    });
+
+    await expect(
+      service().execute({
+        ...scope,
+        weekStartDate: 'invalid-date',
+        usageIdempotencyKey: 'job:local-validation:weekly-plan',
+        existingPolicy: 'RETURN',
+      }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+
+    expect(generate).not.toHaveBeenCalled();
+    expect(recordUsageStrict).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'FAILED', estimatedCostUsdMicros: 0 }),
+    );
+    expect(settleProviderRuntime).toHaveBeenCalledWith(admission);
+  });
+
+  it('leaves the admission open when strict usage persistence fails', async () => {
+    const admission = {
+      id: '33333333-3333-4333-8333-333333333333',
+      environment: 'DEVELOPMENT',
+      provider: 'OPENAI',
+      operationHash: 'c'.repeat(64),
+    } as const;
+    reserveProviderRuntime.mockResolvedValue({
+      planner: { generate },
+      model: 'gpt-test',
+      requestCostUsdMicros: 250,
+      admission,
+    });
+    recordUsageStrict.mockRejectedValue(new Error('synthetic usage persistence failure'));
+
+    await expect(
+      service().execute({
+        ...scope,
+        weekStartDate: '2026-08-24',
+        usageIdempotencyKey: 'job:persistence:weekly-plan',
+        existingPolicy: 'RETURN',
+      }),
+    ).rejects.toThrow('synthetic usage persistence failure');
+
+    expect(recordUsageStrict).toHaveBeenCalledOnce();
+    expect(settleProviderRuntime).not.toHaveBeenCalled();
   });
 });
 

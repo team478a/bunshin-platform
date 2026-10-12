@@ -36,9 +36,11 @@ vi.mock('@bunshin/database', () => {
   };
 });
 vi.mock('../src/ai/runtime-provider-configuration', () => ({
-  resolveOpenAiRuntimeConfiguration: fake.runtime,
+  reserveOpenAiRuntimeConfiguration: fake.runtime,
 }));
-vi.mock('../src/observability/ai-usage', () => ({ recordAiUsageSafely: fake.usage }));
+vi.mock('../src/ai/openai-cost-admission', () => ({
+  recordOpenAiUsageAndSettle: fake.usage,
+}));
 vi.mock('../src/observability/personal-learning-ai-call', () => ({
   preparePersonalLearningAiCall: fake.pilotPrepare,
 }));
@@ -214,7 +216,10 @@ describe('training evaluation period boundaries', () => {
       retryable: false,
     });
     expect(fake.evaluate).not.toHaveBeenCalled();
-    expect(fake.usage).not.toHaveBeenCalled();
+    expect(fake.usage).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ status: 'FAILED', estimatedCostUsdMicros: 0 }),
+    );
     expect(fake.save).not.toHaveBeenCalled();
   });
   it('rejects a late evaluation after the lock without saving scores or progress', async () => {
@@ -255,6 +260,9 @@ describe('training evaluation period boundaries', () => {
       fake.enrollment.mock.invocationCallOrder[2]!,
     );
     expect(fake.save).not.toHaveBeenCalled();
-    expect(fake.usage).toHaveBeenCalledWith(expect.objectContaining({ status: 'SUCCESS' }));
+    expect(fake.usage).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ status: 'SUCCESS' }),
+    );
   });
 });

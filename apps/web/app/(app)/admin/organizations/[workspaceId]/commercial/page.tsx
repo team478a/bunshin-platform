@@ -52,13 +52,106 @@ const customQuoteSchema = z.object({
   amountYen: z.coerce.number().int().positive().max(1_000_000_000),
   notes: z.string().trim().max(1000).optional(),
 });
+const setupFeeSchema = z.object({
+  workspaceId: z.uuid(),
+  productId: z.uuid(),
+  chargeKey: z
+    .string()
+    .trim()
+    .regex(/^[A-Z0-9][A-Z0-9_-]{2,79}$/),
+  amountYen: z.coerce.number().int().positive().max(1_000_000_000),
+  description: z.string().trim().min(1).max(200),
+  agreementReference: z.string().trim().min(1).max(200),
+  agreedAt: z.iso.date(),
+  reason: z.string().trim().min(10).max(1000),
+  confirmed: z.literal('on'),
+});
 const reminderSchema = z.object({ workspaceId: z.uuid(), invoiceId: z.uuid() });
 const recipientTestSchema = z.object({ workspaceId: z.uuid() });
+const oemOfferingSchema = z.object({
+  workspaceId: z.uuid(),
+  groupId: z.uuid(),
+  productPolicy: z
+    .string()
+    .trim()
+    .regex(/^[A-Z][A-Z0-9_]{1,39}$/),
+  classification: z.enum(['FREE', 'PAID', 'PAID_BUNDLE']),
+  expectedCurrentId: z.union([z.literal(''), z.uuid()]),
+  reason: z.string().trim().min(10).max(1000),
+  confirmed: z.literal('on'),
+});
+const oemRegistrationSchema = z.object({
+  workspaceId: z.uuid(),
+  groupMembershipId: z.uuid(),
+  registeredAt: z.string().min(1),
+  reason: z.string().trim().min(10).max(1000),
+  confirmed: z.literal('on'),
+});
+const oemRegistrationCorrectionSchema = z.object({
+  workspaceId: z.uuid(),
+  registrationPeriodId: z.uuid(),
+  expectedStartsAt: z.string().datetime({ offset: true }),
+  expectedEndsAt: z.union([z.literal(''), z.string().datetime({ offset: true })]),
+  revisedStartsAt: z.string().min(1),
+  revisedEndsAt: z.string().optional(),
+  reason: z.string().trim().min(10).max(1000),
+  confirmed: z.literal('on'),
+});
+const oemOfferingCorrectionSchema = z.object({
+  workspaceId: z.uuid(),
+  offeringPeriodId: z.uuid(),
+  expectedStartsAt: z.string().datetime({ offset: true }),
+  expectedEndsAt: z.union([z.literal(''), z.string().datetime({ offset: true })]),
+  expectedClassification: z.enum(['FREE', 'PAID', 'PAID_BUNDLE']),
+  revisedStartsAt: z.string().min(1),
+  revisedEndsAt: z.string().optional(),
+  revisedClassification: z.enum(['FREE', 'PAID', 'PAID_BUNDLE']),
+  reason: z.string().trim().min(10).max(1000),
+  confirmed: z.literal('on'),
+});
+const oemContractHistorySchema = z.object({
+  workspaceId: z.uuid(),
+  startsAt: z.string().min(1),
+  endsAt: z.string().optional(),
+  reason: z.string().trim().min(10).max(1000),
+  confirmed: z.literal('on'),
+});
+const oemContractCorrectionSchema = z.object({
+  workspaceId: z.uuid(),
+  contractPeriodId: z.uuid(),
+  expectedStartsAt: z.string().datetime({ offset: true }),
+  expectedEndsAt: z.union([z.literal(''), z.string().datetime({ offset: true })]),
+  revisedStartsAt: z.string().min(1),
+  revisedEndsAt: z.string().optional(),
+  reason: z.string().trim().min(10).max(1000),
+  confirmed: z.literal('on'),
+});
+const oemCutoverSchema = z.object({
+  workspaceId: z.uuid(),
+  month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/),
+  reason: z.string().trim().min(10).max(1000),
+  historyReviewed: z.literal('on'),
+  confirmed: z.literal('on'),
+});
+const oemCutoverCorrectionSchema = z.object({
+  workspaceId: z.uuid(),
+  expectedEffectiveFrom: z.union([z.literal(''), z.string().datetime({ offset: true })]),
+  revisedMonth: z.union([z.literal(''), z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/)]),
+  reason: z.string().trim().min(10).max(1000),
+  historyReviewed: z.literal('on').optional(),
+  confirmed: z.literal('on'),
+});
 
 function optionalDate(value: string | undefined): Date | null {
   if (!value) return null;
   const date = new Date(`${value}:00+09:00`);
   if (Number.isNaN(date.getTime())) throw new Error('invalid date');
+  return date;
+}
+
+function requiredDate(value: string): Date {
+  const date = optionalDate(value);
+  if (!date) throw new Error('invalid date');
   return date;
 }
 
@@ -160,6 +253,31 @@ async function prepareCustomQuoteInvoice(formData: FormData) {
   redirect(`/admin/organizations/${input.data.workspaceId}/commercial?customQuoteSaved=1`);
 }
 
+async function prepareSetupFeeInvoice(formData: FormData) {
+  'use server';
+  const input = setupFeeSchema.safeParse(Object.fromEntries(formData));
+  if (!input.success) redirect('/admin/organizations?error=invalid');
+  const { actor, db } = await requireSuperAdmin();
+  try {
+    await new db.PrismaCommercialBillingService().prepareSetupFeeInvoice({
+      workspaceId: input.data.workspaceId,
+      productId: input.data.productId,
+      actorUserId: actor.userId,
+      chargeKey: input.data.chargeKey,
+      amountYen: input.data.amountYen,
+      description: input.data.description,
+      agreementReference: input.data.agreementReference,
+      agreedAt: new Date(`${input.data.agreedAt}T00:00:00.000Z`),
+      reason: input.data.reason,
+    });
+  } catch {
+    redirect(`/admin/organizations/${input.data.workspaceId}/commercial?error=setupFee`);
+  }
+  revalidatePath(`/admin/organizations/${input.data.workspaceId}/commercial`);
+  revalidatePath('/admin/commercial-billing');
+  redirect(`/admin/organizations/${input.data.workspaceId}/commercial?setupFeeSaved=1`);
+}
+
 async function sendInvoiceReminder(formData: FormData) {
   'use server';
   const input = reminderSchema.safeParse(Object.fromEntries(formData));
@@ -176,6 +294,7 @@ async function sendInvoiceReminder(formData: FormData) {
     },
     select: {
       id: true,
+      kind: true,
       invoiceNumber: true,
       amountYen: true,
       dueAt: true,
@@ -196,6 +315,7 @@ async function sendInvoiceReminder(formData: FormData) {
       apiKey: new AesGcmAdminEmailSecretCrypto().decrypt(configuration.encryptedApiKey),
       from: configuration.configuration.fromEmail,
       to: invoice.contract.billingEmail,
+      invoiceKind: invoice.kind,
       invoiceNumber: invoice.invoiceNumber,
       billingName: invoice.contract.billingName,
       amountYen: invoice.amountYen,
@@ -281,6 +401,196 @@ async function sendBillingRecipientTest(formData: FormData) {
   redirect(`${returnPath}?recipientTestSent=1` as Route);
 }
 
+async function setOemOffering(formData: FormData) {
+  'use server';
+  const input = oemOfferingSchema.safeParse(Object.fromEntries(formData));
+  if (!input.success) redirect('/admin/organizations?error=invalid');
+  const { actor, db } = await requireSuperAdmin();
+  const path = `/admin/organizations/${input.data.workspaceId}/commercial` as Route;
+  try {
+    await new db.PrismaOemBillingAdminService().setOffering({
+      workspaceId: input.data.workspaceId,
+      groupId: input.data.groupId,
+      productPolicy: input.data.productPolicy,
+      classification: input.data.classification,
+      expectedCurrentId: input.data.expectedCurrentId || null,
+      actorUserId: actor.userId,
+      reason: input.data.reason,
+    });
+  } catch {
+    redirect(`${path}?error=oemPreparation#oem-billing-preparation` as Route);
+  }
+  revalidatePath(path);
+  redirect(`${path}?oemPrepared=offering#oem-billing-preparation` as Route);
+}
+
+async function reviewOemRegistration(formData: FormData) {
+  'use server';
+  const input = oemRegistrationSchema.safeParse(Object.fromEntries(formData));
+  if (!input.success) redirect('/admin/organizations?error=invalid');
+  const { actor, db } = await requireSuperAdmin();
+  const path = `/admin/organizations/${input.data.workspaceId}/commercial` as Route;
+  try {
+    await new db.PrismaOemBillingAdminService().reviewInitialRegistration({
+      workspaceId: input.data.workspaceId,
+      groupMembershipId: input.data.groupMembershipId,
+      registeredAt: requiredDate(input.data.registeredAt),
+      actorUserId: actor.userId,
+      reason: input.data.reason,
+    });
+  } catch {
+    redirect(`${path}?error=oemPreparation#oem-billing-preparation` as Route);
+  }
+  revalidatePath(path);
+  redirect(`${path}?oemPrepared=registration#oem-billing-preparation` as Route);
+}
+
+async function correctOemRegistration(formData: FormData) {
+  'use server';
+  const input = oemRegistrationCorrectionSchema.safeParse(Object.fromEntries(formData));
+  if (!input.success) redirect('/admin/organizations?error=invalid');
+  const { actor, db } = await requireSuperAdmin();
+  const path = `/admin/organizations/${input.data.workspaceId}/commercial` as Route;
+  try {
+    await new db.PrismaOemBillingAdminService().correctRegistrationPeriod({
+      workspaceId: input.data.workspaceId,
+      registrationPeriodId: input.data.registrationPeriodId,
+      expectedStartsAt: new Date(input.data.expectedStartsAt),
+      expectedEndsAt: input.data.expectedEndsAt ? new Date(input.data.expectedEndsAt) : null,
+      revisedStartsAt: requiredDate(input.data.revisedStartsAt),
+      revisedEndsAt: optionalDate(input.data.revisedEndsAt),
+      actorUserId: actor.userId,
+      reason: input.data.reason,
+      confirmed: true,
+    });
+  } catch {
+    redirect(`${path}?error=oemPreparation#oem-billing-preparation` as Route);
+  }
+  revalidatePath(path);
+  redirect(`${path}?oemPrepared=registration-correction#oem-billing-preparation` as Route);
+}
+
+async function correctOemOffering(formData: FormData) {
+  'use server';
+  const input = oemOfferingCorrectionSchema.safeParse(Object.fromEntries(formData));
+  if (!input.success) redirect('/admin/organizations?error=invalid');
+  const { actor, db } = await requireSuperAdmin();
+  const path = `/admin/organizations/${input.data.workspaceId}/commercial` as Route;
+  try {
+    await new db.PrismaOemBillingAdminService().correctOfferingPeriod({
+      workspaceId: input.data.workspaceId,
+      offeringPeriodId: input.data.offeringPeriodId,
+      expectedStartsAt: new Date(input.data.expectedStartsAt),
+      expectedEndsAt: input.data.expectedEndsAt ? new Date(input.data.expectedEndsAt) : null,
+      expectedClassification: input.data.expectedClassification,
+      revisedStartsAt: requiredDate(input.data.revisedStartsAt),
+      revisedEndsAt: optionalDate(input.data.revisedEndsAt),
+      revisedClassification: input.data.revisedClassification,
+      actorUserId: actor.userId,
+      reason: input.data.reason,
+      confirmed: true,
+    });
+  } catch {
+    redirect(`${path}?error=oemPreparation#oem-billing-preparation` as Route);
+  }
+  revalidatePath(path);
+  redirect(`${path}?oemPrepared=offering-correction#oem-billing-preparation` as Route);
+}
+
+async function reviewOemContract(formData: FormData) {
+  'use server';
+  const input = oemContractHistorySchema.safeParse(Object.fromEntries(formData));
+  if (!input.success) redirect('/admin/organizations?error=invalid');
+  const { actor, db } = await requireSuperAdmin();
+  const path = `/admin/organizations/${input.data.workspaceId}/commercial` as Route;
+  try {
+    await new db.PrismaOemBillingAdminService().reviewContractPeriod({
+      workspaceId: input.data.workspaceId,
+      startsAt: requiredDate(input.data.startsAt),
+      endsAt: optionalDate(input.data.endsAt),
+      actorUserId: actor.userId,
+      reason: input.data.reason,
+    });
+  } catch {
+    redirect(`${path}?error=oemPreparation#oem-billing-preparation` as Route);
+  }
+  revalidatePath(path);
+  redirect(`${path}?oemPrepared=contract#oem-billing-preparation` as Route);
+}
+
+async function correctOemContract(formData: FormData) {
+  'use server';
+  const input = oemContractCorrectionSchema.safeParse(Object.fromEntries(formData));
+  if (!input.success) redirect('/admin/organizations?error=invalid');
+  const { actor, db } = await requireSuperAdmin();
+  const path = `/admin/organizations/${input.data.workspaceId}/commercial` as Route;
+  try {
+    await new db.PrismaOemBillingAdminService().correctContractPeriod({
+      workspaceId: input.data.workspaceId,
+      contractPeriodId: input.data.contractPeriodId,
+      expectedStartsAt: new Date(input.data.expectedStartsAt),
+      expectedEndsAt: input.data.expectedEndsAt ? new Date(input.data.expectedEndsAt) : null,
+      revisedStartsAt: requiredDate(input.data.revisedStartsAt),
+      revisedEndsAt: optionalDate(input.data.revisedEndsAt),
+      actorUserId: actor.userId,
+      reason: input.data.reason,
+      confirmed: true,
+    });
+  } catch {
+    redirect(`${path}?error=oemPreparation#oem-billing-preparation` as Route);
+  }
+  revalidatePath(path);
+  redirect(`${path}?oemPrepared=contract-correction#oem-billing-preparation` as Route);
+}
+
+async function scheduleOemCutover(formData: FormData) {
+  'use server';
+  const input = oemCutoverSchema.safeParse(Object.fromEntries(formData));
+  if (!input.success) redirect('/admin/organizations?error=invalid');
+  const { actor, db } = await requireSuperAdmin();
+  const path = `/admin/organizations/${input.data.workspaceId}/commercial` as Route;
+  try {
+    await new db.PrismaOemBillingAdminService().scheduleCutover({
+      workspaceId: input.data.workspaceId,
+      effectiveFrom: new Date(`${input.data.month}-01T00:00:00.000Z`),
+      actorUserId: actor.userId,
+      reason: input.data.reason,
+      historyReviewed: true,
+    });
+  } catch {
+    redirect(`${path}?error=oemPreparation#oem-billing-preparation` as Route);
+  }
+  revalidatePath(path);
+  redirect(`${path}?oemPrepared=cutover#oem-billing-preparation` as Route);
+}
+
+async function correctOemCutover(formData: FormData) {
+  'use server';
+  const input = oemCutoverCorrectionSchema.safeParse(Object.fromEntries(formData));
+  if (!input.success) redirect('/admin/organizations?error=invalid');
+  const { actor, db } = await requireSuperAdmin();
+  const path = `/admin/organizations/${input.data.workspaceId}/commercial` as Route;
+  try {
+    await new db.PrismaOemBillingAdminService().correctCutover({
+      workspaceId: input.data.workspaceId,
+      expectedEffectiveFrom: input.data.expectedEffectiveFrom
+        ? new Date(input.data.expectedEffectiveFrom)
+        : null,
+      revisedEffectiveFrom: input.data.revisedMonth
+        ? new Date(`${input.data.revisedMonth}-01T00:00:00.000Z`)
+        : null,
+      actorUserId: actor.userId,
+      reason: input.data.reason,
+      historyReviewed: input.data.historyReviewed === 'on',
+      confirmed: true,
+    });
+  } catch {
+    redirect(`${path}?error=oemPreparation#oem-billing-preparation` as Route);
+  }
+  revalidatePath(path);
+  redirect(`${path}?oemPrepared=cutover-correction#oem-billing-preparation` as Route);
+}
+
 export default async function OrganizationCommercialPage({
   params,
   searchParams,
@@ -293,16 +603,39 @@ export default async function OrganizationCommercialPage({
     prepared?: string;
     invoiceUpdated?: string;
     customQuoteSaved?: string;
+    setupFeeSaved?: string;
     reminderSent?: string;
     recipientTestSent?: string;
+    oemPrepared?: string;
+    shadowMonth?: string;
   }>;
 }) {
   const workspaceId = z.uuid().safeParse((await params).workspaceId);
   if (!workspaceId.success) notFound();
-  const [{ db }, query] = await Promise.all([requireSuperAdmin(), searchParams]);
-  const [dashboard, billing] = await Promise.all([
+  const [{ actor, db }, query] = await Promise.all([requireSuperAdmin(), searchParams]);
+  const currentMonth = new Date()
+    .toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' })
+    .slice(0, 7);
+  const shadowMonth = /^\d{4}-(0[1-9]|1[0-2])$/.test(query.shadowMonth ?? '')
+    ? query.shadowMonth!
+    : currentMonth;
+  const oemAdmin = new db.PrismaOemBillingAdminService();
+  const [dashboard, billing, oemPreparation, shadowResult] = await Promise.all([
     new db.PrismaCommercialUsageService().dashboard(workspaceId.data),
     new db.PrismaCommercialBillingService().dashboard(workspaceId.data),
+    oemAdmin.preparationDashboard({ workspaceId: workspaceId.data, actorUserId: actor.userId }),
+    oemAdmin
+      .shadow({
+        workspaceId: workspaceId.data,
+        actorUserId: actor.userId,
+        month: new Date(`${shadowMonth}-15T00:00:00.000Z`),
+      })
+      .then((value) => ({ value, reviewRequired: false }))
+      .catch((error: unknown) => {
+        if (error instanceof Error && error.message.startsWith('REVIEW_REQUIRED'))
+          return { value: null, reviewRequired: true };
+        throw error;
+      }),
   ]);
   if (!dashboard || !billing) notFound();
   const latestReminderEvents = new Map<string, (typeof billing.commercialBillingAudits)[number]>();
@@ -324,16 +657,28 @@ export default async function OrganizationCommercialPage({
     <CommercialAdminDashboard
       dashboard={dashboard}
       billing={billing}
-      query={query}
+      query={{ ...query, shadowMonth }}
       reminderFailures={reminderFailures}
+      oemPreparation={oemPreparation}
+      oemShadow={shadowResult.value}
+      oemShadowReviewRequired={shadowResult.reviewRequired}
       actions={{
         finalizePreviousMonth,
         saveContract,
         prepareInvoices,
         transitionInvoice,
         prepareCustomQuoteInvoice,
+        prepareSetupFeeInvoice,
         sendInvoiceReminder,
         sendBillingRecipientTest,
+        setOemOffering,
+        correctOemOffering,
+        reviewOemRegistration,
+        correctOemRegistration,
+        reviewOemContract,
+        correctOemContract,
+        scheduleOemCutover,
+        correctOemCutover,
       }}
     />
   );

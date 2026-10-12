@@ -96,3 +96,43 @@ export function tenantInvoiceNumber(periodStart: Date, monthlyUsageId: string): 
   const suffix = monthlyUsageId.replaceAll('-', '').toUpperCase();
   return `WW-${month}-${suffix}`;
 }
+
+export interface OemSetupFeeChargeInput {
+  chargeKey: string;
+  amountYen: number;
+  description: string;
+  agreementReference: string;
+  agreedAt: Date;
+  reason: string;
+}
+
+export function assertOemSetupFeeCharge(input: OemSetupFeeChargeInput, now = new Date()): void {
+  if (!/^[A-Z0-9][A-Z0-9_-]{2,79}$/.test(input.chargeKey))
+    throw new Error('invalid setup fee charge key');
+  if (
+    !Number.isSafeInteger(input.amountYen) ||
+    input.amountYen <= 0 ||
+    input.amountYen > 1_000_000_000
+  )
+    throw new Error('invalid setup fee amount');
+  if (!input.description.trim() || input.description.trim().length > 200)
+    throw new Error('invalid setup fee description');
+  if (!input.agreementReference.trim() || input.agreementReference.trim().length > 200)
+    throw new Error('invalid setup fee agreement reference');
+  if (input.reason.trim().length < 10 || input.reason.trim().length > 1_000)
+    throw new Error('invalid setup fee reason');
+  if (
+    Number.isNaN(input.agreedAt.getTime()) ||
+    Number.isNaN(now.getTime()) ||
+    input.agreedAt.getTime() > now.getTime()
+  )
+    throw new Error('invalid setup fee agreement date');
+}
+
+export function tenantSetupFeeInvoiceNumber(agreedAt: Date, chargeId: string): string {
+  if (Number.isNaN(agreedAt.getTime()) || !chargeId.trim())
+    throw new Error('invalid setup fee invoice identity');
+  const date = agreedAt.toISOString().slice(0, 10).replaceAll('-', '');
+  const suffix = chargeId.replaceAll('-', '').toUpperCase();
+  return `WW-SETUP-${date}-${suffix}`;
+}

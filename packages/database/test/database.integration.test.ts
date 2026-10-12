@@ -1,10 +1,12 @@
 import { reserveVideoMedia, finishVideoMedia } from '../src/video-media-quota';
+import { registerOemBillingIntegrationCases } from './oem-billing.integration-cases';
 import { registerMigrationBoundsIntegrationCases } from './migration-bounds.integration-cases';
 import { randomUUID } from 'node:crypto';
 import { registerImprovementTriageIntegrationCases } from './improvement-triage.integration-cases';
 import { registerImprovementRetentionJobIntegrationCases } from './improvement-retention-jobs.integration-cases';
 import { registerTrainingSupportSkillLifecycleIntegrationCases } from './training-support-skill-lifecycle.integration-cases';
 import { registerPersonalLearningPersistenceIntegrationCases } from './personal-learning-persistence.integration-cases';
+import { registerAiProviderCallAdmissionIntegrationCases } from './provider-call-admission.integration-cases';
 import { cleanupProgramFixtures } from './program-fixture-cleanup';
 import {
   integrationDatabaseTarget,
@@ -142,6 +144,9 @@ describe('database ownership boundaries', () => {
 
   beforeAll(async () => {
     await verifyLiveDatabase(client);
+    await client.$executeRawUnsafe(
+      'TRUNCATE TABLE commercial_pricing_audits, commercial_pricing_schedules, oem_billing_policies, oem_registration_periods, oem_offering_periods, oem_contract_periods, oem_setup_fee_charges, tenant_monthly_usage, organization_commercial_contracts, commercial_billing_audits CASCADE',
+    );
     await client.socialImageSample.deleteMany();
     await client.campaignActivity.deleteMany();
     await client.campaignParticipation.deleteMany();
@@ -180,6 +185,7 @@ describe('database ownership boundaries', () => {
     await client.accountDeletionRequest.deleteMany();
     await client.userLegalConsent.deleteMany();
     await client.legalDocument.deleteMany();
+    await client.aiProviderCallAdmission.deleteMany();
     await client.aiUsageEvent.deleteMany();
     await client.dailyMissionGeneration.deleteMany();
     await client.missionFeedback.deleteMany();
@@ -215,7 +221,9 @@ describe('database ownership boundaries', () => {
   registerImprovementRetentionJobIntegrationCases(client);
   registerTrainingSupportSkillLifecycleIntegrationCases(client);
   registerPersonalLearningPersistenceIntegrationCases(client);
+  registerOemBillingIntegrationCases(client);
   registerMigrationBoundsIntegrationCases(client);
+  registerAiProviderCallAdmissionIntegrationCases(client);
 
   it('fixture cleanup regression: program and training residue is absent before new fixtures', async () => {
     expect(

@@ -18,6 +18,7 @@ const healthy = (): AdminAlertSnapshot => ({
       monthlySpentUsdMicros: 100_000,
       recentProviderFailures: 0,
       recentUnknownCostEvents: 0,
+      staleOpenAdmissions: 0,
     },
   ],
   line: {
@@ -41,6 +42,7 @@ const healthy = (): AdminAlertSnapshot => ({
   blockedDeletions: 0,
   openSupportCases: 0,
   urgentSupportCases: 0,
+  commercialBillingRefundReviews: 0,
 });
 
 describe('admin alert center', () => {
@@ -78,6 +80,21 @@ describe('admin alert center', () => {
           severity: 'WARNING',
           count: 5,
           title: expect.stringContaining('利用料を算定できない'),
+        }),
+      ]),
+    );
+  });
+
+  it('keeps stale open cost reservations visible for explicit recovery', () => {
+    const snapshot = healthy();
+    snapshot.ai[0]!.staleOpenAdmissions = 2;
+    expect(buildAdminAlerts(snapshot)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'AI_OPENAI_OPEN_ADMISSIONS',
+          severity: 'WARNING',
+          count: 2,
+          href: '/admin/ai',
         }),
       ]),
     );
@@ -121,6 +138,24 @@ describe('admin alert center', () => {
           severity: 'INFO',
           count: 2,
           href: '/admin/rewards',
+        }),
+      ]),
+    );
+  });
+
+  it('shows OEM invoice refund reviews without treating them as settled', () => {
+    const snapshot = healthy();
+    snapshot.commercialBillingRefundReviews = 2;
+
+    expect(buildAdminAlerts(snapshot)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'COMMERCIAL_BILLING_REFUND_REVIEWS',
+          severity: 'WARNING',
+          count: 2,
+          title: expect.stringContaining('返金の要照合'),
+          guidance: expect.stringContaining('内部請求状態は自動変更されていません'),
+          href: '/admin/commercial-billing?status=REFUND_REVIEW',
         }),
       ]),
     );

@@ -89,10 +89,13 @@ export { PrismaTrainingParticipantProfileRepository } from './training-profile';
 export { PrismaAiResaleOfferRepository } from './resale-offer';
 export { PrismaServiceNotificationPreferenceRepository } from './service-notification-preference';
 export { PrismaCommercialUsageService } from './commercial-usage';
+export { PrismaCommercialPricingAdminService } from './commercial-pricing-admin';
+export { PrismaOemBillingAdminService } from './oem-billing-admin';
 export { PrismaCommercialBillingService } from './commercial-billing';
 export type {
   SaveOrganizationCommercialContractInput,
   PrepareCustomQuoteInvoiceInput,
+  PrepareOemSetupFeeInvoiceInput,
   TransitionTenantInvoiceInput,
 } from './commercial-billing';
 export type {
@@ -303,6 +306,12 @@ export { PrismaLearningDefinitionApprovalAdminRepository } from './learning-defi
 export { PrismaPersonalLearningPilotProfileRepository } from './personal-learning-pilot-profile';
 export { PrismaPersonalLearningAssessmentGate } from './personal-learning-assessment-gate';
 export { PrismaGuidedPracticeRepository } from './guided-practice';
+export { PrismaReproductionHistoryRepository } from './reproduction-history';
+export {
+  PrismaReproductionChallengeReviewAdminRepository,
+  validateReproductionChallengeReviewAdminCommand,
+  type ReproductionChallengeReviewAdminCommand,
+} from './reproduction-challenge-review-admin';
 export { PrismaPersonalLearningCallAdmission } from './personal-learning-call-admission';
 export { PrismaPersonalLearningPilotOperations } from './personal-learning-pilot-operations';
 export {

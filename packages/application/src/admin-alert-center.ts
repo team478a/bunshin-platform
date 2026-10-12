@@ -16,6 +16,7 @@ export interface AdminAlert {
     | '/admin/deletions'
     | '/admin/guide'
     | '/admin/services'
+    | '/admin/commercial-billing?status=REFUND_REVIEW'
     | `/s/${string}/manage/line`;
 }
 
@@ -30,6 +31,7 @@ export interface AdminAlertSnapshot {
     monthlySpentUsdMicros: number;
     recentProviderFailures: number;
     recentUnknownCostEvents: number;
+    staleOpenAdmissions: number;
   }>;
   line: {
     required: boolean;
@@ -60,6 +62,7 @@ export interface AdminAlertSnapshot {
   blockedDeletions: number;
   openSupportCases: number;
   urgentSupportCases: number;
+  commercialBillingRefundReviews: number;
 }
 
 export interface AdminAlertRepository {
@@ -128,6 +131,16 @@ export function buildAdminAlerts(snapshot: AdminAlertSnapshot): AdminAlert[] {
         guidance:
           '直近24時間のトークン使用量と価格設定を確認してください。未算定分がある間は表示予算を上限保証として扱わないでください。',
         count: item.recentUnknownCostEvents,
+        href: '/admin/ai',
+      });
+    if (item.staleOpenAdmissions > 0)
+      alerts.push({
+        code: `AI_${item.provider}_OPEN_ADMISSIONS`,
+        severity: 'WARNING',
+        title: `${label}の費用予約に未精算があります`,
+        guidance:
+          'AI設定画面で使用量記録と一致する予約だけを復旧してください。一致しない予約は調査が終わるまで解放しないでください。',
+        count: item.staleOpenAdmissions,
         href: '/admin/ai',
       });
   }
@@ -261,6 +274,16 @@ export function buildAdminAlerts(snapshot: AdminAlertSnapshot): AdminAlert[] {
       guidance: '停止理由を確認し、問題を解消してから再試行してください。',
       count: snapshot.blockedDeletions,
       href: '/admin/deletions',
+    });
+  if (snapshot.commercialBillingRefundReviews > 0)
+    alerts.push({
+      code: 'COMMERCIAL_BILLING_REFUND_REVIEWS',
+      severity: 'WARNING',
+      title: 'OEM請求に返金の要照合があります',
+      guidance:
+        'Stripeの返金記録、契約証跡、会計処理を照合してください。内部請求状態は自動変更されていません。',
+      count: snapshot.commercialBillingRefundReviews,
+      href: '/admin/commercial-billing?status=REFUND_REVIEW',
     });
   if (snapshot.openSupportCases > 0)
     alerts.push({

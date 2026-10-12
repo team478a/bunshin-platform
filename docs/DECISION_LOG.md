@@ -1,5 +1,209 @@
 # BUNSHIN Platform Decision Log
 
+## 2026-10-12: OEM初期cutoverの取消・差替えはappend-only訂正リビジョンとする
+
+- 初回予約の`OemBillingPolicy`を更新・削除せず、`OemBillingPolicyRevision`が直前の訂正を1対1でsupersedeする。後続を持たない最新葉を課金projectionとして扱う。
+- 最新葉が`CANCELLED`なら旧MAU方式を継続し、`RESCHEDULED`なら再確認した将来月、rule version、履歴準備時刻を採用する。取消後の将来月再予約も同じチェーンへ追記する。
+- 変更はSUPER_ADMIN、Workspace lock、期待値CAS、理由、明示確認を必須とする。再予約時はOffering・契約・正式登録履歴をtransaction内で再検証し、開始済みcutoverまたは確定済み月に影響する訂正を拒否する。
+- 変更前後を`CommercialBillingAudit`へ保存する。本番Migration、Deploy、cutover訂正、請求確定、実課金は別Gateとする。
+
+## 2026-10-12: OEM提供・正式登録期間も元版を残す1対1 supersessionとする
+
+- `OemOfferingPeriod`と`OemRegistrationPeriod`を直接訂正せず、訂正版が直前版を`supersedesId`で参照する。月次計算、商品判定、cutover準備は後続を持たない葉だけを参照する。
+- Offering訂正は同じ商品・Policy Version内の期間境界と提供区分に限定し、正式登録訂正はWorkspace、Group、Membership、Userを固定して期間境界に限定する。
+- 期間差分または提供区分変更の対象区間がJSTの確定済み月へ触れる場合は拒否する。期待値CAS、Workspace/Membership lock、重複・商品ポリシー再検証、変更前後監査を必須にする。
+- cutover取消・差替え、商品自体の過去訂正、確定月の取消・再確定、本番操作は別Gateとする。
+
+## 2026-10-12: OEM契約期間の訂正は元版を残す1対1 supersessionとする
+
+- `OemContractPeriod`の開始・終了日時を直接更新・削除せず、訂正版が直前版を`supersedesId`で参照する。課金計算・請求・対象外月分類は後続を持たない最新葉だけを参照する。
+- Workspace lock、期待開始・終了日時、最新葉判定でCASし、同一内容の再送だけを冪等成功させる。他の有効期間との重複、Workspace境界、SUPER_ADMIN権限、根拠理由、明示確認をtransaction内で再検証する。
+- 訂正前後の区間差分がJST境界で確定済み`TenantMonthlyUsage`と重なる場合は拒否する。元版と訂正版は削除せず、変更前後を`CommercialBillingAudit`へ追加する。
+- Offering、正式登録、cutover、確定済み月の取消・再確定、本番操作は別Gateとする。
+
+## 2026-10-12: OEM契約終了後の月次キュー分離は確認済み契約期間だけを根拠にする
+
+- 正式登録課金V2の履歴レビュー済みポリシーがあり、対象月より前に開始した契約期間が1件以上存在し、その全件が対象月開始以前に明示終了しているWorkspaceだけを`CONTRACT_ENDED_BEFORE_PERIOD`として月次要確認キューから分離する。
+- 履歴準備未完了、ルール版不一致、契約期間なし、将来開始または終了未設定を含む場合は契約対象外と推測せず、既存のfail-closed処理を維持する。
+- 分離した月に0円の利用スナップショットや請求書は作らず、Workspace、対象月、固定理由、最終契約終了日時を処理結果へ残す。単一Workspaceの明示確定入口は変更しない。
+
+## 2026-10-11: OEM課金人数の根拠を再計算せず管理画面へ表示する
+
+- 状態: Proposed（実装PRレビュー待ち。本番Migration・cutover・請求確定は未承認）
+- 現在月は既存の正式登録課金shadowから有料正式登録R、無料実利用A、重複、R∪Aを表示し、確定月は`TenantMonthlyUsage`へ保存済みの不変スナップショットだけを表示する。
+- 旧MAU方式にはR/A内訳を推測補完しない。履歴不足時は人数と料金を未確定のままにし、既知理由を安全な運用文へ変換する。未知理由も要確認として扱い、0人やMAUへ置換しない。
+- schema、人数計算、料金、確定値、請求書、cutover、本番設定は変更しない。
+
+## 2026-10-11: OEM請求の返金要照合をPlatform運用通知へ集約する
+
+- 状態: Proposed（実装PRレビュー待ち。本番Webhook設定・返金・請求状態変更は未承認）
+- 処理済みの部分／全額返金通知が紐づく入金済み請求を請求単位で重複排除し、Platform管理者の運用通知へWARNINGとして表示する。
+- 通知は返金要照合で絞り込んだ全体請求画面へ遷移する。外部メール／LINE通知、返金実行、請求状態変更、会計確定は行わない。
+- 返金要照合の解消状態は未設計のため、既存通知を安全と推測して消さない。承認済みの会計・取消方針と明示的な解消証跡は別Gateとする。
+
+## 2026-10-11: OEM経理用CSVは最新の返金要照合通知を識別情報として出力する
+
+- 状態: Proposed（実装PRレビュー待ち。本番Webhook設定・返金・請求状態変更は未承認）
+- 経理用CSVの既存列を維持し、末尾へ返金要照合区分、通知受信日時、Stripe Event IDを追加する。対象は請求ごとの最新の処理済み部分／全額返金通知だけとする。
+- Provider Event IDにも既存のSpreadsheet Formula Injection対策を適用する。返金通知がない請求は追加列を空欄にする。
+- CSVを返金額、会計確定、返金済み請求状態の正本にしない。保存されていない返金額を推測せず、要照合の解消や`TenantInvoice`更新を行わない。
+
+# 2026-10-11: OEM請求の返金要照合は団体別請求画面でも既存通知履歴を表示する
+
+- 状態: Proposed（実装PRレビュー待ち。本番Webhook設定・返金・請求状態変更は未承認）
+- 全体請求画面から団体別請求画面へ移動した後も照合作業を継続できるよう、対象Workspaceの請求に紐づく処理済み部分／全額返金通知を請求カード内へ時系列表示する。
+- 表示する識別情報は返金区分、受信日時、Stripe Event IDに限定し、Webhook本文、カード情報、推測した返金額は表示・保存しない。
+- 返金通知は調査証跡であり、`TenantInvoice`の状態、金額、入金日、請求書Snapshotを変更しない。要照合の解消、会計確定、取消文書は承認済み方針を得るまで実装しない。
+
+## 2026-10-11: OEM請求のStripe返金通知は会計状態を変えず要照合として記録する
+
+- 状態: Proposed（実装PRレビュー待ち。本番Webhook設定・返金・請求状態変更は未承認）
+- `charge.refunded`は部分返金でも発生するため、署名・環境・PaymentIntent・元金額・通貨・累計返金額・全額フラグを照合した通知を既存Webhook台帳へ記録する。
+- 返金通知だけから`TenantInvoice`を`VOID`等へ遷移させず、部分／全額の要照合として全体請求画面へ表示する。売上認識、返金確定日、取消文書、税務処理をコードで推測しない。
+- 同じProvider Event IDは冪等に扱い、PaymentIntentに一致する請求が0件または複数、請求が未入金、金額・通貨・環境が不一致の場合は記録せずfail-closedとする。
+- 本番Webhook購読追加、Stripe返金、内部請求状態変更、通知解消操作は別Gateとする。
+
+## 2026-10-11: OEM初期費用を月額料金の自動回収同意へ含めない
+
+- 状態: Proposed（実装PRレビュー待ち。本番Stripe、自動回収、請求状態変更は未承認）
+- 既存の団体単位の自動回収同意は、管理画面に明記された「次回以降の月額料金」だけを対象とする。`SETUP_FEE`をこの同意へ暗黙に含めない。
+- 日次自動回収は`TenantInvoice.kind = MONTHLY_USAGE`を候補条件として必須化する。初期費用は手動入金または団体管理者が開始する既存Checkoutで扱い、保存済みカードへ自動請求しない。
+- 初期費用を将来自動回収する場合は、対象範囲と証跡を分離した明示同意、取消・返金方針、管理画面を別Gateで設計する。本番設定、Provider送信、実決済は行わない。
+
+## 2026-10-11: OEM請求の決済・督促表示は請求種別から決定する
+
+- 状態: Proposed（実装PRレビュー待ち。本番Stripe、メール送信、請求発行、自動回収は未承認）
+- Stripe Checkoutの商品名、保存支払方法による自動回収の明細、手動・自動督促メールは、不変な`TenantInvoice.kind`から`OEM月額利用料`または`OEM初期費用`を決定する。
+- ブラウザー入力や商品表示名を決済種別の判定に使わない。金額、Workspace、請求番号、状態、冪等キーは従来どおり内部請求台帳を正本とする。
+- 未知の請求種別は月額と推測せず停止する。初期費用の返金・取消会計、実決済、本番送信は別Gateとする。
+
+## 2026-10-11: OEM初期費用は月次人数料金と分離した契約証跡Snapshotとして請求する
+
+- 状態: Proposed（実装PRレビュー待ち。本番Migration・release・初期費用登録・請求発行・決済は未承認）
+- 初期費用は共通段階料金や月次`R ∪ A`から計算せず、SUPER_ADMINが締結済み契約の対象商品、税込金額、合意日、参照番号、理由を確認したときだけ不変Snapshotと請求下書きを同一transactionで作る。
+- 80万円、先行5社30万円などの価格・対象判定をコードへ固定しない。Organization・Service Product・一意の請求キーで再送を同じ請求へ収束させ、異なる内容の再利用は`REVIEW_REQUIRED`で停止する。
+- `TenantInvoice`は`MONTHLY_USAGE`と`SETUP_FEE`のsourceを排他的に保持する。初期費用も既存の発行、PDF、入金、督促、CSV、Stripe Checkout経路を使うが、課金対象人数・月額料金版として表示しない。
+- 初期費用SnapshotはDB triggerで更新・削除を拒否し、未提供商品、非Organization、無効契約、非SUPER_ADMIN、将来合意日では作成しない。
+- 本番の価格・契約証跡・既存Offering・Migration lock・Backup/復元・RLS roleは未確認とし、本番操作は別承認とする。
+
+## 2026-10-11: OEM Service Productの改定は不変版追加、廃止は新規割当停止とする
+
+- 状態: Proposed（実装PRレビュー待ち。本番Migration・release・商品操作は未承認）
+- 既存OEM Offeringへの商品ポリシー新版適用は一括backfillせず、SUPER_ADMINがOrganization・Service・現在版・FREE可否・Capability差分を確認し、Offering 1件ごとに明示実行する。現在Offering IDと現在ポリシー版IDをCASとして使い、将来適用版、同版・旧版、廃止商品、サービス内容と互換性のない版は拒否する。切替は旧期間を終了して新期間を追加し、参加者・確定済み請求・過去期間を変更しない。
+- 商品ポリシー改定は既存版を更新せず、適用日付きの新しい版を追加する。過去日、同日、古い画面からの競合操作は拒否する。
+- 商品廃止は`RETIRED`へ一方向遷移し、新しいOffering割当だけを停止する。既存Offering、参加者、確定済み請求は自動変更しない。
+- 改定・廃止はSUPER_ADMIN、操作理由、明示確認、画面表示時の版との一致を必須とする。
+- [実装報告](OEM_PRODUCT_POLICY_ADMIN_UI_IMPLEMENTATION.md)を参照。
+
+## 2026-10-11: OEMを提供形態、ワタシワークスのService Productを商品台帳として分離する
+
+- 状態: Proposed（実装PRレビュー待ち。本番Migration・release・商品登録・課金は未承認）
+- OEMはハッシー固有の商品名ではなく、ワタシワークスのService ProductをOrganization Workspaceで運営する提供・契約形態とする。
+- 商品key、FREE許可、必要Capabilityをプラットフォーム管理の商品台帳と不変ポリシー版へ保存する。`HASSY / MANABERU_STYLE`のコード分岐は明示seedデータへ移行する。
+- Workspace内`R ∪ A`、複数ServiceのUser重複排除、共通料金表、確定月・請求書の不変性は維持する。商品別請求や初期費用は追加しない。
+- 未登録商品や将来適用ポリシーは`REVIEW_REQUIRED`で停止し、商品名、slug、金額、決済方式から推測しない。
+- [ADR](adr/OEM_SERVICE_PRODUCT_POLICY.md)と[実装報告](OEM_SERVICE_PRODUCT_POLICY_IMPLEMENTATION_REPORT.md)を参照。
+
+## 2026-10-11: 会員の商品投稿案生成をOpenAI費用予約の第3経路とする
+
+- 状態: Proposed（実装PRレビュー待ち。本番release・Provider送信は未承認）
+- 商品投稿案生成は、request ID由来の既存operation key、単一のProvider送信、成功・失敗で共通の利用実績を持つため、第3の原子的費用予約対象とする。
+- 本人・Service・Bunshin・商品・承認済み外部リンク・公式商品情報を確認した後に予約する。組織quota拒否は0円、Provider試行後とローカル安全検査失敗は固定リクエスト原価を記録する。
+- Admission利用時は利用実績をstrictに保存してから予約を確定し、保存・確定失敗はopenのまま維持する。非本番legacy fallbackだけは予約なし・best-effort記録を維持する。
+- 商品内容、投稿案、URL、User、Workspace、Bunshinを予約台帳へ保存しない。研修評価の二重Admission、複数call処理、本番操作は別判断とする。
+
+## 2026-10-11: SNSインサイト画像読取をOpenAI費用予約の第2経路とする
+
+- 状態: Proposed（実装PRレビュー待ち。本番release・Provider送信は未承認）
+- SNSインサイト画像読取は、本人が生成するUUIDに固定prefixを付けた安定operation keyと、単一のResponses API送信境界、成功・失敗で共通の利用実績を持つため、週次投稿計画に続く原子的費用予約の対象とする。
+- 本人認証、Service参加同意、Bunshin所有、機能有効化、画像形式・サイズを確認した後にだけ予約する。Provider試行後は固定リクエスト原価、ローカル失敗は0円を記録し、Admission利用時は実績保存後だけ予約を確定する。
+- 利用実績保存または予約確定に失敗した場合はopen予約を維持し、同じoperation keyの再送を保守的に停止する。非本番legacy fallbackだけは予約なし・best-effort記録を維持する。
+- 画像内容、抽出結果、User、Workspace、Bunshinを予約台帳へ保存しない。他のOpenAI画像生成、音声、研修評価、複数call処理、本番操作は別判断とする。
+
+## 2026-10-11: OpenAI原子的費用予約は週次投稿計画から経路単位で展開する
+
+- 状態: Proposed（実装PRレビュー待ち。本番release・Provider送信は未承認）
+- OpenAIは複数の実送信境界と複数callを持つため、Runtime resolver全体へ一律適用しない。最初の対象は単一Responses API callと安定したoperation keyを持つ週次投稿計画とする。
+- 業務Precondition後、組織quota前に予約し、quota拒否は0円、Provider試行後は固定リクエスト原価を記録する。Admission利用時は実績保存後だけ確定し、保存・確定失敗はopenのまま維持する。
+- productionは管理設定の原子的予約を必須とし、予約対象なしの後に設定を再検索しない。非本番legacy fallbackだけは従来互換として予約なしを許す。
+- 他のOpenAI文章・画像・音声・研修評価、複数call処理、open予約復旧、請求照合、本番操作は別判断とする。
+
+## 2026-10-11: Trend Provider予算は送信前の原子的予約で競合を止める
+
+- 状態: Proposed（実装PRレビュー待ち。本番Migration・release・Provider送信は未承認）
+- Grok／Exa／Firecrawlの週次トレンド調査は、Provider・環境単位のDB advisory lock内で、UTC日次／月次の利用実績と未確定予約を合算し、固定リクエスト原価1回分を送信前に予約する。
+- 予約台帳は設定version、固定原価、時刻、operation keyの不可逆digestだけを保持する。Workspace、User、Bunshin、query、Evidence、Provider response、API keyは保存しない。
+- Provider試行後は利用実績を先に永続化し、成功した場合だけ同じProvider lockで予約を確定済みにする。利用実績または確定処理が失敗した予約は自動解放せず、新規呼出しを保守的に停止させる。TTL、失敗refund、原価推測backfillを設けない。
+- 今回の接続先は単一送信境界を持つ週次Trendだけ。OpenAI、Creatomate、FAL、Runway、接続テスト、Provider側budget、請求照合へ適用済みとは扱わない。
+- additive migrationと新旧instance混在時の旧Trend経路による予約迂回があるため、Trend有効状態で混在Deployしない。本番Migration、release、設定変更、送信、課金は別承認とする。
+
+## 2026-10-11: Provider接続確認で検索・scrapeを実行しない
+
+- 状態: Proposed（実装PRレビュー待ち。本番接続テスト・設定変更・Provider送信は未承認）
+- Exaの接続確認は検索APIではなく、認証済みチーム情報を返すread-onlyな`GET /v0/teams/me`を使用する。
+- Firecrawlの接続確認はscrape APIではなく、認証済みチームの残クレジットを返すread-onlyな`GET /v2/team/credit-usage`を使用する。
+- 接続確認は鍵の有効性とendpoint到達性だけを確認し、検索品質、scrape成功、残高十分、Runtimeモデル、予算設定、本番利用可能性を証明しない。
+- 既存の認可、秘密復号、結果監査、有効化Gateを維持する。実鍵、本番設定、接続テスト実行、Provider送信、実課金は変更しない。
+
+## 2026-10-11: ProductionのOpenAI Runtimeは管理Provider設定だけを使用する
+
+- 状態: Proposed（実装PRレビュー待ち。本番release・設定変更・Provider送信は未承認）
+- `APP_ENV=production`では、activeな管理Provider設定がない場合に旧`OPENAI_API_KEY`が存在してもfallbackせず、Provider到達前に`CONFIGURATION_ERROR`で停止する。
+- development／stagingの移行用fallbackは維持し、既存の正の固定原価Gateとtask/model互換性検査を継続する。active設定の停止・検証失敗・予算超過・原価UNKNOWNをfallbackで迂回しない既存挙動も維持する。
+- productionの暗号化DB Provider設定は日次・月次予算、停止、接続検証、原価Gateの対象である。環境変数の存在を管理設定や予算Admissionの代用にしない。
+- schema、migration、鍵、価格、予算、本番環境は変更しない。production release、Provider設定、送信、実課金、Pilot STARTは別承認とする。
+
+## 2026-10-10: 共有Provider送信には正の固定リクエスト原価を必須化する
+
+- 状態: Accepted（コード上の送信前Gate。価格値、本番設定、releaseは未承認）
+- Provider設定は原価調査中でも停止Draftとして作成できるが、`requestCostUsdMicros`が正の安全な整数でなければ有効化とRuntime解決を拒否する。0を無料または確定原価とみなさない。
+- 移行用の旧`OPENAI_API_KEY` fallbackも、`OPENAI_REQUEST_COST_USD_MICROS`が正の安全な整数の場合だけ利用できる。設定なし・0・小数・範囲外はProvider到達前に停止する。
+- 過去の原価NULLを推測backfillせず、価格値をコードで決めない。既存UNKNOWNによる月次fail-closed、Provider側budget、同時呼出予約、接続テスト費用、本番releaseは別Gateとする。
+- [実装報告](ai-training/AI_PROVIDER_KNOWN_REQUEST_COST_IMPLEMENTATION.md)を参照。
+
+## 2026-10-09: Wave 0の復旧証拠と作業単位の安全Gateを分離する
+
+- 状態: Proposed（運用文書レビュー待ち。本番操作・残リスクの受容は未承認）
+- 過去の復元元Backup日時/完全性/RTO/RPOのUNKNOWNを維持するが、同じ取得不能な画面の再探索を全準備作業の前提にしない。文書、教育レビュー、ローカルテスト、対象分離した読取検査は先行可能。
+- Migration/Deploy/STARTには現在の復旧準備、固定release、実認可/隔離、停止、費用、Definition承認、参加者準備を別々に要求する。過去日時の不足と現在の回復手順不足を区別し、残リスクはownerが明示判断する。Codexは復旧合格の推定や条件免除をしない。
+- 新しい有償Restore・契約Upgradeを自動要求せず、既存環境/記録を先に利用する。将来の操作時にはProvider UI履歴に依存しない非公開運用証跡を残す。
+- 正本: `docs/ai-evolution/WAVE0_SAFETY_GATE_REBASELINE.md`。新機能、コード、schema、Provider、本番操作を承認するDecisionではない。
+
+## 2026-10-09: 題材レビュー操作は停止中の専用Serviceで追記式監査として保持する
+
+- 既存ProgramAuditLogを「人間によるレビュー判断の事実」の正本に再利用する。Plan/Event payloadへ題材本文を保存せず、新schemaを先行しない。boundedな履歴から連続revisionとchainを検証して現在判断を投影する。
+- server-owned preparation authority、現認可済み管理者、停止中Program/Pilot、固定server commitと資料digestをtransaction内で再照合する。CAS・操作UUIDによる同内容再送・明示取消を実装し、再送結果と現在判断を分離する。
+- 認証sessionとのcomposition/HTTP/UI、実人間レビューの実行、R3/Assignment/履歴比較への承認利用は今回未接続。保存記録もexecutionPermission=NOT_GRANTEDとし、R1全DRAFT/R2 UNKNOWN・既存Definition承認・Pilot Gateを維持する。
+- [実装報告](ai-evolution/EVO05_CHALLENGE_REVIEW_ADMIN_IMPLEMENTATION.md)を参照。
+
+## 2026-10-09: 題材レビュー記録の形式検証と実行承認を分離する
+
+- EVO-05 R3の先行契約。AI Package内に版固定題材のレビュー資料と、Workspace/Service・reviewer・時刻・commit・digest・確認項目・判断を持つ最小記録契約を追加する。
+- APPROVEを含む形式上有効な記録も、本人認証・管理権限・人間による判断の証明ではない。trusted serverによる資料digest/actor照合、保存・取消・実行認可は未実装で別レビューとする。
+- 全題材DRAFT/NOT_REVIEWED、R1/R2のUNKNOWNを維持する。実承認、Assignment Bridge、DB/UI/Provider/本番操作へ接続しない。
+- [実装報告](ai-evolution/EVO05_CHALLENGE_REVIEW_CONTRACT_IMPLEMENTATION.md)を参照。
+
+## 2026-10-09: 再現履歴の比較は本人の整合Snapshotから非永続投影する
+
+- EVO-05 R2。明示された2AssignmentのみをRepeatableReadで読む。本人Enrollment/MembershipとR0 Privacy条件を再検証し、停止後の本人読取と新規学習認可を分離する。既存Export/削除の挙動を変更しない。
+- 完了metadataのPASS/verifiedを信頼せず、版固定参照、保存Plan、START/本人操作/支援、READY Answer、ANSWER_EVALUATED監査、対象Skill・時刻を照合する。欠落・削除・redaction・取得打切り・未知版はUNKNOWN。日時やscoreからpairを自動選択しない。
+- R1の全題材はDRAFTで、人間承認正本は未実装。整合する合成履歴でもHUMAN_REVIEW_REQUIREDでUNKNOWNを維持する。成功結果・本文・新Eventを保存せず、R3/R4・課題生成・本番操作には進まない。
+- [R2実装報告](ai-evolution/EVO05_R2_HISTORY_PROJECTION_IMPLEMENTATION.md)を参照。
+
+## 2026-10-09: 再現練習の題材は版固定の合成Draft参照に限定する
+
+- EVO-05 R1。既存3Definition/既存Mission quality版へ対応する、EMAIL/REPORT/INFORMATION_SUMMARYの固定合成課題Draftとstrict参照契約をAI Training Package内へ追加する。新Definitionや成果物制作機能ではない。
+- 参照はcontract/subject/challenge/Definition/Mission qualityの版を固定し、本文・本人情報・承認主張を受け付けない。形式検証と既知版の照合は人間承認や実行認可を意味しない。
+- 今回の全課題はDRAFT。人間のレビュー結果をAIが作らず、既知DraftもHUMAN_REVIEW_REQUIRED/UNKNOWNとして扱う。未知/旧履歴/不一致から推測補完しない。
+- 既存比較関数、Router、Assignment、保存、UI、Provider、Pilot/Privacy Gateを変更しない。R2以降・本番利用・題材承認は別指示。[R1実装報告](ai-evolution/EVO05_R1_SUBJECT_REFERENCE_IMPLEMENTATION.md)を参照。
+
+## 2026-10-09: INTERNAL所有者本人のPrivacy権限を学習実行権限と分離する
+
+- EVO-05 R0。既存本人Enrollment/Membership照合を維持し、専用Pilot Programの本人INTERNAL/cohort INTERNAL Seat履歴を持つSERVICE_OWNERだけを個別学習データExport・削除へ追加する。管理ロール一般、EXTERNALのみ、他人、旧V1所有者は許可しない。
+- Pilot OFF、Program停止、Seat取消は新規学習を止めるが、本人の保存済みデータ操作を止めない。学習のlive GateはPrivacyへ流用しない。認証・所属/User/Group/Workspaceの有効条件、Enrollmentの対象状態は変更しない。
+- ALL削除でSeatのEnrollment参照がnullとなった後は、同一Scope/本人/EnrollmentのALL削除監査と取消済みINTERNAL履歴を照合する。一般的な過去参加だけで別Enrollmentを認可しない。再送時は既存revision監査とlockを再利用する。
+- 新Evidence保存、再現Bridge、UI、schema/migration、Provider、課金、LINE、保持期間、本番操作を含めない。[実装報告](ai-evolution/EVO05_R0_OWNER_PRIVACY_IMPLEMENTATION.md)を参照。退会・無効認証時の本人請求経路は別レビュー事項。
+
 ## 2026-10-09: 内部テスター準備UIは停止中の本人に限定する
 
 - 状態: Proposed（PRレビュー待ち。本番操作は未実施）
@@ -15,6 +219,14 @@
 - 停止中の本人Profile準備と実行時の認可を区別する。準備時の契約projectionは保存設定を有効化しない。実行flag、Program状態、Definition承認、Provider直前認可・Call Admissionは既存Gateを維持する。
 - trusted PREPARE_ENROLLMENT / ADMITのみ所有者本人を候補として扱う。他管理ロール・他User・他Enrollmentのアクセスや旧V1/LINE Schedulerは拡張しない。
 - schema/migration/Provider設定変更なし。実装は本番deploy、Seat付与、Profile回答、Definition承認、START、実課金の承認ではない。[実装報告](ai-training/MANABERU_STYLE_INTERNAL_OWNER_LEARNING_IMPLEMENTATION.md)を参照。
+
+## 2026-10-07: OEM課金人数を正式登録と無料実利用の和集合へ分離する
+
+- 人間が承認したOEM Billing指示に基づく独立PR。提供区分FREE/PAID/PAID_BUNDLEを決済方式から分離し、Workspaceごとの課金人数をR∪Aで算出する。MAUは実利用指標として維持する。
+- 正式登録・明示終了・提供区分・契約期間を時点履歴で保持する。停止、学習開始、管理者昇格、現在status、updatedAtから課金期間を推測しない。初期履歴の人間確認と将来月cutoverがなければ旧方式を継続し、新方式で根拠不足ならREVIEW_REQUIREDで請求確定を止める。
+- 全OEM共通料金はSUPER_ADMINによる下書き/CAS/将来月公開/開始前取消で管理する。版と安定tier IDを保存し、公開料金・確定月・旧請求/PDFの改変を禁止する。新0人はNULLとは異なり、旧MAUへのfallbackをしない。
+- AI_TRAININGの内部DefinitionをOEM商品ポリシーへ対応付け、ブランドや0円設定でManaberu FREE制約を迂回させない。直営・内部PilotへOEM料金を強制しない。
+- [ADR](adr/OEM_REGISTRATION_BILLING_V2.md)と[実装報告](OEM_REGISTRATION_BILLING_V2_IMPLEMENTATION_REPORT.md)を参照。本番Migration/deploy/cutover/価格改定/実請求/実課金は今回実行せず、別レビューを必要とする。
 
 ## 2026-10-07: 専用Program準備UIはCREATE_PROGRAMのみを既存trusted APIへ接続する
 
@@ -3782,14 +3994,21 @@
 - STOPは実行flagがONでも使える独立操作。専用marker・通知隔離・Seat・Goal・Plan・履歴を保持する。送信済みcallを取消したとは扱わず、drainは常に別確認とする。
 - schema、migration、Provider、UI、LINE、V1 Runtimeは変更しない。本番での操作、Definition承認、参加者登録、課金、Wave拡大は実行しない。
 
-## 2026-10-08: DB credential rotationは現在のProductionコードの専用リリースへ分離する
+## 2026-10-08: Migrationの実行上限と終了未確認時の停止を分離する
 
-- 状態: Proposed（専用PRの作成のみ承認。本番変更・merge・Deployは未承認）
-- 基準は最後に確認したProduction SHA `4e2bc01eb0bb1181bcd967d3324c30448ebfaa72`。最新mainのOEM機能・未適用migrationを混在させない。
-- 本専用releaseだけVercel buildからMigration実行を除き、既存のread-only schema readiness gateと同じApplication buildを維持する。schema mismatchを無視せず停止する。ignore/cacheによる接続設定の更新漏れを防ぐ。
-- production向けDraft PRのmergeはGit連携Deployを開始するため、通常の「マージしました」運用で先行mergeしない。credential rotation、停止/drain、承認済みrelease、復旧を一つの人間承認された作業窓で行う。
-- 古いDeploymentの環境変数は更新されない。旧passwordが不明なため単純rollbackを復旧手段とせず、新credentialで同じ基準コードを再buildする。DB restoreでpasswordが戻ると推測しない。
-- 本番schema/データ、Migration history、Runtime、Cron定義、Provider、Pilot設定は変更しない。通常feature releaseではmainのMigration付きbuildへ戻すことを必須とする。
+- 状態: Proposed（実装PRレビュー待ち。本番Migration/Deployは未承認）
+- OEMの段階的公開監査を受け、Vercel build前のMigrationにconnection startupのlock/statement/idle transaction上限とCLI全体の期限を設ける。DB全体やroleの恒久設定、過去migrationのchecksumを変更しない。
+- 同じPrisma CLI/接続設定による非永続probeで実設定を確認してからMigrationへ進む。設定不正、probe失敗、期限、signal、Migration非0終了はfail-closedとし、自動retry/resolve/DB rollbackをしない。
+- process停止とDB session終了、SQL rollback、全writer drainを同一視しない。部分適用は残り得るため実schema/履歴/sessionを確認し、人間が復旧を判断する。
+- 原エラー・URL・SQL・子process出力は公開build logへ流さず固定reasonを記録する。診断・backup/restore・対象writer停止・pending一覧承認は別Gateとして維持する。
+- 設定上限はDeployment Guideに集約。新機能、schema、migration、Provider、課金、UI、Pilot運用を変更しない。全pendingを適用する既存仕様を、対象限定や本番承認済みとは扱わない。
+
+## 2026-10-08: 実Migration接続の確認をDeployから独立させる
+
+- 状態: Proposed（実装PRレビュー待ち。実接続・Migration・Deployは未実施）
+- 通常runnerはprobe成功後にMigrationへ進むため、確認だけの代用にしない。専用`db:migration:probe`入口を設け、同じPrisma CLI / URL変換 / timeout設定のread-only probe一回で終了する。成功・失敗どちらもMigrationやbuildへ進まない。
+- 確認対象Supabase project ref、両接続URL、postgres DB / role、変換後session poolerの5432を照合し、未知の接続先へ試行しない。secretの取得や配置を自動化せず、値と原エラーをログへ出さない。
+- 稼働中Appの停止はprobeの前提にしない。DB全体/role設定やschema、Vercel build command、料金、Pilotを変更しない。probe成功と本番host到達性、backup、pending、writer drain、本番操作承認は別の証拠とする。
 
 ## 2026-10-10: Personal Learning PilotのUSD予算はProvider送信前の最大費用予約で止める
 
@@ -3800,19 +4019,61 @@
 - Admission台帳へ予約額と価格版だけを追加する。既存行は推測backfillせずNULLのまま保持し、同日内に未価格行があれば新規呼出しを停止する。相談、回答、成果物、Provider response、API keyは保存しない。
 - この上限は対象Pilot Programの事前予約であり、Provider請求額、税・為替、他機能、Provider account全体のbudgetを保証しない。Provider側budget、請求照合、外部Alert、未知call復旧、全instance drainは別Gateとする。
 
-## 2026-10-10: Migrationの実行上限と終了未確認時の停止をproductionへ復帰する
+## 2026-10-10: 共有Provider予算は当月原価UNKNOWNをfail-closedで停止する
 
-- 状態: Proposed（限定runner PRレビュー待ち。本番Migration/Deployは未承認）
-- credential rotation専用releaseで一時的に外したVercel build前Migrationを復帰し、connection startupのlock/statement/idle transaction上限とCLI全体の期限を設ける。DB全体やroleの恒久設定、過去migrationのchecksumを変更しない。
-- 同じPrisma CLI/接続設定による非永続probeで実設定を確認してからMigrationへ進む。設定不正、probe失敗、期限、signal、Migration非0終了はfail-closedとし、自動retry/resolve/DB rollbackをしない。
-- process停止とDB session終了、SQL rollback、全writer drainを同一視しない。部分適用は残り得るため実schema/履歴/sessionを確認し、人間が復旧を判断する。
-- 2026-10-10のread-only監査ではproduction系統231件の成功履歴が名前ハッシュまで一致し、unfinished/rolled-backは0件、pendingは`20261010070000_personal_learning_call_cost_reservation`の1件だけだった。対象tableは0行、追加列/制約は未作成、待機lockは0、最新物理Backupは2026-10-10 05:44:36 JSTだった。
-- PR作成はMigration/Deploy承認ではない。mergeがMigrationとApplication buildを開始するため別の明示承認を必須とし、Pilot、Provider送信、課金、参加者登録は変更しない。
+- 状態: Accepted（実装承認。本番反映・Provider送信・Pilot開始は未承認）
+- `AiUsageEvent`のProvider別UTC月次集計に`estimatedCostUsdMicros = null`が1件でもあれば、active Provider設定のRuntime解決を`CONFLICT`で停止する。NULLを0円として予算残高へ含めない。
+- 現行EventにはProvider送信済みを確定する列がない。SUCCESS、task type、error codeから費用未発生を推測して例外にすると上限保証にならないため、既知のDaily Missionを含めて除外を設けない。
+- 日次NULLがなくても当月予算残高は確定できないため、判定窓は既存monthly budgetと同じUTC月初から現在までとする。既存のProvider単位集計境界を維持し、Workspace/User/Bunshinのデータを追加取得しない。
+- schema、migration、Provider Adapter、価格、既存Eventのbackfill/delete、管理UIは変更しない。UNKNOWNの解消は各記録経路で確定原価を保存する別作業とし、履歴改変でRuntimeを再開しない。
+- この変更は共有Providerを利用する既存機能を停止し得る。PRレビュー、影響確認、原価記録経路の修復、本番release、停止解除、Provider送信、実課金をそれぞれ別Gateとする。
 
-## 2026-10-10: Supavisor経由のMigration上限は対象SQLのtransaction-local設定を正本にする
+## 2026-10-11: 共有Provider予算は次回固定原価を含めて送信前に判定する
 
-- 状態: Proposed（hotfix PRレビュー待ち。再merge・再Deployは未承認）
-- PR #1218のProduction buildは、Supavisor session pooler接続後のprobeで`MIGRATION_BOUNDS_NOT_ACTIVE`となり、Migration開始前にfail-closed停止した。本番履歴・対象列・制約は未変更、待機lockとrunner sessionは0件だった。
-- Supavisorは接続startup `options`の一般GUCを反映する保証がないため、`lock_timeout` 5秒、`statement_timeout` 60秒、`idle_in_transaction_session_timeout` 60秒を未適用の対象Migration内で`BEGIN` / `SET LOCAL` / `COMMIT`として固定する。DB/roleの恒久設定は変更しない。
-- runnerは対象Migrationが最新、直前Migrationが所定値、対象SQLに固定上限があることをローカルで検査する。本番probeでは成功履歴の件数とmigration名集合、対象の未適用/適用済み状態、0行、列/制約未作成、待機lockなしを照合し、この限定release以外を実行しない。
-- Prisma migrate process 300秒の期限、非0/signal/期限時のfail-closed、自動retry/resolve/rollback禁止は維持する。再merge前にBackup、履歴、schema、lock、公開SHAを再確認する。
+- 状態: Proposed（実装PRレビュー待ち。本番反映・設定変更・Provider送信は未承認）
+- active Provider Runtimeは、日次・月次の使用済み額に確定済み固定リクエスト原価を加えた額が予算を超える場合、Provider送信前に`CONFLICT`で停止する。予算との完全一致は許可する。
+- 固定原価が予算自体を超える場合は使用済み0でも停止する。価格値や予算値をコードで補完せず、UNKNOWNをPASSへ変換しない。
+- schema、migration、Provider Adapter、価格、予算、本番設定は変更しない。Runtime解決と利用記録の間の同時実行競合は解消しないため、厳密な上限には原子的な送信前予約を別Gateで実装する。
+- production release、設定変更、Provider送信、実課金、Pilot STARTはそれぞれ別承認とする。
+
+## 2026-10-11: OpenAI実送信はcall単位の原子的予約と記録済み実績による限定復旧を正本にする
+
+- 状態: Proposed（実装PRレビュー待ち。本番反映・設定変更・Provider送信は未承認）
+- OpenAIの予約単位はHTTP処理やJob全体ではなく、Providerへ送る各callとする。本文生成、品質判定、修復、再生成等を別operation keyにし、複数callの固定原価合計または文字数等から算定した保守的上限を送信前に原子的予約する。
+- Provider未送信のquota・権限拒否は既知の0円として記録する。送信後は成功／失敗の使用量をstrictに保存してから予約を精算し、保存・精算失敗時はOPENのまま保持する。UNKNOWNを0円へ補完しない。
+- Personal LearningのProgram専用AdmissionとProvider account全体Admissionは別Gateとして両方維持し、利用実績を二重計上しない。
+- OPEN予約の復旧は、同一operation key digestに一致する既知費用`AiUsageEvent`が既に保存済みの場合だけ許可する。SUPER_ADMIN、理由、監査を必須とし、TTL、失敗種別、時間経過から推測解放しない。
+- 管理予算表示にはOPEN予約額を含め、15分超の未精算をAlert Centerに表示する。外部メール／LINE通知、Provider請求書照合、税・為替、使用量記録がない予約の復旧は完了扱いにしない。
+- Creatomate、FAL、Runwayの既存動画専用費用Policyは重複接続しない。本番設定、Deploy、Provider送信、実課金、Pilot開始は別の明示承認を待つ。
+
+## 2026-10-11: OEM Offering移行履歴は既存期間台帳を正本にする
+
+- 状態: Proposed（実装PRレビュー待ち。本番反映・Offering移行は未承認）
+- 新しい監査tableや履歴コピーを作らず、`OemOfferingPeriod`の開始・終了、商品ポリシー版、操作者、理由を移行履歴として読み取る。終了済み期間を更新・削除しない。
+- SUPER_ADMINだけがOrganization、Service、商品で検索できる。現在のOfferingは現時点で適用可能な新版の有無を表示し、最大200件に制限する。履歴も新しい順の最大200件とし、超過時は絞り込みを要求する。
+- 検索・履歴表示は一括移行の権限を与えない。既存の1 Offeringごとの明示確認、CAS、将来版・旧版・互換性違反の拒否を維持する。
+- schema、migration、請求、参加者、本番設定を変更しない。本番Application releaseと実Offering移行はそれぞれ別の明示承認を待つ。
+
+## 2026-10-11: OEM OfferingレビューCSVは全件取得できない場合に出力しない
+
+- 状態: Proposed（実装PRレビュー待ち。本番反映・Offering移行は未承認）
+- SUPER_ADMINだけが、管理画面と同じOrganization・Service・商品・移行要否条件で、現在の移行レビュー対象と期間台帳履歴を別CSVとして保存できる。
+- 10,000件を上限とし、10,001件目を検出した場合は部分CSVを返さず、検索条件による絞り込みを要求する。CSVセルは表計算ソフトの数式解釈を防止する。
+- 出力は読み取り専用で、Offering移行、履歴変更、一括適用、参加者・請求変更を行わない。schema、migration、本番設定も変更しない。
+
+## 2026-10-11: OEM Offeringの互換性違反は移行操作前にfail-closedで表示する
+
+- 状態: Proposed（実装PRレビュー待ち。本番反映・Offering移行は未承認）
+- FREE非対応の商品版、AI_TRAININGを含むService Programに必要Capabilityがない商品版は、移行フォームを表示せず固定reasonでブロックする。管理画面とレビューCSVの判定は、実行時検査と同じ純粋関数を使用する。
+- Service Program定義が欠落・不正で安全に解析できない場合は、AI研修がないと推測せず`OEM_PROGRAM_DEFINITION_REVIEW_REQUIRED`としてブロックする。
+- 事前表示は実行許可の正本にしない。移行transaction内で現行Offering、対象版、適用日、商品状態、FREE可否、Capabilityを再検証する。
+- schema、migration、一括移行、参加者、請求、本番設定は変更しない。
+
+## 2026-10-12: OEM正式登録課金の初期準備は既存の履歴正本と操作境界を一画面へ投影する
+
+- 状態: Proposed（実装PRレビュー待ち。本番反映・履歴登録・cutoverは未承認）
+- Organization別の商用管理画面に、Serviceごとの現在Offering、確認対象参加者と登録履歴、OEM契約期間、既存Billing Policy、月次shadowを読み取り専用projectionとして表示する。現在状態や同意日時を確定済みの過去事実として自動保存しない。
+- 提供区分、正式登録、契約期間、cutoverの保存は既存`PrismaOemBillingAdminService`を使用し、session actorのSUPER_ADMIN再認可、Workspace境界、row lock、CAS、商品互換性、将来月、初期履歴完全性をtransaction内で再検証する。画面の準備完了表示は実行許可の正本にしない。
+- 正式登録日時には同意日時を編集可能な候補として表示するが、証跡確認と理由の入力なしでは保存しない。終了済み登録履歴がある参加者は初期登録を追加せず、訂正・再登録の別レビューへ止める。
+- shadowはRepeatable Readの既存計算だけを呼び、履歴不足を0人や旧MAUで補完しない。cutoverは全ServiceのOffering、契約期間、現在の参加者全員のopen登録履歴を表示上も満たした場合だけフォームを出し、既存Policyがあれば変更・取消入口を出さない。
+- schema、migration、課金計算、月次確定、請求、履歴訂正、本番設定を変更しない。本番の履歴登録、cutover、料金公開、請求確定、実課金はそれぞれ別の明示承認を待つ。

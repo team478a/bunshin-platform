@@ -9010,3 +9010,21 @@ body:has(.app-shell) > .site-footer {
     gap: 0.25rem;
   }
 }
+/* OEM global pricing: one decision per row, including narrow smartphone viewports. */
+.oem-pricing-editor > label,
+.oem-pricing-editor fieldset > label {
+  display: grid;
+  gap: 0.5rem;
+}
+.oem-pricing-editor fieldset {
+  min-width: 0;
+  display: grid;
+  gap: 1rem;
+}
+.oem-pricing-editor input:not([type='checkbox']),
+.oem-pricing-editor textarea {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 0.75rem;
+}

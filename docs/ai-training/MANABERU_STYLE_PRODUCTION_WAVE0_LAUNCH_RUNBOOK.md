@@ -4,11 +4,33 @@
 
 既存APIへの1件ずつのレビュー画面は[承認登録UI実装報告](MANABERU_STYLE_DEFINITION_REVIEW_UI_IMPLEMENTATION.md)。画面は `/s/{serviceSlug}/manage/programs/learning-definition-review`。初期表示は保存せず、GET後に人間が7項目・公開SHA・非公開証跡・最終確認を入力する。登録応答後もGET/監査で現在状態を確認。教育設計の人間承認と本番APPROVEは別段階。画面追加をDefinition管理flag変更・本番Deploy・APPROVE・START・課金同意としない。main/productionの分離releaseと既存Gateを維持する。
 
+### 2026-10-09 内部試験用の教育方針承認（本番操作の許可ではない）
+
+指示元ユーザーが3段階の教育方針を内部1〜2人の試験用として承認した。範囲と証跡は[人間レビュー票の最新追記](PERSONAL_LEARNING_PRODUCTION_DEFINITION_REVIEW_SHEET.md)。これは全checklistレビューや本番Definition APPROVE・deploy・参加者準備・STARTの承認ではない。未確認項目をPASSにせず、固定release・実認可・reviewDigest/revision等の既存Gateを維持する。
+
 ### 2026-10-09 Pilot学習の焦点表示（本番未検証）
 
 [焦点表示の実装報告](MANABERU_STYLE_PILOT_DEFINITION_FOCUS_IMPLEMENTATION.md)で、構造・背景・条件の違い、同じ課題の再利用、安全な架空題材、本人実践完了の記録案内をPilot画面へ追加した。Definition/Rubric/進級条件は変更しない。人間による教育レビュー・APPROVE・本番deploy・STARTの証拠や承認ではない。Phase Hでは実スマートフォン上で案内の理解と版照合を確認する。
 
 ## 状態・対象・承認境界
+
+### 2026-10-09 3Definition教育レビュー一括点検
+
+[教育レビュー一括報告](MANABERU_STYLE_THREE_DEFINITION_EDUCATION_REVIEW.md)と[既存レビュー票の最新版](PERSONAL_LEARNING_PRODUCTION_DEFINITION_REVIEW_SHEET.md)をPhase Dの判断資料として使う。3件の人間判断は全UNKNOWN、本番APPROVEは未実施。特に構造/背景は同じMission本文・Objective・Rubricであり、背景に焦点を当てた反復として許容するか、Pilot限定の焦点表示を先に補うかを人間が決める。追加実装は提案だけで今回行わない。教育レビューをまとめて行っても、3件の承認記録/操作を自動一括化しない。
+
+### 2026-10-09 安全条件の再整理（以下の過去の次操作より優先）
+
+[安全Gate再整理](../ai-evolution/WAVE0_SAFETY_GATE_REBASELINE.md)を現在の作業順序の正本とする。過去の元Backup日時・完全復元はUNKNOWNのまま。画面で取得できない履歴の探索を繰り返すことや、新しい有償Restore/Upgradeを準備全体の必須次操作にしない。復旧準備を省略・PASS扱いせず、現在の変更に必要なBackup/回復手順と残リスクのowner判断を別Gateにする。
+
+現在の開始はNO-GO（Call Admission未設定、Definition未承認、内部参加者未準備、公開release/実認可/停止の検証不足）。次は既存3Definitionの教育レビューと設定案・releaseの整理。実APPROVE/設定/登録/Deploy/STARTは別承認。この追記は過去の復旧証拠を変更せず、復元日時だけをすべてのレビュー・準備の停止理由とする運用を訂正する。
+
+### 2026-10-09 最新読取証拠とレビュー準備
+
+同日追加のLogs読取で、既存restoreへの10月7日09:29 JSTの学習3migration相当DDLリハーサルstatementを確認した。履歴不一致の変更経路は説明できるが、復旧合格はUNKNOWNのまま。現在は[復元報告の最新追記](../ai-evolution/RESTORE_INTEGRITY_WAVE0_REVIEW_PREPARATION.md)を優先し、Phase Bの残確認は元Backup日時/同時点完全性/権限/RTO/RPO。隔離Prisma履歴の修正や同DDL再実行を次操作にしない。
+
+[本番安全条件の読取証拠](../ai-evolution/PRODUCTION_SAFETY_READ_ONLY_EVIDENCE.md)を2026-10-07/08の観測より優先する。本番Prisma231件・学習5tableあり、Pilot停止・Seat0・承認0・人数policy未設定、Vercel project productionのCall Admission NOT_SET。これは開始許可ではない。
+
+[隔離復元確認・設定レビュー案](../ai-evolution/RESTORE_INTEGRITY_WAVE0_REVIEW_PREPARATION.md)では既存restoreの学習tableとPrisma履歴に不一致を確認。復旧リハーサル合格はUNKNOWN、Wave 0はNO-GOを維持する。Phase Bで新しい復元を反射的に実行せず、まずDB ownerが既存restoreの復元元Backup/復元後変更記録を照合する。Phase Eの既存候補と[3Definitionレビュー票](PERSONAL_LEARNING_PRODUCTION_DEFINITION_REVIEW_SHEET.md)は未承認。設定・承認・参加者登録・開始は別操作承認を待つ。
 
 ### 2026-10-09 本人内部テスター準備UI（未本番反映）
 
@@ -90,7 +112,7 @@ Wave 0は内部1〜2人の実環境E2Eであり、外部募集ではない。内
 ## Phase B — Backup / Migration
 
 1. DB ownerとMigration担当の2者がSupabase Dashboardで対象project、backup方式、最終成功timestamp、保持期間を記録。Read-only監査でPro日次Physical Backup実在と最新COMPLETED（2026-10-07 05:44:04 JST）を確認した。正式retention/実restore/RTOはUNKNOWN。実行直前の新しいBackupとRPOを再確認し、日次backupで許容RPOを満たさなければ追加方式をownerが承認する。Storage object本体は含まれない。
-2. 別の隔離projectへrestore rehearsal。restore可能性、実測RTO、RPO、FK/主要件数/schema/実roleを確認。Productionへ上書きしない。dumpはGitへ置かない。backup timestamp、担当者、restore結果がない場合停止。
+2. 既存隔離projectの復元記録とDDL試験後の状態を先に利用する。元Backup日時・同時点完全性・実測RTO/RPOはUNKNOWNのままでよく、文書/教育レビュー/読取検査は先行可能。現在の本番変更を承認する前には、最新Backupと復元手順・権限・許容損失/停止時間・検証範囲をownerが確認し、残リスクを明示判断する。復旧準備自体が不明なら実変更を停止。追加restore rehearsalが必要かはこの判断で決め、費用と対象を別承認する。Productionへ上書きしない。dumpはGitへ置かない。過去の欠落だけを理由に有償再復元を自動要求しない。
 3. release全pendingを固定し、既存Goal unique index/triggerのlock時間と旧版write/deleteとの互換性を隔離環境で測定。lock/statement許容時間、writer停止/drain範囲、監視担当を人間が決める。SQLにはtimeoutがなく、additiveでも無停止保証はない。
 4. Migration実行を独立承認。標準はPhase CのVercel build先頭で**全pendingを辞書順で一括**適用する。各Migrationごとの人間停止点は現runnerにない。backup→一括Migration→全schema/RLS検証→公開検証の順序とする。
 5. 公開前に手動runnerを使いMigration/schema確認を分離する必要がある場合、接続先・credential供給・二重runner排除・失敗時公開防止を別レビュー。承認済みrunner上の `pnpm db:migrate:deploy` も全pending適用であり1件選択ではない。今回実行しない。

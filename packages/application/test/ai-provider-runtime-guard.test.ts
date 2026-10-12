@@ -1,8 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  ReserveAiProviderRuntimeCall,
   ResolveAiProviderRuntimeConfiguration,
+  SettleAiProviderRuntimeCall,
   type AiProviderConfiguration,
   type AiProviderConfigurationRepository,
+  type AiProviderRuntimeAdmissionRepository,
 } from '../src/index';
 
 const configuration: AiProviderConfiguration = {
@@ -16,6 +19,7 @@ const configuration: AiProviderConfiguration = {
   model: 'gpt-5-mini',
   dailyBudgetUsdMicros: 1_000_000,
   monthlyBudgetUsdMicros: 5_000_000,
+  requestCostUsdMicros: 250,
   globallyPaused: false,
   keyVersion: 1,
   lastVerifiedAt: new Date('2026-08-24T00:00:00Z'),
@@ -39,6 +43,7 @@ const snapshot = {
   encryptedApiKey: 'sealed',
   dailySpentUsdMicros: 100,
   monthlySpentUsdMicros: 200,
+  monthlyUnknownCostEvents: 0,
 };
 
 describe('ResolveAiProviderRuntimeConfiguration', () => {
@@ -64,11 +69,184 @@ describe('ResolveAiProviderRuntimeConfiguration', () => {
     ).rejects.toMatchObject({ code });
   });
 
-  it('stops at either daily or monthly budget', async () => {
+  it.each([
+    [
+      'daily',
+      {
+        dailySpentUsdMicros:
+          configuration.dailyBudgetUsdMicros - (configuration.requestCostUsdMicros ?? 0) + 1,
+      },
+      'daily provider budget reached',
+    ],
+    [
+      'monthly',
+      {
+        monthlySpentUsdMicros:
+          configuration.monthlyBudgetUsdMicros - (configuration.requestCostUsdMicros ?? 0) + 1,
+      },
+      'monthly provider budget reached',
+    ],
+  ] as const)(
+    'stops when the next request would exceed the %s budget',
+    async (_, override, message) => {
+      await expect(
+        new ResolveAiProviderRuntimeConfiguration(repository({ ...snapshot, ...override })).execute(
+          { environment: 'PRODUCTION', provider: 'OPENAI' },
+        ),
+      ).rejects.toMatchObject({ code: 'CONFLICT', message });
+    },
+  );
+
+  it('allows the next request when it reaches both budgets exactly', async () => {
+    const requestCostUsdMicros = configuration.requestCostUsdMicros ?? 0;
+    const atBoundary = {
+      ...snapshot,
+      dailySpentUsdMicros: configuration.dailyBudgetUsdMicros - requestCostUsdMicros,
+      monthlySpentUsdMicros: configuration.monthlyBudgetUsdMicros - requestCostUsdMicros,
+    };
+    await expect(
+      new ResolveAiProviderRuntimeConfiguration(repository(atBoundary)).execute({
+        environment: 'PRODUCTION',
+        provider: 'OPENAI',
+      }),
+    ).resolves.toEqual(atBoundary);
+  });
+
+  it('stops before the first request when its configured cost exceeds the budget', async () => {
     await expect(
       new ResolveAiProviderRuntimeConfiguration(
-        repository({ ...snapshot, dailySpentUsdMicros: configuration.dailyBudgetUsdMicros }),
+        repository({
+          ...snapshot,
+          configuration: {
+            ...configuration,
+            dailyBudgetUsdMicros: 249,
+            requestCostUsdMicros: 250,
+          },
+          dailySpentUsdMicros: 0,
+        }),
       ).execute({ environment: 'PRODUCTION', provider: 'OPENAI' }),
+    ).rejects.toMatchObject({
+      code: 'CONFLICT',
+      message: 'daily provider budget reached',
+    });
+  });
+
+  it('fails closed when any usage cost in the current UTC month is unknown', async () => {
+    await expect(
+      new ResolveAiProviderRuntimeConfiguration(
+        repository({ ...snapshot, monthlyUnknownCostEvents: 1 }),
+      ).execute({
+        environment: 'PRODUCTION',
+        provider: 'OPENAI',
+        now: new Date('2026-08-24T12:00:00Z'),
+      }),
+    ).rejects.toMatchObject({ code: 'CONFLICT', message: 'provider cost is unknown' });
+  });
+
+  it.each(['absent', 'zero'] as const)(
+    'fails before runtime handoff when the configured request cost is %s',
+    async (requestCost) => {
+      const unsafeConfiguration: AiProviderConfiguration = { ...configuration };
+      if (requestCost === 'zero') unsafeConfiguration.requestCostUsdMicros = 0;
+      else delete unsafeConfiguration.requestCostUsdMicros;
+      await expect(
+        new ResolveAiProviderRuntimeConfiguration(
+          repository({
+            ...snapshot,
+            configuration: unsafeConfiguration,
+          }),
+        ).execute({
+          environment: 'PRODUCTION',
+          provider: 'OPENAI',
+          now: new Date('2026-08-24T12:00:00Z'),
+        }),
+      ).rejects.toMatchObject({
+        code: 'CONFIGURATION_ERROR',
+        message: 'provider request cost is required',
+      });
+    },
+  );
+});
+
+describe('provider runtime call admission', () => {
+  const admission = {
+    id: '33333333-3333-4333-8333-333333333333',
+    environment: 'PRODUCTION' as const,
+    provider: 'EXA' as const,
+    operationHash: 'a'.repeat(64),
+  };
+
+  it('requires a bounded operation key before reserving', async () => {
+    const reserveActiveForRuntime = vi.fn();
+    const admissionRepository: AiProviderRuntimeAdmissionRepository = {
+      reserveActiveForRuntime,
+      settleRuntimeAdmission: vi.fn(),
+    };
+    await expect(
+      new ReserveAiProviderRuntimeCall(admissionRepository).execute({
+        environment: 'PRODUCTION',
+        provider: 'EXA',
+        operationKey: ' ',
+      }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+    expect(reserveActiveForRuntime).not.toHaveBeenCalled();
+  });
+
+  it('returns the atomic repository reservation', async () => {
+    const reserved = {
+      ...snapshot,
+      configuration: { ...configuration, provider: 'EXA' as const, model: null },
+      admission,
+    };
+    const admissionRepository: AiProviderRuntimeAdmissionRepository = {
+      reserveActiveForRuntime: vi.fn().mockResolvedValue(reserved),
+      settleRuntimeAdmission: vi.fn(),
+    };
+    await expect(
+      new ReserveAiProviderRuntimeCall(admissionRepository).execute({
+        environment: 'PRODUCTION',
+        provider: 'EXA',
+        operationKey: 'trend:week:1',
+      }),
+    ).resolves.toEqual(reserved);
+  });
+
+  it('forwards one bounded explicit cost policy and rejects ambiguous reservations', async () => {
+    const reserveActiveForRuntime = vi.fn().mockResolvedValue({
+      ...snapshot,
+      admission,
+    });
+    const admissionRepository: AiProviderRuntimeAdmissionRepository = {
+      reserveActiveForRuntime,
+      settleRuntimeAdmission: vi.fn(),
+    };
+    await new ReserveAiProviderRuntimeCall(admissionRepository).execute({
+      environment: 'PRODUCTION',
+      provider: 'OPENAI',
+      operationKey: 'narration:1',
+      reservedCostUsdMicros: 1_250,
+    });
+    expect(reserveActiveForRuntime).toHaveBeenCalledWith(
+      expect.objectContaining({ reservedCostUsdMicros: 1_250 }),
+    );
+    await expect(
+      new ReserveAiProviderRuntimeCall(admissionRepository).execute({
+        environment: 'PRODUCTION',
+        provider: 'OPENAI',
+        operationKey: 'ambiguous:1',
+        reservedCostUsdMicros: 1_250,
+        requestCount: 2,
+      }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+  });
+
+  it('fails closed when the exact open admission cannot be settled', async () => {
+    const admissionRepository: AiProviderRuntimeAdmissionRepository = {
+      reserveActiveForRuntime: vi.fn(),
+      settleRuntimeAdmission: vi.fn().mockResolvedValue(false),
+    };
+    await expect(
+      new SettleAiProviderRuntimeCall(admissionRepository).execute(admission),
     ).rejects.toMatchObject({ code: 'CONFLICT' });
   });
 });

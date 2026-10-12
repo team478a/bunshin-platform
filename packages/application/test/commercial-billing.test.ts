@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
+  assertOemSetupFeeCharge,
   isTenantInvoiceOverdue,
   nextTenantInvoiceStatus,
   summarizeCommercialInvoices,
   tenantInvoiceDueAt,
   tenantInvoiceNumber,
+  tenantSetupFeeInvoiceNumber,
 } from '../src/commercial-billing';
 
 describe('tenant invoice lifecycle', () => {
@@ -54,5 +56,35 @@ describe('tenant invoice lifecycle', () => {
         '12345678-1234-4000-8000-123456789abc',
       ),
     ).toBe('WW-202608-12345678123440008000123456789ABC');
+  });
+
+  it('validates a reviewed setup fee and creates a separate stable invoice number', () => {
+    const charge = {
+      chargeKey: 'SIGNED_AGREEMENT_2026_A',
+      amountYen: 300_000,
+      description: 'OEM導入初期設定費用',
+      agreementReference: 'agreement-2026-a',
+      agreedAt: new Date('2026-10-10T00:00:00.000Z'),
+      reason: '締結済み契約書の金額を確認したため',
+    };
+    expect(() =>
+      assertOemSetupFeeCharge(charge, new Date('2026-10-11T00:00:00.000Z')),
+    ).not.toThrow();
+    expect(
+      tenantSetupFeeInvoiceNumber(charge.agreedAt, '12345678-1234-4000-8000-123456789abc'),
+    ).toBe('WW-SETUP-20261010-12345678123440008000123456789ABC');
+  });
+
+  it('rejects unreviewed or unsafe setup fee inputs', () => {
+    expect(() =>
+      assertOemSetupFeeCharge({
+        chargeKey: 'bad key',
+        amountYen: 0,
+        description: '',
+        agreementReference: '',
+        agreedAt: new Date('2026-10-12T00:00:00.000Z'),
+        reason: 'short',
+      }),
+    ).toThrow();
   });
 });

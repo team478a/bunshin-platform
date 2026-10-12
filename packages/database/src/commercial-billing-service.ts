@@ -1,8 +1,10 @@
 import {
+  assertOemSetupFeeCharge,
   nextTenantInvoiceStatus,
   summarizeCommercialInvoices,
   tenantInvoiceDueAt,
   tenantInvoiceNumber,
+  tenantSetupFeeInvoiceNumber,
 } from '@bunshin/application';
 import { Prisma, type PrismaClient } from '@prisma/client';
 import { prisma } from './index';
@@ -13,65 +15,114 @@ import {
   requiredText,
   unresolvedCommercialReminderFailures,
   type PrepareCustomQuoteInvoiceInput,
+  type PrepareOemSetupFeeInvoiceInput,
   type SaveOrganizationCommercialContractInput,
   type TransitionTenantInvoiceInput,
 } from './commercial-billing-support';
+import { requireTrainingOemOffering } from './oem-training-offering';
+import { resolveOemBillingPolicy } from './oem-billing-policy-projection';
 
 export class PrismaCommercialBillingService {
   constructor(private readonly client: PrismaClient = prisma) {}
 
   async dashboard(workspaceId: string) {
-    return this.client.workspace.findFirst({
-      where: { id: workspaceId, type: 'ORGANIZATION' },
-      select: {
-        id: true,
-        name: true,
-        legalName: true,
-        contactEmail: true,
-        organizationCommercialContract: true,
-        tenantInvoices: {
-          orderBy: { periodStart: 'desc' },
-          take: 24,
-          select: {
-            id: true,
-            invoiceNumber: true,
-            status: true,
-            periodStart: true,
-            mau: true,
-            amountYen: true,
-            externalInvoiceReference: true,
-            paymentReference: true,
-            paymentProvider: true,
-            providerCheckoutSessionId: true,
-            checkoutExpiresAt: true,
-            paymentFailedAt: true,
-            paymentFailureCategory: true,
-            notes: true,
-            documentSnapshot: true,
-            issuedAt: true,
-            dueAt: true,
-            paidAt: true,
+    const now = new Date();
+    const [dashboard, setupFeeProducts] = await Promise.all([
+      this.client.workspace.findFirst({
+        where: { id: workspaceId, type: 'ORGANIZATION' },
+        select: {
+          id: true,
+          name: true,
+          legalName: true,
+          contactEmail: true,
+          organizationCommercialContract: true,
+          tenantInvoices: {
+            orderBy: { periodStart: 'desc' },
+            take: 24,
+            select: {
+              id: true,
+              kind: true,
+              invoiceNumber: true,
+              status: true,
+              periodStart: true,
+              mau: true,
+              billableUserCount: true,
+              billingRuleVersion: true,
+              amountYen: true,
+              externalInvoiceReference: true,
+              paymentReference: true,
+              paymentProvider: true,
+              providerCheckoutSessionId: true,
+              checkoutExpiresAt: true,
+              paymentFailedAt: true,
+              paymentFailureCategory: true,
+              notes: true,
+              documentSnapshot: true,
+              issuedAt: true,
+              dueAt: true,
+              paidAt: true,
+              billingWebhookEvents: {
+                where: {
+                  status: 'PROCESSED',
+                  errorCategory: {
+                    in: ['PARTIAL_REFUND_REVIEW_REQUIRED', 'FULL_REFUND_REVIEW_REQUIRED'],
+                  },
+                },
+                orderBy: { receivedAt: 'desc' },
+                select: {
+                  id: true,
+                  providerEventId: true,
+                  errorCategory: true,
+                  receivedAt: true,
+                },
+              },
+              setupFeeCharge: {
+                select: {
+                  chargeKey: true,
+                  description: true,
+                  agreementReference: true,
+                  agreedAt: true,
+                  product: { select: { key: true, displayName: true } },
+                },
+              },
+            },
+          },
+          commercialBillingAudits: {
+            orderBy: { occurredAt: 'desc' },
+            take: 20,
+            select: { id: true, entityType: true, entityId: true, action: true, occurredAt: true },
+          },
+          tenantMonthlyUsage: {
+            where: { status: 'FINALIZED', calculatedPriceYen: null, invoice: null },
+            orderBy: { periodStart: 'asc' },
+            select: {
+              id: true,
+              periodStart: true,
+              periodEnd: true,
+              mau: true,
+              pricingTierKey: true,
+              pricingVersion: true,
+            },
           },
         },
-        commercialBillingAudits: {
-          orderBy: { occurredAt: 'desc' },
-          take: 20,
-          select: { id: true, entityType: true, entityId: true, action: true, occurredAt: true },
-        },
-        tenantMonthlyUsage: {
-          where: { status: 'FINALIZED', calculatedPriceYen: null, invoice: null },
-          orderBy: { periodStart: 'asc' },
-          select: {
-            id: true,
-            periodStart: true,
-            periodEnd: true,
-            mau: true,
-            pricingTierKey: true,
-            pricingVersion: true,
+      }),
+      this.client.commercialServiceProduct.findMany({
+        where: {
+          status: 'ACTIVE',
+          offeringPeriods: {
+            some: {
+              workspaceId,
+              supersededBy: { is: null },
+              startsAt: { lte: now },
+              OR: [{ endsAt: null }, { endsAt: { gt: now } }],
+            },
           },
         },
-      },
-    });
+        orderBy: { key: 'asc' },
+        select: { id: true, key: true, displayName: true },
+      }),
+    ]);
+    return dashboard ? { ...dashboard, setupFeeProducts } : null;
   }
 
   async operationsDashboard(now = new Date()) {
@@ -81,12 +132,15 @@ export class PrismaCommercialBillingService {
         orderBy: [{ periodStart: 'desc' }, { createdAt: 'desc' }],
         select: {
           id: true,
+          kind: true,
           workspaceId: true,
           invoiceNumber: true,
           status: true,
           periodStart: true,
           periodEnd: true,
           mau: true,
+          billableUserCount: true,
+          billingRuleVersion: true,
           pricingTierKey: true,
           pricingVersion: true,
           amountYen: true,
@@ -97,6 +151,13 @@ export class PrismaCommercialBillingService {
           dueAt: true,
           paidAt: true,
           createdAt: true,
+          setupFeeCharge: {
+            select: {
+              description: true,
+              agreementReference: true,
+              product: { select: { key: true, displayName: true } },
+            },
+          },
           workspace: { select: { name: true, legalName: true } },
           contract: {
             select: { billingName: true, billingEmail: true, externalCustomerReference: true },
@@ -107,36 +168,69 @@ export class PrismaCommercialBillingService {
     const issuedInvoiceIds = invoices
       .filter((invoice) => invoice.status === 'ISSUED')
       .map((invoice) => invoice.id);
-    const reminderAudits = issuedInvoiceIds.length
-      ? await this.client.commercialBillingAudit.findMany({
-          where: {
-            entityType: 'INVOICE',
-            entityId: { in: issuedInvoiceIds },
-            action: {
-              in: [
-                'PAYMENT_GUIDANCE_SENT',
-                'OVERDUE_REMINDER_SENT',
-                'PAYMENT_GUIDANCE_FAILED',
-                'OVERDUE_REMINDER_FAILED',
-              ],
+    const paidInvoiceIds = invoices
+      .filter((invoice) => invoice.status === 'PAID')
+      .map((invoice) => invoice.id);
+    const [reminderAudits, refundEvents] = await Promise.all([
+      issuedInvoiceIds.length
+        ? this.client.commercialBillingAudit.findMany({
+            where: {
+              entityType: 'INVOICE',
+              entityId: { in: issuedInvoiceIds },
+              action: {
+                in: [
+                  'PAYMENT_GUIDANCE_SENT',
+                  'OVERDUE_REMINDER_SENT',
+                  'PAYMENT_GUIDANCE_FAILED',
+                  'OVERDUE_REMINDER_FAILED',
+                ],
+              },
             },
-          },
-          orderBy: { occurredAt: 'desc' },
-          take: 5000,
-          select: {
-            id: true,
-            workspaceId: true,
-            entityId: true,
-            action: true,
-            occurredAt: true,
-          },
-        })
-      : [];
+            orderBy: { occurredAt: 'desc' },
+            take: 5000,
+            select: {
+              id: true,
+              workspaceId: true,
+              entityId: true,
+              action: true,
+              occurredAt: true,
+            },
+          })
+        : [],
+      paidInvoiceIds.length
+        ? this.client.commercialBillingWebhookEvent.findMany({
+            where: {
+              invoiceId: { in: paidInvoiceIds },
+              status: 'PROCESSED',
+              errorCategory: {
+                in: ['PARTIAL_REFUND_REVIEW_REQUIRED', 'FULL_REFUND_REVIEW_REQUIRED'],
+              },
+            },
+            orderBy: { receivedAt: 'desc' },
+            take: 5000,
+            select: {
+              id: true,
+              workspaceId: true,
+              invoiceId: true,
+              providerEventId: true,
+              errorCategory: true,
+              receivedAt: true,
+            },
+          })
+        : [],
+    ]);
+    const latestRefundReviewByInvoice = new Map<string, (typeof refundEvents)[number]>();
+    for (const event of refundEvents) {
+      if (!latestRefundReviewByInvoice.has(event.invoiceId)) {
+        latestRefundReviewByInvoice.set(event.invoiceId, event);
+      }
+    }
     return {
       activeContracts,
       summary: summarizeCommercialInvoices(invoices, now),
       invoices,
       reminderFailures: unresolvedCommercialReminderFailures(reminderAudits),
+      refundReviews: [...latestRefundReviewByInvoice.values()],
     };
   }
 
@@ -152,9 +246,7 @@ export class PrismaCommercialBillingService {
       this.client.organizationCommercialContract.findFirst({
         where: {
           workspaceId: input.workspaceId,
-          status: 'ACTIVE',
-          OR: [{ startsAt: null }, { startsAt: { lte: now } }],
-          AND: [{ OR: [{ endsAt: null }, { endsAt: { gt: now } }] }],
+          status: { in: ['ACTIVE', 'SUSPENDED', 'ENDED'] },
         },
       }),
       this.client.tenantMonthlyUsage.findFirst({
@@ -169,6 +261,27 @@ export class PrismaCommercialBillingService {
     ]);
     if (!contract) throw new Error('active contract not found');
     if (!usage) throw new Error('custom quote usage not found');
+    if (usage.billingRuleVersion != null) {
+      if (usage.billableUserCount == null) throw new Error('REVIEW_REQUIRED: billable count');
+      const historical = await this.client.oemContractPeriod.findFirst({
+        where: {
+          workspaceId: input.workspaceId,
+          supersededBy: { is: null },
+          startsAt: { lt: new Date(usage.periodEnd.getTime() - 9 * 60 * 60 * 1000) },
+          OR: [
+            { endsAt: null },
+            { endsAt: { gt: new Date(usage.periodStart.getTime() - 9 * 60 * 60 * 1000) } },
+          ],
+        },
+      });
+      if (!historical) throw new Error('REVIEW_REQUIRED: historical invoice contract');
+    } else if (
+      contract.status !== 'ACTIVE' ||
+      (contract.startsAt && contract.startsAt > now) ||
+      (contract.endsAt && contract.endsAt <= now)
+    ) {
+      throw new Error('active contract not found');
+    }
     return this.client.$transaction(async (tx) => {
       const invoice = await tx.tenantInvoice.create({
         data: {
@@ -179,6 +292,9 @@ export class PrismaCommercialBillingService {
           periodStart: usage.periodStart,
           periodEnd: usage.periodEnd,
           mau: usage.mau,
+          billableUserCount: usage.billableUserCount,
+          billingRuleVersion: usage.billingRuleVersion,
+          pricingScheduleId: usage.pricingScheduleId,
           pricingTierKey: usage.pricingTierKey,
           pricingVersion: usage.pricingVersion,
           amountYen: input.amountYen,
@@ -194,6 +310,109 @@ export class PrismaCommercialBillingService {
           entityId: invoice.id,
           action: 'CUSTOM_CREATED',
           afterData: jsonSnapshot(invoice),
+        },
+      });
+      return invoice;
+    });
+  }
+
+  async prepareSetupFeeInvoice(input: PrepareOemSetupFeeInvoiceInput) {
+    const now = input.now ?? new Date();
+    assertOemSetupFeeCharge(input, now);
+    const description = requiredText(input.description, 200);
+    const agreementReference = requiredText(input.agreementReference, 200);
+    const reason = requiredText(input.reason, 1_000);
+    return this.client.$transaction(async (tx) => {
+      await tx.$executeRaw(
+        Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${`oem-setup-fee:${input.workspaceId}:${input.productId}:${input.chargeKey}`}, 0))`,
+      );
+      const admin = await tx.platformAdmin.findFirst({
+        where: { userId: input.actorUserId, role: 'SUPER_ADMIN', status: 'ACTIVE' },
+        select: { id: true },
+      });
+      if (!admin) throw new Error('SUPER_ADMIN_REQUIRED');
+      const existing = await tx.oemSetupFeeCharge.findUnique({
+        where: {
+          workspaceId_productId_chargeKey: {
+            workspaceId: input.workspaceId,
+            productId: input.productId,
+            chargeKey: input.chargeKey,
+          },
+        },
+        include: { invoice: true },
+      });
+      if (existing) {
+        if (
+          existing.amountYen !== input.amountYen ||
+          existing.description !== description ||
+          existing.agreementReference !== agreementReference ||
+          existing.agreedAt.getTime() !== input.agreedAt.getTime() ||
+          existing.reason !== reason ||
+          !existing.invoice
+        )
+          throw new Error('REVIEW_REQUIRED: setup fee charge key conflict');
+        return existing.invoice;
+      }
+      const contract = await tx.organizationCommercialContract.findFirst({
+        where: {
+          workspaceId: input.workspaceId,
+          status: 'ACTIVE',
+          workspace: { type: 'ORGANIZATION' },
+          OR: [{ startsAt: null }, { startsAt: { lte: now } }],
+          AND: [{ OR: [{ endsAt: null }, { endsAt: { gt: now } }] }],
+        },
+      });
+      if (!contract) throw new Error('REVIEW_REQUIRED: active commercial contract required');
+      const offering = await tx.oemOfferingPeriod.findFirst({
+        where: {
+          workspaceId: input.workspaceId,
+          productId: input.productId,
+          supersededBy: { is: null },
+          startsAt: { lte: input.agreedAt },
+          OR: [{ endsAt: null }, { endsAt: { gt: input.agreedAt } }],
+        },
+        select: { id: true },
+      });
+      if (!offering)
+        throw new Error('REVIEW_REQUIRED: product offering at agreement date required');
+      const charge = await tx.oemSetupFeeCharge.create({
+        data: {
+          workspaceId: input.workspaceId,
+          productId: input.productId,
+          chargeKey: input.chargeKey,
+          amountYen: input.amountYen,
+          description,
+          agreementReference,
+          agreedAt: input.agreedAt,
+          actorUserId: input.actorUserId,
+          reason,
+        },
+      });
+      const invoice = await tx.tenantInvoice.create({
+        data: {
+          kind: 'SETUP_FEE',
+          workspaceId: input.workspaceId,
+          contractId: contract.id,
+          setupFeeChargeId: charge.id,
+          invoiceNumber: tenantSetupFeeInvoiceNumber(charge.agreedAt, charge.id),
+          periodStart: charge.agreedAt,
+          periodEnd: new Date(charge.agreedAt.getTime() + 86_400_000),
+          mau: 0,
+          pricingTierKey: 'SETUP_FEE',
+          pricingVersion: 'AGREEMENT_SNAPSHOT_V1',
+          amountYen: charge.amountYen,
+          notes: `契約証跡: ${agreementReference}`,
+          updatedByUserId: input.actorUserId,
+        },
+      });
+      await tx.commercialBillingAudit.create({
+        data: {
+          workspaceId: input.workspaceId,
+          actorUserId: input.actorUserId,
+          entityType: 'INVOICE',
+          entityId: invoice.id,
+          action: 'SETUP_FEE_CREATED',
+          afterData: jsonSnapshot({ invoice, charge }),
         },
       });
       return invoice;
@@ -241,6 +460,9 @@ export class PrismaCommercialBillingService {
       updatedByUserId: input.actorUserId,
     };
     return this.client.$transaction(async (tx) => {
+      await tx.$queryRaw(
+        Prisma.sql`SELECT "id" FROM "workspaces" WHERE "id" = ${input.workspaceId}::uuid FOR UPDATE`,
+      );
       const before = await tx.organizationCommercialContract.findUnique({
         where: { workspaceId: input.workspaceId },
       });
@@ -254,6 +476,85 @@ export class PrismaCommercialBillingService {
         create: { workspaceId: input.workspaceId, ...contractData, ...consentData },
         update: { ...contractData, ...consentData },
       });
+      if (input.status === 'ACTIVE') {
+        const programs = await tx.serviceProgram.findMany({
+          where: { workspaceId: input.workspaceId },
+          select: { groupId: true, programTemplateVersionId: true },
+        });
+        for (const program of programs) {
+          const version = await tx.programTemplateVersion.findFirstOrThrow({
+            where: { id: program.programTemplateVersionId, workspaceId: input.workspaceId },
+            select: { definition: true },
+          });
+          await requireTrainingOemOffering(tx, {
+            workspaceId: input.workspaceId,
+            groupId: program.groupId,
+            definition: version.definition,
+          });
+        }
+      }
+      const billingPolicy = await resolveOemBillingPolicy(tx, input.workspaceId);
+      if (billingPolicy?.status === 'SCHEDULED') {
+        await tx.$queryRaw(
+          Prisma.sql`SELECT "id" FROM "workspaces" WHERE "id" = ${input.workspaceId}::uuid FOR UPDATE`,
+        );
+        if (input.status === 'ACTIVE') {
+          if (!input.startsAt) throw new Error('REVIEW_REQUIRED: explicit contract start');
+          const existingPeriod = await tx.oemContractPeriod.findFirst({
+            where: {
+              workspaceId: input.workspaceId,
+              startsAt: input.startsAt,
+              supersededBy: { is: null },
+            },
+          });
+          if (existingPeriod) {
+            if (existingPeriod.endsAt?.getTime() !== input.endsAt?.getTime()) {
+              if (existingPeriod.endsAt || !input.endsAt)
+                throw new Error('REVIEW_REQUIRED: closed contract history is immutable');
+              await tx.oemContractPeriod.update({
+                where: { id: existingPeriod.id },
+                data: { endsAt: input.endsAt },
+              });
+            }
+          } else {
+            const overlap = await tx.oemContractPeriod.findFirst({
+              where: {
+                workspaceId: input.workspaceId,
+                supersededBy: { is: null },
+                ...(input.endsAt ? { startsAt: { lt: input.endsAt } } : {}),
+                OR: [{ endsAt: null }, { endsAt: { gt: input.startsAt } }],
+              },
+            });
+            if (overlap) throw new Error('REVIEW_REQUIRED: overlapping contract period');
+            await tx.oemContractPeriod.create({
+              data: {
+                workspaceId: input.workspaceId,
+                startsAt: input.startsAt,
+                endsAt: input.endsAt ?? null,
+                actorUserId: input.actorUserId,
+                reason: 'commercial contract activated',
+              },
+            });
+          }
+        }
+        if (input.status === 'ENDED') {
+          if (!input.endsAt) throw new Error('REVIEW_REQUIRED: explicit contract end');
+          const currentPeriod = await tx.oemContractPeriod.findFirst({
+            where: { workspaceId: input.workspaceId, supersededBy: { is: null } },
+            orderBy: { startsAt: 'desc' },
+          });
+          if (
+            !currentPeriod ||
+            currentPeriod.startsAt >= input.endsAt ||
+            (currentPeriod.endsAt && currentPeriod.endsAt.getTime() !== input.endsAt.getTime())
+          )
+            throw new Error('REVIEW_REQUIRED: contract end differs from reviewed history');
+          await tx.oemContractPeriod.update({
+            where: { id: currentPeriod.id },
+            data: { endsAt: input.endsAt },
+          });
+        }
+      }
       await tx.commercialBillingAudit.create({
         data: {
           workspaceId: input.workspaceId,
@@ -273,9 +574,7 @@ export class PrismaCommercialBillingService {
     const contract = await this.client.organizationCommercialContract.findFirst({
       where: {
         workspaceId,
-        status: 'ACTIVE',
-        OR: [{ startsAt: null }, { startsAt: { lte: now } }],
-        AND: [{ OR: [{ endsAt: null }, { endsAt: { gt: now } }] }],
+        status: { in: ['ACTIVE', 'SUSPENDED', 'ENDED'] },
       },
     });
     if (!contract) return { prepared: 0, skippedCustomQuote: 0 };
@@ -286,6 +585,27 @@ export class PrismaCommercialBillingService {
     let prepared = 0;
     let skippedCustomQuote = 0;
     for (const usage of usages) {
+      if (usage.billingRuleVersion !== null && usage.billingRuleVersion !== undefined) {
+        if (usage.billableUserCount === null || usage.billableUserCount === undefined)
+          throw new Error('REVIEW_REQUIRED: confirmed billable count missing');
+        const periodStart = new Date(usage.periodStart.getTime() - 9 * 60 * 60 * 1000);
+        const periodEnd = new Date(usage.periodEnd.getTime() - 9 * 60 * 60 * 1000);
+        const valid = await this.client.oemContractPeriod.findFirst({
+          where: {
+            workspaceId,
+            supersededBy: { is: null },
+            startsAt: { lt: periodEnd },
+            OR: [{ endsAt: null }, { endsAt: { gt: periodStart } }],
+          },
+        });
+        if (!valid) throw new Error('REVIEW_REQUIRED: historical invoice contract');
+      } else if (
+        contract.status !== 'ACTIVE' ||
+        (contract.startsAt && contract.startsAt > now) ||
+        (contract.endsAt && contract.endsAt <= now)
+      ) {
+        continue;
+      }
       if (usage.calculatedPriceYen === null) {
         skippedCustomQuote += 1;
         continue;
@@ -302,6 +622,9 @@ export class PrismaCommercialBillingService {
               periodStart: usage.periodStart,
               periodEnd: usage.periodEnd,
               mau: usage.mau,
+              billableUserCount: usage.billableUserCount,
+              billingRuleVersion: usage.billingRuleVersion,
+              pricingScheduleId: usage.pricingScheduleId,
               pricingTierKey: usage.pricingTierKey,
               pricingVersion: usage.pricingVersion,
               amountYen,
@@ -331,20 +654,25 @@ export class PrismaCommercialBillingService {
   async prepareAllFinalizedInvoices(now = new Date()) {
     const contracts = await this.client.organizationCommercialContract.findMany({
       where: {
-        status: 'ACTIVE',
-        OR: [{ startsAt: null }, { startsAt: { lte: now } }],
-        AND: [{ OR: [{ endsAt: null }, { endsAt: { gt: now } }] }],
+        status: { in: ['ACTIVE', 'SUSPENDED', 'ENDED'] },
       },
       select: { workspaceId: true },
     });
     let prepared = 0;
     let skippedCustomQuote = 0;
+    const reviewRequired: Array<{ workspaceId: string; reason: string }> = [];
     for (const contract of contracts) {
-      const result = await this.prepareWorkspaceInvoices(contract.workspaceId, now);
-      prepared += result.prepared;
-      skippedCustomQuote += result.skippedCustomQuote;
+      try {
+        const result = await this.prepareWorkspaceInvoices(contract.workspaceId, now);
+        prepared += result.prepared;
+        skippedCustomQuote += result.skippedCustomQuote;
+      } catch (error) {
+        if (error instanceof Error && error.message.startsWith('REVIEW_REQUIRED'))
+          reviewRequired.push({ workspaceId: contract.workspaceId, reason: error.message });
+        else throw error;
+      }
     }
-    return { organizations: contracts.length, prepared, skippedCustomQuote };
+    return { organizations: contracts.length, prepared, skippedCustomQuote, reviewRequired };
   }
 
   async transitionInvoice(input: TransitionTenantInvoiceInput) {
@@ -354,6 +682,9 @@ export class PrismaCommercialBillingService {
         workspace: { select: { name: true, legalName: true, address: true } },
         contract: {
           select: { billingName: true, billingEmail: true, paymentTermsDays: true },
+        },
+        setupFeeCharge: {
+          include: { product: { select: { displayName: true } } },
         },
       },
     });

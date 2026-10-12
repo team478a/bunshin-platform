@@ -9,11 +9,11 @@ describe('daily mission AI runtime boundary', () => {
   it('owns runtime configuration, quota reservation, and usage audit details', () => {
     const runtime = read('src/services/daily-mission-ai-runtime.ts');
 
-    expect(runtime).toContain('resolveOpenAiRuntimeConfiguration()');
+    expect(runtime).toContain('reserveOpenAiRuntimeConfiguration(');
     expect(runtime).toContain('withOrganizationAiGenerationQuota({');
     expect(runtime).toContain("status: 'SUCCESS'");
-    expect(runtime).toContain('estimatedCostUsdMicros: configuration.requestCostUsdMicros || null');
-    expect(runtime).toContain('pricingVersion: configuration.requestCostUsdMicros');
+    expect(runtime).toContain('estimatedCostUsdMicros: runtime.requestCostUsdMicros || null');
+    expect(runtime).toContain('pricingVersion: runtime.requestCostUsdMicros');
     expect(runtime).toContain("taskType: 'DAILY_MISSION_PIPELINE'");
     expect(runtime).toContain("status: 'FAILED'");
     expect(runtime).toContain(':daily-pipeline-failure`');
@@ -24,12 +24,9 @@ describe('daily mission AI runtime boundary', () => {
     const generation = read('src/services/daily-mission-generation.ts');
     const briefRuntime = read('src/services/daily-mission-brief-runtime.ts');
 
-    expect(generation).toContain('await createDailyMissionAiRuntime({');
-    expect(briefRuntime).toContain(
-      "await input.recordUsage('daily-brief', 'DAILY_MISSION_PLANNER', brief)",
-    );
-    expect(generation).toContain('generateWithQuota,');
-    expect(generation).toContain('recordUsage,');
+    expect(generation).toContain('createDailyMissionAiRuntime({');
+    expect(briefRuntime).toContain("taskType: 'DAILY_MISSION_PLANNER'");
+    expect(generation).toContain('executeAiStep,');
     expect(generation).toContain('await recordDailyMissionPipelineFailure({');
     expect(generation).toContain('errorCategory: dailyMissionErrorCategory(error)');
     expect(generation).not.toContain("from '../observability/ai-usage'");

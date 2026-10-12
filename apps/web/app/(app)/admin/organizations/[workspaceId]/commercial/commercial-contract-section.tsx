@@ -27,7 +27,7 @@ export function CommercialContractSection({
       <section className="settings-card">
         <h2>OEM契約と請求先</h2>
         <p>
-          MAU課金を請求へつなぐための契約情報です。税務上の請求書や決済は外部サービスで発行し、その番号と入金状態を下の請求台帳で管理します。
+          月次の課金対象人数を請求へつなぐための契約情報です。税務上の請求書や決済は外部サービスで発行し、その番号と入金状態を下の請求台帳で管理します。
         </p>
         <form className="form-stack" action={saveContract}>
           <input type="hidden" name="workspaceId" value={dashboard.workspace.id} />
@@ -146,7 +146,7 @@ export function CommercialContractSection({
             <span>契約上の同意を確認し、次回以降の月額料金を保存カードから回収する</span>
           </label>
           <p className="field__hint">
-            初期状態は停止です。有効化後、団体管理者が最初のStripe支払いを完了すると支払方法が保存されます。カード番号はワタシワークスへ保存しません。
+            初期状態は停止です。有効化後、団体管理者が最初のStripe支払いを完了すると支払方法が保存されます。自動回収の対象は月額料金だけで、初期費用は対象外です。カード番号はワタシワークスへ保存しません。
           </p>
           <label className="field">
             <span className="field__label">外部顧客番号（任意）</span>

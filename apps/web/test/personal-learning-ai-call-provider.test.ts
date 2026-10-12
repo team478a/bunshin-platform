@@ -26,7 +26,7 @@ function evaluator(body: unknown, status = 200) {
     fetcher,
     provider: new OpenAiTrainingAnswerEvaluator({
       apiKey: 'synthetic-key',
-      model: 'synthetic',
+      model: 'gpt-5.2',
       requestCostUsdMicros: 9,
       fetch: fetcher,
       observe,
@@ -47,7 +47,7 @@ describe('Pilot structured Provider measurements', () => {
     const onResponseSettled = vi.fn();
     const provider = new OpenAiTrainingAnswerEvaluator({
       apiKey: 'synthetic',
-      model: 'synthetic',
+      model: 'gpt-5.2',
       requestCostUsdMicros: 0,
       fetch: fetcher,
       onResponseSettled,
@@ -67,7 +67,7 @@ describe('Pilot structured Provider measurements', () => {
     const onRequestStarted = vi.fn();
     const provider = new OpenAiTrainingAnswerEvaluator({
       apiKey: 'synthetic',
-      model: 'synthetic',
+      model: 'gpt-5.2',
       requestCostUsdMicros: 0,
       fetch: fetcher,
       onRequestStarted,

@@ -64,7 +64,11 @@ export default async function AdminAlertsPage() {
           </h2>
           <p>{alert.guidance}</p>
           <Link className="button button--secondary" href={alert.href}>
-            {alert.href.startsWith('/s/') ? '配信状況を確認する' : '設定を確認する'}
+            {alert.href.startsWith('/s/')
+              ? '配信状況を確認する'
+              : alert.href.startsWith('/admin/commercial-billing')
+                ? '請求を確認する'
+                : '設定を確認する'}
           </Link>
         </article>
       ))}

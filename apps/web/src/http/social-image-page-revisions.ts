@@ -11,9 +11,9 @@ import { z } from 'zod';
 import { currentUserProvider } from '../auth/current-user';
 import { requireSameOrigin } from '../auth/request-security';
 import { assertOrganizationGenerationQuota } from '../organization-generation-quota';
-import { recordAiUsageSafely } from '../observability/ai-usage';
+import { recordOpenAiUsageAndSettle } from '../ai/openai-cost-admission';
 import { OpenAiSocialImageGenerationAdapter } from '../providers/openai-social-image-generation';
-import { resolveOpenAiRuntimeConfiguration } from '../ai/runtime-provider-configuration';
+import { reserveOpenAiRuntimeConfiguration } from '../ai/runtime-provider-configuration';
 import { socialImagePagePrompt } from '../jobs/social-image-generation-job-handler';
 import { loadBundledSocialImageFonts, ManagedSocialImageRenderer } from '../social-image-renderer';
 import { SupabaseSocialImageStorage } from '../social-image-storage';
@@ -171,34 +171,65 @@ export async function reviseSocialImagePageResponse(
       const coverMedia = mediaPages.find((media) => media.pageIndex === 0);
       const referenceKey = coverMedia?.sourceStorageKey ?? current.sourceStorageKey;
       const reference = referenceKey ? await storage.readStoredPng(referenceKey) : undefined;
-      const runtime = await resolveOpenAiRuntimeConfiguration();
-      const provider = new OpenAiSocialImageGenerationAdapter({ apiKey: runtime.apiKey });
-      const generated = await provider.generate({
-        requestId: `${imageRequest.id}:revision:${imageRequest.revision}:page:${pageIndex + 1}`,
-        prompt: socialImagePagePrompt(pageLayout, Boolean(reference), pageIndex, 5, pages),
-        ...(reference ? { referenceImage: reference } : {}),
-        width: 1080,
-        height: 1350,
-        model: enrollment.pilot.defaultModel,
-        quality: pageIndex === 0 ? 'high' : enrollment.pilot.defaultQuality,
-      });
-      sourceBytes = generated.bytes;
-      await recordAiUsageSafely({
-        workspaceId,
-        bunshinId: imageRequest.bunshinId,
-        actorUserId: actor.userId,
-        taskType: 'SOCIAL_IMAGE_GENERATION',
-        provider: generated.provider,
-        model: generated.model,
-        promptVersion: 'social-image-page-revision-v2',
-        status: 'SUCCESS',
-        inputTokens: generated.inputTokens,
-        outputTokens: generated.outputTokens,
-        latencyMs: generated.latencyMs,
-        estimatedCostUsdMicros: runtime.requestCostUsdMicros,
-        pricingVersion: 'ADMIN_FIXED_REQUEST_COST_PER_PAGE',
-        idempotencyKey: `social-image-revision:${imageRequest.id}:${imageRequest.revision}:${pageIndex}`,
-      });
+      const operationKey = `social-image-revision:${imageRequest.id}:${imageRequest.revision}:${pageIndex}`;
+      const runtime = await reserveOpenAiRuntimeConfiguration(operationKey);
+      const started = Date.now();
+      let providerAttempted = false;
+      let usagePersistenceStarted = false;
+      try {
+        providerAttempted = true;
+        const generated = await new OpenAiSocialImageGenerationAdapter({
+          apiKey: runtime.apiKey,
+        }).generate({
+          requestId: `${imageRequest.id}:revision:${imageRequest.revision}:page:${pageIndex + 1}`,
+          prompt: socialImagePagePrompt(pageLayout, Boolean(reference), pageIndex, 5, pages),
+          ...(reference ? { referenceImage: reference } : {}),
+          width: 1080,
+          height: 1350,
+          model: enrollment.pilot.defaultModel,
+          quality: pageIndex === 0 ? 'high' : enrollment.pilot.defaultQuality,
+        });
+        sourceBytes = generated.bytes;
+        usagePersistenceStarted = true;
+        await recordOpenAiUsageAndSettle(runtime, {
+          workspaceId,
+          bunshinId: imageRequest.bunshinId,
+          actorUserId: actor.userId,
+          taskType: 'SOCIAL_IMAGE_GENERATION',
+          provider: generated.provider,
+          model: generated.model,
+          promptVersion: 'social-image-page-revision-v2',
+          status: 'SUCCESS',
+          inputTokens: generated.inputTokens,
+          outputTokens: generated.outputTokens,
+          latencyMs: generated.latencyMs,
+          estimatedCostUsdMicros: runtime.requestCostUsdMicros,
+          pricingVersion: 'ADMIN_FIXED_REQUEST_COST_PER_PAGE',
+          idempotencyKey: operationKey,
+        });
+      } catch (error) {
+        if (!usagePersistenceStarted) {
+          usagePersistenceStarted = true;
+          await recordOpenAiUsageAndSettle(runtime, {
+            workspaceId,
+            bunshinId: imageRequest.bunshinId,
+            actorUserId: actor.userId,
+            taskType: 'SOCIAL_IMAGE_GENERATION',
+            provider: 'OPENAI',
+            model: enrollment.pilot.defaultModel,
+            promptVersion: 'social-image-page-revision-v2',
+            status: 'FAILED',
+            inputTokens: null,
+            outputTokens: null,
+            latencyMs: Date.now() - started,
+            estimatedCostUsdMicros: providerAttempted ? runtime.requestCostUsdMicros : 0,
+            pricingVersion: 'ADMIN_FIXED_REQUEST_COST_PER_PAGE',
+            errorCode: error instanceof ApplicationError ? error.code : 'INTERNAL_ERROR',
+            idempotencyKey: operationKey,
+          });
+        }
+        throw error;
+      }
     }
     const renderer = new ManagedSocialImageRenderer(await loadBundledSocialImageFonts());
     const rendered = await renderer.render({

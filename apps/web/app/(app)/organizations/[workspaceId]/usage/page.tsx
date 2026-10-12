@@ -75,7 +75,9 @@ export default async function OrganizationUsagePage({
       <header className="app-page__heading">
         <p className="eyebrow">契約中の利用状況</p>
         <h1>{dashboard.workspace.name}の利用人数</h1>
-        <p>今月、サービス機能を1回以上使った参加者の人数と現在の料金帯です。</p>
+        <p>
+          実利用人数（MAU）と請求に使う人数を分けて表示します。有料提供では、利用していない正式登録者も課金対象です。
+        </p>
         <Link href={`/organizations/${dashboard.workspace.id}/manage`}>← 団体管理へ戻る</Link>
       </header>
 
@@ -100,13 +102,23 @@ export default async function OrganizationUsagePage({
         </div>
         <div>
           <span>今月の利用人数</span>
+          <strong>{dashboard.current.mau}人（実利用）</strong>
+        </div>
+        <div>
+          <span>課金対象人数</span>
           <strong>
-            {dashboard.current.mau} / {dashboard.current.pricing.upperLimit ?? '見積'}人
+            {dashboard.current.billableUserCount === null
+              ? '確認待ち'
+              : `${dashboard.current.billableUserCount}人`}
           </strong>
         </div>
         <div>
           <span>現在の月額</span>
-          <strong>{yen(dashboard.current.pricing.priceYen)}</strong>
+          <strong>
+            {dashboard.current.billingState === 'REVIEW_REQUIRED'
+              ? '確認待ち（請求未確定）'
+              : yen(dashboard.current.pricing.priceYen)}
+          </strong>
         </div>
         <div>
           <span>次の料金帯まで</span>
@@ -121,9 +133,12 @@ export default async function OrganizationUsagePage({
       <section className="settings-card">
         <h2>利用人数の数え方</h2>
         <p>
-          投稿案の確認・生成・再生成・採用、今日やることや週間計画の確認など、対象機能を使った参加者を月内で1人として数えます。
+          実利用人数（MAU）は、投稿案の確認・生成・再生成・採用、今日やることや週間計画の確認など、対象機能を使った参加者を月内で1人として数えます。登録やログインだけではMAUに含みません。
         </p>
-        <p>登録やログインだけの人、運営者・スタッフ・システム管理者は含みません。</p>
+        <p>
+          課金対象人数は、有料提供の正式登録者と無料提供の実利用者を合算し、同じ人の重複を除いて数えます。有料提供では当月に利用がなくても、正式登録期間中は課金対象です。
+        </p>
+        <p>運営者・スタッフ・システム管理者は含みません。</p>
       </section>
 
       <section className="settings-card">
@@ -160,7 +175,8 @@ export default async function OrganizationUsagePage({
             <table>
               <thead>
                 <tr>
-                  <th>対象月</th>
+                  <th>請求種別・対象</th>
+                  <th>課金対象人数</th>
                   <th>金額</th>
                   <th>状態</th>
                   <th>支払期限</th>
@@ -173,7 +189,21 @@ export default async function OrganizationUsagePage({
                   .filter((invoice) => invoice.status !== 'DRAFT')
                   .map((invoice) => (
                     <tr key={invoice.id}>
-                      <td>{invoice.periodStart.toISOString().slice(0, 7)}</td>
+                      <td>
+                        {invoice.kind === 'SETUP_FEE'
+                          ? `初期費用／${invoice.setupFeeCharge?.product.displayName ?? '商品'}`
+                          : `月額／${invoice.periodStart.toISOString().slice(0, 7)}`}
+                      </td>
+                      <td>
+                        {invoice.kind === 'SETUP_FEE' ? (
+                          '—'
+                        ) : (
+                          <>
+                            {invoice.billableUserCount ?? invoice.mau}人
+                            {invoice.billingRuleVersion ? '' : '（旧MAU）'}
+                          </>
+                        )}
+                      </td>
                       <td>{yen(invoice.amountYen)}</td>
                       <td>{invoiceStatusLabel(invoice.status, invoice.dueAt)}</td>
                       <td>
@@ -194,6 +224,7 @@ export default async function OrganizationUsagePage({
                       </td>
                       <td>
                         {invoice.status === 'ISSUED' &&
+                        invoice.amountYen > 0 &&
                         billing.organizationCommercialContract?.billingMode ===
                           'EXTERNAL_BILLING' ? (
                           <form action={startInvoicePayment}>
@@ -228,6 +259,7 @@ export default async function OrganizationUsagePage({
                 <tr>
                   <th>対象月</th>
                   <th>利用人数</th>
+                  <th>課金対象人数</th>
                   <th>確定料金</th>
                 </tr>
               </thead>
@@ -236,6 +268,10 @@ export default async function OrganizationUsagePage({
                   <tr key={row.month}>
                     <td>{row.month}</td>
                     <td>{row.mau.toLocaleString('ja-JP')}人</td>
+                    <td>
+                      {row.billableUserCount.toLocaleString('ja-JP')}人
+                      {row.billingRuleVersion ? '' : '（旧MAU）'}
+                    </td>
                     <td>{yen(row.priceYen)}</td>
                   </tr>
                 ))}

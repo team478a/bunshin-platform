@@ -1,4 +1,4 @@
-import { isTenantInvoiceOverdue } from '@bunshin/application';
+import { isTenantInvoiceOverdue, invoiceBillableUserCount } from '@bunshin/application';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { currentUserProvider } from '../../../../src/auth/current-user';
@@ -14,43 +14,6 @@ const STATUS_LABELS = {
 
 function yen(value: number): string {
   return `${value.toLocaleString('ja-JP')}円`;
-}
-
-async function createPricingSchedule(formData: FormData) {
-  'use server';
-  const actor = await (await currentUserProvider()).getCurrentUser();
-  if (!actor) redirect('/login');
-  const db = await import('@bunshin/database');
-  const admin = await new db.PrismaPlatformAdminRepository().findActivePlatformAdminByUserId(
-    actor.userId,
-  );
-  if (!admin || admin.role !== 'SUPER_ADMIN') notFound();
-  const versionValue = formData.get('version');
-  const effectiveFromValue = formData.get('effectiveFrom');
-  const version = typeof versionValue === 'string' ? versionValue.trim() : '';
-  const effectiveFrom = new Date(
-    `${typeof effectiveFromValue === 'string' ? effectiveFromValue : ''}T00:00:00.000Z`,
-  );
-  const limits = [100, 300, 500, 1000, 3000];
-  const keys = ['MAU_0_100', 'MAU_101_300', 'MAU_301_500', 'MAU_501_1000', 'MAU_1001_3000'];
-  const tiers = limits.map((upperLimit, index) => ({
-    tierKey: keys[index]!,
-    upperLimit,
-    priceYen: Number(formData.get(`price${upperLimit}`)),
-  }));
-  if (
-    !version ||
-    Number.isNaN(effectiveFrom.getTime()) ||
-    tiers.some((tier) => !Number.isInteger(tier.priceYen) || tier.priceYen < 0)
-  )
-    redirect('/admin/commercial-billing?pricing=invalid');
-  await new db.PrismaCommercialUsageService().createPricingSchedule({
-    version,
-    effectiveFrom,
-    tiers,
-    createdByUserId: actor.userId,
-  });
-  redirect('/admin/commercial-billing?pricing=created');
 }
 
 export default async function CommercialBillingOperationsPage({
@@ -75,10 +38,14 @@ export default async function CommercialBillingOperationsPage({
   const reminderFailureInvoiceIds = new Set(
     data.reminderFailures.map((failure) => failure.entityId),
   );
+  const refundReviewByInvoiceId = new Map(
+    data.refundReviews.map((review) => [review.invoiceId, review]),
+  );
   const invoicesById = new Map(data.invoices.map((invoice) => [invoice.id, invoice]));
   const invoices = data.invoices.filter((invoice) => {
     if (status === 'OVERDUE') return isTenantInvoiceOverdue(invoice, now);
     if (status === 'REMINDER_FAILED') return reminderFailureInvoiceIds.has(invoice.id);
+    if (status === 'REFUND_REVIEW') return refundReviewByInvoiceId.has(invoice.id);
     if (status === 'DRAFT' || status === 'ISSUED' || status === 'PAID' || status === 'VOID') {
       return invoice.status === status;
     }
@@ -98,58 +65,20 @@ export default async function CommercialBillingOperationsPage({
       </p>
 
       <section className="settings-card">
-        <h2>MAU料金表</h2>
-        <p>
-          新しい料金は適用開始月以降に確定する利用量へ適用されます。確定済みの請求金額は変わりません。
-        </p>
-        <form action={createPricingSchedule} className="form-stack">
-          <label>
-            料金表バージョン
-            <input name="version" required maxLength={80} placeholder="oem-mau-jpy-v2" />
-          </label>
-          <label>
-            適用開始月
-            <input name="effectiveFrom" required type="date" />
-          </label>
-          <div className="form-grid">
-            <label>
-              0〜100 MAU
-              <input name="price100" required type="number" min="0" defaultValue="19800" />
-            </label>
-            <label>
-              101〜300 MAU
-              <input name="price300" required type="number" min="0" defaultValue="39800" />
-            </label>
-            <label>
-              301〜500 MAU
-              <input name="price500" required type="number" min="0" defaultValue="59800" />
-            </label>
-            <label>
-              501〜1,000 MAU
-              <input name="price1000" required type="number" min="0" defaultValue="99800" />
-            </label>
-            <label>
-              1,001〜3,000 MAU
-              <input name="price3000" required type="number" min="0" defaultValue="198000" />
-            </label>
-          </div>
-          <p>3,001 MAU以上は従来どおり個別見積です。</p>
-          <button className="button" type="submit">
-            将来の料金表を登録
-          </button>
-        </form>
-        {pricingSchedules.length > 0 ? (
-          <ul className="summary-list">
-            {pricingSchedules.map((schedule) => (
-              <li key={schedule.id}>
-                <span>{schedule.version}</span>
-                <strong>{schedule.effectiveFrom.toISOString().slice(0, 10)}から</strong>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p>登録済みの改定料金表はありません。現在は標準料金v1を使用しています。</p>
-        )}
+        <h2>OEM共通料金表</h2>
+        <p>適用月の料金表で請求します。下書きは請求に利用しません。</p>
+        <Link className="button" href="/admin/commercial-billing/pricing">
+          段階・金額・公開予約を管理
+        </Link>
+        <p>登録済み料金表: {pricingSchedules.length}件</p>
+      </section>
+
+      <section className="settings-card">
+        <h2>Service Productポリシー</h2>
+        <p>ワタシワークスの商品、FREE提供可否、必要Capability、廃止状態を管理します。</p>
+        <Link className="button" href="/admin/commercial-billing/products">
+          商品ポリシーを管理
+        </Link>
       </section>
 
       <section className="operations-overview" aria-label="請求状況の集計">
@@ -179,6 +108,10 @@ export default async function CommercialBillingOperationsPage({
           <span>案内送信の要確認</span>
           <strong>{reminderFailureInvoiceIds.size}件</strong>
         </div>
+        <div>
+          <span>返金の要照合</span>
+          <strong>{refundReviewByInvoiceId.size}件</strong>
+        </div>
       </section>
 
       {data.reminderFailures.length > 0 ? (
@@ -201,6 +134,37 @@ export default async function CommercialBillingOperationsPage({
                   <strong>
                     <Link href={`/admin/organizations/${invoice.workspaceId}/commercial`}>
                       確認・再送
+                    </Link>
+                  </strong>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      ) : null}
+
+      {data.refundReviews.length > 0 ? (
+        <section className="settings-card">
+          <h2>Stripe返金の要照合</h2>
+          <p>
+            Stripeから返金通知を受信しました。内部請求状態は自動変更していません。Stripeの返金記録、契約証跡、会計処理を確認してください。
+          </p>
+          <ul className="summary-list">
+            {data.refundReviews.map((review) => {
+              const invoice = invoicesById.get(review.invoiceId);
+              if (!invoice) return null;
+              return (
+                <li key={review.id}>
+                  <span>
+                    {invoice.workspace.name}／{invoice.invoiceNumber}／
+                    {review.errorCategory === 'FULL_REFUND_REVIEW_REQUIRED'
+                      ? '全額返金通知'
+                      : '部分返金通知'}
+                    （{review.receivedAt.toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })}）
+                  </span>
+                  <strong>
+                    <Link href={`/admin/organizations/${invoice.workspaceId}/commercial`}>
+                      請求を確認
                     </Link>
                   </strong>
                 </li>
@@ -245,6 +209,12 @@ export default async function CommercialBillingOperationsPage({
           >
             案内送信失敗（{reminderFailureInvoiceIds.size}）
           </Link>
+          <Link
+            className="button button--secondary"
+            href="/admin/commercial-billing?status=REFUND_REVIEW"
+          >
+            返金要照合（{refundReviewByInvoiceId.size}）
+          </Link>
         </div>
         {invoices.length === 0 ? (
           <p>該当する請求はありません。</p>
@@ -254,13 +224,15 @@ export default async function CommercialBillingOperationsPage({
               <thead>
                 <tr>
                   <th>運営団体</th>
-                  <th>対象月</th>
+                  <th>請求種別・対象</th>
                   <th>請求番号</th>
                   <th>MAU</th>
+                  <th>課金対象人数</th>
                   <th>金額</th>
                   <th>状態</th>
                   <th>支払期限</th>
                   <th>自動案内</th>
+                  <th>返金</th>
                   <th>確認</th>
                 </tr>
               </thead>
@@ -274,9 +246,26 @@ export default async function CommercialBillingOperationsPage({
                         <br />
                         {invoice.contract.billingEmail}
                       </td>
-                      <td>{invoice.periodStart.toISOString().slice(0, 7)}</td>
+                      <td>
+                        {invoice.kind === 'SETUP_FEE' ? (
+                          <>
+                            初期費用
+                            <br />
+                            {invoice.setupFeeCharge?.product.displayName ?? '商品確認要'}
+                          </>
+                        ) : (
+                          <>月額／{invoice.periodStart.toISOString().slice(0, 7)}</>
+                        )}
+                      </td>
                       <td>{invoice.invoiceNumber}</td>
-                      <td>{invoice.mau.toLocaleString('ja-JP')}</td>
+                      <td>
+                        {invoice.kind === 'SETUP_FEE' ? '—' : invoice.mau.toLocaleString('ja-JP')}
+                      </td>
+                      <td>
+                        {invoice.kind === 'SETUP_FEE'
+                          ? '—'
+                          : invoiceBillableUserCount(invoice).toLocaleString('ja-JP')}
+                      </td>
                       <td>{yen(invoice.amountYen)}</td>
                       <td>{overdue ? '支払期限超過' : STATUS_LABELS[invoice.status]}</td>
                       <td>
@@ -284,6 +273,14 @@ export default async function CommercialBillingOperationsPage({
                           '—'}
                       </td>
                       <td>{reminderFailureInvoiceIds.has(invoice.id) ? '要確認' : '—'}</td>
+                      <td>
+                        {refundReviewByInvoiceId.get(invoice.id)?.errorCategory ===
+                        'FULL_REFUND_REVIEW_REQUIRED'
+                          ? '全額・要照合'
+                          : refundReviewByInvoiceId.has(invoice.id)
+                            ? '部分・要照合'
+                            : '—'}
+                      </td>
                       <td>
                         <Link href={`/admin/organizations/${invoice.workspaceId}/commercial`}>
                           詳細・更新

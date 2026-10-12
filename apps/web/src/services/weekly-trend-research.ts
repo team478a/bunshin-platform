@@ -1,5 +1,5 @@
 import 'server-only';
-import { ExpireTrendResearchData } from '@bunshin/application';
+import { ExpireTrendResearchData, type AiProviderRuntimeAdmission } from '@bunshin/application';
 import type {
   SocialPlatform,
   SocialPreferredFormat,
@@ -9,8 +9,12 @@ import type {
 import { CreateCompletedTrendResearch } from '@bunshin/capability-social';
 import { ApplicationError } from '@bunshin/shared';
 import { createHash } from 'node:crypto';
-import { resolveTrendRuntimeConfiguration } from '../ai/runtime-provider-configuration';
-import { recordAiUsageSafely } from '../observability/ai-usage';
+import {
+  reserveTrendRuntimeConfiguration,
+  settleProviderRuntimeAdmission,
+  type AdmittedTrendRuntimeConfiguration,
+} from '../ai/runtime-provider-configuration';
+import { recordAiUsage, recordAiUsageSafely } from '../observability/ai-usage';
 import { withOrganizationAiGenerationQuota } from '../organization-ai-generation-quota';
 import { ExaTrendResearchAdapter } from '../providers/exa-trend-research';
 import { FirecrawlTrendResearchAdapter } from '../providers/firecrawl-trend-research';
@@ -38,7 +42,7 @@ const addDays = (value: Date, days: number) => new Date(value.getTime() + days *
 const clean = (value: string, maximum: number) =>
   value.replace(/\s+/g, ' ').trim().slice(0, maximum);
 
-function providerFor(configuration: Awaited<ReturnType<typeof resolveTrendRuntimeConfiguration>>) {
+function providerFor(configuration: AdmittedTrendRuntimeConfiguration) {
   if (configuration.provider === 'GROK')
     return new GrokXTrendResearchAdapter({
       apiKey: configuration.apiKey,
@@ -80,6 +84,9 @@ export class WeeklyTrendResearchGenerationService {
     let providerKey = 'trend-search';
     let model = 'search';
     let requestCostUsdMicros: number | null = null;
+    let admission: AiProviderRuntimeAdmission | null = null;
+    let providerAttempted = false;
+    let operationError: Error | null = null;
     try {
       const context = await new db.PrismaTrendResearchGenerationContextRepository().get(input);
       if (!context) throw new ApplicationError('NOT_FOUND', 'trend generation scope not found');
@@ -92,7 +99,8 @@ export class WeeklyTrendResearchGenerationService {
         actorUserId: input.actorUserId,
         at: periodStart,
       });
-      const configuration = await resolveTrendRuntimeConfiguration();
+      const configuration = await reserveTrendRuntimeConfiguration(input.usageIdempotencyKey);
+      admission = configuration.admission;
       providerKey = configuration.provider.toLowerCase();
       model = configuration.model ?? `${providerKey}-search`;
       requestCostUsdMicros = configuration.requestCostUsdMicros || null;
@@ -106,14 +114,16 @@ export class WeeklyTrendResearchGenerationService {
       const result = await withOrganizationAiGenerationQuota({
         workspaceId: input.workspaceId,
         operationKey: input.usageIdempotencyKey,
-        generate: () =>
-          provider.search({
+        generate: () => {
+          providerAttempted = true;
+          return provider.search({
             query,
             language: 'ja',
             country: 'JP',
             publishedAfter: addDays(periodStart, -7),
             maximumResults: 6,
-          }),
+          });
+        },
       });
       if (result.items.length === 0) throw new TrendSearchProviderError('INVALID_RESPONSE', false);
       const completedAt = new Date();
@@ -165,42 +175,43 @@ export class WeeklyTrendResearchGenerationService {
       } catch (error) {
         if (!(error instanceof ApplicationError && error.code === 'CONFLICT')) throw error;
       }
-      await recordAiUsageSafely({
-        ...input,
-        taskType: 'TREND_RESEARCH',
-        provider: providerKey,
-        model,
-        promptVersion: TREND_QUERY_VERSION,
-        status: 'SUCCESS',
-        inputTokens: null,
-        outputTokens: null,
-        latencyMs: Date.now() - started,
-        estimatedCostUsdMicros: requestCostUsdMicros,
-        pricingVersion: requestCostUsdMicros === null ? null : 'admin-request-cost-v1',
-        idempotencyKey: input.usageIdempotencyKey,
-      });
     } catch (error) {
-      await recordAiUsageSafely({
-        ...input,
-        taskType: 'TREND_RESEARCH',
-        provider: providerKey,
-        model,
-        promptVersion: TREND_QUERY_VERSION,
-        status: 'FAILED',
-        inputTokens: null,
-        outputTokens: null,
-        latencyMs: Date.now() - started,
-        estimatedCostUsdMicros: requestCostUsdMicros,
-        pricingVersion: requestCostUsdMicros === null ? null : 'admin-request-cost-v1',
-        errorCode:
-          error instanceof TrendSearchProviderError
-            ? error.category
-            : error instanceof ApplicationError
-              ? error.code
-              : 'UNEXPECTED',
-        idempotencyKey: input.usageIdempotencyKey,
-      });
-      throw error;
+      operationError =
+        error instanceof Error ? error : new Error('unexpected trend research failure');
     }
+    const status = operationError === null ? 'SUCCESS' : 'FAILED';
+    const usage = {
+      ...input,
+      taskType: 'TREND_RESEARCH',
+      provider: providerKey,
+      model,
+      promptVersion: TREND_QUERY_VERSION,
+      status,
+      inputTokens: null,
+      outputTokens: null,
+      latencyMs: Date.now() - started,
+      estimatedCostUsdMicros:
+        admission === null ? requestCostUsdMicros : providerAttempted ? requestCostUsdMicros : 0,
+      pricingVersion: requestCostUsdMicros === null ? null : 'admin-request-cost-v1',
+      ...(operationError === null
+        ? {}
+        : {
+            errorCode:
+              operationError instanceof TrendSearchProviderError
+                ? operationError.category
+                : operationError instanceof ApplicationError
+                  ? operationError.code
+                  : 'UNEXPECTED',
+          }),
+      idempotencyKey: input.usageIdempotencyKey,
+    } as const;
+    if (admission === null) await recordAiUsageSafely(usage);
+    else {
+      // Persist the canonical usage first. A persistence or settlement failure deliberately
+      // leaves the reservation open so the next call fails closed instead of undercounting.
+      await recordAiUsage(usage);
+      await settleProviderRuntimeAdmission(admission);
+    }
+    if (operationError !== null) throw operationError;
   }
 }

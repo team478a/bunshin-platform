@@ -81,6 +81,7 @@ export class StripeCommercialInvoiceCheckoutAdapter {
     invoiceId: string;
     workspaceId: string;
     invoiceNumber: string;
+    itemName: string;
     billingEmail: string;
     amountYen: number;
     successUrl: string;
@@ -97,7 +98,7 @@ export class StripeCommercialInvoiceCheckoutAdapter {
       'invoice_creation[enabled]': 'true',
       'line_items[0][price_data][currency]': 'jpy',
       'line_items[0][price_data][unit_amount]': String(input.amountYen),
-      'line_items[0][price_data][product_data][name]': `ワタシワークス OEM月額利用料 ${input.invoiceNumber}`,
+      'line_items[0][price_data][product_data][name]': input.itemName,
       'line_items[0][quantity]': '1',
       'metadata[invoice_id]': input.invoiceId,
       'metadata[workspace_id]': input.workspaceId,
@@ -128,7 +129,7 @@ export class StripeCommercialInvoiceCheckoutAdapter {
         response.status === 401 || response.status === 403
           ? 'CONFIGURATION_ERROR'
           : 'INTERNAL_ERROR',
-        '月額利用料のStripe Checkoutを開始できませんでした',
+        '請求のStripe Checkoutを開始できませんでした',
       );
     }
     const payload = (await response.json()) as {

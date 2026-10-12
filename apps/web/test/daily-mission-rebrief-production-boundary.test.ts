@@ -23,10 +23,8 @@ describe('daily mission rebrief production boundary', () => {
 
     expect(runtime).toContain('prepareSocialDecisionRebrief({');
     expect(runtime).toContain('new OpenAIDailyMissionRebriefPlanner({');
-    expect(runtime).toContain("generateWithQuota('decision-rebrief:1'");
-    expect(runtime).toContain(
-      "recordUsage('decision-rebrief:1', 'DAILY_MISSION_REBRIEF', generated)",
-    );
+    expect(runtime).toContain("suffix: 'decision-rebrief:1'");
+    expect(runtime).toContain("taskType: 'DAILY_MISSION_REBRIEF'");
     expect(runtime).toContain('finalizeSocialDecisionRebrief({');
     expect(runtime).toContain("stage: 'REVISED_BRIEF'");
   });

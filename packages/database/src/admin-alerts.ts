@@ -26,6 +26,7 @@ export class PrismaAdminAlertRepository implements AdminAlertRepository {
       staleBadgeProcessing,
       stoppedPointServices,
       blockedDeletions,
+      commercialBillingRefundReviews,
       openSupportCases,
       urgentSupportCases,
     ] = await Promise.all([
@@ -104,6 +105,17 @@ export class PrismaAdminAlertRepository implements AdminAlertRepository {
         where: { pointIssuanceStopped: true, group: { status: 'ACTIVE' } },
       }),
       this.client.accountDeletionRequest.count({ where: { status: 'BLOCKED' } }),
+      this.client.commercialBillingWebhookEvent.findMany({
+        where: {
+          status: 'PROCESSED',
+          errorCategory: {
+            in: ['PARTIAL_REFUND_REVIEW_REQUIRED', 'FULL_REFUND_REVIEW_REQUIRED'],
+          },
+          invoice: { status: 'PAID' },
+        },
+        distinct: ['invoiceId'],
+        select: { invoiceId: true },
+      }),
       this.client.supportCase.count({ where: { status: 'OPEN' } }),
       this.client.supportCase.count({ where: { status: 'OPEN', priority: 'URGENT' } }),
     ]);
@@ -138,65 +150,104 @@ export class PrismaAdminAlertRepository implements AdminAlertRepository {
     const ai = await Promise.all(
       configurations.map(async (configuration) => {
         const provider = configuration.provider.toLowerCase();
-        const [daily, monthly, recentProviderFailures, recentUnknownCostEvents] = await Promise.all(
-          [
-            this.client.aiUsageEvent.aggregate({
-              where: { provider, occurredAt: { gte: input.dailyFrom, lt: input.now } },
-              _sum: { estimatedCostUsdMicros: true },
-            }),
-            this.client.aiUsageEvent.aggregate({
-              where: { provider, occurredAt: { gte: input.monthlyFrom, lt: input.now } },
-              _sum: { estimatedCostUsdMicros: true },
-            }),
-            this.client.aiUsageEvent.count({
-              where: {
-                provider,
-                status: 'FAILED',
-                OR: [
-                  { errorCode: { startsWith: 'AI_PROVIDER_' } },
-                  {
-                    errorCode: {
-                      in: [
-                        'PROVIDER_UNAVAILABLE',
-                        'PROVIDER_ERROR',
-                        'PROVIDER_FAILED',
-                        'PROVIDER_GENERATION_FAILED',
-                        'PROVIDER_RENDER_FAILED',
-                        'PROVIDER_TIMEOUT',
-                        'TIMEOUT',
-                        'TIMEOUT_OR_NETWORK',
-                        'NETWORK_ERROR',
-                        'RATE_LIMIT',
-                        'RATE_LIMITED',
-                        'QUOTA_OR_RATE_LIMIT',
-                        'HTTP_ERROR',
-                      ],
-                    },
+        const [
+          daily,
+          monthly,
+          dailyOpen,
+          monthlyOpen,
+          recentProviderFailures,
+          recentUnknownCostEvents,
+          staleOpenAdmissions,
+        ] = await Promise.all([
+          this.client.aiUsageEvent.aggregate({
+            where: { provider, occurredAt: { gte: input.dailyFrom, lt: input.now } },
+            _sum: { estimatedCostUsdMicros: true },
+          }),
+          this.client.aiUsageEvent.aggregate({
+            where: { provider, occurredAt: { gte: input.monthlyFrom, lt: input.now } },
+            _sum: { estimatedCostUsdMicros: true },
+          }),
+          this.client.aiProviderCallAdmission.aggregate({
+            where: {
+              environment: input.environment,
+              provider: configuration.provider,
+              settledAt: null,
+              admittedAt: { gte: input.dailyFrom, lt: input.now },
+            },
+            _sum: { reservedCostUsdMicros: true },
+          }),
+          this.client.aiProviderCallAdmission.aggregate({
+            where: {
+              environment: input.environment,
+              provider: configuration.provider,
+              settledAt: null,
+              admittedAt: { gte: input.monthlyFrom, lt: input.now },
+            },
+            _sum: { reservedCostUsdMicros: true },
+          }),
+          this.client.aiUsageEvent.count({
+            where: {
+              provider,
+              status: 'FAILED',
+              OR: [
+                { errorCode: { startsWith: 'AI_PROVIDER_' } },
+                {
+                  errorCode: {
+                    in: [
+                      'PROVIDER_UNAVAILABLE',
+                      'PROVIDER_ERROR',
+                      'PROVIDER_FAILED',
+                      'PROVIDER_GENERATION_FAILED',
+                      'PROVIDER_RENDER_FAILED',
+                      'PROVIDER_TIMEOUT',
+                      'TIMEOUT',
+                      'TIMEOUT_OR_NETWORK',
+                      'NETWORK_ERROR',
+                      'RATE_LIMIT',
+                      'RATE_LIMITED',
+                      'QUOTA_OR_RATE_LIMIT',
+                      'HTTP_ERROR',
+                    ],
                   },
-                ],
-                occurredAt: { gte: input.recentFrom, lt: input.now },
-              },
-            }),
-            this.client.aiUsageEvent.count({
-              where: {
-                provider,
-                estimatedCostUsdMicros: null,
-                taskType: { not: 'DAILY_MISSION_PIPELINE' },
-                occurredAt: { gte: input.recentFrom, lt: input.now },
-              },
-            }),
-          ],
-        );
+                },
+              ],
+              occurredAt: { gte: input.recentFrom, lt: input.now },
+            },
+          }),
+          this.client.aiUsageEvent.count({
+            where: {
+              provider,
+              estimatedCostUsdMicros: null,
+              taskType: { not: 'DAILY_MISSION_PIPELINE' },
+              occurredAt: { gte: input.recentFrom, lt: input.now },
+            },
+          }),
+          this.client.aiProviderCallAdmission.count({
+            where: {
+              environment: input.environment,
+              provider: configuration.provider,
+              settledAt: null,
+              admittedAt: { lt: new Date(input.now.getTime() - 15 * 60 * 1000) },
+            },
+          }),
+        ]);
         return {
           provider: configuration.provider,
           globallyPaused: configuration.globallyPaused,
           lastErrorCategory: configuration.lastErrorCategory,
           dailyBudgetUsdMicros: Number(configuration.dailyBudgetUsdMicros),
           monthlyBudgetUsdMicros: Number(configuration.monthlyBudgetUsdMicros),
-          dailySpentUsdMicros: safeNumber(daily._sum.estimatedCostUsdMicros),
-          monthlySpentUsdMicros: safeNumber(monthly._sum.estimatedCostUsdMicros),
+          dailySpentUsdMicros: safeNumber(
+            (daily._sum.estimatedCostUsdMicros ?? 0n) +
+              (dailyOpen._sum.reservedCostUsdMicros ?? 0n),
+          ),
+          monthlySpentUsdMicros: safeNumber(
+            (monthly._sum.estimatedCostUsdMicros ?? 0n) +
+              (monthlyOpen._sum.reservedCostUsdMicros ?? 0n),
+          ),
           recentProviderFailures,
           recentUnknownCostEvents,
+          staleOpenAdmissions,
         };
       }),
     );
@@ -229,6 +280,7 @@ export class PrismaAdminAlertRepository implements AdminAlertRepository {
         stoppedServices: stoppedPointServices,
       },
       blockedDeletions,
+      commercialBillingRefundReviews: commercialBillingRefundReviews.length,
       openSupportCases,
       urgentSupportCases,
     };

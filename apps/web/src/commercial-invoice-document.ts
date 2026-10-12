@@ -17,6 +17,8 @@ export const commercialInvoiceDocumentSnapshotSchema = z.object({
   periodStart: z.iso.datetime(),
   periodEnd: z.iso.datetime(),
   description: z.string(),
+  itemKind: z.enum(['MONTHLY_USAGE', 'SETUP_FEE']).optional(),
+  agreementReference: nullableText.optional(),
   quantity: z.literal(1),
   taxRatePercent: z.literal(10),
   subtotalYen: z.number().int().nonnegative(),
@@ -215,8 +217,17 @@ async function invoiceJpeg(snapshot: CommercialInvoiceDocumentSnapshot): Promise
           createElement(
             'span',
             { style: { color: '#536176', fontSize: '21px', marginTop: '7px' } },
-            `${date(snapshot.periodStart)}〜${inclusivePeriodEnd(snapshot.periodEnd)}`,
+            snapshot.itemKind === 'SETUP_FEE'
+              ? `合意日：${date(snapshot.periodStart)}`
+              : `${date(snapshot.periodStart)}〜${inclusivePeriodEnd(snapshot.periodEnd)}`,
           ),
+          snapshot.itemKind === 'SETUP_FEE' && snapshot.agreementReference
+            ? createElement(
+                'span',
+                { style: { color: '#536176', fontSize: '19px', marginTop: '6px' } },
+                `契約証跡：${snapshot.agreementReference}`,
+              )
+            : null,
         ),
         createElement('span', { style: { width: '13%', textAlign: 'right' } }, '1'),
         createElement(

@@ -1,4 +1,9 @@
 import 'server-only';
+import { ApplicationError } from '@bunshin/shared';
+import {
+  OPENAI_TASK_RESPONSES_ENDPOINT,
+  serializeOpenAiTaskRequest,
+} from '../ai/openai-task-compatibility';
 import {
   SOCIAL_PREFERRED_FORMATS,
   type WeeklyPlannerInput,
@@ -68,14 +73,14 @@ export class OpenAIWeeklyPlanner implements WeeklyPlannerPort {
     const model = this.options.model ?? 'gpt-5.2';
     let response: Response;
     try {
-      response = await (this.options.fetch ?? fetch)('https://api.openai.com/v1/responses', {
+      response = await (this.options.fetch ?? fetch)(OPENAI_TASK_RESPONSES_ENDPOINT, {
         signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
         method: 'POST',
         headers: {
           authorization: `Bearer ${this.options.apiKey}`,
           'content-type': 'application/json',
         },
-        body: JSON.stringify({
+        body: serializeOpenAiTaskRequest('SOCIAL_PLANNER', {
           model,
           store: false,
           input: [
@@ -95,6 +100,7 @@ export class OpenAIWeeklyPlanner implements WeeklyPlannerPort {
         }),
       });
     } catch (error) {
+      if (error instanceof ApplicationError && error.code === 'CONFIGURATION_ERROR') throw error;
       throw missionTransportFailure(error);
     }
     const { value, output: parsed } = await readMissionProviderResponse(response);

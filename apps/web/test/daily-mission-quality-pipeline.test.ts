@@ -5,6 +5,7 @@ import type {
   MissionQualityCheckerInput,
 } from '@bunshin/capability-social';
 import { describe, expect, it, vi } from 'vitest';
+import type { AdmittedOpenAiRuntimeConfiguration } from '../src/ai/runtime-provider-configuration';
 import { generateQualityCheckedMissionContent } from '../src/services/daily-mission-quality-pipeline';
 
 const generationResult = (body: string) => ({
@@ -47,21 +48,30 @@ const inputFor = (options: {
   quotaSuffixes?: string[];
   usageSuffixes?: string[];
 }) => ({
-  generator: { execute: options.generate } as unknown as GenerateMissionContent,
-  checker: { execute: options.check } as unknown as CheckMissionQuality,
+  generator: () => ({ execute: options.generate }) as unknown as GenerateMissionContent,
+  checker: () => ({ execute: options.check }) as unknown as CheckMissionQuality,
+  contentPromptVersion: 'test-content-prompt',
+  qualityPromptVersion: 'test-quality-prompt',
   contentInput: {} as MissionContentGeneratorInput,
   qualityInput: ((content) => ({ content }) as MissionQualityCheckerInput) as (
     content: Record<string, unknown>,
   ) => MissionQualityCheckerInput,
   recentMissions: [],
-  generateWithQuota: <T>(suffix: string, generate: () => Promise<T>) => {
-    options.quotaSuffixes?.push(suffix);
-    return generate();
+  executeAiStep: async <T>(operation: {
+    suffix: string;
+    generate: (runtime: AdmittedOpenAiRuntimeConfiguration) => Promise<T>;
+  }) => {
+    options.quotaSuffixes?.push(operation.suffix);
+    const result = await operation.generate({
+      apiKey: 'test-key',
+      model: 'test-model',
+      requestCostUsdMicros: 1,
+      source: 'ADMIN_CONFIGURATION',
+      admission: null,
+    });
+    options.usageSuffixes?.push(operation.suffix);
+    return result;
   },
-  recordUsage: vi.fn().mockImplementation((suffix: string) => {
-    options.usageSuffixes?.push(suffix);
-    return Promise.resolve();
-  }),
   applyTerminology: <T>(result: T) => result,
   decisionRepairPolicy: 'ALLOW_CONTENT_REPAIR' as const,
   setStage: (stage: string) => options.stages?.push(stage),

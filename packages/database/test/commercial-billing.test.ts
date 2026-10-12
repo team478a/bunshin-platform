@@ -39,6 +39,103 @@ describe('unresolvedCommercialReminderFailures', () => {
 });
 
 describe('PrismaCommercialBillingService', () => {
+  it('returns workspace-scoped refund review history with invoice details', async () => {
+    const findFirst = vi.fn().mockResolvedValue({
+      id: 'workspace-a',
+      tenantInvoices: [],
+      commercialBillingAudits: [],
+      tenantMonthlyUsage: [],
+    });
+    const client = {
+      workspace: { findFirst },
+      commercialServiceProduct: { findMany: vi.fn().mockResolvedValue([]) },
+    } as unknown as PrismaClient;
+
+    await new PrismaCommercialBillingService(client).dashboard('workspace-a');
+
+    expect(findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'workspace-a', type: 'ORGANIZATION' },
+        select: expect.objectContaining({
+          tenantInvoices: expect.objectContaining({
+            select: expect.objectContaining({
+              billingWebhookEvents: expect.objectContaining({
+                where: {
+                  status: 'PROCESSED',
+                  errorCategory: {
+                    in: ['PARTIAL_REFUND_REVIEW_REQUIRED', 'FULL_REFUND_REVIEW_REQUIRED'],
+                  },
+                },
+                orderBy: { receivedAt: 'desc' },
+                select: expect.objectContaining({ providerEventId: true, receivedAt: true }),
+              }),
+            }),
+          }),
+        }),
+      }),
+    );
+  });
+
+  it('returns the latest refund review signal for each paid invoice', async () => {
+    const latest = {
+      id: 'event-full',
+      workspaceId: 'workspace-a',
+      invoiceId: 'invoice-a',
+      providerEventId: 'evt_refund_full',
+      errorCategory: 'FULL_REFUND_REVIEW_REQUIRED',
+      receivedAt: new Date('2026-10-11T02:00:00.000Z'),
+    };
+    const findRefundEvents = vi.fn().mockResolvedValue([
+      latest,
+      {
+        ...latest,
+        id: 'event-partial',
+        errorCategory: 'PARTIAL_REFUND_REVIEW_REQUIRED',
+        receivedAt: new Date('2026-10-11T01:00:00.000Z'),
+      },
+    ]);
+    const client = {
+      organizationCommercialContract: { count: vi.fn().mockResolvedValue(1) },
+      tenantInvoice: {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            id: 'invoice-a',
+            status: 'PAID',
+            amountYen: 19_800,
+            dueAt: new Date('2026-10-01T00:00:00.000Z'),
+          },
+        ]),
+      },
+      commercialBillingWebhookEvent: { findMany: findRefundEvents },
+    } as unknown as PrismaClient;
+
+    await expect(
+      new PrismaCommercialBillingService(client).operationsDashboard(
+        new Date('2026-10-11T03:00:00.000Z'),
+      ),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        refundReviews: [latest],
+      }),
+    );
+    expect(findRefundEvents).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          invoiceId: { in: ['invoice-a'] },
+          status: 'PROCESSED',
+          errorCategory: {
+            in: ['PARTIAL_REFUND_REVIEW_REQUIRED', 'FULL_REFUND_REVIEW_REQUIRED'],
+          },
+        }),
+      }),
+    );
+    expect(findRefundEvents).toHaveBeenCalledWith(
+      expect.objectContaining({
+        select: expect.objectContaining({ providerEventId: true }),
+      }),
+    );
+  });
+
   it('does not activate billing without an OEM entitlement', async () => {
     const client = {
       workspace: {
@@ -72,6 +169,7 @@ describe('PrismaCommercialBillingService', () => {
         findFirst: vi.fn().mockResolvedValue({
           id: 'contract',
           workspaceId: 'workspace-a',
+          status: 'ACTIVE',
           updatedByUserId: 'actor',
         }),
       },
@@ -196,6 +294,7 @@ describe('PrismaCommercialBillingService', () => {
         findFirst: vi.fn().mockResolvedValue({
           id: 'contract',
           workspaceId: 'workspace-a',
+          status: 'ACTIVE',
           updatedByUserId: 'actor',
         }),
       },
@@ -219,7 +318,9 @@ describe('PrismaCommercialBillingService', () => {
     const create = vi.fn().mockResolvedValue({ id: 'invoice-custom', amountYen: 250_000 });
     const rawClient = {
       organizationCommercialContract: {
-        findFirst: vi.fn().mockResolvedValue({ id: 'contract', updatedByUserId: 'owner' }),
+        findFirst: vi
+          .fn()
+          .mockResolvedValue({ id: 'contract', status: 'ACTIVE', updatedByUserId: 'owner' }),
       },
       tenantMonthlyUsage: {
         findFirst: vi.fn().mockResolvedValue({
@@ -268,5 +369,118 @@ describe('PrismaCommercialBillingService', () => {
         amountYen: 0,
       }),
     ).rejects.toThrow('invalid custom quote amount');
+  });
+
+  it('creates a separate setup fee snapshot and invoice for a reviewed product offering', async () => {
+    const agreedAt = new Date('2026-10-10T00:00:00.000Z');
+    const charge = {
+      id: '12345678-1234-4000-8000-123456789abc',
+      workspaceId: 'workspace-a',
+      productId: 'product-a',
+      chargeKey: 'SIGNED_AGREEMENT_2026_A',
+      amountYen: 300_000,
+      description: 'OEM導入初期設定費用',
+      agreementReference: 'agreement-2026-a',
+      agreedAt,
+      actorUserId: 'actor',
+      reason: '締結済み契約書の金額を確認したため',
+    };
+    const invoice = { id: 'invoice-setup', kind: 'SETUP_FEE', amountYen: 300_000 };
+    const rawClient = {
+      $executeRaw: vi.fn().mockResolvedValue(1),
+      platformAdmin: { findFirst: vi.fn().mockResolvedValue({ id: 'admin-a' }) },
+      oemSetupFeeCharge: {
+        findUnique: vi.fn().mockResolvedValue(null),
+        create: vi.fn().mockResolvedValue(charge),
+      },
+      organizationCommercialContract: {
+        findFirst: vi.fn().mockResolvedValue({ id: 'contract-a', status: 'ACTIVE' }),
+      },
+      oemOfferingPeriod: { findFirst: vi.fn().mockResolvedValue({ id: 'offering-a' }) },
+      tenantInvoice: { create: vi.fn().mockResolvedValue(invoice) },
+      commercialBillingAudit: { create: vi.fn().mockResolvedValue({ id: 'audit-a' }) },
+    };
+    const client = {
+      ...rawClient,
+      $transaction: vi.fn((callback: (tx: typeof rawClient) => unknown) => callback(rawClient)),
+    } as unknown as PrismaClient;
+
+    await expect(
+      new PrismaCommercialBillingService(client).prepareSetupFeeInvoice({
+        workspaceId: 'workspace-a',
+        productId: 'product-a',
+        actorUserId: 'actor',
+        chargeKey: charge.chargeKey,
+        amountYen: charge.amountYen,
+        description: charge.description,
+        agreementReference: charge.agreementReference,
+        agreedAt,
+        reason: charge.reason,
+        now: new Date('2026-10-11T00:00:00.000Z'),
+      }),
+    ).resolves.toEqual(invoice);
+    expect(rawClient.tenantInvoice.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        kind: 'SETUP_FEE',
+        setupFeeChargeId: charge.id,
+        amountYen: 300_000,
+        mau: 0,
+      }),
+    });
+  });
+
+  it('fails closed when the product was not offered on the setup fee agreement date', async () => {
+    const rawClient = {
+      $executeRaw: vi.fn().mockResolvedValue(1),
+      platformAdmin: { findFirst: vi.fn().mockResolvedValue({ id: 'admin-a' }) },
+      oemSetupFeeCharge: { findUnique: vi.fn().mockResolvedValue(null) },
+      organizationCommercialContract: {
+        findFirst: vi.fn().mockResolvedValue({ id: 'contract-a', status: 'ACTIVE' }),
+      },
+      oemOfferingPeriod: { findFirst: vi.fn().mockResolvedValue(null) },
+    };
+    const client = {
+      ...rawClient,
+      $transaction: vi.fn((callback: (tx: typeof rawClient) => unknown) => callback(rawClient)),
+    } as unknown as PrismaClient;
+    await expect(
+      new PrismaCommercialBillingService(client).prepareSetupFeeInvoice({
+        workspaceId: 'workspace-a',
+        productId: 'product-a',
+        actorUserId: 'actor',
+        chargeKey: 'SIGNED_AGREEMENT_2026_A',
+        amountYen: 300_000,
+        description: 'OEM導入初期設定費用',
+        agreementReference: 'agreement-2026-a',
+        agreedAt: new Date('2026-10-10T00:00:00.000Z'),
+        reason: '締結済み契約書の金額を確認したため',
+        now: new Date('2026-10-11T00:00:00.000Z'),
+      }),
+    ).rejects.toThrow('REVIEW_REQUIRED: product offering at agreement date required');
+  });
+
+  it('does not create setup fee charges for a non-super-admin actor', async () => {
+    const rawClient = {
+      $executeRaw: vi.fn().mockResolvedValue(1),
+      platformAdmin: { findFirst: vi.fn().mockResolvedValue(null) },
+    };
+    const client = {
+      ...rawClient,
+      $transaction: vi.fn((callback: (tx: typeof rawClient) => unknown) => callback(rawClient)),
+    } as unknown as PrismaClient;
+    await expect(
+      new PrismaCommercialBillingService(client).prepareSetupFeeInvoice({
+        workspaceId: 'workspace-a',
+        productId: 'product-a',
+        actorUserId: 'actor',
+        chargeKey: 'SIGNED_AGREEMENT_2026_A',
+        amountYen: 300_000,
+        description: 'OEM導入初期設定費用',
+        agreementReference: 'agreement-2026-a',
+        agreedAt: new Date('2026-10-10T00:00:00.000Z'),
+        reason: '締結済み契約書の金額を確認したため',
+        now: new Date('2026-10-11T00:00:00.000Z'),
+      }),
+    ).rejects.toThrow('SUPER_ADMIN_REQUIRED');
   });
 });

@@ -9,10 +9,12 @@ export type MigrationBounds = {
   processTimeoutMs: number;
 };
 export function resolveMigrationBounds(environment: NodeJS.ProcessEnv): MigrationBounds;
-export function withMigrationConnectionMetadata(directUrl: string): string;
-export function assertReleaseMigrationGuard(): string[];
-export function buildReleasePreflightSql(expectedMigrationNames: string[]): string;
+export function withMigrationBounds(directUrl: string, bounds: MigrationBounds): string;
 export function runVercelMigration(
+  environment?: NodeJS.ProcessEnv,
+  execute?: typeof import('./migration-process.mjs').runMigrationProcess,
+): Promise<number>;
+export function runMigrationConnectionProbe(
   environment?: NodeJS.ProcessEnv,
   execute?: typeof import('./migration-process.mjs').runMigrationProcess,
 ): Promise<number>;

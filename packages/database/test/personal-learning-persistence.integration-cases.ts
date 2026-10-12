@@ -29,6 +29,8 @@ import { PrismaPersonalLearningRouterBridge } from '../src/personal-learning-rou
 import { PrismaTrainingAnswerRepository } from '../src/training-answer';
 import { PrismaPersonalLearningAiCallRepository } from '../src/personal-learning-ai-call';
 import { PrismaLearningDefinitionApprovalAdminRepository } from '../src/learning-definition-approval-admin';
+import { PrismaReproductionChallengeReviewAdminRepository } from '../src/reproduction-challenge-review-admin';
+import { REPRODUCTION_CHALLENGE_REVIEW_FIXTURES } from '@bunshin/capability-training';
 import { PrismaPersonalLearningPilotProfileRepository } from '../src/personal-learning-pilot-profile';
 import { PrismaPersonalLearningAssessmentGate } from '../src/personal-learning-assessment-gate';
 import { PrismaPersonalLearningCallAdmission } from '../src/personal-learning-call-admission';
@@ -1115,6 +1117,136 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
       expect(state.seats[0]?.programEnrollmentId).toBeNull();
       expect(state.seats[0]?.revokedAt).not.toBeNull();
     });
+    async function challengeReviewFixture() {
+      const f = await fixture(false);
+      const authority = {
+        workspaceId: f.scope.workspaceId,
+        groupId: f.scope.groupId,
+        serviceProgramId: f.enrollment.serviceProgramId,
+      };
+      await client.serviceProgram.update({
+        where: { id: authority.serviceProgramId },
+        data: {
+          status: 'SUSPENDED',
+          settings: {
+            moduleKey: 'AI_TRAINING_V1',
+            personalLearningPilot: { enabled: false, enrollmentIds: [f.enrollment.id] },
+            trainingOperations: { notificationsEnabled: false, postponedReminderEnabled: false },
+          },
+        },
+      });
+      let tick = 0;
+      const repo = new PrismaReproductionChallengeReviewAdminRepository(
+        client,
+        authority,
+        'a'.repeat(40),
+        () => {},
+        () => new Date(now.getTime() + ++tick),
+      );
+      const reference = REPRODUCTION_CHALLENGE_REVIEW_FIXTURES[0]!.reference;
+      const state = await repo.read(f.owner.id, reference);
+      const command = {
+        operationId: randomUUID(),
+        reference,
+        expectedRevision: state.revision,
+        materialDigest: state.materialDigest,
+        reviewedCommitSha: state.reviewedCommitSha,
+        evidenceKey: 'synthetic-test-review',
+        action: 'APPROVE' as const,
+        confirmation: 'CONFIRM_CHALLENGE_REVIEW' as const,
+        checklist: {
+          objective: true,
+          prerequisites: true,
+          syntheticFacts: true,
+          learnerTask: true,
+          rubricAndMission: true,
+          safety: true,
+        },
+      };
+      return { ...f, authority, repo, reference, command };
+    }
+    it('challenge review real JSONB: immutable review/revoke history and replay never restore execution', async () => {
+      const f = await challengeReviewFixture();
+      await f.repo.change(f.owner.id, f.command);
+      expect((await f.repo.read(f.owner.id, f.reference)).history).toHaveLength(1);
+      const state = await f.repo.read(f.owner.id, f.reference);
+      await f.repo.change(f.owner.id, {
+        ...f.command,
+        operationId: randomUUID(),
+        expectedRevision: state.revision,
+        action: 'REVOKE',
+        confirmation: 'CONFIRM_CHALLENGE_REVOKE',
+        checklist: null,
+      });
+      expect(await f.repo.change(f.owner.id, f.command)).toMatchObject({
+        replayed: true,
+        current: { recordedDecision: 'REVOKE', executionPermission: 'NOT_GRANTED' },
+      });
+      expect((await f.repo.read(f.owner.id, f.reference)).history).toHaveLength(2);
+      expect(
+        await client.learningDefinitionApproval.count({
+          where: { workspaceId: f.scope.workspaceId, groupId: f.scope.groupId },
+        }),
+      ).toBe(0);
+      expect(
+        await client.programMissionAssignment.count({
+          where: { workspaceId: f.scope.workspaceId, groupId: f.scope.groupId },
+        }),
+      ).toBe(0);
+    });
+    it('challenge review real concurrency: same-revision commands append at most one fact', async () => {
+      const f = await challengeReviewFixture();
+      const results = await Promise.allSettled([
+        f.repo.change(f.owner.id, f.command),
+        f.repo.change(f.owner.id, { ...f.command, operationId: randomUUID() }),
+      ]);
+      expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+      expect(results.filter((r) => r.status === 'rejected')).toHaveLength(1);
+      expect((await f.repo.read(f.owner.id, f.reference)).history).toHaveLength(1);
+    });
+    it('challenge review real auth: foreign actor, live Program and disabled membership reject retries', async () => {
+      const f = await challengeReviewFixture();
+      for (const key of ['workspaceId', 'groupId', 'serviceProgramId'] as const) {
+        const foreign = new PrismaReproductionChallengeReviewAdminRepository(
+          client,
+          { ...f.authority, [key]: randomUUID() },
+          'a'.repeat(40),
+          () => {},
+        );
+        await expect(foreign.read(f.owner.id, f.reference)).rejects.toThrow();
+      }
+      await expect(f.repo.change(f.scope.userId, f.command)).rejects.toThrow();
+      await f.repo.change(f.owner.id, f.command);
+      await client.serviceProgram.update({
+        where: { id: f.authority.serviceProgramId },
+        data: { status: 'ACTIVE' },
+      });
+      await expect(f.repo.change(f.owner.id, f.command)).rejects.toThrow();
+      await client.serviceProgram.update({
+        where: { id: f.authority.serviceProgramId },
+        data: { status: 'SUSPENDED' },
+      });
+      await client.groupMembership.updateMany({
+        where: { groupId: f.scope.groupId, userId: f.owner.id },
+        data: { status: 'REVOKED', revokedAt: now },
+      });
+      await expect(f.repo.read(f.owner.id, f.reference)).rejects.toThrow();
+    });
+    it('challenge review real transaction rolls back if trusted guard is revoked after writing', async () => {
+      const f = await challengeReviewFixture();
+      let checks = 0;
+      const repo = new PrismaReproductionChallengeReviewAdminRepository(
+        client,
+        f.authority,
+        'a'.repeat(40),
+        () => {
+          if (++checks >= 4) throw new Error('synthetic guard revoked');
+        },
+        () => now,
+      );
+      await expect(repo.change(f.owner.id, f.command)).rejects.toThrow('synthetic guard revoked');
+      expect((await f.repo.read(f.owner.id, f.reference)).history).toHaveLength(0);
+    });
     it('production preparation pins Program and retains human approval/profile ownership and retry authorization', async () => {
       const f = await profilePreparation();
       const authority = {
@@ -1709,6 +1841,86 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
         where: authority,
         data: { revokedAt: new Date() },
       });
+      await expect(pilot.read(f.actor)).rejects.toThrow();
+      // Privacy is independent of current learning access: revoked seat + stopped program.
+      await client.serviceProgram.update({
+        where: { id: authority.serviceProgramId },
+        data: {
+          status: 'SUSPENDED',
+          settings: {
+            ...settings,
+            personalLearningPilot: {
+              ...(settings.personalLearningPilot as Prisma.JsonObject),
+              enabled: false,
+            },
+          },
+        },
+      });
+      const privacyScope = {
+        workspaceId: f.scope.workspaceId,
+        groupId: f.scope.groupId,
+        programEnrollmentId: f.enrollment.id,
+        actorUserId: f.scope.userId,
+      };
+      const exporter = new PrismaTrainingPersonalDataExportRepository(client);
+      const deletion = new PrismaTrainingPersonalDataDeletionRepository(client);
+      expect((await exporter.read(privacyScope)).outcome).toBe('FOUND');
+      for (const foreign of [
+        { actorUserId: f.owner.id },
+        { workspaceId: randomUUID() },
+        { groupId: randomUUID() },
+        { programEnrollmentId: randomUUID() },
+      ]) {
+        expect(await exporter.read({ ...privacyScope, ...foreign })).toEqual({
+          outcome: 'NOT_FOUND',
+        });
+        expect(
+          await deletion.preview({ ...privacyScope, ...foreign, target: { kind: 'ALL' } }),
+        ).toEqual({ outcome: 'NOT_FOUND' });
+      }
+      // Management role or EXTERNAL history alone cannot authorize own learning-data access.
+      await client.personalLearningPilotSeat.updateMany({
+        where: authority,
+        data: { kind: 'EXTERNAL', cohort: 'WAVE_1' },
+      });
+      expect(await exporter.read(privacyScope)).toEqual({ outcome: 'NOT_FOUND' });
+      expect(await deletion.preview({ ...privacyScope, target: { kind: 'ALL' } })).toEqual({
+        outcome: 'NOT_FOUND',
+      });
+      await client.personalLearningPilotSeat.updateMany({
+        where: authority,
+        data: { kind: 'INTERNAL', cohort: 'INTERNAL' },
+      });
+      const ownAnswer = await client.trainingMissionAnswer.findFirstOrThrow({
+        where: {
+          workspaceId: f.scope.workspaceId,
+          groupId: f.scope.groupId,
+          programEnrollmentId: f.enrollment.id,
+          userId: f.scope.userId,
+        },
+      });
+      const single = {
+        ...privacyScope,
+        target: { kind: 'ANSWER' as const, answerId: ownAnswer.id },
+      };
+      const answerPreview = await deletion.preview(single);
+      if (answerPreview.outcome !== 'PREVIEW') throw new Error('owner answer preview expected');
+      expect(
+        (await deletion.delete({ ...single, revision: answerPreview.preview.revision, now }))
+          .outcome,
+      ).toBe('DELETED');
+      const all = { ...privacyScope, target: { kind: 'ALL' as const } };
+      const allPreview = await deletion.preview(all);
+      if (allPreview.outcome !== 'PREVIEW') throw new Error('owner ALL preview expected');
+      const deleteRequest = { ...all, revision: allPreview.preview.revision, now };
+      expect((await deletion.delete(deleteRequest)).outcome).toBe('DELETED');
+      expect((await deletion.delete(deleteRequest)).outcome).toBe('ALREADY_DELETED');
+      expect((await exporter.read(privacyScope)).outcome).toBe('FOUND');
+      const deletedSeat = await client.personalLearningPilotSeat.findFirstOrThrow({
+        where: authority,
+      });
+      expect(deletedSeat.programEnrollmentId).toBeNull();
+      expect(deletedSeat.revokedAt).toBeInstanceOf(Date);
       await expect(pilot.read(f.actor)).rejects.toThrow();
       expect(
         await client.groupMembership.findUniqueOrThrow({ where: { id: f.member.id } }),

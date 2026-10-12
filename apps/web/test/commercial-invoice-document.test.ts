@@ -44,4 +44,22 @@ describe('commercial invoice document', () => {
     expect(result.pdf.toString('latin1')).toContain('/MediaBox [0 0 595.28 841.89]');
     expect(result.pdf.toString('latin1')).toContain('/Filter /DCTDecode');
   }, 30_000);
+
+  it('accepts a setup fee snapshot with the reviewed agreement reference', () => {
+    expect(
+      commercialInvoiceDocumentSnapshotSchema.parse({
+        ...snapshot,
+        invoiceNumber: 'WW-SETUP-20261010-A',
+        description: 'サービスA OEM初期費用（導入初期設定）',
+        itemKind: 'SETUP_FEE',
+        agreementReference: 'agreement-2026-a',
+      }),
+    ).toEqual({
+      ...snapshot,
+      invoiceNumber: 'WW-SETUP-20261010-A',
+      description: 'サービスA OEM初期費用（導入初期設定）',
+      itemKind: 'SETUP_FEE',
+      agreementReference: 'agreement-2026-a',
+    });
+  });
 });

@@ -1,5 +1,9 @@
 import 'server-only';
 import {
+  OPENAI_TASK_RESPONSES_ENDPOINT,
+  serializeOpenAiTaskRequest,
+} from '../ai/openai-task-compatibility';
+import {
   TRAINING_SKILL_KEYS,
   finalizeTrainingSkillEvaluation,
   getAiTrainingMissionQuality,
@@ -138,7 +142,7 @@ export class OpenAiTrainingAnswerEvaluator {
       });
     };
     let response: Response;
-    const body = JSON.stringify({
+    const body = serializeOpenAiTaskRequest('TRAINING_ASSESSMENT', {
       model: this.options.model,
       store: false,
       ...(this.options.requestLimits
@@ -187,7 +191,7 @@ export class OpenAiTrainingAnswerEvaluator {
       throw new ApplicationError('VALIDATION_ERROR', 'pilot evaluation request limit exceeded');
     this.options.onRequestStarted?.();
     try {
-      response = await (this.options.fetch ?? fetch)('https://api.openai.com/v1/responses', {
+      response = await (this.options.fetch ?? fetch)(OPENAI_TASK_RESPONSES_ENDPOINT, {
         method: 'POST',
         headers: {
           authorization: `Bearer ${this.options.apiKey}`,
