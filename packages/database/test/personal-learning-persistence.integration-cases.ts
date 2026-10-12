@@ -31,6 +31,7 @@ import { PrismaPersonalLearningRequestRepository } from '../src/personal-learnin
 import { PrismaPersonalLearningTextOperationRepository } from '../src/personal-learning-text-operation';
 import { PrismaLearningCandidateRepository } from '../src/personal-learning-lesson-candidate';
 import { PrismaPersonalLearningPracticeRepository } from '../src/personal-learning-practice';
+import { PrismaPracticeSupportRepository } from '../src/personal-learning-practice-support';
 import { PrismaTrainingRetentionExecutionRepository } from '../src/training-retention-execution';
 import { PrismaAccountDeletionPurgeRepository } from '../src/account-deletion-purge';
 import { PrismaPersonalLearningRouterBridge } from '../src/personal-learning-router';
@@ -319,7 +320,7 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
         usageKey: `personal-learning-operation:${permit.operationHash}`,
         promptVersion: operation.promptVersion,
       };
-      return { ...f, request, candidates, input };
+      return { ...f, request, candidates, input, operation };
     }
     it('lesson candidate: stores once and confirms the displayed version without applying Plan or Assignment', async () => {
       const f = await lessonFixture();
@@ -671,6 +672,315 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
         await client.programActionEvent.count({ where: { programEnrollmentId: f.enrollment.id } }),
       ).toBe(0);
       await expect(f.practice.readPractice(f.actor)).rejects.toThrow();
+    });
+    async function supportFixture() {
+      const f = await dynamicPracticeFixture();
+      const practice = await f.practice.startPractice(f.start);
+      const support = new PrismaPracticeSupportRepository(client, () => now);
+      const command = {
+        actor: f.actor,
+        assignmentId: practice.assignmentId,
+        operationId: randomUUID(),
+        expectedNoteRevision: 0,
+        expectedSupportRevision: 0,
+        reason: 'ENVIRONMENT_MISMATCH' as const,
+        text: '画面が違う',
+      };
+      const advice = {
+        cause: 'ENVIRONMENT_MISMATCH' as const,
+        explanation: '端末や画面の違いを確認します',
+        nextAction: 'いま画面に表示されている内容を短く教えてください',
+        question: '',
+      };
+      const prepared = await support.prepareSupport(command);
+      const operation: PersonalLearningTextOperation = {
+        ...f.operation,
+        requestId: f.request.id,
+        expectedRequestRevision: f.request.revision,
+        operationId: command.operationId,
+        operationKind: 'PRACTICE_SUPPORT',
+        practice: {
+          assignmentId: practice.assignmentId,
+          noteRevision: 0,
+          supportRevision: 1,
+          supportRequestId: prepared.request.id,
+        },
+      };
+      const complete = async () => {
+        const permit = await f.repo.admit(operation);
+        await f.repo.record({
+          operation,
+          permit,
+          measurement: f.measurement,
+          requestFinished: true,
+        });
+        return support.completeSupport({
+          command,
+          requestId: prepared.request.id,
+          advice,
+          promptVersion: operation.promptVersion,
+          usageKey: `personal-learning-operation:${permit.operationHash}`,
+        });
+      };
+      return { ...f, support, command, advice, prepared, operation, complete };
+    }
+    it('practice support: saves same-version advice and retry never duplicates or changes achievement', async () => {
+      const f = await supportFixture();
+      const before = await client.programMissionAssignment.findUniqueOrThrow({
+        where: { id: f.command.assignmentId },
+      });
+      const result = await f.complete();
+      expect(result.support.history[0]).toMatchObject({
+        status: 'READY',
+        advice: f.advice,
+        materialVersion: 1,
+      });
+      expect((await f.support.prepareSupport(f.command)).created).toBe(false);
+      expect((await f.practice.readPractice(f.actor)).current).toEqual(result);
+      expect(
+        await client.programMissionAssignment.findUniqueOrThrow({
+          where: { id: f.command.assignmentId },
+        }),
+      ).toEqual(before);
+      expect(await client.trainingMissionAnswer.count()).toBe(0);
+      expect(await client.trainingParticipantProfile.count()).toBe(0);
+      expect(
+        (await client.programMemberGoal.findUniqueOrThrow({ where: { id: result.goalId } })).status,
+      ).toBe('ACTIVE');
+      expect(
+        await client.programActionEvent.count({
+          where: { eventType: 'PERSONAL_LEARNING_SUPPORT_RESPONSE' },
+        }),
+      ).toBe(1);
+      const exported = await new PrismaTrainingPersonalDataExportRepository(client).read({
+        workspaceId: f.scope.workspaceId,
+        groupId: f.scope.groupId,
+        programEnrollmentId: f.enrollment.id,
+        actorUserId: f.actor.actorUserId,
+      });
+      if (exported.outcome !== 'FOUND') throw new Error('export required');
+      expect(exported.data.personalLearning).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            kind: 'PRACTICE_SUPPORT',
+            metadata: expect.objectContaining({ text: f.command.text }),
+          }),
+        ]),
+      );
+    });
+    it('practice support: a different latest wish does not change the executing context or block its budget', async () => {
+      const f = await supportFixture();
+      await f.requests.saveRequest({
+        ...f.actor,
+        content: { ...requestContent, originalText: 'AIで発表の練習をしたい' },
+        expectedRevision: 2,
+        idempotencyKey: randomUUID(),
+      });
+      const result = await f.complete();
+      expect(result.candidate.originalText).toBe(f.request.originalText);
+      expect(result.support.history[0]?.status).toBe('READY');
+    });
+    it('practice support: changed notes make delayed advice stale, not current or an achievement', async () => {
+      const f = await supportFixture();
+      await f.practice.recordPracticeNote({
+        actor: f.actor,
+        assignmentId: f.command.assignmentId,
+        operationId: randomUUID(),
+        expectedRevision: 0,
+        text: '先へ進めた',
+      });
+      await expect(f.repo.admit(f.operation)).rejects.toMatchObject({ code: 'CONFLICT' });
+      // A real call may already have been admitted before the note changed.
+      await client.aiUsageEvent.create({
+        data: {
+          workspaceId: f.scope.workspaceId,
+          actorUserId: f.actor.actorUserId,
+          taskType: 'PERSONAL_LEARNING_PRACTICE_SUPPORT',
+          provider: 'synthetic',
+          model: 'synthetic',
+          promptVersion: f.operation.promptVersion,
+          status: 'SUCCESS',
+          estimatedCostUsdMicros: 60n,
+          idempotencyKey: `personal-learning-operation:${(await import('../src/personal-learning-operation-identity')).personalLearningOperationHash(f.operation)}`,
+        },
+      });
+      const result = await f.support.completeSupport({
+        command: f.command,
+        requestId: f.prepared.request.id,
+        advice: f.advice,
+        promptVersion: f.operation.promptVersion,
+        usageKey: `personal-learning-operation:${(await import('../src/personal-learning-operation-identity')).personalLearningOperationHash(f.operation)}`,
+      });
+      expect(result.support.history[0]).toMatchObject({ status: 'STALE', advice: null });
+      expect(result.note?.text).toBe('先へ進めた');
+    });
+    it('practice support: five-axis ownership is required for request, admission and apply', async () => {
+      const f = await supportFixture();
+      for (const key of [
+        'workspaceId',
+        'groupId',
+        'programEnrollmentId',
+        'groupMembershipId',
+        'userId',
+      ] as const) {
+        const actor = { ...f.actor, scope: { ...f.scope, [key]: randomUUID() } };
+        await expect(f.support.prepareSupport({ ...f.command, actor })).rejects.toThrow();
+        await expect(f.repo.admit({ ...f.operation, actor })).rejects.toThrow();
+        await expect(
+          f.support.completeSupport({
+            command: { ...f.command, actor },
+            requestId: f.prepared.request.id,
+            advice: f.advice,
+            promptVersion: 'SYNTHETIC_V1',
+            usageKey: 'foreign',
+          }),
+        ).rejects.toThrow();
+      }
+    });
+    it('practice support: pending duplicate, altered operation and competing request are stopped', async () => {
+      const f = await supportFixture();
+      expect((await f.support.prepareSupport(f.command)).created).toBe(false);
+      await expect(
+        f.support.prepareSupport({ ...f.command, text: '別の相談' }),
+      ).rejects.toMatchObject({ code: 'CONFLICT' });
+      await expect(
+        f.support.prepareSupport({
+          ...f.command,
+          operationId: randomUUID(),
+          expectedSupportRevision: 1,
+        }),
+      ).rejects.toMatchObject({ code: 'CONFLICT' });
+      await expect(
+        f.repo.admit({
+          ...f.operation,
+          practice: { ...f.operation.practice!, supportRequestId: randomUUID() },
+        }),
+      ).rejects.toMatchObject({ code: 'CONFLICT' });
+      expect(
+        await client.programActionEvent.count({
+          where: { eventType: 'PERSONAL_LEARNING_SUPPORT_REQUEST' },
+        }),
+      ).toBe(1);
+    });
+    it('practice support: a failed consultation remains history and permits an explicit new attempt', async () => {
+      const f = await supportFixture();
+      await f.support.failSupport({ command: f.command, requestId: f.prepared.request.id });
+      await f.support.failSupport({ command: f.command, requestId: f.prepared.request.id });
+      const result = await f.support.prepareSupport({
+        ...f.command,
+        operationId: randomUUID(),
+        expectedSupportRevision: 1,
+      });
+      expect(result.request.revision).toBe(2);
+      expect(result.practice.support.history[1]?.status).toBe('FAILED');
+      const concurrent = await Promise.allSettled([
+        f.support.prepareSupport({
+          ...f.command,
+          operationId: randomUUID(),
+          expectedSupportRevision: 2,
+        }),
+        f.support.prepareSupport({
+          ...f.command,
+          operationId: randomUUID(),
+          expectedSupportRevision: 2,
+        }),
+      ]);
+      expect(concurrent.filter((r) => r.status === 'fulfilled')).toHaveLength(0);
+    });
+    it('practice support: stopped policy prevents AI admission and apply but preserves readable history', async () => {
+      const f = await supportFixture();
+      await client.serviceProgram.update({
+        where: { id: f.enrollment.serviceProgramId },
+        data: { settings: { moduleKey: 'AI_TRAINING_V1' } },
+      });
+      await expect(f.repo.admit(f.operation)).rejects.toThrow();
+      await expect(
+        f.support.prepareSupport({
+          ...f.command,
+          operationId: randomUUID(),
+          expectedSupportRevision: 1,
+        }),
+      ).rejects.toThrow();
+      await expect(
+        f.support.completeSupport({
+          command: f.command,
+          requestId: f.prepared.request.id,
+          advice: f.advice,
+          usageKey: 'fake',
+          promptVersion: 'SYNTHETIC_V1',
+        }),
+      ).rejects.toThrow();
+      expect((await f.practice.readPractice(f.actor)).allowed).toBe(false);
+    });
+    it('practice support: unknown cost remains blocking even after the consultation fails', async () => {
+      const f = await supportFixture();
+      const permit = await f.repo.admit(f.operation);
+      await f.repo.record({
+        operation: f.operation,
+        permit,
+        measurement: {
+          ...f.measurement,
+          success: false,
+          inputTokens: null,
+          outputTokens: null,
+          cachedInputTokens: null,
+          errorCategory: 'UNKNOWN',
+          validationResult: 'NOT_RUN',
+        },
+        requestFinished: false,
+      });
+      await f.support.failSupport({ command: f.command, requestId: f.prepared.request.id });
+      const command = { ...f.command, operationId: randomUUID(), expectedSupportRevision: 1 };
+      const request = await f.support.prepareSupport(command);
+      await expect(
+        f.repo.admit({
+          ...f.operation,
+          operationId: command.operationId,
+          practice: {
+            ...f.operation.practice!,
+            supportRevision: 2,
+            supportRequestId: request.request.id,
+          },
+        }),
+      ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+      expect(
+        (await client.personalLearningCallAdmission.findUniqueOrThrow({ where: { id: permit.id } }))
+          .settledAt,
+      ).toBeNull();
+    });
+    it('practice support: ALL deletion removes consultation data and rejects a delayed reply', async () => {
+      const f = await supportFixture();
+      const input = {
+        workspaceId: f.scope.workspaceId,
+        groupId: f.scope.groupId,
+        programEnrollmentId: f.enrollment.id,
+        actorUserId: f.actor.actorUserId,
+        target: { kind: 'ALL' as const },
+      };
+      const deletion = new PrismaTrainingPersonalDataDeletionRepository(client);
+      const preview = await deletion.preview(input);
+      if (preview.outcome !== 'PREVIEW') throw new Error('preview required');
+      expect(
+        (await deletion.delete({ ...input, revision: preview.preview.revision, now })).outcome,
+      ).toBe('DELETED');
+      expect(
+        await client.programActionEvent.count({
+          where: {
+            eventType: {
+              in: ['PERSONAL_LEARNING_SUPPORT_REQUEST', 'PERSONAL_LEARNING_SUPPORT_RESPONSE'],
+            },
+          },
+        }),
+      ).toBe(0);
+      await expect(
+        f.support.completeSupport({
+          command: f.command,
+          requestId: f.prepared.request.id,
+          advice: f.advice,
+          promptVersion: 'SYNTHETIC_V1',
+          usageKey: 'fake',
+        }),
+      ).rejects.toThrow();
     });
     it('text operation: normal learner without Profile, Assignment, Answer or Pilot records cost once', async () => {
       const f = await textOperationFixture();

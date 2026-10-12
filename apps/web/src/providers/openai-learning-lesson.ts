@@ -64,11 +64,12 @@ export function learningLessonBody(
   return body;
 }
 /** One bounded request. Raw errors/responses never become logs or learner permissions. */
-export async function generateLearningLesson(options: {
+export async function generateLearningStructured<T>(options: {
   apiKey: string;
   model: string;
   body: string;
   fetch?: typeof fetch;
+  validate: (value: unknown) => T;
 }) {
   const start = Date.now();
   const response = await (options.fetch ?? fetch)(OPENAI_TASK_RESPONSES_ENDPOINT, {
@@ -114,10 +115,10 @@ export async function generateLearningLesson(options: {
   };
   const token = (n: unknown) =>
     typeof n === 'number' && Number.isSafeInteger(n) && n >= 0 && n <= 2147483647 ? n : null;
-  let proposal = null;
+  let proposal: T | null = null;
   try {
     if (response.ok && raw.status === 'completed')
-      proposal = validateLearningLessonProposal(
+      proposal = options.validate(
         JSON.parse(
           raw.output?.flatMap((x) => x.content ?? []).find((x) => x.type === 'output_text')?.text ??
             '',
@@ -144,4 +145,13 @@ export async function generateLearningLesson(options: {
     measurement,
     requestFinished: ['completed', 'failed', 'incomplete', 'cancelled'].includes(raw.status ?? ''),
   };
+}
+
+export function generateLearningLesson(options: {
+  apiKey: string;
+  model: string;
+  body: string;
+  fetch?: typeof fetch;
+}) {
+  return generateLearningStructured({ ...options, validate: validateLearningLessonProposal });
 }

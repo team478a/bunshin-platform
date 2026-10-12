@@ -107,6 +107,19 @@ describe('training personal data export isolation', () => {
     expect(tx.trainingParticipantProfile.findFirst.mock.calls[0]?.[0].select).not.toHaveProperty(
       'updatedByUserId',
     );
+    expect(tx.programActionEvent.findMany.mock.calls[2]?.[0]).toMatchObject({
+      where: {
+        workspaceId: input.workspaceId,
+        groupId: input.groupId,
+        programEnrollmentId: input.programEnrollmentId,
+        actorUserId: input.actorUserId,
+        eventType: {
+          in: ['PERSONAL_LEARNING_SUPPORT_REQUEST', 'PERSONAL_LEARNING_SUPPORT_RESPONSE'],
+        },
+      },
+      select: { metadata: true },
+      take: TRAINING_EXPORT_MAX_ROWS + 1,
+    });
     expect(tx.serviceProgram.findFirst.mock.calls[0]?.[0].where).not.toHaveProperty('status');
     expect(tx.personalLearningPilotSeat.findMany).toHaveBeenCalledWith({
       where: {
