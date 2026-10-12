@@ -11,6 +11,7 @@ export default {
     'training-setup.e2e.ts',
     'learning-request.e2e.ts',
     'lesson-candidate.e2e.ts',
+    'practice.e2e.ts',
   ],
   workers: 1,
   actionTimeout: 10_000,

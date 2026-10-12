@@ -1,10 +1,12 @@
 'use client';
 import { useState } from 'react';
 import { LearningCandidateCard } from './candidate-card';
+import { LearningPracticeCard } from './practice-card';
 import type {
   SavedPersonalLearningRequest,
   PersonalLearningRequestContent,
   SavedLearningLessonCandidate,
+  PersonalLearningPracticeState,
 } from '@bunshin/application';
 
 export function PersonalLearningRequestCard({
@@ -12,11 +14,15 @@ export function PersonalLearningRequestCard({
   initial,
   candidateEndpoint,
   initialCandidate = null,
+  practiceEndpoint,
+  initialPractice = { allowed: false, current: null },
 }: {
   endpoint: string;
   initial: SavedPersonalLearningRequest | null;
   candidateEndpoint?: string;
   initialCandidate?: SavedLearningLessonCandidate | null;
+  practiceEndpoint?: string;
+  initialPractice?: PersonalLearningPracticeState;
 }) {
   const [content, setContent] = useState<PersonalLearningRequestContent>({
     originalText: initial?.originalText ?? '',
@@ -26,9 +32,16 @@ export function PersonalLearningRequestCard({
     currentPosition: initial?.currentPosition ?? null,
   });
   const [saved, setSaved] = useState(initial);
+  const [practice, setPractice] = useState(initialPractice);
+  const [confirmedCandidate, setConfirmedCandidate] = useState(initialCandidate);
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState('');
   const [retry, setRetry] = useState<{ key: string; serialized: string } | null>(null);
+  const matchesSaved =
+    saved &&
+    Object.entries(content).every(
+      ([key, value]) => saved[key as keyof PersonalLearningRequestContent] === value,
+    );
   async function save() {
     if (pending || !content.originalText.trim()) return;
     setPending(true);
@@ -60,12 +73,24 @@ export function PersonalLearningRequestCard({
   }
   return (
     <section>
+      {practiceEndpoint && (
+        <LearningPracticeCard
+          endpoint={practiceEndpoint}
+          state={practice}
+          candidate={
+            matchesSaved && confirmedCandidate?.requestId === saved?.id ? confirmedCandidate : null
+          }
+          onChange={setPractice}
+        />
+      )}
       <h1>AIを使って、何ができるようになりたいですか？</h1>
       <p>あなたの希望を元のまま保存します。未回答の経験や能力は推測しません。</p>
       <p>
-        {candidateEndpoint
-          ? 'この検証画面では教材候補の確認までです。実践課題の開始は準備中で、現在の課題は切り替わりません。'
-          : 'この検証画面では希望の保存までです。教材の生成・確定はまだ行いません。現在の課題は切り替わりません。'}
+        {practiceEndpoint
+          ? '希望の下書き保存では現在の実践を切り替えません。教材の本人確認後、実践開始を別に確認します。'
+          : candidateEndpoint
+            ? 'この検証画面では教材候補の確認までです。実践課題の開始は準備中で、現在の課題は切り替わりません。'
+            : 'この検証画面では希望の保存までです。教材の生成・確定はまだ行いません。現在の課題は切り替わりません。'}
       </p>
       {saved && (
         <p>
@@ -142,6 +167,7 @@ export function PersonalLearningRequestCard({
             endpoint={candidateEndpoint}
             request={saved}
             initial={initialCandidate?.requestId === saved.id ? initialCandidate : null}
+            {...(practiceEndpoint ? { onConfirmed: setConfirmedCandidate } : {})}
           />
         )}
     </section>

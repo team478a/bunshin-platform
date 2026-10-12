@@ -25,7 +25,7 @@ export class PrismaLearningCandidateRepository
         : null;
     });
   }
-  private project(value: Prisma.JsonValue, confirmed: Date | null): SavedLearningLessonCandidate {
+  protected project(value: Prisma.JsonValue, confirmed: Date | null): SavedLearningLessonCandidate {
     const c = value as unknown as SavedLearningLessonCandidate;
     if (!c || c.policyVersion !== LEARNING_CANDIDATE_POLICY || c.materialVersion !== 1)
       throw new ApplicationError('CONFLICT', 'lesson version unavailable');

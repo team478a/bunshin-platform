@@ -93,6 +93,17 @@ describe('training personal data export isolation', () => {
       input.actorUserId,
     );
     expect(tx.programActionEvent.findMany.mock.calls[0]?.[0].select).not.toHaveProperty('metadata');
+    expect(tx.programActionEvent.findMany.mock.calls[1]?.[0]).toMatchObject({
+      where: {
+        workspaceId: input.workspaceId,
+        groupId: input.groupId,
+        programEnrollmentId: input.programEnrollmentId,
+        actorUserId: input.actorUserId,
+        eventType: 'PERSONAL_LEARNING_PRACTICE_NOTE',
+      },
+      select: { metadata: true },
+      take: TRAINING_EXPORT_MAX_ROWS + 1,
+    });
     expect(tx.trainingParticipantProfile.findFirst.mock.calls[0]?.[0].select).not.toHaveProperty(
       'updatedByUserId',
     );
@@ -151,5 +162,25 @@ describe('training personal data export isolation', () => {
       revokedAt: now,
     });
     expect((await repository.read(input)).outcome).toBe('FOUND');
+  });
+  it('exports only explicitly scoped practice note content, not generic activity metadata', async () => {
+    const { tx, repository } = fixture();
+    tx.programActionEvent.findMany.mockResolvedValueOnce([]);
+    tx.programActionEvent.findMany.mockResolvedValueOnce([
+      {
+        id: 'note',
+        missionAssignmentId: 'assignment',
+        occurredAt: now,
+        metadata: { text: '本人の作業記録', evidenceLevel: 'SELF_REPORT', revision: 1 },
+      },
+    ]);
+    const result = await repository.read(input);
+    if (result.outcome !== 'FOUND') throw new Error('snapshot required');
+    expect(result.data.activities).toEqual([]);
+    expect(result.data.personalLearning?.[0]).toMatchObject({
+      kind: 'PRACTICE_NOTE',
+      metadata: { text: '本人の作業記録', evidenceLevel: 'SELF_REPORT' },
+      occurredAt: now.toISOString(),
+    });
   });
 });

@@ -30,10 +30,13 @@ import { PrismaPersonalLearningPersistenceRepository } from '../src/personal-lea
 import { PrismaPersonalLearningRequestRepository } from '../src/personal-learning-request';
 import { PrismaPersonalLearningTextOperationRepository } from '../src/personal-learning-text-operation';
 import { PrismaLearningCandidateRepository } from '../src/personal-learning-lesson-candidate';
+import { PrismaPersonalLearningPracticeRepository } from '../src/personal-learning-practice';
 import { PrismaTrainingRetentionExecutionRepository } from '../src/training-retention-execution';
 import { PrismaAccountDeletionPurgeRepository } from '../src/account-deletion-purge';
 import { PrismaPersonalLearningRouterBridge } from '../src/personal-learning-router';
 import { PrismaTrainingAnswerRepository } from '../src/training-answer';
+import { PrismaTrainingParticipantProfileRepository } from '../src/training-profile';
+import { PrismaTrainingInteractionRepository } from '../src/training-interaction';
 import { PrismaPersonalLearningAiCallRepository } from '../src/personal-learning-ai-call';
 import { PrismaLearningDefinitionApprovalAdminRepository } from '../src/learning-definition-approval-admin';
 import { PrismaReproductionChallengeReviewAdminRepository } from '../src/reproduction-challenge-review-admin';
@@ -413,6 +416,261 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
       ).toBe('DELETED');
       expect(await client.personalLearningRequest.count({ where: f.scope })).toBe(0);
       await expect(f.candidates.readCandidate(f.actor)).rejects.toThrow();
+    });
+    async function dynamicPracticeFixture() {
+      const f = await lessonFixture();
+      const candidate = await f.candidates.save(f.input);
+      await f.candidates.confirm({
+        actor: f.actor,
+        requestId: f.request.id,
+        requestRevision: 2,
+        candidateId: candidate.id,
+      });
+      await client.serviceProgram.update({
+        where: { id: f.enrollment.serviceProgramId },
+        data: {
+          settings: {
+            moduleKey: 'AI_TRAINING_V1',
+            personalLearningPracticePolicy: {
+              enabled: true,
+              version: 'LEARNER_PRACTICE_TOOL_INDEPENDENT_V1',
+            },
+          },
+        },
+      });
+      const practice = new PrismaPersonalLearningPracticeRepository(client, () => now);
+      const start = {
+        actor: f.actor,
+        requestId: f.request.id,
+        requestRevision: 2,
+        candidateId: candidate.id,
+      };
+      return { ...f, practice, start };
+    }
+    it('dynamic practice: starts once without a prepared Profile and keeps original material across a new wish', async () => {
+      const f = await dynamicPracticeFixture();
+      expect(await client.trainingParticipantProfile.count()).toBe(0);
+      const first = await f.practice.startPractice(f.start);
+      expect(await f.practice.startPractice(f.start)).toEqual(first);
+      expect(await client.programMissionAssignment.count()).toBe(1);
+      expect(
+        await client.programMemberGoal.findUniqueOrThrow({ where: { id: first.goalId } }),
+      ).toMatchObject({ status: 'ACTIVE' });
+      expect(
+        (await new PrismaPersonalLearningPersistenceRepository(client, () => now).read(f.actor))
+          .plans[0]?.plan.steps[0]?.definition.definitionKey,
+      ).toMatch(/^LESSON_/);
+      const note = {
+        actor: f.actor,
+        assignmentId: first.assignmentId,
+        operationId: randomUUID(),
+        expectedRevision: 0,
+        text: '見出しを直せた。公開・独力更新はまだ確認していない',
+      };
+      const reported = await f.practice.recordPracticeNote(note);
+      expect(await f.practice.recordPracticeNote(note)).toEqual(reported);
+      expect(reported.note).toMatchObject({
+        revision: 1,
+        evidenceLevel: 'SELF_REPORT',
+        text: note.text,
+      });
+      await expect(
+        f.practice.recordPracticeNote({ ...note, operationId: randomUUID() }),
+      ).rejects.toMatchObject({ code: 'CONFLICT' });
+      await expect(
+        f.practice.recordPracticeNote({ ...note, text: '違う報告' }),
+      ).rejects.toMatchObject({ code: 'CONFLICT' });
+      await f.requests.saveRequest({
+        ...f.actor,
+        content: { ...requestContent, originalText: 'AIで発表の練習をしたい' },
+        expectedRevision: 2,
+        idempotencyKey: randomUUID(),
+      });
+      expect((await f.practice.readPractice(f.actor)).current).toEqual(reported);
+      expect(await f.practice.startPractice(f.start)).toEqual(reported);
+      const assignment = await client.programMissionAssignment.findUniqueOrThrow({
+        where: { id: first.assignmentId },
+      });
+      expect(assignment).toMatchObject({ status: 'STARTED', completedAt: null });
+      expect(await client.trainingMissionAnswer.count()).toBe(0);
+      expect(await client.learningDefinitionApproval.count()).toBe(0);
+    });
+    it('dynamic practice: isolates ownership, old answers, and profile goal overwrite', async () => {
+      const f = await dynamicPracticeFixture();
+      const first = await f.practice.startPractice(f.start);
+      for (const key of [
+        'workspaceId',
+        'groupId',
+        'programEnrollmentId',
+        'groupMembershipId',
+        'userId',
+      ] as const) {
+        const actor = { ...f.actor, scope: { ...f.scope, [key]: randomUUID() } };
+        await expect(f.practice.readPractice(actor)).rejects.toThrow();
+        await expect(f.practice.startPractice({ ...f.start, actor })).rejects.toThrow();
+        await expect(
+          f.practice.recordPracticeNote({
+            actor,
+            assignmentId: first.assignmentId,
+            operationId: randomUUID(),
+            expectedRevision: 0,
+            text: '別人の記録',
+          }),
+        ).rejects.toThrow();
+      }
+      // Use an explicitly active synthetic period for the legacy repository's system-clock check.
+      await client.programEnrollment.update({
+        where: { id: f.enrollment.id },
+        data: { startsAt: new Date('2026-01-01'), endsAt: new Date('2099-01-01') },
+      });
+      expect(
+        await new PrismaTrainingAnswerRepository(client).submit({
+          workspaceId: f.scope.workspaceId,
+          groupId: f.scope.groupId,
+          actorUserId: f.actor.actorUserId,
+          programEnrollmentId: f.enrollment.id,
+          missionAssignmentId: first.assignmentId,
+          answer: '旧6技能評価へ流してはいけない',
+          idempotencyKey: randomUUID(),
+          occurredAt: now,
+        }),
+      ).toEqual({ outcome: 'NOT_FOUND' });
+      expect(await client.trainingMissionAnswer.count()).toBe(0);
+      expect(
+        await new PrismaTrainingInteractionRepository(client).record({
+          workspaceId: f.scope.workspaceId,
+          groupId: f.scope.groupId,
+          actorUserId: f.actor.actorUserId,
+          programEnrollmentId: f.enrollment.id,
+          missionAssignmentId: first.assignmentId,
+          interactionType: 'HELP_REQUESTED',
+          idempotencyKey: randomUUID(),
+          occurredAt: now,
+        }),
+      ).toEqual({ outcome: 'NOT_FOUND' });
+      expect(
+        await new PrismaTrainingParticipantProfileRepository(client).save({
+          workspaceId: f.scope.workspaceId,
+          groupId: f.scope.groupId,
+          actorUserId: f.actor.actorUserId,
+          programEnrollmentId: f.enrollment.id,
+          role: 'OFFICE',
+          aiLevel: 'BEGINNER',
+          aiUseCases: [],
+          workChallenges: [],
+          preferredTopics: [],
+          dailyMinutes: 5,
+          learningGoalKey: 'USE_AI_IN_DAILY_WORK',
+          idempotencyKey: randomUUID(),
+          occurredAt: now,
+        }),
+      ).toEqual({ outcome: 'CONFLICT' });
+      expect((await f.practice.readPractice(f.actor)).current?.goalId).toBe(first.goalId);
+      await expect(
+        f.practice.startPractice({ ...f.start, candidateId: randomUUID() }),
+      ).rejects.toMatchObject({ code: 'CONFLICT' });
+    });
+    it('dynamic practice: unconfirmed, stale, or already executing material cannot start', async () => {
+      const f = await dynamicPracticeFixture();
+      await client.personalLearningRequest.update({
+        where: { id: f.request.id },
+        data: { candidateConfirmedAt: null },
+      });
+      await expect(f.practice.startPractice(f.start)).rejects.toMatchObject({ code: 'CONFLICT' });
+      await client.personalLearningRequest.update({
+        where: { id: f.request.id },
+        data: { candidateConfirmedAt: now },
+      });
+      await expect(
+        f.practice.startPractice({ ...f.start, requestRevision: 1 }),
+      ).rejects.toMatchObject({ code: 'CONFLICT' });
+      const first = await f.practice.startPractice(f.start);
+      // A legacy unfinished assignment may not be replaced even if its dynamic marker is absent.
+      await client.programMissionAssignment.update({
+        where: { id: first.assignmentId },
+        data: { ruleVersion: 'SYNTHETIC_LEGACY' },
+      });
+      await expect(f.practice.startPractice(f.start)).rejects.toMatchObject({ code: 'CONFLICT' });
+      expect(await client.programMissionAssignment.count()).toBe(1);
+    });
+    it('dynamic practice: competing starts and notes cannot duplicate or overwrite work', async () => {
+      const f = await dynamicPracticeFixture();
+      const starts = await Promise.allSettled([
+        f.practice.startPractice(f.start),
+        f.practice.startPractice(f.start),
+      ]);
+      expect(starts.filter((r) => r.status === 'fulfilled').length).toBeGreaterThan(0);
+      const first = await f.practice.startPractice(f.start);
+      expect(await client.programMissionAssignment.count()).toBe(1);
+      const base = { actor: f.actor, assignmentId: first.assignmentId, expectedRevision: 0 };
+      const notes = await Promise.allSettled([
+        f.practice.recordPracticeNote({ ...base, operationId: randomUUID(), text: '進めた' }),
+        f.practice.recordPracticeNote({ ...base, operationId: randomUUID(), text: '止まった' }),
+      ]);
+      expect(notes.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+      expect((await f.practice.readPractice(f.actor)).current?.note?.revision).toBe(1);
+      expect(
+        await client.programActionEvent.count({
+          where: {
+            missionAssignmentId: first.assignmentId,
+            eventType: 'PERSONAL_LEARNING_PRACTICE_NOTE',
+          },
+        }),
+      ).toBe(1);
+    });
+    it('dynamic practice: policy stop keeps saved material readable and ALL deletion clears notes/material', async () => {
+      const f = await dynamicPracticeFixture();
+      const first = await f.practice.startPractice(f.start);
+      await f.practice.recordPracticeNote({
+        actor: f.actor,
+        assignmentId: first.assignmentId,
+        operationId: randomUUID(),
+        expectedRevision: 0,
+        text: 'ここで止まった',
+      });
+      await client.serviceProgram.update({
+        where: { id: f.enrollment.serviceProgramId },
+        data: { settings: { moduleKey: 'AI_TRAINING_V1' } },
+      });
+      expect((await f.practice.readPractice(f.actor)).allowed).toBe(false);
+      expect((await f.practice.readPractice(f.actor)).current?.note?.text).toBe('ここで止まった');
+      await expect(f.practice.startPractice(f.start)).rejects.toMatchObject({
+        code: 'CONFIGURATION_ERROR',
+      });
+      const input = {
+        workspaceId: f.scope.workspaceId,
+        groupId: f.scope.groupId,
+        programEnrollmentId: f.enrollment.id,
+        actorUserId: f.actor.actorUserId,
+      };
+      const exported = await new PrismaTrainingPersonalDataExportRepository(client).read(input);
+      expect(exported.outcome).toBe('FOUND');
+      if (exported.outcome !== 'FOUND') throw new Error('export required');
+      expect(
+        exported.data.personalLearning?.find((row) => row.kind === 'PRACTICE_NOTE'),
+      ).toMatchObject({
+        metadata: { text: 'ここで止まった', evidenceLevel: 'SELF_REPORT' },
+      });
+      expect(exported.data.assignments.find((row) => row.id === first.assignmentId)).toMatchObject({
+        displaySnapshot: { dynamicPractice: { candidate: first.candidate } },
+      });
+      const deletion = new PrismaTrainingPersonalDataDeletionRepository(client);
+      const target = { ...input, target: { kind: 'ALL' as const } };
+      const preview = await deletion.preview(target);
+      if (preview.outcome !== 'PREVIEW') throw new Error('preview required');
+      expect(
+        (await deletion.delete({ ...target, revision: preview.preview.revision, now })).outcome,
+      ).toBe('DELETED');
+      expect(
+        await client.programMissionAssignment.count({
+          where: { programEnrollmentId: f.enrollment.id },
+        }),
+      ).toBe(0);
+      expect(await client.personalLearningPlanRevision.count({ where: f.scope })).toBe(0);
+      expect(
+        await client.programActionEvent.count({ where: { programEnrollmentId: f.enrollment.id } }),
+      ).toBe(0);
+      await expect(f.practice.readPractice(f.actor)).rejects.toThrow();
     });
     it('text operation: normal learner without Profile, Assignment, Answer or Pilot records cost once', async () => {
       const f = await textOperationFixture();
