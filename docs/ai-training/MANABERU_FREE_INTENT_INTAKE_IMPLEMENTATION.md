@@ -47,6 +47,7 @@ Migration `20261013000000_personal_learning_requests`は追加テーブル・ind
 - 初回lintはテストmockの不要asyncで失敗し修正。`beb22fd3`のCIでは全package lintまで成功したがlearning-uiのJSON.parse由来のanyで失敗。E2E送信データをunknownから厳格に検査する形へ変更し、learning-ui lint/typecheckと新規3 E2Eを再実行して成功。途中のzod利用試行はroot依存がなくcollection/typecheckで失敗したため撤回し、新依存は追加していない。
 - 初回の全体formatは途中で修正したaccessファイルで失敗し、再整形・対象check成功。`599d5a7e`のCI（run `38271181094`）はformat/typecheck/lint成功、database結合201件成功。全体unitは必要DB版が旧Migrationのままであることを検出して失敗し、定義を最新へ更新した。最終headのCIは再確認する。
 - ローカル全体buildは`599d5a7e`で13タスク成功（11 cached、7分27秒）。プロセス内の合成staging設定によるbuildであり、実Auth・実AI・staging配備の証拠ではない。
+- 必要DB版の更新後、ローカルreadiness 3件とDatabase unit全203ファイル997件が成功（49秒）。最終コミットのGitHub CI結果はPR #1263のchecksで確認する。失敗した先行runを成功に読み替えない。
 - 242番目のMigrationを、DB名・run ID・live marker確認済みの既存隔離DBへ適用成功。本番DBへの接続・適用なし。
 
 合成ブラウザーは実端末・通常登録画面・実Auth再ログイン・LINE送信・実AIの証拠ではない。最終確認結果はこの節を更新する。
