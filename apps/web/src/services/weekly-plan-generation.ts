@@ -6,7 +6,6 @@ import {
   type BunshinCapabilityAssignmentRepository,
   type BunshinRepository,
   type KnowledgeGrantRepository,
-  type AiProviderRuntimeAdmission,
   CampaignService,
   type CampaignRepository,
 } from '@bunshin/application';
@@ -29,11 +28,8 @@ import {
 } from '@bunshin/capability-social';
 import { ApplicationError } from '@bunshin/shared';
 import { createLogger } from '@bunshin/observability';
-import {
-  reserveOpenAiRuntimeConfiguration,
-  settleProviderRuntimeAdmission,
-} from '../ai/runtime-provider-configuration';
-import { recordAiUsage, recordAiUsageSafely } from '../observability/ai-usage';
+import { resolveOpenAiRuntimeConfiguration } from '../ai/runtime-provider-configuration';
+import { recordAiUsageSafely } from '../observability/ai-usage';
 import { withOrganizationAiGenerationQuota } from '../organization-ai-generation-quota';
 import {
   BUSINESS_OUTCOME_KEYS,
@@ -78,16 +74,7 @@ interface UsageEvent {
   outputTokens: number | null;
   latencyMs: number;
   errorCode?: string;
-  estimatedCostUsdMicros: number;
-  pricingVersion: string;
   idempotencyKey: string;
-}
-
-interface WeeklyPlanProviderRuntime {
-  planner: WeeklyPlannerPort;
-  model: string;
-  requestCostUsdMicros: number;
-  admission: AiProviderRuntimeAdmission | null;
 }
 
 interface RecentOutcomeRecord {
@@ -219,15 +206,14 @@ export interface WeeklyPlanGenerationDependencies {
   strategies: SocialAccountStrategyRepository;
   bunshins: BunshinRepository;
   knowledge: KnowledgeGrantRepository;
+  planner: WeeklyPlannerPort;
   campaigns?: CampaignRepository;
-  reserveProviderRuntime(operationKey: string): Promise<WeeklyPlanProviderRuntime>;
-  settleProviderRuntime(admission: AiProviderRuntimeAdmission): Promise<void>;
+  providerModel: string;
   resolveTimezone(scope: Scope): Promise<string | null>;
   loadRecentPerformance?(
     scope: Scope & { goal: SocialAccountStrategyGoal },
   ): Promise<NonNullable<WeeklyPlannerInput['recentPerformance']>>;
   recordUsage(event: UsageEvent): Promise<void>;
-  recordUsageStrict(event: UsageEvent): Promise<void>;
   runWithQuota<T>(input: {
     workspaceId: string;
     groupId?: string | null;
@@ -256,8 +242,6 @@ export class WeeklyPlanGenerationService {
   ) {
     const started = this.dependencies.now();
     let providerAttempted = false;
-    let usagePersistenceStarted = false;
-    let runtime: WeeklyPlanProviderRuntime | null = null;
     let stage = 'PRECONDITIONS';
     try {
       await new RequireActiveBunshinCapability(this.dependencies.assignments).execute({
@@ -314,23 +298,14 @@ export class WeeklyPlanGenerationService {
         ...input,
         goal: strategy.goal,
       });
-      stage = 'AI_ADMISSION';
-      const admittedRuntime = await this.dependencies.reserveProviderRuntime(
-        input.usageIdempotencyKey,
-      );
-      runtime = admittedRuntime;
       stage = 'AI_GENERATION';
+      providerAttempted = true;
       const result = await this.dependencies.runWithQuota({
         workspaceId: input.workspaceId,
         ...(input.groupId === undefined ? {} : { groupId: input.groupId }),
         operationKey: input.usageIdempotencyKey,
         generate: () =>
-          new GenerateWeeklyPlan({
-            generate(plannerInput) {
-              providerAttempted = true;
-              return admittedRuntime.planner.generate(plannerInput);
-            },
-          }).execute({
+          new GenerateWeeklyPlan(this.dependencies.planner).execute({
             weekStartDate: input.weekStartDate,
             timezone,
             platform: profile.platform,
@@ -390,7 +365,7 @@ export class WeeklyPlanGenerationService {
         timezone,
         ...generatedOutput,
       });
-      const successUsage = {
+      await this.dependencies.recordUsage({
         ...input,
         taskType: 'WEEKLY_PLANNER',
         provider: 'openai',
@@ -400,14 +375,8 @@ export class WeeklyPlanGenerationService {
         inputTokens: result.inputTokens ?? null,
         outputTokens: result.outputTokens ?? null,
         latencyMs: result.latencyMs,
-        estimatedCostUsdMicros: runtime.requestCostUsdMicros,
-        pricingVersion: 'admin-request-cost-v1',
         idempotencyKey: input.usageIdempotencyKey,
-      } as const;
-      usagePersistenceStarted = true;
-      if (runtime.admission) await this.dependencies.recordUsageStrict(successUsage);
-      else await this.dependencies.recordUsage(successUsage);
-      if (runtime.admission) await this.dependencies.settleProviderRuntime(runtime.admission);
+      });
       return { plan, titles: new Map(pillars.map(({ id, title }) => [id, title])) };
     } catch (error) {
       createLogger().warn('weekly plan generation failed', {
@@ -416,33 +385,27 @@ export class WeeklyPlanGenerationService {
         errorCode: error instanceof ApplicationError ? error.code : 'INTERNAL_ERROR',
         errorMessage: error instanceof Error ? error.message : String(error),
       });
-      if (runtime && !usagePersistenceStarted) {
-        const failedUsage = {
+      if (providerAttempted)
+        await this.dependencies.recordUsage({
           ...input,
           taskType: 'WEEKLY_PLANNER',
           provider: 'openai',
-          model: runtime.model,
+          model: this.dependencies.providerModel,
           promptVersion: WEEKLY_PLANNER_PROMPT_VERSION,
           status: 'FAILED',
           inputTokens: null,
           outputTokens: null,
           latencyMs: this.dependencies.now() - started,
-          estimatedCostUsdMicros: providerAttempted ? runtime.requestCostUsdMicros : 0,
-          pricingVersion: 'admin-request-cost-v1',
           errorCode: error instanceof ApplicationError ? error.code : 'INTERNAL_ERROR',
           idempotencyKey: input.usageIdempotencyKey,
-        } as const;
-        usagePersistenceStarted = true;
-        if (runtime.admission) await this.dependencies.recordUsageStrict(failedUsage);
-        else await this.dependencies.recordUsage(failedUsage);
-        if (runtime.admission) await this.dependencies.settleProviderRuntime(runtime.admission);
-      }
+        });
       throw error;
     }
   }
 }
 
 export async function createWeeklyPlanGenerationService() {
+  const { apiKey, model } = await resolveOpenAiRuntimeConfiguration(undefined, 'SOCIAL_PLANNER');
   const db = await import('@bunshin/database');
   const preferences = new db.PrismaLineNotificationPreferenceRepository();
   return new WeeklyPlanGenerationService({
@@ -454,20 +417,11 @@ export async function createWeeklyPlanGenerationService() {
     bunshins: new db.PrismaBunshinRepository(),
     knowledge: new db.PrismaKnowledgeGrantRepository(),
     campaigns: new db.PrismaCampaignRepository(),
-    async reserveProviderRuntime(operationKey) {
-      const runtime = await reserveOpenAiRuntimeConfiguration(
-        operationKey,
-        undefined,
-        'SOCIAL_PLANNER',
-      );
-      return {
-        planner: new OpenAIWeeklyPlanner({ apiKey: runtime.apiKey, model: runtime.model }),
-        model: runtime.model,
-        requestCostUsdMicros: runtime.requestCostUsdMicros,
-        admission: runtime.admission,
-      };
-    },
-    settleProviderRuntime: settleProviderRuntimeAdmission,
+    planner: new OpenAIWeeklyPlanner({
+      apiKey,
+      model,
+    }),
+    providerModel: model,
     async resolveTimezone(scope) {
       const value = await preferences.getScoped(scope);
       if (!value.accessible)
@@ -540,7 +494,6 @@ export async function createWeeklyPlanGenerationService() {
       };
     },
     recordUsage: recordAiUsageSafely,
-    recordUsageStrict: recordAiUsage,
     runWithQuota: withOrganizationAiGenerationQuota,
     now: Date.now,
   });
