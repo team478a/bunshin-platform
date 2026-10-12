@@ -38,6 +38,7 @@ export async function loadServiceManagementHome(serviceSlug: string) {
   const {
     group,
     socialFeedback,
+    trainingOverview,
     line,
     linePolicy,
     now,
@@ -203,6 +204,7 @@ export async function loadServiceManagementHome(serviceSlug: string) {
     fortune: isFortuneService,
     promptOnlyImages: isPromptOnlyImageService(configuration.slug),
     socialFeedback,
+    improvementOverview: socialFeedback || trainingOverview,
   });
 
   return {

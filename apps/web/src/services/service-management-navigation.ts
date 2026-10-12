@@ -29,9 +29,11 @@ export function selectServiceManagementSections<T extends { href: string }>(
     fortune: boolean;
     promptOnlyImages?: boolean;
     socialFeedback?: boolean;
+    improvementOverview?: boolean;
   },
 ): T[] {
   return sections.filter((section) => {
+    if (section.href === 'improvement-overview') return input.improvementOverview === true;
     if (section.href === 'improvement-feedback') return input.socialFeedback === true;
     if (input.businessDaily) return BUSINESS_DAILY_SECTION_HREFS.has(section.href);
     if (input.fortune) return FORTUNE_SECTION_HREFS.has(section.href);

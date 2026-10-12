@@ -13,6 +13,9 @@ const servicePagePattern = new RegExp(
 const learningProgramAdminPagePattern = new RegExp(
   `^/s/${serviceSlugPattern}/manage/programs/(?:personal-learning-preparation|learning-definition-review)$`,
 );
+const serviceOverviewAdminPagePattern = new RegExp(
+  `^/s/${serviceSlugPattern}/manage/improvement-overview$`,
+);
 
 export function serviceAuthLoginPath(returnTo: string): Route {
   const safe = safeLineAuthReturnPath(returnTo);
@@ -90,7 +93,8 @@ export function safeLineAuthReturnPath(value: string | null | undefined): string
     }
     if (
       (servicePagePattern.test(url.pathname) ||
-        learningProgramAdminPagePattern.test(url.pathname)) &&
+        learningProgramAdminPagePattern.test(url.pathname) ||
+        serviceOverviewAdminPagePattern.test(url.pathname)) &&
       url.search === ''
     ) {
       return url.pathname;
