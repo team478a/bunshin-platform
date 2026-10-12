@@ -3,10 +3,17 @@ import { createRoot } from 'react-dom/client';
 import { PersonalLearningPilotCard } from '../../../apps/web/app/s/[serviceSlug]/programs/[programEnrollmentId]/personal-learning-pilot-card';
 import { InternalPreparationCard } from '../../../apps/web/app/s/[serviceSlug]/manage/programs/personal-learning-preparation/internal-card';
 import { DefinitionReviewCard } from '../../../apps/web/app/s/[serviceSlug]/manage/programs/learning-definition-review/card';
+import { ServiceOverviewCard } from '../../../apps/web/app/s/[serviceSlug]/manage/improvement-overview/card';
 import '../../../apps/web/app/styles.css';
 
 createRoot(document.getElementById('root')!).render(
-  new URLSearchParams(window.location.search).has('definition-review') ? (
+  new URLSearchParams(window.location.search).has('improvement-overview') ? (
+    <ServiceOverviewCard
+      endpoint="/api/services/synthetic/improvement-overview"
+      packages={['SOCIAL', 'TRAINING']}
+      weeks={['2026-10-05', '2026-09-28']}
+    />
+  ) : new URLSearchParams(window.location.search).has('definition-review') ? (
     <DefinitionReviewCard serviceSlug="synthetic" />
   ) : new URLSearchParams(window.location.search).has('internal-preparation') ? (
     <InternalPreparationCard serviceSlug="synthetic" />
