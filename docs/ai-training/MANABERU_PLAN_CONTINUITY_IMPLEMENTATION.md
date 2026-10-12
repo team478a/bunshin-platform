@@ -12,6 +12,7 @@
 - `isCurrent`は現在の確定版、未確定しかなければ最新DRAFT。追加の`isLatestProposal`は最新DRAFTだけ。COMPLETED版も未確認の提案に置き換えない。
 - Router、評価前Gate、実践記録は同じ確定版選択を使う。所属・受講資格・Pilot停止・人間承認・版照合は削除しない。
 - 最新提案を明示確認するtransactionで期待版と未完了Assignmentを再確認し、可能な場合だけ旧CONFIRMEDをSUPERSEDEDにする。
+- 旧writerで確定版が既にSUPERSEDEDになっていた場合も、未完了Assignmentを無視して提案を確定しない。その旧状態の自動修復・復活はしない。
 - 既存の再送receiptと履歴を維持する。再訪GETからAIや課題Routerを実行しない。
 
 主要ファイルは`packages/application/src/personal-learning-revisions.ts`、`personal-learning-persistence.ts`、Databaseの同名Repository、`personal-learning-router.ts`、`personal-learning-assessment-gate.ts`、`guided-practice.ts`。DB schema、migration、Provider、課金、LINE、教材生成、画面構成は変更しない。
@@ -26,7 +27,10 @@
 - WebのPersonal Learning関連全20ファイル・202件成功。既存スマホ幅390×844の合成E2E全18件成功（`.e2e/report.json`のselected/executed/passedはいずれも18、failed/flaky/skippedは0）。新しい自由希望・画像・実認証のE2Eではない。
 - DRAFT後の実践・PENDING評価認可・同じAssignment/Answerでの再開、未完了中の切替拒否、完了後の明示切替と旧証拠保持を確認。
 - 追加の切替/課題提示競合を含むDB全193件の再実行は192件成功・1件失敗。既存Migrationの20秒期限試験で`EXITED`ではなく`DEADLINE_EXCEEDED`となった。新規競合テストは成功。重い型検査等との同時実行の影響が疑われるが、原因を断定せず、単独再確認の結果を追記する。期限やassertionは変更しない。
-- 全体`pnpm typecheck`、`pnpm lint`、`pnpm format:check`、architecture境界・`git diff --check`成功。lintは無関係な既存`apps/web/app/consent/page.tsx`のunused eslint-disable警告1件を残す（エラー0）。buildと失敗した既存試験の単独確認は実行完了後に記録する。リポジトリ全unit testの`pnpm test`はローカル未実行で、GitHub CIを別途確認する。
+- その失敗した既存試験を同じ期限・同じassertionで対象単独実行し成功（1件成功、対象外192件）。build処理は同時進行していたため完全な負荷隔離とは扱わない。最後に旧writer状態の否定テストを追加したDB全194件を再実行し、全194件成功（148.28秒）。過去の失敗を隠さず、現行headのCIでも再確認する。
+- 全体`pnpm typecheck`、`pnpm lint`、`pnpm format:check`、architecture境界・`git diff --check`成功。lintは無関係な既存`apps/web/app/consent/page.tsx`のunused eslint-disable警告1件を残す（エラー0）。最後の旧writer否定Guard追加後はDBの`tsc --noEmit`と変更2ファイルのeslintも成功。リポジトリ全unit testの`pnpm test`はローカル未実行で、GitHub CIを別途確認する。
+
+初版buildはcompile、TypeScript、静的ページ生成、全13task完了の表示まで確認したが、完了付近の停止入力によってprocess exitは1だった。またそのcompile後に旧writer状態の否定Guardを追加したため、最終版のbuild成功とは扱わない。最終版`pnpm build`を再実行してから結果を記録する。
 
 初回の全体typecheck/lintはDB統合試験と同時実行したため、Windowsの使用中Prisma DLLの置換でEPERM失敗。コードの型エラーとは異なる。試験終了後に直列で再実行し、未完了の検証をPASSとして記録しない。
 

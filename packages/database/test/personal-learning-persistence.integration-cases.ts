@@ -2032,6 +2032,41 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
         ).evaluationStatus,
       ).toBe('PENDING');
     });
+    it('does not bypass unfinished work when old data has already superseded the confirmed plan', async () => {
+      const f = await practiceFixture();
+      await f.repo.savePlan({
+        ...f.actor,
+        plan: {
+          ...f.plan,
+          revision: 2,
+          previousRevision: { planId: f.plan.planId, revision: 1 },
+          revisionReason: 'LEARNER_REQUEST',
+        },
+        expectedRevision: 1,
+        idempotencyKey: 'legacy-proposal',
+      });
+      // Synthetic reproduction of the old writer, not an authorized production repair.
+      await client.personalLearningPlanRevision.update({
+        where: { planId_revision: { planId: f.plan.planId, revision: 1 } },
+        data: { status: 'SUPERSEDED' },
+      });
+      await expect(
+        f.repo.confirmPlan({
+          ...f.actor,
+          planId: f.plan.planId,
+          expectedRevision: 2,
+          idempotencyKey: 'legacy-switch',
+        }),
+      ).rejects.toThrow('personal learning operation conflict');
+      expect(
+        (await client.programMissionAssignment.findUniqueOrThrow({ where: { id: f.assignmentId } }))
+          .status,
+      ).toBe('PRESENTED');
+      expect((await f.repo.read(f.actor)).plans.map((row) => row.plan.status)).toEqual([
+        'SUPERSEDED',
+        'DRAFT',
+      ]);
+    });
     it('switches only after the old assignment is completed and preserves its evidence', async () => {
       const f = await practiceFixture();
       await f.start();

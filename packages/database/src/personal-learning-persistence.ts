@@ -458,19 +458,20 @@ export class PrismaPersonalLearningPersistenceRepository implements PersonalLear
             where: { ...input.scope, planId: row.planId, status: 'CONFIRMED' },
             orderBy: { revision: 'desc' },
           });
+          // Also fail closed for history left by the old DRAFT-time supersession behavior.
+          const unfinished = await tx.programMissionAssignment.findFirst({
+            where: {
+              workspaceId: input.scope.workspaceId,
+              groupId: input.scope.groupId,
+              programEnrollmentId: input.scope.programEnrollmentId,
+              targetResourceType: 'PERSONAL_LEARNING_PLAN',
+              targetResourceId: row.planId,
+              status: { in: ['PRESENTED', 'STARTED'] },
+            },
+            select: { id: true },
+          });
+          if (unfinished) conflict();
           if (executing) {
-            const unfinished = await tx.programMissionAssignment.findFirst({
-              where: {
-                workspaceId: input.scope.workspaceId,
-                groupId: input.scope.groupId,
-                programEnrollmentId: input.scope.programEnrollmentId,
-                targetResourceType: 'PERSONAL_LEARNING_PLAN',
-                targetResourceId: row.planId,
-                status: { in: ['PRESENTED', 'STARTED'] },
-              },
-              select: { id: true },
-            });
-            if (unfinished) conflict();
             await tx.personalLearningPlanRevision.update({
               where: {
                 planId_revision: { planId: executing.planId, revision: executing.revision },
