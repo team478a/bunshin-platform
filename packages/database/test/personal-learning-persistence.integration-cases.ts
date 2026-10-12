@@ -1967,6 +1967,187 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
         });
       return { ...f, practice, assignmentId, start, interact, complete };
     }
+    it('keeps practice, pending assessment and resume on the confirmed version after a new draft', async () => {
+      const f = await practiceFixture();
+      await f.start();
+      const submission = await new PrismaTrainingAnswerRepository(client).submit({
+        workspaceId: f.scope.workspaceId,
+        groupId: f.scope.groupId,
+        programEnrollmentId: f.enrollment.id,
+        actorUserId: f.scope.userId,
+        missionAssignmentId: f.assignmentId,
+        answer: 'Synthetic pending practice',
+        idempotencyKey: randomUUID(),
+        occurredAt: now,
+      });
+      if (submission.outcome !== 'SUBMITTED') throw new Error('synthetic submission failed');
+      await f.repo.savePlan({
+        ...f.actor,
+        plan: {
+          ...f.plan,
+          revision: 2,
+          previousRevision: { planId: f.plan.planId, revision: 1 },
+          revisionReason: 'LEARNER_REQUEST',
+        },
+        expectedRevision: 1,
+        idempotencyKey: 'pending-proposal',
+      });
+      const pilot = new PrismaPersonalLearningPilotRepository(client, () => now);
+      const state = await pilot.read(f.actor);
+      expect(state.plans.find((row) => row.isCurrent)?.plan.revision).toBe(1);
+      expect(state.plans.find((row) => row.isLatestProposal)?.plan.revision).toBe(2);
+      expect(
+        await pilot.currentAssignment({ ...f.actor, planId: f.plan.planId, revision: 1 }),
+      ).toMatchObject({
+        id: f.assignmentId,
+        status: 'STARTED',
+        submission: { answerId: submission.answer.id },
+      });
+      await new PrismaPersonalLearningAssessmentGate(client, () => now).authorizeAssessment(
+        f.actor,
+        f.assignmentId,
+        submission.answer.id,
+      );
+      await f.interact();
+      expect(
+        (await f.bridge.bridge({ ...f.request, idempotencyKey: 'while-proposed' })).result.reason,
+      ).toBe('ASSESSMENT_MISSING');
+      await expect(
+        f.repo.confirmPlan({
+          ...f.actor,
+          planId: f.plan.planId,
+          expectedRevision: 2,
+          idempotencyKey: 'cannot-switch',
+        }),
+      ).rejects.toThrow('personal learning operation conflict');
+      expect((await pilot.read(f.actor)).plans.map((row) => row.plan.status)).toEqual([
+        'CONFIRMED',
+        'DRAFT',
+      ]);
+      expect(
+        (
+          await client.trainingMissionAnswer.findUniqueOrThrow({
+            where: { id: submission.answer.id },
+          })
+        ).evaluationStatus,
+      ).toBe('PENDING');
+    });
+    it('does not bypass unfinished work when old data has already superseded the confirmed plan', async () => {
+      const f = await practiceFixture();
+      await f.repo.savePlan({
+        ...f.actor,
+        plan: {
+          ...f.plan,
+          revision: 2,
+          previousRevision: { planId: f.plan.planId, revision: 1 },
+          revisionReason: 'LEARNER_REQUEST',
+        },
+        expectedRevision: 1,
+        idempotencyKey: 'legacy-proposal',
+      });
+      // Synthetic reproduction of the old writer, not an authorized production repair.
+      await client.personalLearningPlanRevision.update({
+        where: { planId_revision: { planId: f.plan.planId, revision: 1 } },
+        data: { status: 'SUPERSEDED' },
+      });
+      await expect(
+        f.repo.confirmPlan({
+          ...f.actor,
+          planId: f.plan.planId,
+          expectedRevision: 2,
+          idempotencyKey: 'legacy-switch',
+        }),
+      ).rejects.toThrow('personal learning operation conflict');
+      expect(
+        (await client.programMissionAssignment.findUniqueOrThrow({ where: { id: f.assignmentId } }))
+          .status,
+      ).toBe('PRESENTED');
+      expect((await f.repo.read(f.actor)).plans.map((row) => row.plan.status)).toEqual([
+        'SUPERSEDED',
+        'DRAFT',
+      ]);
+    });
+    it('switches only after the old assignment is completed and preserves its evidence', async () => {
+      const f = await practiceFixture();
+      await f.start();
+      await f.repo.savePlan({
+        ...f.actor,
+        plan: {
+          ...f.plan,
+          revision: 2,
+          previousRevision: { planId: f.plan.planId, revision: 1 },
+          revisionReason: 'LEARNER_REQUEST',
+        },
+        expectedRevision: 1,
+        idempotencyKey: 'proposal',
+      });
+      await f.interact();
+      const answer = await f.assessed(f.assignmentId);
+      await f.complete();
+      await f.repo.confirmPlan({
+        ...f.actor,
+        planId: f.plan.planId,
+        expectedRevision: 2,
+        idempotencyKey: 'switch',
+      });
+      expect(
+        (await f.repo.read(f.actor)).plans.map((row) => ({
+          status: row.plan.status,
+          current: row.isCurrent,
+        })),
+      ).toEqual([
+        { status: 'SUPERSEDED', current: false },
+        { status: 'CONFIRMED', current: true },
+      ]);
+      expect(
+        (await client.trainingMissionAnswer.findUniqueOrThrow({ where: { id: answer.id } }))
+          .evaluationStatus,
+      ).toBe('READY');
+      expect((await f.practice.readPractice(f.actor, f.assignmentId)).completed).toBe(true);
+      expect(
+        (await client.programEnrollment.findUniqueOrThrow({ where: { id: f.enrollment.id } }))
+          .status,
+      ).toBe('ACTIVE');
+    });
+    it('serializes plan confirmation against presenting work without stranding an old-version assignment', async () => {
+      const f = await routerFixture();
+      await f.repo.savePlan({
+        ...f.actor,
+        plan: {
+          ...f.plan,
+          revision: 2,
+          previousRevision: { planId: f.plan.planId, revision: 1 },
+          revisionReason: 'LEARNER_REQUEST',
+        },
+        expectedRevision: 1,
+        idempotencyKey: 'racing-proposal',
+      });
+      const outcomes = await Promise.allSettled([
+        f.repo.confirmPlan({
+          ...f.actor,
+          planId: f.plan.planId,
+          expectedRevision: 2,
+          idempotencyKey: 'racing-confirm',
+        }),
+        f.bridge.bridge(f.request),
+      ]);
+      expect(outcomes.some((outcome) => outcome.status === 'fulfilled')).toBe(true);
+      const current = (await f.repo.read(f.actor)).plans.find((row) => row.isCurrent)!.plan;
+      const unfinished = await client.programMissionAssignment.findMany({
+        where: {
+          workspaceId: f.scope.workspaceId,
+          groupId: f.scope.groupId,
+          programEnrollmentId: f.enrollment.id,
+          status: { in: ['PRESENTED', 'STARTED'] },
+        },
+      });
+      for (const assignment of unfinished) {
+        expect(assignment.displaySnapshot).toMatchObject({
+          personalLearning: { planRevision: current.revision },
+        });
+      }
+      if (current.revision === 2) expect(unfinished).toHaveLength(0);
+    });
     async function admissionFixture() {
       const f = await practiceFixture();
       const submitted = await new PrismaTrainingAnswerRepository(client).submit({
@@ -3080,10 +3261,21 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
         f.repo.savePlan({ ...f.actor, plan: next, expectedRevision: 1, idempotencyKey: 'stale' }),
       ).rejects.toThrow();
       const history = await f.repo.read(f.actor);
-      expect(history.plans.map((row) => row.plan.status)).toEqual(['SUPERSEDED', 'DRAFT']);
+      expect(history.plans.map((row) => row.plan.status)).toEqual(['CONFIRMED', 'DRAFT']);
+      expect(history.plans.map((row) => row.isCurrent)).toEqual([true, false]);
+      expect(history.plans.map((row) => row.isLatestProposal)).toEqual([false, true]);
       expect(history.plans.map((row) => row.plan.revision)).toEqual([1, 2]);
       expect(history.plans[0]?.plan.steps).toEqual(plan.steps);
       expect(await f.repo.confirmPlan(confirmation)).toMatchObject({ revision: 1 });
+      await f.repo.confirmPlan({
+        ...confirmation,
+        expectedRevision: 2,
+        idempotencyKey: 'switch-to-revision-2',
+      });
+      expect((await f.repo.read(f.actor)).plans.map((row) => row.plan.status)).toEqual([
+        'SUPERSEDED',
+        'CONFIRMED',
+      ]);
     });
     it('serializes racing Plan successors, never overwriting one with the other', async () => {
       const f = await fixture();

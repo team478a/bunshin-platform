@@ -106,6 +106,37 @@ describe('Personal Learning pilot HTTP composition', () => {
     expect(f.bridge).not.toHaveBeenCalled();
     expect(f.goal).not.toHaveBeenCalled();
   });
+  it('resumes the confirmed version rather than a newer proposal without generating a new task', async () => {
+    f.read.mockResolvedValue({
+      goals: [],
+      plans: [
+        {
+          isCurrent: false,
+          isLatestProposal: true,
+          goalActive: true,
+          plan: { planId: idempotencyKey, revision: 2, status: 'DRAFT' },
+        },
+        {
+          isCurrent: true,
+          isLatestProposal: false,
+          goalActive: true,
+          plan: { planId: idempotencyKey, revision: 1, status: 'CONFIRMED', steps: [] },
+        },
+      ],
+    });
+    f.assignment.mockResolvedValue(null);
+    expect((await call()).status).toBe(200);
+    expect(f.assignment).toHaveBeenCalledWith({
+      scope,
+      actorUserId: scope.userId,
+      planId: idempotencyKey,
+      revision: 1,
+    });
+    expect(f.bridge).not.toHaveBeenCalled();
+    expect(f.consult).not.toHaveBeenCalled();
+    expect(f.goal).not.toHaveBeenCalled();
+    expect(f.save).not.toHaveBeenCalled();
+  });
   it('selects focus only from the server current Plan and exact saved Definition reference', async () => {
     const definition = AI_TRAINING_LEARNING_DEFINITION_FIXTURES[1]!;
     const plan = {

@@ -50,11 +50,7 @@ export class PrismaPersonalLearningRouterBridge
         },
         assignmentId: null,
       });
-      const row = await tx.personalLearningPlanRevision.findFirst({
-        where: { ...s, planId: input.planId },
-        orderBy: { revision: 'desc' },
-        include: { goalConfirmation: { include: { goal: true } } },
-      });
+      const row = await this.executablePlan(tx, input, input.planId);
       if (!row) throw new ApplicationError('NOT_FOUND', 'learning plan not found');
       if (row.revision !== input.expectedRevision) return stop('BLOCKED', 'PLAN_REVISION_CHANGED');
       if (row.goalConfirmation.goal.status !== 'ACTIVE') return stop('BLOCKED', 'GOAL_NOT_ACTIVE');
