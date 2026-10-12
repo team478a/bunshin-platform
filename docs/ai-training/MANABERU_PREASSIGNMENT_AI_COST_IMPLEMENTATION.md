@@ -2,6 +2,8 @@
 
 2026-10-13。基準main `e9b838aee6e499099f77096688babf049b95a821`（#1263）。#1262は開始時OPENで、競合解消後のCI成功を確認したが本分割へ未マージの変更を取り込まない。productionは別release系統。本番設定・Migration・Deploy・実AI・実送信・実課金・Pilot開始を行わない。元のdirty checkoutへ変更しない。
 
+PR #1264提出後、#1262がmain `8bb9ca59`へマージされたため同mainを取り込んだ。競合はDecision LogとRoadmapの追記位置2か所のみで、両方の記録を維持した。新規Profileの明示回答、自由希望の入口、費用管理を併存させ、既存アプリコードの意味変更は行わない。元commitのCI成功と、この統合commitの再検証結果はPR checksで区別する。
+
 ## 調査・実装範囲
 
 既存の`PrismaPersonalLearningCallAdmission`は評価Assignment/Answer/LEASED JobとPilot席を必要とする。希望相談や教材生成前にこれらを架空作成して制限を通す構造は採用しない。
