@@ -1,3 +1,8 @@
+BEGIN;
+SET LOCAL lock_timeout = '5000ms';
+SET LOCAL statement_timeout = '60000ms';
+SET LOCAL idle_in_transaction_session_timeout = '60000ms';
+
 -- Platform-owned service product catalog. OEM is a delivery/contract mode, not a product name.
 CREATE TABLE "commercial_service_products" (
   "id" UUID NOT NULL,
@@ -160,3 +165,4 @@ CREATE TRIGGER "commercial_service_product_policy_version_immutable"
 
 ALTER TABLE "commercial_service_products" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "commercial_service_product_policy_versions" ENABLE ROW LEVEL SECURITY;
+COMMIT;

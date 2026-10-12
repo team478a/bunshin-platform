@@ -70,3 +70,12 @@ Migration runnerは接続時のlock、statement、transaction idle、process tim
 7. OEM管理画面は読み取り確認まで。履歴登録・cutover・請求・決済は別承認
 
 Vercel CLIでは暗号化されたProduction DB secretをローカルへ取得できなかったため、実DB接続probeはProduction buildのfail-closed runnerで確認する。未実行の事前条件をPASSとは記録しない。
+
+## 初回デプロイ結果と限定再試行
+
+- PR #1252は`production`に`7e92320e0d4cab7c57397a6b87bdfc897cb714a9`としてmergeした。
+- 初回Vercel deploymentは読み取り専用のMigration接続preflightで停止した。`prisma migrate deploy`は開始しておらず、8件のpending Migrationは未適用。
+- 原因は、ProductionのSupabase session poolerが接続URLに追加したPostgreSQL startup `options`を受け付けないか、設定を保持しなかったこと。
+- 復旧版は接続URLからstartup `options`を外し、各pending Migration内で`BEGIN`、`SET LOCAL`のlock/statement/idle timeout、`COMMIT`を必須化する。
+- Runnerは接続前に8件のguardを検査し、読み取りprobeで同じtransaction-local設定を確認する。
+- 復旧PRのdatabase integration CIと通常verify CIが成功した場合のみ再デプロイする。
