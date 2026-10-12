@@ -99,7 +99,7 @@ describe('lesson generation composition', () => {
       maxOutputTokens: 2000,
     });
     f.record.mockResolvedValue(undefined);
-    f.cost.mockResolvedValue({ reservedCostUsdMicros: 48000, settledAt: new Date() });
+    f.cost.mockResolvedValue({ reservedCostUsdMicros: 48000n, settledAt: new Date() });
     f.settle.mockResolvedValue(undefined);
     f.save.mockResolvedValue({ id: 'candidate' });
     f.prices.mockReturnValue([
@@ -158,7 +158,7 @@ describe('lesson generation composition', () => {
   });
   it('never saves output after cost recording fails and retains Provider reservation', async () => {
     f.record.mockRejectedValue(new Error('synthetic persistence failure'));
-    f.cost.mockResolvedValue({ reservedCostUsdMicros: 48000, settledAt: null });
+    f.cost.mockResolvedValue({ reservedCostUsdMicros: 48000n, settledAt: null });
     await expect(prepareLearningLesson(actor, id, 1, id)).rejects.toThrow();
     expect(f.save).not.toHaveBeenCalled();
     expect(f.settle).not.toHaveBeenCalled();

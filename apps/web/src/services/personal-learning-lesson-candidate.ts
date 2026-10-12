@@ -85,13 +85,17 @@ export async function prepareLearningLesson(
           where: { id: permit.id },
           select: { reservedCostUsdMicros: true },
         });
-        if (!frozen || frozen.reservedCostUsdMicros < 1)
+        if (
+          frozen?.reservedCostUsdMicros == null ||
+          frozen.reservedCostUsdMicros < 1n ||
+          frozen.reservedCostUsdMicros > BigInt(Number.MAX_SAFE_INTEGER)
+        )
           throw new ApplicationError('CONFIGURATION_ERROR', 'lesson reservation unavailable');
         providerAdmission = await reserveOpenAiRuntimeConfiguration(
           usageKey,
           undefined,
           'LEARNING_LESSON',
-          frozen.reservedCostUsdMicros,
+          Number(frozen.reservedCostUsdMicros),
           1,
         );
         if (providerAdmission.model !== policy.model)
