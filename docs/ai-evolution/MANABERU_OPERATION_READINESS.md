@@ -1,53 +1,66 @@
 # マナベルスタイル 実運用判定
 
-基準・本番SHAは[統合監査](INTEGRATED_READINESS_AUDIT.md)。**既存3Definitionの内部Wave 0はCONDITIONAL GO、広いテーマと再現性保証を伴う一般提供はNO-GO**。これはPilot開始の許可ではない。
+## 判定
 
-## 利用フローと接続状況
+- **現在の実受講開始: NO-GO**
+- **内部1〜2人のWave 0: 全開始条件を満たした後のみCONDITIONAL GO**
+- **一般提供・再現性保証: NO-GO**
 
-| 段階                 | 現行実装 / 根拠                                                                                                              | 利用できる範囲 / 未検証                                                                                                                             |
-| -------------------- | ---------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 受講者登録・初期設定 | `/s/[serviceSlug]/programs/[programEnrollmentId]`、Profile Preparation Card、内部準備UI、`resolvePersonalLearningPilot`      | serverでMembership/Enrollment/Program/Seat/期間を照合。本人INTERNALのSERVICE_OWNER権限と学習権を別確認。初めての受講者が自力で設定できるかはUNKNOWN |
-| 学習希望→Goal候補    | `consultAiTrainingLearning`、`learning-scope.ts`、Pilot HTTP `CONSULT`                                                       | 決定的Mapping、必要時だけ経験質問、UNKNOWN≠NONE。CONTENT_REQUESTは本人が自分で行う学習への変換確認、CONSULTINGはGoalにしない                        |
-| Goal確認・保存       | `personal-learning-pilot.ts` `CONFIRM_GOAL`、DB `PrismaPersonalLearningPilotRepository` / `personal-learning-persistence.ts` | scope・候補・版をserver再検証。本人選択、ProgramMemberGoal正本、Primary Goal/CAS/idempotency。相談全文は保存しない                                  |
-| Plan生成・確認・復元 | Pilot HTTP `PREPARE_PLAN` / `CONFIRM_PLAN`、Application `definePersonalLearningPlan`                                         | 承認済みDefinitionのGoal Mapping、版固定/Revision。DRAFT≠CONFIRMED。ログアウト後の保存状態からの復元経路あり、実本番復元は未検証                    |
-| 次の課題             | `routeAiTrainingLearning`、`PrismaPersonalLearningRouterBridge`                                                              | PROMPT_STRUCTURE→CONTEXT_SETTING→CONSTRAINT_SETTINGのみ。PROMPT_BASIC/PROMPT_CONDITIONへの既存Mission Bridge。全テーマ個別生成ではない              |
-| 本人の実践           | `guided-practice.ts`、`PrismaGuidedPracticeRepository`、Pilot Card                                                           | INTERACT/Support/本人確認/有用性/Assessment Evidence。AI成果物の代行生成・顧客環境変更なし。外部Tool操作を直接計測していない                        |
-| 回答・AI評価         | 既存Answer API/Job、`OpenAiTrainingAnswerEvaluator`、`finalizeTrainingSkillEvaluation`                                       | prompt/回答の評価と本人の成果物品質・能力を区別。queued/PENDINGはGETで再取得、評価完了前に次へ進めない。実Provider完走は未検証                      |
-| 次の学習・つまずき   | Router: NEXT / REVIEW / RETRY / BLOCKED / UNKNOWN / PLAN_COMPLETED                                                           | Answer READY＋対応Audit＋Rule/Skill/時刻/版を要求。評価/Skill欠損・不一致はUNKNOWN、未承認/前提不足はBLOCKED。Plan完了でGoal達成/契約終了にしない   |
-| 学習成果             | First Success / Capability Evidence / Fit Feedback                                                                           | 本人確認・操作申告と検証済みAssessmentの組合せ。自己申告だけでLevel1〜5を確定しない。実務効果・本人再現・応用は別Evidence                           |
+人間は3件の学習設計方針を承認済みだが、本番APPROVE登録、参加者準備、Pilot開始、実課金は未実施である。方針承認を本番状態へ読み替えない。
 
-主要Pilot HTTP/access/Seat/Admission/Router/Guided Practiceファイルはproductionとmainのtree差分なし。コード配備済みと、実設定・DB・承認・Seatが成立して実利用できることは別。
+## 利用フロー
 
-## 個別化の実態
+| 段階         | 実装                                                       | 現在の利用可否・限界                                                   |
+| ------------ | ---------------------------------------------------------- | ---------------------------------------------------------------------- |
+| 受講者登録   | Membership、Enrollment、Program、内部Seat/Allowlist        | 実装済み。本番参加者登録・Seat付与は未実施                             |
+| 初期設定     | Profile Preparation、職種/AI経験/時間、相談                | 画面・保存経路あり。初心者の自力完走は実ユーザー未検証                 |
+| 学習目標     | 相談→Goal候補→本人確認→保存                                | UNKNOWNをNONEにせず、CONSULTINGを学習Goal化しない。実本番保存未検証    |
+| 学習計画     | 3つの承認済みDefinitionを版固定してPlan化                  | 教育方針は承認済み。本番3件APPROVE登録は未実施                         |
+| 個別課題     | Definition→既存PROMPT_BASIC / PROMPT_CONDITION Assignment  | 目的/履歴で進路は変わるが、職種別教材本文を自由生成する機能ではない    |
+| 本人の実践   | Guided Practice、本人操作申告、支援量、完了確認            | AIが完成品を代行しない設計。外部仕事ツールでの実操作は直接測定しない   |
+| 回答・AI評価 | Answer job、評価、Skill/understanding、監査                | PENDING/不明を合格にしない。実Provider品質・誤合格率は未検証           |
+| 次の課題     | NEXT / REVIEW / RETRY / BLOCKED / UNKNOWN / PLAN_COMPLETED | 版・回答・評価・監査が揃わなければ進めない。Plan完了を能力習得としない |
+| 成果確認     | First Success、Capability Evidence、Fit Feedback           | 自己申告と検証評価を分離。本人再現性・転用力のRuntimeは未完成          |
 
-Goal/経験/学習履歴に応じた質問・Definition選択・復習/再挑戦は利用可能な実装。次に学ぶものを変える個別化であり、仕事別の教材/例/課題本文を自由生成するTeaching Personalizationではない。現行3Definitionと既存Mission本文を利用する。画像・動画・Excel・API・自動化・AI AgentはDefinition Gapの表示を維持する。
+主な根拠は Personal Learning Pilot HTTP/UI、`definePersonalLearningPlan`、`routeAiTrainingLearning`、`guided-practice.ts`、`OpenAiTrainingAnswerEvaluator`、Learning Definition ApprovalのDB/API/UI、および対応テスト。
 
-職種/AIレベル/学習時間等の既存Profileは再利用可能。ただし職種を保存していることだけで、課題が本人の仕事へ適合したと判定しない。過去回答全文を無制限に次のLLMや共通Memoryへ送らない。
+## 個別化と本人支援
 
-## EVO05: コード / Runtime / UI / 本番を分離
+Goal、経験、既存Skill、回答/評価、Plan revisionから次のDefinitionやREVIEW/RETRYを決める接続はある。回答不足、評価なし、版不一致をUNKNOWNとして止める点も実装されている。
 
-| PR                      | コード完成範囲                                        | Runtime / UI / 本番                                                                 |
-| ----------------------- | ----------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| #1193 EVO05-A           | 2回の明示Evidenceを比較する純粋契約                   | DB/UI/自動課題提示なし。合成入力以外の本人再現は未測定                              |
-| #1194                   | 履歴Bridge/Privacy/段階設計                           | 設計文書。実装完了として数えない                                                    |
-| #1195 R0                | 限定INTERNAL SERVICE_OWNER本人のExport/削除互換       | 学習権の一般拡張なし。production未配備、実操作未検証                                |
-| #1196 R1                | 3Definition×3題材の版付きDraft参照・strict validation | DRAFT/NOT_REVIEWED。参照ResolverはHuman Review Required / UNKNOWN。Approved扱いなし |
-| #1197 R2                | 本人scopeの2Assignment履歴読取・比較投影              | 既存題材参照がない履歴はUNKNOWN。新再実践の提示/保存や本人HTTP/UIなし               |
-| #1198 review contract   | 版/digest/人間レビューassertion                       | 認証・学習利用権を付与しない                                                        |
-| #1199 review repository | 停止中Program、管理権限、lock/CAS、追加監査履歴       | 人間の実レビュー未実施。Approved課題Runtime reader・R3/R4未接続。新schemaなし       |
-| #1200（OPEN）           | 管理HTTP接続候補、CI成功                              | main対象外。マージ後も再実践Bridge/本人UIが自動完成するわけではない                 |
+ただし個別化は主に「次にどの学習段階へ進むか」であり、本人の業種・職務ごとに新しい教材や課題を生成する完成機能ではない。現行Wave 0はPROMPT_STRUCTURE、CONTEXT_SETTING、CONSTRAINT_SETTINGの3段階と既存Missionを使う。画像、動画、Excel、API、自動化、AI Agent等はDefinition Gapのままとする。
 
-EVO05の全部を合成テスト成功から「受講者の再現性評価を提供済み」と表示しない。成果物本文をCore/Telemetryへ保存せず、実務利用・支援量・自己再現Evidenceを分ける。再現性機能未接続はP1の成果確認Gapであり、基本Prompt学習のWave 0を必要以上に延期する理由にしない。
+## EVO-05の接続状況
 
-## LINE・スマートフォン
+| 範囲                 | 完成                                                         | 未完成                                                                   |
+| -------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------ |
+| #1193                | 2回の明示Evidenceを同scope・同Definition版で比較する純粋契約 | 実履歴、課題提示、UIなし                                                 |
+| #1194〜#1196         | Privacy設計、限定ownerアクセス、版付き再現題材参照           | 題材はDraft。自動承認禁止                                                |
+| #1197                | 本人scopeの2Assignment履歴projection                         | 題材参照のない旧履歴はUNKNOWN                                            |
+| #1198〜#1199         | review assertion、CAS、immutable audit、取消                 | 管理HTTP #1200はOPEN。production未配備                                   |
+| Runtime / learner UI | 既存学習・履歴部品を再利用可能                               | Approved題材Reader→新再実践Assignment Bridge→本人UI→比較結果表示が未接続 |
 
-- 会員LINE導線は `/s/manaberu-style/line` からProgram一覧→本人Enrollment→既存学習Webへ接続する実装。会員照合と学習通知は別。
-- `service-line-broadcast-eligibility.ts` は既存AI_TRAINING_ACTION通知からPilot Program / PERSONAL_LEARNING_PLAN Assignmentを除外する。既存30日研修のLINE schedulerがPersonal Learning通知として動くとは扱わない。
-- Pilot専用の学習通知配信は未接続。これはWeb限定Wave 0の必須ではないが、LINE学習通知を約束する提供条件なら開始前対応が必要。
-- スマホ向けCard/縦Plan/CTA、再ログイン・polling・二重送信の実装/合成テストあり。実LIFF、Cookie、端末操作、入力・戻る・評価待ちの本番E2Eは今回未実施。
+このため「課題に合格した」と「本人が後でもう一度できる」はまだ別である。EVO-05を提供済みの再現性評価と表示しない。
 
-## 利用開始前の条件
+## productionで確認できる範囲
 
-実設定のPilot flag/Production flag、対象Program、Seat/Allowlist/internal cap、3Definitionの正確な版とHuman Approval、Profile、Providerモデル/Admission・出力/日次/同時数、DB/RLS/復旧/ログの証拠を取得する。本監査では現在値はUNKNOWN。人間承認後、内部1〜2人で相談→確認→実践→評価→次課題→First Success→ログアウト/復元→STOPを別途検証する。
+production `e5812090…` には、Pilot学習焦点表示、学習設計レビュー/承認UI、原価可視化、Personal Learning日次費用Hard Stopと対象Migrationが限定releaseされている。公開healthも正常。
 
-開始条件が満たせない場合は開始不可。実学習を行う時点で初めてProvider課金を伴うため、合成テスト実行の承認と混同しない。100人上限は安全制約であり、100人規模の品質・負荷の証明ではない。
+一方、次は未実施またはUNKNOWNである。
+
+- Production 3DefinitionのAPPROVE receiptと再GET/監査
+- Pilot flag、単一authority、対象Program、Seat/Allowlist、内部人数、Profile
+- AI Provider source/model/価格版/日次金額/同時数/外部account budget
+- 実認証、実DB RLS role、最新Backup/復旧、STOP/drain
+- 実スマホ/LIFF、再ログイン、評価待ち、First Successの完走
+- Pilot専用LINE学習通知。既存30日研修通知は代用しない
+
+## Wave 0開始条件
+
+1. release SHA、DB全履歴/RLS/role、最新Backup/復旧を読取確認する。
+2. 3Definitionを固定版・digest・7項目で1件ずつ本番APPROVEし、GETと監査で確認する。
+3. 対象Programを停止状態で準備し、内部1〜2人のEnrollment/Seat/Profileを明示承認する。
+4. Provider価格・日次費用・同時数・総予算・監視/停止担当を設定し、費用発生を承認する。
+5. 全GateがPASSした後だけ開始し、実端末で相談→Plan→実践→回答→評価→次課題→復元→STOPを確認する。
+
+どれかがUNKNOWNなら開始しない。LINE通知を提供条件に含める場合は、専用通知経路の実装と実配送受入も開始前P0になる。
