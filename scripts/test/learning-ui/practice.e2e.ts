@@ -102,3 +102,14 @@ test('policy stop preserves readable material but disables writes', async ({ app
     screen.getByText('現在は実践の保存を停止しています。保存済みの内容は確認できます。'),
   ).toBeVisible();
 });
+test('editing a new wish cannot start material for a different displayed wish', async ({
+  app,
+  screen,
+}) => {
+  await app.open('/?practice');
+  await expect(screen.getByRole('button', '希望と教材を確認して実践を始める')).toBeVisible();
+  await screen.getByLabel('実現したいこと').fill('AIで発表の練習をしたい');
+  await expect(screen.getByRole('button', '希望と教材を確認して実践を始める')).not.toBeVisible();
+  await screen.getByLabel('実現したいこと').fill(lessonWish.originalText);
+  await expect(screen.getByRole('button', '希望と教材を確認して実践を始める')).toBeVisible();
+});

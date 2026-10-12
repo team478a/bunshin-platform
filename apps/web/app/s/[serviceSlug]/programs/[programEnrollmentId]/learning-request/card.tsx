@@ -37,6 +37,11 @@ export function PersonalLearningRequestCard({
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState('');
   const [retry, setRetry] = useState<{ key: string; serialized: string } | null>(null);
+  const matchesSaved =
+    saved &&
+    Object.entries(content).every(
+      ([key, value]) => saved[key as keyof PersonalLearningRequestContent] === value,
+    );
   async function save() {
     if (pending || !content.originalText.trim()) return;
     setPending(true);
@@ -72,7 +77,9 @@ export function PersonalLearningRequestCard({
         <LearningPracticeCard
           endpoint={practiceEndpoint}
           state={practice}
-          candidate={confirmedCandidate?.requestId === saved?.id ? confirmedCandidate : null}
+          candidate={
+            matchesSaved && confirmedCandidate?.requestId === saved?.id ? confirmedCandidate : null
+          }
           onChange={setPractice}
         />
       )}
