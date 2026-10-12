@@ -27,13 +27,18 @@ main全体は取り込まず、PR #1190のmerge commitだけをproduction基点�
 - Adapter内の自動retryを追加しない。Weeklyは既存Jobの上限付きretryと冪等保存を再利用し、Strategyは自動retryしない。
 - 既定モデル`gpt-5.2`、環境変数によるモデル指定、Prompt Version、入力、strict schema、`store:false`、usage欠損時nullを維持する。
 
-## 4. 実行する検証
+## 4. 実行した検証
 
-- 対象Provider、Strategy HTTP、Weekly生成、Mission Job分類のテスト。
-- `pnpm format:check`、`pnpm typecheck`、`pnpm lint`、`pnpm test`、`pnpm build`、`git diff --check`。
-- production向けPRのGitHub CI `verify` / `database`。
-- マージ後、Vercel Production DeploymentのGit SHAがproduction merge SHAと一致すること。
-- `/api/health/live`と`/api/health/ready`が成功し、readinessでDB schemaがcurrentであること。
+- 対象Provider、Strategy HTTP、Weekly生成: Web 4ファイル89件成功。
+- Mission Job分類: Application 1ファイル25件成功。
+- `pnpm format:check`: 成功。
+- `pnpm typecheck`: 25/25 tasksと学習UI成功。
+- `pnpm lint`: architecture check、25/25 tasks、学習UI成功。
+- `pnpm test`: architecture 10件と24/25 turbo tasks成功。Web 3,181件成功、実API 2件skip。変更対象外の`daily-missions.test.ts` 2件だけが全体高並列時に5秒timeoutとなり、同ファイルを1 workerで再実行して10/10件成功した。
+- `pnpm build`: 13/13 tasks、Next.js production build、TypeScript、静的ページ34/34件成功。
+- `git diff --check`: 成功。
+
+production向けPRのGitHub CI `verify` / `database`、マージ後のVercel SHA、`/api/health/live`、`/api/health/ready`は公開手順で確認する。
 
 実OpenAI生成は費用と利用者データを伴うため、このreleaseの自動smokeには含めない。Provider実査は対象、予算、入力、記録方法を確定した別の運用判断とする。
 
