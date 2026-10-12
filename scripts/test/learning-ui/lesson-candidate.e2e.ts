@@ -8,7 +8,7 @@ test('homepage candidate is confirmed with exactly its saved ID, not regenerated
 }) => {
   const requests: Record<string, unknown>[] = [];
   await browser.route('**/api/synthetic/lesson-candidate', async (route) => {
-    const body = JSON.parse(route.request.postData ?? '{}');
+    const body = JSON.parse(route.request.postData ?? '{}') as Record<string, unknown>;
     requests.push(body);
     await route.fulfill({
       json: {
