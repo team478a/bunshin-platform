@@ -543,7 +543,7 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
           actorUserId: f.actor.actorUserId,
           programEnrollmentId: f.enrollment.id,
           missionAssignmentId: first.assignmentId,
-          interactionType: 'TRAINING_HELP_REQUESTED',
+          interactionType: 'HELP_REQUESTED',
           idempotencyKey: randomUUID(),
           occurredAt: now,
         }),
