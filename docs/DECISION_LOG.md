@@ -4077,3 +4077,12 @@
 - 正式登録日時には同意日時を編集可能な候補として表示するが、証跡確認と理由の入力なしでは保存しない。終了済み登録履歴がある参加者は初期登録を追加せず、訂正・再登録の別レビューへ止める。
 - shadowはRepeatable Readの既存計算だけを呼び、履歴不足を0人や旧MAUで補完しない。cutoverは全ServiceのOffering、契約期間、現在の参加者全員のopen登録履歴を表示上も満たした場合だけフォームを出し、既存Policyがあれば変更・取消入口を出さない。
 - schema、migration、課金計算、月次確定、請求、履歴訂正、本番設定を変更しない。本番の履歴登録、cutover、料金公開、請求確定、実課金はそれぞれ別の明示承認を待つ。
+
+## 2026-10-12: ハッシー・マナベルの少数テストは招待ではなく通常登録を使う
+
+- 状態: Proposed（実装PRレビュー待ち。本番設定・実登録・実課金・Pilot開始は未承認）
+- ハッシーは既存の`PUBLIC`サービス登録を再利用する。マナベル外部参加者も、招待URL・招待コード・管理者による無料Enrollmentではなく、`PUBLIC`サービス登録から既存の有料Program Checkoutへ進む。
+- マナベルはStripeで確認済みの直接購入Enrollmentだけを、同じSerializable transaction内でPersonal Learning Pilotの`EXTERNAL` Seatとallowlistへ接続する。既存の内部Wave 0準備・手動Seat操作は運営確認用として残し、外部の通常登録経路には使用しない。
+- 少数枠は`ServiceCommercialSetting.includedMemberLimit`とPilotの現在Wave上限の小さい方で制御する。Checkout開始時に、公開登録・招待コード停止・有効な人数上限・実行中Pilotを再確認し、欠損や上限超過は決済前にfail-closedとする。Seat付与時もProgram lock、累計枠、projection、本人・所属・Enrollmentを再確認する。
+- 既存の非Pilot Program購入、他Service、OEM請求ロジック、DB schemaは変更しない。過去の招待制Runbookは当時の閉鎖Pilot記録として保持し、現在の外部少数テスト方針を表すものとは扱わない。
+- 本PRは本番Serviceを`PUBLIC`へ変更せず、料金・人数・Payment設定を変更せず、実Checkout・実課金・利用者登録・Pilot開始・Deployを行わない。これらは本番値と安全条件を確認したうえで個別に実施する。

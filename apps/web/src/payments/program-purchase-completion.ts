@@ -199,6 +199,20 @@ export async function completePaidProgramPurchase(
             paidAt: now,
           },
         });
+        if (directContext) {
+          await (
+            await import('@bunshin/database')
+          ).admitPaidPersonalLearningRegistration(tx, {
+            workspaceId: purchase.workspaceId,
+            groupId: purchase.groupId,
+            serviceProgramId: program.id,
+            programEnrollmentId: enrollment.id,
+            groupMembershipId: purchase.groupMembershipId,
+            buyerUserId: purchase.buyerUserId,
+            purchaseId: purchase.id,
+            now,
+          });
+        }
         await tx.paymentWebhookEvent.update({
           where: { id: webhook.id },
           data: { status: 'PROCESSED', processedAt: now },

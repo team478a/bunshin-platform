@@ -1,5 +1,9 @@
 import 'server-only';
 import { parseAiResaleOfferTerms, parseAiResaleRuntimeSettings } from '@bunshin/capability-resale';
+import {
+  isPersonalLearningPilotProgram,
+  personalLearningPublicRegistrationCapacity,
+} from '@bunshin/capability-training';
 import { parseProgramProductTerms } from '@bunshin/application';
 import type { Prisma, PrismaClient } from '@bunshin/database';
 import { ApplicationError } from '@bunshin/shared';
@@ -106,6 +110,57 @@ export async function validatedDirectPurchaseContext(
   ]);
   if (!program) throw new ApplicationError('NOT_FOUND', 'program product unavailable');
   if (enrolled) throw new ApplicationError('CONFLICT', 'member already has this program');
+  if (isPersonalLearningPilotProgram(program.settings)) {
+    const pilotCapacity = personalLearningPublicRegistrationCapacity(program.settings);
+    const [service, registration, commercial] = await Promise.all([
+      db.serviceConfiguration.findFirst({
+        where: {
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          visibility: 'PUBLIC',
+          group: { status: 'ACTIVE' },
+          AND: [
+            { OR: [{ startsAt: null }, { startsAt: { lte: now } }] },
+            { OR: [{ endsAt: null }, { endsAt: { gt: now } }] },
+          ],
+        },
+        select: { id: true },
+      }),
+      db.serviceRegistrationPolicy.findFirst({
+        where: {
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          mode: 'PUBLIC',
+          inviteCodeEnabled: false,
+        },
+        select: { id: true },
+      }),
+      db.serviceCommercialSetting.findFirst({
+        where: {
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          status: 'ACTIVE',
+          OR: [{ startsAt: null }, { startsAt: { lte: now } }],
+          AND: [{ OR: [{ endsAt: null }, { endsAt: { gt: now } }] }],
+        },
+        select: { includedMemberLimit: true },
+      }),
+    ]);
+    const registrationLimit = commercial?.includedMemberLimit;
+    if (
+      !service ||
+      !registration ||
+      pilotCapacity === null ||
+      !Number.isSafeInteger(registrationLimit) ||
+      Number(registrationLimit) < 1 ||
+      Number(registrationLimit) > pilotCapacity
+    ) {
+      throw new ApplicationError(
+        'CONFIGURATION_ERROR',
+        'personal learning public registration is not ready',
+      );
+    }
+  }
   return { offering, paymentConfiguration, membership, program, terms };
 }
 
