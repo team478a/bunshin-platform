@@ -102,7 +102,6 @@ export interface AiProviderConfigurationRepository {
     encryptedApiKey: string;
     dailySpentUsdMicros: number;
     monthlySpentUsdMicros: number;
-    monthlyUnknownCostEvents: number;
   } | null>;
 }
 
@@ -259,8 +258,6 @@ export class ResolveAiProviderRuntimeConfiguration {
       throw new ApplicationError('CONFIGURATION_ERROR', 'provider is paused');
     if (configuration.lastVerifiedAt === null || configuration.lastErrorCategory !== null)
       throw new ApplicationError('CONFIGURATION_ERROR', 'verified provider configuration required');
-    if (value.monthlyUnknownCostEvents > 0)
-      throw new ApplicationError('CONFLICT', 'provider cost is unknown');
     if (value.dailySpentUsdMicros >= configuration.dailyBudgetUsdMicros)
       throw new ApplicationError('CONFLICT', 'daily provider budget reached');
     if (value.monthlySpentUsdMicros >= configuration.monthlyBudgetUsdMicros)
