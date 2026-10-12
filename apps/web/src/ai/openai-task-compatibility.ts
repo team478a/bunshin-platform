@@ -3,13 +3,14 @@ import { ApplicationError } from '@bunshin/shared';
 
 export const OPENAI_TASK_COMPATIBILITY_VERSION = 'OPENAI_TASK_COMPATIBILITY_V1';
 export const OPENAI_TASK_RESPONSES_ENDPOINT = 'https://api.openai.com/v1/responses';
-export type OpenAiCompatibilityTask = 'SOCIAL_PLANNER' | 'TRAINING_ASSESSMENT';
+export type OpenAiCompatibilityTask = 'SOCIAL_PLANNER' | 'TRAINING_ASSESSMENT' | 'LEARNING_LESSON';
 
 // Local request compatibility, not a live quality/access/price approval or model router.
 const models = new Set(['gpt-5.2', 'gpt-5.2-2025-12-11', 'gpt-5-mini', 'gpt-5-mini-2025-08-07']);
 const schemaNames: Record<OpenAiCompatibilityTask, readonly string[]> = {
   SOCIAL_PLANNER: ['daily_mission_brief', 'weekly_plan'],
   TRAINING_ASSESSMENT: ['training_evaluation'],
+  LEARNING_LESSON: ['learning_lesson'],
 };
 
 function fail(task: OpenAiCompatibilityTask, reason: string): never {
@@ -41,7 +42,7 @@ export function assertOpenAiTaskRequest(
   if (endpoint !== OPENAI_TASK_RESPONSES_ENDPOINT) fail(task, 'ENDPOINT_NOT_SUPPORTED');
   if (value.store !== false) fail(task, 'STORE_NOT_DISABLED');
   const keys = ['model', 'store', 'input', 'text'];
-  if (task === 'TRAINING_ASSESSMENT') keys.push('max_output_tokens');
+  if (task === 'TRAINING_ASSESSMENT' || task === 'LEARNING_LESSON') keys.push('max_output_tokens');
   if (Object.keys(value).some((key) => !keys.includes(key))) fail(task, 'OPTION_NOT_SUPPORTED');
   if (
     Object.hasOwn(value, 'max_output_tokens') &&

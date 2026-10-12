@@ -27,7 +27,7 @@ const body = z
       .strict(),
   })
   .strict();
-async function boundedJson(request: Request) {
+export async function boundedLearningJson(request: Request) {
   if (!request.body) throw new ApplicationError('VALIDATION_ERROR', 'body required');
   const reader = request.body.getReader();
   const chunks: Uint8Array[] = [];
@@ -84,7 +84,10 @@ export async function personalLearningRequestResponse(
     const saved =
       request.method === 'GET'
         ? await repository.readRequest(input)
-        : await repository.saveRequest({ ...input, ...body.parse(await boundedJson(request)) });
+        : await repository.saveRequest({
+            ...input,
+            ...body.parse(await boundedLearningJson(request)),
+          });
     return Response.json({ data: saved, requestId }, { headers });
   } catch (error) {
     const mapped = toApiError(
