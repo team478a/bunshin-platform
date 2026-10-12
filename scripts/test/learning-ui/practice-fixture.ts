@@ -19,4 +19,33 @@ export const practiceFixture = {
     reportedAt: lessonWish.createdAt,
     evidenceLevel: 'SELF_REPORT',
   },
+  support: { revision: 0, history: [] },
+} satisfies PersonalLearningPractice;
+export const supportedPracticeFixture = {
+  ...practiceFixture,
+  support: {
+    revision: 1,
+    history: [
+      {
+        id: '77777777-7777-4777-8777-777777777777',
+        operationId: '88888888-8888-4888-8888-888888888888',
+        revision: 1,
+        noteRevision: 1,
+        candidateId: practiceFixture.candidate.id,
+        materialVersion: 1,
+        reason: 'ENVIRONMENT_MISMATCH',
+        text: '画面が違う',
+        requestedAt: lessonWish.createdAt,
+        status: 'READY',
+        advice: {
+          cause: 'ENVIRONMENT_MISMATCH',
+          explanation: '画面の違いを確認します。能力の評価ではありません。',
+          nextAction: 'いま表示されている内容を一つ教えてください',
+          question: '',
+        },
+        promptVersion: 'synthetic-support-v1',
+        usageKey: 'synthetic-support-usage',
+      },
+    ],
+  },
 } satisfies PersonalLearningPractice;

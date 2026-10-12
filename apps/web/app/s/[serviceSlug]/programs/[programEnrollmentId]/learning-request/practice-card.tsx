@@ -1,5 +1,6 @@
 'use client';
 import { useState } from 'react';
+import { LearningSupportCard } from './support-card';
 import type {
   PersonalLearningPractice,
   PersonalLearningPracticeState,
@@ -107,7 +108,7 @@ export function LearningPracticeCard({
             途中の記録を保存
           </button>
           <p>
-            途中支援・提出物の評価・次課題の提案は準備中です。記録だけで今回の課題や目標全体を完了にはしません。
+            提出物の評価・次課題の提案は準備中です。記録や相談だけで今回の課題や目標全体を完了にはしません。
           </p>
         </>
       ) : (
@@ -122,6 +123,7 @@ export function LearningPracticeCard({
       <p role="status" aria-label="実践の状態">
         {message}
       </p>
+      {current && <LearningSupportCard endpoint={endpoint} state={state} onChange={onChange} />}
     </section>
   );
 }
