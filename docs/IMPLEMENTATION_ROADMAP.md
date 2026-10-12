@@ -1,5 +1,7 @@
 # BUNSHIN Platform 実装ロードマップ
 
+本番フィードバック統合Phase 1-Bは`docs/auto-improvement/PHASE1B_ADMIN_OVERVIEW_IMPLEMENTATION.md`を参照。1-Aのマージ/CI成功後、管理者限定の固定完了週GET・件数範囲表示へ接続し、原本環境/捕捉率/成果は未判定に維持する。新DB/外部AI/自動修正なし。レビュー・CI・マージ後は1-A + 1-Bをproduction基点の最初の限定release単位にする。
+
 本番フィードバック統合Phase 1-Aは`docs/auto-improvement/PHASE1A_OBSERVATION_INTEGRATION_IMPLEMENTATION.md`を参照。既存Feedback/支援/写真Readerと採否・投稿/研修進捗の限定投影を統合し、少数・欠測・原本の環境不足は非表示/UNKNOWNにする。Runtime/UI/HTTP/Job・外部AIは未接続。次はレビュー・CI後の1-B管理者読取表示。全Phaseを待たず1-A + 1-Bを最初の利用可能な限定release単位とし、production基点の差分照合を維持する。
 
 OEM初期cutoverのappend-only取消・差替えは`docs/OEM_CUTOVER_HISTORY_CORRECTION_IMPLEMENTATION.md`を参照。初回予約を不変証跡として残し、最新revisionが取消なら旧MAU継続、差替えなら再確認済み将来月を課金projectionにする。開始済みcutover、確定済み月、本番Migration・cutover操作は別Gate。

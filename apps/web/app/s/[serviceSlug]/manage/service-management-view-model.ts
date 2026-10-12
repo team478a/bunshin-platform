@@ -1,5 +1,10 @@
 export const serviceManagementSections = [
   {
+    title: '利用記録と改善の確認',
+    description: 'SNS・研修の保存記録を範囲表示で確認します。少人数や欠測は未判定です。',
+    href: 'improvement-overview',
+  },
+  {
     title: 'SNSの困った報告',
     description: '本人の報告を読み取り専用で確認します。少人数・不完全な集計は保留します。',
     href: 'improvement-feedback',

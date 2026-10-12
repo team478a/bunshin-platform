@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { selectServiceManagementSections } from '../src/services/service-management-navigation';
 
 const sections = [
+  { href: 'improvement-overview' },
   { href: 'improvement-feedback' },
   { href: 'members' },
   { href: 'knowledge' },
@@ -17,6 +18,22 @@ const sections = [
 ] as const;
 
 describe('service management navigation', () => {
+  it('shows overview only after an explicit scoped capability/history probe', () => {
+    for (const input of [
+      { businessDaily: true, fortune: false },
+      { businessDaily: false, fortune: true },
+      { businessDaily: false, fortune: false },
+    ]) {
+      expect(selectServiceManagementSections(sections, input).map((s) => s.href)).not.toContain(
+        'improvement-overview',
+      );
+      expect(
+        selectServiceManagementSections(sections, { ...input, improvementOverview: true }).map(
+          (s) => s.href,
+        ),
+      ).toContain('improvement-overview');
+    }
+  });
   it('shows feedback only for explicit SOCIAL capability/history, not a brand or other package alone', () => {
     for (const input of [
       { businessDaily: true, fortune: false },

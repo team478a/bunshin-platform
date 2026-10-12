@@ -13,6 +13,15 @@ function pages(directory: URL, prefix = ''): string[] {
 
 describe('service authentication route inventory', () => {
   it.each([
+    '/s/service-a/manage/improvement-overview?week=2026-10-05',
+    '/s/service-a/manage/improvement-overview/extra',
+    '/s/service-a/manage/improvement-overview#details',
+    '/s/service-a/manage/%69mprovement-overview',
+    '//example.com/s/service-a/manage/improvement-overview',
+  ])('rejects overview route aliases and unapproved extensions: %s', (path) => {
+    expect(safeLineAuthReturnPath(path)).toBeNull();
+  });
+  it.each([
     '/s/service-a/manage/programs/personal-learning-preparation?start=true',
     '/s/service-a/manage/programs/personal-learning-preparation/extra',
     '/s/service-a/manage/programs/personal-learning-preparation#start',
