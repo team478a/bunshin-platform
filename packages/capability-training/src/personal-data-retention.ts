@@ -76,6 +76,7 @@ export interface TrainingRetentionExecutionCounts {
   goals: number;
   preferences: number;
   retainedToolkit: number;
+  learningRequests?: number;
 }
 export type TrainingRetentionExecutionPreview = {
   revision: string;

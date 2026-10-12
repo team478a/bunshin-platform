@@ -173,7 +173,7 @@ export class PrismaTrainingPersonalDataExportRepository implements TrainingPerso
           take,
         });
         const learningScope = { ...personal, groupMembershipId: membership.id };
-        const [learningGoals, learningPlans, pilotSeats] = await Promise.all([
+        const [learningGoals, learningPlans, pilotSeats, learningRequests] = await Promise.all([
           tx.personalLearningGoalConfirmation.findMany({ where: learningScope, take }),
           tx.personalLearningPlanRevision.findMany({
             where: learningScope,
@@ -196,19 +196,41 @@ export class PrismaTrainingPersonalDataExportRepository implements TrainingPerso
             },
             take,
           }),
+          tx.personalLearningRequest.findMany({
+            where: learningScope,
+            take,
+            orderBy: { revision: 'asc' },
+          }),
         ]);
         if (
-          [assignments, answers, toolkit, activities, goals, learningGoals, learningPlans].some(
-            (rows) => rows.length > TRAINING_EXPORT_MAX_ROWS,
-          )
+          [
+            assignments,
+            answers,
+            toolkit,
+            activities,
+            goals,
+            learningGoals,
+            learningPlans,
+            learningRequests,
+          ].some((rows) => rows.length > TRAINING_EXPORT_MAX_ROWS)
         )
           return { outcome: 'TOO_LARGE' };
         return {
           outcome: 'FOUND',
           data: {
-            ...(learningGoals.length + learningPlans.length + pilotSeats.length > 0
+            ...(learningGoals.length +
+              learningPlans.length +
+              pilotSeats.length +
+              learningRequests.length >
+            0
               ? {
                   personalLearning: [
+                    ...learningRequests.map((row) => ({
+                      ...row,
+                      kind: 'LEARNING_REQUEST',
+                      createdAt: iso(row.createdAt),
+                      updatedAt: iso(row.updatedAt),
+                    })),
                     ...pilotSeats.map((row) => ({
                       ...row,
                       kind: 'PILOT_SEAT',

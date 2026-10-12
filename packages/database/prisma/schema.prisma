@@ -417,6 +417,7 @@ model ProgramEnrollment {
   paidPurchase      ProgramPurchase?            @relation("ProgramPurchasePaidEnrollment")
   trainingRetention TrainingDataRetentionState?
   personalLearningGoalConfirmations PersonalLearningGoalConfirmation[]
+  personalLearningRequests PersonalLearningRequest[]
 
   @@unique([groupMembershipId, serviceProgramId])
   @@unique([workspaceId, groupId, id])
@@ -818,6 +819,31 @@ model ProgramMemberGoal {
   @@index([workspaceId, groupId, groupMembershipId, status])
   @@index([workspaceId, groupId, programEnrollmentId])
   @@map("program_member_goals")
+}
+
+model PersonalLearningRequest {
+  id                    String            @id @default(uuid()) @db.Uuid
+  workspaceId           String            @map("workspace_id") @db.Uuid
+  groupId               String            @map("group_id") @db.Uuid
+  programEnrollmentId   String            @map("program_enrollment_id") @db.Uuid
+  groupMembershipId     String            @map("group_membership_id") @db.Uuid
+  userId                String            @map("user_id") @db.Uuid
+  revision              Int
+  originalText          String            @map("original_text") @db.VarChar(2000)
+  deviceType            String?           @map("device_type") @db.VarChar(16)
+  toolDescription       String?           @map("tool_description") @db.VarChar(240)
+  experienceDescription String?           @map("experience_description") @db.VarChar(300)
+  currentPosition       String?           @map("current_position") @db.VarChar(500)
+  idempotencyKey        String            @map("idempotency_key") @db.VarChar(100)
+  digest                String            @db.VarChar(64)
+  createdAt             DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  enrollment            ProgramEnrollment @relation(fields: [workspaceId, groupId, programEnrollmentId, groupMembershipId], references: [workspaceId, groupId, id, groupMembershipId], onDelete: Cascade, map: "personal_learning_requests_workspace_id_group_id_program_e_fkey")
+  membership            GroupMembership   @relation(fields: [workspaceId, groupId, groupMembershipId, userId], references: [workspaceId, groupId, id, userId], onDelete: Cascade, map: "personal_learning_requests_workspace_id_group_id_group_mem_fkey")
+
+  @@unique([workspaceId, groupId, programEnrollmentId, revision], map: "personal_learning_request_revision_key")
+  @@unique([workspaceId, groupId, programEnrollmentId, idempotencyKey], map: "personal_learning_request_operation_key")
+  @@map("personal_learning_requests")
 }
 
 model PersonalLearningGoalConfirmation {
@@ -3409,6 +3435,7 @@ model GroupMembership {
   oemRegistrationPeriods OemRegistrationPeriod[]
   id                           String                           @id @default(uuid()) @db.Uuid
   personalLearningGoalConfirmations PersonalLearningGoalConfirmation[]
+  personalLearningRequests PersonalLearningRequest[]
   workspaceId                  String                           @map("workspace_id") @db.Uuid
   groupId                      String                           @map("group_id") @db.Uuid
   userId                       String                           @map("user_id") @db.Uuid
