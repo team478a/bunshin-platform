@@ -739,6 +739,201 @@ export function registerOemBillingIntegrationCases(client: PrismaClient) {
       ).rejects.toThrow('FINALIZED_BILLING_PERIOD_IMMUTABLE');
     });
 
+    it('appends cutover cancellation and replacement while keeping started and finalized months immutable', async () => {
+      const actor = await client.user.create({ data: { displayName: 'Cutover history reviewer' } });
+      await client.platformAdmin.create({
+        data: { userId: actor.id, role: 'SUPER_ADMIN', status: 'ACTIVE' },
+      });
+      const user = await client.user.create({ data: { displayName: 'Cutover learner' } });
+      const workspace = await client.workspace.create({
+        data: { name: `cutover-correction-${randomUUID()}`, type: 'ORGANIZATION' },
+      });
+      const group = await client.group.create({
+        data: { workspaceId: workspace.id, name: 'Cutover service' },
+      });
+      await client.serviceConfiguration.create({
+        data: {
+          workspaceId: workspace.id,
+          groupId: group.id,
+          slug: `cutover-${randomUUID()}`,
+          displayName: 'Cutover OEM service',
+          description: 'synthetic',
+          operatorName: 'synthetic',
+          createdByUserId: actor.id,
+          updatedByUserId: actor.id,
+        },
+      });
+      const membership = await client.groupMembership.create({
+        data: {
+          workspaceId: workspace.id,
+          groupId: group.id,
+          userId: user.id,
+          status: 'ACTIVE',
+          consentedAt: new Date('2026-09-01T00:00:00.000Z'),
+        },
+      });
+      const product = await client.commercialServiceProduct.findUniqueOrThrow({
+        where: { key: 'HASSY' },
+        include: { policyVersions: { where: { version: 1 } } },
+      });
+      await client.oemOfferingPeriod.create({
+        data: {
+          workspaceId: workspace.id,
+          groupId: group.id,
+          productId: product.id,
+          productPolicyVersionId: product.policyVersions[0]!.id,
+          productPolicy: product.key,
+          classification: 'PAID',
+          startsAt: new Date('2026-09-01T00:00:00.000Z'),
+          actorUserId: actor.id,
+          reason: 'reviewed offering for cutover correction',
+        },
+      });
+      await client.oemContractPeriod.create({
+        data: {
+          workspaceId: workspace.id,
+          startsAt: new Date('2026-09-01T00:00:00.000Z'),
+          actorUserId: actor.id,
+          reason: 'reviewed contract for cutover correction',
+        },
+      });
+      await client.oemRegistrationPeriod.create({
+        data: {
+          workspaceId: workspace.id,
+          groupId: group.id,
+          groupMembershipId: membership.id,
+          userId: user.id,
+          startsAt: new Date('2026-09-01T00:00:00.000Z'),
+          registeredByUserId: actor.id,
+          reason: 'reviewed registration for cutover correction',
+        },
+      });
+      const service = new PrismaOemBillingAdminService(client);
+      const now = new Date('2026-10-12T00:00:00.000Z');
+      const initial = await service.scheduleCutover({
+        workspaceId: workspace.id,
+        actorUserId: actor.id,
+        effectiveFrom: new Date('2026-12-01T00:00:00.000Z'),
+        reason: 'initial reviewed future cutover',
+        historyReviewed: true,
+        now,
+      });
+      const cancelInput = {
+        workspaceId: workspace.id,
+        expectedEffectiveFrom: initial.effectiveFrom,
+        revisedEffectiveFrom: null,
+        actorUserId: actor.id,
+        reason: 'signed approval cancels the initial cutover',
+        historyReviewed: false,
+        confirmed: true,
+        now,
+      };
+      const cancelled = await service.correctCutover(cancelInput);
+      expect((await service.correctCutover(cancelInput)).id).toBe(cancelled.id);
+      expect(cancelled).toMatchObject({ action: 'CANCELLED', supersedesId: null });
+      const legacyDashboard = await new PrismaCommercialUsageService(client).dashboard(
+        workspace.id,
+        new Date('2026-12-15T00:00:00.000Z'),
+      );
+      expect(legacyDashboard?.current.billingState).toBe('LEGACY_MAU');
+
+      const otherWorkspace = await client.workspace.create({
+        data: { name: `cutover-cross-workspace-${randomUUID()}`, type: 'ORGANIZATION' },
+      });
+      await client.oemBillingPolicy.create({
+        data: {
+          workspaceId: otherWorkspace.id,
+          effectiveFrom: new Date('2027-01-01T00:00:00.000Z'),
+          ruleVersion: 'OEM_REGISTRATION_BILLING_V2',
+          historyReadyAt: now,
+          actorUserId: actor.id,
+          reason: 'synthetic policy for cross-workspace protection',
+        },
+      });
+      await expect(
+        client.oemBillingPolicyRevision.create({
+          data: {
+            workspaceId: otherWorkspace.id,
+            action: 'RESCHEDULED',
+            effectiveFrom: new Date('2027-02-01T00:00:00.000Z'),
+            ruleVersion: 'OEM_REGISTRATION_BILLING_V2',
+            historyReadyAt: now,
+            actorUserId: actor.id,
+            reason: 'forbidden cross-workspace supersession',
+            supersedesId: cancelled.id,
+          },
+        }),
+      ).rejects.toThrow();
+
+      const rescheduled = await service.correctCutover({
+        ...cancelInput,
+        expectedEffectiveFrom: null,
+        revisedEffectiveFrom: new Date('2027-01-01T00:00:00.000Z'),
+        reason: 'signed approval replaces the cancelled cutover month',
+        historyReviewed: true,
+      });
+      expect(rescheduled).toMatchObject({
+        action: 'RESCHEDULED',
+        supersedesId: cancelled.id,
+      });
+      const preparation = await service.preparationDashboard({
+        workspaceId: workspace.id,
+        actorUserId: actor.id,
+        now,
+      });
+      expect(preparation.billingPolicy?.effectiveFrom).toEqual(
+        new Date('2027-01-01T00:00:00.000Z'),
+      );
+      expect(preparation.billingPolicyRecord?.revisions).toHaveLength(2);
+      await expect(
+        service.correctCutover({
+          ...cancelInput,
+          expectedEffectiveFrom: new Date('2027-01-01T00:00:00.000Z'),
+          revisedEffectiveFrom: new Date('2027-02-01T00:00:00.000Z'),
+          reason: 'attempted change after cutover activation',
+          historyReviewed: true,
+          now: new Date('2027-01-15T00:00:00.000Z'),
+        }),
+      ).rejects.toThrow('STARTED_CUTOVER_IMMUTABLE');
+
+      await client.tenantMonthlyUsage.create({
+        data: {
+          workspaceId: workspace.id,
+          periodStart: new Date('2027-01-01T00:00:00.000Z'),
+          periodEnd: new Date('2027-02-01T00:00:00.000Z'),
+          mau: 0,
+          pricingTierKey: 'synthetic-zero',
+          calculatedPriceYen: 0,
+          pricingVersion: 'synthetic-cutover-correction',
+          status: 'FINALIZED',
+          finalizedAt: now,
+        },
+      });
+      await expect(
+        service.correctCutover({
+          ...cancelInput,
+          expectedEffectiveFrom: new Date('2027-01-01T00:00:00.000Z'),
+          revisedEffectiveFrom: new Date('2027-02-01T00:00:00.000Z'),
+          reason: 'attempted change across finalized cutover month',
+          historyReviewed: true,
+        }),
+      ).rejects.toThrow('FINALIZED_BILLING_PERIOD_IMMUTABLE');
+      await expect(
+        client.oemBillingPolicyRevision.update({
+          where: { id: cancelled.id },
+          data: { reason: 'forbidden historical rewrite' },
+        }),
+      ).rejects.toThrow();
+      expect(
+        await client.commercialBillingAudit.count({
+          where: {
+            workspaceId: workspace.id,
+            action: { in: ['CUTOVER_CANCELLED', 'CUTOVER_RESCHEDULED'] },
+          },
+        }),
+      ).toBe(2);
+    });
+
     it('pricing edits use CAS, publish conflicts serialize, cancellation permits replacement but not historical mutation', async () => {
       const actor = await client.user.create({
         data: { displayName: 'Synthetic pricing SUPER_ADMIN' },

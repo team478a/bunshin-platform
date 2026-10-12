@@ -11,6 +11,10 @@ import { Prisma } from '@prisma/client';
 import type { PrismaClient } from '@prisma/client';
 import { prisma } from './index';
 import { oemBillingShadow } from './oem-billing-history';
+import {
+  listOemBillingPolicyProjections,
+  resolveOemBillingPolicy,
+} from './oem-billing-policy-projection';
 
 export interface RecordCommercialUsageInput {
   workspaceId: string;
@@ -117,8 +121,13 @@ export class PrismaCommercialUsageService {
     period: ReturnType<typeof commercialMonthPeriod>,
     mau: number,
   ) {
-    const policy = await this.client.oemBillingPolicy.findUnique({ where: { workspaceId } });
-    if (!policy || policy.effectiveFrom > snapshotDate(period.key))
+    const policy = await resolveOemBillingPolicy(this.client, workspaceId);
+    if (
+      !policy ||
+      policy.status === 'CANCELLED' ||
+      !policy.effectiveFrom ||
+      policy.effectiveFrom > snapshotDate(period.key)
+    )
       return {
         billableUserCount: mau,
         registeredUserCount: null,
@@ -151,7 +160,7 @@ export class PrismaCommercialUsageService {
         billingState: 'REVIEW_REQUIRED' as const,
         billingReviewReason: billingReviewReason(error.message),
         pricing: {
-          pricingVersion: policy.ruleVersion,
+          pricingVersion: policy.ruleVersion ?? 'REVIEW_REQUIRED',
           tierKey: 'REVIEW_REQUIRED',
           mau,
           priceYen: null,
@@ -378,8 +387,12 @@ export class PrismaCommercialUsageService {
     });
     if (existing?.status === 'FINALIZED') return existing;
 
-    const policy = await this.client.oemBillingPolicy.findUnique({ where: { workspaceId } });
-    if (policy && policy.effectiveFrom <= periodStart) {
+    const policy = await resolveOemBillingPolicy(this.client, workspaceId);
+    if (
+      policy?.status === 'SCHEDULED' &&
+      policy.effectiveFrom &&
+      policy.effectiveFrom <= periodStart
+    ) {
       if (!policy.historyReadyAt || policy.ruleVersion !== OEM_REGISTRATION_BILLING_RULE_VERSION)
         throw new Error('REVIEW_REQUIRED: billing policy');
       return this.client.$transaction(async (tx) => {
@@ -390,10 +403,10 @@ export class PrismaCommercialUsageService {
           where: { workspaceId_periodStart: { workspaceId, periodStart } },
         });
         if (finalized?.status === 'FINALIZED') return finalized;
-        const currentPolicy = await tx.oemBillingPolicy.findUniqueOrThrow({
-          where: { workspaceId },
-        });
+        const currentPolicy = await resolveOemBillingPolicy(tx, workspaceId);
         if (
+          currentPolicy?.status !== 'SCHEDULED' ||
+          !currentPolicy.effectiveFrom ||
           !currentPolicy.historyReadyAt ||
           currentPolicy.effectiveFrom > periodStart ||
           currentPolicy.ruleVersion !== OEM_REGISTRATION_BILLING_RULE_VERSION
@@ -515,10 +528,12 @@ export class PrismaCommercialUsageService {
     });
     const finalized = [];
     const reviewRequired: Array<{ workspaceId: string; reason: string }> = [];
-    const policies = await this.client.oemBillingPolicy.findMany({
-      where: { effectiveFrom: { lte: periodStart } },
-      select: { workspaceId: true, historyReadyAt: true, ruleVersion: true },
-    });
+    const policies = (await listOemBillingPolicyProjections(this.client)).filter(
+      (policy) =>
+        policy.status === 'SCHEDULED' &&
+        policy.effectiveFrom !== null &&
+        policy.effectiveFrom <= periodStart,
+    );
     const workspaceIds = new Set([
       ...organizations.map((row) => row.id),
       ...policies.map((row) => row.workspaceId),

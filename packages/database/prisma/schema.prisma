@@ -3598,7 +3598,33 @@ model OemBillingPolicy {
   historyReadyAt DateTime? @map("history_ready_at") @db.Timestamptz(6)
   actorUserId String @map("actor_user_id") @db.Uuid
   reason String @db.VarChar(1000)
+  revisions OemBillingPolicyRevision[]
   @@map("oem_billing_policies")
+}
+
+enum OemBillingPolicyRevisionAction {
+  RESCHEDULED
+  CANCELLED
+}
+
+/// Append-only correction of the initial cutover. The latest leaf is the effective projection.
+model OemBillingPolicyRevision {
+  id String @id @default(uuid()) @db.Uuid
+  workspaceId String @map("workspace_id") @db.Uuid
+  action OemBillingPolicyRevisionAction
+  effectiveFrom DateTime? @map("effective_from") @db.Date
+  ruleVersion String? @map("rule_version") @db.VarChar(80)
+  historyReadyAt DateTime? @map("history_ready_at") @db.Timestamptz(6)
+  actorUserId String @map("actor_user_id") @db.Uuid
+  reason String @db.VarChar(1000)
+  supersedesId String? @unique @map("supersedes_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  policy OemBillingPolicy @relation(fields: [workspaceId], references: [workspaceId], onDelete: Restrict, onUpdate: NoAction, map: "oem_policy_revision_policy_fk")
+  supersedes OemBillingPolicyRevision? @relation("OemBillingPolicyRevisionSupersession", fields: [supersedesId], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "oem_policy_revision_supersedes_fk")
+  supersededBy OemBillingPolicyRevision? @relation("OemBillingPolicyRevisionSupersession")
+
+  @@index([workspaceId, createdAt])
+  @@map("oem_billing_policy_revisions")
 }
 
 model OemRegistrationPeriod {

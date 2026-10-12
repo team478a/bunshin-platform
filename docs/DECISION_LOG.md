@@ -1,5 +1,12 @@
 # BUNSHIN Platform Decision Log
 
+## 2026-10-12: OEM初期cutoverの取消・差替えはappend-only訂正リビジョンとする
+
+- 初回予約の`OemBillingPolicy`を更新・削除せず、`OemBillingPolicyRevision`が直前の訂正を1対1でsupersedeする。後続を持たない最新葉を課金projectionとして扱う。
+- 最新葉が`CANCELLED`なら旧MAU方式を継続し、`RESCHEDULED`なら再確認した将来月、rule version、履歴準備時刻を採用する。取消後の将来月再予約も同じチェーンへ追記する。
+- 変更はSUPER_ADMIN、Workspace lock、期待値CAS、理由、明示確認を必須とする。再予約時はOffering・契約・正式登録履歴をtransaction内で再検証し、開始済みcutoverまたは確定済み月に影響する訂正を拒否する。
+- 変更前後を`CommercialBillingAudit`へ保存する。本番Migration、Deploy、cutover訂正、請求確定、実課金は別Gateとする。
+
 ## 2026-10-12: OEM提供・正式登録期間も元版を残す1対1 supersessionとする
 
 - `OemOfferingPeriod`と`OemRegistrationPeriod`を直接訂正せず、訂正版が直前版を`supersedesId`で参照する。月次計算、商品判定、cutover準備は後続を持たない葉だけを参照する。

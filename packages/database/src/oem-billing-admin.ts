@@ -9,6 +9,7 @@ import {
 import { Prisma, type PrismaClient, prisma } from './client';
 import { requiredText, jsonSnapshot } from './commercial-billing-support';
 import { oemBillingShadow } from './oem-billing-history';
+import { resolveOemBillingPolicy } from './oem-billing-policy-projection';
 
 type ContractWindow = { startsAt: Date; endsAt: Date | null };
 
@@ -66,6 +67,7 @@ export class PrismaOemBillingAdminService {
     const now = input.now ?? new Date();
     if (!Number.isFinite(now.getTime())) throw new Error('INVALID_PREPARATION_TIME');
     const effectiveOn = new Date(`${dateInBusinessTimezone(now)}T00:00:00.000Z`);
+    const nextCutover = new Date(`${commercialMonthPeriod(now, 1).key}-01T00:00:00.000Z`);
     return this.client.$transaction(
       async (tx) => {
         await this.authorizeSuperAdmin(tx, input.actorUserId);
@@ -132,7 +134,18 @@ export class PrismaOemBillingAdminService {
               },
               orderBy: [{ startsAt: 'desc' }, { id: 'desc' }],
             }),
-            tx.oemBillingPolicy.findUnique({ where: { workspaceId: input.workspaceId } }),
+            tx.oemBillingPolicy.findUnique({
+              where: { workspaceId: input.workspaceId },
+              include: {
+                revisions: {
+                  include: {
+                    supersedes: { select: { id: true } },
+                    supersededBy: { select: { id: true } },
+                  },
+                  orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+                },
+              },
+            }),
             tx.commercialServiceProduct.findMany({
               where: { status: 'ACTIVE' },
               select: {
@@ -165,6 +178,9 @@ export class PrismaOemBillingAdminService {
         const currentRegistrationPeriods = registrations.filter(
           (registration) => registration.supersededBy === null,
         );
+        const billingPolicyProjection = await resolveOemBillingPolicy(tx, input.workspaceId);
+        const activeBillingPolicy =
+          billingPolicyProjection?.status === 'SCHEDULED' ? billingPolicyProjection : null;
 
         const currentOfferings = new Map(
           currentOfferingPeriods
@@ -229,7 +245,9 @@ export class PrismaOemBillingAdminService {
           participants: participantRows,
           contractPeriods: currentContractPeriods,
           contractPeriodHistory: contractPeriods,
-          billingPolicy,
+          billingPolicy: activeBillingPolicy,
+          billingPolicyRecord: billingPolicy,
+          billingPolicyProjection,
           products: products
             .filter((product) => product.policyVersions.length === 1)
             .map((product) => ({ ...product, currentPolicy: product.policyVersions[0]! })),
@@ -243,6 +261,11 @@ export class PrismaOemBillingAdminService {
               missingRegistrationCount === 0 &&
               currentContractPeriods.length > 0 &&
               billingPolicy === null,
+            cutoverCorrectionAllowed:
+              billingPolicyProjection?.status === 'CANCELLED' ||
+              (billingPolicyProjection?.effectiveFrom !== null &&
+                billingPolicyProjection?.effectiveFrom !== undefined &&
+                billingPolicyProjection.effectiveFrom >= nextCutover),
           },
         };
       },
@@ -383,6 +406,68 @@ export class PrismaOemBillingAdminService {
       )
     )
       throw new Error('FINALIZED_BILLING_PERIOD_IMMUTABLE');
+  }
+
+  private async assertCutoverHistoryReady(
+    tx: Prisma.TransactionClient,
+    workspaceId: string,
+  ): Promise<void> {
+    const groups = await tx.serviceConfiguration.findMany({
+      where: { workspaceId },
+      select: { groupId: true },
+    });
+    const offerings = await tx.oemOfferingPeriod.findMany({
+      where: { workspaceId, endsAt: null, supersededBy: { is: null } },
+      select: { groupId: true },
+    });
+    if (groups.some((group) => !offerings.some((offering) => offering.groupId === group.groupId)))
+      throw new Error('REVIEW_REQUIRED: service classification missing');
+    const contract = await tx.oemContractPeriod.findFirst({
+      where: { workspaceId, supersededBy: { is: null } },
+      select: { id: true },
+    });
+    if (!contract) throw new Error('REVIEW_REQUIRED: contract history missing');
+    const participants = await tx.groupMembership.findMany({
+      where: {
+        workspaceId,
+        groupId: { in: groups.map((group) => group.groupId) },
+        role: 'PARTICIPANT',
+        status: { in: ['ACTIVE', 'SUSPENDED'] },
+        consentedAt: { not: null },
+      },
+      select: { id: true },
+    });
+    const registrations = await tx.oemRegistrationPeriod.findMany({
+      where: { workspaceId, endsAt: null, supersededBy: { is: null } },
+      select: { groupMembershipId: true },
+    });
+    if (
+      participants.some(
+        (participant) =>
+          !registrations.some((registration) => registration.groupMembershipId === participant.id),
+      )
+    )
+      throw new Error('REVIEW_REQUIRED: initial registration history missing');
+  }
+
+  private async assertNoFinalizedCutoverImpact(
+    tx: Prisma.TransactionClient,
+    workspaceId: string,
+    before: Date | null,
+    after: Date | null,
+  ): Promise<void> {
+    const startsAt =
+      before === null ? after! : after === null ? before : before < after ? before : after;
+    const endsAt = before === null || after === null ? null : before > after ? before : after;
+    const finalized = await tx.tenantMonthlyUsage.findFirst({
+      where: {
+        workspaceId,
+        status: 'FINALIZED',
+        periodStart: { gte: startsAt, ...(endsAt ? { lt: endsAt } : {}) },
+      },
+      select: { id: true },
+    });
+    if (finalized) throw new Error('FINALIZED_BILLING_PERIOD_IMMUTABLE');
   }
 
   async registerProductPolicy(input: {
@@ -874,44 +959,7 @@ export class PrismaOemBillingAdminService {
       throw new Error('FUTURE_MONTH_AND_HISTORY_REVIEW_REQUIRED');
     return this.client.$transaction(async (tx) => {
       await this.authorize(tx, input.workspaceId, input.actorUserId);
-      const groups = await tx.serviceConfiguration.findMany({
-        where: { workspaceId: input.workspaceId },
-        select: { groupId: true },
-      });
-      const offerings = await tx.oemOfferingPeriod.findMany({
-        where: {
-          workspaceId: input.workspaceId,
-          endsAt: null,
-          supersededBy: { is: null },
-        },
-      });
-      if (groups.some((g) => !offerings.some((o) => o.groupId === g.groupId)))
-        throw new Error('REVIEW_REQUIRED: service classification missing');
-      const contract = await tx.oemContractPeriod.findFirst({
-        where: { workspaceId: input.workspaceId, supersededBy: { is: null } },
-      });
-      if (!contract) throw new Error('REVIEW_REQUIRED: contract history missing');
-      // Existing participants require individually reviewed initial registration records.
-      const participants = await tx.groupMembership.findMany({
-        where: {
-          workspaceId: input.workspaceId,
-          groupId: { in: groups.map((g) => g.groupId) },
-          role: 'PARTICIPANT',
-          status: { in: ['ACTIVE', 'SUSPENDED'] },
-          consentedAt: { not: null },
-        },
-        select: { id: true },
-      });
-      const registrations = await tx.oemRegistrationPeriod.findMany({
-        where: {
-          workspaceId: input.workspaceId,
-          endsAt: null,
-          supersededBy: { is: null },
-        },
-        select: { groupMembershipId: true },
-      });
-      if (participants.some((m) => !registrations.some((r) => r.groupMembershipId === m.id)))
-        throw new Error('REVIEW_REQUIRED: initial registration history missing');
+      await this.assertCutoverHistoryReady(tx, input.workspaceId);
       const policy = await tx.oemBillingPolicy.create({
         data: {
           workspaceId: input.workspaceId,
@@ -933,6 +981,88 @@ export class PrismaOemBillingAdminService {
         },
       });
       return policy;
+    });
+  }
+
+  async correctCutover(input: {
+    workspaceId: string;
+    expectedEffectiveFrom: Date | null;
+    revisedEffectiveFrom: Date | null;
+    actorUserId: string;
+    reason: string;
+    historyReviewed: boolean;
+    confirmed: boolean;
+    now?: Date;
+  }) {
+    const now = input.now ?? new Date();
+    const next = new Date(`${commercialMonthPeriod(now, 1).key}-01T00:00:00.000Z`);
+    const reason = requiredText(input.reason, 1000);
+    if (
+      !input.confirmed ||
+      !Number.isFinite(now.getTime()) ||
+      (input.expectedEffectiveFrom !== null &&
+        !Number.isFinite(input.expectedEffectiveFrom.getTime())) ||
+      (input.revisedEffectiveFrom !== null &&
+        (!input.historyReviewed ||
+          !Number.isFinite(input.revisedEffectiveFrom.getTime()) ||
+          input.revisedEffectiveFrom < next ||
+          input.revisedEffectiveFrom.toISOString().slice(8) !== '01T00:00:00.000Z'))
+    )
+      throw new Error('CUTOVER_CORRECTION_CONFIRMATION_REQUIRED');
+
+    return this.client.$transaction(async (tx) => {
+      await this.authorize(tx, input.workspaceId, input.actorUserId);
+      const current = await resolveOemBillingPolicy(tx, input.workspaceId);
+      if (!current) throw new Error('BILLING_POLICY_NOT_FOUND');
+      const currentEffectiveFrom = current.effectiveFrom;
+      if (
+        current.revisionId &&
+        sameOptionalDate(currentEffectiveFrom, input.revisedEffectiveFrom) &&
+        current.revisionActorUserId === input.actorUserId &&
+        current.revisionReason === reason
+      )
+        return tx.oemBillingPolicyRevision.findUniqueOrThrow({
+          where: { id: current.revisionId },
+        });
+      if (!sameOptionalDate(currentEffectiveFrom, input.expectedEffectiveFrom))
+        throw new Error('STALE_BILLING_POLICY');
+      if (sameOptionalDate(currentEffectiveFrom, input.revisedEffectiveFrom))
+        throw new Error('CUTOVER_CORRECTION_CHANGE_REQUIRED');
+      if (currentEffectiveFrom && currentEffectiveFrom < next)
+        throw new Error('STARTED_CUTOVER_IMMUTABLE');
+
+      await this.assertNoFinalizedCutoverImpact(
+        tx,
+        input.workspaceId,
+        currentEffectiveFrom,
+        input.revisedEffectiveFrom,
+      );
+      if (input.revisedEffectiveFrom) await this.assertCutoverHistoryReady(tx, input.workspaceId);
+
+      const revision = await tx.oemBillingPolicyRevision.create({
+        data: {
+          workspaceId: input.workspaceId,
+          action: input.revisedEffectiveFrom ? 'RESCHEDULED' : 'CANCELLED',
+          effectiveFrom: input.revisedEffectiveFrom,
+          ruleVersion: input.revisedEffectiveFrom ? OEM_REGISTRATION_BILLING_RULE_VERSION : null,
+          historyReadyAt: input.revisedEffectiveFrom ? now : null,
+          actorUserId: input.actorUserId,
+          reason,
+          supersedesId: current.revisionId,
+        },
+      });
+      await tx.commercialBillingAudit.create({
+        data: {
+          workspaceId: input.workspaceId,
+          actorUserId: input.actorUserId,
+          entityType: 'BILLING_POLICY_REVISION',
+          entityId: revision.id,
+          action: input.revisedEffectiveFrom ? 'CUTOVER_RESCHEDULED' : 'CUTOVER_CANCELLED',
+          beforeData: jsonSnapshot(current),
+          afterData: jsonSnapshot(revision),
+        },
+      });
+      return revision;
     });
   }
 

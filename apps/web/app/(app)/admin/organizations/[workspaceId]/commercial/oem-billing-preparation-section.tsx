@@ -44,7 +44,9 @@ export function OemBillingPreparationSection({
               ? 'OEM契約期間の履歴を保存しました。'
               : query.oemPrepared === 'cutover'
                 ? '将来月のcutoverを予約しました。'
-                : null;
+                : query.oemPrepared === 'cutover-correction'
+                  ? 'cutoverの訂正版を保存しました。'
+                  : null;
 
   return (
     <section className="settings-card" id="oem-billing-preparation">
@@ -78,8 +80,10 @@ export function OemBillingPreparationSection({
           <span>cutover</span>
           <strong>
             {oemPreparation.billingPolicy
-              ? `${oemPreparation.billingPolicy.effectiveFrom.toISOString().slice(0, 7)}から予約済み`
-              : '未予約'}
+              ? `${oemPreparation.billingPolicy.effectiveFrom?.toISOString().slice(0, 7)}から予約済み`
+              : oemPreparation.billingPolicyProjection?.status === 'CANCELLED'
+                ? '取消済み（旧MAU継続）'
+                : '未予約'}
           </strong>
         </div>
       </div>
@@ -606,11 +610,86 @@ export function OemBillingPreparationSection({
 
       <div className="settings-stack service-template-preview">
         <h3>5. 将来月cutover</h3>
-        {oemPreparation.billingPolicy ? (
-          <p className="notice notice--success">
-            {oemPreparation.billingPolicy.effectiveFrom.toISOString().slice(0, 7)}から正式登録課金
-            V2へ切り替える予約があります。ここから変更・取消はできません。
-          </p>
+        {oemPreparation.billingPolicyRecord ? (
+          <div className="settings-stack">
+            {oemPreparation.billingPolicy ? (
+              <p className="notice notice--success">
+                {oemPreparation.billingPolicy.effectiveFrom?.toISOString().slice(0, 7)}
+                から正式登録課金 V2へ切り替える予約があります。
+              </p>
+            ) : (
+              <p className="notice">
+                cutover予約は取消済みです。正式登録課金V2へ切り替えず、旧MAU方式を継続します。
+              </p>
+            )}
+            {readiness.cutoverCorrectionAllowed ? (
+              <form className="form-stack" action={actions.correctOemCutover}>
+                <input type="hidden" name="workspaceId" value={workspaceId} />
+                <input
+                  type="hidden"
+                  name="expectedEffectiveFrom"
+                  value={oemPreparation.billingPolicy?.effectiveFrom?.toISOString() ?? ''}
+                />
+                <label className="field">
+                  <span className="field__label">訂正後の開始利用月</span>
+                  <input className="field__control" type="month" name="revisedMonth" />
+                  <span className="field__hint">
+                    予約中の場合、空欄のまま保存すると取消します。取消済みの場合は再予約する将来月を指定してください。
+                  </span>
+                </label>
+                <label className="field">
+                  <span className="field__label">訂正根拠</span>
+                  <textarea
+                    className="field__control"
+                    name="reason"
+                    minLength={10}
+                    maxLength={1000}
+                    required
+                  />
+                </label>
+                <label className="field field--checkbox">
+                  <input type="checkbox" name="historyReviewed" />
+                  <span>差替え・再予約時は全Service、契約期間、全参加者の履歴を再確認しました</span>
+                </label>
+                <label className="field field--checkbox">
+                  <input type="checkbox" name="confirmed" required />
+                  <span>
+                    元予約と訂正履歴を残します。開始済みまたは確定済み月に影響する訂正は保存できません
+                  </span>
+                </label>
+                <button className="button button--danger" type="submit">
+                  cutoverの訂正版を保存
+                </button>
+              </form>
+            ) : (
+              <p className="notice notice--danger">
+                このcutoverは開始済みです。管理画面からの取消・差替えはできません。
+              </p>
+            )}
+            <details>
+              <summary>cutoverの元予約・訂正履歴を表示</summary>
+              <ul className="summary-list">
+                <li>
+                  <span>
+                    初回予約{' '}
+                    {oemPreparation.billingPolicyRecord.effectiveFrom.toISOString().slice(0, 7)}
+                  </span>
+                  <strong>{oemPreparation.billingPolicyRecord.reason}</strong>
+                </li>
+                {oemPreparation.billingPolicyRecord.revisions.map((revision) => (
+                  <li key={revision.id}>
+                    <span>
+                      {revision.action === 'CANCELLED'
+                        ? '取消'
+                        : `${revision.effectiveFrom?.toISOString().slice(0, 7)}へ差替え`}{' '}
+                      / {dateTime(revision.createdAt)}
+                    </span>
+                    <strong>{revision.reason}</strong>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          </div>
         ) : readiness.readyToSchedule ? (
           <form className="form-stack" action={actions.scheduleOemCutover}>
             <input type="hidden" name="workspaceId" value={workspaceId} />

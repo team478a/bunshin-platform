@@ -101,6 +101,18 @@ const schema = z.discriminatedUnion('operation', [
       historyReviewed: z.literal(true),
     })
     .strict(),
+  z
+    .object({
+      ...common,
+      operation: z.literal('CORRECT_CUTOVER'),
+      expectedEffectiveFrom: date.nullable(),
+      revisedMonth: z
+        .string()
+        .regex(/^\d{4}-(0[1-9]|1[0-2])$/)
+        .nullable(),
+      historyReviewed: z.boolean(),
+    })
+    .strict(),
 ]);
 
 export async function oemBillingPolicyResponse(request: Request) {
@@ -200,13 +212,27 @@ export async function oemBillingPolicyResponse(request: Request) {
                         reason: value.reason,
                         confirmed: value.confirmed,
                       })
-                    : await service.scheduleCutover({
-                        workspaceId: value.workspaceId,
-                        actorUserId,
-                        reason: value.reason,
-                        effectiveFrom: new Date(`${value.month}-01T00:00:00.000Z`),
-                        historyReviewed: value.historyReviewed,
-                      });
+                    : value.operation === 'SCHEDULE_CUTOVER'
+                      ? await service.scheduleCutover({
+                          workspaceId: value.workspaceId,
+                          actorUserId,
+                          reason: value.reason,
+                          effectiveFrom: new Date(`${value.month}-01T00:00:00.000Z`),
+                          historyReviewed: value.historyReviewed,
+                        })
+                      : await service.correctCutover({
+                          workspaceId: value.workspaceId,
+                          expectedEffectiveFrom: value.expectedEffectiveFrom
+                            ? new Date(value.expectedEffectiveFrom)
+                            : null,
+                          revisedEffectiveFrom: value.revisedMonth
+                            ? new Date(`${value.revisedMonth}-01T00:00:00.000Z`)
+                            : null,
+                          actorUserId,
+                          reason: value.reason,
+                          historyReviewed: value.historyReviewed,
+                          confirmed: value.confirmed,
+                        });
     return Response.json(
       { data: result, requestId },
       { headers: { 'cache-control': 'private, no-store' } },
