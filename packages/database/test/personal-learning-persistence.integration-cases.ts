@@ -392,7 +392,7 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
           expect.objectContaining({
             id: f.request.id,
             candidateConfirmedAt: confirmed.confirmedAt,
-            lessonCandidate: expect.objectContaining({ id: candidate.id }),
+            lessonCandidate: candidate,
           }),
         ]),
       );
