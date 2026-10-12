@@ -759,13 +759,11 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
         actorUserId: f.actor.actorUserId,
       });
       if (exported.outcome !== 'FOUND') throw new Error('export required');
-      expect(exported.data.personalLearning).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            kind: 'PRACTICE_SUPPORT',
-            metadata: expect.objectContaining({ text: f.command.text }),
-          }),
-        ]),
+      const exportedSupport = exported.data.personalLearning
+        ?.filter((entry) => entry.kind === 'PRACTICE_SUPPORT')
+        .map((entry) => entry.metadata);
+      expect(exportedSupport).toEqual(
+        expect.arrayContaining([expect.objectContaining({ text: f.command.text })]),
       );
     });
     it('practice support: a different latest wish does not change the executing context or block its budget', async () => {
