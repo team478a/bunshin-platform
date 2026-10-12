@@ -4,11 +4,26 @@ import { PersonalLearningPilotCard } from '../../../apps/web/app/s/[serviceSlug]
 import { InternalPreparationCard } from '../../../apps/web/app/s/[serviceSlug]/manage/programs/personal-learning-preparation/internal-card';
 import { DefinitionReviewCard } from '../../../apps/web/app/s/[serviceSlug]/manage/programs/learning-definition-review/card';
 import { ServiceOverviewCard } from '../../../apps/web/app/s/[serviceSlug]/manage/improvement-overview/card';
+import { AiTrainingCard } from '../../../apps/web/app/s/[serviceSlug]/programs/[programEnrollmentId]/ai-training-card';
 import '../../../apps/web/app/styles.css';
 import { PersonalLearningRequestCard } from '../../../apps/web/app/s/[serviceSlug]/programs/[programEnrollmentId]/learning-request/card';
 
 createRoot(document.getElementById('root')!).render(
-  new URLSearchParams(window.location.search).has('learning-request') ? (
+  new URLSearchParams(window.location.search).has('training-setup') ? (
+    <AiTrainingCard
+      serviceSlug="synthetic"
+      initialState={{
+        enrollmentId: 'synthetic',
+        programName: '合成研修',
+        enrollmentStatus: 'ACTIVE',
+        startsAt: '2026-10-12T00:00:00Z',
+        endsAt: null,
+        profile: null,
+        goal: null,
+        action: null,
+      }}
+    />
+  ) : new URLSearchParams(window.location.search).has('learning-request') ? (
     <PersonalLearningRequestCard
       endpoint="/api/services/synthetic/learning-request"
       initial={
