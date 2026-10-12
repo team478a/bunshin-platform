@@ -33,7 +33,7 @@ export class PrismaPersonalLearningRequestRepository
   extends PrismaPersonalLearningPersistenceRepository
   implements PersonalLearningRequestRepository
 {
-  private async normalLearner(tx: Prisma.TransactionClient, input: PersonalLearningActor) {
+  protected async normalLearner(tx: Prisma.TransactionClient, input: PersonalLearningActor) {
     const s = input.scope;
     const member = await tx.groupMembership.findUnique({ where: { id: s.groupMembershipId } });
     const enrollment = await tx.programEnrollment.findUnique({
