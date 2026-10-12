@@ -4078,6 +4078,22 @@
 - shadowはRepeatable Readの既存計算だけを呼び、履歴不足を0人や旧MAUで補完しない。cutoverは全ServiceのOffering、契約期間、現在の参加者全員のopen登録履歴を表示上も満たした場合だけフォームを出し、既存Policyがあれば変更・取消入口を出さない。
 - schema、migration、課金計算、月次確定、請求、履歴訂正、本番設定を変更しない。本番の履歴登録、cutover、料金公開、請求確定、実課金はそれぞれ別の明示承認を待つ。
 
+## 2026-10-12: Feedback統合1-Bは固定週・範囲表示の管理者読取に限定する
+
+- 状態: Proposed（1-Aマージ・CI成功後、1-B実装の明示指示を受領。レビュー待ち）
+- 既存管理者認証とCapability/history probeを再利用し、SOCIAL/TRAININGの読取専用画面を接続する。期間は既存の完了済みJST週のみ、個人・任意期間・CSV・差分/率表示は提供しない。
+- 1-Aの少数/補集合抑制に加え件数は固定範囲へ丸め、欠測・原本環境/公開版不明は未判定を維持する。匿名公開を保証する契約ではなく、既存Service管理者に限定する。
+- 読取の開始/結果を既存構造化ログへscope内のHMAC参照で記録し、本人回答/評価結果/件数/秘密情報をログへ出さない。新DB・外部AI・自動修正・課金・実送信は追加しない。
+- 1-A + 1-Bのレビュー/CI/マージ後、production基点の限定releaseを最初の利用可能な反映単位にする。本PR内の自動Merge/Deployは行わない。
+
+## 2026-10-12: 本番Feedback統合1-Aは原本の限定読取と未判定表示に留める
+
+- 状態: Proposed（Phase 1-A実装の指示を受領。実装PRレビュー待ち）
+- 既存Improvement EngineとSOCIAL Feedback/支援/Photo Readerを再利用し、採否/実投稿と研修課題/回答の処理状態を同Service内の別cohortとして統合する。AI評価本文・個人のPASS/score・回答・原稿は取得しない。
+- 内部管理者認可を各Adapterで再確認し、Workspace/Service/User/Bunshinを照合する。集計は5人以上、正/補数の小集団も抑制し、不完全読取・時点復元不能を未判定にする。
+- 原本に環境/公開SHAがない場合はUNKNOWN/nullを維持する。Adapter間は別Snapshotであることを明示し、件数を母集団の発生率・因果効果・本人能力へ変換しない。
+- 新DB/外部AI/HTTP/UI/Job/自動修正/課金変更は追加しない。小さな機能単位の本番release方針を受領したが、main/productionの別系統、PRレビュー、CI、限定release確認は省略しない。
+
 ## 2026-10-12: ハッシー・マナベルの少数テストは招待ではなく通常登録を使う
 
 - 状態: Proposed（実装PRレビュー待ち。本番設定・実登録・実課金・Pilot開始は未承認）
