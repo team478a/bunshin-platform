@@ -4035,6 +4035,7 @@
 - 固定原価が予算自体を超える場合は使用済み0でも停止する。価格値や予算値をコードで補完せず、UNKNOWNをPASSへ変換しない。
 - schema、migration、Provider Adapter、価格、予算、本番設定は変更しない。Runtime解決と利用記録の間の同時実行競合は解消しないため、厳密な上限には原子的な送信前予約を別Gateで実装する。
 - production release、設定変更、Provider送信、実課金、Pilot STARTはそれぞれ別承認とする。
+
 ## 2026-10-11: OEM Offering移行履歴は既存期間台帳を正本にする
 
 - 状態: Proposed（実装PRレビュー待ち。本番反映・Offering移行は未承認）
