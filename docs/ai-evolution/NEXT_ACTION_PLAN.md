@@ -1,52 +1,78 @@
-# 次に実施する最小作業
+# 次に実施すべき開発・検証・運用準備
 
-## 優先順位: 開発より既存成果の利用確認
+## 方針
 
-| 優先度 / 項目                     | 開発・検証・運用の区別             | 再利用 / 受入条件                                                                                                               | 目安・依存                                                                       |
-| --------------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| P0-1 本番適合証拠の確定           | Read-only監査・運用準備            | 公開SHAは確定済み。DB全Migration/RLS/role、復旧合否、Pilot設定/承認/Seat/Provider限度を確認。UNKNOWNを残して開始しない          | 実環境権限があれば半日〜1日、復旧検証は別見積。アクセス/実行者の確定に依存       |
-| P0-2 既存縦フロー受入             | 人間承認後の限定実利用検証         | 少数ハッシー企業の3条件、マナベル内部1〜2人のGoal→Plan→実践→評価→次課題→First Success→復元。LINE照合/スマホ/旧V1/STOP・費用観測 | 1〜3日＋観測。実API費用/送信/Pilot開始は個別承認、既存Launch Runbook再利用       |
-| P0-3 発見された利用不能点のみ修正 | 小さなバグ修正PR                   | 認証/越境/重複/保存復元/評価待ち/課金の重大不具合があれば優先。原因を再現テストで固定                                           | 原因次第。未確認を既知のバグ扱いして先行実装しない                               |
-| P0 OEM課金V2 Release Gate         | 運用・別Release計画                | #1176のschema/復旧/正式登録/提供/契約履歴、shadow、将来cutover承認。内部Pilot開始の前提に無用に結合しない                       | 1〜3日以上、実履歴整合とDB権限依存。本監査は適用/課金しない                      |
-| P1 ハッシー個別化・継続支援       | 品質受入→不足時の小拡張            | 既存History/Goal/Quality/Barrierを利用。企業差・日差・不採用理由の適切な反映を固定データで比較、本人採用/投稿を区別             | 1〜2日の評価設計から。全Memory新設や既存処理統合は不要                           |
-| P1 マナベル再実践R3/R4            | 人間レビュー後の最小開発           | #1195〜#1199を再利用し、Approved題材Reader→本人明示の既存Assignment Bridge→本人UI、履歴比較UNKNOWNを適切に表示                  | 3〜6開発日を仮目安、レビュー/DB競合試験別。#1200と題材人間レビュー/Privacyに依存 |
-| P1 初回操作・課題適合             | 実受講者フィードバック後の小UI改善 | 既存Profile/相談・Plan/Reason Mappingを再利用。大量質問を追加しない。Teachingの自由生成はまだ不要                               | 1〜3日、実離脱/つまずき証拠が前提                                                |
-| P1 LINE学習通知（提供条件次第）   | 明示要求時のみ別設計/PR            | 会員LINE照合・LIFFは再利用、Personal Learning通知は別。旧V1通知をそのまま流さない。重複/対象取消/時間/停止を保証                | 未見積。Web限定Wave 0では後回し可、LINE通知込み提供では必須                      |
-| P2 原価照合の読取接続             | 小さなReader/運用レポート候補      | EVO04 exact usageKey、原価不明/CONFLICT、取得範囲・OEM帰属限界を表示。料金請求は変えない                                        | 2〜4日仮目安。実usageの欠落状況を先に確認                                        |
-| P2 候補モデル少量比較             | 別承認の検証                       | EVO01固定条件＋EVO02/03、合成入力/予算上限、実費用・品質の人間レビュー。公開仕様を確認してから                                  | 1〜2日＋review/費用。新Model採用とは別承認                                       |
-| P2 改善候補/Dots/Codex            | 運用設計候補                       | 本文なし構造化report、人間承認→小PR→CI→人間確認。Dots公開仕様/API未確認を利用可能と仮定しない                                   | 後回し。自動merge/deployなし                                                     |
-| P3 将来AI機能/OEM拡張             | 今回不要                           | 画像/音声/検索/高度自動化・新Package・巨大Gateway/Marketplaceを先行しない                                                       | 未見積                                                                           |
+新機能を増やす前に、既存成果を安全に利用できる証拠を揃える。未検証をバグと決めつけず、実受入で再現した利用不能点だけを小さく修正する。mainとproductionは別release系統のため、main全体を本番へ反映しない。
 
-工数はコード調査からの概算であり見積確約でない。全EVO・再現性・通知・新課題を完成させてから利用検証、という順序にはしない。まず既存3Definitionと既存ハッシーで利用価値・障害を測る。
+## 優先順位
 
-## 受入記録の最小形式
+| 優先度 | 作業                        | 種別            | 完了条件                                                                                                                |
+| ------ | --------------------------- | --------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| P0-1   | 本番安全条件の読取監査      | 運用準備        | 採用SHA、全Migration、schema、RLS/role、Backup/復旧、設定、価格/予算、停止担当を証拠化。UNKNOWNを残した対象は開始しない |
+| P0-2   | マナベル開始前準備          | 運用準備        | 3Definitionを本番APPROVE→再GET/監査、対象Program停止、内部1〜2人Seat/Profile、Provider/Admission、STOP/drainを確認      |
+| P0-3   | 少数の実縦フロー受入        | 検証            | ハッシー数社とマナベル内部1〜2人が実認証・スマホで完走し、越境なし、保存復元、誤合格なし、費用、停止を確認              |
+| P0-4   | 発見した重大問題の修正      | 開発            | 認証、tenant分離、重複、データ損失、誤合格、予算超過、停止不能だけを再現テスト付き小PRで解消                            |
+| P0-5   | OEM限定release設計          | 運用/検証       | #1176以降を一括せず、Migration lineage、初期履歴、shadow、cutover、旧請求非回帰を対象別にレビュー                       |
+| P1-1   | ハッシー個別化品質受入      | 検証→必要時開発 | 企業、日付、不採用理由を1項目ずつ変え、実AI出力が意味のある差を示す。ランダム差では合格しない                           |
+| P1-2   | マナベル再実践R3/R4         | 開発            | Approved題材Reader→本人明示のAssignment Bridge→本人UI→履歴比較。UNKNOWN/Privacy/版固定を維持                            |
+| P1-3   | 初回UX・つまずき改善        | 検証→必要時開発 | 実利用者の離脱点に基づき、既存Profile/相談/Plan/Barrierを再利用して最小修正                                             |
+| P1-4   | LINE学習通知                | 条件付き開発    | LINE通知を商品要件に含める場合のみ。対象、取消、重複、時間、停止、実配送を保証                                          |
+| P2-1   | AI原価・請求照合            | 開発/運用       | Provider請求証拠と内部usageを照合し、UNKNOWN/OPEN/CONFLICT、OEM帰属限界を管理表示。人数請求と混ぜない                   |
+| P2-2   | 候補モデル比較              | 検証            | 別承認の少量実API比較。品質、latency、token、費用、人間評価、切戻しを保存                                               |
+| P2-3   | 100社容量試験               | 検証            | queue、同時数、DB、rate limit、retry、所要時間、30日原価、停止/復旧を隔離条件で測定                                     |
+| P3     | 画像/音声/外部AI/高度自動化 | 将来            | 現在の実利用移行には不要。MVPのP0/P1を妨げない                                                                          |
 
-各検証に対象SHA/設定版/合成ケースIDまたは匿名参加ID、利用範囲、手順、期待結果、観測結果、PASS/FAIL/UNKNOWN、日時/実行者、停止/復旧方法、費用、未検証を記録。顧客名・相談/回答/成果物本文・Secretは共有監査文書へ入れない。
+## 最優先3項目
 
-ハッシーは同じ合成企業条件から企業情報・日・拒否理由を一つずつ変えて比較。言い換え・random差だけで合格にしない。実投稿は本人操作し、採用と実施記録を別確認する。
+1. **本番安全条件を読取で確定する。**
+2. **別承認後に少数の実利用者で両サービスを完走する。**
+3. **実際に再現した利用不能点だけを修正する。**
 
-マナベルは「何を学べばよいか不明」「CONTENT_REQUEST」「CONSULTING」「Definition Gap」「REVIEW/RETRY」「評価なし」「再ログイン/復元」を含める。再現機能は未承認Draft・旧履歴・片側削除・版不一致のUNKNOWNを維持する。
+OEM新課金のreleaseは上記と並行計画できるが、マナベル内部Pilot開始やハッシー少数受入へ不要に結合しない。実課金は独立承認とする。
 
-## 今回の再現コマンド（本番操作なし）
+## 受入シナリオ
 
-Node24 / pnpm10、基準mainで次を実行した。各 `vitest run` はAPI/DBをfake/mockで置換する。EVO01は出力先を指定せず実行し、新しいreportファイルを書かない。
+### ハッシー
+
+1. 同じ合成/許諾企業を基準に、企業情報だけを変える。
+2. 同一企業で日付と直近28日履歴だけを変える。
+3. 同一条件で具体的な不採用理由を追加する前後を比較する。
+4. 主題、根拠、CTA、重複、創作、他社混入を人間評価する。
+5. 採用と本人投稿を別操作し、投稿結果が次回へ反映されることを確認する。
+6. LINE/スマホ、停止、Provider失敗、再試行、費用を記録する。
+
+### マナベルスタイル
+
+1. 「何を学ぶべきか不明」、CONTENT_REQUEST、CONSULTINGを含む相談を確認する。
+2. Goal/Planの確認、3Definitionの順序と版固定、架空・非機密題材を確認する。
+3. 不足回答、評価待ち、REVIEW/RETRY/BLOCKED/UNKNOWNを誤ってPASSにしない。
+4. 本人が操作し、AIが完成品を代行しないことを観察する。
+5. ログアウト/再ログイン、評価完了、次課題、First Success、STOPを確認する。
+6. 再現性は未接続と表示し、課題合格だけで能力習得を保証しない。
+
+## 証拠の最小形式
+
+対象SHA、環境、設定版、匿名case/participant ID、期待、観測、PASS/FAIL/UNKNOWN、日時、実行者、費用、停止/復旧、未検証を記録する。秘密、顧客名、相談・回答・成果物本文は共有監査文書へ保存しない。
+
+## 今回の再現コマンド
 
 ```powershell
-pnpm --filter web exec vitest run test/ai-evolution-baseline.test.ts test/ai-evolution-report.test.ts test/hassy-sns-goal-propagation-characterization.test.ts test/hassy-goal-differential-rubric.test.ts test/openai-weekly-planner.test.ts test/openai-task-compatibility.test.ts test/mission-provider-response.test.ts test/personal-learning-pilot-http.test.ts test/personal-learning-pilot-ui.test.tsx test/personal-learning-call-admission.test.ts test/personal-learning-ai-call-worker.test.ts test/personal-learning-ai-call-provider.test.ts test/personal-learning-line-isolation.test.ts test/personal-learning-pilot-operations.test.ts
+pnpm test:ai-baseline
 pnpm --filter @bunshin/capability-social test
 pnpm --filter @bunshin/capability-training test
-pnpm --filter @bunshin/application exec vitest run test/ai-cost-reconciliation.test.ts test/oem-registration-billing.test.ts test/personal-learning-persistence.test.ts test/personal-learning-plan.test.ts test/personal-learning-call-admission.test.ts test/personal-learning-pilot-operations.test.ts
-pnpm --filter web exec vitest run test/daily-mission-learning-history.test.ts test/social-activity-barrier-scheduler.test.ts test/social-activity-barrier-line-scheduler.test.ts test/oem-billing-policy.test.ts test/commercial-billing-export.test.ts test/personal-learning-pilot-profile.test.ts test/personal-learning-profile-preparation-ui.test.tsx test/personal-learning-ai-call-observability.test.ts
-pnpm --filter @bunshin/database exec vitest run test/reproduction-history.test.ts test/reproduction-challenge-review-admin.test.ts test/personal-learning-internal-owner.test.ts test/personal-learning-pilot-profile.test.ts test/personal-learning-ai-call.test.ts test/social-activity-barrier-repository.test.ts test/commercial-billing.test.ts
-pnpm --filter web exec vitest run test/openai-training-answer-evaluator.test.ts test/daily-mission-generation-error.test.ts test/daily-mission-generation-environment-boundary.test.ts test/service-member-line-status.test.ts test/service-member-line-diagnostics-boundary.test.ts test/ai-training-action-line-boundary.test.ts
+pnpm --filter web exec vitest run <Hassy・学習・承認・費用の選択テスト>
+pnpm --filter @bunshin/application exec vitest run <原価・OEM・Admissionの選択テスト>
+pnpm db:generate
+pnpm --filter @bunshin/database exec vitest run <再現性・OEM schema・Admissionの選択テスト>
+pnpm test:learning-ui
 ```
 
-結果は[統合監査](INTEGRATED_READINESS_AUDIT.md)。ブラウザー/実スマホE2E、実DB integration、実API品質/負荷、実送信は今回未実行。文書のみのため全体build/typecheck/lintを新たに実行せず、関連main/PR CI結果と文書format・architecture・diffを区別して記録する。buildやmigration runnerを本番確認の代わりに実行しない。
+選択テスト1,041件、390×844の合成E2E 13件が成功。実API、実DB integration、負荷、実送信、実課金は未実施。
 
-## 実利用へ移行する最小ゴール
+## 実利用へ移行できる境界
 
-1. 対象範囲のP0証拠を確定し、開始責任者が承認する。
-2. 既存フローを少数で実完走し、誤PASS/越境/データ損失/課金異常/旧V1影響がないこと、復元・停止・費用観測を確認する。
-3. 利用不能点だけ修正して再受入。ハッシー3条件、マナベル本人実践が成立した対象へ段階拡大する。
+- ハッシー: P0安全条件と少数縦フローがPASSすれば限定利用へ移行。100社は容量・原価試験後。
+- マナベル: 本番APPROVE、内部参加者/費用/停止Gateと実端末完走がPASSすれば内部Wave 0へ移行。一般提供・再現性保証はR3/R4と追加受入後。
+- OEM: migration/初期履歴/shadow/cutover/旧請求非回帰を証拠化し、対象を限定したrelease後。請求・決済は別承認。
 
-100社負荷や再現性保証を約束する場合だけ、対応する追加受入/開発を前提にする。今回の監査終了後は新実装・本番操作に進まず人間レビューを待つ。
+監査PR提出後は次の指示を待つ。自動merge、Deploy、本番操作へ進まない。

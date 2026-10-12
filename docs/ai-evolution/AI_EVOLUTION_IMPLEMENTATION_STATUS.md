@@ -1,36 +1,41 @@
-# AI進化対応 EVO-01〜05 実装・未完了状況
+# AI進化対応 EVO-01〜05 実装状況
 
-基準main/本番・PR/CI・検証範囲は[統合監査](INTEGRATED_READINESS_AUDIT.md)。#1189〜#1199はMERGEDかつverify/database SUCCESSだが、現在productionには未配備。コードの完成と本番の効果を分ける。
+基準mainは `31ea1d20…`、productionは `e5812090…`。#1189〜#1199はMERGEDかつverify/database SUCCESS。実API比較は今回実行していない。
 
-## 完成した範囲と残る範囲
+## 完成・未完成
 
-| EVO / PR                                                                                                                                        | 完成した範囲・再利用                                                                                                                                                                                                                                           | 未完了 / 実用上の限界                                                                                                                                                                              | 判定                                                         |
-| ----------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
-| [01 #1189](https://github.com/team478a/bunshin-platform/pull/1189) 品質比較                                                                     | `apps/web/test/ai-evolution/{dataset,evaluator,report}.ts`、Daily7/Weekly7/Assessment10の24合成ケース。実Adapter/Validator/Rubricをfake fetchで呼ぶ。Commit/sourceDigest/モデルlabel/Prompt/Rule/Dataset/日時/失敗/未測定/人間レビュー、追加保存・条件一致比較 | 実API比較runner・実品質/費用/時間・人間の候補採用は未実施。異なる版/digest/caseはINCOMPARABLE。外部呼出し0、releaseVerdict UNKNOWN固定                                                             | オフライン基盤は実装済み・合成確認済み。本番品質保証ではない |
-| [02 #1190](https://github.com/team478a/bunshin-platform/pull/1190) 通信安全                                                                     | Weekly/Strategyが`mission-provider-response.ts`を再利用。55秒Abort、safe HTTP/error code、invalid JSON/未完出力拒否、失敗usage。既存Jobのretry/backoff/冪等                                                                                                    | 全Adapter共通Gatewayでない。Adapter単体は1fetch、再試行は既存Job責務。送信済みProvider処理/課金の取消保証なし。Retry-After/jitter未実装。実障害は未検証                                            | 対象2経路は実装済み・合成確認済み                            |
-| [03 #1191](https://github.com/team478a/bunshin-platform/pull/1191) モデル互換                                                                   | `openai-task-compatibility.ts` の `OPENAI_TASK_COMPATIBILITY_V1`、SOCIAL_PLANNER(Daily/Weekly) / TRAINING_ASSESSMENT。Responses/text/strict JSON/store:false、schema/option限定。未知model/optionはCONFIGURATION_ERROR                                         | gpt-5.2 / 2025-12-11、gpt-5-mini / 2025-08-07のexact allowlist。これは品質/予算/アクセス承認でない。Strategy/Content/vision/他taskまで制御しない。独立task別Model Routerなし                       | 限定互換Gateは実装済み・合成確認済み                         |
-| [04 #1192](https://github.com/team478a/bunshin-platform/pull/1192) 原価照合                                                                     | Application `reconcileAiCosts` / `AI_COST_RECONCILIATION_V1`。AiUsageEventとPERSONAL_LEARNING_AI_CALLをexact usageKey/scopeで照合、同attempt二重計上防止、価格snapshot整数計算、欠損UNKNOWN/矛盾CONFLICT、known subtotal分離                                   | 純粋契約で実Reader/管理画面/定期集計未接続。2台帳best-effort保存で両方欠落は検知不能。group/service/OEM直接帰属不足。actualCallCoverage UNKNOWN / RECORDED_ATTEMPTS_ONLY / billingUse NOT_APPROVED | 契約は実装済み・合成確認済み。費用運用は一部実装             |
-| [05-A #1193](https://github.com/team478a/bunshin-platform/pull/1193) 本人再現                                                                   | `compareLearningReproduction` がsame scope/Goal/Plan/Definition版・別Assignment/Answer・時刻・検証済み評価/完了を要求、支援量比較                                                                                                                              | external Tool実操作/成果品質/Capability Level/応用はUNKNOWN。新規再実践課題提示・本人UIなし                                                                                                        | 比較契約は実装済み、Runtime機能は未完成                      |
-| [05-B #1194](https://github.com/team478a/bunshin-platform/pull/1194)〜[R2 #1197](https://github.com/team478a/bunshin-platform/pull/1197)        | 設計、[R0 #1195](https://github.com/team478a/bunshin-platform/pull/1195)本人Privacy、[R1 #1196](https://github.com/team478a/bunshin-platform/pull/1196)Draft参照、R2 `PrismaLearningReproductionHistoryRepository`本人履歴投影                                 | 旧履歴に題材参照なし→UNKNOWN正常。Draftを勝手にApprovedへ昇格しない。本人用実比較API/UIなし                                                                                                        | 部分実装                                                     |
-| [レビュー #1198](https://github.com/team478a/bunshin-platform/pull/1198) / [監査 #1199](https://github.com/team478a/bunshin-platform/pull/1199) | strict review assertion、`PrismaReproductionChallengeReviewAdminRepository`、停止時のみ・権限・lock/CAS・版/digest・immutable audit                                                                                                                            | 実承認未実施、管理session HTTPは#1200未マージ、Approved reader/再実践Bridge/R4UI未接続。NOT_GRANTEDは学習許可でない                                                                                | 管理契約/保存まで部分実装                                    |
+| EVO                          | 完成した範囲                                                                                                                             | 未完成・制限                                                                                                  | production                                          |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| EVO-01 品質比較 (#1189)      | Daily 7 / Weekly 7 / Assessment 10の24固定ケース、validator/rubric、版・digest・model label・失敗/未測定・人間レビューを持つ比較レポート | 実API runner、実品質/時間/原価比較、候補採用判断は未実施。fixtureのFAILは不良例の検知で、モデル不良率ではない | 未配備                                              |
+| EVO-02 通信安全 (#1190)      | Weekly/Strategyでtimeout、Abort、安全なHTTP分類、invalid JSON/未完出力拒否、失敗usage。Job側retry/backoff/冪等                           | 全Provider共通Gatewayではない。Retry-After/jitter、送信済みcallの取消、実障害試験は未完                       | 対象EVO差分は未配備                                 |
+| EVO-03 互換性 (#1191)        | SOCIAL_PLANNER / TRAINING_ASSESSMENTのモデル・API形式・strict JSON・option allowlist。未知モデル/optionを拒否                            | Strategy/Content/vision等の全taskを覆わない。品質・価格・利用権の承認ではない。独立Model Routerではない       | 未配備                                              |
+| EVO-04 原価 (#1192)          | exact usageKey/scopeで2台帳を照合、attempt重複防止、価格snapshot整数計算、UNKNOWN/CONFLICTを分離                                         | 当初は純粋契約のみ。Provider請求書、税/為替、両台帳欠落、OEM別完全配賦は未解決                                | 原価可視化とPersonal Learning Hard Stopのみ限定配備 |
+| EVO-05 再現性 (#1193〜#1199) | 比較契約、Privacy、版付き題材、本人履歴projection、review assertion/CAS/audit/revoke                                                     | #1200管理HTTPはOPEN。Approved題材Reader、再実践Assignment Bridge、本人UI、実比較、転用評価は未接続            | 再現性機能は未配備                                  |
 
-EVO01の保存済みbaselineにある観測10 PASS / 13 FAIL / 1 UNKNOWNは、意図的な悪いfixtureも含む結果。期待した違反検出が成功した記録であり、実モデルのエラー率ではない。今回baseline/reportテストも成功。
+## #1199以降に進んだ原価安全性
 
-## 共通基盤の完成と非目標
+mainでは#1220〜#1229により、原価UNKNOWN時の停止、次回呼出しの保守的予算判定、production OpenAIを管理設定へ限定、非課金接続確認、Trend/Weekly/Social Insight/商品提案、さらに主要OpenAI送信経路の原子的費用予約が追加された。
 
-Provider Adapter / Application Port、認可・Tenant分離、AI usage、Program Runtime、Job/既存quota、Pilot Admissionを再利用する。新しいGateway/Registryを全面実装したわけではない。各Adapterのfetch/default model/usage抽出には重複が残るが、監査で統合・削除しない。
+各外部callを個別予約し、usage保存後に精算する。保存/精算失敗時はOPENを残し、根拠なしに再送・解放しない。Personal Learningは専用日次Hard StopとProvider全体Admissionの別Gateを通す。
 
-managed Provider設定が存在する場合を優先し、停止/不正設定をlegacy envへfallbackして迂回しない。設定未作成時のみ従来fallback＋対象task互換チェック。Service/OEM/taskごとに自由にmodelを変えられる完成機能とは表示しない。
+ただしこの共通Admissionはproduction未配備で、本番価格・予算・active設定・既存UNKNOWN/OPEN予約も未確認。Creatomate、FAL、Runwayは既存の動画費用Policyのまま。Provider請求額との照合は未実装である。
 
-AiUsageEventはAI呼出し原価、ServiceUsageEvent/RegistrationはOEM請求人数。異なる単位を統合・二重加算しない。価格不明/cached内訳不足を0円にしない。EVO04の未接続を「すでに二重請求が発生」と断定しない。
+## 新モデル採用手順
 
-## 新モデルを採用する最小手順
+1. 対象taskと利用者範囲を固定し、モデルID、API形式、schema/option、timeout、出力上限、価格版、アクセス条件を確認する。
+2. 現行commit、Prompt/Rule/Dataset/sourceDigestを固定し、EVO-01で現行と候補を同条件比較する。比較不能、必須違反、UNKNOWNは採用保留。
+3. EVO-02/03のtimeout、エラー分類、schema、option、未知モデル拒否をfakeで確認し、対象外taskへの波及を列挙する。
+4. 人間が予算・データ取扱い・評価基準を承認した後だけ、合成入力の少量実API比較を別作業で実行する。token、latency、error、原価、人間品質評価を保存する。
+5. 価格・予算・Admission、監視、停止条件、旧モデルへの切戻し設定を固定し、限定releaseを別承認する。
+6. 欠損、創作、誤PASS、越境、費用異常があれば停止・切戻しする。旧比較記録を上書きしない。
 
-1. taskと利用範囲を固定。モデルID、API形式、schema/option/出力上限/timeout、価格版、Providerアクセス条件を確認。allowlistへの追加は別レビュー。
-2. 現行Commit/Prompt/Rule/Dataset/sourceDigestを固定し、EVO01を実行。必須違反/UNKNOWN/比較不能は採用保留。
-3. 候補の通信・schema・互換性をfakeで検証。対象外taskへのglobal設定変更の波及を列挙。
-4. 人間が予算・データ取扱い・候補比較を承認してから、合成入力のみの少量実API比較を別作業で実施。現行/候補の同条件、token/latency/error/原価、未測定・人間レビューを追加保存する。今回は実行しない。
-5. 実品質・安全・費用の採用基準を満たした後、切戻し対象設定/コードを固定、配備とMigration Gateを分離して承認。限定対象で監視する。
-6. 欠損/創作/誤PASS/越境/費用異常なら停止・切戻し。旧結果を上書きせず比較条件を保存する。
+今回は手順4以降を実施していない。新モデル採用、配備、自動切替、自動PR/merge/deployは完成範囲に含めない。
 
-現状はこの判断の土台ができた段階。Dots/Codexへのログ受渡しや自動改善・自動PR/merge/deployは今回の完成範囲に含めない。本文を外部へ渡さず、人間承認した匿名構造化の改善候補を将来検討する。
+## 検証
+
+- EVO-01 baseline/report: 2 files / 35 tests PASS、外部API呼出し0。
+- Application原価/OEM/Admission selected: 3 files / 63 tests PASS。
+- Web費用Admission/OEM selected: 7 files / 37 tests PASS。
+- PR #1189〜#1199、#1220〜#1229のverify/databaseは各SUCCESS。
+
+これらは契約回帰の証拠であり、実モデルの品質、実請求額、本番設定、本番障害時の復旧をPASSにしない。

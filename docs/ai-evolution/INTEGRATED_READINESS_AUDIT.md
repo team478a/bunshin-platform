@@ -1,77 +1,82 @@
 # 実運用準備・AI進化対応 統合監査
 
-2026-10-09のマージ後追跡: [本番安全条件の読取証拠](PRODUCTION_SAFETY_READ_ONLY_EVIDENCE.md)。Personal Learningの対象4Migration/版一致、RLS、Program停止・Seat0・cap未設定・Approval0を実DBで確認。#1176の2MigrationはPENDINGへ更新。以下は#1201時点の監査記録として維持する。
+監査日: 2026-10-12 JST。対象は `team478a/bunshin-platform` のハッシー、マナベルスタイル、ワタシワークス共通AI基盤、OEM運営・課金。旧 `ai-sns-agent` / `InstagramOEM` は対象外。本監査は文書・読取・ローカル合成検証のみで、アプリ、DB、Migration、本番設定、課金、送信、Pilot、モデル、Deployを変更していない。
 
-## 結論と監査境界
+## 経営判断
 
-監査日: 2026-10-09 JST。対象は `team478a/bunshin-platform` のハッシー、マナベルスタイル、共通AI基盤、OEM。旧 `ai-sns-agent` / `InstagramOEM` は対象外。
+| 対象                   | 現在判定                         | 結論                                                                                                                                             |
+| ---------------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| ハッシー100社モニター  | **NO-GO**                        | 実装された縦フローはあるが、実AIでの個別化3条件、100社負荷・原価上限、実LINE/スマホ完走が未検証。productionにはmainの共有AI費用Admissionも未反映 |
+| ハッシー少数検証       | **CONDITIONAL GO**               | 企業数・予算・担当・停止条件を限定し、本人投稿方式で実受入する場合のみ。これは100社開始許可ではない                                              |
+| マナベルスタイル実受講 | **NO-GO（現在）**                | 本番に限定UI・費用Hard Stopは反映済みだが、本番APPROVE、参加者/Seat、設定、実認証、実Provider完走、停止試験が未実施                              |
+| マナベル内部1〜2人     | **CONDITIONAL GO（条件充足後）** | 3件の教育方針は人間承認済み。別承認で本番登録と全Gateを実証した後に限りWave 0へ移行可能                                                          |
+| EVO-01〜05             | **部分完成**                     | 比較・通信・互換・費用・再現性の安全な土台はmainにある。実API比較、全経路統一、請求照合、再実践Runtime/UI、本番配備は未完                        |
+| OEM新課金              | **NO-GO（本番）**                | mainはワタシワークス全商品向けへ一般化済み。本番は#1176以降のOEM V2コード/Migrationを含まず、履歴・cutover・実請求も未実施                       |
 
-- 基準main: `9e0db97a51b15cacd8e2c95f328cfabeff3d32ee`（#1199）。専用branch: `codex/integrated-operation-readiness-audit`。
-- 公開URL `https://www.watashi-works.com` の実Deployment: `dpl_EtS1L7qyt1vPgDKpXXayrzifn4Se`、Vercel `bunshin-platform-web`、production / READY、SHA `d86115c7e1952c47fd56af77a4f44fd87933b48a`、branch `production`。作成日時 `2026-10-09T00:20:18.305Z`。
-- `vercel inspect` で公開aliasを特定し、認証済みGET `/v13/deployments/{id}` の `gitSource.sha` / `meta.githubCommitSha` 一致を確認。GitHub deploymentの環境名だけを本番反映証拠にはしない。
-- main / productionは **DIVERGED**。選択リリースのため、祖先判定だけで未配備としない。tree差分と各経路を確認する。
-- 本番GET `/api/health/live`: `ok`、`/api/health/ready`: `ready` / production / configuration・authentication・database `ok` / databaseSchema `current`。これは稼働版が要求する最新Migrationの存在チェックであり、mainの全Migration・RLS・実認証完走・学習可能性の証明ではない。
+GOはテスト数やPR数では決めない。現在値を取得していない安全条件は `UNKNOWN` のままとし、PASSへ補完しない。
 
-今回変更するのは監査文書のみ。顧客データ、環境変数値、Secret、相談・回答・成果物本文は取得しない。本番DB接続、Migration、Deploy、設定変更、送信、実課金、モデル比較API、Pilot操作、ユーザー登録を実行しない。
+## 監査基準と本番同定
 
-## 実運用判定
+| 項目           | 確認結果                                                                                                                      |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| 最新main       | `31ea1d20a35052f18f272396487350c2be88b618`（#1249）                                                                           |
+| 最新production | `e5812090b6779a99c09b3ae9069df5dcc43e1798`（#1219）                                                                           |
+| 分岐           | merge-base `6400027cd0e041d1fe732b178aeb502546df5aff`、production固有68 / main固有100 commit。mainとproductionは別release系統 |
+| tree差分       | production→mainで286 files、+26,508 / -2,212。規模は完成率を表さない                                                          |
+| 公開Deployment | Vercel `dpl_ECXmvYF4CgU2nFy1g1unU8u16pDR`、target production / Ready、Git SHA `e5812090…`、公開alias `www.watashi-works.com`  |
+| 稼働確認       | `/api/health/live` は `ok`、`/api/health/ready` は production / configuration・authentication・database・databaseSchemaが正常 |
 
-| 対象 / 提供範囲                  | 判定           | 利用可能な実装                                                         | 利用開始条件 / 制限                                                                                                         |
-| -------------------------------- | -------------- | ---------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| ハッシー100社一括モニター        | NO-GO          | 企業情報→Daily/Weekly→採否→本人投稿記録→次回入力、停滞支援             | 100社の処理能力・原価、実生成の3条件、LINE/mobile・実認証の受入証拠がない。確定不具合を意味する判定ではなく、開始条件未充足 |
-| ハッシー少数・限定検証           | CONDITIONAL GO | 上記既存フローを再利用可能                                             | 対象と予算・監視・停止担当を限定し、実フローを別承認で検証。自動SNS投稿代行ではない                                         |
-| マナベルスタイル限定Wave 0       | CONDITIONAL GO | 既存3Definitionの相談→Goal/Plan→課題→回答→評価→Router、Guided Practice | 実設定・承認・Seat・原価制御・復旧証拠の確認後のみ。現時点で開始承認ではない                                                |
-| 全テーマ・再現性保証付き研修     | NO-GO          | 再現性比較の純粋契約、版付き参照、読取・レビュー監査                   | 再実践Assignment Bridge・本人UI・実比較は未接続。画像/動画/自動化等の未対応テーマはGapのまま                                |
-| EVO-01〜04を使った本番モデル変更 | NO-GO          | オフライン比較、限定通信/互換性、安全な原価照合契約                    | 実API品質/原価比較、候補承認、配備、切戻し確認は未実施。新モデルに切り替えない                                              |
-| #1176登録課金V2の本番利用        | NO-GO          | mainに履歴・人数計算・動的料金UI                                       | 本番コード未配備。DB履歴・RLS・復旧・初期履歴・将来cutoverの承認が必要                                                      |
+healthは公開版の起動・接続・要求schemaを確認するだけで、mainの全Migration、RLS実role、業務フロー、実課金、実LINE、復旧を証明しない。main全体をproductionへ反映してはならず、対象commitとMigrationを限定したreleaseが必要。
 
-GOにはコード・合成テストだけでなく、利用範囲に対応した実環境証拠が必要。UNKNOWNをPASSで補わない。
+## PR・CI
 
-## 調査・仕様照合
+- #1188はOPEN、verify/database SUCCESS。監査案でありmainの完成機能として数えない。
+- #1189〜#1199はMERGED、各verify/database SUCCESS。EVO-01〜05の段階実装。
+- #1200（再現題材レビュー操作API）はOPEN、CI成功。main/runtimeへ未採用。
+- #1208〜#1211で学習焦点表示・教育方針記録・承認UIを実装。#1210、#1212でproduction基点へ限定release。
+- #1213〜#1219で原価可視化、Personal Learning費用Hard Stop、対象Migration runnerをproductionへ限定release。
+- #1220〜#1229の共通AI費用Admission、#1231〜#1249のOEM共通商品・初期費用・返金照合・証拠UI・履歴訂正はmainのみ。
+- #1249 PRのverify/databaseはSUCCESS。最新main push CI run `38193670937` もverify/databaseともSUCCESS（format、typecheck、lint、test、学習E2E、build、DB integrationを含む）。
 
-AGENTS、`docs/BUNSHIN_PLATFORM_CODEX_SPEC_V1.md`、Architecture Principles / Decision Log、既存サービス・Personal Learning・OEM報告、#1188の6監査文書、EVO-01〜05の実装報告と現行コードを参照。既存のWorkspace/User/Bunshin/Service分離、Learning First、Program Runtime、Provider Adapter、MVP Firstを維持する。
+## 実装と実利用の差
 
-| 項目         | 最新コードを優先した差分                                                                                                                                   |
-| ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| #1188        | OPEN / verify・database SUCCESS。監査head `41daf16848308051baa548384855b8594eb2b8b2` を読取ref `origin/audit-1188` で確認。6文書はmain反映済みとは扱わない |
-| #1189〜#1192 | MERGED / 各verify・database SUCCESS。#1188時点の通信・互換性・原価のGapは部分的に解消。全Gatewayや本番モデル比較の完成ではない                             |
-| #1193〜#1199 | MERGED / 各verify・database SUCCESS。契約→Privacy→Draft参照→履歴投影→レビュー記録まで。課題提示・本人UIの完成と区別                                        |
-| #1200        | OPEN / verify・database SUCCESS（今回確認時）。管理HTTP接続候補だが基準mainの実装・成果には含めない                                                        |
-| #1176        | MERGED / verify・database SUCCESS。production treeにはV2実装がない。Migrationが未適用かはDBを確認していないためUNKNOWN                                     |
+### ハッシー
 
-PR/CIはGitHub CLIの `state` / `mergeCommit` / `statusCheckRollup` を確認。main CI run `37898282390` はSUCCESS。各PRのリンクと詳細は[AI実装状況](AI_EVOLUTION_IMPLEMENTATION_STATUS.md)、[OEM・本番差分](OEM_PRODUCTION_GAP.md)を参照。
+企業/Service登録、Business Profile、Strategy/Pillar、Weekly/Daily、採否、本人投稿記録、成果、履歴要約、次回生成、停滞支援は接続済み。`service-generation-knowledge-loader.ts` が採否理由と投稿結果を読み、`daily-mission-generation.ts` が企業情報、日付、直近テーマ/形式、`behaviorSummary` / `feedbackSummary` / `performanceSummary` をPlannerとContentへ渡す。採用と投稿実施は別の台帳・操作である。
 
-## 本番で確認できたこと / 未確認
+ただし14日シミュレーションは固定fixtureで、実モデルが「企業ごと」「日ごと」「履歴に基づく」有用な違いを出す証拠ではない。productionにはDaily原価テレメトリはあるが、#1220〜#1229の送信前費用予約・UNKNOWN時停止を含む共通Admissionはない。100社の同時数、待ち時間、DB接続、Provider rate limit、総原価、停止・復旧は未測定。
 
-| 分類               | 証拠と限界                                                                                                                                                                                      |
-| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 今回の実環境読取   | 公開alias、Deployment SHA / READY、health GET。DB・Provider業務処理や認証ユーザー操作は実行しない                                                                                               |
-| コード上の本番配備 | production treeに既存Daily/Weekly、Pilot API/UI、Goal/Plan/Router、Gate、Hard Cap、Admission、Profile/内部準備、LINE会員導線が存在。主要Pilotファイルはmainとのtree差分なし。利用設定の成立は別 |
-| 未配備             | EVO-01〜05、#1176料金/登録課金V2、mainのMigration runner変更。全mainの一括配備を推奨しない                                                                                                      |
-| UNKNOWN            | 現在のDB接続先とrole、全Migration/失敗履歴/catalog/RLS、現在Backup/復元整合、Pilot ON/OFF、Seat/承認件数、Provider設定値・限度、実原価・負荷、実LINE/スマホ完走                                 |
-| 過去証拠           | 過去監査のSupabase project、Backup COMPLETED、隔離復元COMPLETED、cron観測は時点付き参考。現在の復旧PASS・送信成功・フロー完了へ転用しない                                                       |
+### マナベルスタイル
 
-`checkDatabaseReadiness` は `packages/database/src/bunshin-personality.ts`。匿名healthの `databaseSchema: current` を全台帳/RLSの検証結果と表現しない。
+Goal→Plan→Assignment→本人回答→AI評価→Router→次課題、Guided Practice、履歴復元、内部Preparation、承認UI、費用Hard Stopの実装がある。productionは学習焦点表示、承認UI、原価可視化、費用Hard Stopとその対象Migrationまで限定反映済み。
 
-## 今回実行した検証
+人間は3Definitionの内部試験用教育方針を承認済みだが、Production `LearningDefinitionApproval` の3件APPROVEは未実施。参加者登録、Seat、Pilot開始、実Provider課金、実端末E2Eも未実施。EVO-05は比較契約・題材参照・履歴投影・レビュー保存までで、承認済み題材を新しい再実践Assignmentへ渡すBridgeと本人用UIは未接続。
 
-すべて基準mainのローカル合成データ / fake Provider / mock Repository。ブラウザー実E2E、実DB integration、負荷試験、実API品質比較は未実施。
+### OEM・費用
 
-| 実行                         | 結果                | 検証対象 / 限界                                                                                                                                          |
-| ---------------------------- | ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| web selected 14 files        | 215 PASS            | EVO01 baseline/report、Hassy Goal差分、Weekly、task互換・通信、Pilot API/component/Admission/worker/Provider境界/LINE隔離/operation                      |
-| capability-social全体        | 29 files / 305 PASS | Mission採否・投稿・Decision/Weekly・停滞ルール。実生成/送信ではない                                                                                      |
-| capability-training全体      | 29 files / 465 PASS | P1契約・相談・Router・Guided Practice・再現性・Draftレビュー。本人能力の実測ではない                                                                     |
-| application selected 6 files | 127 PASS            | 原価照合、OEM人数、Plan/永続化/Admission/Operationsの契約                                                                                                |
-| web selected 8 files         | 45 PASS             | 履歴要約、停滞scheduler/LINE除外、OEM API/export、Profile UI、AI Call観測。`daily-mission-generation.test.ts` は存在せず実行対象外（追加したと扱わない） |
-| database selected 7 files    | 68 PASS             | 履歴読取、レビュー監査、内部本人Privacy、Profile、AI Call、停滞、旧請求。DBモックであり本番RLS証明ではない                                               |
+mainは名称分岐を廃し、SUPER_ADMINが登録するService Product Policyでワタシワークス全商品へ対応する。Offering単位の版移行、初期費用と月額の分離、返金要照合、R/A/重複/R∪A表示、将来cutover、append-only訂正も実装済み。これらは本番利用済みではない。
 
-追加のweb 6 files / 33 testsもPASS。Assessment Adapter、Daily失敗・環境境界、会員LINE状態/診断、AI Training LINE通知境界を検証した。合計1,258 tests PASSは範囲記録であり完成率ではない。
+AI原価は `AiUsageEvent` / Provider Admission、OEM請求人数は登録・利用期間と月次snapshotで別管理する。両者を同じ金額や人数として合算しない。Provider請求書との照合、税・為替、OEM別の完全な原価帰属は未完成。
 
-実行再現コマンドと受入条件は[NEXT_ACTION_PLAN](NEXT_ACTION_PLAN.md)。合成出力の品質PASSも本番モデルの品質保証ではない。
+## 今回の検証
 
-## 次の判断
+| 検証                               | 結果                      | 限界                                          |
+| ---------------------------------- | ------------------------- | --------------------------------------------- |
+| Web: Hassy/学習/承認/費用 selected | 13 files / 102 tests PASS | mock/fake、実AI・実認証なし                   |
+| capability-social                  | 29 files / 305 tests PASS | 企業差・履歴・停滞等の契約。100社負荷ではない |
+| capability-training                | 29 files / 465 tests PASS | 学習/再現性の契約。本人能力の証明ではない     |
+| Application: 原価/OEM/Admission    | 3 files / 63 tests PASS   | 純粋計算・契約                                |
+| Web: AI費用/OEM管理                | 7 files / 37 tests PASS   | mock API、実課金なし                          |
+| Database selected                  | 5 files / 34 tests PASS   | Prisma Client生成後に成功。実DB/RLSではない   |
+| EVO-01 baseline/report             | 2 files / 35 tests PASS   | 保存fixture、外部API呼出し0                   |
+| 学習スマホ合成E2E                  | 3 files / 13 tests PASS   | 390×844、模擬HTTP。本番端末/LINEではない      |
 
-最優先は追加基盤の開発ではなく、(1)本番適合・復旧・隔離の証拠確定、(2)少数実フローと個別化/復元/費用の受入、(3)証拠から判明した利用不能点だけの最小修正。再現性R3/R4は研修の成果確認を強化するP1で、既存3Definitionの安全なWave 0開始に全EVO完成を要求しない。
+選択テスト計1,041件とE2E 13件。DBテストの初回は依存生成前で起動できず、`pnpm db:generate` 後に再実行して成功した。実API比較、実DB integration、100社負荷、実請求、実送信は行っていない。
 
-今回の監査PR提出後に停止。実装、配備、実ユーザー検証・Pilot開始はそれぞれ別指示を待つ。
+## 最優先3項目
+
+1. **P0: 本番安全条件の読取確定** — 採用SHA、全Migration履歴、RLS/接続role、最新Backup/復旧、設定、Pilot/Seat/APPROVE、AI価格・予算・停止担当を証拠化する。
+2. **P0: 少数の実縦フロー受入** — 別承認後、ハッシー少数社とマナベル内部1〜2人をスマホ/LINEまたは提供条件どおりに完走し、保存復元、越境なし、費用、停止を確認する。
+3. **P0/P1: 発見した利用不能点だけ修正** — 認証・分離・重複・誤合格・費用超過をP0。ハッシー個別化品質とマナベル再実践Bridge/UIをP1として、再現証拠に基づき小PR化する。
+
+既存成果を重複開発せず、安全条件と実完走が揃った範囲から限定利用へ移す。監査PR後は本番操作や実装へ自動継続しない。
