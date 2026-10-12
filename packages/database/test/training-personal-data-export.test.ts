@@ -165,16 +165,15 @@ describe('training personal data export isolation', () => {
   });
   it('exports only explicitly scoped practice note content, not generic activity metadata', async () => {
     const { tx, repository } = fixture();
-    tx.programActionEvent.findMany
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([
-        {
-          id: 'note',
-          missionAssignmentId: 'assignment',
-          occurredAt: now,
-          metadata: { text: '本人の作業記録', evidenceLevel: 'SELF_REPORT', revision: 1 },
-        },
-      ]);
+    tx.programActionEvent.findMany.mockResolvedValueOnce([]);
+    tx.programActionEvent.findMany.mockResolvedValueOnce([
+      {
+        id: 'note',
+        missionAssignmentId: 'assignment',
+        occurredAt: now,
+        metadata: { text: '本人の作業記録', evidenceLevel: 'SELF_REPORT', revision: 1 },
+      },
+    ]);
     const result = await repository.read(input);
     if (result.outcome !== 'FOUND') throw new Error('snapshot required');
     expect(result.data.activities).toEqual([]);
