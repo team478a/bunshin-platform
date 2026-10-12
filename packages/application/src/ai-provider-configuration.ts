@@ -102,7 +102,95 @@ export interface AiProviderConfigurationRepository {
     encryptedApiKey: string;
     dailySpentUsdMicros: number;
     monthlySpentUsdMicros: number;
+    monthlyUnknownCostEvents: number;
   } | null>;
+}
+
+export interface AiProviderRuntimeConfigurationSnapshot {
+  configuration: AiProviderConfiguration;
+  encryptedApiKey: string;
+  dailySpentUsdMicros: number;
+  monthlySpentUsdMicros: number;
+  monthlyUnknownCostEvents: number;
+}
+
+export function assertAiProviderRuntimeConfiguration(
+  input: {
+    environment: LineConfigurationEnvironment;
+    provider: AiProviderKey;
+    reservedCostUsdMicros?: number;
+    requestCount?: number;
+  },
+  value: AiProviderRuntimeConfigurationSnapshot,
+) {
+  const { configuration } = value;
+  if (configuration.environment !== input.environment || configuration.provider !== input.provider)
+    throw new ApplicationError('CONFIGURATION_ERROR', 'provider configuration scope mismatch');
+  if (configuration.status !== 'ACTIVE' || configuration.globallyPaused)
+    throw new ApplicationError('CONFIGURATION_ERROR', 'provider is paused');
+  if (configuration.lastVerifiedAt === null || configuration.lastErrorCategory !== null)
+    throw new ApplicationError('CONFIGURATION_ERROR', 'verified provider configuration required');
+  if (value.monthlyUnknownCostEvents > 0)
+    throw new ApplicationError('CONFLICT', 'provider cost is unknown');
+  const requestCostUsdMicros =
+    input.reservedCostUsdMicros ??
+    (configuration.requestCostUsdMicros ?? 0) * (input.requestCount ?? 1);
+  if (!Number.isSafeInteger(requestCostUsdMicros) || requestCostUsdMicros <= 0)
+    throw new ApplicationError('CONFIGURATION_ERROR', 'provider request cost is required');
+  if (value.dailySpentUsdMicros > configuration.dailyBudgetUsdMicros - requestCostUsdMicros)
+    throw new ApplicationError('CONFLICT', 'daily provider budget reached');
+  if (value.monthlySpentUsdMicros > configuration.monthlyBudgetUsdMicros - requestCostUsdMicros)
+    throw new ApplicationError('CONFLICT', 'monthly provider budget reached');
+  return value;
+}
+
+export interface AiProviderRuntimeAdmission {
+  id: string;
+  environment: LineConfigurationEnvironment;
+  provider: AiProviderKey;
+  operationHash: string;
+}
+
+export interface AiProviderRuntimeAdmissionRepository {
+  reserveActiveForRuntime(input: {
+    environment: LineConfigurationEnvironment;
+    provider: AiProviderKey;
+    operationKey: string;
+    reservedCostUsdMicros?: number;
+    requestCount?: number;
+  }): Promise<{
+    configuration: AiProviderConfiguration;
+    encryptedApiKey: string;
+    dailySpentUsdMicros: number;
+    monthlySpentUsdMicros: number;
+    monthlyUnknownCostEvents: number;
+    admission: AiProviderRuntimeAdmission;
+  } | null>;
+  settleRuntimeAdmission(input: AiProviderRuntimeAdmission): Promise<boolean>;
+}
+
+export interface AiProviderOpenAdmissionSummary {
+  provider: AiProviderKey;
+  openCount: number;
+  recoverableCount: number;
+  reservedCostUsdMicros: number;
+  oldestAdmittedAt: Date;
+}
+
+export interface AiProviderRuntimeAdmissionAdminRepository {
+  listOpenRuntimeAdmissions(input: {
+    actorUserId: string;
+    environment: LineConfigurationEnvironment;
+  }): Promise<{
+    summaries: AiProviderOpenAdmissionSummary[];
+    recoveryScanTruncated: boolean;
+    canRecover: boolean;
+  } | null>;
+  recoverRecordedRuntimeAdmissions(input: {
+    actorUserId: string;
+    environment: LineConfigurationEnvironment;
+    reason: string;
+  }): Promise<{ scanned: number; recovered: number; remainingOpen: number } | null>;
 }
 
 export class ListAiProviderConfigurations {
@@ -248,20 +336,75 @@ export class ResolveAiProviderRuntimeConfiguration {
     });
     if (value === null)
       throw new ApplicationError('CONFIGURATION_ERROR', 'active provider configuration required');
-    const { configuration } = value;
+    return assertAiProviderRuntimeConfiguration(input, value);
+  }
+}
+
+export class ReserveAiProviderRuntimeCall {
+  constructor(private readonly repository: AiProviderRuntimeAdmissionRepository) {}
+
+  async execute(input: {
+    environment: LineConfigurationEnvironment;
+    provider: AiProviderKey;
+    operationKey: string;
+    reservedCostUsdMicros?: number;
+    requestCount?: number;
+  }) {
+    if (!input.operationKey.trim() || input.operationKey.length > 200)
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid provider operation key');
     if (
-      configuration.environment !== input.environment ||
-      configuration.provider !== input.provider
+      input.reservedCostUsdMicros !== undefined &&
+      (!Number.isSafeInteger(input.reservedCostUsdMicros) || input.reservedCostUsdMicros <= 0)
     )
-      throw new ApplicationError('CONFIGURATION_ERROR', 'provider configuration scope mismatch');
-    if (configuration.status !== 'ACTIVE' || configuration.globallyPaused)
-      throw new ApplicationError('CONFIGURATION_ERROR', 'provider is paused');
-    if (configuration.lastVerifiedAt === null || configuration.lastErrorCategory !== null)
-      throw new ApplicationError('CONFIGURATION_ERROR', 'verified provider configuration required');
-    if (value.dailySpentUsdMicros >= configuration.dailyBudgetUsdMicros)
-      throw new ApplicationError('CONFLICT', 'daily provider budget reached');
-    if (value.monthlySpentUsdMicros >= configuration.monthlyBudgetUsdMicros)
-      throw new ApplicationError('CONFLICT', 'monthly provider budget reached');
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid provider reserved cost');
+    if (
+      input.requestCount !== undefined &&
+      (!Number.isSafeInteger(input.requestCount) ||
+        input.requestCount < 1 ||
+        input.requestCount > 100)
+    )
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid provider request count');
+    if (input.reservedCostUsdMicros !== undefined && input.requestCount !== undefined)
+      throw new ApplicationError('VALIDATION_ERROR', 'ambiguous provider reservation');
+    const value = await this.repository.reserveActiveForRuntime(input);
+    if (value === null)
+      throw new ApplicationError('CONFIGURATION_ERROR', 'active provider configuration required');
+    return value;
+  }
+}
+
+export class SettleAiProviderRuntimeCall {
+  constructor(private readonly repository: AiProviderRuntimeAdmissionRepository) {}
+
+  async execute(input: AiProviderRuntimeAdmission) {
+    const settled = await this.repository.settleRuntimeAdmission(input);
+    if (!settled) throw new ApplicationError('CONFLICT', 'provider call admission is not open');
+  }
+}
+
+export class ListOpenAiProviderRuntimeAdmissions {
+  constructor(private readonly repository: AiProviderRuntimeAdmissionAdminRepository) {}
+
+  async execute(actorUserId: string, environment: LineConfigurationEnvironment) {
+    const value = await this.repository.listOpenRuntimeAdmissions({ actorUserId, environment });
+    if (value === null) throw new ApplicationError('NOT_FOUND', 'admin page not found');
+    return value;
+  }
+}
+
+export class RecoverRecordedAiProviderRuntimeAdmissions {
+  constructor(private readonly repository: AiProviderRuntimeAdmissionAdminRepository) {}
+
+  async execute(input: {
+    actorUserId: string;
+    environment: LineConfigurationEnvironment;
+    reason: string;
+  }) {
+    const reason = input.reason.trim();
+    if (reason.length < 3 || reason.length > 500)
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid reason');
+    const value = await this.repository.recoverRecordedRuntimeAdmissions({ ...input, reason });
+    if (value === null) throw new ApplicationError('FORBIDDEN', 'super admin required');
     return value;
   }
 }

@@ -6,6 +6,7 @@ import { registerImprovementTriageIntegrationCases } from './improvement-triage.
 import { registerImprovementRetentionJobIntegrationCases } from './improvement-retention-jobs.integration-cases';
 import { registerTrainingSupportSkillLifecycleIntegrationCases } from './training-support-skill-lifecycle.integration-cases';
 import { registerPersonalLearningPersistenceIntegrationCases } from './personal-learning-persistence.integration-cases';
+import { registerAiProviderCallAdmissionIntegrationCases } from './provider-call-admission.integration-cases';
 import { cleanupProgramFixtures } from './program-fixture-cleanup';
 import {
   integrationDatabaseTarget,
@@ -184,6 +185,7 @@ describe('database ownership boundaries', () => {
     await client.accountDeletionRequest.deleteMany();
     await client.userLegalConsent.deleteMany();
     await client.legalDocument.deleteMany();
+    await client.aiProviderCallAdmission.deleteMany();
     await client.aiUsageEvent.deleteMany();
     await client.dailyMissionGeneration.deleteMany();
     await client.missionFeedback.deleteMany();
@@ -221,6 +223,7 @@ describe('database ownership boundaries', () => {
   registerPersonalLearningPersistenceIntegrationCases(client);
   registerOemBillingIntegrationCases(client);
   registerMigrationBoundsIntegrationCases(client);
+  registerAiProviderCallAdmissionIntegrationCases(client);
 
   it('fixture cleanup regression: program and training residue is absent before new fixtures', async () => {
     expect(

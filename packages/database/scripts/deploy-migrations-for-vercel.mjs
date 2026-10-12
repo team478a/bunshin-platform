@@ -8,6 +8,7 @@ const requireModule = createRequire(import.meta.url);
 const boundedReleaseMigrations = [
   '20261007170000_add_oem_registration_billing',
   '20261007173000_oem_billing_guardrails',
+  '20261011180000_ai_provider_call_admission',
   '20261011200000_oem_service_product_policy',
   '20261011220000_oem_product_policy_admin',
   '20261011230000_oem_setup_fee_invoicing',

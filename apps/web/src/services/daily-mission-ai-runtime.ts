@@ -1,6 +1,10 @@
 import 'server-only';
 import { ApplicationError } from '@bunshin/shared';
-import { resolveOpenAiRuntimeConfiguration } from '../ai/runtime-provider-configuration';
+import {
+  reserveOpenAiRuntimeConfiguration,
+  type AdmittedOpenAiRuntimeConfiguration,
+} from '../ai/runtime-provider-configuration';
+import { recordOpenAiUsageAndSettle } from '../ai/openai-cost-admission';
 import { recordAiUsageSafely } from '../observability/ai-usage';
 import { withOrganizationAiGenerationQuota } from '../organization-ai-generation-quota';
 
@@ -19,35 +23,76 @@ interface AiOperationResult {
   latencyMs: number;
 }
 
-export async function createDailyMissionAiRuntime(input: {
+export function createDailyMissionAiRuntime(input: {
   scope: DailyMissionAiScope;
   usageIdempotencyPrefix: string;
 }) {
-  const configuration = await resolveOpenAiRuntimeConfiguration(undefined, 'SOCIAL_PLANNER');
-  const recordUsage = (suffix: string, taskType: string, result: AiOperationResult) =>
-    recordAiUsageSafely({
-      ...input.scope,
-      taskType,
-      provider: 'openai',
-      model: result.model,
-      promptVersion: result.promptVersion,
-      status: 'SUCCESS',
-      inputTokens: result.inputTokens,
-      outputTokens: result.outputTokens,
-      latencyMs: result.latencyMs,
-      estimatedCostUsdMicros: configuration.requestCostUsdMicros || null,
-      pricingVersion: configuration.requestCostUsdMicros ? 'admin-request-cost-v1' : null,
-      idempotencyKey: `${input.usageIdempotencyPrefix}:${suffix}`,
-    });
-  const generateWithQuota = <T>(suffix: string, generate: () => Promise<T>) =>
-    withOrganizationAiGenerationQuota({
-      workspaceId: input.scope.workspaceId,
-      ...(input.scope.groupId === undefined ? {} : { groupId: input.scope.groupId }),
-      operationKey: `${input.usageIdempotencyPrefix}:${suffix}`,
-      generate,
-    });
+  const execute = async <T extends AiOperationResult>(operation: {
+    suffix: string;
+    taskType: string;
+    promptVersion: string;
+    generate: (runtime: AdmittedOpenAiRuntimeConfiguration) => Promise<T>;
+  }) => {
+    const operationKey = `${input.usageIdempotencyPrefix}:${operation.suffix}`;
+    const runtime = await reserveOpenAiRuntimeConfiguration(
+      operationKey,
+      undefined,
+      'SOCIAL_PLANNER',
+    );
+    const startedAt = Date.now();
+    let providerAttempted = false;
+    let usagePending = true;
+    try {
+      const result = await withOrganizationAiGenerationQuota({
+        workspaceId: input.scope.workspaceId,
+        ...(input.scope.groupId === undefined ? {} : { groupId: input.scope.groupId }),
+        operationKey,
+        generate: () => {
+          providerAttempted = true;
+          return operation.generate(runtime);
+        },
+      });
+      usagePending = false;
+      await recordOpenAiUsageAndSettle(runtime, {
+        ...input.scope,
+        taskType: operation.taskType,
+        provider: 'openai',
+        model: result.model,
+        promptVersion: result.promptVersion,
+        status: 'SUCCESS',
+        inputTokens: result.inputTokens,
+        outputTokens: result.outputTokens,
+        latencyMs: result.latencyMs,
+        estimatedCostUsdMicros: runtime.requestCostUsdMicros || null,
+        pricingVersion: runtime.requestCostUsdMicros ? 'admin-request-cost-v1' : null,
+        idempotencyKey: operationKey,
+      });
+      return result;
+    } catch (error) {
+      if (usagePending) {
+        usagePending = false;
+        await recordOpenAiUsageAndSettle(runtime, {
+          ...input.scope,
+          taskType: operation.taskType,
+          provider: 'openai',
+          model: runtime.model,
+          promptVersion: operation.promptVersion,
+          status: 'FAILED',
+          inputTokens: null,
+          outputTokens: null,
+          latencyMs: Date.now() - startedAt,
+          estimatedCostUsdMicros: providerAttempted ? runtime.requestCostUsdMicros : 0,
+          pricingVersion:
+            providerAttempted && runtime.requestCostUsdMicros ? 'admin-request-cost-v1' : null,
+          errorCode: dailyMissionErrorCategory(error),
+          idempotencyKey: operationKey,
+        });
+      }
+      throw error;
+    }
+  };
 
-  return { ...configuration, recordUsage, generateWithQuota };
+  return { execute };
 }
 
 export function dailyMissionErrorCategory(error: unknown) {
