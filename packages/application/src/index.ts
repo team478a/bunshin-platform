@@ -117,6 +117,7 @@ export * from './business-growth-actions';
 export * from './business-growth-program';
 export * from './business-sns-diagnosis';
 export * from './improvement-engine';
+export * from './service-improvement-overview';
 export * from './improvement-feedback';
 export * from './improvement-feedback-observations';
 export * from './improvement-feedback-review-evidence';
