@@ -94,7 +94,7 @@ export function validatePracticeSupportAdvice(value: unknown): PracticeSupportAd
     keys.some((k) => !Object.hasOwn(v, k)) ||
     !PRACTICE_SUPPORT_REASONS.includes(v.cause as PracticeSupportReason) ||
     ['explanation', 'nextAction', 'question'].some(
-      (k) => typeof v[k] !== 'string' || (v[k] as string).length > 600,
+      (k) => typeof v[k] !== 'string' || v[k].length > 600,
     ) ||
     !(v.explanation as string).trim()
   )

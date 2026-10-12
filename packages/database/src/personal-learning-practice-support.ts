@@ -131,7 +131,7 @@ export class PrismaPracticeSupportRepository
     )
       return conflict();
   }
-  completeSupport(input: Parameters<PracticeSupportRepository['completeSupport']>[0]) {
+  async completeSupport(input: Parameters<PracticeSupportRepository['completeSupport']>[0]) {
     validatePracticeSupportCommand(input.command);
     const advice = validatePracticeSupportAdvice(input.advice);
     return this.authorized(input.command.actor, true, async (tx, now) => {

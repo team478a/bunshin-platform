@@ -782,6 +782,7 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
     });
     it('practice support: changed notes make delayed advice stale, not current or an achievement', async () => {
       const f = await supportFixture();
+      const permit = await f.repo.admit(f.operation);
       await f.practice.recordPracticeNote({
         actor: f.actor,
         assignmentId: f.command.assignmentId,
@@ -790,26 +791,19 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
         text: '先へ進めた',
       });
       await expect(f.repo.admit(f.operation)).rejects.toMatchObject({ code: 'CONFLICT' });
-      // A real call may already have been admitted before the note changed.
-      await client.aiUsageEvent.create({
-        data: {
-          workspaceId: f.scope.workspaceId,
-          actorUserId: f.actor.actorUserId,
-          taskType: 'PERSONAL_LEARNING_PRACTICE_SUPPORT',
-          provider: 'synthetic',
-          model: 'synthetic',
-          promptVersion: f.operation.promptVersion,
-          status: 'SUCCESS',
-          estimatedCostUsdMicros: 60n,
-          idempotencyKey: `personal-learning-operation:${(await import('../src/personal-learning-operation-identity')).personalLearningOperationHash(f.operation)}`,
-        },
+      // The real call was admitted before the note changed; its cost is still durable.
+      await f.repo.record({
+        operation: f.operation,
+        permit,
+        measurement: f.measurement,
+        requestFinished: true,
       });
       const result = await f.support.completeSupport({
         command: f.command,
         requestId: f.prepared.request.id,
         advice: f.advice,
         promptVersion: f.operation.promptVersion,
-        usageKey: `personal-learning-operation:${(await import('../src/personal-learning-operation-identity')).personalLearningOperationHash(f.operation)}`,
+        usageKey: `personal-learning-operation:${permit.operationHash}`,
       });
       expect(result.support.history[0]).toMatchObject({ status: 'STALE', advice: null });
       expect(result.note?.text).toBe('先へ進めた');
