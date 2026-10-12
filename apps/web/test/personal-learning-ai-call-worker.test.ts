@@ -42,14 +42,19 @@ vi.mock('@bunshin/database', () => {
   };
 });
 vi.mock('../src/ai/runtime-provider-configuration', () => ({
-  resolveOpenAiRuntimeConfiguration: () =>
+  reserveOpenAiRuntimeConfiguration: () =>
     Promise.resolve({
       apiKey: 'synthetic-key',
       model: 'unchanged-model',
       requestCostUsdMicros: 999,
+      admission: { provider: 'OPENAI' },
     }),
 }));
-vi.mock('../src/observability/ai-usage', () => ({ recordAiUsageSafely: fake.usage }));
+vi.mock('../src/ai/openai-cost-admission', () => ({
+  recordOpenAiUsageAndSettle: (_runtime: unknown, usage: unknown) => {
+    fake.usage(usage);
+  },
+}));
 vi.mock('../src/services/personal-learning-call-admission', () => ({
   admitPersonalLearningCall: fake.admit,
 }));

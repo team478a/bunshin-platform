@@ -35,6 +35,21 @@ const state = vi.hoisted(() => ({
   grantedKnowledge: vi.fn(),
   profile: vi.fn(),
   generate: vi.fn(),
+  usage: vi.fn(),
+}));
+vi.mock('../src/ai/runtime-provider-configuration', () => ({
+  reserveOpenAiRuntimeConfiguration: () =>
+    Promise.resolve({
+      apiKey: 'test-only',
+      model: 'gpt-5.2',
+      requestCostUsdMicros: 100,
+      admission: { provider: 'OPENAI' },
+    }),
+}));
+vi.mock('../src/ai/openai-cost-admission', () => ({
+  recordOpenAiUsageAndSettle: (_runtime: unknown, usage: unknown) => {
+    state.usage(usage);
+  },
 }));
 vi.mock('../src/auth/current-user', () => ({
   currentUserProvider: () => Promise.resolve({ getCurrentUser: () => Promise.resolve(state.user) }),
@@ -107,6 +122,7 @@ describe('Account Strategy HTTP', () => {
     vi.stubEnv('SESSION_SECRET', '12345678901234567890123456789012');
     vi.stubEnv('LOG_LEVEL', 'info');
     vi.stubEnv('OPENAI_API_KEY', 'test-key');
+    vi.stubEnv('OPENAI_REQUEST_COST_USD_MICROS', '250');
     state.user = { userId: 'user-1' };
     state.create.mockResolvedValue(strategy);
     state.list.mockResolvedValue([strategy]);

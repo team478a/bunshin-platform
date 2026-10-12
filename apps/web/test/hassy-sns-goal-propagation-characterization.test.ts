@@ -140,10 +140,16 @@ describe('Hassy SNS goal propagation characterization', () => {
           }),
         } as never,
         knowledge: { listGrantedKnowledge: vi.fn().mockResolvedValue([]) } as never,
-        planner: { generate },
-        providerModel: 'fake-no-network',
+        reserveProviderRuntime: vi.fn().mockResolvedValue({
+          planner: { generate },
+          model: 'fake-no-network',
+          requestCostUsdMicros: 1,
+          admission: null,
+        }),
+        settleProviderRuntime: vi.fn(),
         resolveTimezone: vi.fn().mockResolvedValue('Asia/Tokyo'),
         recordUsage: vi.fn(),
+        recordUsageStrict: vi.fn(),
         runWithQuota: (input) => input.generate(),
         now: () => now.valueOf(),
       });

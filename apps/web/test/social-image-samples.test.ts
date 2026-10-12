@@ -24,7 +24,17 @@ vi.mock('../src/auth/current-user', () => ({
   currentUserProvider: () => ({ getCurrentUser: m.actor }),
 }));
 vi.mock('../src/ai/runtime-provider-configuration', () => ({
-  resolveOpenAiRuntimeConfiguration: () => ({ apiKey: 'test', requestCostUsdMicros: 100 }),
+  reserveOpenAiRuntimeConfiguration: () => ({
+    apiKey: 'test',
+    model: 'image-model',
+    requestCostUsdMicros: 100,
+    admission: { provider: 'OPENAI' },
+  }),
+}));
+vi.mock('../src/ai/openai-cost-admission', () => ({
+  recordOpenAiUsageAndSettle: (_runtime: unknown, usage: unknown) => {
+    m.usage(usage);
+  },
 }));
 vi.mock('../src/providers/openai-social-image-generation', () => ({
   OpenAiSocialImageGenerationAdapter: class {

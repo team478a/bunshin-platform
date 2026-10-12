@@ -3,6 +3,7 @@ import {
   ActivateAiProviderConfiguration,
   CreateAiProviderConfigurationVersion,
   ListAiProviderConfigurations,
+  RecoverRecordedAiProviderRuntimeAdmissions,
   PauseAiProviderConfiguration,
   TestAiProviderConfigurationConnection,
   type AiProviderConfiguration,
@@ -157,4 +158,17 @@ export function activateAiProviderConfigurationResponse(request: Request, idValu
 
 export function pauseAiProviderConfigurationResponse(request: Request, idValue: string) {
   return statusAction(request, idValue, 'pause');
+}
+
+export function recoverAiProviderRuntimeAdmissionsResponse(request: Request) {
+  return respond(request, async () => {
+    requireSameOrigin(request);
+    const parsed = actionSchema.safeParse(await json(request));
+    if (!parsed.success) throw new ApplicationError('VALIDATION_ERROR', 'invalid body');
+    return new RecoverRecordedAiProviderRuntimeAdmissions(await repository()).execute({
+      actorUserId: await actor(),
+      environment: currentAiProviderEnvironment(),
+      reason: parsed.data.reason,
+    });
+  });
 }

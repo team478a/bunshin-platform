@@ -1,8 +1,13 @@
 import 'server-only';
 import {
   ResolveAiProviderRuntimeConfiguration,
+  ReserveAiProviderRuntimeCall,
+  SettleAiProviderRuntimeCall,
   type AiProviderConfigurationRepository,
+  type AiProviderRuntimeAdmission,
+  type AiProviderRuntimeAdmissionRepository,
   type AiProviderSecretCryptoPort,
+  type LineConfigurationEnvironment,
 } from '@bunshin/application';
 import { ApplicationError } from '@bunshin/shared';
 import { assertOpenAiTaskModel, type OpenAiCompatibilityTask } from './openai-task-compatibility';
@@ -18,6 +23,10 @@ export interface OpenAiRuntimeConfiguration {
   source: 'ADMIN_CONFIGURATION' | 'LEGACY_ENVIRONMENT';
 }
 
+export interface AdmittedOpenAiRuntimeConfiguration extends OpenAiRuntimeConfiguration {
+  admission: AiProviderRuntimeAdmission | null;
+}
+
 export interface TrendRuntimeConfiguration {
   provider: 'GROK' | 'EXA' | 'FIRECRAWL';
   apiKey: string;
@@ -25,6 +34,10 @@ export interface TrendRuntimeConfiguration {
   dailyBudgetUsdMicros: number;
   monthlyBudgetUsdMicros: number;
   requestCostUsdMicros: number;
+}
+
+export interface AdmittedTrendRuntimeConfiguration extends TrendRuntimeConfiguration {
+  admission: AiProviderRuntimeAdmission;
 }
 
 export interface CreatomateRuntimeConfiguration {
@@ -46,6 +59,8 @@ interface Dependencies {
   crypto: AiProviderSecretCryptoPort;
   legacyApiKey?: string;
   legacyModel?: string;
+  legacyRequestCostUsdMicros?: number;
+  environment?: LineConfigurationEnvironment;
 }
 
 function isMissingActiveConfiguration(error: unknown) {
@@ -56,10 +71,37 @@ function isMissingActiveConfiguration(error: unknown) {
   );
 }
 
+function resolveLegacyOpenAiRuntimeConfiguration(
+  input: {
+    environment: LineConfigurationEnvironment;
+    legacyApiKey?: string | undefined;
+    legacyModel?: string | undefined;
+    legacyRequestCostUsdMicros?: number | undefined;
+  },
+  task?: OpenAiCompatibilityTask,
+): OpenAiRuntimeConfiguration {
+  const legacyApiKey = input.legacyApiKey ?? process.env['OPENAI_API_KEY'];
+  if (!legacyApiKey || input.environment === 'PRODUCTION')
+    throw new ApplicationError('CONFIGURATION_ERROR', 'active provider configuration required');
+  const model = input.legacyModel ?? process.env['OPENAI_MODEL'] ?? 'gpt-5.2';
+  if (task) assertOpenAiTaskModel(task, model);
+  const requestCostUsdMicros =
+    input.legacyRequestCostUsdMicros ?? Number(process.env['OPENAI_REQUEST_COST_USD_MICROS']);
+  if (!Number.isSafeInteger(requestCostUsdMicros) || requestCostUsdMicros <= 0)
+    throw new ApplicationError('CONFIGURATION_ERROR', 'legacy OpenAI request cost is required');
+  return {
+    apiKey: legacyApiKey,
+    model,
+    requestCostUsdMicros,
+    source: 'LEGACY_ENVIRONMENT',
+  };
+}
+
 export async function resolveOpenAiRuntimeConfiguration(
   dependencies?: Dependencies,
   task?: OpenAiCompatibilityTask,
 ): Promise<OpenAiRuntimeConfiguration> {
+  const environment = dependencies?.environment ?? currentAiProviderEnvironment();
   let repository: AiProviderConfigurationRepository;
   if (dependencies) repository = dependencies.repository;
   else {
@@ -69,7 +111,7 @@ export async function resolveOpenAiRuntimeConfiguration(
   const crypto = dependencies?.crypto ?? new AesGcmAiProviderSecretCrypto();
   try {
     const resolved = await new ResolveAiProviderRuntimeConfiguration(repository).execute({
-      environment: currentAiProviderEnvironment(),
+      environment,
       provider: 'OPENAI',
     });
     if (!resolved.configuration.model)
@@ -82,16 +124,70 @@ export async function resolveOpenAiRuntimeConfiguration(
       source: 'ADMIN_CONFIGURATION',
     };
   } catch (error) {
-    const legacyApiKey = dependencies?.legacyApiKey ?? process.env['OPENAI_API_KEY'];
-    if (!isMissingActiveConfiguration(error) || !legacyApiKey) throw error;
-    const model = dependencies?.legacyModel ?? process.env['OPENAI_MODEL'] ?? 'gpt-5.2';
-    if (task) assertOpenAiTaskModel(task, model);
-    return {
-      apiKey: legacyApiKey,
-      model,
-      requestCostUsdMicros: 0,
-      source: 'LEGACY_ENVIRONMENT',
-    };
+    if (!isMissingActiveConfiguration(error)) throw error;
+    return resolveLegacyOpenAiRuntimeConfiguration(
+      {
+        environment,
+        legacyApiKey: dependencies?.legacyApiKey,
+        legacyModel: dependencies?.legacyModel,
+        legacyRequestCostUsdMicros: dependencies?.legacyRequestCostUsdMicros,
+      },
+      task,
+    );
+  }
+}
+
+export async function reserveOpenAiRuntimeConfiguration(
+  operationKey: string,
+  dependencies?: Omit<Dependencies, 'repository'> & {
+    repository: AiProviderConfigurationRepository & AiProviderRuntimeAdmissionRepository;
+  },
+  task?: OpenAiCompatibilityTask,
+  reservedCostUsdMicros?: number,
+  requestCount?: number,
+): Promise<AdmittedOpenAiRuntimeConfiguration> {
+  const environment = dependencies?.environment ?? currentAiProviderEnvironment();
+  let repository = dependencies?.repository;
+  if (!repository) {
+    const db = await import('@bunshin/database');
+    repository = new db.PrismaAiProviderConfigurationRepository();
+  }
+  const crypto = dependencies?.crypto ?? new AesGcmAiProviderSecretCrypto();
+  try {
+    const reserved = await new ReserveAiProviderRuntimeCall(repository).execute({
+      environment,
+      provider: 'OPENAI',
+      operationKey,
+      ...(reservedCostUsdMicros === undefined ? {} : { reservedCostUsdMicros }),
+      ...(requestCount === undefined ? {} : { requestCount }),
+    });
+    try {
+      if (!reserved.configuration.model)
+        throw new ApplicationError('CONFIGURATION_ERROR', 'active OpenAI model is required');
+      if (task) assertOpenAiTaskModel(task, reserved.configuration.model);
+      return {
+        apiKey: crypto.decrypt(reserved.encryptedApiKey),
+        model: reserved.configuration.model,
+        requestCostUsdMicros: reserved.configuration.requestCostUsdMicros ?? 0,
+        source: 'ADMIN_CONFIGURATION',
+        admission: reserved.admission,
+      };
+    } catch (error) {
+      await new SettleAiProviderRuntimeCall(repository).execute(reserved.admission);
+      throw error;
+    }
+  } catch (error) {
+    if (!isMissingActiveConfiguration(error)) throw error;
+    const legacy = resolveLegacyOpenAiRuntimeConfiguration(
+      {
+        environment,
+        legacyApiKey: dependencies?.legacyApiKey,
+        legacyModel: dependencies?.legacyModel,
+        legacyRequestCostUsdMicros: dependencies?.legacyRequestCostUsdMicros,
+      },
+      task,
+    );
+    return { ...legacy, admission: null };
   }
 }
 
@@ -126,6 +222,62 @@ export async function resolveTrendRuntimeConfiguration(input?: {
     }
   }
   throw new ApplicationError('CONFIGURATION_ERROR', 'active trend provider configuration required');
+}
+
+export async function reserveTrendRuntimeConfiguration(
+  operationKey: string,
+  input?: {
+    repository?: AiProviderConfigurationRepository & AiProviderRuntimeAdmissionRepository;
+    crypto?: AiProviderSecretCryptoPort;
+    preferredProviders?: Array<'GROK' | 'EXA' | 'FIRECRAWL'>;
+  },
+): Promise<AdmittedTrendRuntimeConfiguration> {
+  let repository = input?.repository;
+  if (!repository) {
+    const db = await import('@bunshin/database');
+    repository = new db.PrismaAiProviderConfigurationRepository();
+  }
+  const crypto = input?.crypto ?? new AesGcmAiProviderSecretCrypto();
+  const providers = input?.preferredProviders ?? ['GROK', 'EXA', 'FIRECRAWL'];
+  for (const provider of providers) {
+    try {
+      const reserved = await new ReserveAiProviderRuntimeCall(repository).execute({
+        environment: currentAiProviderEnvironment(),
+        provider,
+        operationKey,
+      });
+      let apiKey: string;
+      try {
+        apiKey = crypto.decrypt(reserved.encryptedApiKey);
+      } catch (error) {
+        await new SettleAiProviderRuntimeCall(repository).execute(reserved.admission);
+        throw error;
+      }
+      return {
+        provider,
+        apiKey,
+        model: reserved.configuration.model,
+        dailyBudgetUsdMicros: reserved.configuration.dailyBudgetUsdMicros,
+        monthlyBudgetUsdMicros: reserved.configuration.monthlyBudgetUsdMicros,
+        requestCostUsdMicros: reserved.configuration.requestCostUsdMicros ?? 0,
+        admission: reserved.admission,
+      };
+    } catch (error) {
+      if (!isMissingActiveConfiguration(error)) throw error;
+    }
+  }
+  throw new ApplicationError('CONFIGURATION_ERROR', 'active trend provider configuration required');
+}
+
+export async function settleProviderRuntimeAdmission(
+  admission: AiProviderRuntimeAdmission,
+  repository?: AiProviderRuntimeAdmissionRepository,
+) {
+  if (!repository) {
+    const db = await import('@bunshin/database');
+    repository = new db.PrismaAiProviderConfigurationRepository();
+  }
+  await new SettleAiProviderRuntimeCall(repository).execute(admission);
 }
 
 export async function resolveCreatomateRuntimeConfiguration(input?: {

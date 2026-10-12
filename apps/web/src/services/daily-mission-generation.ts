@@ -142,11 +142,10 @@ export class DailyMissionGenerationService {
       if (!claim.acquired)
         throw new ApplicationError('CONFLICT', 'daily mission generation is in progress');
       generationId = claim.record.id;
-      const { apiKey, model, recordUsage, generateWithQuota } = await createDailyMissionAiRuntime({
+      const { execute: executeAiStep } = createDailyMissionAiRuntime({
         scope,
         usageIdempotencyPrefix: input.usageIdempotencyPrefix,
       });
-      runtimeModel = model;
       const { bunshinContext, strategyContext, plannerPersonalization, knowledge } =
         buildDailyMissionPersonalizationBase({
           bunshin,
@@ -204,12 +203,10 @@ export class DailyMissionGenerationService {
       });
       stage = 'daily-brief';
       const brief = await runDailyMissionBriefGeneration({
-        apiKey,
-        model,
-        generateWithQuota,
-        recordUsage,
+        executeAiStep,
         plannerInput: decisionPreparation.plannerInput,
       });
+      runtimeModel = brief.model;
       const pillarId = weeklyPlan.items.find(
         ({ id }) => id === brief.output.weeklyPlanItemId,
       )?.contentPillarId;
@@ -269,13 +266,10 @@ export class DailyMissionGenerationService {
         },
         generateContent: (contentPreparation, attempt) =>
           runDailyMissionContentGeneration({
-            apiKey,
-            model,
             contentInput: contentPreparation.contentInput,
             qualityInput: contentPreparation.qualityInput,
             recentMissions,
-            generateWithQuota,
-            recordUsage,
+            executeAiStep,
             terminologyPolicy: serviceKnowledge?.contentTerminologyPolicy ?? null,
             decisionRepairPolicy: decisionPreparation.context
               ? 'REQUIRE_REBRIEF'
@@ -289,14 +283,11 @@ export class DailyMissionGenerationService {
           }),
         reviseBrief: ({ initialBrief, disposition, boundary }) =>
           runDailyMissionRebriefGeneration({
-            apiKey,
-            model,
             initialBrief,
             strategyVersion: strategy.version,
             boundary,
             disposition,
-            generateWithQuota,
-            recordUsage,
+            executeAiStep,
             setStage: (value) => {
               stage = value;
             },

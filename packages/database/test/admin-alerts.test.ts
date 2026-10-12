@@ -49,6 +49,10 @@ describe('PrismaAdminAlertRepository', () => {
         aggregate: vi.fn().mockResolvedValue({ _sum: { estimatedCostUsdMicros: 0n } }),
         count: aiUsageCount,
       },
+      aiProviderCallAdmission: {
+        aggregate: vi.fn().mockResolvedValue({ _sum: { reservedCostUsdMicros: 25n } }),
+        count: vi.fn().mockResolvedValue(2),
+      },
     };
 
     const snapshot = await new PrismaAdminAlertRepository(client as never).snapshot({
@@ -64,6 +68,9 @@ describe('PrismaAdminAlertRepository', () => {
       provider: 'OPENAI',
       recentProviderFailures: 3,
       recentUnknownCostEvents: 5,
+      staleOpenAdmissions: 2,
+      dailySpentUsdMicros: 25,
+      monthlySpentUsdMicros: 25,
     });
     expect(snapshot?.commercialBillingRefundReviews).toBe(1);
     expect(client.commercialBillingWebhookEvent.findMany).toHaveBeenCalledWith({

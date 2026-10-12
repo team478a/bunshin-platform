@@ -3,10 +3,13 @@ import { VIDEO_NARRATION_SPEEDS, VIDEO_NARRATION_VOICES } from '@bunshin/applica
 import { requestIdFromHeader } from '@bunshin/observability';
 import { ApplicationError, toApiError } from '@bunshin/shared';
 import { z } from 'zod';
-import { resolveOpenAiRuntimeConfiguration } from '../ai/runtime-provider-configuration';
+import { recordOpenAiUsageAndSettle } from '../ai/openai-cost-admission';
+import {
+  reserveOpenAiRuntimeConfiguration,
+  type AdmittedOpenAiRuntimeConfiguration,
+} from '../ai/runtime-provider-configuration';
 import { currentUserProvider } from '../auth/current-user';
 import { requireSameOrigin } from '../auth/request-security';
-import { recordAiUsageSafely } from '../observability/ai-usage';
 import { withOrganizationAiGenerationQuota } from '../organization-ai-generation-quota';
 import {
   NARRATION_MICROS_PER_CHARACTER,
@@ -39,6 +42,9 @@ export async function previewVideoNarrationResponse(
   let usage:
     | { workspaceId: string; groupId: string; bunshinId: string; actorUserId: string; key: string }
     | undefined;
+  let runtime: AdmittedOpenAiRuntimeConfiguration | undefined;
+  let providerAttempted = false;
+  let usagePersistenceStarted = false;
   try {
     requireSameOrigin(request);
     if (!request.headers.get('content-type')?.startsWith('application/json'))
@@ -82,14 +88,26 @@ export async function previewVideoNarrationResponse(
       actorUserId: actor.userId,
       key: operationKey,
     };
-    const runtime = await resolveOpenAiRuntimeConfiguration();
+    const estimatedCostUsdMicros =
+      narrationCharacters(NARRATION_PREVIEW_TEXT) * NARRATION_MICROS_PER_CHARACTER;
+    const admittedRuntime = await reserveOpenAiRuntimeConfiguration(
+      operationKey,
+      undefined,
+      undefined,
+      estimatedCostUsdMicros,
+    );
+    runtime = admittedRuntime;
     const audio = await withOrganizationAiGenerationQuota({
       workspaceId: safeWorkspaceId,
       groupId: safeGroupId,
       operationKey,
-      generate: () => new OpenAIVideoNarration(runtime.apiKey).preview(input.voice, input.speed),
+      generate: () => {
+        providerAttempted = true;
+        return new OpenAIVideoNarration(admittedRuntime.apiKey).preview(input.voice, input.speed);
+      },
     });
-    await recordAiUsageSafely({
+    usagePersistenceStarted = true;
+    await recordOpenAiUsageAndSettle(admittedRuntime, {
       workspaceId: safeWorkspaceId,
       bunshinId: bunshin.id,
       actorUserId: actor.userId,
@@ -101,8 +119,7 @@ export async function previewVideoNarrationResponse(
       inputTokens: null,
       outputTokens: null,
       latencyMs: Date.now() - started,
-      estimatedCostUsdMicros:
-        narrationCharacters(NARRATION_PREVIEW_TEXT) * NARRATION_MICROS_PER_CHARACTER,
+      estimatedCostUsdMicros,
       pricingVersion: 'gpt-4o-mini-tts-character-estimate-2026-09-13',
       idempotencyKey: operationKey,
     });
@@ -121,8 +138,9 @@ export async function previewVideoNarrationResponse(
             '音声を作れませんでした。少し待ってからもう一度お試しください。',
           )
         : error;
-    if (usage) {
-      await recordAiUsageSafely({
+    if (usage && runtime && !usagePersistenceStarted) {
+      usagePersistenceStarted = true;
+      await recordOpenAiUsageAndSettle(runtime, {
         workspaceId: usage.workspaceId,
         bunshinId: usage.bunshinId,
         actorUserId: usage.actorUserId,
@@ -134,6 +152,10 @@ export async function previewVideoNarrationResponse(
         inputTokens: null,
         outputTokens: null,
         latencyMs: Date.now() - started,
+        estimatedCostUsdMicros: providerAttempted
+          ? narrationCharacters(NARRATION_PREVIEW_TEXT) * NARRATION_MICROS_PER_CHARACTER
+          : 0,
+        pricingVersion: 'gpt-4o-mini-tts-character-estimate-2026-09-13',
         idempotencyKey: usage.key,
         errorCode:
           error instanceof OpenAIVideoNarrationError

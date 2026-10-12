@@ -3,8 +3,11 @@ vi.mock('server-only', () => ({}));
 import type {
   AiProviderConfiguration,
   AiProviderConfigurationRepository,
+  AiProviderRuntimeAdmissionRepository,
 } from '@bunshin/application';
 import {
+  reserveOpenAiRuntimeConfiguration,
+  reserveTrendRuntimeConfiguration,
   resolveOpenAiRuntimeConfiguration,
   resolveVideoAiRuntimeConfiguration,
 } from '../src/ai/runtime-provider-configuration';
@@ -20,6 +23,7 @@ const active: AiProviderConfiguration = {
   model: 'gpt-5-mini',
   dailyBudgetUsdMicros: 1_000_000,
   monthlyBudgetUsdMicros: 10_000_000,
+  requestCostUsdMicros: 250,
   globallyPaused: false,
   keyVersion: 1,
   lastVerifiedAt: new Date('2026-08-24T00:00:00Z'),
@@ -42,6 +46,16 @@ function repository(
   };
 }
 
+function admissionRepository(
+  value: Awaited<ReturnType<AiProviderRuntimeAdmissionRepository['reserveActiveForRuntime']>>,
+) {
+  return {
+    ...repository(null),
+    reserveActiveForRuntime: vi.fn().mockResolvedValue(value),
+    settleRuntimeAdmission: vi.fn().mockResolvedValue(true),
+  };
+}
+
 beforeEach(() => {
   vi.stubEnv('NODE_ENV', 'test');
   vi.stubEnv('APP_ENV', 'development');
@@ -61,10 +75,12 @@ describe('OpenAI runtime configuration', () => {
           encryptedApiKey: 'sealed',
           dailySpentUsdMicros: 0,
           monthlySpentUsdMicros: 0,
+          monthlyUnknownCostEvents: 0,
         }),
         crypto: { encrypt: vi.fn(), decrypt: vi.fn().mockReturnValue('synthetic-key') },
         legacyApiKey: 'synthetic-legacy-key',
         legacyModel: 'gpt-5.2',
+        legacyRequestCostUsdMicros: 300,
       };
       await expect(resolveOpenAiRuntimeConfiguration(deps, task)).resolves.toMatchObject({
         model: active.model,
@@ -94,6 +110,7 @@ describe('OpenAI runtime configuration', () => {
             encryptedApiKey: 'sealed',
             dailySpentUsdMicros: 0,
             monthlySpentUsdMicros: 0,
+            monthlyUnknownCostEvents: 0,
           }),
           crypto: { encrypt: vi.fn(), decrypt },
           legacyApiKey: 'synthetic',
@@ -112,26 +129,43 @@ describe('OpenAI runtime configuration', () => {
       configuration: { ...active, globallyPaused: true },
       dailySpentUsdMicros: 0,
       monthlySpentUsdMicros: 0,
+      monthlyUnknownCostEvents: 0,
     },
     {
       configuration: { ...active, lastVerifiedAt: null },
       dailySpentUsdMicros: 0,
       monthlySpentUsdMicros: 0,
+      monthlyUnknownCostEvents: 0,
     },
     {
       configuration: { ...active, environment: 'STAGING' as const },
       dailySpentUsdMicros: 0,
       monthlySpentUsdMicros: 0,
+      monthlyUnknownCostEvents: 0,
     },
     {
       configuration: active,
       dailySpentUsdMicros: active.dailyBudgetUsdMicros,
       monthlySpentUsdMicros: 0,
+      monthlyUnknownCostEvents: 0,
     },
     {
       configuration: active,
       dailySpentUsdMicros: 0,
       monthlySpentUsdMicros: active.monthlyBudgetUsdMicros,
+      monthlyUnknownCostEvents: 0,
+    },
+    {
+      configuration: active,
+      dailySpentUsdMicros: 0,
+      monthlySpentUsdMicros: 0,
+      monthlyUnknownCostEvents: 1,
+    },
+    {
+      configuration: { ...active, requestCostUsdMicros: 0 },
+      dailySpentUsdMicros: 0,
+      monthlySpentUsdMicros: 0,
+      monthlyUnknownCostEvents: 0,
     },
   ])('keeps runtime gates before task compatibility %j', async (snapshot) => {
     const decrypt = vi.fn();
@@ -155,6 +189,7 @@ describe('OpenAI runtime configuration', () => {
           encryptedApiKey: 'sealed',
           dailySpentUsdMicros: 0,
           monthlySpentUsdMicros: 0,
+          monthlyUnknownCostEvents: 0,
         }),
         crypto: { encrypt: vi.fn(), decrypt: vi.fn().mockReturnValue('plain-key') },
         legacyApiKey: 'legacy-key',
@@ -162,7 +197,7 @@ describe('OpenAI runtime configuration', () => {
     ).resolves.toEqual({
       apiKey: 'plain-key',
       model: 'gpt-5-mini',
-      requestCostUsdMicros: 0,
+      requestCostUsdMicros: 250,
       source: 'ADMIN_CONFIGURATION',
     });
   });
@@ -174,12 +209,43 @@ describe('OpenAI runtime configuration', () => {
         crypto: { encrypt: vi.fn(), decrypt: vi.fn() },
         legacyApiKey: 'legacy-key',
         legacyModel: 'legacy-model',
+        legacyRequestCostUsdMicros: 300,
       }),
     ).resolves.toEqual({
       apiKey: 'legacy-key',
       model: 'legacy-model',
-      requestCostUsdMicros: 0,
+      requestCostUsdMicros: 300,
       source: 'LEGACY_ENVIRONMENT',
+    });
+  });
+
+  it('requires an active admin configuration in production even when the legacy key is set', async () => {
+    await expect(
+      resolveOpenAiRuntimeConfiguration({
+        repository: repository(null),
+        crypto: { encrypt: vi.fn(), decrypt: vi.fn() },
+        legacyApiKey: 'legacy-key',
+        legacyModel: 'legacy-model',
+        legacyRequestCostUsdMicros: 300,
+        environment: 'PRODUCTION',
+      }),
+    ).rejects.toMatchObject({
+      code: 'CONFIGURATION_ERROR',
+      message: 'active provider configuration required',
+    });
+  });
+
+  it('does not use the legacy key when its request cost is absent', async () => {
+    await expect(
+      resolveOpenAiRuntimeConfiguration({
+        repository: repository(null),
+        crypto: { encrypt: vi.fn(), decrypt: vi.fn() },
+        legacyApiKey: 'legacy-key',
+        legacyModel: 'legacy-model',
+      }),
+    ).rejects.toMatchObject({
+      code: 'CONFIGURATION_ERROR',
+      message: 'legacy OpenAI request cost is required',
     });
   });
 
@@ -191,11 +257,113 @@ describe('OpenAI runtime configuration', () => {
           encryptedApiKey: 'sealed',
           dailySpentUsdMicros: 0,
           monthlySpentUsdMicros: 0,
+          monthlyUnknownCostEvents: 0,
         }),
         crypto: { encrypt: vi.fn(), decrypt: vi.fn() },
         legacyApiKey: 'legacy-key',
       }),
     ).rejects.toMatchObject({ code: 'CONFIGURATION_ERROR', message: 'provider is paused' });
+  });
+
+  it('returns an atomic admin admission for an OpenAI operation', async () => {
+    const admission = {
+      id: '33333333-3333-4333-8333-333333333333',
+      environment: 'DEVELOPMENT' as const,
+      provider: 'OPENAI' as const,
+      operationHash: 'a'.repeat(64),
+    };
+    const repo = admissionRepository({
+      configuration: active,
+      encryptedApiKey: 'sealed',
+      dailySpentUsdMicros: 0,
+      monthlySpentUsdMicros: 0,
+      monthlyUnknownCostEvents: 0,
+      admission,
+    });
+
+    await expect(
+      reserveOpenAiRuntimeConfiguration(
+        'weekly-plan:1',
+        {
+          repository: repo,
+          crypto: { encrypt: vi.fn(), decrypt: vi.fn().mockReturnValue('plain-key') },
+        },
+        'SOCIAL_PLANNER',
+      ),
+    ).resolves.toEqual({
+      apiKey: 'plain-key',
+      model: active.model,
+      requestCostUsdMicros: active.requestCostUsdMicros,
+      source: 'ADMIN_CONFIGURATION',
+      admission,
+    });
+  });
+
+  it('settles an OpenAI reservation when local validation fails before Provider use', async () => {
+    const admission = {
+      id: '33333333-3333-4333-8333-333333333333',
+      environment: 'DEVELOPMENT' as const,
+      provider: 'OPENAI' as const,
+      operationHash: 'b'.repeat(64),
+    };
+    const repo = admissionRepository({
+      configuration: { ...active, model: 'unreviewed-model' },
+      encryptedApiKey: 'sealed',
+      dailySpentUsdMicros: 0,
+      monthlySpentUsdMicros: 0,
+      monthlyUnknownCostEvents: 0,
+      admission,
+    });
+    const decrypt = vi.fn();
+
+    await expect(
+      reserveOpenAiRuntimeConfiguration(
+        'weekly-plan:2',
+        { repository: repo, crypto: { encrypt: vi.fn(), decrypt } },
+        'SOCIAL_PLANNER',
+      ),
+    ).rejects.toMatchObject({ code: 'CONFIGURATION_ERROR' });
+    expect(decrypt).not.toHaveBeenCalled();
+    expect(repo.settleRuntimeAdmission).toHaveBeenCalledWith(admission);
+  });
+
+  it('keeps the bounded development legacy fallback without creating an admission', async () => {
+    const repo = admissionRepository(null);
+    await expect(
+      reserveOpenAiRuntimeConfiguration('weekly-plan:3', {
+        repository: repo,
+        crypto: { encrypt: vi.fn(), decrypt: vi.fn() },
+        legacyApiKey: 'legacy-key',
+        legacyModel: 'gpt-5.2',
+        legacyRequestCostUsdMicros: 300,
+      }),
+    ).resolves.toEqual({
+      apiKey: 'legacy-key',
+      model: 'gpt-5.2',
+      requestCostUsdMicros: 300,
+      source: 'LEGACY_ENVIRONMENT',
+      admission: null,
+    });
+    expect(repo.settleRuntimeAdmission).not.toHaveBeenCalled();
+  });
+
+  it('never re-resolves an unreserved admin configuration in production', async () => {
+    const getActiveForRuntime = vi.fn().mockResolvedValue(null);
+    const repo = { ...admissionRepository(null), getActiveForRuntime };
+    await expect(
+      reserveOpenAiRuntimeConfiguration('weekly-plan:4', {
+        repository: repo,
+        crypto: { encrypt: vi.fn(), decrypt: vi.fn() },
+        legacyApiKey: 'legacy-key',
+        legacyModel: 'gpt-5.2',
+        legacyRequestCostUsdMicros: 300,
+        environment: 'PRODUCTION',
+      }),
+    ).rejects.toMatchObject({
+      code: 'CONFIGURATION_ERROR',
+      message: 'active provider configuration required',
+    });
+    expect(getActiveForRuntime).not.toHaveBeenCalled();
   });
 });
 
@@ -214,6 +382,7 @@ describe('video AI runtime configuration', () => {
           encryptedApiKey: 'sealed',
           dailySpentUsdMicros: 0,
           monthlySpentUsdMicros: 0,
+          monthlyUnknownCostEvents: 0,
         }),
         crypto: { encrypt: vi.fn(), decrypt: vi.fn().mockReturnValue('plain-fal-key') },
       }),
@@ -238,5 +407,58 @@ describe('video AI runtime configuration', () => {
       code: 'CONFIGURATION_ERROR',
       message: 'active provider configuration required',
     });
+  });
+});
+
+describe('trend provider runtime admission', () => {
+  const admission = {
+    id: '33333333-3333-4333-8333-333333333333',
+    environment: 'DEVELOPMENT' as const,
+    provider: 'EXA' as const,
+    operationHash: 'a'.repeat(64),
+  };
+  const reserved = {
+    configuration: { ...active, provider: 'EXA' as const, model: null },
+    encryptedApiKey: 'sealed',
+    dailySpentUsdMicros: 0,
+    monthlySpentUsdMicros: 0,
+    monthlyUnknownCostEvents: 0,
+    admission,
+  };
+
+  it('returns the atomically admitted trend configuration', async () => {
+    const repo = admissionRepository(reserved);
+    await expect(
+      reserveTrendRuntimeConfiguration('trend:week:1', {
+        repository: repo,
+        preferredProviders: ['EXA'],
+        crypto: { encrypt: vi.fn(), decrypt: vi.fn().mockReturnValue('plain-exa-key') },
+      }),
+    ).resolves.toEqual({
+      provider: 'EXA',
+      apiKey: 'plain-exa-key',
+      model: null,
+      dailyBudgetUsdMicros: active.dailyBudgetUsdMicros,
+      monthlyBudgetUsdMicros: active.monthlyBudgetUsdMicros,
+      requestCostUsdMicros: active.requestCostUsdMicros,
+      admission,
+    });
+  });
+
+  it('settles without provider use when secret decryption fails after reservation', async () => {
+    const repo = admissionRepository(reserved);
+    await expect(
+      reserveTrendRuntimeConfiguration('trend:week:1', {
+        repository: repo,
+        preferredProviders: ['EXA'],
+        crypto: {
+          encrypt: vi.fn(),
+          decrypt: vi.fn(() => {
+            throw new Error('synthetic decrypt failure');
+          }),
+        },
+      }),
+    ).rejects.toThrow('synthetic decrypt failure');
+    expect(repo.settleRuntimeAdmission).toHaveBeenCalledWith(admission);
   });
 });
