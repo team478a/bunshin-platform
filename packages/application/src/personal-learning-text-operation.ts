@@ -19,7 +19,13 @@ export interface PersonalLearningTextOperation {
   requestId: string;
   expectedRequestRevision: number;
   operationId: string;
-  operationKind: 'REQUEST_INTERPRETATION' | 'LESSON_GENERATION';
+  operationKind: 'REQUEST_INTERPRETATION' | 'LESSON_GENERATION' | 'PRACTICE_SUPPORT';
+  practice?: {
+    assignmentId: string;
+    noteRevision: number;
+    supportRevision: number;
+    supportRequestId: string;
+  };
   attempt: number;
   provider: string;
   promptVersion: string;
@@ -56,7 +62,20 @@ export function validatePersonalLearningTextOperation(input: PersonalLearningTex
     !Number.isInteger(input.attempt) ||
     input.attempt < 1 ||
     input.attempt > 3 ||
-    !['REQUEST_INTERPRETATION', 'LESSON_GENERATION'].includes(input.operationKind) ||
+    !['REQUEST_INTERPRETATION', 'LESSON_GENERATION', 'PRACTICE_SUPPORT'].includes(
+      input.operationKind,
+    ) ||
+    (input.operationKind === 'PRACTICE_SUPPORT'
+      ? !input.practice ||
+        !uuid(input.practice.assignmentId) ||
+        !uuid(input.practice.supportRequestId) ||
+        !Number.isSafeInteger(input.practice.noteRevision) ||
+        input.practice.noteRevision < 0 ||
+        input.practice.noteRevision >= 1000 ||
+        !Number.isSafeInteger(input.practice.supportRevision) ||
+        input.practice.supportRevision < 1 ||
+        input.practice.supportRevision > 1000
+      : input.practice !== undefined) ||
     !symbol(input.provider) ||
     input.provider.length > 40 ||
     !symbol(input.promptVersion) ||

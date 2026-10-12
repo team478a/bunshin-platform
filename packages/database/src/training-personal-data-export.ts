@@ -175,6 +175,24 @@ export class PrismaTrainingPersonalDataExportRepository implements TrainingPerso
           orderBy: [{ occurredAt: 'asc' }, { id: 'asc' }],
           take,
         });
+        const practiceSupport = await tx.programActionEvent.findMany({
+          where: {
+            ...scope,
+            actorUserId: input.actorUserId,
+            eventType: {
+              in: ['PERSONAL_LEARNING_SUPPORT_REQUEST', 'PERSONAL_LEARNING_SUPPORT_RESPONSE'],
+            },
+          },
+          select: {
+            id: true,
+            missionAssignmentId: true,
+            eventType: true,
+            occurredAt: true,
+            metadata: true,
+          },
+          orderBy: [{ occurredAt: 'asc' }, { id: 'asc' }],
+          take,
+        });
         const goals = await tx.programMemberGoal.findMany({
           where: { ...scope, groupMembershipId: membership.id },
           select: {
@@ -231,6 +249,7 @@ export class PrismaTrainingPersonalDataExportRepository implements TrainingPerso
             learningPlans,
             learningRequests,
             practiceNotes,
+            practiceSupport,
           ].some((rows) => rows.length > TRAINING_EXPORT_MAX_ROWS)
         )
           return { outcome: 'TOO_LARGE' };
@@ -241,10 +260,16 @@ export class PrismaTrainingPersonalDataExportRepository implements TrainingPerso
               learningPlans.length +
               pilotSeats.length +
               learningRequests.length +
+              practiceSupport.length +
               practiceNotes.length >
             0
               ? {
                   personalLearning: [
+                    ...practiceSupport.map((row) => ({
+                      ...row,
+                      kind: 'PRACTICE_SUPPORT',
+                      occurredAt: iso(row.occurredAt),
+                    })),
                     ...practiceNotes.map((row) => ({
                       ...row,
                       kind: 'PRACTICE_NOTE',

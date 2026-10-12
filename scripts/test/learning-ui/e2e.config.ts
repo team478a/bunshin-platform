@@ -12,6 +12,7 @@ export default {
     'learning-request.e2e.ts',
     'lesson-candidate.e2e.ts',
     'practice.e2e.ts',
+    'practice-support.e2e.ts',
   ],
   workers: 1,
   actionTimeout: 10_000,

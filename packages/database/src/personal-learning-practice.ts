@@ -11,6 +11,7 @@ import {
   type PersonalLearningActor,
 } from '@bunshin/application';
 import { PrismaLearningCandidateRepository } from './personal-learning-lesson-candidate';
+import { readPracticeSupportHistory } from './personal-learning-practice-support-history';
 
 const object = (v: unknown): Record<string, unknown> =>
   v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
@@ -26,7 +27,7 @@ export class PrismaPersonalLearningPracticeRepository
   extends PrismaLearningCandidateRepository
   implements PersonalLearningPracticeRepository
 {
-  private async policy(tx: Tx, actor: PersonalLearningActor) {
+  protected async policy(tx: Tx, actor: PersonalLearningActor) {
     const enrollment = await tx.programEnrollment.findUniqueOrThrow({
       where: { id: actor.scope.programEnrollmentId },
     });
@@ -39,7 +40,7 @@ export class PrismaPersonalLearningPracticeRepository
       allowed: policy.enabled === true && policy.version === LEARNING_CANDIDATE_POLICY,
     };
   }
-  private async current(tx: Tx, actor: PersonalLearningActor) {
+  protected async current(tx: Tx, actor: PersonalLearningActor) {
     const rows = await tx.programMissionAssignment.findMany({
       where: {
         workspaceId: actor.scope.workspaceId,
@@ -54,7 +55,7 @@ export class PrismaPersonalLearningPracticeRepository
     if (rows.length > 1) return conflict();
     return rows[0] ?? null;
   }
-  private async projectPractice(
+  protected async projectPractice(
     tx: Tx,
     actor: PersonalLearningActor,
     row: Assignment,
@@ -145,6 +146,7 @@ export class PrismaPersonalLearningPracticeRepository
         currentPosition: environment.currentPosition as string | null,
       },
       note,
+      support: await readPracticeSupportHistory(tx, actor, row.id, candidate.id),
     };
   }
   readPractice(actor: PersonalLearningActor) {

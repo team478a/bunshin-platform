@@ -11,8 +11,9 @@ import {
   type AiCallMeasurement,
   type AiTokenPricing,
 } from '@bunshin/application';
-import { PrismaPersonalLearningRequestRepository } from './personal-learning-request';
+import { PrismaPracticeSupportRepository } from './personal-learning-practice-support';
 import { reserveLearningProgramBudget } from './personal-learning-call-budget';
+import { personalLearningOperationHash as operationHash } from './personal-learning-operation-identity';
 
 const digest = (v: unknown) =>
   createHash('sha256')
@@ -24,17 +25,6 @@ const digest = (v: unknown) =>
       ),
     )
     .digest('hex');
-const operationHash = (input: PersonalLearningTextOperation, attempt = input.attempt) =>
-  digest([
-    'LEARNING_TEXT_OPERATION_V1',
-    input.actor.scope.workspaceId,
-    input.actor.scope.groupId,
-    input.actor.scope.programEnrollmentId,
-    input.actor.scope.groupMembershipId,
-    input.actor.scope.userId,
-    input.operationId,
-    attempt,
-  ]);
 const bodyHash = (input: PersonalLearningTextOperation) =>
   digest([
     input.requestId,
@@ -43,6 +33,7 @@ const bodyHash = (input: PersonalLearningTextOperation) =>
     input.provider,
     input.policy.model,
     input.promptVersion,
+    ...(input.practice ? [input.practice] : []),
   ]);
 interface Context {
   version: 'LEARNING_TEXT_OPERATION_V1';
@@ -71,7 +62,7 @@ function context(value: Prisma.JsonValue): Context {
 }
 /** Internal server port only. Does not publish/apply a lesson or permit learner-supplied prices. */
 export class PrismaPersonalLearningTextOperationRepository
-  extends PrismaPersonalLearningRequestRepository
+  extends PrismaPracticeSupportRepository
   implements PersonalLearningTextOperationRepository
 {
   constructor(
@@ -90,12 +81,16 @@ export class PrismaPersonalLearningTextOperationRepository
       });
       if (enrollment.serviceProgramId !== input.policy.serviceProgramId)
         throw new ApplicationError('NOT_FOUND', 'learning program unavailable');
-      const wish = await tx.personalLearningRequest.findFirst({
-        where: s,
-        orderBy: { revision: 'desc' },
-      });
-      if (wish?.id !== input.requestId || wish.revision !== input.expectedRequestRevision)
-        throw new ApplicationError('CONFLICT', 'learning wish changed');
+      if (input.operationKind === 'PRACTICE_SUPPORT') {
+        await this.assertSupportAdmission(tx, input);
+      } else {
+        const wish = await tx.personalLearningRequest.findFirst({
+          where: s,
+          orderBy: { revision: 'desc' },
+        });
+        if (wish?.id !== input.requestId || wish.revision !== input.expectedRequestRevision)
+          throw new ApplicationError('CONFLICT', 'learning wish changed');
+      }
       const scope = {
         workspaceId: s.workspaceId,
         groupId: s.groupId,

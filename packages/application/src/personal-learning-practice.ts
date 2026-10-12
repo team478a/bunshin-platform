@@ -2,6 +2,7 @@ import { ApplicationError } from '@bunshin/shared';
 import type { PersonalLearningActor } from './personal-learning-persistence';
 import type { SavedLearningLessonCandidate } from './personal-learning-lesson-candidate';
 import type { SavedPersonalLearningRequest } from './personal-learning-request';
+import type { PracticeSupportState } from './personal-learning-practice-support';
 
 export const PERSONAL_LEARNING_PRACTICE_VERSION = 'PERSONAL_LEARNING_PRACTICE_V1';
 export const PERSONAL_LEARNING_PRACTICE_MISSION = 'PERSONAL_LEARNING_DYNAMIC_PRACTICE';
@@ -17,6 +18,7 @@ export interface PersonalLearningPractice {
     'deviceType' | 'toolDescription' | 'experienceDescription' | 'currentPosition'
   >;
   note: { revision: number; text: string; reportedAt: string; evidenceLevel: 'SELF_REPORT' } | null;
+  support: PracticeSupportState;
 }
 export interface PersonalLearningPracticeState {
   allowed: boolean;
