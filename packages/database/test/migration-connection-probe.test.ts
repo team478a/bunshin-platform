@@ -40,7 +40,8 @@ describe('migration connection probe only', () => {
     const url = new URL(options.env.DIRECT_URL!);
     expect(url.port).toBe('5432');
     expect(decodeURIComponent(url.username)).toBe(`postgres.${project}`);
-    expect(url.searchParams.get('options')).toContain('lock_timeout=5000');
+    expect(url.searchParams.get('options')).toBeNull();
+    expect(options.input).toContain("SET LOCAL lock_timeout = '5000ms'");
     expect(environment.DIRECT_URL).toBe(direct);
     expect(log.mock.calls.flat().join(' ')).toContain('MIGRATION_CONNECTION_PROBE_PASSED');
     expect(log.mock.calls.flat().join(' ')).not.toContain('synthetic-secret');

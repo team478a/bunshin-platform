@@ -1,9 +1,20 @@
 import { createRequire } from 'node:module';
+import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { performance } from 'node:perf_hooks';
 import { runMigrationProcess } from './migration-process.mjs';
 
 const requireModule = createRequire(import.meta.url);
+const boundedReleaseMigrations = [
+  '20261007170000_add_oem_registration_billing',
+  '20261007173000_oem_billing_guardrails',
+  '20261011200000_oem_service_product_policy',
+  '20261011220000_oem_product_policy_admin',
+  '20261011230000_oem_setup_fee_invoicing',
+  '20261012070000_oem_contract_period_supersession',
+  '20261012080000_oem_operational_period_supersession',
+  '20261012090000_oem_billing_policy_revision',
+];
 
 export function resolveMigrationBounds(environment) {
   const bounded = (name, fallback, maximum) => {
@@ -26,14 +37,40 @@ export function withMigrationBounds(directUrl, bounds) {
   const url = new URL(directUrl);
   if (!['postgres:', 'postgresql:'].includes(url.protocol) || url.searchParams.has('options'))
     throw new Error('INVALID_MIGRATION_CONNECTION');
-  // Startup options apply to the actual migration engine connection, not another client.
-  url.searchParams.set(
-    'options',
-    `-c lock_timeout=${bounds.lockTimeoutMs} -c statement_timeout=${bounds.statementTimeoutMs} -c idle_in_transaction_session_timeout=${bounds.statementTimeoutMs}`,
-  );
   url.searchParams.set('connect_timeout', '10');
   url.searchParams.set('application_name', 'bunshin_migration_bounded');
   return url.toString();
+}
+
+export function assertBoundedReleaseMigrations(bounds) {
+  const required = [
+    'BEGIN;',
+    `SET LOCAL lock_timeout = '${bounds.lockTimeoutMs}ms';`,
+    `SET LOCAL statement_timeout = '${bounds.statementTimeoutMs}ms';`,
+    `SET LOCAL idle_in_transaction_session_timeout = '${bounds.statementTimeoutMs}ms';`,
+    'COMMIT;',
+  ];
+  for (const migration of boundedReleaseMigrations) {
+    const sql = readFileSync(
+      new URL(`../prisma/migrations/${migration}/migration.sql`, import.meta.url),
+      'utf8',
+    )
+      .replace(/\r\n/g, '\n')
+      .trim();
+    let previous = -1;
+    if (
+      !sql.startsWith('BEGIN;') ||
+      !sql.endsWith('COMMIT;') ||
+      required.some((statement) => {
+        const position = sql.indexOf(statement);
+        const ordered = position > previous;
+        previous = position;
+        return !ordered || sql.indexOf(statement, position + statement.length) !== -1;
+      })
+    ) {
+      throw new Error('RELEASE_MIGRATION_BOUNDS_MISSING');
+    }
+  }
 }
 
 export function resolveMigrationDirectUrl(directUrl, sessionPoolerHost) {
@@ -118,6 +155,7 @@ async function runMigration(environment, execute, probeOnly) {
       }
     }
     bounds = resolveMigrationBounds(environment);
+    assertBoundedReleaseMigrations(bounds);
     migrationDirectUrl = withMigrationBounds(
       resolveMigrationDirectUrl(environment.DIRECT_URL, environment.SUPABASE_SESSION_POOLER_HOST),
       bounds,
@@ -152,7 +190,8 @@ async function runMigration(environment, execute, probeOnly) {
   let result;
   try {
     const startedAt = performance.now();
-    // A pooler must not silently discard startup settings. Probe with the same CLI/URL.
+    // Supabase's session pooler can reject PostgreSQL startup `options`. Apply and verify
+    // the same transaction-local settings used by every release migration instead.
     const probe = await execute(
       process.execPath,
       [prismaCli, 'db', 'execute', '--stdin', '--schema', 'prisma/schema.prisma'],
@@ -161,6 +200,9 @@ async function runMigration(environment, execute, probeOnly) {
         env: childEnvironment,
         timeoutMs: bounds.processTimeoutMs,
         input: `BEGIN READ ONLY;
+      SET LOCAL lock_timeout = '${bounds.lockTimeoutMs}ms';
+      SET LOCAL statement_timeout = '${bounds.statementTimeoutMs}ms';
+      SET LOCAL idle_in_transaction_session_timeout = '${bounds.statementTimeoutMs}ms';
       DO $$ BEGIN
         ${probeOnly ? "IF current_database() <> 'postgres' OR current_user <> 'postgres' THEN RAISE EXCEPTION 'MIGRATION_PROBE_IDENTITY_MISMATCH'; END IF;" : ''}
         IF current_setting('lock_timeout')::interval <> interval '${bounds.lockTimeoutMs} milliseconds'

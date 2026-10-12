@@ -10,6 +10,7 @@ export type MigrationBounds = {
 };
 export function resolveMigrationBounds(environment: NodeJS.ProcessEnv): MigrationBounds;
 export function withMigrationBounds(directUrl: string, bounds: MigrationBounds): string;
+export function assertBoundedReleaseMigrations(bounds: MigrationBounds): void;
 export function runVercelMigration(
   environment?: NodeJS.ProcessEnv,
   execute?: typeof import('./migration-process.mjs').runMigrationProcess,
