@@ -38,7 +38,7 @@ export interface PersonalLearningPractice {
   assignmentId: string;
   goalId: string;
   planId: string;
-  planRevision: 1;
+  planRevision: number;
   startedAt: string;
   candidate: SavedLearningLessonCandidate;
   environment: Pick<
@@ -48,6 +48,7 @@ export interface PersonalLearningPractice {
   note: { revision: number; text: string; reportedAt: string; evidenceLevel: 'SELF_REPORT' } | null;
   support: PracticeSupportState;
   submissions: PersonalLearningPracticeSubmission[];
+  nextCandidate: SavedLearningLessonCandidate | null;
 }
 
 export function validatePersonalLearningEvidenceSubmission(input: {
@@ -134,7 +135,13 @@ export interface PersonalLearningPracticeRepository {
     requestId: string;
     requestRevision: number;
     candidateId: string;
+    previousAssignmentId?: string;
   }): Promise<PersonalLearningPractice>;
+  createNextPracticeRequest(input: {
+    actor: PersonalLearningActor;
+    assignmentId: string;
+    operationId: string;
+  }): Promise<SavedPersonalLearningRequest>;
   recordPracticeNote(input: {
     actor: PersonalLearningActor;
     assignmentId: string;

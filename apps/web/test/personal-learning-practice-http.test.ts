@@ -9,6 +9,9 @@ const f = vi.hoisted(() => ({
   note: vi.fn(),
   submit: vi.fn(),
   enqueue: vi.fn(),
+  createNext: vi.fn(),
+  confirmCandidate: vi.fn(),
+  prepareLesson: vi.fn(),
 }));
 vi.mock('../src/auth/current-user', () => ({
   currentUserProvider: () => Promise.resolve({ getCurrentUser: f.user }),
@@ -23,6 +26,10 @@ vi.mock('@bunshin/database', () => ({
     readPractice = f.read;
     startPractice = f.start;
     recordPracticeNote = f.note;
+    createNextPracticeRequest = f.createNext;
+  },
+  PrismaLearningCandidateRepository: class {
+    confirm = f.confirmCandidate;
   },
   PrismaTrainingAnswerRepository: class {
     submit = f.submit;
@@ -30,6 +37,9 @@ vi.mock('@bunshin/database', () => ({
 }));
 vi.mock('../src/services/ai-training-evaluation-queue', () => ({
   enqueueAiTrainingEvaluation: f.enqueue,
+}));
+vi.mock('../src/services/personal-learning-lesson-candidate', () => ({
+  prepareLearningLesson: f.prepareLesson,
 }));
 import { learningPracticeResponse } from '../src/http/personal-learning-practice';
 const id = '11111111-1111-4111-8111-111111111111';
@@ -69,6 +79,9 @@ describe('dynamic practice HTTP', () => {
     f.note.mockResolvedValue({ assignmentId: id });
     f.submit.mockResolvedValue({ outcome: 'SUBMITTED', answer: { id }, eventId: id });
     f.enqueue.mockResolvedValue(undefined);
+    f.createNext.mockResolvedValue({ id, revision: 2 });
+    f.confirmCandidate.mockResolvedValue({ id, confirmedAt: new Date().toISOString() });
+    f.prepareLesson.mockResolvedValue({ id });
   });
   it('starts using saved IDs only', async () => {
     expect((await learningPracticeResponse(post(), 's', 'e')).status).toBe(200);
@@ -79,12 +92,66 @@ describe('dynamic practice HTTP', () => {
       candidateId: id,
     });
   });
+  it('requires the prior assignment identity for an explicit next-task switch', async () => {
+    expect(
+      (await learningPracticeResponse(post({ ...start, previousAssignmentId: id }), 's', 'e'))
+        .status,
+    ).toBe(200);
+    expect(f.start).toHaveBeenCalledWith({
+      actor: { actorUserId: 'user', scope: {} },
+      requestId: id,
+      requestRevision: 1,
+      candidateId: id,
+      previousAssignmentId: id,
+    });
+  });
   it('records a versioned note without assessment', async () => {
     expect((await learningPracticeResponse(post(note), 's', 'e')).status).toBe(200);
     expect(f.note).toHaveBeenCalledWith(
       expect.objectContaining({ text: note.text, expectedRevision: 0, operationId: id }),
     );
     expect(f.start).not.toHaveBeenCalled();
+  });
+  it('generates a next-step proposal from a verified result through the existing lesson operation', async () => {
+    const operationId = '22222222-2222-4222-8222-222222222222';
+    expect(
+      (
+        await learningPracticeResponse(
+          post({ action: 'NEXT_PROPOSAL', assignmentId: id, operationId }),
+          's',
+          'e',
+        )
+      ).status,
+    ).toBe(200);
+    expect(f.createNext).toHaveBeenCalledWith({
+      actor: { actorUserId: 'user', scope: {} },
+      assignmentId: id,
+      operationId,
+    });
+    expect(f.prepareLesson).toHaveBeenCalledWith(
+      { actorUserId: 'user', scope: {} },
+      id,
+      2,
+      operationId,
+    );
+  });
+  it('confirms the saved next-step candidate without regenerating it', async () => {
+    expect(
+      (
+        await learningPracticeResponse(
+          post({ action: 'NEXT_CONFIRM', requestId: id, requestRevision: 2, candidateId: id }),
+          's',
+          'e',
+        )
+      ).status,
+    ).toBe(200);
+    expect(f.confirmCandidate).toHaveBeenCalledWith({
+      actor: { actorUserId: 'user', scope: {} },
+      requestId: id,
+      requestRevision: 2,
+      candidateId: id,
+    });
+    expect(f.prepareLesson).not.toHaveBeenCalled();
   });
   it('stores typed evidence and enqueues the existing answer evaluation job', async () => {
     expect((await learningPracticeResponse(post(evidence), 's', 'e')).status).toBe(200);
