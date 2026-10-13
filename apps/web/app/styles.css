@@ -5022,6 +5022,12 @@ a {
   font-weight: 700;
 }
 
+.service-home-access__help {
+  margin-top: 20px;
+  color: #6a7486;
+  font-size: 0.86rem;
+}
+
 .service-entry__details {
   display: flex;
   flex-wrap: wrap;
