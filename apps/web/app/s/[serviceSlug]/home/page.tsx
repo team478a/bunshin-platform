@@ -43,6 +43,7 @@ import {
   ServiceOperatorLinks,
 } from './service-home-navigation-sections';
 import { ServiceHomeAccessGuidance } from './service-home-access-guidance';
+import { serviceAuthBrandForSlug } from '../../../../src/services/service-auth-brand';
 
 export const dynamic = 'force-dynamic';
 
@@ -82,6 +83,7 @@ export default async function ServiceMemberHome({
   const actor = await (await currentUserProvider()).getCurrentUser();
   if (!actor) {
     const publicService = await publicContext(serviceSlug);
+    const brand = serviceAuthBrandForSlug(serviceSlug, publicService?.configuration);
     return (
       <ServiceHomeAccessGuidance
         state="LOGIN_REQUIRED"
@@ -92,6 +94,7 @@ export default async function ServiceMemberHome({
               poweredBy: publicService.configuration.poweredByEnabled,
             }
           : {})}
+        brand={brand}
         serviceSlug={serviceSlug}
       />
     );
@@ -100,6 +103,7 @@ export default async function ServiceMemberHome({
   const service = await memberContext(serviceSlug, actor.userId);
   if (!service) {
     const publicService = await publicContext(serviceSlug);
+    const brand = serviceAuthBrandForSlug(serviceSlug, publicService?.configuration);
     return (
       <ServiceHomeAccessGuidance
         state={publicService ? 'MEMBERSHIP_REQUIRED' : 'LINK_UNAVAILABLE'}
@@ -110,6 +114,7 @@ export default async function ServiceMemberHome({
               poweredBy: publicService.configuration.poweredByEnabled,
             }
           : {})}
+        brand={brand}
         serviceSlug={serviceSlug}
       />
     );
@@ -150,6 +155,7 @@ export default async function ServiceMemberHome({
   });
   if (!membership) {
     const publicService = await publicContext(serviceSlug);
+    const brand = serviceAuthBrandForSlug(serviceSlug, publicService?.configuration);
     return (
       <ServiceHomeAccessGuidance
         state="MEMBERSHIP_REQUIRED"
@@ -160,6 +166,7 @@ export default async function ServiceMemberHome({
               poweredBy: publicService.configuration.poweredByEnabled,
             }
           : {})}
+        brand={brand}
         serviceSlug={serviceSlug}
       />
     );

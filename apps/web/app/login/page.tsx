@@ -4,6 +4,7 @@ import { PendingSubmitButton } from '../ui/pending-submit-button';
 import { ServiceAuthBranding } from '../ui/service-auth-branding';
 import { serviceAuthReturnSlug } from '../../src/auth/line-return';
 import { resolvePublicServiceContext } from '../../src/services/public-service';
+import { serviceAuthBrandForSlug } from '../../src/services/service-auth-brand';
 import { isRouteNotFound } from '../../src/navigation/route-not-found';
 
 export default async function LoginPage({
@@ -23,14 +24,15 @@ export default async function LoginPage({
       if (!isRouteNotFound(error)) throw error;
     }
   }
-  const serviceName = serviceConfiguration?.displayName;
+  const serviceBrand = serviceAuthBrandForSlug(serviceSlug, serviceConfiguration);
+  const serviceName = serviceBrand?.serviceName;
   return (
-    <PublicShell narrow showPlatformBrand={!serviceConfiguration}>
-      {serviceConfiguration && (
+    <PublicShell narrow showPlatformBrand={!serviceBrand}>
+      {serviceBrand && (
         <ServiceAuthBranding
-          serviceName={serviceConfiguration.displayName}
-          logoUrl={serviceConfiguration.brand.logoUrl}
-          poweredBy={serviceConfiguration.poweredByEnabled}
+          serviceName={serviceBrand.serviceName}
+          logoUrl={serviceBrand.logoUrl}
+          poweredBy={serviceBrand.poweredBy}
         />
       )}
       <section className="auth-panel" aria-labelledby="login-title">
