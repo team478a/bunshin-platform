@@ -8,6 +8,12 @@ export type OpenAiCompatibilityTask =
 
 // Local request compatibility, not a live quality/access/price approval or model router.
 const models = new Set(['gpt-5.2', 'gpt-5.2-2025-12-11', 'gpt-5-mini', 'gpt-5-mini-2025-08-07']);
+const imageModels = new Set([
+  'gpt-5.2',
+  'gpt-5.2-2025-12-11',
+  'gpt-5-mini',
+  'gpt-5-mini-2025-08-07',
+]);
 const schemaNames: Record<OpenAiCompatibilityTask, readonly string[]> = {
   SOCIAL_PLANNER: ['daily_mission_brief', 'weekly_plan'],
   TRAINING_ASSESSMENT: ['training_evaluation', 'personal_learning_evidence_review'],
@@ -51,18 +57,42 @@ export function assertOpenAiTaskRequest(
     (!Number.isInteger(value.max_output_tokens) || Number(value.max_output_tokens) < 16)
   )
     fail(task, 'INVALID_OUTPUT_LIMIT');
-  if (
-    !Array.isArray(value.input) ||
-    value.input.length === 0 ||
-    value.input.some(
-      (item: unknown) =>
-        !object(item) ||
-        !['system', 'user'].includes(String(item.role)) ||
-        typeof item.content !== 'string' ||
-        Object.keys(item).some((key) => !['role', 'content'].includes(key)),
-    )
-  )
+  if (!Array.isArray(value.input) || value.input.length === 0)
     fail(task, 'INPUT_MODALITY_NOT_SUPPORTED');
+  let hasImage = false;
+  for (const item of value.input) {
+    if (
+      !object(item) ||
+      !['system', 'user'].includes(String(item.role)) ||
+      Object.keys(item).some((key) => !['role', 'content'].includes(key))
+    )
+      fail(task, 'INPUT_MODALITY_NOT_SUPPORTED');
+    if (typeof item.content === 'string') continue;
+    if (task !== 'LEARNING_SUPPORT' || item.role !== 'user' || !Array.isArray(item.content))
+      fail(task, 'INPUT_MODALITY_NOT_SUPPORTED');
+    for (const part of item.content) {
+      if (!object(part) || typeof part.type !== 'string')
+        fail(task, 'INPUT_MODALITY_NOT_SUPPORTED');
+      if (
+        part.type === 'input_text' &&
+        typeof part.text === 'string' &&
+        Object.keys(part).every((key) => ['type', 'text'].includes(key))
+      )
+        continue;
+      if (
+        part.type === 'input_image' &&
+        typeof part.image_url === 'string' &&
+        /^data:image\/jpeg;base64,[A-Za-z0-9+/]+={0,2}$/.test(part.image_url) &&
+        part.detail === 'low' &&
+        Object.keys(part).every((key) => ['type', 'image_url', 'detail'].includes(key))
+      ) {
+        hasImage = true;
+        continue;
+      }
+      fail(task, 'INPUT_MODALITY_NOT_SUPPORTED');
+    }
+  }
+  if (hasImage && !imageModels.has(String(value.model))) fail(task, 'IMAGE_MODEL_NOT_SUPPORTED');
   const format = object(value.text) ? value.text.format : undefined;
   if (
     !object(value.text) ||

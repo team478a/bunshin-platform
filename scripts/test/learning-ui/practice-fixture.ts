@@ -47,6 +47,7 @@ export const supportedPracticeFixture = {
         },
         promptVersion: 'synthetic-support-v1',
         usageKey: 'synthetic-support-usage',
+        image: null,
       },
     ],
   },

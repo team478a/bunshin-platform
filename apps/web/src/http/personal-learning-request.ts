@@ -27,7 +27,7 @@ const body = z
       .strict(),
   })
   .strict();
-export async function boundedLearningJson(request: Request) {
+export async function boundedLearningJson(request: Request, maxBytes = 16000) {
   if (!request.body) throw new ApplicationError('VALIDATION_ERROR', 'body required');
   const reader = request.body.getReader();
   const chunks: Uint8Array[] = [];
@@ -37,7 +37,7 @@ export async function boundedLearningJson(request: Request) {
       const next = await reader.read();
       if (next.done) break;
       size += next.value.byteLength;
-      if (size > 16000) {
+      if (size > maxBytes) {
         await reader.cancel();
         throw new ApplicationError('VALIDATION_ERROR', 'request too large');
       }

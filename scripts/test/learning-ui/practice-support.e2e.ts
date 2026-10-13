@@ -1,6 +1,8 @@
 import { test } from '@e2e-dev/web';
 import { expect } from 'e2e';
+import { resolve } from 'node:path';
 import { practiceFixture, supportedPracticeFixture } from './practice-fixture';
+const testImagePath = resolve(process.cwd(), '../../../apps/web/public/hassy-icon.jpg');
 
 test('smartphone consultation uses current task and note versions, not a new material', async ({
   app,
@@ -51,6 +53,47 @@ test('revisit restores support with no provider call or write', async ({
     screen.getByText('支援であり、達成・合格・独力再現の評価ではありません。'),
   ).toBeVisible();
   expect(calls).toBe(0);
+});
+test('one screenshot can be selected, previewed, removed, and attached to the same support request', async ({
+  app,
+  browser,
+  screen,
+}) => {
+  const posted: Record<string, unknown>[] = [];
+  await browser.route('**/api/synthetic/practice/support', async (route) => {
+    posted.push(JSON.parse(route.request.postData ?? '{}') as Record<string, unknown>);
+    await route.fulfill({
+      json: {
+        data: {
+          ...supportedPracticeFixture,
+          support: {
+            ...supportedPracticeFixture.support,
+            history: supportedPracticeFixture.support.history.map((entry) => ({
+              ...entry,
+              image: { mimeType: 'image/jpeg', sha256: 'a'.repeat(64), sizeBytes: 4 },
+            })),
+          },
+        },
+      },
+    });
+  });
+  await app.open('/?practice&resume');
+  const picker = screen.getByLabel('画面の画像（任意・1枚、3MBまで）');
+  await picker.setInputFiles([testImagePath]);
+  await expect(screen.getByRole('img', '相談に添付する画像のプレビュー')).toBeVisible();
+  await screen.getByRole('button', '画像を削除').tap();
+  await expect(screen.getByRole('img', '相談に添付する画像のプレビュー')).not.toBeVisible();
+  await picker.setInputFiles([testImagePath]);
+  await screen
+    .getByLabel('どこまで進めたか・何を聞きたいか（短く）')
+    .fill('ボタンが見つかりません');
+  await screen.getByRole('button', 'この課題の続きを相談').tap();
+  await expect(screen.getByRole('img', '相談に添付したスクリーンショット')).toBeVisible();
+  expect(posted[0]).toMatchObject({
+    assignmentId: practiceFixture.assignmentId,
+    text: 'ボタンが見つかりません',
+  });
+  expect(String(posted[0]?.imageDataUrl)).toMatch(/^data:image\/jpeg;base64,/);
 });
 test('AI failure retains input, work note and original task then reads durable status only', async ({
   app,

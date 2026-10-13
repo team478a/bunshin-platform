@@ -1,6 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApplicationError } from '@bunshin/shared';
-const f = vi.hoisted(() => ({ user: vi.fn(), actor: vi.fn(), origin: vi.fn(), support: vi.fn() }));
+const f = vi.hoisted(() => ({
+  user: vi.fn(),
+  actor: vi.fn(),
+  origin: vi.fn(),
+  support: vi.fn(),
+  readImage: vi.fn(),
+}));
 vi.mock('../src/auth/current-user', () => ({
   currentUserProvider: () => Promise.resolve({ getCurrentUser: f.user }),
 }));
@@ -11,7 +17,16 @@ vi.mock('../src/services/personal-learning-request-access', () => ({
 vi.mock('../src/services/personal-learning-practice-support', () => ({
   requestPracticeSupport: f.support,
 }));
-import { learningPracticeSupportResponse } from '../src/http/personal-learning-practice-support';
+vi.mock('@bunshin/database', () => ({
+  prisma: {},
+  PrismaPracticeSupportRepository: class {
+    readSupportImage = f.readImage;
+  },
+}));
+import {
+  learningPracticeSupportImageResponse,
+  learningPracticeSupportResponse,
+} from '../src/http/personal-learning-practice-support';
 const id = '11111111-1111-4111-8111-111111111111';
 const input = {
   assignmentId: id,
@@ -39,7 +54,11 @@ describe('practice support HTTP', () => {
     const response = await learningPracticeSupportResponse(post(), 's', 'e');
     expect(response.status).toBe(200);
     expect(response.headers.get('cache-control')).toBe('private, no-store');
-    expect(f.support).toHaveBeenCalledWith({ ...input, actor: { actorUserId: 'user', scope: {} } });
+    expect(f.support).toHaveBeenCalledWith({
+      ...input,
+      image: null,
+      actor: { actorUserId: 'user', scope: {} },
+    });
   });
   it('requires same origin before authorization', async () => {
     f.origin.mockImplementation(() => {
@@ -81,5 +100,35 @@ describe('practice support HTTP', () => {
         .status,
     ).toBe(405);
     expect(f.support).not.toHaveBeenCalled();
+  });
+  it('serves a private image only after session and enrollment resolution', async () => {
+    const bytes = Uint8Array.from([255, 216, 255, 217]);
+    f.readImage.mockResolvedValue({ mimeType: 'image/jpeg', bytes });
+    const response = await learningPracticeSupportImageResponse(
+      new Request('http://localhost/support/image'),
+      's',
+      'e',
+      id,
+    );
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toBe('image/jpeg');
+    expect(response.headers.get('cache-control')).toBe('private, no-store');
+    expect(response.headers.get('x-content-type-options')).toBe('nosniff');
+    expect(f.readImage).toHaveBeenCalledWith({
+      actor: { actorUserId: 'user', scope: {} },
+      requestId: id,
+    });
+    f.actor.mockRejectedValue(new ApplicationError('NOT_FOUND', 'hidden'));
+    expect(
+      (
+        await learningPracticeSupportImageResponse(
+          new Request('http://localhost/support/image'),
+          's',
+          'e',
+          id,
+        )
+      ).status,
+    ).toBe(404);
+    expect(f.readImage).toHaveBeenCalledOnce();
   });
 });

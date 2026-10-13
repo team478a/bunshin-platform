@@ -47,6 +47,13 @@ export async function requestPracticeSupport(command: PracticeSupportCommand) {
       policy.groupId !== command.actor.scope.groupId
     )
       throw new ApplicationError('CONFIGURATION_ERROR', 'support admission unavailable');
+    const body = learningSupportBody(
+      prepared.practice,
+      prepared.request,
+      policy.model,
+      { maxRequestBytes: policy.maxRequestBytes, maxOutputTokens: policy.maxOutputTokens },
+      command.image,
+    );
     const runtime = await resolveOpenAiRuntimeConfiguration(undefined, 'LEARNING_SUPPORT');
     if (runtime.model !== policy.model)
       throw new ApplicationError('CONFIGURATION_ERROR', 'support model mismatch');
@@ -60,7 +67,6 @@ export async function requestPracticeSupport(command: PracticeSupportCommand) {
       })
     )
       throw new ApplicationError('CONFIGURATION_ERROR', 'support price unavailable');
-    const body = learningSupportBody(prepared.practice, prepared.request, policy.model, policy);
     const value = await executePersonalLearningTextOperation(
       new db.PrismaPersonalLearningTextOperationRepository(db.prisma),
       {
@@ -79,6 +85,7 @@ export async function requestPracticeSupport(command: PracticeSupportCommand) {
           noteRevision: prepared.request.noteRevision,
           supportRevision: prepared.request.revision,
           supportRequestId: prepared.request.id,
+          imageSha256: command.image?.sha256 ?? null,
         },
       },
       async (permit) => {

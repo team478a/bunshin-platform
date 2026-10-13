@@ -170,6 +170,13 @@ export class PrismaTrainingPersonalDataDeletionRepository implements TrainingPer
               data: { beforeData: Prisma.DbNull, afterData: { learningDataRedacted: true } },
             });
           } else {
+            await tx.personalLearningPracticeSupportImage.deleteMany({
+              where: {
+                ...scope,
+                userId: input.actorUserId,
+                missionAssignmentId: { in: snapshot.answers.map((row) => row.missionAssignmentId) },
+              },
+            });
             await tx.programMissionAssignment.updateMany({
               where: {
                 ...scope,
