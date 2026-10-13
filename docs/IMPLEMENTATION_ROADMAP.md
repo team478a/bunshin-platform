@@ -1,5 +1,7 @@
 # BUNSHIN Platform 実装ロードマップ
 
+LINEログインでサービス参加状態を確認できない場合のHassy/マナベル比較、およびverified sessionからの明示的なidentity連携実装は`docs/LINE_IDENTITY_LINK_IMPLEMENTATION.md`を参照。Supabase Manual Identity LinkingはBetaのため、環境設定・実機smoke・migration reviewが完了するまで本番有効化しない。
+
 LINEの参加者ホームで未ログイン/未参加時に404を返さず、ログイン・参加案内を状態別に表示する修正は`docs/SERVICE_LINE_HOME_ACCESS_GUIDANCE_IMPLEMENTATION.md`を参照。認可境界は維持する。PRレビュー/CI後にmainへ反映し、production反映後にLINE内ブラウザで未ログイン・参加済み・未参加の各状態を確認する。
 
 メールmagic linkの確認画面ブランド表示とブラウザ違い案内は`docs/SERVICE_BRANDED_EMAIL_AUTH_IMPLEMENTATION.md`を参照。表示用`returnTo`は許可リスト検証し、ログイン成功時は試行記録を正本にする。LINE外ブラウザへ認証proofを渡さず、LINEログイン継続案内と実機確認を別途行う。

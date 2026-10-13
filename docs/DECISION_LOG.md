@@ -1,5 +1,14 @@
 # BUNSHIN Platform Decision Log
 
+## 2026-10-14: メールとLINEのログインIDは本人のverified sessionからのみ明示連携する
+
+- 状態: 実装PRレビュー待ち。migration・本番設定・LINE実機smokeは未実施。
+- Hassyとマナベルスタイルは同一の`custom:line`ログインProvider/callbackを共有し、ログイン後のMembershipはサービス単位で別認可する。画面の「サービス利用状態を確認できません」はLINE認証失敗とは限らない。実利用者レコードは本人/管理者照合なしに読み出さない。
+- 既存verified sessionからLINEを明示的に追加するrouteを実装する。短命・single-useの専用試行、origin/proof cookie/PKCE、callback時のPlatform User一致とLINE subject一意性を確認する。Email一致で統合しない。
+- Identity連携はサービスMembership、Enrollment、Seat、Workspace権限を変更しない。LINE subjectが別Userへ登録済みなら拒否し、自動移動しない。
+- Supabase Manual Identity LinkingのBeta設定が必要なため、`LINE_IDENTITY_LINKING_ENABLED`と既存attempt gateが両方trueでなければUI/APIを無効にする。Productionで設定を変更せず、まずDevelopment環境と実機でsmokeを行う。
+- 正本/運用記録: `docs/LINE_IDENTITY_LINK_IMPLEMENTATION.md`。
+
 ## 2026-10-13: 動的実践の途中相談は課題・記録版に固定した支援履歴とする
 
 - 既存Assignmentの不変教材・評価基準と本人の環境・記録だけを使う。理解、操作位置、画面差異、機能不足、目的不一致、作業量、原因不明を分け、原因不明は短い確認へ止める。操作根拠がない画面を推測せず、制作代行・課題変更・能力スコア更新を行わない。

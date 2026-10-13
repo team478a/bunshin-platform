@@ -99,7 +99,7 @@ export function emailAuthReturnTo(url: URL): string | null {
   return safe;
 }
 
-type Method = 'LINE' | 'EMAIL';
+type Method = 'LINE' | 'EMAIL' | 'LINE_LINK';
 type Stage = 'PENDING' | 'CLAIMED' | 'AUTHENTICATED' | 'CONSUMED';
 interface AttemptRecord {
   id: string;
@@ -158,6 +158,7 @@ export async function createAuthReturnAttempt(
   method: Method,
   returnTo: string | null,
   email?: string,
+  actorUserId?: string,
 ): Promise<NewAuthReturnAttempt> {
   const safe = safeLineAuthReturnPath(returnTo);
   if (returnTo && !safe) throw new AuthReturnContextError();
@@ -190,7 +191,13 @@ export async function createAuthReturnAttempt(
     });
   const proof = randomBytes(32).toString('base64url');
   const origin = trustedRequestOrigin(request);
-  if (origin.length > 255 || (method === 'EMAIL' && !email)) throw new AuthReturnContextError();
+  if (
+    origin.length > 255 ||
+    (method === 'EMAIL' && !email) ||
+    (method === 'LINE_LINK' && !actorUserId) ||
+    (method !== 'LINE_LINK' && actorUserId)
+  )
+    throw new AuthReturnContextError();
   const attempt = await db.prisma.authReturnAttempt.create({
     data: {
       id: randomUUID(),
@@ -199,6 +206,7 @@ export async function createAuthReturnAttempt(
       origin,
       returnPath: safe,
       loginIdentityHash: method === 'EMAIL' ? authEmailHash(email!, hash(proof)) : null,
+      actorUserId: method === 'LINE_LINK' ? (actorUserId ?? null) : null,
       expiresAt: new Date(now.getTime() + LINE_AUTH_RETURN_MAX_AGE_SECONDS * 1000),
       createdAt: now,
     },
@@ -243,7 +251,11 @@ export async function setAuthAttemptPkceFlow(
     throw new AuthReturnContextError();
   const db = await database();
   const changed = await db.prisma.authReturnAttempt.updateMany({
-    where: { ...scope(context), stage: 'PENDING', method: 'LINE' },
+    where: {
+      ...scope(context),
+      stage: 'PENDING',
+      method: { in: ['LINE', 'LINE_LINK'] },
+    },
     data: { pkceFlowId: flowId },
   });
   if (changed.count !== 1) throw new AuthReturnContextError();
@@ -284,7 +296,11 @@ export async function readAuthReturnContext(
     attempt.expiresAt <= new Date() ||
     attempt.origin !== new URL(request.url).origin ||
     (options.method && (attempt.method !== options.method || attempt.stage !== 'PENDING')) ||
+    (attempt.method === 'LINE_LINK' &&
+      (!attempt.actorUserId ||
+        (options.actorUserId !== undefined && attempt.actorUserId !== options.actorUserId))) ||
     (options.actorUserId &&
+      attempt.method !== 'LINE_LINK' &&
       (attempt.actorUserId !== options.actorUserId || attempt.stage !== 'AUTHENTICATED')) ||
     attempt.stage === 'CONSUMED'
   )
@@ -321,8 +337,15 @@ export async function authenticateAuthReturnAttempt(
   if (!context.attempt) return;
   const db = await database();
   const changed = await db.prisma.authReturnAttempt.updateMany({
-    where: { ...scope(context), stage: 'CLAIMED' },
-    data: { stage: 'AUTHENTICATED', actorUserId },
+    where: {
+      ...scope(context),
+      stage: 'CLAIMED',
+      ...(context.attempt.method === 'LINE_LINK' ? { actorUserId } : {}),
+    },
+    data: {
+      stage: 'AUTHENTICATED',
+      ...(context.attempt.method === 'LINE_LINK' ? {} : { actorUserId }),
+    },
   });
   if (changed.count !== 1) throw new AuthReturnContextError();
 }

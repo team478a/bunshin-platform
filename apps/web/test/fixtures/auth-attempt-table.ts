@@ -4,7 +4,7 @@ type Stage = 'PENDING' | 'CLAIMED' | 'AUTHENTICATED' | 'CONSUMED';
 export interface AttemptRow {
   id: string;
   proofHash: string;
-  method: 'LINE' | 'EMAIL';
+  method: 'LINE' | 'EMAIL' | 'LINE_LINK';
   stage: Stage;
   origin: string;
   returnPath: string | null;
@@ -19,7 +19,7 @@ interface Where {
   proofHash?: string;
   origin?: string;
   stage?: Stage | { not: Stage };
-  method?: 'LINE' | 'EMAIL';
+  method?: 'LINE' | 'EMAIL' | { in: Array<'LINE' | 'EMAIL' | 'LINE_LINK'> };
   actorUserId?: string;
   expiresAt?: { gt?: Date; lt?: Date };
 }
@@ -31,7 +31,10 @@ function matches(row: AttemptRow, where: Where) {
       (typeof where.id === 'string' ? row.id === where.id : where.id.in.includes(row.id))) &&
     (!where.proofHash || row.proofHash === where.proofHash) &&
     (!where.origin || row.origin === where.origin) &&
-    (!where.method || row.method === where.method) &&
+    (!where.method ||
+      (typeof where.method === 'string'
+        ? row.method === where.method
+        : where.method.in.includes(row.method))) &&
     (!where.actorUserId || row.actorUserId === where.actorUserId) &&
     (!where.stage ||
       (typeof where.stage === 'string'
