@@ -161,7 +161,7 @@ export async function GET(request: Request): Promise<Response> {
     return clearAuthReturnCookie(
       loginErrorResponse(
         request,
-        error instanceof AuthReturnContextError ? 'auth-context' : '1',
+        error instanceof AuthReturnContextError ? 'auth-context' : 'line',
         context?.returnTo ?? null,
       ),
       claimed || cancelled ? context : null,
