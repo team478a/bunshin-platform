@@ -1074,6 +1074,7 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
     });
     it('practice support image: persists only scoped bytes and returns them to the owner', async () => {
       const f = await supportFixture();
+      await f.complete();
       const bytes = Uint8Array.from([255, 216, 255, 217]);
       const image = {
         mimeType: 'image/jpeg' as const,
@@ -1081,7 +1082,12 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
         sha256: createHash('sha256').update(bytes).digest('hex'),
         sizeBytes: bytes.byteLength,
       };
-      const command = { ...f.command, image };
+      const command = {
+        ...f.command,
+        operationId: randomUUID(),
+        expectedSupportRevision: 1,
+        image,
+      };
       const prepared = await f.support.prepareSupport(command);
       expect(prepared.request.image).toEqual({
         mimeType: 'image/jpeg',
