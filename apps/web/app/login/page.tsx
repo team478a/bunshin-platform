@@ -1,6 +1,10 @@
 import { PublicShell } from '../ui/public-shell';
 import { safeLineAuthReturnPath, videoAuthReturnProjectId } from '../../src/auth/line-return';
 import { PendingSubmitButton } from '../ui/pending-submit-button';
+import { ServiceAuthBranding } from '../ui/service-auth-branding';
+import { serviceAuthReturnSlug } from '../../src/auth/line-return';
+import { resolvePublicServiceContext } from '../../src/services/public-service';
+import { isRouteNotFound } from '../../src/navigation/route-not-found';
 
 export default async function LoginPage({
   searchParams,
@@ -10,13 +14,36 @@ export default async function LoginPage({
   const query = await searchParams;
   const returnTo = safeLineAuthReturnPath(query.returnTo);
   const videoProjectId = videoAuthReturnProjectId(returnTo);
+  const serviceSlug = serviceAuthReturnSlug(returnTo);
+  let serviceConfiguration = null;
+  if (serviceSlug) {
+    try {
+      serviceConfiguration = (await resolvePublicServiceContext(serviceSlug)).configuration;
+    } catch (error) {
+      if (!isRouteNotFound(error)) throw error;
+    }
+  }
+  const serviceName = serviceConfiguration?.displayName;
   return (
-    <PublicShell narrow>
+    <PublicShell narrow showPlatformBrand={!serviceConfiguration}>
+      {serviceConfiguration && (
+        <ServiceAuthBranding
+          serviceName={serviceConfiguration.displayName}
+          logoUrl={serviceConfiguration.brand.logoUrl}
+          poweredBy={serviceConfiguration.poweredByEnabled}
+        />
+      )}
       <section className="auth-panel" aria-labelledby="login-title">
         <div className="echo-motif" aria-hidden="true" />
         <div className="page-heading page-heading--center">
-          <h1 id="login-title">ワタシワークスへログイン</h1>
-          <p>LINEなら、すぐにはじめられます。</p>
+          <h1 id="login-title">
+            {serviceName ? `${serviceName}へログイン` : 'ワタシワークスへログイン'}
+          </h1>
+          <p>
+            {serviceName
+              ? `${serviceName}の利用を続けるには、LINEまたはメールでログインしてください。`
+              : 'LINEなら、すぐにはじめられます。'}
+          </p>
         </div>
         {query.sent === '1' && (
           <div className="notice notice--success" role="status">
@@ -27,7 +54,17 @@ export default async function LoginPage({
         {query.error === '1' && (
           <div className="notice notice--danger" role="alert">
             <strong>ログインを完了できませんでした</strong>
-            <span>リンクを再送して、最新のメールからもう一度お試しください。</span>
+            <span>
+              LINEの場合はLINEログインを、メールの場合は最新のログインリンクをもう一度お試しください。
+            </span>
+          </div>
+        )}
+        {query.error === 'line' && (
+          <div className="notice notice--danger" role="alert">
+            <strong>LINEログインを完了できませんでした</strong>
+            <span>
+              LINEの認証を最後まで完了しているかご確認ください。ログイン後もこの画面に戻る場合は、参加登録に使ったLINEアカウントか運営者へご確認ください。
+            </span>
           </div>
         )}
         {query.error === 'rate-limit' && (
