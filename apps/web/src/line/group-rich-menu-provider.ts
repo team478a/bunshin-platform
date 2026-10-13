@@ -103,3 +103,45 @@ export async function publishDefaultGroupRichMenu(input: {
   }
   return { lineRichMenuId, cleanupFailedIds };
 }
+
+/**
+ * Link a previously created menu to one verified LINE member. Keep this separate from
+ * publishDefaultGroupRichMenu: the latter intentionally changes the channel-wide default.
+ */
+export async function linkGroupRichMenuToUser(input: {
+  request?: typeof fetch;
+  accessToken: string;
+  providerUserId: string;
+  lineRichMenuId: string;
+}) {
+  if (!input.providerUserId.trim() || !input.lineRichMenuId.trim())
+    throw new ApplicationError('VALIDATION_ERROR', 'LINE member and menu are required');
+  const response = await (input.request ?? fetch)(
+    `${endpoint}/v2/bot/user/${encodeURIComponent(input.providerUserId)}/richmenu/${encodeURIComponent(input.lineRichMenuId)}`,
+    {
+      method: 'POST',
+      headers: { authorization: `Bearer ${input.accessToken}` },
+      signal: AbortSignal.timeout(10_000),
+    },
+  );
+  if (!response.ok) throw providerError(response.status);
+}
+
+/** Remove only the selected member's override; it falls back to the standard menu. */
+export async function unlinkGroupRichMenuFromUser(input: {
+  request?: typeof fetch;
+  accessToken: string;
+  providerUserId: string;
+}) {
+  if (!input.providerUserId.trim())
+    throw new ApplicationError('VALIDATION_ERROR', 'LINE member is required');
+  const response = await (input.request ?? fetch)(
+    `${endpoint}/v2/bot/user/${encodeURIComponent(input.providerUserId)}/richmenu`,
+    {
+      method: 'DELETE',
+      headers: { authorization: `Bearer ${input.accessToken}` },
+      signal: AbortSignal.timeout(10_000),
+    },
+  );
+  if (!response.ok) throw providerError(response.status);
+}
