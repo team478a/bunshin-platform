@@ -15,7 +15,7 @@ export function ServiceHomeAccessGuidance({
   serviceSlug: string;
 }) {
   const returnTo = `/s/${serviceSlug}/home`;
-  const serviceEntry = `/s/${serviceSlug}`;
+  const serviceEntry = `/s/${serviceSlug}` as const;
   const copy = {
     LOGIN_REQUIRED: {
       title: `${serviceName ?? 'サービス'}を利用するにはログインが必要です`,
