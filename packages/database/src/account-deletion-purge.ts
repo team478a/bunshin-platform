@@ -79,6 +79,7 @@ export class PrismaAccountDeletionPurgeRepository implements AccountDeletionPurg
       const learningRequests = await tx.personalLearningRequest.deleteMany({
         where: { userId: input.userId },
       });
+      await tx.personalLearningPracticeSupportImage.deleteMany({ where: { userId: input.userId } });
 
       const [identities, lineConnections, linePreferences, deepLinks, posts, activities] =
         await Promise.all([

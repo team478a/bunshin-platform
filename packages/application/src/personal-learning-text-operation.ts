@@ -25,6 +25,7 @@ export interface PersonalLearningTextOperation {
     noteRevision: number;
     supportRevision: number;
     supportRequestId: string;
+    imageSha256: string | null;
   };
   attempt: number;
   provider: string;
@@ -69,6 +70,8 @@ export function validatePersonalLearningTextOperation(input: PersonalLearningTex
       ? !input.practice ||
         !uuid(input.practice.assignmentId) ||
         !uuid(input.practice.supportRequestId) ||
+        (input.practice.imageSha256 !== null &&
+          !/^[a-f0-9]{64}$/.test(input.practice.imageSha256)) ||
         !Number.isSafeInteger(input.practice.noteRevision) ||
         input.practice.noteRevision < 0 ||
         input.practice.noteRevision >= 1000 ||

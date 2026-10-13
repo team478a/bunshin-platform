@@ -14,6 +14,18 @@ export const PRACTICE_SUPPORT_REASONS = [
 ] as const;
 export type PracticeSupportReason = (typeof PRACTICE_SUPPORT_REASONS)[number];
 export const PRACTICE_SUPPORT_VERSION = 'PERSONAL_LEARNING_SUPPORT_V1';
+export const PRACTICE_SUPPORT_IMAGE_MAX_BYTES = 512_000;
+export interface PracticeSupportImageInput {
+  mimeType: 'image/jpeg';
+  base64: string;
+  sha256: string;
+  sizeBytes: number;
+}
+export interface PracticeSupportImageMetadata {
+  mimeType: 'image/jpeg';
+  sha256: string;
+  sizeBytes: number;
+}
 export interface PracticeSupportAdvice {
   cause: PracticeSupportReason;
   explanation: string;
@@ -28,6 +40,7 @@ export interface PracticeSupportCommand {
   expectedSupportRevision: number;
   reason: PracticeSupportReason;
   text: string;
+  image: PracticeSupportImageInput | null;
 }
 export interface SavedPracticeSupport {
   id: string;
@@ -43,6 +56,7 @@ export interface SavedPracticeSupport {
   advice: PracticeSupportAdvice | null;
   promptVersion: string | null;
   usageKey: string | null;
+  image: PracticeSupportImageMetadata | null;
 }
 export interface PracticeSupportState {
   revision: number;
@@ -62,9 +76,15 @@ export interface PracticeSupportRepository {
     promptVersion: string;
   }): Promise<PersonalLearningPractice>;
   failSupport(input: { command: PracticeSupportCommand; requestId: string }): Promise<void>;
+  readSupportImage(input: {
+    actor: PersonalLearningActor;
+    requestId: string;
+  }): Promise<{ mimeType: 'image/jpeg'; bytes: Uint8Array } | null>;
 }
 export function validatePracticeSupportCommand(input: PracticeSupportCommand) {
   validatePersonalLearningActor(input.actor);
+  const decodedImageBytes = (base64: string) =>
+    (base64.length / 4) * 3 - (base64.endsWith('==') ? 2 : base64.endsWith('=') ? 1 : 0);
   const uuid = (v: unknown) =>
     typeof v === 'string' && /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(v);
   if (
@@ -77,7 +97,21 @@ export function validatePracticeSupportCommand(input: PracticeSupportCommand) {
     input.text.length > 500 ||
     ![input.expectedNoteRevision, input.expectedSupportRevision].every(
       (v) => Number.isSafeInteger(v) && v >= 0 && v < 1000,
-    )
+    ) ||
+    (input.image !== null &&
+      (!input.image ||
+        input.image.mimeType !== 'image/jpeg' ||
+        !Number.isSafeInteger(input.image.sizeBytes) ||
+        input.image.sizeBytes < 1 ||
+        input.image.sizeBytes > PRACTICE_SUPPORT_IMAGE_MAX_BYTES ||
+        typeof input.image.base64 !== 'string' ||
+        input.image.base64.length !== Math.ceil(input.image.sizeBytes / 3) * 4 ||
+        decodedImageBytes(input.image.base64) !== input.image.sizeBytes ||
+        !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(
+          input.image.base64,
+        ) ||
+        typeof input.image.sha256 !== 'string' ||
+        !/^[a-f0-9]{64}$/.test(input.image.sha256)))
   )
     throw new ApplicationError('VALIDATION_ERROR', 'invalid practice support input');
 }

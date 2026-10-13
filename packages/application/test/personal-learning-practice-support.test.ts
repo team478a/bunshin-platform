@@ -23,6 +23,7 @@ const command: PracticeSupportCommand = {
   expectedSupportRevision: 0,
   reason: 'ENVIRONMENT_MISMATCH',
   text: '画面が違う',
+  image: null,
 };
 const advice = {
   cause: 'ENVIRONMENT_MISMATCH',
@@ -67,6 +68,25 @@ describe('practice support contract', () => {
       validatePracticeSupportCommand({ ...command, ...change } as PracticeSupportCommand),
     ).toThrow();
   });
+  it('requires image bytes, canonical base64, size, and a digest-shaped identifier together', () => {
+    const image = {
+      mimeType: 'image/jpeg' as const,
+      base64: '/9j/2Q==',
+      sha256: 'a'.repeat(64),
+      sizeBytes: 4,
+    };
+    expect(() => validatePracticeSupportCommand({ ...command, image })).not.toThrow();
+    for (const invalid of [
+      { ...image, mimeType: 'image/png' },
+      { ...image, sizeBytes: image.sizeBytes + 1 },
+      { ...image, base64: 'invalid' },
+      { ...image, sha256: 'not-a-digest' },
+      { ...image, sizeBytes: 512_001 },
+    ])
+      expect(() =>
+        validatePracticeSupportCommand({ ...command, image: invalid } as PracticeSupportCommand),
+      ).toThrow();
+  });
   it.each([
     { ...advice, score: 1 },
     { ...advice, goalComplete: true },
@@ -104,7 +124,13 @@ describe('practice support contract', () => {
     expect(() =>
       validatePersonalLearningTextOperation({
         ...operation,
-        practice: { assignmentId: id, noteRevision: 0, supportRevision: 1, supportRequestId: id },
+        practice: {
+          assignmentId: id,
+          noteRevision: 0,
+          supportRevision: 1,
+          supportRequestId: id,
+          imageSha256: null,
+        },
       }),
     ).not.toThrow();
     expect(() =>
@@ -115,6 +141,7 @@ describe('practice support contract', () => {
           noteRevision: 0,
           supportRevision: 1,
           supportRequestId: id,
+          imageSha256: null,
         },
       }),
     ).toThrow();

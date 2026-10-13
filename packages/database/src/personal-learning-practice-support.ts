@@ -3,6 +3,7 @@ import type { Prisma } from '@prisma/client';
 import { ApplicationError } from '@bunshin/shared';
 import {
   PRACTICE_SUPPORT_VERSION,
+  PRACTICE_SUPPORT_IMAGE_MAX_BYTES,
   validatePracticeSupportCommand,
   validatePracticeSupportAdvice,
   type PracticeSupportRepository,
@@ -27,6 +28,7 @@ const digest = (input: PracticeSupportCommand) =>
         input.expectedSupportRevision,
         input.reason,
         input.text,
+        input.image?.sha256 ?? null,
       ]),
     )
     .digest('hex');
@@ -98,9 +100,40 @@ export class PrismaPracticeSupportRepository
             materialVersion: 1,
             reason: input.reason,
             text: input.text,
+            image: input.image
+              ? {
+                  mimeType: input.image.mimeType,
+                  sha256: input.image.sha256,
+                  sizeBytes: input.image.sizeBytes,
+                }
+              : null,
           },
         },
       });
+      if (input.image) {
+        const bytes = Buffer.from(input.image.base64, 'base64');
+        if (
+          bytes.byteLength !== input.image.sizeBytes ||
+          bytes.byteLength > PRACTICE_SUPPORT_IMAGE_MAX_BYTES ||
+          createHash('sha256').update(bytes).digest('hex') !== input.image.sha256
+        )
+          return conflict();
+        await tx.personalLearningPracticeSupportImage.create({
+          data: {
+            workspaceId: s.workspaceId,
+            groupId: s.groupId,
+            programEnrollmentId: s.programEnrollmentId,
+            groupMembershipId: s.groupMembershipId,
+            missionAssignmentId: row.id,
+            requestEventId: event.id,
+            userId: s.userId,
+            mimeType: input.image.mimeType,
+            sha256: input.image.sha256,
+            sizeBytes: input.image.sizeBytes,
+            bytes,
+          },
+        });
+      }
       const updated = await this.projectPractice(tx, actor, row);
       const request = updated.support.history.find((r) => r.id === event.id);
       if (!request) return conflict();
@@ -127,7 +160,8 @@ export class PrismaPracticeSupportRepository
       request.status !== 'PENDING' ||
       request.operationId !== input.operationId ||
       request.noteRevision !== p.noteRevision ||
-      request.revision !== p.supportRevision
+      request.revision !== p.supportRevision ||
+      (request.image?.sha256 ?? null) !== p.imageSha256
     )
       return conflict();
   }
@@ -149,6 +183,7 @@ export class PrismaPracticeSupportRepository
         request.operationId !== input.command.operationId ||
         request.text !== input.command.text ||
         request.reason !== input.command.reason ||
+        (request.image?.sha256 ?? null) !== (input.command.image?.sha256 ?? null) ||
         request.noteRevision !== input.command.expectedNoteRevision ||
         request.revision !== input.command.expectedSupportRevision + 1
       )
@@ -196,7 +231,8 @@ export class PrismaPracticeSupportRepository
         !request ||
         request.operationId !== input.command.operationId ||
         request.text !== input.command.text ||
-        request.reason !== input.command.reason
+        request.reason !== input.command.reason ||
+        (request.image?.sha256 ?? null) !== (input.command.image?.sha256 ?? null)
       )
         return conflict();
       if (request.status !== 'PENDING') return;
@@ -215,6 +251,62 @@ export class PrismaPracticeSupportRepository
         status: 'FAILED',
         ...(receipt ? { usageKey, promptVersion: receipt.promptVersion } : {}),
       });
+    });
+  }
+
+  async readSupportImage(input: Parameters<PracticeSupportRepository['readSupportImage']>[0]) {
+    return this.authorized(input.actor, false, async (tx) => {
+      const actor = input.actor;
+      await this.normalLearner(tx, actor);
+      const row = await this.current(tx, actor);
+      if (!row) return null;
+      const s = actor.scope;
+      const event = await tx.programActionEvent.findFirst({
+        where: {
+          workspaceId: s.workspaceId,
+          groupId: s.groupId,
+          programEnrollmentId: s.programEnrollmentId,
+          missionAssignmentId: row.id,
+          actorUserId: s.userId,
+          id: input.requestId,
+          eventType: SUPPORT_REQUEST_EVENT,
+        },
+        select: { id: true, metadata: true },
+      });
+      if (!event) return null;
+      const image = await tx.personalLearningPracticeSupportImage.findFirst({
+        where: {
+          workspaceId: s.workspaceId,
+          groupId: s.groupId,
+          programEnrollmentId: s.programEnrollmentId,
+          groupMembershipId: s.groupMembershipId,
+          missionAssignmentId: row.id,
+          requestEventId: event.id,
+          userId: s.userId,
+        },
+        select: { mimeType: true, sha256: true, sizeBytes: true, bytes: true },
+      });
+      if (!image) return null;
+      const metadata = supportObject(event.metadata);
+      const expectedImage = supportObject(metadata.image);
+      if (
+        metadata.image === null ||
+        metadata.image === undefined ||
+        expectedImage.mimeType !== image.mimeType ||
+        expectedImage.sha256 !== image.sha256 ||
+        expectedImage.sizeBytes !== image.sizeBytes
+      )
+        return conflict();
+      const bytes = new Uint8Array(image.bytes);
+      if (
+        image.mimeType !== 'image/jpeg' ||
+        image.sizeBytes !== bytes.byteLength ||
+        image.sizeBytes < 1 ||
+        image.sizeBytes > PRACTICE_SUPPORT_IMAGE_MAX_BYTES ||
+        createHash('sha256').update(bytes).digest('hex') !== image.sha256
+      )
+        return conflict();
+      return { mimeType: 'image/jpeg' as const, bytes };
     });
   }
   private response(

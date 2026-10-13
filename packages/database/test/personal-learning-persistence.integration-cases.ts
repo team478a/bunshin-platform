@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import type { PrismaClient, Prisma } from '@prisma/client';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -989,6 +989,7 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
         expectedSupportRevision: 0,
         reason: 'ENVIRONMENT_MISMATCH' as const,
         text: '画面が違う',
+        image: null,
       };
       const advice = {
         cause: 'ENVIRONMENT_MISMATCH' as const,
@@ -1008,6 +1009,7 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
           noteRevision: 0,
           supportRevision: 1,
           supportRequestId: prepared.request.id,
+          imageSha256: null,
         },
       };
       const complete = async () => {
@@ -1069,6 +1071,38 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
       expect(exportedSupport).toEqual(
         expect.arrayContaining([expect.objectContaining({ text: f.command.text })]),
       );
+    });
+    it('practice support image: persists only scoped bytes and returns them to the owner', async () => {
+      const f = await supportFixture();
+      await f.complete();
+      const bytes = Uint8Array.from([255, 216, 255, 217]);
+      const image = {
+        mimeType: 'image/jpeg' as const,
+        base64: Buffer.from(bytes).toString('base64'),
+        sha256: createHash('sha256').update(bytes).digest('hex'),
+        sizeBytes: bytes.byteLength,
+      };
+      const command = {
+        ...f.command,
+        operationId: randomUUID(),
+        expectedSupportRevision: 1,
+        image,
+      };
+      const prepared = await f.support.prepareSupport(command);
+      expect(prepared.request.image).toEqual({
+        mimeType: 'image/jpeg',
+        sha256: image.sha256,
+        sizeBytes: image.sizeBytes,
+      });
+      await expect(
+        f.support.readSupportImage({ actor: f.actor, requestId: prepared.request.id }),
+      ).resolves.toMatchObject({ mimeType: 'image/jpeg', bytes });
+      await client.programActionEvent.delete({ where: { id: prepared.request.id } });
+      expect(
+        await client.personalLearningPracticeSupportImage.count({
+          where: { requestEventId: prepared.request.id },
+        }),
+      ).toBe(0);
     });
     it('practice support: a different latest wish does not change the executing context or block its budget', async () => {
       const f = await supportFixture();
