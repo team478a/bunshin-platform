@@ -11,6 +11,10 @@ import { currentUserProvider } from '../auth/current-user';
 import { requireSameOrigin } from '../auth/request-security';
 import { resolvePersonalLearningPilot } from '../services/personal-learning-pilot-access';
 import { resolvePersonalLearningFocus } from '../services/personal-learning-focus';
+import {
+  activatePersonalLearningLineMenu,
+  personalLearningLineMenuStatus,
+} from '../services/personal-learning-line-rich-menu';
 const logger = createLogger();
 
 const consultation = z
@@ -99,6 +103,7 @@ const body = z.discriminatedUnion('operation', [
       fit: z.enum(['FIT', 'NEUTRAL', 'NOT_FIT']),
     })
     .strict(),
+  z.object({ operation: z.literal('ACTIVATE_LINE_MENU') }).strict(),
 ]);
 
 export async function personalLearningPilotResponse(
@@ -130,9 +135,14 @@ export async function personalLearningPilotResponse(
             revision: current.plan.revision,
           })
         : null;
+      const lineMenu = await personalLearningLineMenuStatus(
+        input,
+        assignment?.display?.title ?? null,
+      );
       return respond({
         state,
         assignment,
+        lineMenu,
         learningFocus: resolvePersonalLearningFocus(current?.plan, assignment),
         readiness: await repository.readiness(input),
         practice: await new db.PrismaGuidedPracticeRepository(db.prisma).readPractice(
@@ -145,6 +155,10 @@ export async function personalLearningPilotResponse(
     const readiness = await repository.readiness(input);
     if (!readiness.profileReady && value.operation !== 'CONSULT')
       throw new ApplicationError('CONFLICT', 'pilot profile preparation required');
+    if (value.operation === 'ACTIVATE_LINE_MENU') {
+      await activatePersonalLearningLineMenu({ actor: input, serviceSlug });
+      return respond({ linked: true });
+    }
     if (value.operation === 'PRACTICE')
       return respond(
         await new db.PrismaGuidedPracticeRepository(db.prisma).recordPractice(
