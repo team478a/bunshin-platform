@@ -4,6 +4,7 @@ import Link from 'next/link';
 interface MemberFeatureLinksProps {
   imageAvailable: boolean;
   isBusinessDailyService: boolean;
+  isPersonalLearningService: boolean;
   isServiceOperator: boolean;
   promptOnlyImages: boolean;
   rewardsAvailable: boolean;
@@ -16,6 +17,7 @@ export function MemberFeatureLinks(props: MemberFeatureLinksProps) {
   const {
     imageAvailable,
     isBusinessDailyService,
+    isPersonalLearningService,
     isServiceOperator,
     promptOnlyImages,
     rewardsAvailable,
@@ -25,7 +27,13 @@ export function MemberFeatureLinks(props: MemberFeatureLinksProps) {
   } = props;
   return (
     <section className="service-entry__card">
-      <h2>{isBusinessDailyService ? '毎日の集客を進める' : '利用できる機能'}</h2>
+      <h2>
+        {isBusinessDailyService
+          ? '毎日の集客を進める'
+          : isPersonalLearningService
+            ? '学習を進める'
+            : '利用できる機能'}
+      </h2>
       {!isBusinessDailyService &&
         !promptOnlyImages &&
         !imageAvailable &&
@@ -35,6 +43,11 @@ export function MemberFeatureLinks(props: MemberFeatureLinksProps) {
           <p>現在、利用できる機能を準備しています。サービス運営者からの案内をお待ちください。</p>
         )}
       <div className="service-home-actions">
+        {isPersonalLearningService && (
+          <Link className="button button--primary" href={`/s/${serviceSlug}/programs` as Route}>
+            学習プログラム・課題を見る
+          </Link>
+        )}
         {promptOnlyImages && (
           <div className="notice">
             <strong>画像は、画像用の文章をコピーして作ります</strong>
@@ -54,9 +67,14 @@ export function MemberFeatureLinks(props: MemberFeatureLinksProps) {
             ポイント・バッジを見る
           </Link>
         )}
-        <Link className="button button--primary" href={`/s/${serviceSlug}/weekly-report` as Route}>
-          今週できたことを見る
-        </Link>
+        {!isPersonalLearningService && (
+          <Link
+            className="button button--primary"
+            href={`/s/${serviceSlug}/weekly-report` as Route}
+          >
+            今週できたことを見る
+          </Link>
+        )}
         {isBusinessDailyService && (
           <>
             <Link className="button button--primary" href={`/s/${serviceSlug}/diagnosis` as Route}>
@@ -73,7 +91,7 @@ export function MemberFeatureLinks(props: MemberFeatureLinksProps) {
             </Link>
           </>
         )}
-        {!isBusinessDailyService && (
+        {!isBusinessDailyService && !isPersonalLearningService && (
           <>
             <Link className="button button--primary" href={`/s/${serviceSlug}/activity` as Route}>
               活動・紹介を見る
@@ -83,13 +101,15 @@ export function MemberFeatureLinks(props: MemberFeatureLinksProps) {
             </Link>
           </>
         )}
-        <Link className="button button--primary" href={`/s/${serviceSlug}/bunshins` as Route}>
-          投稿パートナーを作る・見る
-        </Link>
+        {!isPersonalLearningService && (
+          <Link className="button button--primary" href={`/s/${serviceSlug}/bunshins` as Route}>
+            投稿パートナーを作る・見る
+          </Link>
+        )}
         <Link className="button" href={`/s/${serviceSlug}/help` as Route}>
           使い方・困ったとき
         </Link>
-        {!isBusinessDailyService && !promptOnlyImages && (
+        {!isBusinessDailyService && !isPersonalLearningService && !promptOnlyImages && (
           <Link className="button" href={`/s/${serviceSlug}/credits` as Route}>
             画像作成回数を見る
           </Link>
