@@ -20,6 +20,7 @@ import {
   singleAuthAttemptId,
   authEmailHash,
   emailAuthAttemptId,
+  emailAuthReturnTo,
   type NewAuthReturnAttempt,
 } from '../src/auth/auth-return-attempt';
 
@@ -147,14 +148,19 @@ describe('attempt-scoped authentication return records', () => {
     expect(attemptTable.create).not.toHaveBeenCalled();
   });
 
-  it('extracts only the same-origin attempt from email template redirect metadata', () => {
+  it('extracts the same-origin attempt and a validated service return path from email metadata', () => {
     const url = new URL(`${origin}/auth/confirm?token_hash=token&type=email`);
-    url.searchParams.set('redirect_to', `${origin}/auth/confirm?authAttempt=${actor}`);
+    url.searchParams.set(
+      'redirect_to',
+      `${origin}/auth/confirm?authAttempt=${actor}&returnTo=%2Fs%2Fmanaberu-style%2Fhome`,
+    );
     expect(emailAuthAttemptId(url)).toBe(actor);
+    expect(emailAuthReturnTo(url)).toBe('/s/manaberu-style/home');
     for (const invalid of [
       'https://other.example/auth/confirm',
       `${origin}/s/other/line`,
-      `${origin}/auth/confirm?returnTo=/s/other/line`,
+      `${origin}/auth/confirm?returnTo=https%3A%2F%2Fevil.example`,
+      `${origin}/auth/confirm?returnTo=%2Fs%2Fone%2Fhome&returnTo=%2Fs%2Ftwo%2Fhome`,
       `${origin}/auth/confirm?authAttempt=${actor}&authAttempt=${actor}`,
     ]) {
       url.searchParams.set('redirect_to', invalid);
