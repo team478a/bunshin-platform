@@ -107,38 +107,54 @@ export function WeeklyActivitySection({
   activities,
   bunshinCount,
   isBusinessDailyService,
+  isPersonalLearningService,
   serviceSlug,
 }: {
   activities: ServiceActivity[];
   bunshinCount: number;
   isBusinessDailyService: boolean;
+  isPersonalLearningService: boolean;
   serviceSlug: string;
 }) {
   return (
     <section className="service-entry__card">
-      <h2>今週の進み具合</h2>
+      <h2>{isPersonalLearningService ? '今日の学習' : '今週の進み具合'}</h2>
       {bunshinCount === 0 ? (
         <div className="empty-state">
-          <p>まずは、投稿を一緒に考えるパートナーを作りましょう。</p>
+          <p>
+            {isPersonalLearningService
+              ? '受講中の学習プログラムから、今日の課題と前回の続きへ進めます。'
+              : 'まずは、投稿を一緒に考えるパートナーを作りましょう。'}
+          </p>
           <Link
             className="button button--primary button--full"
-            href={`/s/${serviceSlug}/bunshins/new` as Route}
+            href={
+              isPersonalLearningService
+                ? `/s/${serviceSlug}/programs`
+                : `/s/${serviceSlug}/bunshins/new`
+            }
           >
-            投稿パートナーを作る
+            {isPersonalLearningService ? '学習プログラムを開く' : '投稿パートナーを作る'}
           </Link>
         </div>
       ) : activities.length === 0 ? (
         <div className="empty-state">
           <p>
-            {isBusinessDailyService
-              ? '今日の集客活動が届くと、ここに今週の記録が表示されます。'
-              : '投稿の準備が整うと、ここに今週の記録が表示されます。'}
+            {isPersonalLearningService
+              ? '学習プログラムを開くと、現在の課題と前回の続きが確認できます。'
+              : isBusinessDailyService
+                ? '今日の集客活動が届くと、ここに今週の記録が表示されます。'
+                : '投稿の準備が整うと、ここに今週の記録が表示されます。'}
           </p>
           <Link
             className="button button--primary button--full"
-            href={`/s/${serviceSlug}/bunshins` as Route}
+            href={
+              isPersonalLearningService
+                ? `/s/${serviceSlug}/programs`
+                : `/s/${serviceSlug}/bunshins`
+            }
           >
-            投稿パートナーを見る
+            {isPersonalLearningService ? '学習プログラムを開く' : '投稿パートナーを見る'}
           </Link>
         </div>
       ) : (
