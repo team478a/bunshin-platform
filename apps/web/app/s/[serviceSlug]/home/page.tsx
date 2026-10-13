@@ -3,6 +3,7 @@ import {
   ServiceParticipationService,
   businessGrowthProgramStatus,
 } from '@bunshin/application';
+import { AI_TRAINING_V1_MODULE_KEY } from '@bunshin/capability-training';
 import { GetMissionProgress } from '@bunshin/capability-social';
 import type { CSSProperties } from 'react';
 import type { Metadata, Route } from 'next';
@@ -216,6 +217,17 @@ export default async function ServiceMemberHome({
           currentDate: localDate,
         })
       : null;
+  const isPersonalLearningService = Boolean(
+    await db.prisma.serviceProgram.findFirst({
+      where: {
+        workspaceId: service.workspaceId,
+        groupId: service.serviceId,
+        status: 'ACTIVE',
+        settings: { path: ['moduleKey'], equals: AI_TRAINING_V1_MODULE_KEY },
+      },
+      select: { id: true },
+    }),
+  );
   const currentWeek = weekRange(localDate);
   const activityRule = await currentActivityContinuityRule();
   const assignmentRepository = new db.PrismaBunshinCapabilityAssignmentRepository();
@@ -291,11 +303,13 @@ export default async function ServiceMemberHome({
           activities={activities}
           bunshinCount={bunshins.length}
           isBusinessDailyService={isBusinessDailyService}
+          isPersonalLearningService={isPersonalLearningService}
           serviceSlug={service.configuration.slug}
         />
         <MemberFeatureLinks
           imageAvailable={imageAvailable}
           isBusinessDailyService={isBusinessDailyService}
+          isPersonalLearningService={isPersonalLearningService}
           isServiceOperator={isServiceOperator}
           promptOnlyImages={promptOnlyImages}
           rewardsAvailable={Boolean(rewardsPilotAccess)}

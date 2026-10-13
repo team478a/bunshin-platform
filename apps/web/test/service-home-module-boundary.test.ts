@@ -1,5 +1,9 @@
 import { readFileSync } from 'node:fs';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
+import { WeeklyActivitySection } from '../app/s/[serviceSlug]/home/service-home-overview-sections';
+import { MemberFeatureLinks } from '../app/s/[serviceSlug]/home/service-home-navigation-sections';
 
 const pageSource = readFileSync(
   new URL('../app/s/[serviceSlug]/home/page.tsx', import.meta.url),
@@ -29,5 +33,35 @@ describe('service home module boundary', () => {
     expect(overviewSource).toContain('今週の進み具合');
     expect(navigationSource).toContain('運営者用メニュー');
     expect(pageSource).not.toContain('service-home-actions');
+  });
+
+  it('shows learning actions instead of social-post partner prompts for training services', () => {
+    const overview = renderToStaticMarkup(
+      createElement(WeeklyActivitySection, {
+        activities: [],
+        bunshinCount: 0,
+        isBusinessDailyService: false,
+        isPersonalLearningService: true,
+        serviceSlug: 'manaberu-style',
+      }),
+    );
+    const navigation = renderToStaticMarkup(
+      createElement(MemberFeatureLinks, {
+        imageAvailable: false,
+        isBusinessDailyService: false,
+        isPersonalLearningService: true,
+        isServiceOperator: false,
+        promptOnlyImages: false,
+        rewardsAvailable: false,
+        serviceSlug: 'manaberu-style',
+        trackingLinkAvailable: false,
+        videoAvailable: false,
+      }),
+    );
+
+    expect(overview).toContain('学習プログラムを開く');
+    expect(overview).not.toContain('投稿パートナー');
+    expect(navigation).toContain('学習プログラム・課題を見る');
+    expect(navigation).not.toContain('投稿パートナー');
   });
 });
