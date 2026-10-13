@@ -582,7 +582,7 @@ model TrainingMissionAnswer {
   workspaceId         String                         @map("workspace_id") @db.Uuid
   groupId             String                         @map("group_id") @db.Uuid
   programEnrollmentId String                         @map("program_enrollment_id") @db.Uuid
-  missionAssignmentId String                         @unique @map("mission_assignment_id") @db.Uuid
+  missionAssignmentId String                         @map("mission_assignment_id") @db.Uuid
   userId              String                         @map("user_id") @db.Uuid
   answer              String                         @db.Text
   evaluationStatus    TrainingAnswerEvaluationStatus @default(PENDING) @map("evaluation_status")
@@ -592,6 +592,7 @@ model TrainingMissionAnswer {
   updatedAt           DateTime                       @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   @@unique([workspaceId, groupId, id])
+  @@index([workspaceId, groupId, missionAssignmentId, createdAt])
   @@index([workspaceId, groupId, programEnrollmentId, createdAt])
   @@index([workspaceId, groupId, userId, updatedAt])
   @@map("training_mission_answers")

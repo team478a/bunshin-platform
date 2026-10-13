@@ -1,1 +1,1 @@
-export const LATEST_DATABASE_MIGRATION = '20261013020000_personal_learning_lesson_candidate';
+export const LATEST_DATABASE_MIGRATION = '20261013030000_personal_learning_answer_revisions';

@@ -432,11 +432,36 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
         data: {
           settings: {
             moduleKey: 'AI_TRAINING_V1',
+            personalLearningPilot: {
+              enabled: true,
+              enrollmentIds: [f.enrollment.id],
+              participantControl: {
+                version: 'PILOT_PARTICIPANT_CAP_V1',
+                revision: 1,
+                externalParticipantCap: 5,
+                internalParticipantCap: 0,
+                currentWave: 1,
+                currentWaveCap: 1,
+              },
+            },
+            trainingOperations: { notificationsEnabled: false, postponedReminderEnabled: false },
             personalLearningPracticePolicy: {
               enabled: true,
               version: 'LEARNER_PRACTICE_TOOL_INDEPENDENT_V1',
             },
           },
+        },
+      });
+      await client.personalLearningPilotSeat.create({
+        data: {
+          workspaceId: f.scope.workspaceId,
+          groupId: f.scope.groupId,
+          serviceProgramId: f.enrollment.serviceProgramId,
+          participantHash: pilotParticipantHash(f.enrollment.serviceProgramId, f.scope.userId),
+          programEnrollmentId: f.enrollment.id,
+          kind: 'EXTERNAL',
+          cohort: 'WAVE_1',
+          seatNumber: 1,
         },
       });
       const practice = new PrismaPersonalLearningPracticeRepository(client, () => now);
@@ -495,6 +520,109 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
       expect(assignment).toMatchObject({ status: 'STARTED', completedAt: null });
       expect(await client.trainingMissionAnswer.count()).toBe(0);
       expect(await client.learningDefinitionApproval.count()).toBe(0);
+    });
+    it('dynamic practice: submits typed evidence revisions and keeps every answer bound to the confirmed material', async () => {
+      const f = await dynamicPracticeFixture();
+      const current = await f.practice.startPractice(f.start);
+      const answers = new PrismaTrainingAnswerRepository(client);
+      const firstInput = {
+        workspaceId: f.scope.workspaceId,
+        groupId: f.scope.groupId,
+        actorUserId: f.actor.actorUserId,
+        programEnrollmentId: f.enrollment.id,
+        missionAssignmentId: current.assignmentId,
+        answer: '見出しを一か所直した文章です。',
+        practiceEvidence: {
+          kind: 'TEXT' as const,
+          content: '見出しを一か所直した文章です。',
+          expectedRevision: 0,
+          candidateId: current.candidate.id,
+          materialVersion: current.candidate.materialVersion,
+        },
+        idempotencyKey: randomUUID(),
+        occurredAt: now,
+      };
+      const first = await answers.submit(firstInput);
+      expect(first.outcome).toBe('SUBMITTED');
+      if (first.outcome !== 'SUBMITTED') throw new Error('first evidence not saved');
+      expect(await answers.submit(firstInput)).toMatchObject({ outcome: 'ALREADY_SUBMITTED' });
+      expect(
+        await answers.submit({
+          ...firstInput,
+          practiceEvidence: { ...firstInput.practiceEvidence, content: '別の内容' },
+          answer: '別の内容',
+        }),
+      ).toMatchObject({ outcome: 'CONFLICT' });
+      await expect(
+        new PrismaPersonalLearningAssessmentGate(client).authorizeAssessment(
+          f.actor,
+          current.assignmentId,
+          first.answer.id,
+        ),
+      ).resolves.toBeUndefined();
+      const firstAnswerValue = await client.trainingMissionAnswer.findUniqueOrThrow({
+        where: { id: first.answer.id },
+      });
+      await client.trainingMissionAnswer.update({
+        where: { id: first.answer.id },
+        data: {
+          evaluationStatus: 'READY',
+          evaluation: {
+            schemaVersion: 'PERSONAL_LEARNING_EVIDENCE_REVIEW_V1',
+            candidateId: current.candidate.id,
+            materialVersion: 1,
+            revision: 1,
+            kind: 'TEXT',
+            review: {
+              state: 'FOLLOW_UP',
+              observed: [],
+              notEstablished: current.candidate.proposal.criteria,
+              feedback: 'もう一点確認します。',
+              nextAction: '同じ基準でもう一つ提出してください。',
+            },
+          },
+          evaluatedAt: now,
+        },
+      });
+      const secondInput = {
+        ...firstInput,
+        answer: '本人の報告です。',
+        practiceEvidence: {
+          ...firstInput.practiceEvidence,
+          kind: 'SELF_REPORT' as const,
+          content: '本人の報告です。',
+          expectedRevision: 1,
+        },
+        idempotencyKey: randomUUID(),
+      };
+      const second = await answers.submit(secondInput);
+      expect(second.outcome).toBe('SUBMITTED');
+      await client.trainingMissionAnswer.updateMany({
+        where: { missionAssignmentId: current.assignmentId },
+        data: { createdAt: now },
+      });
+      const refreshed = await f.practice.readPractice(f.actor);
+      expect(
+        refreshed.current?.submissions.map(({ revision, kind, status }) => ({
+          revision,
+          kind,
+          status,
+        })),
+      ).toEqual([
+        { revision: 1, kind: 'TEXT', status: 'READY' },
+        { revision: 2, kind: 'SELF_REPORT', status: 'PENDING' },
+      ]);
+      expect(
+        (await client.trainingMissionAnswer.findUniqueOrThrow({ where: { id: first.answer.id } }))
+          .answer,
+      ).toBe(firstAnswerValue.answer);
+      expect(
+        (
+          await client.programMissionAssignment.findUniqueOrThrow({
+            where: { id: current.assignmentId },
+          })
+        ).status,
+      ).toBe('STARTED');
     });
     it('dynamic practice: isolates ownership, old answers, and profile goal overwrite', async () => {
       const f = await dynamicPracticeFixture();

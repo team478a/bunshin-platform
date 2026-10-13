@@ -36,3 +36,9 @@
 第3分割の自由希望入口は`MANABERU_FREE_INTENT_INTAKE_IMPLEMENTATION.md`。希望・任意の利用環境を`PersonalLearningRequest`へ保存するだけではGoal確認・教材提示としない。新規Profileがなくても有効な通常PARTICIPANTは希望を保存できるが、未回答を推測してProfileを作らない。教材生成・原価予約・候補確定まで接続する前は、本番では入口を公開しない。
 
 第4分割の課題作成前AI原価Portは`MANABERU_PREASSIGNMENT_AI_COST_IMPLEMENTATION.md`。既存予約台帳・利用台帳を再利用し、Assignment/Answer/Jobを架空作成しない。内部Portの実装だけで教材生成・同版確定・実AI・実受講者の効果・本番公開を完成扱いにしない。
+
+## 2026-10-13 実装更新：証拠別の結果確認
+
+`MANABERU_PRACTICE_RESULT_REVIEW_IMPLEMENTATION.md`に第8分割の実装範囲と確認状況を記録する。既存TrainingMissionAnswer・評価Jobを使い、動的課題の確定教材と評価基準を変えずに提出Revisionごとの課題固有レビューを保存する。TEXT提出から確認できた事実、SELF_REPORT、未確認項目を分け、旧6技能評価やGoal全体の達成へ拡張しない。
+
+回答履歴用migrationの適用は行っていない。隔離DB結合試験、実Provider試験、画像添付、課題の継続/次課題、LINE再開、本番適用は未確認であり、自由希望全体の完成や受講者の学習効果を意味しない。

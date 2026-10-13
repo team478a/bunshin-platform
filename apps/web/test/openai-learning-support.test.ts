@@ -46,6 +46,7 @@ const practice: PersonalLearningPractice = {
     evidenceLevel: 'SELF_REPORT',
   },
   support: { revision: 0, history: [] },
+  submissions: [],
 };
 const request: SavedPracticeSupport = {
   id: 'r',

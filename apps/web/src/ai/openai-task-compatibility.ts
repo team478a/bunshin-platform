@@ -10,7 +10,7 @@ export type OpenAiCompatibilityTask =
 const models = new Set(['gpt-5.2', 'gpt-5.2-2025-12-11', 'gpt-5-mini', 'gpt-5-mini-2025-08-07']);
 const schemaNames: Record<OpenAiCompatibilityTask, readonly string[]> = {
   SOCIAL_PLANNER: ['daily_mission_brief', 'weekly_plan'],
-  TRAINING_ASSESSMENT: ['training_evaluation'],
+  TRAINING_ASSESSMENT: ['training_evaluation', 'personal_learning_evidence_review'],
   LEARNING_LESSON: ['learning_lesson'],
   LEARNING_SUPPORT: ['learning_support'],
 };

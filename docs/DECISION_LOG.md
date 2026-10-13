@@ -4147,3 +4147,11 @@
 - 少数枠は`ServiceCommercialSetting.includedMemberLimit`とPilotの現在Wave上限の小さい方で制御する。Checkout開始時に、公開登録・招待コード停止・有効な人数上限・実行中Pilotを再確認し、欠損や上限超過は決済前にfail-closedとする。Seat付与時もProgram lock、累計枠、projection、本人・所属・Enrollmentを再確認する。
 - 既存の非Pilot Program購入、他Service、OEM請求ロジック、DB schemaは変更しない。過去の招待制Runbookは当時の閉鎖Pilot記録として保持し、現在の外部少数テスト方針を表すものとは扱わない。
 - 本PRは本番Serviceを`PUBLIC`へ変更せず、料金・人数・Payment設定を変更せず、実Checkout・実課金・利用者登録・Pilot開始・Deployを行わない。これらは本番値と安全条件を確認したうえで個別に実施する。
+
+## 2026-10-13: 自由課題の提出レビューは既存Answer履歴で証拠の範囲だけを返す
+
+- 状態：Proposed（実装PRレビュー待ち。migration未適用・本番未反映）。
+- 自由課題では提出種別（TEXT / SELF_REPORT）とRevisionを既存TrainingMissionAnswerへ追記する。旧Assignmentの一件回答契約はRepositoryで維持する。未評価回答がある間の二重提出、飛び番Revision、異なる本文での冪等再送、他人/他Enrollmentの課題は拒否する。
+- 評価Jobは本人に確認済みの同一教材・基準Revisionに結びついた課題固有レビューを記録する。本人申告だけでは提出物の観察へ昇格させず、レビュー状態は今の一課題の証拠に限る。旧6技能Profile、Plan/Goal完了、Assignment完了は更新しない。
+- 保存前に現在のEnrollment、Assignment、回答Revisionを再認可し、古い遅延評価が差替え後の履歴を上書きしない。AI本文をActionEvent metadataへ保存しない。既存のAI利用Admission・費用台帳を利用し、未知原価の0円補完はしない。
+- 画像、正式な次課題提案/未達継続、LINE、実AI/実受講者確認、本番Migration/Deployは本決定の範囲外で未検証とする。
