@@ -7,13 +7,16 @@ import { GetMissionProgress } from '@bunshin/capability-social';
 import type { CSSProperties } from 'react';
 import type { Metadata, Route } from 'next';
 import Link from 'next/link';
-import { notFound, redirect } from 'next/navigation';
+import { redirect } from 'next/navigation';
 import { currentUserProvider } from '../../../../src/auth/current-user';
 import { memberServiceMetadata } from '../../../../src/services/member-service-metadata';
 import { isRouteNotFound } from '../../../../src/navigation/route-not-found';
 import { currentActivityContinuityRule } from '../../../../src/activity-continuity-rule';
 import { localDateInTimezone, weekRange, weeklyCalendar } from '../../../../src/activity-progress';
-import { resolveMemberServiceContext } from '../../../../src/services/public-service';
+import {
+  resolveMemberServiceContext,
+  resolvePublicServiceContext,
+} from '../../../../src/services/public-service';
 import {
   isServiceAnnouncementVisible,
   readServiceAnnouncement,
@@ -38,14 +41,24 @@ import {
   ServiceHomeFooter,
   ServiceOperatorLinks,
 } from './service-home-navigation-sections';
+import { ServiceHomeAccessGuidance } from './service-home-access-guidance';
 
 export const dynamic = 'force-dynamic';
 
-async function context(slug: string, actorUserId: string) {
+async function memberContext(slug: string, actorUserId: string) {
   try {
     return await resolveMemberServiceContext(slug, actorUserId);
   } catch (error) {
-    if (isRouteNotFound(error)) notFound();
+    if (isRouteNotFound(error)) return null;
+    throw error;
+  }
+}
+
+async function publicContext(slug: string) {
+  try {
+    return await resolvePublicServiceContext(slug);
+  } catch (error) {
+    if (isRouteNotFound(error)) return null;
     throw error;
   }
 }
@@ -66,9 +79,28 @@ export default async function ServiceMemberHome({
 }) {
   const { serviceSlug } = await params;
   const actor = await (await currentUserProvider()).getCurrentUser();
-  const returnTo = `/s/${serviceSlug}/home` as Route;
-  if (!actor) redirect(`/login?returnTo=${encodeURIComponent(returnTo)}` as Route);
-  const service = await context(serviceSlug, actor.userId);
+  if (!actor) {
+    const publicService = await publicContext(serviceSlug);
+    return (
+      <ServiceHomeAccessGuidance
+        state="LOGIN_REQUIRED"
+        {...(publicService ? { serviceName: publicService.configuration.displayName } : {})}
+        serviceSlug={serviceSlug}
+      />
+    );
+  }
+
+  const service = await memberContext(serviceSlug, actor.userId);
+  if (!service) {
+    const publicService = await publicContext(serviceSlug);
+    return (
+      <ServiceHomeAccessGuidance
+        state={publicService ? 'MEMBERSHIP_REQUIRED' : 'LINK_UNAVAILABLE'}
+        {...(publicService ? { serviceName: publicService.configuration.displayName } : {})}
+        serviceSlug={serviceSlug}
+      />
+    );
+  }
   const db = await import('@bunshin/database');
   const membership = await db.prisma.groupMembership.findFirst({
     where: {
@@ -103,7 +135,16 @@ export default async function ServiceMemberHome({
       },
     },
   });
-  if (!membership) redirect(`/s/${service.configuration.slug}` as Route);
+  if (!membership) {
+    const publicService = await publicContext(serviceSlug);
+    return (
+      <ServiceHomeAccessGuidance
+        state="MEMBERSHIP_REQUIRED"
+        {...(publicService ? { serviceName: publicService.configuration.displayName } : {})}
+        serviceSlug={serviceSlug}
+      />
+    );
+  }
   const legalConsent = membership.consentedAt
     ? await new ServiceParticipationService(
         new db.PrismaServiceParticipationRepository(),
