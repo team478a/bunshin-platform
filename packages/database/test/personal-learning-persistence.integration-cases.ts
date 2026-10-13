@@ -441,7 +441,7 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
                 externalParticipantCap: 5,
                 internalParticipantCap: 0,
                 currentWave: 1,
-                currentWaveCap: 1,
+                currentWaveCap: 5,
               },
             },
             trainingOperations: { notificationsEnabled: false, postponedReminderEnabled: false },
