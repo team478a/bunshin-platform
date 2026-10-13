@@ -30,7 +30,10 @@ export type TrainingAnswerSubmissionResult =
   | { outcome: 'NOT_FOUND' | 'CONFLICT' };
 
 export class PrismaTrainingAnswerRepository {
-  constructor(private readonly client: PrismaClient = prisma) {}
+  constructor(
+    private readonly client: PrismaClient = prisma,
+    private readonly now = () => new Date(),
+  ) {}
 
   async submit(input: {
     workspaceId: string;
@@ -57,7 +60,7 @@ export class PrismaTrainingAnswerRepository {
           groupId: input.groupId,
           status: 'ACTIVE',
           startsAt: { not: null },
-          AND: [trainingEnrollmentPeriodWhere(new Date())],
+          AND: [trainingEnrollmentPeriodWhere(this.now())],
         },
         select: { id: true, groupMembershipId: true, serviceProgramId: true },
       }),
@@ -124,7 +127,7 @@ export class PrismaTrainingAnswerRepository {
             groupId: input.groupId,
             groupMembershipId: membership.id,
             status: 'ACTIVE',
-            AND: [trainingEnrollmentPeriodWhere(new Date())],
+            AND: [trainingEnrollmentPeriodWhere(this.now())],
           },
           select: { id: true },
         });
@@ -156,8 +159,8 @@ export class PrismaTrainingAnswerRepository {
           const snapshot = assignment.displaySnapshot as {
             dynamicPractice?: { candidate?: { id?: string; materialVersion?: number } };
           };
+          if (!evidence) return { outcome: 'NOT_FOUND' } as const;
           if (
-            !evidence ||
             input.answer !== evidence.content ||
             evidence.candidateId !== snapshot.dynamicPractice?.candidate?.id ||
             evidence.materialVersion !== snapshot.dynamicPractice?.candidate?.materialVersion

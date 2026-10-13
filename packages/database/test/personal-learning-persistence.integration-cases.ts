@@ -418,7 +418,7 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
       expect(await client.personalLearningRequest.count({ where: f.scope })).toBe(0);
       await expect(f.candidates.readCandidate(f.actor)).rejects.toThrow();
     });
-    async function dynamicPracticeFixture() {
+    async function dynamicPracticeFixture(withPilotSeat = false) {
       const f = await lessonFixture();
       const candidate = await f.candidates.save(f.input);
       await f.candidates.confirm({
@@ -432,19 +432,6 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
         data: {
           settings: {
             moduleKey: 'AI_TRAINING_V1',
-            personalLearningPilot: {
-              enabled: true,
-              enrollmentIds: [f.enrollment.id],
-              participantControl: {
-                version: 'PILOT_PARTICIPANT_CAP_V1',
-                revision: 1,
-                externalParticipantCap: 5,
-                internalParticipantCap: 0,
-                currentWave: 1,
-                currentWaveCap: 5,
-              },
-            },
-            trainingOperations: { notificationsEnabled: false, postponedReminderEnabled: false },
             personalLearningPracticePolicy: {
               enabled: true,
               version: 'LEARNER_PRACTICE_TOOL_INDEPENDENT_V1',
@@ -452,18 +439,48 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
           },
         },
       });
-      await client.personalLearningPilotSeat.create({
-        data: {
-          workspaceId: f.scope.workspaceId,
-          groupId: f.scope.groupId,
-          serviceProgramId: f.enrollment.serviceProgramId,
-          participantHash: pilotParticipantHash(f.enrollment.serviceProgramId, f.scope.userId),
-          programEnrollmentId: f.enrollment.id,
-          kind: 'EXTERNAL',
-          cohort: 'WAVE_1',
-          seatNumber: 1,
-        },
-      });
+      if (withPilotSeat) {
+        await client.serviceProgram.update({
+          where: { id: f.enrollment.serviceProgramId },
+          data: {
+            settings: {
+              moduleKey: 'AI_TRAINING_V1',
+              personalLearningPracticePolicy: {
+                enabled: true,
+                version: 'LEARNER_PRACTICE_TOOL_INDEPENDENT_V1',
+              },
+              trainingOperations: {
+                notificationsEnabled: false,
+                postponedReminderEnabled: false,
+              },
+              personalLearningPilot: {
+                enabled: true,
+                enrollmentIds: [f.enrollment.id],
+                participantControl: {
+                  version: 'PILOT_PARTICIPANT_CAP_V1',
+                  revision: 1,
+                  externalParticipantCap: 5,
+                  internalParticipantCap: 0,
+                  currentWave: 1,
+                  currentWaveCap: 5,
+                },
+              },
+            },
+          },
+        });
+        await client.personalLearningPilotSeat.create({
+          data: {
+            workspaceId: f.scope.workspaceId,
+            groupId: f.scope.groupId,
+            serviceProgramId: f.enrollment.serviceProgramId,
+            participantHash: pilotParticipantHash(f.enrollment.serviceProgramId, f.scope.userId),
+            programEnrollmentId: f.enrollment.id,
+            kind: 'EXTERNAL',
+            cohort: 'WAVE_1',
+            seatNumber: 1,
+          },
+        });
+      }
       const practice = new PrismaPersonalLearningPracticeRepository(client, () => now);
       const start = {
         actor: f.actor,
@@ -474,8 +491,8 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
       return { ...f, practice, start };
     }
     it('allows the regular free-intent flow only for a live external Pilot seat', async () => {
-      const f = await dynamicPracticeFixture();
-      const request = new PrismaPersonalLearningRequestRepository(client);
+      const f = await dynamicPracticeFixture(true);
+      const request = new PrismaPersonalLearningRequestRepository(client, () => now);
       await expect(request.readRequest(f.actor)).resolves.toMatchObject({
         id: f.request.id,
         originalText: f.request.originalText,
@@ -543,9 +560,9 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
       expect(await client.learningDefinitionApproval.count()).toBe(0);
     });
     it('dynamic practice: submits typed evidence revisions and keeps every answer bound to the confirmed material', async () => {
-      const f = await dynamicPracticeFixture();
+      const f = await dynamicPracticeFixture(true);
       const current = await f.practice.startPractice(f.start);
-      const answers = new PrismaTrainingAnswerRepository(client);
+      const answers = new PrismaTrainingAnswerRepository(client, () => now);
       const firstInput = {
         workspaceId: f.scope.workspaceId,
         groupId: f.scope.groupId,
@@ -575,7 +592,7 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
         }),
       ).toMatchObject({ outcome: 'CONFLICT' });
       await expect(
-        new PrismaPersonalLearningAssessmentGate(client).authorizeAssessment(
+        new PrismaPersonalLearningAssessmentGate(client, () => now).authorizeAssessment(
           f.actor,
           current.assignmentId,
           first.answer.id,
