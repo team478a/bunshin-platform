@@ -53,7 +53,7 @@ export function ServiceHomeAccessGuidance({
           </Link>
         )}
         {state !== 'LINK_UNAVAILABLE' && serviceName && (
-          <Link className="service-entry__login-link" href={serviceEntry as Route}>
+          <Link className="service-entry__login-link" href={serviceEntry}>
             {state === 'MEMBERSHIP_REQUIRED' ? '参加案内を確認する' : 'サービスの案内を見る'}
           </Link>
         )}
