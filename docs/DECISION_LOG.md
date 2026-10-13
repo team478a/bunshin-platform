@@ -4199,3 +4199,4 @@
 - `poweredByEnabled`が有効な場合は「ワタシワークスを利用しています」を控えめに表示する。既存の認証、参加、Workspace/Service/Userの認可条件は緩和しない。
 - LINE開始・callback失敗はメールログイン失敗と異なるエラー種別で返し、サービスの戻り先を維持してLINE認証に即した案内を出す。認証失敗の詳細・秘密情報は画面へ出さず、ログイン成功を保証する表示もしない。
 - DB schema、LINE設定、認証Provider、本番設定は変更しない。CI後の本番反映とLINE実機確認は別途行う。
+- 追加条件: 独立ブランドのLINEリンクは、未ログイン時に公開Serviceとして解決できない場合がある。`manaberu-style`、`hassy`、`sennokuni-media`の明示allowlistに限り、ブランド名とpowered-by表示だけを固定値から出す。参加状態・登録状態・運営連絡先などは推測・表示せず、未知slugは共通表示のままとする。
