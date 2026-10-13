@@ -20,6 +20,7 @@ const boundedReleaseMigrations = [
   '20261013020000_personal_learning_lesson_candidate',
   '20261013030000_personal_learning_answer_revisions',
   '20261013040000_personal_learning_practice_support_images',
+  '20261013050000_personal_learning_line_rich_menu',
 ];
 
 export function resolveMigrationBounds(environment) {

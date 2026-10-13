@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 vi.mock('server-only', () => ({}));
-import { publishDefaultGroupRichMenu } from '../src/line/group-rich-menu-provider';
+import {
+  activatePersonalLearningGroupRichMenu,
+  linkGroupRichMenuToUser,
+  publishDefaultGroupRichMenu,
+  unlinkGroupRichMenuFromUser,
+} from '../src/line/group-rich-menu-provider';
 
 describe('dedicated group LINE rich menu', () => {
   it('creates and activates the default menu with service-scoped links', async () => {
@@ -85,5 +90,114 @@ describe('dedicated group LINE rich menu', () => {
       chatBarText: string;
     };
     expect(definition.chatBarText).toBe('ワタシワークスメニュー');
+  });
+});
+
+describe('per-user group LINE rich menu links', () => {
+  it('links one member without changing the channel-wide default', async () => {
+    const request = vi.fn<typeof fetch>().mockResolvedValue(new Response(null, { status: 200 }));
+    await linkGroupRichMenuToUser({
+      request,
+      accessToken: 'test-token',
+      providerUserId: 'U/member?&',
+      lineRichMenuId: 'richmenu-personal',
+    });
+    expect(request).toHaveBeenCalledWith(
+      'https://api.line.me/v2/bot/user/U%2Fmember%3F%26/richmenu/richmenu-personal',
+      expect.objectContaining({ method: 'POST' }),
+    );
+    expect(request.mock.calls[0]?.[0]).not.toBe(
+      'https://api.line.me/v2/bot/user/all/richmenu/richmenu-personal',
+    );
+  });
+
+  it('unlinks only the member override so the standard menu can resume', async () => {
+    const request = vi.fn<typeof fetch>().mockResolvedValue(new Response(null, { status: 200 }));
+    await unlinkGroupRichMenuFromUser({
+      request,
+      accessToken: 'test-token',
+      providerUserId: 'U/member',
+    });
+    expect(request).toHaveBeenCalledWith(
+      'https://api.line.me/v2/bot/user/U%2Fmember/richmenu',
+      expect.objectContaining({ method: 'DELETE' }),
+    );
+  });
+
+  it('does not treat a failed provider call as a successful link', async () => {
+    const request = vi.fn<typeof fetch>().mockResolvedValue(new Response(null, { status: 429 }));
+    await expect(
+      linkGroupRichMenuToUser({
+        request,
+        accessToken: 'test-token',
+        providerUserId: 'U/member',
+        lineRichMenuId: 'richmenu-personal',
+      }),
+    ).rejects.toThrow('LINEの利用上限に達しています');
+  });
+
+  it('creates, uploads, and links a learner menu without publishing it as default', async () => {
+    const request = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(Response.json({ richMenuId: 'richmenu-learner' }))
+      .mockResolvedValueOnce(new Response(null, { status: 200 }))
+      .mockResolvedValueOnce(new Response(null, { status: 200 }));
+    const onCreated = vi.fn().mockResolvedValue(undefined);
+    await expect(
+      activatePersonalLearningGroupRichMenu({
+        request,
+        accessToken: 'test-token',
+        providerUserId: 'U/learner',
+        groupId: 'group-1',
+        serviceSlug: 'manaberu-style',
+        enrollmentId: '11111111-1111-4111-8111-111111111111',
+        appUrl: 'https://app.example.com',
+        image: Buffer.from([1, 2, 3]),
+        existingLineRichMenuId: null,
+        onCreated,
+      }),
+    ).resolves.toEqual({ lineRichMenuId: 'richmenu-learner' });
+    expect(onCreated).toHaveBeenCalledWith('richmenu-learner');
+    expect(request.mock.calls[0]?.[0]).toBe('https://api.line.me/v2/bot/richmenu');
+    const definition = JSON.parse(request.mock.calls[0]?.[1]?.body as string) as {
+      areas: Array<{ action: { uri: string } }>;
+    };
+    expect(definition.areas[0]?.action.uri).toBe(
+      'https://app.example.com/s/manaberu-style/programs/11111111-1111-4111-8111-111111111111#personal-learning-practice',
+    );
+    expect(definition.areas.map((area) => area.action.uri)).toEqual([
+      'https://app.example.com/s/manaberu-style/programs/11111111-1111-4111-8111-111111111111#personal-learning-practice',
+      'https://app.example.com/s/manaberu-style/programs/11111111-1111-4111-8111-111111111111#personal-learning-support',
+      'https://app.example.com/s/manaberu-style/programs/11111111-1111-4111-8111-111111111111#personal-learning-result',
+      'https://app.example.com/s/manaberu-style/programs/11111111-1111-4111-8111-111111111111#personal-learning-plan',
+    ]);
+    expect(request.mock.calls[1]?.[0]).toBe(
+      'https://api-data.line.me/v2/bot/richmenu/richmenu-learner/content',
+    );
+    expect(request.mock.calls[2]?.[0]).toBe(
+      'https://api.line.me/v2/bot/user/U%2Flearner/richmenu/richmenu-learner',
+    );
+  });
+
+  it('reuses an existing LINE menu instead of consuming another menu slot', async () => {
+    const request = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(null, { status: 200 }))
+      .mockResolvedValueOnce(new Response(null, { status: 200 }));
+    await activatePersonalLearningGroupRichMenu({
+      request,
+      accessToken: 'test-token',
+      providerUserId: 'U/learner',
+      groupId: 'group-1',
+      serviceSlug: 'manaberu-style',
+      enrollmentId: '11111111-1111-4111-8111-111111111111',
+      appUrl: 'https://app.example.com',
+      image: Buffer.from([1]),
+      existingLineRichMenuId: 'richmenu-existing',
+    });
+    expect(request).toHaveBeenCalledTimes(2);
+    expect(request.mock.calls[0]?.[0]).toBe(
+      'https://api-data.line.me/v2/bot/richmenu/richmenu-existing/content',
+    );
   });
 });

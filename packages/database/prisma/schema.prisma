@@ -6275,6 +6275,9 @@ model GroupLineConnection {
   userId                String                        @map("user_id") @db.Uuid
   configurationId       String                        @map("configuration_id") @db.Uuid
   providerUserId        String                        @map("provider_user_id") @db.VarChar(255)
+  personalLearningRichMenuId String?                   @map("personal_learning_rich_menu_id") @db.VarChar(128)
+  personalLearningRichMenuLinkedAt DateTime?           @map("personal_learning_rich_menu_linked_at") @db.Timestamptz(6)
+  personalLearningRichMenuContentHash String?          @map("personal_learning_rich_menu_content_hash") @db.Char(64)
   status                LineConnectionStatus          @default(ACTIVE)
   friendshipStatus      LineFriendshipStatus          @default(UNKNOWN) @map("friendship_status")
   notificationConsentAt DateTime?                     @map("notification_consent_at") @db.Timestamptz(6)
