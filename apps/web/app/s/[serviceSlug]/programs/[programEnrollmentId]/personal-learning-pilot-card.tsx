@@ -52,6 +52,7 @@ export type PersonalLearningPilotSnapshot = {
   state: PersonalLearningState;
   assignment: (TrainingAction & { definitionKey: string | null; planCompleted?: boolean }) | null;
   readiness: { profileReady: boolean; approvalReady: boolean };
+  lineMenu?: { available: boolean; linked: boolean; needsRefresh: boolean };
 };
 const errorMessage = '学習状態を確認できませんでした。もう一度お試しください。';
 
@@ -389,8 +390,46 @@ export function PersonalLearningPilotCard({
           Pilotの学習設定を準備中です。運営者へ確認してください。未回答の経験を初心者とは扱いません。
         </p>
       ) : null}
+      {snapshot?.readiness.profileReady && snapshot.assignment ? (
+        <section className="service-entry__card training-card" aria-labelledby="personal-line-menu">
+          <h2 id="personal-line-menu">あなたのLINEメニュー</h2>
+          <p>
+            今回の実践「{snapshot.assignment.display.title}
+            」を先頭に表示します。標準メニューは他の利用者も含め変更されません。
+          </p>
+          {snapshot.lineMenu?.available ? (
+            <>
+              {snapshot.lineMenu.linked ? (
+                <p className="notice" role="status">
+                  個別メニューを設定済みです。
+                </p>
+              ) : null}
+              {!snapshot.lineMenu.linked || snapshot.lineMenu.needsRefresh ? (
+                <button
+                  type="button"
+                  className="button button--secondary button--full"
+                  disabled={busy}
+                  onClick={() =>
+                    void run(async () => {
+                      await api(`${base}/personal-learning`, { operation: 'ACTIVATE_LINE_MENU' });
+                      await reload();
+                    })
+                  }
+                >
+                  {snapshot.lineMenu.linked ? '個別メニューを更新' : '個別メニューをLINEに設定'}
+                </button>
+              ) : null}
+            </>
+          ) : (
+            <p>
+              設定には、このサービスの公式LINEとの接続と友だち追加が必要です。{' '}
+              <a href={`/s/${encodeURIComponent(serviceSlug)}/line`}>公式LINEを接続する</a>
+            </p>
+          )}
+        </section>
+      ) : null}
       {snapshot && snapshot.readiness.profileReady && !goal && !current ? (
-        <section className="service-entry__card training-card">
+        <section id="personal-learning-plan" className="service-entry__card training-card">
           {!consultation ? (
             <form
               className="form-stack"
@@ -502,7 +541,7 @@ export function PersonalLearningPilotCard({
         </button>
       ) : null}
       {current ? (
-        <section className="service-entry__card training-card">
+        <section id="personal-learning-practice" className="service-entry__card training-card">
           <h2>あなたの学習プラン</h2>
           <p>学習結果に応じて進みます。ステップ数で受講期間は決まりません。</p>
           <ol>
@@ -590,7 +629,11 @@ export function PersonalLearningPilotCard({
         </section>
       ) : null}
       {action && !planCompleted ? (
-        <section className="service-entry__card training-card" aria-label="今回の学習の焦点">
+        <section
+          id="personal-learning-support"
+          className="service-entry__card training-card"
+          aria-label="今回の学習の焦点"
+        >
           {learningFocus ? (
             <>
               <h2>{learningFocus.title}</h2>
@@ -609,7 +652,7 @@ export function PersonalLearningPilotCard({
         </section>
       ) : null}
       {action && practice?.started && !practice.completed ? (
-        <section className="service-entry__card training-card">
+        <section id="personal-learning-result" className="service-entry__card training-card">
           <h2>本人が操作・確認する</h2>
           <p>
             {practice.supportLevel === 'GUIDED'

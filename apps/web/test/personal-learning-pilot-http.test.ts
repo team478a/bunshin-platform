@@ -25,6 +25,8 @@ const f = vi.hoisted(() => ({
   storedGoal: vi.fn(),
   practice: vi.fn(),
   readPractice: vi.fn(),
+  lineMenuStatus: vi.fn(),
+  activateLineMenu: vi.fn(),
 }));
 vi.mock('../src/auth/current-user', () => ({
   currentUserProvider: () => Promise.resolve({ getCurrentUser: f.actor }),
@@ -32,6 +34,10 @@ vi.mock('../src/auth/current-user', () => ({
 vi.mock('../src/auth/request-security', () => ({ requireSameOrigin: f.sameOrigin }));
 vi.mock('../src/services/personal-learning-pilot-access', () => ({
   resolvePersonalLearningPilot: f.access,
+}));
+vi.mock('../src/services/personal-learning-line-rich-menu', () => ({
+  personalLearningLineMenuStatus: f.lineMenuStatus,
+  activatePersonalLearningLineMenu: f.activateLineMenu,
 }));
 vi.mock('@bunshin/database', () => ({
   prisma: { programMemberGoal: { findFirst: f.storedGoal } },
@@ -95,6 +101,8 @@ describe('Personal Learning pilot HTTP composition', () => {
       interactions: [],
       firstSuccess: false,
     });
+    f.lineMenuStatus.mockResolvedValue({ available: false, linked: false });
+    f.activateLineMenu.mockResolvedValue({ linked: true });
     f.consult.mockImplementation((input: { consultation: LearningConsultationRequest }) =>
       Promise.resolve(consultAiTrainingLearning(consultationContext(), input.consultation)),
     );
@@ -105,6 +113,15 @@ describe('Personal Learning pilot HTTP composition', () => {
     expect(result.headers.get('cache-control')).toBe('private, no-store');
     expect(f.bridge).not.toHaveBeenCalled();
     expect(f.goal).not.toHaveBeenCalled();
+    expect(f.lineMenuStatus).toHaveBeenCalledWith({ scope, actorUserId: scope.userId }, null);
+  });
+  it('activates the personal menu only through the authorized learner endpoint', async () => {
+    const result = await call({ operation: 'ACTIVATE_LINE_MENU' });
+    expect(result.status).toBe(200);
+    expect(f.activateLineMenu).toHaveBeenCalledWith({
+      actor: { scope, actorUserId: scope.userId },
+      serviceSlug: 'synthetic',
+    });
   });
   it('resumes the confirmed version rather than a newer proposal without generating a new task', async () => {
     f.read.mockResolvedValue({
