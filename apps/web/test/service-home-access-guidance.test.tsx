@@ -60,4 +60,24 @@ describe('service home access guidance', () => {
     expect(html).not.toContain('service-auth-brand');
     expect(html).not.toContain('/s/unknown-service');
   });
+
+  it('shows only the approved Manaberu brand on an unresolved service-link screen', () => {
+    const html = renderToStaticMarkup(
+      createElement(ServiceHomeAccessGuidance, {
+        state: 'LINK_UNAVAILABLE',
+        serviceSlug: 'manaberu-style',
+        brand: {
+          serviceName: 'マナベルスタイル',
+          logoUrl: null,
+          poweredBy: true,
+        },
+      }),
+    );
+
+    expect(html).toContain('サービスの利用状態を確認できません');
+    expect(html).toContain('マナベルスタイル');
+    expect(html).toContain('ワタシワークスを利用しています');
+    expect(html).not.toContain('参加案内を確認する');
+    expect(html).not.toContain('/s/manaberu-style');
+  });
 });
