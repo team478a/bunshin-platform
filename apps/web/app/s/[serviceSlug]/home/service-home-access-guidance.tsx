@@ -3,6 +3,7 @@ import Link from 'next/link';
 import type { Route } from 'next';
 import { PublicShell } from '../../../ui/public-shell';
 import { ServiceAuthBranding } from '../../../ui/service-auth-branding';
+import type { ServiceAuthBrand } from '../../../../src/services/service-auth-brand';
 
 export type ServiceHomeAccessState = 'LOGIN_REQUIRED' | 'MEMBERSHIP_REQUIRED' | 'LINK_UNAVAILABLE';
 
@@ -12,12 +13,14 @@ export function ServiceHomeAccessGuidance({
   serviceSlug,
   serviceLogoUrl = null,
   poweredBy = false,
+  brand = null,
 }: {
   state: ServiceHomeAccessState;
   serviceName?: string;
   serviceSlug: string;
   serviceLogoUrl?: string | null;
   poweredBy?: boolean;
+  brand?: ServiceAuthBrand | null;
 }) {
   const returnTo = `/s/${serviceSlug}/home`;
   const serviceEntry = `/s/${serviceSlug}` as const;
@@ -38,14 +41,17 @@ export function ServiceHomeAccessGuidance({
         'LINE内で別のアカウントにログインしているか、メニューのリンク先または参加登録の確認が必要な可能性があります。まずLINEでログインし直してください。ログイン後も同じ画面になる場合は、運営者にこの画面を見せて、LINEメニューのリンク先と参加登録を確認してもらってください。',
     },
   }[state];
+  const brandName = brand?.serviceName ?? serviceName;
+  const brandLogoUrl = brand?.logoUrl ?? serviceLogoUrl;
+  const showPoweredBy = brand?.poweredBy ?? poweredBy;
 
   return (
-    <PublicShell narrow showPlatformBrand={!serviceName}>
-      {serviceName && (
+    <PublicShell narrow showPlatformBrand={!brandName}>
+      {brandName && (
         <ServiceAuthBranding
-          serviceName={serviceName}
-          logoUrl={serviceLogoUrl}
-          poweredBy={poweredBy}
+          serviceName={brandName}
+          logoUrl={brandLogoUrl}
+          poweredBy={showPoweredBy}
         />
       )}
       <section
