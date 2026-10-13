@@ -2,6 +2,7 @@ import type { CSSProperties } from 'react';
 import Link from 'next/link';
 import type { Route } from 'next';
 import { PublicShell } from '../../../ui/public-shell';
+import { ServiceAuthBranding } from '../../../ui/service-auth-branding';
 
 export type ServiceHomeAccessState = 'LOGIN_REQUIRED' | 'MEMBERSHIP_REQUIRED' | 'LINK_UNAVAILABLE';
 
@@ -9,10 +10,14 @@ export function ServiceHomeAccessGuidance({
   state,
   serviceName,
   serviceSlug,
+  serviceLogoUrl = null,
+  poweredBy = false,
 }: {
   state: ServiceHomeAccessState;
   serviceName?: string;
   serviceSlug: string;
+  serviceLogoUrl?: string | null;
+  poweredBy?: boolean;
 }) {
   const returnTo = `/s/${serviceSlug}/home`;
   const serviceEntry = `/s/${serviceSlug}` as const;
@@ -35,7 +40,14 @@ export function ServiceHomeAccessGuidance({
   }[state];
 
   return (
-    <PublicShell narrow>
+    <PublicShell narrow showPlatformBrand={!serviceName}>
+      {serviceName && (
+        <ServiceAuthBranding
+          serviceName={serviceName}
+          logoUrl={serviceLogoUrl}
+          poweredBy={poweredBy}
+        />
+      )}
       <section
         className="service-entry__card"
         aria-labelledby="service-home-access-title"

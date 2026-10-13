@@ -170,6 +170,29 @@ describe('LINE login routes', () => {
     });
   });
 
+  it('shows a LINE-specific error and keeps the service destination when OAuth cannot start', async () => {
+    state.signInWithOAuth.mockResolvedValueOnce({
+      data: { url: null, flowId: null },
+      error: new Error('provider unavailable'),
+    });
+
+    const response = await startLineLogin(
+      new Request('https://bunshin.example/auth/line', {
+        method: 'POST',
+        headers: {
+          origin: 'https://bunshin.example',
+          'content-type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({ returnTo: '/s/manaberu-style/home' }),
+      }),
+    );
+
+    const destination = new URL(response.headers.get('location')!);
+    expect(destination.pathname).toBe('/login');
+    expect(destination.searchParams.get('error')).toBe('line');
+    expect(destination.searchParams.get('returnTo')).toBe('/s/manaberu-style/home');
+  });
+
   it('stores only an allowed Mission return path in a short-lived secure cookie', async () => {
     const response = await startLineLogin(
       new Request('https://bunshin.example/auth/line', {
@@ -441,6 +464,6 @@ describe('LINE login routes', () => {
     );
 
     expect(state.exchangeCodeForSession).not.toHaveBeenCalled();
-    expect(response.headers.get('location')).toBe('https://bunshin.example/login?error=1');
+    expect(response.headers.get('location')).toBe('https://bunshin.example/login?error=line');
   });
 });

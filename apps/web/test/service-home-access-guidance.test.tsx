@@ -9,6 +9,8 @@ describe('service home access guidance', () => {
       createElement(ServiceHomeAccessGuidance, {
         state: 'LOGIN_REQUIRED',
         serviceName: 'マナベルスタイル',
+        serviceLogoUrl: 'https://assets.example/manaberu.png',
+        poweredBy: true,
         serviceSlug: 'manaberu-style',
       }),
     );
@@ -17,6 +19,8 @@ describe('service home access guidance', () => {
     expect(html).toContain('ログインして続ける');
     expect(html).toContain('/login?returnTo=%2Fs%2Fmanaberu-style%2Fhome');
     expect(html).toContain('/s/manaberu-style');
+    expect(html).toContain('マナベルスタイルのロゴ');
+    expect(html).toContain('ワタシワークスを利用しています');
   });
 
   it('guides a signed-in user whose service participation is not confirmed', () => {
@@ -53,6 +57,7 @@ describe('service home access guidance', () => {
     );
 
     expect(html).toContain('サービスの利用状態を確認できません');
+    expect(html).not.toContain('service-auth-brand');
     expect(html).not.toContain('/s/unknown-service');
   });
 });
