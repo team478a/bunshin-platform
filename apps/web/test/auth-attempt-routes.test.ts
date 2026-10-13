@@ -225,9 +225,15 @@ describe('attempt-scoped route contracts', () => {
       ),
     );
     const callback = new URL(`${origin}/auth/confirm?token_hash=token&type=email`);
-    callback.searchParams.set('redirect_to', `${origin}/auth/confirm?authAttempt=${a.id}`);
+    callback.searchParams.set(
+      'redirect_to',
+      `${origin}/auth/confirm?authAttempt=${a.id}&returnTo=%2Fs%2Ftraining%2Fhome`,
+    );
     expect(location(emailLanding(new Request(callback))).searchParams.get('authAttempt')).toBe(
       a.id,
+    );
+    expect(location(emailLanding(new Request(callback))).searchParams.get('returnTo')).toBe(
+      '/s/training/home',
     );
     state.otp.mockResolvedValue({ data: { user: { email: 'other@example.com' } }, error: null });
     const response = await finishEmail(
@@ -237,6 +243,50 @@ describe('attempt-scoped route contracts', () => {
     expect(location(response).searchParams.get('returnTo')).toBe('/s/media/line');
     expect(state.commit).not.toHaveBeenCalled();
     expect(attemptRows.get(a.id)?.stage).toBe('CONSUMED');
+  });
+
+  it('sends validated service navigation context with the email callback without changing the auth proof', async () => {
+    const attempt = proof(
+      await startEmail(
+        post('/auth/email', {
+          email: 'member@example.com',
+          returnTo: '/s/manaberu-style/home',
+        }),
+      ),
+    );
+    const emailOptions = state.email.mock.calls[0]?.[0] as {
+      options: { emailRedirectTo: string };
+    };
+    const callback = new URL(emailOptions.options.emailRedirectTo);
+
+    expect(callback.pathname).toBe('/auth/confirm');
+    expect(callback.searchParams.get('authAttempt')).toBe(attempt.id);
+    expect(callback.searchParams.get('returnTo')).toBe('/s/manaberu-style/home');
+    expect(attemptRows.get(attempt.id)?.returnPath).toBe('/s/manaberu-style/home');
+  });
+
+  it('explains a different email browser and keeps the service on the retry screen', async () => {
+    const a = proof(
+      await startEmail(
+        post('/auth/email', {
+          email: 'member@example.com',
+          returnTo: '/s/manaberu-style/home',
+        }),
+      ),
+    );
+    const response = await finishEmail(
+      post('/auth/confirm', {
+        token_hash: 'token',
+        type: 'email',
+        authAttempt: a.id,
+        returnTo: '/s/manaberu-style/home',
+      }),
+    );
+
+    expect(location(response).searchParams.get('error')).toBe('auth-context');
+    expect(location(response).searchParams.get('returnTo')).toBe('/s/manaberu-style/home');
+    expect(state.otp).not.toHaveBeenCalled();
+    expect(attemptRows.get(a.id)?.stage).toBe('PENDING');
   });
 
   it('continues email consent only as the authenticated actor and preserves the project', async () => {

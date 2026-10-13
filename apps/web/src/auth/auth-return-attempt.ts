@@ -63,12 +63,40 @@ export function emailAuthAttemptId(url: URL): string | null {
     nested.username ||
     nested.password ||
     nested.hash ||
-    [...nested.searchParams.keys()].some((key) => key !== 'authAttempt')
+    [...nested.searchParams.keys()].some((key) => key !== 'authAttempt' && key !== 'returnTo')
   )
     throw new AuthReturnContextError();
+  emailAuthReturnTo(url);
   const id = singleAuthAttemptId(nested.searchParams.getAll('authAttempt'));
   if (direct && direct !== id) throw new AuthReturnContextError();
   return direct ?? id;
+}
+
+/** Safe service navigation context for the confirmation UI; never an auth grant. */
+export function emailAuthReturnTo(url: URL): string | null {
+  const directValues = url.searchParams.getAll('returnTo');
+  if (directValues.length > 1) throw new AuthReturnContextError();
+  const redirects = url.searchParams.getAll('redirect_to');
+  if (redirects.length > 1) throw new AuthReturnContextError();
+  let nestedValue: string | null = null;
+  if (redirects[0]) {
+    let nested: URL;
+    try {
+      nested = new URL(redirects[0]);
+    } catch {
+      throw new AuthReturnContextError();
+    }
+    const values = nested.searchParams.getAll('returnTo');
+    if (values.length > 1) throw new AuthReturnContextError();
+    nestedValue = values[0] ?? null;
+  }
+  const directValue = directValues[0] ?? null;
+  if (directValue && nestedValue && directValue !== nestedValue) throw new AuthReturnContextError();
+  const value = directValue ?? nestedValue;
+  if (value === null) return null;
+  const safe = safeLineAuthReturnPath(value);
+  if (!safe || safe !== value) throw new AuthReturnContextError();
+  return safe;
 }
 
 type Method = 'LINE' | 'EMAIL';
