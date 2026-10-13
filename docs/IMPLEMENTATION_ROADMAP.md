@@ -1,6 +1,8 @@
 # BUNSHIN Platform 実装ロードマップ
 
-自由希望の第7分割は`docs/ai-training/MANABERU_PRACTICE_SUPPORT_IMPLEMENTATION.md`。現在課題・不変教材・作業記録版に固定したテキストAI相談、既存費用枠、支援履歴と再訪を接続する。旧6技能評価へ流さず、遅延応答は現在状態へ適用しない。次は既存回答/評価Jobによる証拠別結果確認、継続/次課題、画像・LINE・実AI。価格・予算不足を推測補完せず本番公開Gateを維持する。
+自由希望の第8分割は`docs/ai-training/MANABERU_PRACTICE_RESULT_REVIEW_IMPLEMENTATION.md`。既存Answer・評価Jobに動的課題固有の証拠別結果確認を接続し、複数の提出Revisionを履歴として保存する。本人申告と提出文から確認した点を分離し、旧6技能・Goal完了・Assignment完了へ流用しない。画像、未達課題からの正式な継続/次課題、LINE、実AIの許可環境通し確認は未完了。本番Gateを維持する。
+
+自由希望の第7分割は`docs/ai-training/MANABERU_PRACTICE_SUPPORT_IMPLEMENTATION.md`。現在課題・不変教材・作業記録版に固定したテキストAI相談、既存費用枠、支援履歴と再訪を接続する。旧6技能評価へ流さず、遅延応答は現在状態へ適用しない。結果確認、画像・LINE・実AIは後続段階。
 
 自由希望の第6分割は`docs/ai-training/MANABERU_DYNAMIC_PRACTICE_START_IMPLEMENTATION.md`。本人確認済み候補を既存Goal/Plan/Assignmentへ固定し、短い本人申告と再訪を接続する。新しい希望で実行課題を切り替えず、旧6技能評価へ流さない。AI途中支援・画像・動的評価・次課題・LINE・実AI通し確認は未完了で、本番公開Gateは維持する。
 

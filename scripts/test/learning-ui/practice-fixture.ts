@@ -20,6 +20,7 @@ export const practiceFixture = {
     evidenceLevel: 'SELF_REPORT',
   },
   support: { revision: 0, history: [] },
+  submissions: [],
 } satisfies PersonalLearningPractice;
 export const supportedPracticeFixture = {
   ...practiceFixture,
