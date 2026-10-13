@@ -15,6 +15,11 @@ const boundedReleaseMigrations = [
   '20261012070000_oem_contract_period_supersession',
   '20261012080000_oem_operational_period_supersession',
   '20261012090000_oem_billing_policy_revision',
+  '20261013000000_personal_learning_requests',
+  '20261013010000_personal_learning_operation_cost',
+  '20261013020000_personal_learning_lesson_candidate',
+  '20261013030000_personal_learning_answer_revisions',
+  '20261013040000_personal_learning_practice_support_images',
 ];
 
 export function resolveMigrationBounds(environment) {
