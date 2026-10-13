@@ -193,6 +193,25 @@ export class PrismaTrainingPersonalDataExportRepository implements TrainingPerso
           orderBy: [{ occurredAt: 'asc' }, { id: 'asc' }],
           take,
         });
+        const practiceSupportImages = practiceSupport.length
+          ? await tx.personalLearningPracticeSupportImage.findMany({
+              where: {
+                ...scope,
+                groupMembershipId: membership.id,
+                userId: input.actorUserId,
+                requestEventId: { in: practiceSupport.map(({ id }) => id) },
+              },
+              select: {
+                requestEventId: true,
+                mimeType: true,
+                sha256: true,
+                sizeBytes: true,
+                bytes: true,
+                createdAt: true,
+              },
+              take,
+            })
+          : [];
         const goals = await tx.programMemberGoal.findMany({
           where: { ...scope, groupMembershipId: membership.id },
           select: {
@@ -250,6 +269,7 @@ export class PrismaTrainingPersonalDataExportRepository implements TrainingPerso
             learningRequests,
             practiceNotes,
             practiceSupport,
+            practiceSupportImages,
           ].some((rows) => rows.length > TRAINING_EXPORT_MAX_ROWS)
         )
           return { outcome: 'TOO_LARGE' };
@@ -261,6 +281,7 @@ export class PrismaTrainingPersonalDataExportRepository implements TrainingPerso
               pilotSeats.length +
               learningRequests.length +
               practiceSupport.length +
+              practiceSupportImages.length +
               practiceNotes.length >
             0
               ? {
@@ -274,6 +295,15 @@ export class PrismaTrainingPersonalDataExportRepository implements TrainingPerso
                       ...row,
                       kind: 'PRACTICE_NOTE',
                       occurredAt: iso(row.occurredAt),
+                    })),
+                    ...practiceSupportImages.map((row) => ({
+                      kind: 'PRACTICE_SUPPORT_IMAGE',
+                      requestEventId: row.requestEventId,
+                      mimeType: row.mimeType,
+                      sha256: row.sha256,
+                      sizeBytes: row.sizeBytes,
+                      base64: Buffer.from(row.bytes).toString('base64'),
+                      createdAt: iso(row.createdAt),
                     })),
                     ...learningRequests.map((row) => ({
                       ...row,

@@ -59,6 +59,7 @@ const command = {
   expectedSupportRevision: 0,
   reason: 'UNKNOWN' as const,
   text: 'ここで止まった',
+  image: null,
 };
 const advice = {
   cause: 'UNKNOWN',
@@ -71,7 +72,7 @@ const practice = {
   support: { revision: 1, history: [] },
   submissions: [],
 };
-const request = { id, revision: 1, noteRevision: 0, status: 'PENDING' };
+const request = { id, revision: 1, noteRevision: 0, status: 'PENDING', image: null };
 describe('practice support orchestration', () => {
   afterEach(() => vi.unstubAllEnvs());
   beforeEach(() => {
@@ -129,7 +130,13 @@ describe('practice support orchestration', () => {
       requestId: id,
       expectedRequestRevision: 2,
       operationKind: 'PRACTICE_SUPPORT',
-      practice: { assignmentId: id, noteRevision: 0, supportRevision: 1, supportRequestId: id },
+      practice: {
+        assignmentId: id,
+        noteRevision: 0,
+        supportRevision: 1,
+        supportRequestId: id,
+        imageSha256: null,
+      },
     });
     expect(f.reserve).toHaveBeenCalledWith(
       `personal-learning-operation:${'a'.repeat(64)}`,

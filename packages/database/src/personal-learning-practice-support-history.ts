@@ -37,6 +37,21 @@ export async function readPracticeSupportHistory(
   if (rows.length > 2000) return conflict();
   const requests = rows.filter((r) => r.eventType === SUPPORT_REQUEST_EVENT);
   const replies = rows.filter((r) => r.eventType === SUPPORT_RESPONSE_EVENT);
+  const images = requests.length
+    ? await tx.personalLearningPracticeSupportImage.findMany({
+        where: {
+          workspaceId: actor.scope.workspaceId,
+          groupId: actor.scope.groupId,
+          programEnrollmentId: actor.scope.programEnrollmentId,
+          groupMembershipId: actor.scope.groupMembershipId,
+          missionAssignmentId: assignmentId,
+          requestEventId: { in: requests.map((r) => r.id) },
+          userId: actor.scope.userId,
+        },
+        select: { requestEventId: true, mimeType: true, sha256: true, sizeBytes: true },
+      })
+    : [];
+  const imageByRequestId = new Map(images.map((image) => [image.requestEventId, image]));
   const history: SavedPracticeSupport[] = requests
     .map((row): SavedPracticeSupport => {
       const m = supportObject(row.metadata);
@@ -54,6 +69,35 @@ export async function readPracticeSupportHistory(
         return conflict();
       const reason = m.reason as SavedPracticeSupport['reason'];
       const text = m.text as string;
+      const imageMetadataValue = m.image ?? null;
+      const imageMetadata = supportObject(imageMetadataValue);
+      const storedImage = imageByRequestId.get(row.id) ?? null;
+      let image: SavedPracticeSupport['image'] = null;
+      if (imageMetadataValue !== null) {
+        if (
+          !imageMetadataValue ||
+          typeof imageMetadataValue !== 'object' ||
+          Array.isArray(imageMetadataValue) ||
+          Object.keys(imageMetadata).length !== 3 ||
+          imageMetadata.mimeType !== 'image/jpeg' ||
+          typeof imageMetadata.sha256 !== 'string' ||
+          !/^[a-f0-9]{64}$/.test(imageMetadata.sha256) ||
+          !Number.isSafeInteger(imageMetadata.sizeBytes) ||
+          Number(imageMetadata.sizeBytes) < 1 ||
+          !storedImage ||
+          storedImage.mimeType !== imageMetadata.mimeType ||
+          storedImage.sha256 !== imageMetadata.sha256 ||
+          storedImage.sizeBytes !== imageMetadata.sizeBytes
+        )
+          return conflict();
+        image = {
+          mimeType: 'image/jpeg',
+          sha256: imageMetadata.sha256,
+          sizeBytes: Number(imageMetadata.sizeBytes),
+        };
+      } else if (storedImage) {
+        return conflict();
+      }
       validatePracticeSupportCommand({
         actor,
         assignmentId,
@@ -62,6 +106,7 @@ export async function readPracticeSupportHistory(
         expectedSupportRevision: m.revision - 1,
         reason,
         text,
+        image: null,
       });
       const responses = replies.filter((r) => supportObject(r.metadata).requestId === row.id);
       if (responses.length > 1) return conflict();
@@ -91,6 +136,7 @@ export async function readPracticeSupportHistory(
         advice: reply?.status === 'READY' ? validatePracticeSupportAdvice(reply.advice) : null,
         promptVersion: typeof reply?.promptVersion === 'string' ? reply.promptVersion : null,
         usageKey: typeof reply?.usageKey === 'string' ? reply.usageKey : null,
+        image,
       };
     })
     .sort((a, b) => b.revision - a.revision);

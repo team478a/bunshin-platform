@@ -25,8 +25,11 @@ export function LearningSupportCard({
 }) {
   const [reason, setReason] = useState<PracticeSupportReason>('UNKNOWN');
   const [text, setText] = useState('');
+  const [imageDataUrl, setImageDataUrl] = useState<string | null>(null);
+  const [imageError, setImageError] = useState('');
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState('');
+  const imageInput = useRef<HTMLInputElement>(null);
   const operation = useRef<{ signature: string; id: string } | null>(null);
   const current = state.current;
   if (!current) return null;
@@ -40,6 +43,7 @@ export function LearningSupportCard({
       expectedSupportRevision: support.revision,
       reason,
       text: text.trim(),
+      imageDataUrl,
     };
     const signature = JSON.stringify(content);
     if (operation.current?.signature !== signature)
@@ -86,7 +90,7 @@ export function LearningSupportCard({
   return (
     <section aria-label="実践途中の相談">
       <h3>途中でも相談できます</h3>
-      <p>いまの課題を保ったまま、次の一歩を相談します。画像はまだ添付できません。</p>
+      <p>いまの課題を保ったまま、次の一歩を相談します。画面の画像は1枚添付できます。</p>
       <label htmlFor="support-reason">いま困っていること</label>
       <select
         id="support-reason"
@@ -108,6 +112,48 @@ export function LearningSupportCard({
         disabled={pending}
         onChange={(e) => setText(e.target.value)}
       />
+      <label htmlFor="support-image">画面の画像（任意・1枚、3MBまで）</label>
+      <input
+        ref={imageInput}
+        id="support-image"
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        disabled={pending}
+        onChange={(event) => {
+          const file = event.currentTarget.files?.[0];
+          setImageError('');
+          if (!file) return;
+          if (file.size > 3_000_000) {
+            setImageDataUrl(null);
+            setImageError('画像は3MB以下を選んでください。');
+            event.currentTarget.value = '';
+            return;
+          }
+          const reader = new FileReader();
+          reader.onload = () => {
+            if (typeof reader.result === 'string') setImageDataUrl(reader.result);
+            else setImageError('画像を読み込めませんでした。');
+          };
+          reader.onerror = () => setImageError('画像を読み込めませんでした。');
+          reader.readAsDataURL(file);
+        }}
+      />
+      {imageDataUrl && (
+        <div>
+          <img src={imageDataUrl} alt="相談に添付する画像のプレビュー" width={240} />
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() => {
+              setImageDataUrl(null);
+              if (imageInput.current) imageInput.current.value = '';
+            }}
+          >
+            画像を削除
+          </button>
+        </div>
+      )}
+      {imageError && <p role="alert">{imageError}</p>}
       <button
         type="button"
         disabled={!state.allowed || pending || busy || !text.trim() || support.revision >= 1000}
@@ -129,6 +175,13 @@ export function LearningSupportCard({
           {support.history.slice(0, 3).map((r) => (
             <article key={r.id}>
               <p>相談：{r.text}</p>
+              {r.image && (
+                <img
+                  src={`${endpoint}/support/${r.id}/image`}
+                  alt="相談に添付したスクリーンショット"
+                  width={240}
+                />
+              )}
               <p>作業記録の版 {r.noteRevision} に対する相談</p>
               {r.noteRevision !== (current.note?.revision ?? 0) && (
                 <p>現在の作業記録より前の支援です。いまの状態を確認した助言ではありません。</p>
