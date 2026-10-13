@@ -7,6 +7,7 @@ import {
   createSupabaseAttemptClient,
 } from '../../../src/auth/supabase';
 import { loginErrorResponse } from '../../../src/auth/login-error';
+import { safeLineAuthReturnPath } from '../../../src/auth/line-return';
 import {
   singleAuthAttemptId,
   emailAuthAttemptId,
@@ -16,6 +17,7 @@ import {
   consumeAuthReturnAttempt,
   cancelAuthReturnAttempt,
   clearAuthReturnCookie,
+  emailAuthReturnTo,
   authConsentPath,
   authReturnDestination,
   authEmailHash,
@@ -36,6 +38,8 @@ export function GET(request: Request): Response {
   try {
     const id = emailAuthAttemptId(url);
     if (id) confirmation.searchParams.set('authAttempt', id);
+    const returnTo = emailAuthReturnTo(url);
+    if (returnTo) confirmation.searchParams.set('returnTo', returnTo);
   } catch {
     return loginErrorResponse(request, 'auth-context', null);
   }
@@ -47,11 +51,16 @@ export function GET(request: Request): Response {
 
 export async function POST(request: Request): Promise<Response> {
   let context: AuthReturnContext | null = null;
+  let displayReturnTo: string | null = null;
   let ownedStage: 'CLAIMED' | 'AUTHENTICATED' = 'CLAIMED';
   let claimed = false;
   try {
     requireSameOrigin(request);
     const data = await request.formData();
+    const submittedReturnTo = data.get('returnTo');
+    displayReturnTo = safeLineAuthReturnPath(
+      typeof submittedReturnTo === 'string' ? submittedReturnTo : null,
+    );
     context = await readAuthReturnContext(
       request,
       singleAuthAttemptId(data.getAll('authAttempt')),
@@ -106,7 +115,7 @@ export async function POST(request: Request): Promise<Response> {
       loginErrorResponse(
         request,
         error instanceof AuthReturnContextError ? 'auth-context' : '1',
-        context?.returnTo ?? null,
+        context?.returnTo ?? displayReturnTo,
       ),
       claimed ? context : null,
     );
