@@ -121,7 +121,14 @@ export class PrismaPersonalLearningAssessmentGate extends PrismaPersonalLearning
         const goalId = dynamic.goalId;
         const [goal, plan, programs] = await Promise.all([
           tx.programMemberGoal.findFirst({
-            where: { id: goalId as string, ...s, status: 'ACTIVE' },
+            where: {
+              id: goalId as string,
+              workspaceId: s.workspaceId,
+              groupId: s.groupId,
+              programEnrollmentId: s.programEnrollmentId,
+              groupMembershipId: s.groupMembershipId,
+              status: 'ACTIVE',
+            },
             select: { id: true },
           }),
           tx.personalLearningPlanRevision.findFirst({

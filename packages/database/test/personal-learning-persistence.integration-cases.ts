@@ -507,7 +507,7 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
       });
       await client.personalLearningPilotSeat.update({
         where: { id: seat.id },
-        data: { revokedAt: now },
+        data: { revokedAt: new Date() },
       });
       await expect(request.readRequest(f.actor)).rejects.toMatchObject({ code: 'NOT_FOUND' });
     });
