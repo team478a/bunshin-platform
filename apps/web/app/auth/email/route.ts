@@ -41,9 +41,7 @@ export async function POST(request: Request): Promise<Response> {
       email: input.data.email,
       options: {
         shouldCreateUser: true,
-        emailRedirectTo: context
-          ? attemptCallbackUrl(context.attempt.origin, '/auth/confirm', context)
-          : `${trustedRequestOrigin(request)}/auth/confirm`,
+        emailRedirectTo: emailCallbackUrl(request, context, returnTo),
       },
     });
     if (error) {
@@ -77,4 +75,21 @@ export async function POST(request: Request): Promise<Response> {
       context,
     );
   }
+}
+
+function emailCallbackUrl(
+  request: Request,
+  context: NewAuthReturnAttempt | null,
+  returnTo: string | null,
+): string {
+  const callback = new URL(
+    context
+      ? attemptCallbackUrl(context.attempt.origin, '/auth/confirm', context)
+      : '/auth/confirm',
+    context?.attempt.origin ?? trustedRequestOrigin(request),
+  );
+  // Display/navigation context only. The auth attempt's stored returnPath remains
+  // authoritative for successful authentication and destination authorization.
+  if (returnTo) callback.searchParams.set('returnTo', returnTo);
+  return callback.toString();
 }

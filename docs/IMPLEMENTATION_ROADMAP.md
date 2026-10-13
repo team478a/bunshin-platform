@@ -2,6 +2,8 @@
 
 LINEの参加者ホームで未ログイン/未参加時に404を返さず、ログイン・参加案内を状態別に表示する修正は`docs/SERVICE_LINE_HOME_ACCESS_GUIDANCE_IMPLEMENTATION.md`を参照。認可境界は維持する。PRレビュー/CI後にmainへ反映し、production反映後にLINE内ブラウザで未ログイン・参加済み・未参加の各状態を確認する。
 
+メールmagic linkの確認画面ブランド表示とブラウザ違い案内は`docs/SERVICE_BRANDED_EMAIL_AUTH_IMPLEMENTATION.md`を参照。表示用`returnTo`は許可リスト検証し、ログイン成功時は試行記録を正本にする。LINE外ブラウザへ認証proofを渡さず、LINEログイン継続案内と実機確認を別途行う。
+
 自由希望の第9分割は`docs/ai-training/MANABERU_RESULT_DRIVEN_NEXT_PRACTICE_IMPLEMENTATION.md`。提出テキストから現在課題の基準が確認できたときだけ、その観察・未確認事項を入力に同じ元希望の次課題案を生成する。候補は別Request revisionとして保存し、本人が内容を確認して開始した場合のみ既存Goal配下のPlan revisionとAssignmentを切り替える。前課題・回答・評価は履歴に保持し、Goal全体や受講を完了扱いしない。画像、LINE、許可環境での実AI通し確認、本番反映は未完了。
 
 自由希望の第8分割は`docs/ai-training/MANABERU_PRACTICE_RESULT_REVIEW_IMPLEMENTATION.md`。既存Answer・評価Jobに動的課題固有の証拠別結果確認を接続し、複数の提出Revisionを履歴として保存する。本人申告と提出文から確認した点を分離し、旧6技能・Goal完了・Assignment完了へ流用しない。第9分割で確認後の次課題提案を追加した。画像、LINE、実AIの許可環境通し確認は未完了。本番Gateを維持する。
