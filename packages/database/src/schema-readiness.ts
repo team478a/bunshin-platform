@@ -1,1 +1,1 @@
-export const LATEST_DATABASE_MIGRATION = '20261013050000_personal_learning_line_rich_menu';
+export const LATEST_DATABASE_MIGRATION = '20261014091000_allow_line_link_attempt_method';

@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 const mocks = vi.hoisted(() => ({
   currentUser: vi.fn(),
   findMembership: vi.fn(),
+  findLineIdentity: vi.fn(),
   findManagedServices: vi.fn(),
   countOrganizations: vi.fn(),
   getDeletionRequest: vi.fn(),
@@ -24,6 +25,7 @@ vi.mock('@bunshin/application', () => ({
 vi.mock('@bunshin/database', () => ({
   PrismaAccountDeletionRequestRepository: class {},
   prisma: {
+    authIdentity: { findFirst: mocks.findLineIdentity },
     groupMembership: {
       findFirst: mocks.findMembership,
       findMany: mocks.findManagedServices,
@@ -38,6 +40,7 @@ describe('service-scoped account page', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.currentUser.mockResolvedValue({ userId: 'user-a' });
+    mocks.findLineIdentity.mockResolvedValue(null);
     mocks.getDeletionRequest.mockResolvedValue(null);
     mocks.findMembership.mockResolvedValue({
       group: {
