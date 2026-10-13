@@ -86,6 +86,12 @@ export default async function ServiceMemberHome({
       <ServiceHomeAccessGuidance
         state="LOGIN_REQUIRED"
         {...(publicService ? { serviceName: publicService.configuration.displayName } : {})}
+        {...(publicService
+          ? {
+              serviceLogoUrl: publicService.configuration.brand.logoUrl,
+              poweredBy: publicService.configuration.poweredByEnabled,
+            }
+          : {})}
         serviceSlug={serviceSlug}
       />
     );
@@ -98,6 +104,12 @@ export default async function ServiceMemberHome({
       <ServiceHomeAccessGuidance
         state={publicService ? 'MEMBERSHIP_REQUIRED' : 'LINK_UNAVAILABLE'}
         {...(publicService ? { serviceName: publicService.configuration.displayName } : {})}
+        {...(publicService
+          ? {
+              serviceLogoUrl: publicService.configuration.brand.logoUrl,
+              poweredBy: publicService.configuration.poweredByEnabled,
+            }
+          : {})}
         serviceSlug={serviceSlug}
       />
     );
@@ -142,6 +154,12 @@ export default async function ServiceMemberHome({
       <ServiceHomeAccessGuidance
         state="MEMBERSHIP_REQUIRED"
         {...(publicService ? { serviceName: publicService.configuration.displayName } : {})}
+        {...(publicService
+          ? {
+              serviceLogoUrl: publicService.configuration.brand.logoUrl,
+              poweredBy: publicService.configuration.poweredByEnabled,
+            }
+          : {})}
         serviceSlug={serviceSlug}
       />
     );

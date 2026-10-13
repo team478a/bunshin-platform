@@ -64,10 +64,14 @@ export async function POST(request: Request): Promise<Response> {
       response.cookies.set(LINE_AUTH_RETURN_COOKIE, '', { maxAge: 0, path: '/' });
     }
     return response;
-  } catch {
+  } catch (error) {
     await cancelAuthReturnAttempt(context);
     return clearAuthReturnCookie(
-      loginErrorResponse(request, authReturnAttemptsEnabled() ? 'auth-context' : '1', returnTo),
+      loginErrorResponse(
+        request,
+        error instanceof AuthReturnContextError ? 'auth-context' : 'line',
+        returnTo,
+      ),
       context,
     );
   }
