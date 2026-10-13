@@ -2,7 +2,6 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 const memberPages = [
-  'home/page.tsx',
   'bunshins/page.tsx',
   'bunshins/new/page.tsx',
   'bunshins/[bunshinId]/page.tsx',
@@ -27,5 +26,15 @@ describe('private service member metadata boundary', () => {
       'utf8',
     );
     expect(source).toContain('resolvePublicServiceContext(slug)');
+  });
+
+  it('uses public service resolution only to explain access state on the member home', () => {
+    const source = readFileSync(
+      new URL('../app/s/[serviceSlug]/home/page.tsx', import.meta.url),
+      'utf8',
+    );
+    expect(source).toContain('resolvePublicServiceContext(slug)');
+    expect(source).toContain('isRouteNotFound(error)');
+    expect(source).not.toContain('.catch(() => null)');
   });
 });

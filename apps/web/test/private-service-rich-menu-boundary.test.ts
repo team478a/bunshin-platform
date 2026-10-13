@@ -7,7 +7,6 @@ const source = (relativePath: string) =>
 
 describe('private service rich menu destinations', () => {
   it.each([
-    'app/s/[serviceSlug]/home/page.tsx',
     'app/s/[serviceSlug]/bunshins/page.tsx',
     'app/s/[serviceSlug]/onboarding/page.tsx',
     'app/s/[serviceSlug]/bunshins/new/page.tsx',
@@ -17,6 +16,15 @@ describe('private service rich menu destinations', () => {
       /const actor = await[\s\S]*if \(!actor\) redirect[\s\S]*context\(serviceSlug, actor\.userId\)/,
     );
     expect(page).toContain('returnTo=${encodeURIComponent(returnTo)}');
+  });
+
+  it('shows a LINE-friendly state guide instead of redirecting a home visitor to a blank error', () => {
+    const page = source('app/s/[serviceSlug]/home/page.tsx');
+    expect(page).toContain('if (!actor)');
+    expect(page).toContain('state="LOGIN_REQUIRED"');
+    expect(page).toContain("state={publicService ? 'MEMBERSHIP_REQUIRED' : 'LINK_UNAVAILABLE'}");
+    expect(page).toContain('<ServiceHomeAccessGuidance');
+    expect(page).not.toMatch(/if \(!actor\) redirect/);
   });
 
   it('preserves the service account destination through LINE login', () => {
