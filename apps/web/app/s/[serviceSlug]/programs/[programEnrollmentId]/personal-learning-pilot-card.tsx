@@ -390,7 +390,7 @@ export function PersonalLearningPilotCard({
           Pilotの学習設定を準備中です。運営者へ確認してください。未回答の経験を初心者とは扱いません。
         </p>
       ) : null}
-      {snapshot?.readiness.profileReady && snapshot.assignment ? (
+      {snapshot?.readiness.profileReady && snapshot.assignment && !planCompleted ? (
         <section className="service-entry__card training-card" aria-labelledby="personal-line-menu">
           <h2 id="personal-line-menu">あなたのLINEメニュー</h2>
           <p>
