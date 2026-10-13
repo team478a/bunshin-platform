@@ -1,5 +1,6 @@
 import type { CSSProperties } from 'react';
 import Link from 'next/link';
+import type { Route } from 'next';
 import { PublicShell } from '../../../ui/public-shell';
 
 export type ServiceHomeAccessState = 'LOGIN_REQUIRED' | 'MEMBERSHIP_REQUIRED' | 'LINK_UNAVAILABLE';
@@ -46,13 +47,13 @@ export function ServiceHomeAccessGuidance({
         {state === 'LOGIN_REQUIRED' && (
           <Link
             className="button button--primary button--full"
-            href={`/login?returnTo=${encodeURIComponent(returnTo)}`}
+            href={`/login?returnTo=${encodeURIComponent(returnTo)}` as Route}
           >
             ログインして続ける
           </Link>
         )}
         {state !== 'LINK_UNAVAILABLE' && serviceName && (
-          <Link className="service-entry__login-link" href={serviceEntry}>
+          <Link className="service-entry__login-link" href={serviceEntry as Route}>
             {state === 'MEMBERSHIP_REQUIRED' ? '参加案内を確認する' : 'サービスの案内を見る'}
           </Link>
         )}
