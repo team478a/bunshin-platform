@@ -158,6 +158,7 @@ export function PersonalLearningRequestCard({
       </form>
       <p role="status">{message}</p>
       {candidateEndpoint &&
+        !practice.current &&
         saved &&
         Object.entries(content).every(
           ([key, value]) => value === saved[key as keyof PersonalLearningRequestContent],

@@ -47,6 +47,7 @@ const practice: PersonalLearningPractice = {
   },
   support: { revision: 0, history: [] },
   submissions: [],
+  nextCandidate: null,
 };
 const request: SavedPracticeSupport = {
   id: 'r',

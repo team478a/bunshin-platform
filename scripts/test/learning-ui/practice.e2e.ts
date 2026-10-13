@@ -1,7 +1,7 @@
 import { test } from '@e2e-dev/web';
 import { expect } from 'e2e';
 import { practiceFixture } from './practice-fixture';
-import { lessonWish } from './lesson-fixture';
+import { lessonCandidate, lessonWish } from './lesson-fixture';
 test('confirmed material starts once and records short self report on smartphone', async ({
   app,
   browser,
@@ -155,6 +155,7 @@ test('submits typed evidence and shows scoped review without claiming mastery', 
   await screen.getByLabel('できたこと、または確認してほしい内容').fill('見出しを修正した結果です');
   await screen.getByRole('button', '提出して今回の基準を確認').tap();
   await expect(screen.getByText('追加の確認が必要です。')).toBeVisible();
+  await expect(screen.getByRole('button', '次の実践を提案してもらう')).toHaveCount(0);
   await expect(
     screen.getByText('提出文で確認できた点：見出しの修正結果が提出された'),
   ).toBeVisible();
@@ -169,4 +170,85 @@ test('submits typed evidence and shows scoped review without claiming mastery', 
     content: '見出しを修正した結果です',
   });
   expect(submitted).toHaveProperty('idempotencyKey');
+});
+
+test('verified evidence requires review and learner confirmation before the next task starts', async ({
+  app,
+  browser,
+  screen,
+}) => {
+  const calls: Record<string, unknown>[] = [];
+  const nextCandidate = {
+    ...lessonCandidate,
+    id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    requestId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+    requestRevision: 2,
+    confirmedAt: null,
+    proposal: {
+      ...lessonCandidate.proposal,
+      outcome: '見出しの順番を自分で比べられる',
+      practice: ['二つの見出し順を比べて本人が選ぶ'],
+    },
+  };
+  const verifiedPractice = {
+    ...practiceFixture,
+    submissions: [
+      {
+        answerId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+        revision: 1,
+        kind: 'TEXT' as const,
+        content: '見出しを直した結果',
+        status: 'READY' as const,
+        review: {
+          state: 'CURRENT_STEP_EVIDENCE' as const,
+          observed: ['提出文で変更を確認'],
+          notEstablished: ['別課題での再現'],
+          feedback: '今回の基準に沿う提出がありました。',
+          nextAction: '見出しの順序を比べてください。',
+        },
+        createdAt: lessonWish.createdAt,
+      },
+    ],
+  };
+  await browser.route('**/api/synthetic/practice', async (route) => {
+    const body = JSON.parse(route.request.postData ?? '{}') as Record<string, unknown>;
+    calls.push(body);
+    const confirmed = body.action === 'NEXT_CONFIRM';
+    const started = body.action === 'START';
+    await route.fulfill({
+      json: {
+        data: {
+          allowed: true,
+          current: started
+            ? {
+                ...practiceFixture,
+                assignmentId: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+                planRevision: 2,
+                candidate: { ...nextCandidate, confirmedAt: lessonWish.createdAt },
+              }
+            : {
+                ...verifiedPractice,
+                nextCandidate: {
+                  ...nextCandidate,
+                  ...(confirmed ? { confirmedAt: lessonWish.createdAt } : {}),
+                },
+              },
+        },
+      },
+    });
+  });
+  await app.open('/?practice&resume&verified');
+  await screen.getByRole('button', '次の実践を提案してもらう').tap();
+  await expect(screen.getByText('見出しの順番を自分で比べられる')).toBeVisible();
+  await expect(screen.getByRole('button', 'この次の課題を始める')).toHaveCount(0);
+  await screen.getByRole('button', 'この次の課題案を確認').tap();
+  await screen.getByRole('button', 'この次の課題を始める').tap();
+  await expect(screen.getByText('二つの見出し順を比べて本人が選ぶ')).toBeVisible();
+  expect(calls.map((call) => call.action)).toEqual(['NEXT_PROPOSAL', 'NEXT_CONFIRM', 'START']);
+  expect(calls[2]).toMatchObject({
+    requestId: nextCandidate.requestId,
+    requestRevision: nextCandidate.requestRevision,
+    candidateId: nextCandidate.id,
+    previousAssignmentId: practiceFixture.assignmentId,
+  });
 });

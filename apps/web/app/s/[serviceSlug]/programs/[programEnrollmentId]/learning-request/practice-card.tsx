@@ -71,6 +71,33 @@ export function LearningPracticeCard({
       setPending(false);
     }
   }
+  async function practiceAction(
+    payload: Record<string, string | number | undefined>,
+    success: string,
+  ) {
+    if (pending) return;
+    setPending(true);
+    setMessage('');
+    try {
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const result = (await response.json()) as {
+        data?: PersonalLearningPracticeState;
+        error?: { message?: string };
+      };
+      if (!response.ok || !result.data)
+        throw new Error(result.error?.message ?? '保存できませんでした。');
+      onChange(result.data);
+      setMessage(success);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '保存できませんでした。');
+    } finally {
+      setPending(false);
+    }
+  }
   async function submitEvidence() {
     const current = state.current;
     if (!current || pending || !evidence.trim()) return;
@@ -228,6 +255,88 @@ export function LearningPracticeCard({
                 </article>
               ))}
             </div>
+          )}
+          {current.submissions.at(-1)?.review?.state === 'CURRENT_STEP_EVIDENCE' && (
+            <section aria-label="次の学習課題">
+              <h3>今回の実践を踏まえた次の一歩</h3>
+              <p>
+                今回確認できた提出と元の希望を使って、次の小さな実践案を作ります。案を確認するまで現在の課題は切り替わりません。
+              </p>
+              {!current.nextCandidate && (
+                <button
+                  type="button"
+                  disabled={!state.allowed || pending}
+                  onClick={() =>
+                    void practiceAction(
+                      {
+                        action: 'NEXT_PROPOSAL',
+                        assignmentId: current.assignmentId,
+                        operationId: crypto.randomUUID(),
+                      },
+                      '次の実践案を準備しました。内容を確認してください。',
+                    )
+                  }
+                >
+                  {pending ? '次の実践案を準備中…' : '次の実践を提案してもらう'}
+                </button>
+              )}
+              {current.nextCandidate?.proposal.status === 'READY' && (
+                <article>
+                  <p>元の希望：{current.nextCandidate.originalText}</p>
+                  <h4>次の到達点（提案）</h4>
+                  <p>{current.nextCandidate.proposal.outcome}</p>
+                  <p>{current.nextCandidate.proposal.explanation}</p>
+                  <ol>
+                    {current.nextCandidate.proposal.practice.map((step, index) => (
+                      <li key={index}>{step}</li>
+                    ))}
+                  </ol>
+                  <p>確認方法：{current.nextCandidate.proposal.evidence.join('／')}</p>
+                  <p>今回の基準：{current.nextCandidate.proposal.criteria.join('／')}</p>
+                  {current.nextCandidate.confirmedAt ? (
+                    <button
+                      type="button"
+                      disabled={!state.allowed || pending}
+                      onClick={() =>
+                        void practiceAction(
+                          {
+                            action: 'START',
+                            requestId: current.nextCandidate!.requestId,
+                            requestRevision: current.nextCandidate!.requestRevision,
+                            candidateId: current.nextCandidate!.id,
+                            previousAssignmentId: current.assignmentId,
+                          },
+                          '確認した次の課題を開始しました。前の課題と結果は履歴に残っています。',
+                        )
+                      }
+                    >
+                      この次の課題を始める
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={!state.allowed || pending}
+                      onClick={() =>
+                        void practiceAction(
+                          {
+                            action: 'NEXT_CONFIRM',
+                            requestId: current.nextCandidate!.requestId,
+                            requestRevision: current.nextCandidate!.requestRevision,
+                            candidateId: current.nextCandidate!.id,
+                          },
+                          '次の課題案を確認しました。開始は別操作で行います。',
+                        )
+                      }
+                    >
+                      この次の課題案を確認
+                    </button>
+                  )}
+                </article>
+              )}
+              {current.nextCandidate && current.nextCandidate.proposal.status !== 'READY' && (
+                <p>次の案には追加確認が必要です。現在の課題はそのまま保持しています。</p>
+              )}
+            </section>
           )}
           <p>
             一回の提出で今回の基準を確認します。本人の報告、提出文から確認したこと、独力で別の実践ができることは別に扱います。目標全体の達成や次の課題はこの確認では決まりません。

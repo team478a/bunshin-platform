@@ -6,6 +6,7 @@ import { requireSameOrigin } from '../auth/request-security';
 import { resolvePersonalLearningRequestActor } from '../services/personal-learning-request-access';
 import { boundedLearningJson } from './personal-learning-request';
 import { enqueueAiTrainingEvaluation } from '../services/ai-training-evaluation-queue';
+import { prepareLearningLesson } from '../services/personal-learning-lesson-candidate';
 
 const body = z.discriminatedUnion('action', [
   z
@@ -14,6 +15,7 @@ const body = z.discriminatedUnion('action', [
       requestId: z.string().uuid(),
       requestRevision: z.number().int().positive(),
       candidateId: z.string().uuid(),
+      previousAssignmentId: z.string().uuid().optional(),
     })
     .strict(),
   z
@@ -23,6 +25,21 @@ const body = z.discriminatedUnion('action', [
       operationId: z.string().uuid(),
       expectedRevision: z.number().int().min(0).max(999),
       text: z.string().trim().min(1).max(500),
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal('NEXT_PROPOSAL'),
+      assignmentId: z.string().uuid(),
+      operationId: z.string().uuid(),
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal('NEXT_CONFIRM'),
+      requestId: z.string().uuid(),
+      requestRevision: z.number().int().positive(),
+      candidateId: z.string().uuid(),
     })
     .strict(),
   z
@@ -60,6 +77,24 @@ export async function learningPracticeResponse(
     if (request.method === 'GET')
       return Response.json({ data: await repo.readPractice(actor) }, { headers });
     const input = body.parse(await boundedLearningJson(request));
+    if (input.action === 'NEXT_PROPOSAL') {
+      const nextRequest = await repo.createNextPracticeRequest({
+        actor,
+        assignmentId: input.assignmentId,
+        operationId: input.operationId,
+      });
+      await prepareLearningLesson(actor, nextRequest.id, nextRequest.revision, input.operationId);
+      return Response.json({ data: await repo.readPractice(actor) }, { headers });
+    }
+    if (input.action === 'NEXT_CONFIRM') {
+      await new db.PrismaLearningCandidateRepository(db.prisma).confirm({
+        actor,
+        requestId: input.requestId,
+        requestRevision: input.requestRevision,
+        candidateId: input.candidateId,
+      });
+      return Response.json({ data: await repo.readPractice(actor) }, { headers });
+    }
     if (input.action === 'EVIDENCE') {
       const submitted = await new db.PrismaTrainingAnswerRepository(db.prisma).submit({
         workspaceId: actor.scope.workspaceId,
@@ -100,6 +135,9 @@ export async function learningPracticeResponse(
             requestId: input.requestId,
             requestRevision: input.requestRevision,
             candidateId: input.candidateId,
+            ...(input.previousAssignmentId
+              ? { previousAssignmentId: input.previousAssignmentId }
+              : {}),
           })
         : await repo.recordPracticeNote({
             actor,

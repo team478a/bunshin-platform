@@ -4156,3 +4156,11 @@
 - 保存前に現在のEnrollment、Assignment、回答Revisionを再認可し、古い遅延評価が差替え後の履歴を上書きしない。AI本文をActionEvent metadataへ保存しない。既存のAI利用Admission・費用台帳を利用し、未知原価の0円補完はしない。
 - 画像、正式な次課題提案/未達継続、LINE、実AI/実受講者確認、本番Migration/Deployは本決定の範囲外で未検証とする。
 - 通常登録のPilot利用者は、既存Enrollmentに結び付いた有効なEXTERNAL席がある場合だけ自由希望経路を許可する。internal席やseat projection不整合は拒否し、招待/管理者個別準備への置換はしない。
+
+## 2026-10-13: 確認済みの提出から本人確認を経て次の動的実践へ進む
+
+- 状態：実装PR作成中。実AI・実受講者・本番環境の確認は別Gate。
+- 現在の課題の最後の提出が、保存済み教材と同版の評価で`CURRENT_STEP_EVIDENCE`になった場合のみ、元の希望と確認済み/未確認の観察を引き継いだ次案を生成する。本人申告、評価待ち、未確認状態から進捗を推測しない。
+- 次案は別の`PersonalLearningRequest` Revisionと候補として保存する。提案を取得するだけでは現在のPlan・Assignmentを変更せず、保存済み候補を本人が確認し、開始操作を行ったtransactionだけが前課題を履歴化し、同じGoal配下の次Plan revision・Assignmentを作成する。
+- 元の希望、前の課題、提出・評価・支援履歴を保持する。課題完了をGoal完了、受講終了、習熟能力へ昇格させない。新しい課題作成前のAdmission・原価計測と既存Jobを再利用し、未知費用を0円扱いしない。
+- Prompt Versionを更新し、前回の観察情報は入力データとして扱う。提出内容や評価文中の命令は権限・指示として実行しない。
