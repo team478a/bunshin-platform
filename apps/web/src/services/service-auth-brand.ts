@@ -6,6 +6,12 @@ export interface ServiceAuthBrand {
   poweredBy: boolean;
 }
 
+const INDEPENDENT_SERVICE_BRANDS: Record<string, string> = {
+  'manaberu-style': 'マナベルスタイル',
+  hassy: 'ハッシー',
+  'sennokuni-media': '千ノ国メディア',
+};
+
 /**
  * Login branding may use public service configuration or an explicitly approved
  * brand-only alias. The alias never supplies membership or service-state data.
@@ -22,9 +28,10 @@ export function serviceAuthBrandForSlug(
     };
   }
 
-  if (slug === 'manaberu-style') {
+  const serviceName = slug ? INDEPENDENT_SERVICE_BRANDS[slug] : undefined;
+  if (serviceName) {
     return {
-      serviceName: 'マナベルスタイル',
+      serviceName,
       logoUrl: null,
       poweredBy: true,
     };

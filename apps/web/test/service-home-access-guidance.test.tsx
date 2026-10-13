@@ -2,6 +2,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { ServiceHomeAccessGuidance } from '../app/s/[serviceSlug]/home/service-home-access-guidance';
+import { serviceAuthBrandForSlug } from '../src/services/service-auth-brand';
 
 describe('service home access guidance', () => {
   it('explains why LINE users may need to log in and preserves the home return path', () => {
@@ -61,23 +62,26 @@ describe('service home access guidance', () => {
     expect(html).not.toContain('/s/unknown-service');
   });
 
-  it('shows only the approved Manaberu brand on an unresolved service-link screen', () => {
+  it.each([
+    ['manaberu-style', 'マナベルスタイル'],
+    ['hassy', 'ハッシー'],
+    ['sennokuni-media', '千ノ国メディア'],
+  ])('shows only the approved %s brand on an unresolved service-link screen', (slug, name) => {
+    const brand = serviceAuthBrandForSlug(slug);
+    expect(brand).toEqual({ serviceName: name, logoUrl: null, poweredBy: true });
+
     const html = renderToStaticMarkup(
       createElement(ServiceHomeAccessGuidance, {
         state: 'LINK_UNAVAILABLE',
-        serviceSlug: 'manaberu-style',
-        brand: {
-          serviceName: 'マナベルスタイル',
-          logoUrl: null,
-          poweredBy: true,
-        },
+        serviceSlug: slug,
+        brand: brand ?? undefined,
       }),
     );
 
     expect(html).toContain('サービスの利用状態を確認できません');
-    expect(html).toContain('マナベルスタイル');
+    expect(html).toContain(name);
     expect(html).toContain('ワタシワークスを利用しています');
     expect(html).not.toContain('参加案内を確認する');
-    expect(html).not.toContain('/s/manaberu-style');
+    expect(html).not.toContain(`/s/${slug}`);
   });
 });
