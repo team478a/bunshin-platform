@@ -13,6 +13,30 @@ describe('magic link confirmation route', () => {
     );
   });
 
+  it('preserves only a validated service return path for branded email confirmation', () => {
+    const response = GET(
+      new Request(
+        'https://bunshin.example/auth/confirm?token_hash=abc_123-Z&type=email&returnTo=%2Fs%2Fmanaberu-style%2Fhome',
+      ),
+    );
+
+    expect(response.headers.get('location')).toBe(
+      'https://bunshin.example/login/confirm?token_hash=abc_123-Z&type=email&returnTo=%2Fs%2Fmanaberu-style%2Fhome',
+    );
+  });
+
+  it('rejects an unsafe service return path instead of displaying misleading context', () => {
+    const response = GET(
+      new Request(
+        'https://bunshin.example/auth/confirm?token_hash=abc_123-Z&type=email&returnTo=https%3A%2F%2Fevil.example',
+      ),
+    );
+
+    expect(response.headers.get('location')).toBe(
+      'https://bunshin.example/login?error=auth-context',
+    );
+  });
+
   it('rejects missing or malformed magic-link parameters', () => {
     const response = GET(
       new Request('https://bunshin.example/auth/confirm?token_hash=%3Cscript%3E&type=email'),
