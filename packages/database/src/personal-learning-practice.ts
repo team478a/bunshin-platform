@@ -375,6 +375,29 @@ export class PrismaPersonalLearningPracticeRepository
       if (!allowed)
         throw new ApplicationError('CONFIGURATION_ERROR', 'practice policy unavailable');
       const running = await this.current(tx, actor);
+      if (running) {
+        const current = await this.projectPractice(tx, actor, running);
+        if (!input.previousAssignmentId) {
+          if (
+            current.candidate.id !== input.candidateId ||
+            current.candidate.requestId !== input.requestId ||
+            current.candidate.requestRevision !== input.requestRevision
+          )
+            return conflict();
+          return current;
+        }
+        if (running.id !== input.previousAssignmentId) {
+          const context = object(object(running.displaySnapshot).dynamicPractice);
+          if (
+            context.previousAssignmentId !== input.previousAssignmentId ||
+            current.candidate.id !== input.candidateId ||
+            current.candidate.requestId !== input.requestId ||
+            current.candidate.requestRevision !== input.requestRevision
+          )
+            return conflict();
+          return current;
+        }
+      }
       const row = await tx.personalLearningRequest.findFirst({
         where: s,
         orderBy: { revision: 'desc' },
