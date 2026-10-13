@@ -2,7 +2,11 @@
 import { createRoot } from 'react-dom/client';
 import { LearningCandidateCard } from '../../../apps/web/app/s/[serviceSlug]/programs/[programEnrollmentId]/learning-request/candidate-card';
 import { lessonWish, lessonCandidate } from './lesson-fixture';
-import { practiceFixture, supportedPracticeFixture } from './practice-fixture';
+import {
+  practiceFixture,
+  supportedPracticeFixture,
+  verifiedPracticeFixture,
+} from './practice-fixture';
 import { PersonalLearningPilotCard } from '../../../apps/web/app/s/[serviceSlug]/programs/[programEnrollmentId]/personal-learning-pilot-card';
 import { InternalPreparationCard } from '../../../apps/web/app/s/[serviceSlug]/manage/programs/personal-learning-preparation/internal-card';
 import { DefinitionReviewCard } from '../../../apps/web/app/s/[serviceSlug]/manage/programs/learning-definition-review/card';
@@ -21,9 +25,11 @@ createRoot(document.getElementById('root')!).render(
       initialPractice={{
         allowed: !new URLSearchParams(window.location.search).has('stopped'),
         current: new URLSearchParams(window.location.search).has('resume')
-          ? new URLSearchParams(window.location.search).has('support')
-            ? supportedPracticeFixture
-            : practiceFixture
+          ? new URLSearchParams(window.location.search).has('verified')
+            ? verifiedPracticeFixture
+            : new URLSearchParams(window.location.search).has('support')
+              ? supportedPracticeFixture
+              : practiceFixture
           : null,
       }}
     />

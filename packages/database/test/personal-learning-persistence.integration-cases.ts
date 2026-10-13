@@ -622,6 +622,13 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
           evaluatedAt: now,
         },
       });
+      await expect(
+        f.practice.createNextPracticeRequest({
+          actor: f.actor,
+          assignmentId: current.assignmentId,
+          operationId: randomUUID(),
+        }),
+      ).rejects.toMatchObject({ code: 'CONFLICT' });
       const secondInput = {
         ...firstInput,
         answer: '本人の報告です。',
@@ -661,6 +668,137 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
           })
         ).status,
       ).toBe('STARTED');
+    });
+    it('dynamic practice: generates a reviewed next step and switches only after learner confirmation', async () => {
+      const f = await dynamicPracticeFixture(true);
+      const first = await f.practice.startPractice(f.start);
+      const answers = new PrismaTrainingAnswerRepository(client, () => now);
+      const text = '見出しを一か所、自分で直しました。';
+      const submitted = await answers.submit({
+        workspaceId: f.scope.workspaceId,
+        groupId: f.scope.groupId,
+        actorUserId: f.actor.actorUserId,
+        programEnrollmentId: f.enrollment.id,
+        missionAssignmentId: first.assignmentId,
+        answer: text,
+        practiceEvidence: {
+          kind: 'TEXT',
+          content: text,
+          expectedRevision: 0,
+          candidateId: first.candidate.id,
+          materialVersion: 1,
+        },
+        idempotencyKey: randomUUID(),
+        occurredAt: now,
+      });
+      if (submitted.outcome !== 'SUBMITTED') throw new Error('evidence not saved');
+      await client.trainingMissionAnswer.update({
+        where: { id: submitted.answer.id },
+        data: {
+          evaluationStatus: 'READY',
+          evaluation: {
+            schemaVersion: 'PERSONAL_LEARNING_EVIDENCE_REVIEW_V1',
+            candidateId: first.candidate.id,
+            materialVersion: 1,
+            revision: 1,
+            kind: 'TEXT',
+            review: {
+              state: 'CURRENT_STEP_EVIDENCE',
+              observed: [text],
+              notEstablished: ['支援を減らした別の実践'],
+              feedback: '提出文で今回の変更を確認しました。',
+              nextAction: '次は見出しの順番も自分で比べてください。',
+            },
+          },
+          evaluatedAt: now,
+        },
+      });
+      const nextRequestContext = await f.practice.createNextPracticeRequest({
+        actor: f.actor,
+        assignmentId: first.assignmentId,
+        operationId: randomUUID(),
+      });
+      expect(nextRequestContext).toMatchObject({
+        originalText: first.candidate.originalText,
+        revision: first.candidate.requestRevision + 1,
+      });
+      expect(nextRequestContext.currentPosition).toContain('前の実践で確認できた点');
+      const nextRequest = await client.personalLearningRequest.findFirstOrThrow({
+        where: f.scope,
+        orderBy: { revision: 'desc' },
+      });
+      const nextCandidateId = randomUUID();
+      await client.personalLearningRequest.update({
+        where: { id: nextRequest.id },
+        data: {
+          candidateConfirmedAt: now,
+          lessonCandidate: {
+            id: nextCandidateId,
+            requestId: nextRequest.id,
+            requestRevision: nextRequest.revision,
+            originalText: nextRequest.originalText,
+            policyVersion: 'LEARNER_PRACTICE_TOOL_INDEPENDENT_V1',
+            materialVersion: 1,
+            promptVersion: 'learning-lesson-tool-independent-v2',
+            usageKey: 'personal-learning-operation:' + 'a'.repeat(64),
+            createdAt: now.toISOString(),
+            confirmedAt: null,
+            proposal: {
+              status: 'READY',
+              reason: '確認した前回の結果から次へ進む',
+              questions: [],
+              outcome: '見出しの順番を比べる',
+              explanation: '伝える順序を確認します。',
+              example: '重要な情報を先に置く',
+              practice: ['見出しの順番を自分で一度入れ替える'],
+              evidence: ['変更前後の見出し'],
+              criteria: ['変更理由を説明できる'],
+            },
+          },
+        },
+      });
+      expect((await f.practice.readPractice(f.actor)).current?.nextCandidate).toMatchObject({
+        id: nextCandidateId,
+        confirmedAt: now.toISOString(),
+      });
+      const next = await f.practice.startPractice({
+        actor: f.actor,
+        requestId: nextRequest.id,
+        requestRevision: nextRequest.revision,
+        candidateId: nextCandidateId,
+        previousAssignmentId: first.assignmentId,
+      });
+      expect(next).toMatchObject({
+        goalId: first.goalId,
+        planId: first.planId,
+        planRevision: 2,
+        candidate: { id: nextCandidateId },
+      });
+      expect(
+        await f.practice.startPractice({
+          actor: f.actor,
+          requestId: nextRequest.id,
+          requestRevision: nextRequest.revision,
+          candidateId: nextCandidateId,
+          previousAssignmentId: first.assignmentId,
+        }),
+      ).toEqual(next);
+      expect(
+        await client.programMissionAssignment.findUniqueOrThrow({
+          where: { id: first.assignmentId },
+        }),
+      ).toMatchObject({ status: 'COMPLETED', completedAt: now });
+      expect(
+        await client.trainingMissionAnswer.findUniqueOrThrow({
+          where: { id: submitted.answer.id },
+        }),
+      ).toMatchObject({ evaluationStatus: 'READY' });
+      const plans = await new PrismaPersonalLearningPersistenceRepository(client, () => now).read(
+        f.actor,
+      );
+      expect(
+        plans.plans.map(({ plan }) => ({ revision: plan.revision, status: plan.status })),
+      ).toContainEqual({ revision: 2, status: 'CONFIRMED' });
     });
     it('dynamic practice: isolates ownership, old answers, and profile goal overwrite', async () => {
       const f = await dynamicPracticeFixture();

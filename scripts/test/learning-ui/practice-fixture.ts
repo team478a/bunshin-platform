@@ -21,6 +21,7 @@ export const practiceFixture = {
   },
   support: { revision: 0, history: [] },
   submissions: [],
+  nextCandidate: null,
 } satisfies PersonalLearningPractice;
 export const supportedPracticeFixture = {
   ...practiceFixture,
@@ -49,4 +50,24 @@ export const supportedPracticeFixture = {
       },
     ],
   },
+} satisfies PersonalLearningPractice;
+export const verifiedPracticeFixture = {
+  ...practiceFixture,
+  submissions: [
+    {
+      answerId: '99999999-9999-4999-8999-999999999999',
+      revision: 1,
+      kind: 'TEXT',
+      content: '見出しを修正した結果です',
+      status: 'READY',
+      review: {
+        state: 'CURRENT_STEP_EVIDENCE',
+        observed: ['提出文で変更を確認'],
+        notEstablished: ['別課題での再現'],
+        feedback: '今回の基準に沿う提出がありました。',
+        nextAction: '見出しの順序を比べてください。',
+      },
+      createdAt: lessonWish.createdAt,
+    },
+  ],
 } satisfies PersonalLearningPractice;

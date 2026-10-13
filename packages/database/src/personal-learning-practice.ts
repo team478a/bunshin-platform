@@ -11,6 +11,7 @@ import {
   type PersonalLearningPracticeRepository,
   type PersonalLearningPractice,
   type PersonalLearningActor,
+  type SavedPersonalLearningRequest,
 } from '@bunshin/application';
 import { PrismaLearningCandidateRepository } from './personal-learning-lesson-candidate';
 import { readPracticeSupportHistory } from './personal-learning-practice-support-history';
@@ -70,7 +71,8 @@ export class PrismaPersonalLearningPracticeRepository
       row.targetResourceType !== 'PERSONAL_LEARNING_PLAN' ||
       row.missionDefinitionKey !== PERSONAL_LEARNING_PRACTICE_MISSION ||
       data.planId !== row.targetResourceId ||
-      data.planRevision !== 1 ||
+      !Number.isSafeInteger(data.planRevision) ||
+      Number(data.planRevision) < 1 ||
       typeof data.goalId !== 'string' ||
       Object.entries(actor.scope).some(([key, value]) => scope[key] !== value) ||
       !row.startedAt
@@ -94,7 +96,7 @@ export class PrismaPersonalLearningPracticeRepository
       where: {
         ...actor.scope,
         planId: row.targetResourceId,
-        revision: 1,
+        revision: Number(data.planRevision),
         status: 'CONFIRMED',
         programMemberGoalId: data.goalId,
       },
@@ -184,11 +186,36 @@ export class PrismaPersonalLearningPracticeRepository
         createdAt: answer.createdAt.toISOString(),
       };
     });
+    const lastVerified = submissions.at(-1);
+    const proposalEvent =
+      lastVerified?.status === 'READY' && lastVerified.review?.state === 'CURRENT_STEP_EVIDENCE'
+        ? await tx.programActionEvent.findFirst({
+            where: {
+              workspaceId: row.workspaceId,
+              groupId: row.groupId,
+              programEnrollmentId: row.programEnrollmentId,
+              missionAssignmentId: row.id,
+              actorUserId: actor.actorUserId,
+              eventType: 'PERSONAL_LEARNING_NEXT_TASK_PROPOSED',
+              idempotencyKey: `practice-next-proposal:${row.id}:${lastVerified.answerId}`,
+            },
+          })
+        : null;
+    const proposalRequestId = object(proposalEvent?.metadata).requestId;
+    const proposalRequest =
+      typeof proposalRequestId === 'string'
+        ? await tx.personalLearningRequest.findFirst({
+            where: { ...actor.scope, id: proposalRequestId },
+          })
+        : null;
+    const nextCandidate = proposalRequest?.lessonCandidate
+      ? this.project(proposalRequest.lessonCandidate, proposalRequest.candidateConfirmedAt)
+      : null;
     return {
       assignmentId: row.id,
       goalId: data.goalId,
       planId: row.targetResourceId,
-      planRevision: 1,
+      planRevision: Number(data.planRevision),
       startedAt: row.startedAt.toISOString(),
       candidate: { ...candidate, confirmedAt: saved.confirmedAt },
       environment: {
@@ -200,7 +227,133 @@ export class PrismaPersonalLearningPracticeRepository
       note,
       support: await readPracticeSupportHistory(tx, actor, row.id, candidate.id),
       submissions,
+      nextCandidate,
     };
+  }
+  createNextPracticeRequest(
+    input: Parameters<PersonalLearningPracticeRepository['createNextPracticeRequest']>[0],
+  ): Promise<SavedPersonalLearningRequest> {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(input.operationId))
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid operation');
+    return this.authorized(input.actor, true, async (tx, now) => {
+      const actor = input.actor;
+      await this.normalLearner(tx, actor);
+      if (!(await this.policy(tx, actor)).allowed)
+        throw new ApplicationError('CONFIGURATION_ERROR', 'practice policy unavailable');
+      const row = await this.current(tx, actor);
+      if (!row || row.id !== input.assignmentId) return conflict();
+      const practice = await this.projectPractice(tx, actor, row);
+      const verified = practice.submissions.at(-1);
+      if (
+        !verified ||
+        verified.status !== 'READY' ||
+        verified.review?.state !== 'CURRENT_STEP_EVIDENCE'
+      )
+        return conflict();
+      const eventKey = `practice-next-proposal:${row.id}:${verified.answerId}`;
+      const priorEvent = await tx.programActionEvent.findUnique({
+        where: {
+          workspaceId_groupId_idempotencyKey: {
+            workspaceId: actor.scope.workspaceId,
+            groupId: actor.scope.groupId,
+            idempotencyKey: eventKey,
+          },
+        },
+      });
+      if (priorEvent) {
+        const priorId = object(priorEvent.metadata).requestId;
+        if (
+          priorEvent.actorUserId !== actor.actorUserId ||
+          priorEvent.programEnrollmentId !== actor.scope.programEnrollmentId ||
+          priorEvent.missionAssignmentId !== row.id ||
+          typeof priorId !== 'string'
+        )
+          return conflict();
+        const existing = await tx.personalLearningRequest.findFirst({
+          where: { ...actor.scope, id: priorId },
+        });
+        if (!existing) return conflict();
+        return {
+          id: existing.id,
+          revision: existing.revision,
+          createdAt: existing.createdAt.toISOString(),
+          originalText: existing.originalText,
+          deviceType: existing.deviceType as SavedPersonalLearningRequest['deviceType'],
+          toolDescription: existing.toolDescription,
+          experienceDescription: existing.experienceDescription,
+          currentPosition: existing.currentPosition,
+        };
+      }
+      const previousRequest = await tx.personalLearningRequest.findFirst({
+        where: { ...actor.scope, id: practice.candidate.requestId },
+      });
+      const latestRequest = await tx.personalLearningRequest.findFirst({
+        where: actor.scope,
+        orderBy: { revision: 'desc' },
+      });
+      if (!previousRequest || latestRequest?.id !== previousRequest.id) return conflict();
+      const review = verified.review;
+      if (!review) return conflict();
+      const progress = [
+        `前の実践で確認できた点: ${review.observed.join('／').slice(0, 140)}`,
+        `まだ確認できていない点: ${review.notEstablished.join('／').slice(0, 100)}`,
+        `次の小さな行動の参考: ${review.nextAction.slice(0, 120)}`,
+        previousRequest.currentPosition
+          ? `これまでの本人申告: ${previousRequest.currentPosition.slice(0, 100)}`
+          : 'これまでの本人申告: 未入力',
+      ]
+        .join('。')
+        .slice(0, 500);
+      const revision = previousRequest.revision + 1;
+      const requestId = randomUUID();
+      const saved = await tx.personalLearningRequest.create({
+        data: {
+          ...actor.scope,
+          id: requestId,
+          revision,
+          originalText: previousRequest.originalText,
+          deviceType: previousRequest.deviceType,
+          toolDescription: previousRequest.toolDescription,
+          experienceDescription: previousRequest.experienceDescription,
+          currentPosition: progress,
+          idempotencyKey: `next-${row.id}-${verified.answerId}`,
+          digest: createHash('sha256')
+            .update(`${row.id}:${verified.answerId}:${practice.candidate.id}:${progress}`)
+            .digest('hex'),
+          createdAt: now,
+        },
+      });
+      await tx.programActionEvent.create({
+        data: {
+          workspaceId: actor.scope.workspaceId,
+          groupId: actor.scope.groupId,
+          programEnrollmentId: actor.scope.programEnrollmentId,
+          missionAssignmentId: row.id,
+          actorUserId: actor.actorUserId,
+          eventType: 'PERSONAL_LEARNING_NEXT_TASK_PROPOSED',
+          sourceResourceType: 'PERSONAL_LEARNING_REQUEST',
+          sourceResourceId: saved.id,
+          idempotencyKey: eventKey,
+          occurredAt: now,
+          metadata: {
+            requestId: saved.id,
+            requestRevision: saved.revision,
+            sourceCandidateId: practice.candidate.id,
+            sourceAnswerId: verified.answerId,
+          },
+        },
+      });
+      return {
+        id: saved.id,
+        revision: saved.revision,
+        createdAt: saved.createdAt.toISOString(),
+        originalText: saved.originalText,
+        deviceType: saved.deviceType as SavedPersonalLearningRequest['deviceType'],
+        toolDescription: saved.toolDescription,
+        experienceDescription: saved.experienceDescription,
+        currentPosition: saved.currentPosition,
+      };
+    });
   }
   readPractice(actor: PersonalLearningActor) {
     return this.authorized(actor, true, async (tx) => {
@@ -222,16 +375,6 @@ export class PrismaPersonalLearningPracticeRepository
       if (!allowed)
         throw new ApplicationError('CONFIGURATION_ERROR', 'practice policy unavailable');
       const running = await this.current(tx, actor);
-      if (running) {
-        const current = await this.projectPractice(tx, actor, running);
-        if (
-          current.candidate.id !== input.candidateId ||
-          current.candidate.requestId !== input.requestId ||
-          current.candidate.requestRevision !== input.requestRevision
-        )
-          return conflict();
-        return current;
-      }
       const row = await tx.personalLearningRequest.findFirst({
         where: s,
         orderBy: { revision: 'desc' },
@@ -244,13 +387,241 @@ export class PrismaPersonalLearningPracticeRepository
       )
         return conflict();
       const candidate = this.project(row.lessonCandidate, row.candidateConfirmedAt);
-      if (
-        candidate.id !== input.candidateId ||
-        candidate.proposal.status !== 'READY' ||
-        !row.deviceType ||
-        !row.toolDescription
-      )
+      if (candidate.id !== input.candidateId || candidate.proposal.status !== 'READY')
         return conflict();
+      if (input.previousAssignmentId) {
+        const priorStart = await tx.programActionEvent.findUnique({
+          where: {
+            workspaceId_groupId_idempotencyKey: {
+              workspaceId: s.workspaceId,
+              groupId: s.groupId,
+              idempotencyKey: `practice-next-start:${input.previousAssignmentId}:${candidate.id}`,
+            },
+          },
+        });
+        const assignmentId = object(priorStart?.metadata).assignmentId;
+        if (
+          priorStart?.actorUserId === actor.actorUserId &&
+          priorStart.programEnrollmentId === s.programEnrollmentId &&
+          typeof assignmentId === 'string'
+        ) {
+          const alreadyStarted = await tx.programMissionAssignment.findFirst({
+            where: {
+              id: assignmentId,
+              workspaceId: s.workspaceId,
+              groupId: s.groupId,
+              programEnrollmentId: s.programEnrollmentId,
+              status: 'STARTED',
+            },
+          });
+          if (alreadyStarted) return this.projectPractice(tx, actor, alreadyStarted);
+          return conflict();
+        }
+      }
+      if (running) {
+        const current = await this.projectPractice(tx, actor, running);
+        if (!input.previousAssignmentId) {
+          if (
+            current.candidate.id !== input.candidateId ||
+            current.candidate.requestId !== input.requestId ||
+            current.candidate.requestRevision !== input.requestRevision
+          )
+            return conflict();
+          return current;
+        }
+        if (
+          input.previousAssignmentId !== running.id ||
+          current.candidate.originalText !== candidate.originalText ||
+          current.candidate.id === candidate.id
+        )
+          return conflict();
+        const verified = current.submissions.at(-1);
+        if (
+          !verified ||
+          verified.status !== 'READY' ||
+          verified.review?.state !== 'CURRENT_STEP_EVIDENCE'
+        )
+          return conflict();
+        const proposalEvent = await tx.programActionEvent.findUnique({
+          where: {
+            workspaceId_groupId_idempotencyKey: {
+              workspaceId: s.workspaceId,
+              groupId: s.groupId,
+              idempotencyKey: `practice-next-proposal:${running.id}:${verified.answerId}`,
+            },
+          },
+        });
+        const proposalMetadata = object(proposalEvent?.metadata);
+        if (
+          proposalEvent?.actorUserId !== actor.actorUserId ||
+          proposalEvent.missionAssignmentId !== running.id ||
+          proposalMetadata.requestId !== row.id ||
+          proposalMetadata.sourceCandidateId !== current.candidate.id ||
+          proposalMetadata.sourceAnswerId !== verified.answerId
+        )
+          return conflict();
+        const previousPlan = await tx.personalLearningPlanRevision.findFirst({
+          where: {
+            ...s,
+            planId: current.planId,
+            revision: current.planRevision,
+            status: 'CONFIRMED',
+          },
+        });
+        if (!previousPlan || previousPlan.programMemberGoalId !== current.goalId) return conflict();
+        const activeOther = await tx.programMissionAssignment.count({
+          where: {
+            workspaceId: s.workspaceId,
+            groupId: s.groupId,
+            programEnrollmentId: s.programEnrollmentId,
+            id: { not: running.id },
+            status: { in: ['PRESENTED', 'STARTED'] },
+          },
+        });
+        if (activeOther) return conflict();
+        const version = await tx.programTemplateVersion.findFirst({
+          where: {
+            id: program.programTemplateVersionId,
+            workspaceId: s.workspaceId,
+            status: 'PUBLISHED',
+          },
+        });
+        if (!version)
+          throw new ApplicationError('CONFIGURATION_ERROR', 'published program required');
+        const planRevision = current.planRevision + 1;
+        await tx.personalLearningPlanRevision.update({
+          where: { planId_revision: { planId: current.planId, revision: current.planRevision } },
+          data: { status: 'SUPERSEDED' },
+        });
+        await tx.personalLearningPlanRevision.create({
+          data: {
+            ...s,
+            planId: current.planId,
+            revision: planRevision,
+            previousRevision: current.planRevision,
+            revisionReason: 'LEARNER_REQUEST',
+            programMemberGoalId: current.goalId,
+            contractVersion: 'PERSONAL_LEARNING_PLAN_V1',
+            ruleVersion: PERSONAL_LEARNING_PRACTICE_VERSION,
+            status: 'CONFIRMED',
+            confirmedAt: now,
+            steps: [
+              {
+                definition: {
+                  packageKey: 'AI_TRAINING_V1',
+                  definitionKey: 'LESSON_' + candidate.id.replaceAll('-', '').toUpperCase(),
+                  version: 'MATERIAL_V1',
+                },
+                prerequisites: [],
+                selectionReason: 'LEARNER_REQUEST',
+              },
+            ],
+          },
+        });
+        const completed = await tx.programMissionAssignment.updateMany({
+          where: {
+            id: running.id,
+            workspaceId: s.workspaceId,
+            groupId: s.groupId,
+            programEnrollmentId: s.programEnrollmentId,
+            status: 'STARTED',
+          },
+          data: { status: 'COMPLETED', completedAt: now },
+        });
+        if (completed.count !== 1) return conflict();
+        const latest = await tx.programMissionAssignment.findFirst({
+          where: {
+            workspaceId: s.workspaceId,
+            groupId: s.groupId,
+            programEnrollmentId: s.programEnrollmentId,
+          },
+          orderBy: { sequence: 'desc' },
+        });
+        const assignment = await tx.programMissionAssignment.create({
+          data: {
+            workspaceId: s.workspaceId,
+            groupId: s.groupId,
+            programEnrollmentId: s.programEnrollmentId,
+            programTemplateVersionId: version.id,
+            sequence: (latest?.sequence ?? 0) + 1,
+            routeKey: 'PERSONAL_LEARNING',
+            phaseKey: 'PRACTICE',
+            missionDefinitionKey: PERSONAL_LEARNING_PRACTICE_MISSION,
+            targetResourceType: 'PERSONAL_LEARNING_PLAN',
+            targetResourceId: current.planId,
+            actionMode: 'WORK',
+            status: 'STARTED',
+            presentedAt: now,
+            startedAt: now,
+            ruleVersion: PERSONAL_LEARNING_PRACTICE_VERSION,
+            displaySnapshot: json({
+              dynamicPractice: {
+                version: PERSONAL_LEARNING_PRACTICE_VERSION,
+                scope: s,
+                goalId: current.goalId,
+                planId: current.planId,
+                planRevision,
+                previousAssignmentId: running.id,
+                candidate: { ...candidate, confirmedAt: row.candidateConfirmedAt.toISOString() },
+                environment: {
+                  deviceType: row.deviceType,
+                  toolDescription: row.toolDescription,
+                  experienceDescription: row.experienceDescription,
+                  currentPosition: row.currentPosition,
+                },
+              },
+            }),
+          },
+        });
+        await tx.programActionEvent.create({
+          data: {
+            workspaceId: s.workspaceId,
+            groupId: s.groupId,
+            programEnrollmentId: s.programEnrollmentId,
+            missionAssignmentId: assignment.id,
+            actorUserId: s.userId,
+            eventType: 'PERSONAL_LEARNING_NEXT_TASK_STARTED',
+            sourceResourceType: 'PERSONAL_LEARNING_PLAN',
+            sourceResourceId: current.planId,
+            idempotencyKey: `practice-next-start:${running.id}:${candidate.id}`,
+            occurredAt: now,
+            metadata: {
+              previousAssignmentId: running.id,
+              assignmentId: assignment.id,
+              candidateId: candidate.id,
+              planRevision,
+            },
+          },
+        });
+        await tx.programProgressSnapshot.upsert({
+          where: { programEnrollmentId: s.programEnrollmentId },
+          create: {
+            workspaceId: s.workspaceId,
+            groupId: s.groupId,
+            programEnrollmentId: s.programEnrollmentId,
+            programTemplateVersionId: version.id,
+            currentAssignmentId: assignment.id,
+            routeKey: 'PERSONAL_LEARNING',
+            phaseKey: 'PRACTICE',
+            stateKey: 'ACTIVE',
+            ruleVersion: PERSONAL_LEARNING_PRACTICE_VERSION,
+            calculatedAt: now,
+            nextEvaluationAt: null,
+          },
+          update: {
+            currentAssignmentId: assignment.id,
+            routeKey: 'PERSONAL_LEARNING',
+            phaseKey: 'PRACTICE',
+            stateKey: 'ACTIVE',
+            ruleVersion: PERSONAL_LEARNING_PRACTICE_VERSION,
+            calculatedAt: now,
+            nextEvaluationAt: null,
+            revision: { increment: 1 },
+          },
+        });
+        return this.projectPractice(tx, actor, assignment);
+      }
+      if (!row.deviceType || !row.toolDescription) return conflict();
       // Never switch an executing plan or unfinished assignment implicitly.
       if (
         (await tx.programMissionAssignment.count({
