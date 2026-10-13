@@ -10,6 +10,7 @@ export interface TrainingDataDeletionCounts {
   activities: number;
   goals: number;
   preferences: number;
+  learningRequests?: number;
 }
 export interface TrainingDataDeletionPreview {
   revision: string;

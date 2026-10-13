@@ -115,6 +115,9 @@ export class PrismaTrainingPersonalDataDeletionRepository implements TrainingPer
           });
           await tx.programActionEvent.deleteMany({ where: snapshot.eventWhere });
           if (all) {
+            await tx.personalLearningRequest.deleteMany({
+              where: { ...personal, groupMembershipId: owned.membershipId },
+            });
             // Preserve cumulative capacity, but remove the Enrollment link and revoke access.
             await tx.personalLearningPilotSeat.updateMany({
               where: {
@@ -167,6 +170,13 @@ export class PrismaTrainingPersonalDataDeletionRepository implements TrainingPer
               data: { beforeData: Prisma.DbNull, afterData: { learningDataRedacted: true } },
             });
           } else {
+            await tx.personalLearningPracticeSupportImage.deleteMany({
+              where: {
+                ...scope,
+                userId: input.actorUserId,
+                missionAssignmentId: { in: snapshot.answers.map((row) => row.missionAssignmentId) },
+              },
+            });
             await tx.programMissionAssignment.updateMany({
               where: {
                 ...scope,
@@ -343,7 +353,16 @@ export class PrismaTrainingPersonalDataDeletionRepository implements TrainingPer
       goals,
       preferences,
     };
-    if (Object.values(rows).some((list) => list.length > TRAINING_EXPORT_MAX_ROWS))
+    const learningRequests = all
+      ? await tx.personalLearningRequest.findMany({
+          where: { ...personal, groupMembershipId: owned.membershipId },
+          select,
+          orderBy,
+          take,
+        })
+      : [];
+    const snapshotRows = { ...rows, learningRequests };
+    if (Object.values(snapshotRows).some((list) => list.length > TRAINING_EXPORT_MAX_ROWS))
       return { outcome: 'TOO_LARGE' } as const;
     const revision = createHash('sha256')
       .update(
@@ -354,7 +373,7 @@ export class PrismaTrainingPersonalDataDeletionRepository implements TrainingPer
           programEnrollmentId: input.programEnrollmentId,
           target: input.target,
           enrollmentUpdatedAt: owned.enrollmentUpdatedAt,
-          rows,
+          rows: snapshotRows,
         }),
       )
       .digest('hex');
@@ -373,6 +392,7 @@ export class PrismaTrainingPersonalDataDeletionRepository implements TrainingPer
           activities: activities.length,
           goals: goals.length,
           preferences: preferences.length,
+          ...(learningRequests.length > 0 ? { learningRequests: learningRequests.length } : {}),
         },
         answers: answers.map((row) => ({
           id: row.id,

@@ -6,6 +6,7 @@ import {
   validatePersonalLearningWrite,
   definePersonalLearningPlan,
   definePersonalLearningPlanRevision,
+  personalLearningRevisionFlags,
   projectProgramMemberGoalReference,
   type PersonalLearningPersistenceRepository,
   type PersonalLearningActor,
@@ -186,6 +187,24 @@ export class PrismaPersonalLearningPersistenceRepository implements PersonalLear
           : { planId: row.planId, revision: row.revision, confirmedByUserId: row.userId },
     };
     return definePersonalLearningPlan(base as PersonalLearningPlan);
+  }
+  protected async executablePlan(tx: Tx, input: PersonalLearningActor, planId: string) {
+    const where = { ...input.scope, planId };
+    const include = { goalConfirmation: { include: { goal: true } } } as const;
+    const current = await tx.personalLearningPlanRevision.findFirst({
+      where: { ...where, status: { in: ['CONFIRMED', 'COMPLETED'] } },
+      orderBy: { revision: 'desc' },
+      include,
+    });
+    // Keep the old failure classification for an initial unconfirmed or completed plan.
+    return (
+      current ??
+      (await tx.personalLearningPlanRevision.findFirst({
+        where,
+        orderBy: { revision: 'desc' },
+        include,
+      }))
+    );
   }
   private async receipt(
     tx: Tx,
@@ -380,11 +399,7 @@ export class PrismaPersonalLearningPersistenceRepository implements PersonalLear
             })
           )
             conflict();
-          if (previous?.status === 'CONFIRMED')
-            await tx.personalLearningPlanRevision.update({
-              where: { planId_revision: { planId: previous.planId, revision: previous.revision } },
-              data: { status: 'SUPERSEDED' },
-            });
+          // A proposal is not a learner-approved switch. Keep the executable revision alive.
           await tx.personalLearningPlanRevision.create({
             data: {
               ...input.scope,
@@ -439,6 +454,31 @@ export class PrismaPersonalLearningPersistenceRepository implements PersonalLear
             orderBy: { revision: 'desc' },
           });
           if (latest?.revision !== input.expectedRevision) conflict();
+          const executing = await tx.personalLearningPlanRevision.findFirst({
+            where: { ...input.scope, planId: row.planId, status: 'CONFIRMED' },
+            orderBy: { revision: 'desc' },
+          });
+          // Also fail closed for history left by the old DRAFT-time supersession behavior.
+          const unfinished = await tx.programMissionAssignment.findFirst({
+            where: {
+              workspaceId: input.scope.workspaceId,
+              groupId: input.scope.groupId,
+              programEnrollmentId: input.scope.programEnrollmentId,
+              targetResourceType: 'PERSONAL_LEARNING_PLAN',
+              targetResourceId: row.planId,
+              status: { in: ['PRESENTED', 'STARTED'] },
+            },
+            select: { id: true },
+          });
+          if (unfinished) conflict();
+          if (executing) {
+            await tx.personalLearningPlanRevision.update({
+              where: {
+                planId_revision: { planId: executing.planId, revision: executing.revision },
+              },
+              data: { status: 'SUPERSEDED' },
+            });
+          }
           await tx.personalLearningPlanRevision.update({
             where: { planId_revision: { planId: row.planId, revision: row.revision } },
             data: { status: 'CONFIRMED', confirmedAt: now },
@@ -470,9 +510,7 @@ export class PrismaPersonalLearningPersistenceRepository implements PersonalLear
         plans: rows.map((row) => ({
           plan: this.restore(row),
           goalActive: row.goalConfirmation.goal.status === 'ACTIVE',
-          isCurrent: !rows.some(
-            (other) => other.planId === row.planId && other.revision > row.revision,
-          ),
+          ...personalLearningRevisionFlags(rows, row),
           createdAt: row.createdAt.toISOString(),
           confirmedAt: row.confirmedAt?.toISOString() ?? null,
         })),

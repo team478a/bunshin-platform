@@ -1,5 +1,8 @@
 import { ApplicationError } from '@bunshin/shared';
 import {
+  PERSONAL_LEARNING_PRACTICE_MISSION,
+  PERSONAL_LEARNING_PRACTICE_VERSION,
+  parseStoredPersonalLearningEvidenceSubmission,
   AI_CALL_OBSERVABILITY_VERSION,
   estimateAiCallCost,
   validateAiCallMeasurement,
@@ -84,7 +87,7 @@ export class PrismaPersonalLearningAiCallRepository {
         missionAssignmentId: assignmentId,
         userId: s.userId,
       },
-      select: { id: true },
+      select: { id: true, answer: true },
     });
     const assignment = await tx.programMissionAssignment.findFirst({
       where: {
@@ -94,9 +97,44 @@ export class PrismaPersonalLearningAiCallRepository {
         programEnrollmentId: s.programEnrollmentId,
         targetResourceType: 'PERSONAL_LEARNING_PLAN',
       },
-      select: { targetResourceId: true, displaySnapshot: true },
+      select: { targetResourceId: true, displaySnapshot: true, missionDefinitionKey: true },
     });
     if (!answer || !assignment?.targetResourceId) denied();
+    if (assignment.missionDefinitionKey === PERSONAL_LEARNING_PRACTICE_MISSION) {
+      const snapshot = assignment.displaySnapshot as {
+        dynamicPractice?: {
+          version?: string;
+          scope?: Record<string, unknown>;
+          candidate?: { id?: string; materialVersion?: number };
+          goalId?: string;
+        };
+      };
+      const dynamic = snapshot.dynamicPractice;
+      const encoded = parseStoredPersonalLearningEvidenceSubmission(answer.answer);
+      const candidate = dynamic?.candidate;
+      const plan = await tx.personalLearningPlanRevision.findFirst({
+        where: { ...s, planId: assignment.targetResourceId, revision: 1, status: 'CONFIRMED' },
+        select: { planId: true },
+      });
+      if (
+        dynamic?.version !== PERSONAL_LEARNING_PRACTICE_VERSION ||
+        Object.entries(s).some(([key, value]) => dynamic.scope?.[key] !== value) ||
+        !candidate?.id ||
+        candidate.materialVersion !== 1 ||
+        !plan ||
+        !encoded ||
+        encoded.candidateId !== candidate.id ||
+        encoded.materialVersion !== 1
+      )
+        denied();
+      return {
+        serviceProgramId: enrollment.serviceProgramId,
+        planId: assignment.targetResourceId,
+        planRevision: 1,
+        candidateId: candidate.id,
+        materialVersion: candidate.materialVersion,
+      };
+    }
     const snapshot = assignment.displaySnapshot as {
       personalLearning?: { planRevision?: number; definition?: LearningDefinitionReference };
     };

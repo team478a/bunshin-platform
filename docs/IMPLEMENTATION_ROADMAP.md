@@ -1,5 +1,23 @@
 # BUNSHIN Platform 実装ロードマップ
 
+自由希望の第9分割は`docs/ai-training/MANABERU_RESULT_DRIVEN_NEXT_PRACTICE_IMPLEMENTATION.md`。提出テキストから現在課題の基準が確認できたときだけ、その観察・未確認事項を入力に同じ元希望の次課題案を生成する。候補は別Request revisionとして保存し、本人が内容を確認して開始した場合のみ既存Goal配下のPlan revisionとAssignmentを切り替える。前課題・回答・評価は履歴に保持し、Goal全体や受講を完了扱いしない。画像、LINE、許可環境での実AI通し確認、本番反映は未完了。
+
+自由希望の第8分割は`docs/ai-training/MANABERU_PRACTICE_RESULT_REVIEW_IMPLEMENTATION.md`。既存Answer・評価Jobに動的課題固有の証拠別結果確認を接続し、複数の提出Revisionを履歴として保存する。本人申告と提出文から確認した点を分離し、旧6技能・Goal完了・Assignment完了へ流用しない。第9分割で確認後の次課題提案を追加した。画像、LINE、実AIの許可環境通し確認は未完了。本番Gateを維持する。
+
+自由希望の第7分割は`docs/ai-training/MANABERU_PRACTICE_SUPPORT_IMPLEMENTATION.md`。現在課題・不変教材・作業記録版に固定したテキストAI相談、既存費用枠、支援履歴と再訪を接続する。旧6技能評価へ流さず、遅延応答は現在状態へ適用しない。結果確認、画像・LINE・実AIは後続段階。
+
+自由希望の第6分割は`docs/ai-training/MANABERU_DYNAMIC_PRACTICE_START_IMPLEMENTATION.md`。本人確認済み候補を既存Goal/Plan/Assignmentへ固定し、短い本人申告と再訪を接続する。新しい希望で実行課題を切り替えず、旧6技能評価へ流さない。AI途中支援・画像・動的評価・次課題・LINE・実AI通し確認は未完了で、本番公開Gateは維持する。
+
+自由希望の第5分割は`docs/ai-training/MANABERU_LESSON_CANDIDATE_IMPLEMENTATION.md`。保存した希望から教材候補を生成・保存し、本人が表示済み同版だけを確認する。既存の原価枠・共通台帳を再利用するが、実AI・本番確認は未実施。Goal/Plan/Assignment、途中支援・画像・動的評価・再開の一課題完成は次段階であり、候補確認を受講開始や達成と扱わない。
+
+自由希望の第4分割は`docs/ai-training/MANABERU_PREASSIGNMENT_AI_COST_IMPLEMENTATION.md`。課題作成前の希望解釈/教材生成用内部Portに、実操作・試行ID、既存Program予算と同時実行、共通利用台帳の費用記録を接続する。公開API/実Adapter/教材生成・同版確定の完成ではない。UNKNOWN原価の照合・回復、実Provider制限と候補保存を次に接続する。
+
+新規受講者の未回答推測の除去は `docs/ai-training/MANABERU_EXPLICIT_PROFILE_ANSWERS_IMPLEMENTATION.md` を参照。既存の通常Profile登録を再利用し、初心者/端末/固定目標を未回答から確定しない。自由希望の動的教材経路、途中支援・画像・実AI通し確認は引き続き次の実装対象。
+
+自由希望の第3分割は`docs/ai-training/MANABERU_FREE_INTENT_INTAKE_IMPLEMENTATION.md`。通常の有効受講者の希望・環境を版付きで保存し、再訪・競合・所有・本人データ出力・削除・保持へ接続する。希望保存で既存Goal/Plan/Assignmentを切り替えない。実AI教材生成・候補確定・動的評価・画像支援が未接続のため本番公開不可。次は課題作成前の原価予約と共通提供方針下の教材候補生成・同版確定。
+
+自由希望の個別AI研修は`docs/ai-training/MANABERU_FREE_INTENT_PRACTICE.md`を参照。新規受講から本人実践・支援・証拠別結果・再開を先に接続し、画像1枚・次課題・LINE・原価/競合を通しで確認する。旧3Definition限定や個別手動承認を新経路へ流用しない。実AI確認と実受講者の効果、本番反映を分離する。
+
 本番フィードバック統合Phase 1-Bは`docs/auto-improvement/PHASE1B_ADMIN_OVERVIEW_IMPLEMENTATION.md`を参照。1-Aのマージ/CI成功後、管理者限定の固定完了週GET・件数範囲表示へ接続し、原本環境/捕捉率/成果は未判定に維持する。新DB/外部AI/自動修正なし。レビュー・CI・マージ後は1-A + 1-Bをproduction基点の最初の限定release単位にする。
 
 本番フィードバック統合Phase 1-Aは`docs/auto-improvement/PHASE1A_OBSERVATION_INTEGRATION_IMPLEMENTATION.md`を参照。既存Feedback/支援/写真Readerと採否・投稿/研修進捗の限定投影を統合し、少数・欠測・原本の環境不足は非表示/UNKNOWNにする。Runtime/UI/HTTP/Job・外部AIは未接続。次はレビュー・CI後の1-B管理者読取表示。全Phaseを待たず1-A + 1-Bを最初の利用可能な限定release単位とし、production基点の差分照合を維持する。

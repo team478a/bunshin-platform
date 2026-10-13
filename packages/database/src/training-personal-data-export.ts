@@ -117,6 +117,8 @@ export class PrismaTrainingPersonalDataExportRepository implements TrainingPerso
               startedAt: true,
               completedAt: true,
               skippedAt: true,
+              ruleVersion: true,
+              displaySnapshot: true,
             },
             orderBy: [{ sequence: 'asc' }, { id: 'asc' }],
             take,
@@ -152,11 +154,64 @@ export class PrismaTrainingPersonalDataExportRepository implements TrainingPerso
           }),
           tx.programActionEvent.findMany({
             where: { ...scope, actorUserId: input.actorUserId },
-            select: { eventType: true, missionAssignmentId: true, occurredAt: true },
+            select: {
+              eventType: true,
+              missionAssignmentId: true,
+              occurredAt: true,
+            },
             orderBy: [{ occurredAt: 'asc' }, { id: 'asc' }],
             take,
           }),
         ]);
+        // Only this learner's explicit practice notes may expose their content.
+        // General operational/admin activity metadata remains unselected.
+        const practiceNotes = await tx.programActionEvent.findMany({
+          where: {
+            ...scope,
+            actorUserId: input.actorUserId,
+            eventType: 'PERSONAL_LEARNING_PRACTICE_NOTE',
+          },
+          select: { id: true, missionAssignmentId: true, occurredAt: true, metadata: true },
+          orderBy: [{ occurredAt: 'asc' }, { id: 'asc' }],
+          take,
+        });
+        const practiceSupport = await tx.programActionEvent.findMany({
+          where: {
+            ...scope,
+            actorUserId: input.actorUserId,
+            eventType: {
+              in: ['PERSONAL_LEARNING_SUPPORT_REQUEST', 'PERSONAL_LEARNING_SUPPORT_RESPONSE'],
+            },
+          },
+          select: {
+            id: true,
+            missionAssignmentId: true,
+            eventType: true,
+            occurredAt: true,
+            metadata: true,
+          },
+          orderBy: [{ occurredAt: 'asc' }, { id: 'asc' }],
+          take,
+        });
+        const practiceSupportImages = practiceSupport.length
+          ? await tx.personalLearningPracticeSupportImage.findMany({
+              where: {
+                ...scope,
+                groupMembershipId: membership.id,
+                userId: input.actorUserId,
+                requestEventId: { in: practiceSupport.map(({ id }) => id) },
+              },
+              select: {
+                requestEventId: true,
+                mimeType: true,
+                sha256: true,
+                sizeBytes: true,
+                bytes: true,
+                createdAt: true,
+              },
+              take,
+            })
+          : [];
         const goals = await tx.programMemberGoal.findMany({
           where: { ...scope, groupMembershipId: membership.id },
           select: {
@@ -173,7 +228,7 @@ export class PrismaTrainingPersonalDataExportRepository implements TrainingPerso
           take,
         });
         const learningScope = { ...personal, groupMembershipId: membership.id };
-        const [learningGoals, learningPlans, pilotSeats] = await Promise.all([
+        const [learningGoals, learningPlans, pilotSeats, learningRequests] = await Promise.all([
           tx.personalLearningGoalConfirmation.findMany({ where: learningScope, take }),
           tx.personalLearningPlanRevision.findMany({
             where: learningScope,
@@ -196,19 +251,67 @@ export class PrismaTrainingPersonalDataExportRepository implements TrainingPerso
             },
             take,
           }),
+          tx.personalLearningRequest.findMany({
+            where: learningScope,
+            take,
+            orderBy: { revision: 'asc' },
+          }),
         ]);
         if (
-          [assignments, answers, toolkit, activities, goals, learningGoals, learningPlans].some(
-            (rows) => rows.length > TRAINING_EXPORT_MAX_ROWS,
-          )
+          [
+            assignments,
+            answers,
+            toolkit,
+            activities,
+            goals,
+            learningGoals,
+            learningPlans,
+            learningRequests,
+            practiceNotes,
+            practiceSupport,
+            practiceSupportImages,
+          ].some((rows) => rows.length > TRAINING_EXPORT_MAX_ROWS)
         )
           return { outcome: 'TOO_LARGE' };
         return {
           outcome: 'FOUND',
           data: {
-            ...(learningGoals.length + learningPlans.length + pilotSeats.length > 0
+            ...(learningGoals.length +
+              learningPlans.length +
+              pilotSeats.length +
+              learningRequests.length +
+              practiceSupport.length +
+              practiceSupportImages.length +
+              practiceNotes.length >
+            0
               ? {
                   personalLearning: [
+                    ...practiceSupport.map((row) => ({
+                      ...row,
+                      kind: 'PRACTICE_SUPPORT',
+                      occurredAt: iso(row.occurredAt),
+                    })),
+                    ...practiceNotes.map((row) => ({
+                      ...row,
+                      kind: 'PRACTICE_NOTE',
+                      occurredAt: iso(row.occurredAt),
+                    })),
+                    ...practiceSupportImages.map((row) => ({
+                      kind: 'PRACTICE_SUPPORT_IMAGE',
+                      requestEventId: row.requestEventId,
+                      mimeType: row.mimeType,
+                      sha256: row.sha256,
+                      sizeBytes: row.sizeBytes,
+                      base64: Buffer.from(row.bytes).toString('base64'),
+                      createdAt: iso(row.createdAt),
+                    })),
+                    ...learningRequests.map((row) => ({
+                      ...row,
+                      kind: 'LEARNING_REQUEST',
+                      candidateConfirmedAt: iso(row.candidateConfirmedAt),
+                      createdAt: iso(row.createdAt),
+                      updatedAt: iso(row.updatedAt),
+                    })),
                     ...pilotSeats.map((row) => ({
                       ...row,
                       kind: 'PILOT_SEAT',
@@ -249,8 +352,9 @@ export class PrismaTrainingPersonalDataExportRepository implements TrainingPerso
                   calculatedAt: iso(progress.calculatedAt),
                 }
               : null,
-            assignments: assignments.map((row) => ({
+            assignments: assignments.map(({ displaySnapshot, ruleVersion, ...row }) => ({
               ...row,
+              ...(ruleVersion === 'PERSONAL_LEARNING_PRACTICE_V1' ? { displaySnapshot } : {}),
               presentedAt: iso(row.presentedAt),
               startedAt: iso(row.startedAt),
               completedAt: iso(row.completedAt),
@@ -263,7 +367,10 @@ export class PrismaTrainingPersonalDataExportRepository implements TrainingPerso
               updatedAt: iso(row.updatedAt),
             })),
             toolkit: toolkit.map((row) => ({ ...row, createdAt: iso(row.createdAt) })),
-            activities: activities.map((row) => ({ ...row, occurredAt: iso(row.occurredAt) })),
+            activities: activities.map((row) => ({
+              ...row,
+              occurredAt: iso(row.occurredAt),
+            })),
             goals: goals.map((row) => ({
               ...row,
               targetValue: row.targetValue.toString(),

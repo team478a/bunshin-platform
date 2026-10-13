@@ -3,13 +3,22 @@ import { ApplicationError } from '@bunshin/shared';
 
 export const OPENAI_TASK_COMPATIBILITY_VERSION = 'OPENAI_TASK_COMPATIBILITY_V1';
 export const OPENAI_TASK_RESPONSES_ENDPOINT = 'https://api.openai.com/v1/responses';
-export type OpenAiCompatibilityTask = 'SOCIAL_PLANNER' | 'TRAINING_ASSESSMENT';
+export type OpenAiCompatibilityTask =
+  'SOCIAL_PLANNER' | 'TRAINING_ASSESSMENT' | 'LEARNING_LESSON' | 'LEARNING_SUPPORT';
 
 // Local request compatibility, not a live quality/access/price approval or model router.
 const models = new Set(['gpt-5.2', 'gpt-5.2-2025-12-11', 'gpt-5-mini', 'gpt-5-mini-2025-08-07']);
+const imageModels = new Set([
+  'gpt-5.2',
+  'gpt-5.2-2025-12-11',
+  'gpt-5-mini',
+  'gpt-5-mini-2025-08-07',
+]);
 const schemaNames: Record<OpenAiCompatibilityTask, readonly string[]> = {
   SOCIAL_PLANNER: ['daily_mission_brief', 'weekly_plan'],
-  TRAINING_ASSESSMENT: ['training_evaluation'],
+  TRAINING_ASSESSMENT: ['training_evaluation', 'personal_learning_evidence_review'],
+  LEARNING_LESSON: ['learning_lesson'],
+  LEARNING_SUPPORT: ['learning_support'],
 };
 
 function fail(task: OpenAiCompatibilityTask, reason: string): never {
@@ -41,25 +50,49 @@ export function assertOpenAiTaskRequest(
   if (endpoint !== OPENAI_TASK_RESPONSES_ENDPOINT) fail(task, 'ENDPOINT_NOT_SUPPORTED');
   if (value.store !== false) fail(task, 'STORE_NOT_DISABLED');
   const keys = ['model', 'store', 'input', 'text'];
-  if (task === 'TRAINING_ASSESSMENT') keys.push('max_output_tokens');
+  if (task !== 'SOCIAL_PLANNER') keys.push('max_output_tokens');
   if (Object.keys(value).some((key) => !keys.includes(key))) fail(task, 'OPTION_NOT_SUPPORTED');
   if (
     Object.hasOwn(value, 'max_output_tokens') &&
     (!Number.isInteger(value.max_output_tokens) || Number(value.max_output_tokens) < 16)
   )
     fail(task, 'INVALID_OUTPUT_LIMIT');
-  if (
-    !Array.isArray(value.input) ||
-    value.input.length === 0 ||
-    value.input.some(
-      (item: unknown) =>
-        !object(item) ||
-        !['system', 'user'].includes(String(item.role)) ||
-        typeof item.content !== 'string' ||
-        Object.keys(item).some((key) => !['role', 'content'].includes(key)),
-    )
-  )
+  if (!Array.isArray(value.input) || value.input.length === 0)
     fail(task, 'INPUT_MODALITY_NOT_SUPPORTED');
+  let hasImage = false;
+  for (const item of value.input) {
+    if (
+      !object(item) ||
+      !['system', 'user'].includes(String(item.role)) ||
+      Object.keys(item).some((key) => !['role', 'content'].includes(key))
+    )
+      fail(task, 'INPUT_MODALITY_NOT_SUPPORTED');
+    if (typeof item.content === 'string') continue;
+    if (task !== 'LEARNING_SUPPORT' || item.role !== 'user' || !Array.isArray(item.content))
+      fail(task, 'INPUT_MODALITY_NOT_SUPPORTED');
+    for (const part of item.content) {
+      if (!object(part) || typeof part.type !== 'string')
+        fail(task, 'INPUT_MODALITY_NOT_SUPPORTED');
+      if (
+        part.type === 'input_text' &&
+        typeof part.text === 'string' &&
+        Object.keys(part).every((key) => ['type', 'text'].includes(key))
+      )
+        continue;
+      if (
+        part.type === 'input_image' &&
+        typeof part.image_url === 'string' &&
+        /^data:image\/jpeg;base64,[A-Za-z0-9+/]+={0,2}$/.test(part.image_url) &&
+        part.detail === 'low' &&
+        Object.keys(part).every((key) => ['type', 'image_url', 'detail'].includes(key))
+      ) {
+        hasImage = true;
+        continue;
+      }
+      fail(task, 'INPUT_MODALITY_NOT_SUPPORTED');
+    }
+  }
+  if (hasImage && !imageModels.has(String(value.model))) fail(task, 'IMAGE_MODEL_NOT_SUPPORTED');
   const format = object(value.text) ? value.text.format : undefined;
   if (
     !object(value.text) ||

@@ -169,6 +169,9 @@ export class PrismaTrainingRetentionExecutionRepository implements TrainingReten
               where: { ...scope, eventType: { not: TRAINING_ENROLLMENT_EXPIRED_EVENT } },
               data: { metadata: {} },
             });
+            await tx.personalLearningPracticeSupportImage.deleteMany({
+              where: { ...scope },
+            });
             await tx.programMemberGoal.updateMany({
               where: { ...scope, groupMembershipId: owned.membership.id },
               data: { title: '保持期限により削除済み', unit: '' },
@@ -187,6 +190,13 @@ export class PrismaTrainingRetentionExecutionRepository implements TrainingReten
             });
           }
           if (work || progress) {
+            await tx.personalLearningRequest.deleteMany({
+              where: {
+                ...personal,
+                groupMembershipId: owned.membership.id,
+                id: { in: snapshot.rows.learningRequests.map((row) => row.id) },
+              },
+            });
             await tx.programEnrollment.updateMany({
               where: {
                 workspaceId: input.workspaceId,

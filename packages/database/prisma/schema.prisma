@@ -417,6 +417,8 @@ model ProgramEnrollment {
   paidPurchase      ProgramPurchase?            @relation("ProgramPurchasePaidEnrollment")
   trainingRetention TrainingDataRetentionState?
   personalLearningGoalConfirmations PersonalLearningGoalConfirmation[]
+  personalLearningRequests PersonalLearningRequest[]
+  practiceSupportImages PersonalLearningPracticeSupportImage[]
 
   @@unique([groupMembershipId, serviceProgramId])
   @@unique([workspaceId, groupId, id])
@@ -464,6 +466,7 @@ model ProgramMissionAssignment {
   startedAt                DateTime?                      @map("started_at") @db.Timestamptz(3)
   completedAt              DateTime?                      @map("completed_at") @db.Timestamptz(3)
   skippedAt                DateTime?                      @map("skipped_at") @db.Timestamptz(3)
+  practiceSupportImages    PersonalLearningPracticeSupportImage[]
   createdAt                DateTime                       @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt                DateTime                       @updatedAt @map("updated_at") @db.Timestamptz(3)
 
@@ -490,12 +493,39 @@ model ProgramActionEvent {
   actorUserId         String?  @map("actor_user_id") @db.Uuid
   occurredAt          DateTime @map("occurred_at") @db.Timestamptz(3)
   createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  practiceSupportImage PersonalLearningPracticeSupportImage?
 
   @@unique([workspaceId, groupId, id])
   @@unique([workspaceId, groupId, idempotencyKey])
   @@index([workspaceId, groupId, programEnrollmentId, occurredAt])
   @@index([workspaceId, groupId, missionAssignmentId, eventType])
   @@map("program_action_events")
+}
+
+/// Private image evidence attached to one immutable Personal Learning support request.
+model PersonalLearningPracticeSupportImage {
+  id                  String                   @id @default(uuid()) @db.Uuid
+  workspaceId         String                   @map("workspace_id") @db.Uuid
+  groupId             String                   @map("group_id") @db.Uuid
+  programEnrollmentId String                   @map("program_enrollment_id") @db.Uuid
+  groupMembershipId   String                   @map("group_membership_id") @db.Uuid
+  missionAssignmentId String                   @map("mission_assignment_id") @db.Uuid
+  requestEventId      String                   @map("request_event_id") @db.Uuid
+  userId              String                   @map("user_id") @db.Uuid
+  mimeType            String                   @map("mime_type") @db.VarChar(32)
+  sha256              String                   @db.VarChar(64)
+  sizeBytes           Int                      @map("size_bytes")
+  bytes               Bytes                    @db.ByteA
+  createdAt           DateTime                 @default(now()) @map("created_at") @db.Timestamptz(3)
+  event               ProgramActionEvent       @relation(fields: [workspaceId, groupId, requestEventId], references: [workspaceId, groupId, id], onDelete: Cascade, map: "personal_learning_support_image_event_fk")
+  enrollment          ProgramEnrollment        @relation(fields: [workspaceId, groupId, programEnrollmentId, groupMembershipId], references: [workspaceId, groupId, id, groupMembershipId], onDelete: Cascade, map: "personal_learning_support_image_enrollment_fk")
+  membership          GroupMembership          @relation(fields: [workspaceId, groupId, groupMembershipId, userId], references: [workspaceId, groupId, id, userId], onDelete: Cascade, map: "personal_learning_support_image_membership_fk")
+  assignment          ProgramMissionAssignment @relation(fields: [workspaceId, groupId, missionAssignmentId], references: [workspaceId, groupId, id], onDelete: Cascade, map: "personal_learning_support_image_assignment_fk")
+
+  @@unique([workspaceId, groupId, id], map: "personal_learning_support_image_scope_id_key")
+  @@unique([workspaceId, groupId, requestEventId], map: "personal_learning_support_image_event_key")
+  @@index([workspaceId, groupId, programEnrollmentId, userId, createdAt], map: "personal_learning_support_image_owner_created_idx")
+  @@map("personal_learning_practice_support_images")
 }
 
 model ProgramProgressSnapshot {
@@ -581,7 +611,7 @@ model TrainingMissionAnswer {
   workspaceId         String                         @map("workspace_id") @db.Uuid
   groupId             String                         @map("group_id") @db.Uuid
   programEnrollmentId String                         @map("program_enrollment_id") @db.Uuid
-  missionAssignmentId String                         @unique @map("mission_assignment_id") @db.Uuid
+  missionAssignmentId String                         @map("mission_assignment_id") @db.Uuid
   userId              String                         @map("user_id") @db.Uuid
   answer              String                         @db.Text
   evaluationStatus    TrainingAnswerEvaluationStatus @default(PENDING) @map("evaluation_status")
@@ -591,6 +621,7 @@ model TrainingMissionAnswer {
   updatedAt           DateTime                       @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   @@unique([workspaceId, groupId, id])
+  @@index([workspaceId, groupId, missionAssignmentId, createdAt])
   @@index([workspaceId, groupId, programEnrollmentId, createdAt])
   @@index([workspaceId, groupId, userId, updatedAt])
   @@map("training_mission_answers")
@@ -818,6 +849,33 @@ model ProgramMemberGoal {
   @@index([workspaceId, groupId, groupMembershipId, status])
   @@index([workspaceId, groupId, programEnrollmentId])
   @@map("program_member_goals")
+}
+
+model PersonalLearningRequest {
+  id                    String            @id @default(uuid()) @db.Uuid
+  workspaceId           String            @map("workspace_id") @db.Uuid
+  groupId               String            @map("group_id") @db.Uuid
+  programEnrollmentId   String            @map("program_enrollment_id") @db.Uuid
+  groupMembershipId     String            @map("group_membership_id") @db.Uuid
+  userId                String            @map("user_id") @db.Uuid
+  revision              Int
+  originalText          String            @map("original_text") @db.VarChar(2000)
+  lessonCandidate       Json?             @map("lesson_candidate")
+  candidateConfirmedAt  DateTime?         @map("candidate_confirmed_at") @db.Timestamptz(3)
+  deviceType            String?           @map("device_type") @db.VarChar(16)
+  toolDescription       String?           @map("tool_description") @db.VarChar(240)
+  experienceDescription String?           @map("experience_description") @db.VarChar(300)
+  currentPosition       String?           @map("current_position") @db.VarChar(500)
+  idempotencyKey        String            @map("idempotency_key") @db.VarChar(100)
+  digest                String            @db.VarChar(64)
+  createdAt             DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  enrollment            ProgramEnrollment @relation(fields: [workspaceId, groupId, programEnrollmentId, groupMembershipId], references: [workspaceId, groupId, id, groupMembershipId], onDelete: Cascade, map: "personal_learning_requests_workspace_id_group_id_program_e_fkey")
+  membership            GroupMembership   @relation(fields: [workspaceId, groupId, groupMembershipId, userId], references: [workspaceId, groupId, id, userId], onDelete: Cascade, map: "personal_learning_requests_workspace_id_group_id_group_mem_fkey")
+
+  @@unique([workspaceId, groupId, programEnrollmentId, revision], map: "personal_learning_request_revision_key")
+  @@unique([workspaceId, groupId, programEnrollmentId, idempotencyKey], map: "personal_learning_request_operation_key")
+  @@map("personal_learning_requests")
 }
 
 model PersonalLearningGoalConfirmation {
@@ -3409,6 +3467,8 @@ model GroupMembership {
   oemRegistrationPeriods OemRegistrationPeriod[]
   id                           String                           @id @default(uuid()) @db.Uuid
   personalLearningGoalConfirmations PersonalLearningGoalConfirmation[]
+  personalLearningRequests PersonalLearningRequest[]
+  practiceSupportImages PersonalLearningPracticeSupportImage[]
   workspaceId                  String                           @map("workspace_id") @db.Uuid
   groupId                      String                           @map("group_id") @db.Uuid
   userId                       String                           @map("user_id") @db.Uuid
@@ -8296,6 +8356,7 @@ model PersonalLearningCallAdmission {
   pricingVersion   String?   @map("pricing_version") @db.VarChar(120)
   admittedAt       DateTime  @default(now()) @map("admitted_at") @db.Timestamptz(3)
   settledAt        DateTime? @map("settled_at") @db.Timestamptz(3)
+  operationContext Json?     @map("operation_context")
 
   @@unique([workspaceId, groupId, serviceProgramId, operationHash], map: "personal_learning_call_admissions_operation_key")
   @@index([workspaceId, groupId, serviceProgramId, admittedAt], map: "personal_learning_call_admissions_day_idx")

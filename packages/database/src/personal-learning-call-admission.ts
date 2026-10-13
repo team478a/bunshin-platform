@@ -2,7 +2,6 @@ import { createHash } from 'node:crypto';
 import type { PrismaClient, LineConfigurationEnvironment } from '@prisma/client';
 import {
   parsePersonalLearningCallAdmissionPolicy,
-  reservePersonalLearningCallCost,
   type AiTokenPricing,
   type PersonalLearningActor,
   type PersonalLearningCallAdmissionPolicy,
@@ -10,6 +9,7 @@ import {
 import { ApplicationError } from '@bunshin/shared';
 import { PrismaPersonalLearningAssessmentGate } from './personal-learning-assessment-gate';
 import { requirePersonalLearningPilotSeat } from './personal-learning-pilot-seat';
+import { reserveLearningProgramBudget } from './personal-learning-call-budget';
 
 export class PrismaPersonalLearningCallAdmission extends PrismaPersonalLearningAssessmentGate {
   constructor(
@@ -78,45 +78,12 @@ export class PrismaPersonalLearningCallAdmission extends PrismaPersonalLearningA
       };
       if (await tx.personalLearningCallAdmission.findFirst({ where: { ...where, operationHash } }))
         throw new ApplicationError('CONFLICT', 'pilot call attempt already admitted');
-      const dayStart = new Date(clock.now);
-      dayStart.setUTCHours(0, 0, 0, 0);
-      const nextDay = new Date(dayStart.getTime() + 86_400_000);
-      const reservation = reservePersonalLearningCallCost({
+      const reservation = await reserveLearningProgramBudget(tx, {
         policy,
         provider: input.provider,
         pricingRegistry: input.pricingRegistry,
         occurredAt: clock.now,
       });
-      if (!reservation || reservation.reservedCostUsdMicros > policy.dailyCostLimitUsdMicros)
-        throw new ApplicationError('FORBIDDEN', 'pilot call cost unavailable');
-      const attempts = await tx.personalLearningCallAdmission.count({
-        where: { ...where, admittedAt: { gte: dayStart, lt: nextDay } },
-      });
-      const concurrent = await tx.personalLearningCallAdmission.count({
-        where: { ...where, settledAt: null },
-      });
-      const [unknownCost, reservedCost] = await Promise.all([
-        tx.personalLearningCallAdmission.count({
-          where: {
-            ...where,
-            admittedAt: { gte: dayStart, lt: nextDay },
-            reservedCostUsdMicros: null,
-          },
-        }),
-        tx.personalLearningCallAdmission.aggregate({
-          where: { ...where, admittedAt: { gte: dayStart, lt: nextDay } },
-          _sum: { reservedCostUsdMicros: true },
-        }),
-      ]);
-      const nextReservedCost =
-        (reservedCost._sum.reservedCostUsdMicros ?? 0n) + BigInt(reservation.reservedCostUsdMicros);
-      if (
-        attempts >= policy.dailyAttemptLimit ||
-        concurrent >= policy.maxConcurrent ||
-        unknownCost > 0 ||
-        nextReservedCost > BigInt(policy.dailyCostLimitUsdMicros)
-      )
-        throw new ApplicationError('FORBIDDEN', 'pilot call limit reached');
       return tx.personalLearningCallAdmission.create({
         data: {
           ...where,
@@ -141,6 +108,7 @@ export class PrismaPersonalLearningCallAdmission extends PrismaPersonalLearningA
       UPDATE personal_learning_call_admissions SET settled_at=clock_timestamp()
       WHERE id=${permit.id}::uuid AND workspace_id=${permit.workspaceId}::uuid
         AND group_id=${permit.groupId}::uuid AND service_program_id=${permit.serviceProgramId}::uuid
-        AND operation_hash=${permit.operationHash} AND settled_at IS NULL`;
+        AND operation_hash=${permit.operationHash} AND settled_at IS NULL
+        AND operation_context IS NULL`;
   }
 }

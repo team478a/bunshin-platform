@@ -19,7 +19,14 @@ function request(task: OpenAiCompatibilityTask) {
     text: {
       format: {
         type: 'json_schema',
-        name: task === 'SOCIAL_PLANNER' ? 'daily_mission_brief' : 'training_evaluation',
+        name:
+          task === 'SOCIAL_PLANNER'
+            ? 'daily_mission_brief'
+            : task === 'LEARNING_SUPPORT'
+              ? 'learning_support'
+              : task === 'LEARNING_LESSON'
+                ? 'learning_lesson'
+                : 'training_evaluation',
         strict: true,
         schema: { type: 'object', additionalProperties: false },
       },
@@ -69,6 +76,36 @@ describe('versioned local OpenAI task compatibility', () => {
     for (const task of tasks) {
       expect(() => serializeOpenAiTaskRequest(task, { ...request(task), ...override })).toThrow();
     }
+  });
+  it('allows a JPEG image only in user support input', () => {
+    const value = {
+      ...request('LEARNING_SUPPORT'),
+      input: [
+        { role: 'system', content: 'support rules' },
+        {
+          role: 'user',
+          content: [
+            { type: 'input_text', text: '相談内容' },
+            { type: 'input_image', image_url: 'data:image/jpeg;base64,/9j/2Q==', detail: 'low' },
+          ],
+        },
+      ],
+    };
+    expect(() => serializeOpenAiTaskRequest('LEARNING_SUPPORT', value)).not.toThrow();
+    expect(() => serializeOpenAiTaskRequest('LEARNING_LESSON', value)).toThrow();
+    expect(() =>
+      serializeOpenAiTaskRequest('LEARNING_SUPPORT', {
+        ...value,
+        input: [
+          {
+            role: 'system',
+            content: [
+              { type: 'input_image', image_url: 'data:image/jpeg;base64,/9j/2Q==', detail: 'low' },
+            ],
+          },
+        ],
+      }),
+    ).toThrow();
   });
   it('keeps schema names task-specific and requires strict object output', () => {
     for (const task of tasks) {

@@ -51,6 +51,8 @@ function fixture() {
     programProgressSnapshot: table(),
     programMemberGoal: table(),
     programMemberPreference: table(),
+    personalLearningRequest: table(),
+    personalLearningPracticeSupportImage: table(),
     programActionEvent: table(),
     job: { updateMany: vi.fn() },
     programAuditLog: { findFirst: vi.fn().mockResolvedValue(null), create: vi.fn() },

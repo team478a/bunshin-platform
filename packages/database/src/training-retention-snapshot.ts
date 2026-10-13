@@ -121,7 +121,23 @@ export async function trainingRetentionSnapshot(
       }),
       tx.trainingToolkitItem.count({ where: personal }),
     ]);
-  const rows = { answers, profiles, assignments, snapshots, goals, preferences, activities };
+  const learningRequests =
+    work || progress
+      ? await tx.personalLearningRequest.findMany({
+          ...options,
+          where: { ...personal, groupMembershipId: owned.membership.id },
+        })
+      : [];
+  const rows = {
+    answers,
+    profiles,
+    assignments,
+    snapshots,
+    goals,
+    preferences,
+    activities,
+    learningRequests,
+  };
   if (Object.values(rows).some((list) => list.length > TRAINING_EXPORT_MAX_ROWS))
     return { outcome: 'TOO_LARGE' } as const;
   const counts = {
@@ -135,6 +151,7 @@ export async function trainingRetentionSnapshot(
     goals: goals.length,
     preferences: preferences.length,
     retainedToolkit,
+    ...(learningRequests.length > 0 ? { learningRequests: learningRequests.length } : {}),
   };
   const revision = createHash('sha256')
     .update(
