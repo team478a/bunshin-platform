@@ -4155,3 +4155,4 @@
 - 評価Jobは本人に確認済みの同一教材・基準Revisionに結びついた課題固有レビューを記録する。本人申告だけでは提出物の観察へ昇格させず、レビュー状態は今の一課題の証拠に限る。旧6技能Profile、Plan/Goal完了、Assignment完了は更新しない。
 - 保存前に現在のEnrollment、Assignment、回答Revisionを再認可し、古い遅延評価が差替え後の履歴を上書きしない。AI本文をActionEvent metadataへ保存しない。既存のAI利用Admission・費用台帳を利用し、未知原価の0円補完はしない。
 - 画像、正式な次課題提案/未達継続、LINE、実AI/実受講者確認、本番Migration/Deployは本決定の範囲外で未検証とする。
+- 通常登録のPilot利用者は、既存Enrollmentに結び付いた有効なEXTERNAL席がある場合だけ自由希望経路を許可する。internal席やseat projection不整合は拒否し、招待/管理者個別準備への置換はしない。

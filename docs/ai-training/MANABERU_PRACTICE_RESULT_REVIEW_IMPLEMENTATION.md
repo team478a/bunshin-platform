@@ -14,6 +14,7 @@
 - Application型で提出種別（`TEXT` / `SELF_REPORT`）、提出Revision、課題固有のレビュー状態と根拠を定義。PASS、点数、習得状態は導入しない。
 - `training_mission_answers.mission_assignment_id`のDB一意制約を外すmigrationを追加。新しい動的課題の複数提出を許可し、既存課題の一件制約はRepositoryのEnrollment lock下で維持する。各提出は追記され、直近提出の差替え・上書きは禁止する。
 - 提出時にEnrollment、Assignment、候補ID、教材版、連続Revision、既存Pending回答の有無を再確認。同一idempotency keyの異なる本文は競合にする。
+- 通常登録のPilot受講は、有効な外部参加席とseat projectionの両方を満たす場合に限り自由希望経路を利用できるよう接続。内部席、失効席、allowlist/cap不整合は拒否する。
 - 動的課題用HTTP入口を既存Answer保存と評価Jobへ接続。評価Jobは保存済み教材・基準を使い、一般評価とは別の動的レビュー経路へ分岐する。
 - AI入力は教材の元希望・到達点・基準と提出内容に限定。提出文中の指示を実行しない。条件を越える基準参照は拒否する。
 - 返すのは提出文から観察できた範囲、未確認事項、次の小さな確認行動。本人申告は`SELF_REPORT_ONLY`のまま、提出物による確認へ昇格させない。

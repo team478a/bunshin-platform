@@ -151,7 +151,7 @@ test('submits typed evidence and shows scoped review without claiming mastery', 
     });
   });
   await app.open('/?practice&resume');
-  await screen.getByLabel('提出内容の種類').selectOption('TEXT');
+  await screen.getByLabel('提出内容の種類').selectOption({ value: 'TEXT' });
   await screen.getByLabel('できたこと、または確認してほしい内容').fill('見出しを修正した結果です');
   await screen.getByRole('button', '提出して今回の基準を確認').tap();
   await expect(screen.getByText('追加の確認が必要です。')).toBeVisible();

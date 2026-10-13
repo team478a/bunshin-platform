@@ -473,6 +473,27 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
       };
       return { ...f, practice, start };
     }
+    it('allows the regular free-intent flow only for a live external Pilot seat', async () => {
+      const f = await dynamicPracticeFixture();
+      const request = new PrismaPersonalLearningRequestRepository(client);
+      await expect(request.readRequest(f.actor)).resolves.toMatchObject({
+        id: f.request.id,
+        originalText: f.request.originalText,
+      });
+      const seat = await client.personalLearningPilotSeat.findUniqueOrThrow({
+        where: {
+          serviceProgramId_programEnrollmentId: {
+            serviceProgramId: f.enrollment.serviceProgramId,
+            programEnrollmentId: f.enrollment.id,
+          },
+        },
+      });
+      await client.personalLearningPilotSeat.update({
+        where: { id: seat.id },
+        data: { revokedAt: now },
+      });
+      await expect(request.readRequest(f.actor)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    });
     it('dynamic practice: starts once without a prepared Profile and keeps original material across a new wish', async () => {
       const f = await dynamicPracticeFixture();
       expect(await client.trainingParticipantProfile.count()).toBe(0);
