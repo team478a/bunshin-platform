@@ -1,4 +1,11 @@
+import { createHash } from 'node:crypto';
 import { AI_TRAINING_V1_MODULE_KEY } from '@bunshin/capability-training';
+import {
+  PERSONAL_LEARNING_PRACTICE_MISSION,
+  PERSONAL_LEARNING_EVIDENCE_SUBMISSION_VERSION,
+  parseStoredPersonalLearningEvidenceSubmission,
+  validatePersonalLearningEvidenceSubmission,
+} from '@bunshin/application';
 import { Prisma, type PrismaClient } from '@prisma/client';
 import { prisma } from './index';
 import { lockTrainingEnrollmentData } from './training-data-lock';
@@ -23,7 +30,10 @@ export type TrainingAnswerSubmissionResult =
   | { outcome: 'NOT_FOUND' | 'CONFLICT' };
 
 export class PrismaTrainingAnswerRepository {
-  constructor(private readonly client: PrismaClient = prisma) {}
+  constructor(
+    private readonly client: PrismaClient = prisma,
+    private readonly now = () => new Date(),
+  ) {}
 
   async submit(input: {
     workspaceId: string;
@@ -32,6 +42,13 @@ export class PrismaTrainingAnswerRepository {
     programEnrollmentId: string;
     missionAssignmentId: string;
     answer: string;
+    practiceEvidence?: {
+      kind: 'TEXT' | 'SELF_REPORT';
+      content: string;
+      expectedRevision: number;
+      candidateId: string;
+      materialVersion: number;
+    };
     idempotencyKey: string;
     occurredAt: Date;
   }): Promise<TrainingAnswerSubmissionResult> {
@@ -43,7 +60,7 @@ export class PrismaTrainingAnswerRepository {
           groupId: input.groupId,
           status: 'ACTIVE',
           startsAt: { not: null },
-          AND: [trainingEnrollmentPeriodWhere(new Date())],
+          AND: [trainingEnrollmentPeriodWhere(this.now())],
         },
         select: { id: true, groupMembershipId: true, serviceProgramId: true },
       }),
@@ -110,7 +127,7 @@ export class PrismaTrainingAnswerRepository {
             groupId: input.groupId,
             groupMembershipId: membership.id,
             status: 'ACTIVE',
-            AND: [trainingEnrollmentPeriodWhere(new Date())],
+            AND: [trainingEnrollmentPeriodWhere(this.now())],
           },
           select: { id: true },
         });
@@ -124,16 +141,80 @@ export class PrismaTrainingAnswerRepository {
             actionMode: 'WORK',
             status: { in: ['PRESENTED', 'STARTED'] },
           },
-          select: { id: true, missionDefinitionKey: true, targetResourceType: true, status: true },
+          select: {
+            id: true,
+            missionDefinitionKey: true,
+            targetResourceType: true,
+            status: true,
+            displaySnapshot: true,
+          },
         });
-        if (!assignment || assignment.missionDefinitionKey === 'PERSONAL_LEARNING_DYNAMIC_PRACTICE')
-          return { outcome: 'NOT_FOUND' } as const;
+        if (!assignment) return { outcome: 'NOT_FOUND' } as const;
 
-        const existingAnswer = await tx.trainingMissionAnswer.findUnique({
-          where: { missionAssignmentId: assignment.id },
-          select: { id: true },
-        });
-        if (existingAnswer) return { outcome: 'CONFLICT' } as const;
+        const dynamic = assignment.missionDefinitionKey === PERSONAL_LEARNING_PRACTICE_MISSION;
+        let answerValue = input.answer;
+        let evidenceRevision: number | null = null;
+        if (dynamic) {
+          const evidence = input.practiceEvidence;
+          const snapshot = assignment.displaySnapshot as {
+            dynamicPractice?: { candidate?: { id?: string; materialVersion?: number } };
+          };
+          if (!evidence) return { outcome: 'NOT_FOUND' } as const;
+          if (
+            input.answer !== evidence.content ||
+            evidence.candidateId !== snapshot.dynamicPractice?.candidate?.id ||
+            evidence.materialVersion !== snapshot.dynamicPractice?.candidate?.materialVersion
+          )
+            return { outcome: 'CONFLICT' } as const;
+          validatePersonalLearningEvidenceSubmission(evidence);
+          const history = await tx.trainingMissionAnswer.findMany({
+            where: {
+              workspaceId: input.workspaceId,
+              groupId: input.groupId,
+              programEnrollmentId: enrollment.id,
+              missionAssignmentId: assignment.id,
+              userId: input.actorUserId,
+            },
+            orderBy: { createdAt: 'asc' },
+            take: 101,
+            select: { evaluationStatus: true, answer: true },
+          });
+          const historyWithRevision = history.map((row) => ({
+            row,
+            submitted: parseStoredPersonalLearningEvidenceSubmission(row.answer),
+          }));
+          historyWithRevision.sort(
+            (left, right) => (left.submitted?.revision ?? 0) - (right.submitted?.revision ?? 0),
+          );
+          if (
+            history.length > 100 ||
+            history.length !== evidence.expectedRevision ||
+            historyWithRevision.some(
+              ({ row, submitted }, index) =>
+                row.evaluationStatus === 'PENDING' ||
+                submitted?.revision !== index + 1 ||
+                submitted.candidateId !== evidence.candidateId ||
+                submitted.materialVersion !== evidence.materialVersion,
+            )
+          )
+            return { outcome: 'CONFLICT' } as const;
+          evidenceRevision = history.length + 1;
+          answerValue = JSON.stringify({
+            schemaVersion: PERSONAL_LEARNING_EVIDENCE_SUBMISSION_VERSION,
+            kind: evidence.kind,
+            content: evidence.content,
+            candidateId: evidence.candidateId,
+            materialVersion: evidence.materialVersion,
+            revision: evidenceRevision,
+          });
+        } else {
+          if (input.practiceEvidence) return { outcome: 'NOT_FOUND' } as const;
+          const existingAnswer = await tx.trainingMissionAnswer.findFirst({
+            where: { missionAssignmentId: assignment.id },
+            select: { id: true },
+          });
+          if (existingAnswer) return { outcome: 'CONFLICT' } as const;
+        }
 
         // Pilot submission is itself a real start fact, not a fabricated HINT/HELP interaction.
         // Legacy V1 remains unchanged. Enrollment lock keeps this atomic with the answer.
@@ -157,7 +238,7 @@ export class PrismaTrainingAnswerRepository {
             programEnrollmentId: enrollment.id,
             missionAssignmentId: assignment.id,
             userId: input.actorUserId,
-            answer: input.answer,
+            answer: answerValue,
             evaluationStatus: 'PENDING',
           },
           select: {
@@ -182,6 +263,15 @@ export class PrismaTrainingAnswerRepository {
             metadata: {
               missionDefinitionKey: assignment.missionDefinitionKey,
               answerLength: input.answer.length,
+              answerDigest: createHash('sha256').update(answerValue).digest('hex'),
+              ...(dynamic && input.practiceEvidence
+                ? {
+                    evidenceKind: input.practiceEvidence.kind,
+                    evidenceRevision,
+                    candidateId: input.practiceEvidence.candidateId,
+                    materialVersion: input.practiceEvidence.materialVersion,
+                  }
+                : {}),
             },
             actorUserId: input.actorUserId,
             occurredAt: input.occurredAt,
@@ -206,6 +296,14 @@ export class PrismaTrainingAnswerRepository {
       actorUserId: string;
       programEnrollmentId: string;
       missionAssignmentId: string;
+      answer: string;
+      practiceEvidence?: {
+        kind: 'TEXT' | 'SELF_REPORT';
+        content: string;
+        expectedRevision: number;
+        candidateId: string;
+        materialVersion: number;
+      };
     },
     event: {
       id: string;
@@ -215,6 +313,7 @@ export class PrismaTrainingAnswerRepository {
       sourceResourceType: string | null;
       sourceResourceId: string | null;
       actorUserId: string | null;
+      metadata: unknown;
     },
   ): Promise<TrainingAnswerSubmissionResult> {
     if (
@@ -227,6 +326,23 @@ export class PrismaTrainingAnswerRepository {
     ) {
       return { outcome: 'CONFLICT' };
     }
+    const answerValue = input.practiceEvidence
+      ? JSON.stringify({
+          schemaVersion: PERSONAL_LEARNING_EVIDENCE_SUBMISSION_VERSION,
+          kind: input.practiceEvidence.kind,
+          content: input.practiceEvidence.content,
+          candidateId: input.practiceEvidence.candidateId,
+          materialVersion: input.practiceEvidence.materialVersion,
+          revision: input.practiceEvidence.expectedRevision + 1,
+        })
+      : input.answer;
+    const answerDigest = createHash('sha256').update(answerValue).digest('hex');
+    const storedDigest = (event.metadata as { answerDigest?: unknown } | null)?.answerDigest;
+    if (
+      (typeof storedDigest === 'string' && storedDigest !== answerDigest) ||
+      (input.practiceEvidence && typeof storedDigest !== 'string')
+    )
+      return { outcome: 'CONFLICT' };
     const answer = await this.client.trainingMissionAnswer.findFirst({
       where: {
         id: event.sourceResourceId,

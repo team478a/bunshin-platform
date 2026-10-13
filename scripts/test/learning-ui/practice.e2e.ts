@@ -113,3 +113,60 @@ test('editing a new wish cannot start material for a different displayed wish', 
   await screen.getByLabel('実現したいこと').fill(lessonWish.originalText);
   await expect(screen.getByRole('button', '希望と教材を確認して実践を始める')).toBeVisible();
 });
+
+test('submits typed evidence and shows scoped review without claiming mastery', async ({
+  app,
+  browser,
+  screen,
+}) => {
+  let submitted: Record<string, unknown> | null = null;
+  await browser.route('**/api/synthetic/practice', async (route) => {
+    submitted = JSON.parse(route.request.postData ?? '{}') as Record<string, unknown>;
+    await route.fulfill({
+      json: {
+        data: {
+          allowed: true,
+          current: {
+            ...practiceFixture,
+            submissions: [
+              {
+                answerId: '99999999-9999-4999-8999-999999999999',
+                revision: 1,
+                kind: 'TEXT',
+                content: '見出しを修正した結果です',
+                status: 'READY',
+                review: {
+                  state: 'FOLLOW_UP',
+                  observed: ['見出しの修正結果が提出された'],
+                  notEstablished: ['別の文章でも本人が一人で直せること'],
+                  feedback: '今回の結果は確認できました。もう一例あると判断しやすくなります。',
+                  nextAction: '別の見出しを一か所、自分で直してみてください。',
+                },
+                createdAt: lessonWish.createdAt,
+              },
+            ],
+          },
+        },
+      },
+    });
+  });
+  await app.open('/?practice&resume');
+  await screen.getByLabel('提出内容の種類').selectOption({ value: 'TEXT' });
+  await screen.getByLabel('できたこと、または確認してほしい内容').fill('見出しを修正した結果です');
+  await screen.getByRole('button', '提出して今回の基準を確認').tap();
+  await expect(screen.getByText('追加の確認が必要です。')).toBeVisible();
+  await expect(
+    screen.getByText('提出文で確認できた点：見出しの修正結果が提出された'),
+  ).toBeVisible();
+  await expect(screen.getByText(/独力で別の実践ができることは別に扱います/)).toBeVisible();
+  expect(submitted).toMatchObject({
+    action: 'EVIDENCE',
+    assignmentId: practiceFixture.assignmentId,
+    candidateId: practiceFixture.candidate.id,
+    materialVersion: 1,
+    expectedRevision: 0,
+    kind: 'TEXT',
+    content: '見出しを修正した結果です',
+  });
+  expect(submitted).toHaveProperty('idempotencyKey');
+});

@@ -6,6 +6,8 @@ import {
   PERSONAL_LEARNING_PRACTICE_VERSION,
   PERSONAL_LEARNING_PRACTICE_MISSION,
   validatePersonalLearningPracticeNote,
+  parseStoredPersonalLearningEvidenceSubmission,
+  validatePersonalLearningEvidenceReview,
   type PersonalLearningPracticeRepository,
   type PersonalLearningPractice,
   type PersonalLearningActor,
@@ -132,6 +134,56 @@ export class PrismaPersonalLearningPracticeRepository
         evidenceLevel: 'SELF_REPORT',
       };
     }
+    const answers = await tx.trainingMissionAnswer.findMany({
+      where: {
+        workspaceId: row.workspaceId,
+        groupId: row.groupId,
+        programEnrollmentId: row.programEnrollmentId,
+        missionAssignmentId: row.id,
+        userId: actor.actorUserId,
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 101,
+      select: { id: true, answer: true, evaluationStatus: true, evaluation: true, createdAt: true },
+    });
+    if (answers.length > 100) return conflict();
+    const answersWithSubmission = answers.map((answer) => ({
+      answer,
+      submitted: parseStoredPersonalLearningEvidenceSubmission(answer.answer),
+    }));
+    answersWithSubmission.sort(
+      (left, right) => (left.submitted?.revision ?? 0) - (right.submitted?.revision ?? 0),
+    );
+    const submissions = answersWithSubmission.map(({ answer, submitted }, index) => {
+      if (
+        !submitted ||
+        submitted.candidateId !== candidate.id ||
+        submitted.materialVersion !== candidate.materialVersion ||
+        submitted.revision !== index + 1
+      )
+        return conflict();
+      const stored = object(answer.evaluation);
+      const reviewValue =
+        stored.schemaVersion === 'PERSONAL_LEARNING_EVIDENCE_REVIEW_V1' ? stored.review : null;
+      if (
+        answer.evaluationStatus === 'READY' &&
+        !validatePersonalLearningEvidenceReview(reviewValue)
+      )
+        return conflict();
+      const review =
+        answer.evaluationStatus === 'READY' && validatePersonalLearningEvidenceReview(reviewValue)
+          ? reviewValue
+          : null;
+      return {
+        answerId: answer.id,
+        revision: submitted.revision,
+        kind: submitted.kind,
+        content: submitted.content,
+        status: answer.evaluationStatus,
+        review,
+        createdAt: answer.createdAt.toISOString(),
+      };
+    });
     return {
       assignmentId: row.id,
       goalId: data.goalId,
@@ -147,6 +199,7 @@ export class PrismaPersonalLearningPracticeRepository
       },
       note,
       support: await readPracticeSupportHistory(tx, actor, row.id, candidate.id),
+      submissions,
     };
   }
   readPractice(actor: PersonalLearningActor) {

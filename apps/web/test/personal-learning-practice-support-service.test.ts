@@ -69,6 +69,7 @@ const advice = {
 const practice = {
   candidate: { requestId: id, requestRevision: 2 },
   support: { revision: 1, history: [] },
+  submissions: [],
 };
 const request = { id, revision: 1, noteRevision: 0, status: 'PENDING' };
 describe('practice support orchestration', () => {

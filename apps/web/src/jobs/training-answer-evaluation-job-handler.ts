@@ -22,6 +22,7 @@ import {
   OpenAiTrainingAnswerEvaluator,
   TRAINING_EVALUATION_PROMPT_VERSION,
 } from '../providers/openai-training-answer-evaluator';
+import { executePersonalLearningEvidenceReview } from './personal-learning-evidence-review';
 
 export function createTrainingAnswerEvaluationJobHandler(): TrainingAnswerEvaluationJobHandler {
   return {
@@ -121,6 +122,10 @@ export function createTrainingAnswerEvaluationJobHandler(): TrainingAnswerEvalua
         assignment.targetResourceType === 'PERSONAL_LEARNING_PLAN';
       if (!personalLearningPilotExecutionAllowed(program.settings, enrollment.id, requirePilot))
         throw new TrainingAnswerEvaluationJobError('TRAINING_EVALUATION_SCOPE_REVOKED', false);
+      if (assignment.missionDefinitionKey === 'PERSONAL_LEARNING_DYNAMIC_PRACTICE') {
+        await executePersonalLearningEvidenceReview(input);
+        return;
+      }
       const operationKey = `training-evaluation:${answer.id}:${input.jobId}:attempt:${input.attemptCount}`;
       const usageKey = operationKey;
       const runtime = await reserveOpenAiRuntimeConfiguration(
