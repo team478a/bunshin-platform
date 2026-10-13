@@ -129,9 +129,9 @@ export function WeeklyActivitySection({
           <Link
             className="button button--primary button--full"
             href={
-              (isPersonalLearningService
+              isPersonalLearningService
                 ? `/s/${serviceSlug}/programs`
-                : `/s/${serviceSlug}/bunshins/new`) as Route
+                : `/s/${serviceSlug}/bunshins/new`
             }
           >
             {isPersonalLearningService ? '学習プログラムを開く' : '投稿パートナーを作る'}
@@ -149,9 +149,9 @@ export function WeeklyActivitySection({
           <Link
             className="button button--primary button--full"
             href={
-              (isPersonalLearningService
+              isPersonalLearningService
                 ? `/s/${serviceSlug}/programs`
-                : `/s/${serviceSlug}/bunshins`) as Route
+                : `/s/${serviceSlug}/bunshins`
             }
           >
             {isPersonalLearningService ? '学習プログラムを開く' : '投稿パートナーを見る'}
