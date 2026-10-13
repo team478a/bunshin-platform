@@ -74,7 +74,7 @@ describe('service home access guidance', () => {
       createElement(ServiceHomeAccessGuidance, {
         state: 'LINK_UNAVAILABLE',
         serviceSlug: slug,
-        brand: brand ?? undefined,
+        brand,
       }),
     );
 
