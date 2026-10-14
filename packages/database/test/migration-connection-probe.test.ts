@@ -104,6 +104,35 @@ describe('migration connection probe only', () => {
     expect(error.mock.calls.flat().join(' ')).not.toContain('synthetic-secret');
   });
 
+  it('labels a direct Supabase URL that cannot be safely routed through a session pooler', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const execute = vi.fn<typeof runMigrationProcess>();
+    expect(
+      await runMigrationConnectionProbe(
+        { ...environment, DIRECT_URL: direct, SUPABASE_SESSION_POOLER_HOST: '' },
+        execute,
+      ),
+    ).toBe(1);
+    expect(error.mock.calls.flat().join(' ')).toContain('session-pooler-host-required');
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it('labels a connection URL that conflicts with bounded migration settings', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const execute = vi.fn<typeof runMigrationProcess>();
+    expect(
+      await runMigrationConnectionProbe(
+        {
+          ...environment,
+          DIRECT_URL: `${environment.DIRECT_URL}&options=-c%20statement_timeout=0`,
+        },
+        execute,
+      ),
+    ).toBe(1);
+    expect(error.mock.calls.flat().join(' ')).toContain('migration-connection-url-invalid');
+    expect(execute).not.toHaveBeenCalled();
+  });
+
   it.each<MigrationProcessResult>([
     { reason: 'EXITED', status: 1 },
     { reason: 'DEADLINE_EXCEEDED', status: 1 },
