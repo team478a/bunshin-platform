@@ -1,6 +1,8 @@
 export type MigrationProcessResult = {
   reason: 'START_FAILED' | 'SIGNALLED' | 'EXITED' | 'DEADLINE_EXCEEDED';
   status: number;
+  /** Fixed allowlisted label only; never raw child output. */
+  diagnostic?: string;
 };
 export type MigrationProcessOptions = {
   cwd: URL;
@@ -13,3 +15,4 @@ export function runMigrationProcess(
   args: string[],
   options: MigrationProcessOptions,
 ): Promise<MigrationProcessResult>;
+export function classifyMigrationProcessFailure(output: string): string | undefined;
