@@ -43,6 +43,8 @@ SOCIAL Intelligenceを有効にする場合、ProductionのOpenAI認証は暗号
 
 `pnpm db:migration:probe`は専用入口から同じPrisma CLI / Migration URL / timeout設定を使い、`BEGIN READ ONLY`内の設定検証だけで終了する。成功でも`migrate deploy`、schema変更、migration history更新、App buildへ進まない。通常のVercel build commandは変更しない。
 
+GitHub Actionsの`Production Migration Connection Probe` workflowからも実行できる。`main`への`workflow_dispatch`に限定し、`production` Environment内の`DATABASE_URL`、`DIRECT_URL`、必要なら`SUPABASE_SESSION_POOLER_HOST`を使用する。実行者はSupabase Dashboard URLで承認済みproject refを確認し、入力欄へ20文字のproject refと`PROBE_PRODUCTION_DATABASE`を指定する。成功してもmigration/deployは行わない。workflowはEnvironment保護ルールを適用し、credential値・生のPrisma出力をsummary/logへ出さない。
+
 実行前にcredential管理者が、承認された非公開実行環境へ既存Productionの`DATABASE_URL`、`DIRECT_URL`、必要なら`SUPABASE_SESSION_POOLER_HOST`を安全に注入する。画面のsecret表示、chatへの貼付、URLをcommand引数へ埋める、PreviewへのProduction secret複製、Gitへの保存はしない。credentialの取得・注入とこのPRのコード承認は別判断。
 
 同じ実行環境で、値が秘密ではない次の2項目を設定して実行する（PowerShell例）:
