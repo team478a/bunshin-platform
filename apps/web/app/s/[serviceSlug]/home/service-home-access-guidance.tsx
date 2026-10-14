@@ -37,8 +37,7 @@ export function ServiceHomeAccessGuidance({
     },
     LINK_UNAVAILABLE: {
       title: 'サービスの利用状態を確認できません',
-      description:
-        'LINE内で別のアカウントにログインしているか、メニューのリンク先または参加登録の確認が必要な可能性があります。まずLINEでログインし直してください。ログイン後も同じ画面になる場合は、運営者にこの画面を見せて、LINEメニューのリンク先と参加登録を確認してもらってください。',
+      description: `ログインは完了しています。${brand?.serviceName ?? serviceName ?? 'このサービス'}の参加登録は、他のサービスとは別に確認されます。何度もログインし直さず、運営者にこの画面を見せて、参加登録が現在のLINEログイン中のアカウントに紐づいているか確認してもらってください。`,
     },
   }[state];
   const brandName = brand?.serviceName ?? serviceName;
@@ -62,12 +61,12 @@ export function ServiceHomeAccessGuidance({
         <p className="eyebrow">LINEからのご利用</p>
         <h1 id="service-home-access-title">{copy.title}</h1>
         <p>{copy.description}</p>
-        {(state === 'LOGIN_REQUIRED' || state === 'LINK_UNAVAILABLE') && (
+        {state === 'LOGIN_REQUIRED' && (
           <Link
             className="button button--primary button--full"
             href={`/login?returnTo=${encodeURIComponent(returnTo)}` as Route}
           >
-            {state === 'LINK_UNAVAILABLE' ? 'LINEでログインし直す' : 'ログインして続ける'}
+            ログインして続ける
           </Link>
         )}
         {state !== 'LINK_UNAVAILABLE' && serviceName && (

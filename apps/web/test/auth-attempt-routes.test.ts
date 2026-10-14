@@ -2,12 +2,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { attemptRows, attemptTable } from './fixtures/auth-attempt-table';
 const state = vi.hoisted(() => ({
   oauth: vi.fn(),
+  linkIdentity: vi.fn(),
+  getUser: vi.fn(),
   exchange: vi.fn(),
   otp: vi.fn(),
   email: vi.fn(),
   commit: vi.fn(),
   accept: vi.fn(),
   actor: '11111111-1111-4111-8111-111111111111',
+  identityOwner: '11111111-1111-4111-8111-111111111111',
   required: false,
   cookie: '',
 }));
@@ -38,6 +41,8 @@ vi.mock('../src/auth/supabase', () => {
   const client = () => ({
     auth: {
       signInWithOAuth: state.oauth,
+      linkIdentity: state.linkIdentity,
+      getUser: state.getUser,
       exchangeCodeForSession: state.exchange,
       verifyOtp: state.otp,
       signInWithOtp: state.email,
@@ -56,10 +61,23 @@ vi.mock('../src/auth/current-user', () => ({
 vi.mock('@bunshin/database', () => ({
   prisma: {
     authReturnAttempt: attemptTable,
+    authIdentity: {
+      findUnique: ({ where }: { where: { provider_providerUserId: { provider: string } } }) =>
+        Promise.resolve(
+          where.provider_providerUserId.provider === 'EMAIL'
+            ? { userId: state.identityOwner }
+            : null,
+        ),
+    },
     $transaction: async (operation: (tx: object) => Promise<unknown>) =>
       operation({
         authIdentity: {
-          findUnique: () => Promise.resolve(null),
+          findUnique: ({ where }: { where: { provider_providerUserId: { provider: string } } }) =>
+            Promise.resolve(
+              where.provider_providerUserId.provider === 'EMAIL'
+                ? { userId: state.identityOwner }
+                : null,
+            ),
           create: () => Promise.resolve({}),
         },
       }),
@@ -74,6 +92,8 @@ vi.mock('@bunshin/database', () => ({
 }));
 import { POST as startLine } from '../app/auth/line/route';
 import { GET as finishLine } from '../app/auth/line/callback/route';
+import { POST as startLineLink } from '../app/auth/line/link/route';
+import { GET as finishLineLink } from '../app/auth/line/link/callback/route';
 import { POST as startEmail } from '../app/auth/email/route';
 import { GET as emailLanding, POST as finishEmail } from '../app/auth/confirm/route';
 import { POST as acceptConsent } from '../app/consent/accept/route';
@@ -103,6 +123,7 @@ const location = (response: Response) => new URL(response.headers.get('location'
 const lineSuccess = {
   data: {
     user: {
+      id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
       identities: [
         { id: 'line-identity', provider: 'custom:line', identity_data: { sub: 'U1234567890' } },
       ],
@@ -116,7 +137,9 @@ describe('attempt-scoped route contracts', () => {
     vi.clearAllMocks();
     attemptRows.clear();
     vi.stubEnv('AUTH_RETURN_ATTEMPTS_ENABLED', 'true');
+    vi.stubEnv('LINE_IDENTITY_LINKING_ENABLED', 'false');
     state.actor = '11111111-1111-4111-8111-111111111111';
+    state.identityOwner = state.actor;
     state.required = false;
     state.cookie = '';
     state.oauth.mockImplementation(() =>
@@ -128,6 +151,16 @@ describe('attempt-scoped route contracts', () => {
         error: null,
       }),
     );
+    state.linkIdentity.mockImplementation(() =>
+      Promise.resolve({
+        data: { url: 'https://access.line.me/authorize', flowId: 'line-link-flow-12345678' },
+        error: null,
+      }),
+    );
+    state.getUser.mockResolvedValue({
+      data: { user: { id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' } },
+      error: null,
+    });
     state.exchange.mockResolvedValue(lineSuccess);
     state.email.mockResolvedValue({ error: null });
     state.otp.mockResolvedValue({ data: { user: { email: 'member@example.com' } }, error: null });
@@ -158,6 +191,56 @@ describe('attempt-scoped route contracts', () => {
         (response as NextResponse).cookies.get(attempt === a ? b.name : a.name),
       ).toBeUndefined();
     }
+  });
+
+  it('links LINE only to the same verified account and returns to its service account page', async () => {
+    vi.stubEnv('LINE_IDENTITY_LINKING_ENABLED', 'true');
+    const started = await startLineLink(
+      post('/auth/line/link', { returnTo: '/account?service=manaberu-style' }),
+    );
+    const attempt = proof(started);
+    expect(location(started).origin).toBe('https://access.line.me');
+    expect(state.linkIdentity).toHaveBeenCalledTimes(1);
+    expect(state.oauth).not.toHaveBeenCalled();
+    expect(attemptRows.get(attempt.id)).toMatchObject({
+      method: 'LINE_LINK',
+      actorUserId: state.actor,
+      stage: 'PENDING',
+    });
+
+    const completed = await finishLineLink(
+      new Request(`${origin}/auth/line/link/callback?code=linked-code&authAttempt=${attempt.id}`, {
+        headers: { cookie: attempt.cookie },
+      }),
+    );
+    expect(location(completed).pathname).toBe('/account');
+    expect(location(completed).searchParams.get('service')).toBe('manaberu-style');
+    expect(state.exchange).toHaveBeenCalledWith('linked-code', {
+      flowId: 'line-link-flow-12345678',
+    });
+    expect(attemptRows.get(attempt.id)?.stage).toBe('CONSUMED');
+  });
+
+  it('keeps LINE identity linking disabled until its explicit environment gate is enabled', async () => {
+    const response = await startLineLink(post('/auth/line/link', {}));
+    expect(location(response).searchParams.get('error')).toBe('auth-context');
+    expect(state.linkIdentity).not.toHaveBeenCalled();
+    expect(attemptRows.size).toBe(0);
+  });
+
+  it('rejects LINE linking when the callback session resolves to another platform user', async () => {
+    vi.stubEnv('LINE_IDENTITY_LINKING_ENABLED', 'true');
+    const started = await startLineLink(post('/auth/line/link', {}));
+    const attempt = proof(started);
+    state.actor = '22222222-2222-4222-8222-222222222222';
+    const completed = await finishLineLink(
+      new Request(`${origin}/auth/line/link/callback?code=linked-code&authAttempt=${attempt.id}`, {
+        headers: { cookie: attempt.cookie },
+      }),
+    );
+    expect(location(completed).pathname).toBe('/login');
+    expect(location(completed).searchParams.get('error')).toBe('auth-context');
+    expect(attemptRows.get(attempt.id)?.stage).toBe('CONSUMED');
   });
 
   it('rejects missing proof, selectors and replay before calling the provider', async () => {

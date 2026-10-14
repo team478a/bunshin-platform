@@ -24,6 +24,10 @@ export default async function AccountPage({
     redirect(`/login?returnTo=${encodeURIComponent(returnTo)}`);
   }
   const db = await import('@bunshin/database');
+  const lineIdentity = await db.prisma.authIdentity.findFirst({
+    where: { userId: user.userId, provider: 'LINE' },
+    select: { id: true },
+  });
   const scopedMembership = requestedService
     ? await db.prisma.groupMembership.findFirst({
         where: {
@@ -106,6 +110,35 @@ export default async function AccountPage({
             : '利用情報や通知、セキュリティに関する設定を確認できます。'}
         </p>
       </header>
+
+      <section className="settings-card" aria-labelledby="login-methods-title">
+        <h2 id="login-methods-title">ログイン方法</h2>
+        <p>
+          LINEとメールのアカウントは、自分で連携するまで別々です。連携すると、このアカウントでLINEログインを使えます。
+        </p>
+        {lineIdentity ? (
+          <p role="status">LINEログイン：連携済み</p>
+        ) : process.env['LINE_IDENTITY_LINKING_ENABLED'] === 'true' &&
+          process.env['AUTH_RETURN_ATTEMPTS_ENABLED'] === 'true' ? (
+          <form action="/auth/line/link" method="post">
+            {scopedService ? (
+              <input
+                name="returnTo"
+                type="hidden"
+                value={`/account?service=${scopedService.slug}`}
+              />
+            ) : null}
+            <PendingSubmitButton
+              className="button button--line"
+              pendingLabel="LINE連携を開始しています…"
+            >
+              LINEをこのアカウントに連携
+            </PendingSubmitButton>
+          </form>
+        ) : (
+          <p>LINE連携機能は現在準備中です。連携できるようになったら、この画面から設定できます。</p>
+        )}
+      </section>
 
       {!scopedService && (managedOrganizationCount > 0 || managedServices.length > 0) ? (
         <section className="settings-card" aria-labelledby="operator-settings-title">

@@ -5,6 +5,7 @@ generator client {
 enum AuthReturnAttemptMethod {
   LINE
   EMAIL
+  LINE_LINK
 }
 
 enum AuthReturnAttemptStage {
