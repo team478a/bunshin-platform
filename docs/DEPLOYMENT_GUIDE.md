@@ -65,6 +65,8 @@ Node 24 / lockfileどおりのPrisma 6.19.3を使用する。probeの対象は`p
 
 `db:migrate:vercel`はproductionだけで、DBセッション設定の非永続probe → `prisma migrate deploy`を実行する。Prisma CLIを直接起動し、DB側の上限と両コマンド合計のprocess期限を分離する。
 
+`Production Migration History Probe`は、Production GitHub Environmentを使う手動の読み取り専用診断である。`prisma migrate status`の出力から秘密情報を除き、pending migration名と履歴状態だけを記録する。最初に期待するSupabase project ref、DB名/roleを照合し、短いread-only transactionでDB identityを検証する。これはmigration、接続設定probe、deployのいずれも実行しない。既存のbounds probeが失敗した場合はこの診断で適用履歴を確認できるが、pending名だけで安全性を承認したり、手動適用したりしてはならない。
+
 | 環境変数                         | 未設定時  | 許容最大  |
 | -------------------------------- | --------- | --------- |
 | `MIGRATION_LOCK_TIMEOUT_MS`      | 5000 ms   | 10000 ms  |
