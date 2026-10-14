@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { performance } from 'node:perf_hooks';
 import { runMigrationProcess } from './migration-process.mjs';
+import { parseMigrationHistoryStatus } from './migration-history-status.mjs';
 
 const requireModule = createRequire(import.meta.url);
 const boundedReleaseMigrations = [
@@ -40,12 +41,16 @@ export function resolveMigrationBounds(environment) {
   return { lockTimeoutMs, statementTimeoutMs, processTimeoutMs };
 }
 
-export function withMigrationBounds(directUrl, bounds) {
+export function withMigrationBounds(
+  directUrl,
+  bounds,
+  applicationName = 'bunshin_migration_bounded',
+) {
   const url = new URL(directUrl);
   if (!['postgres:', 'postgresql:'].includes(url.protocol) || url.searchParams.has('options'))
     throw new Error('INVALID_MIGRATION_CONNECTION');
   url.searchParams.set('connect_timeout', '10');
-  url.searchParams.set('application_name', 'bunshin_migration_bounded');
+  url.searchParams.set('application_name', applicationName);
   return url.toString();
 }
 
@@ -186,7 +191,7 @@ async function runMigration(environment, execute, probeOnly) {
   }
 
   console.log(
-    `[database] ${probeOnly ? 'Probing migration connection only' : 'Applying production migrations'}: lock=${bounds.lockTimeoutMs}ms statement=${bounds.statementTimeoutMs}ms process=${bounds.processTimeoutMs}ms.`,
+    `[database] ${probeOnly ? 'Probing migration connection only' : 'Checking production migration status'}: lock=${bounds.lockTimeoutMs}ms statement=${bounds.statementTimeoutMs}ms process=${bounds.processTimeoutMs}ms.`,
   );
   const childEnvironment = {
     ...environment,
@@ -197,6 +202,43 @@ async function runMigration(environment, execute, probeOnly) {
   let result;
   try {
     const startedAt = performance.now();
+    if (!probeOnly) {
+      const historyUrl = withMigrationBounds(
+        resolveMigrationDirectUrl(environment.DIRECT_URL, environment.SUPABASE_SESSION_POOLER_HOST),
+        bounds,
+        'bunshin_migration_history_check',
+      );
+      const history = await execute(
+        process.execPath,
+        [prismaCli, 'migrate', 'status', '--schema', 'prisma/schema.prisma'],
+        {
+          cwd: new URL('../', import.meta.url),
+          env: {
+            ...childEnvironment,
+            DATABASE_URL: historyUrl,
+            DIRECT_URL: historyUrl,
+          },
+          timeoutMs: Math.min(bounds.processTimeoutMs, 60000),
+          captureOutput: true,
+        },
+      );
+      if (history.reason !== 'EXITED') {
+        console.error('[database] MIGRATION_HISTORY_CHECK_FAILED: build stopped before migration.');
+        return 1;
+      }
+      const status = parseMigrationHistoryStatus(history.capturedOutput ?? '');
+      if (status.status === 'UP_TO_DATE' && history.status === 0) {
+        console.log('[database] Migrations already up to date; no migration command started.');
+        return 0;
+      }
+      if (status.status !== 'PENDING') {
+        console.error('[database] MIGRATION_HISTORY_CHECK_FAILED: build stopped before migration.');
+        return 1;
+      }
+      console.log(
+        '[database] Pending migrations found; validating active DB timeout bounds before deploy.',
+      );
+    }
     // Supabase's session pooler can reject PostgreSQL startup `options`. Apply and verify
     // the same transaction-local settings used by every release migration instead.
     const probe = await execute(
