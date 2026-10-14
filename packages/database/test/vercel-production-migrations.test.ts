@@ -138,19 +138,32 @@ describe('Vercel production migrations', () => {
     };
     const execute = vi
       .fn<typeof runMigrationProcess>()
+      .mockResolvedValueOnce({
+        reason: 'EXITED',
+        status: 1,
+        capturedOutput:
+          'The following migration(s) have not yet been applied:\n20261013050000_personal_learning_line_rich_menu\n',
+      })
       .mockResolvedValue({ reason: 'EXITED', status: 0 });
     expect(await runVercelMigration(environment, execute)).toBe(0);
-    expect(execute).toHaveBeenCalledTimes(2);
+    expect(execute).toHaveBeenCalledTimes(3);
     expect(execute.mock.calls[0]![1].slice(1)).toEqual([
+      'migrate',
+      'status',
+      '--schema',
+      'prisma/schema.prisma',
+    ]);
+    expect(execute.mock.calls[0]![2].captureOutput).toBe(true);
+    expect(execute.mock.calls[1]![1].slice(1)).toEqual([
       'db',
       'execute',
       '--stdin',
       '--schema',
       'prisma/schema.prisma',
     ]);
-    expect(execute.mock.calls[0]![2].input).toContain('MIGRATION_BOUNDS_NOT_ACTIVE');
-    expect(execute.mock.calls[0]![2].input).toContain("SET LOCAL lock_timeout = '5000ms'");
-    const [command, args, options] = execute.mock.calls[1]!;
+    expect(execute.mock.calls[1]![2].input).toContain('MIGRATION_BOUNDS_NOT_ACTIVE');
+    expect(execute.mock.calls[1]![2].input).toContain("SET LOCAL lock_timeout = '5000ms'");
+    const [command, args, options] = execute.mock.calls[2]!;
     expect(command).toBe(process.execPath);
     expect(args.slice(1)).toEqual(['migrate', 'deploy']);
     expect(args[0]).toMatch(/prisma.*build[/\\]index\.js$/);
@@ -172,6 +185,12 @@ describe('Vercel production migrations', () => {
     const errorLog = vi.spyOn(console, 'error').mockImplementation(() => {});
     const execute = vi
       .fn<typeof runMigrationProcess>()
+      .mockResolvedValueOnce({
+        reason: 'EXITED',
+        status: 1,
+        capturedOutput:
+          'The following migration(s) have not yet been applied:\n20261013050000_personal_learning_line_rich_menu\n',
+      })
       .mockResolvedValueOnce({ reason: 'EXITED', status: 0 })
       .mockResolvedValue(result);
     const url = 'postgresql://test:synthetic-secret@localhost/test';
@@ -181,7 +200,7 @@ describe('Vercel production migrations', () => {
         execute,
       ),
     ).toBe(1);
-    expect(execute).toHaveBeenCalledTimes(2);
+    expect(execute).toHaveBeenCalledTimes(3);
     expect(errorLog.mock.calls.flat().join(' ')).toContain('do not retry automatically');
     expect(errorLog.mock.calls.flat().join(' ')).not.toContain('synthetic-secret');
   });
@@ -191,6 +210,12 @@ describe('Vercel production migrations', () => {
     const errorLog = vi.spyOn(console, 'error').mockImplementation(() => {});
     const execute = vi
       .fn<typeof runMigrationProcess>()
+      .mockResolvedValueOnce({
+        reason: 'EXITED',
+        status: 1,
+        capturedOutput:
+          'The following migration(s) have not yet been applied:\n20261013050000_personal_learning_line_rich_menu\n',
+      })
       .mockResolvedValue({ reason: 'EXITED', status: 1 });
     const url = 'postgresql://test:synthetic@localhost/test';
     expect(
@@ -199,8 +224,8 @@ describe('Vercel production migrations', () => {
         execute,
       ),
     ).toBe(1);
-    expect(execute).toHaveBeenCalledTimes(1);
-    expect(execute.mock.calls[0]![1].slice(1)).toEqual([
+    expect(execute).toHaveBeenCalledTimes(2);
+    expect(execute.mock.calls[1]![1].slice(1)).toEqual([
       'db',
       'execute',
       '--stdin',
@@ -208,6 +233,50 @@ describe('Vercel production migrations', () => {
       'prisma/schema.prisma',
     ]);
     expect(errorLog.mock.calls.flat().join(' ')).toContain('no migrate deploy started');
+  });
+
+  it('skips the settings probe and migration when history is already current', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    const execute = vi.fn<typeof runMigrationProcess>().mockResolvedValue({
+      reason: 'EXITED',
+      status: 0,
+      capturedOutput: 'Database schema is up to date!',
+    });
+    const url = 'postgresql://test:synthetic@localhost/test';
+    expect(
+      await runVercelMigration(
+        { VERCEL_ENV: 'production', DATABASE_URL: url, DIRECT_URL: url },
+        execute,
+      ),
+    ).toBe(0);
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(execute.mock.calls[0]![1].slice(1)).toEqual([
+      'migrate',
+      'status',
+      '--schema',
+      'prisma/schema.prisma',
+    ]);
+    expect(execute.mock.calls[0]![2].captureOutput).toBe(true);
+    expect(execute.mock.calls[0]![2].input).toBeUndefined();
+  });
+
+  it('fails closed when migration history cannot be classified as current or pending', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    const errorLog = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const execute = vi.fn<typeof runMigrationProcess>().mockResolvedValue({
+      reason: 'EXITED',
+      status: 0,
+      capturedOutput: 'connection succeeded',
+    });
+    const url = 'postgresql://test:synthetic@localhost/test';
+    expect(
+      await runVercelMigration(
+        { VERCEL_ENV: 'production', DATABASE_URL: url, DIRECT_URL: url },
+        execute,
+      ),
+    ).toBe(1);
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(errorLog.mock.calls.flat().join(' ')).toContain('MIGRATION_HISTORY_CHECK_FAILED');
   });
 
   it('does not leak an invalid URL or executor exception', async () => {
@@ -256,6 +325,25 @@ describe('Vercel production migrations', () => {
     ).toEqual({
       reason: 'START_FAILED',
       status: 1,
+    });
+  });
+
+  it('captures bounded child output only when explicitly requested', async () => {
+    const options = {
+      cwd: new URL('../', import.meta.url),
+      env: process.env,
+      timeoutMs: 2000,
+      captureOutput: true,
+    };
+    const result = await runMigrationProcess(
+      process.execPath,
+      ['-e', 'console.log("Database schema is up to date!")'],
+      options,
+    );
+    expect(result).toEqual({
+      reason: 'EXITED',
+      status: 0,
+      capturedOutput: 'Database schema is up to date!\n',
     });
   });
 });

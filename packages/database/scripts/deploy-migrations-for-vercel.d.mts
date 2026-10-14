@@ -9,7 +9,11 @@ export type MigrationBounds = {
   processTimeoutMs: number;
 };
 export function resolveMigrationBounds(environment: NodeJS.ProcessEnv): MigrationBounds;
-export function withMigrationBounds(directUrl: string, bounds: MigrationBounds): string;
+export function withMigrationBounds(
+  directUrl: string,
+  bounds: MigrationBounds,
+  applicationName?: string,
+): string;
 export function assertBoundedReleaseMigrations(bounds: MigrationBounds): void;
 export function runVercelMigration(
   environment?: NodeJS.ProcessEnv,
