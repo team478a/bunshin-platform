@@ -110,9 +110,11 @@ async function runMigration(environment, execute, probeOnly) {
   let migrationDirectUrl;
   let bounds;
   let prismaCli;
+  let configurationDiagnostic = 'unclassified-configuration-error';
 
   try {
     if (probeOnly) {
+      configurationDiagnostic = 'probe-target-invalid';
       const expectedProject = environment.MIGRATION_PROBE_EXPECTED_PROJECT_REF;
       if (
         !/^[a-z0-9]{20}$/.test(expectedProject ?? '') ||
@@ -122,11 +124,28 @@ async function runMigration(environment, execute, probeOnly) {
         throw new Error('MIGRATION_PROBE_TARGET_INVALID');
       }
     }
+    configurationDiagnostic = 'migration-timeout-settings-invalid';
     bounds = resolveMigrationBounds(environment);
-    migrationDirectUrl = withMigrationBounds(
-      resolveMigrationDirectUrl(environment.DIRECT_URL, environment.SUPABASE_SESSION_POOLER_HOST),
-      bounds,
-    );
+    let directUrl;
+    try {
+      const directUrlObject = new URL(environment.DIRECT_URL);
+      if (
+        /^db\.[a-z0-9]+\.supabase\.co$/i.test(directUrlObject.hostname) &&
+        !environment.SUPABASE_SESSION_POOLER_HOST
+      ) {
+        configurationDiagnostic = 'session-pooler-host-required';
+      } else {
+        configurationDiagnostic = 'direct-url-invalid';
+      }
+      directUrl = resolveMigrationDirectUrl(
+        environment.DIRECT_URL,
+        environment.SUPABASE_SESSION_POOLER_HOST,
+      );
+    } catch {
+      throw new Error('MIGRATION_DIRECT_URL_INVALID');
+    }
+    configurationDiagnostic = 'migration-connection-url-invalid';
+    migrationDirectUrl = withMigrationBounds(directUrl, bounds);
     if (
       probeOnly &&
       (!matchesExpectedProject(
@@ -135,12 +154,14 @@ async function runMigration(environment, execute, probeOnly) {
       ) ||
         new URL(migrationDirectUrl).port !== '5432')
     ) {
+      configurationDiagnostic = 'probe-target-invalid';
       throw new Error('MIGRATION_PROBE_TARGET_INVALID');
     }
+    configurationDiagnostic = 'prisma-cli-unavailable';
     prismaCli = requireModule.resolve('prisma/build/index.js');
   } catch {
     console.error(
-      '[database] MIGRATION_CONFIGURATION_INVALID: check URL, pooler host and bounded timeout settings; values are not logged.',
+      `[database] MIGRATION_CONFIGURATION_INVALID (${configurationDiagnostic}): values are not logged.`,
     );
     return 1;
   }
