@@ -85,7 +85,7 @@ Node 24 / lockfileどおりのPrisma 6.19.3を使用する。probeの対象は`p
 .\packages\database\scripts\apply-line-link-migrations.ps1
 ```
 
-DB passwordは非表示のsecure promptで入力し、チャット、コマンド引数、ファイル、ログへ出さない。runnerは直接host/project/database/role、実際のsession timeout、migration履歴を読み取り専用で確認する。pending一覧が以下2件と完全一致しない場合は停止する:
+DB passwordは非表示のsecure promptで入力し、チャット、コマンド引数、ファイル、ログへ出さない。runnerは直接host/project/database/role、実際のsession timeout、migration履歴を読み取り専用で確認する。最初のPrisma接続確認は最大90秒で、timeout時は認証状態を未確認として停止し、migrationを開始しない。pending一覧が以下2件と完全一致しない場合は停止する:
 
 - `20261014090000_add_line_link_attempt_method`
 - `20261014091000_allow_line_link_attempt_method`

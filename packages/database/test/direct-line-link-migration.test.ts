@@ -109,4 +109,19 @@ describe('direct, approval-gated production migration', () => {
     expect(execute).toHaveBeenCalledTimes(2);
     expect(confirm).not.toHaveBeenCalled();
   });
+
+  it('reports a read-only preflight timeout distinctly and never reads history or deploys', async () => {
+    const errorLog = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const execute = vi.fn<typeof runMigrationProcess>().mockResolvedValue({
+      reason: 'DEADLINE_EXCEEDED',
+      status: 1,
+    });
+
+    expect(
+      await runDirectLineLinkMigration(execute, environment, (phrase) => Promise.resolve(phrase)),
+    ).toBe(1);
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(errorLog.mock.calls.flat().join(' ')).toContain('credentials remain unverified');
+    expect(errorLog.mock.calls.flat().join(' ')).toContain('no migration started');
+  });
 });
