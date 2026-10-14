@@ -2,6 +2,7 @@ import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import { performance } from 'node:perf_hooks';
 import { runMigrationProcess } from './migration-process.mjs';
+import { parseMigrationHistoryStatus } from './migration-history-status.mjs';
 
 const requireModule = createRequire(import.meta.url);
 
@@ -108,6 +109,7 @@ async function runMigration(environment, execute, probeOnly) {
   }
 
   let migrationDirectUrl;
+  let migrationHistoryUrl;
   let bounds;
   let prismaCli;
   let configurationDiagnostic = 'unclassified-configuration-error';
@@ -146,6 +148,10 @@ async function runMigration(environment, execute, probeOnly) {
     }
     configurationDiagnostic = 'migration-connection-url-invalid';
     migrationDirectUrl = withMigrationBounds(directUrl, bounds);
+    migrationHistoryUrl = withMigrationConnectionMetadata(
+      directUrl,
+      'bunshin_migration_history_check',
+    );
     if (
       probeOnly &&
       (!matchesExpectedProject(
@@ -167,7 +173,7 @@ async function runMigration(environment, execute, probeOnly) {
   }
 
   console.log(
-    `[database] ${probeOnly ? 'Probing migration connection only' : 'Applying production migrations'}: lock=${bounds.lockTimeoutMs}ms statement=${bounds.statementTimeoutMs}ms process=${bounds.processTimeoutMs}ms.`,
+    `[database] ${probeOnly ? 'Probing migration connection only' : 'Checking production migration status'}: lock=${bounds.lockTimeoutMs}ms statement=${bounds.statementTimeoutMs}ms process=${bounds.processTimeoutMs}ms.`,
   );
   const childEnvironment = {
     ...environment,
@@ -175,9 +181,52 @@ async function runMigration(environment, execute, probeOnly) {
     DIRECT_URL: migrationDirectUrl,
   };
   delete childEnvironment.PGOPTIONS;
+  const startedAt = performance.now();
   let result;
   try {
-    const startedAt = performance.now();
+    // If a prior approved direct-connection operation already applied every migration,
+    // do not require pooler startup options that this pooler may not support.
+    const history = probeOnly
+      ? undefined
+      : await execute(
+          process.execPath,
+          [prismaCli, 'migrate', 'status', '--schema', 'prisma/schema.prisma'],
+          {
+            cwd: new URL('../', import.meta.url),
+            env: {
+              ...childEnvironment,
+              DATABASE_URL: migrationHistoryUrl,
+              DIRECT_URL: migrationHistoryUrl,
+            },
+            timeoutMs: Math.min(bounds.processTimeoutMs, 60000),
+            captureOutput: true,
+          },
+        );
+    if (probeOnly) {
+      // Connection probe below intentionally remains independent of migration history.
+    } else {
+      if (history.reason !== 'EXITED') {
+        console.error('[database] MIGRATION_HISTORY_CHECK_FAILED: build stopped before migration.');
+        return 1;
+      }
+      const parsedHistory = parseMigrationHistoryStatus(history.capturedOutput ?? '');
+      if (parsedHistory.status === 'UP_TO_DATE' && history.status === 0) {
+        console.log('[database] Migrations already up to date; no migration command started.');
+        return 0;
+      }
+      if (parsedHistory.status !== 'PENDING') {
+        console.error('[database] MIGRATION_HISTORY_CHECK_FAILED: build stopped before migration.');
+        return 1;
+      }
+      console.log(
+        '[database] Pending migrations found; validating active DB timeout bounds before deploy.',
+      );
+    }
+  } catch {
+    console.error('[database] MIGRATION_HISTORY_CHECK_FAILED: build stopped before migration.');
+    return 1;
+  }
+  try {
     // A pooler must not silently discard startup settings. Probe with the same CLI/URL.
     const probe = await execute(
       process.execPath,

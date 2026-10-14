@@ -1,5 +1,13 @@
 # BUNSHIN Platform Decision Log
 
+## 2026-10-14: IPv4 pooler migration preflight不適合時の限定direct経路
+
+- 状態: 実装後レビュー・merge待ち。本番migrationは未実行。
+- Vercel Production buildは最初にread-only migration historyを確認し、最新ならmigration commandを実行せずschema readinessへ進む。履歴不明・failed・driftは拒否し、pending時は従来どおり実際のtimeout設定を検証してからのみdeployする。
+- Supavisor poolerがPostgreSQL startup `options`を反映しない場合、DB/role永続設定を変更しない。対象を承認済み2件に固定したWindows direct runnerを用意し、secure password prompt、project/database/role/timeout/historyのread-only検証、厳密なpending allowlist、一意の対話確認、deploy後read-only検証を必須とする。
+- runner失敗/timeout/未確認終了後は自動retryせず、session、schema、migration historyを照合する。手動SQL、migration resolve、secret表示/保存、別のpending migration適用は行わない。
+- Source: `packages/database/scripts/apply-line-link-migrations.mjs`、`apply-line-link-migrations.ps1`、`deploy-migrations-for-vercel.mjs`、`docs/DEPLOYMENT_GUIDE.md`。
+
 ## 2026-10-14: メールとLINEのログインIDは本人のverified sessionからのみ明示連携する
 
 - 状態: 実装PRレビュー待ち。migration・本番設定・LINE実機smokeは未実施。
