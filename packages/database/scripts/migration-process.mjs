@@ -44,7 +44,11 @@ export function runMigrationProcess(command, args, options) {
         result.reason === 'EXITED' && result.status !== 0
           ? classifyMigrationProcessFailure(output)
           : undefined;
-      resolve(diagnostic ? { ...result, diagnostic } : result);
+      const capturedOutput = options.captureOutput ? output : undefined;
+      const withDiagnostic = diagnostic ? { ...result, diagnostic } : result;
+      resolve(
+        capturedOutput === undefined ? withDiagnostic : { ...withDiagnostic, capturedOutput },
+      );
     };
     const terminate = () => {
       // Only this runner's child/group. This is NOT DB cancellation or drain.

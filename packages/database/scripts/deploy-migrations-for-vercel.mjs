@@ -22,17 +22,22 @@ export function resolveMigrationBounds(environment) {
   return { lockTimeoutMs, statementTimeoutMs, processTimeoutMs };
 }
 
-export function withMigrationBounds(directUrl, bounds) {
+export function withMigrationConnectionMetadata(directUrl, applicationName) {
   const url = new URL(directUrl);
   if (!['postgres:', 'postgresql:'].includes(url.protocol) || url.searchParams.has('options'))
     throw new Error('INVALID_MIGRATION_CONNECTION');
+  url.searchParams.set('connect_timeout', '10');
+  url.searchParams.set('application_name', applicationName);
+  return url.toString();
+}
+
+export function withMigrationBounds(directUrl, bounds) {
+  const url = new URL(withMigrationConnectionMetadata(directUrl, 'bunshin_migration_bounded'));
   // Startup options apply to the actual migration engine connection, not another client.
   url.searchParams.set(
     'options',
     `-c lock_timeout=${bounds.lockTimeoutMs} -c statement_timeout=${bounds.statementTimeoutMs} -c idle_in_transaction_session_timeout=${bounds.statementTimeoutMs}`,
   );
-  url.searchParams.set('connect_timeout', '10');
-  url.searchParams.set('application_name', 'bunshin_migration_bounded');
   return url.toString();
 }
 
@@ -71,7 +76,7 @@ export function runMigrationConnectionProbe(
   return runMigration(environment, execute, true);
 }
 
-function matchesExpectedProject(connection, projectRef) {
+export function matchesExpectedProject(connection, projectRef) {
   const url = new URL(connection);
   const direct = url.hostname === `db.${projectRef}.supabase.co`;
   const pooler = url.hostname.endsWith('.pooler.supabase.com');
