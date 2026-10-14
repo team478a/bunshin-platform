@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { runMigrationConnectionProbe } from '../scripts/deploy-migrations-for-vercel.mjs';
 import type { runMigrationProcess } from '../scripts/migration-process.mjs';
 import type { MigrationProcessResult } from '../scripts/migration-process.mjs';
+import { classifyMigrationProcessFailure } from '../scripts/migration-process.mjs';
 
 const project = 'abcdefghijklmnopqrst';
 const direct = `postgresql://postgres:synthetic-secret@db.${project}.supabase.co:5432/postgres?sslmode=require`;
@@ -18,6 +19,20 @@ const environment = {
 
 describe('migration connection probe only', () => {
   afterEach(() => vi.restoreAllMocks());
+
+  it('classifies common Prisma connection failures without exposing raw output', () => {
+    expect(
+      classifyMigrationProcessFailure(
+        "Error: P1001: Can't reach database server at `db.example.supabase.co`",
+      ),
+    ).toBe('database-unreachable');
+    expect(
+      classifyMigrationProcessFailure('Error: P1000: Authentication failed for user secret-user'),
+    ).toBe('database-authentication-failed');
+    expect(classifyMigrationProcessFailure('opaque synthetic-secret error')).toBe(
+      'unclassified-preflight-error',
+    );
+  });
 
   it('succeeds with exactly one read-only settings probe and never migrates', async () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});

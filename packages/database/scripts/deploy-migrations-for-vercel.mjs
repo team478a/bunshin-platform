@@ -174,7 +174,7 @@ async function runMigration(environment, execute, probeOnly) {
     const remainingMs = Math.floor(bounds.processTimeoutMs - (performance.now() - startedAt));
     if (probe.reason !== 'EXITED' || probe.status !== 0 || remainingMs <= 0) {
       console.error(
-        '[database] MIGRATION_PREFLIGHT_FAILED: no migrate deploy started. Verify connection settings and DB sessions before retry.',
+        `[database] MIGRATION_PREFLIGHT_FAILED (${probe.diagnostic ?? probe.reason.toLowerCase()}): no migrate deploy started.`,
       );
       return 1;
     }
