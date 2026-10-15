@@ -146,73 +146,87 @@ export async function unlinkGroupRichMenuFromUser(input: {
   if (!response.ok) throw providerError(response.status);
 }
 
-/** Create once, then replace only its image and keep one LINE menu per connected learner. */
-export async function activatePersonalLearningGroupRichMenu(input: {
+/** Create a new image-less menu; LINE does not allow replacing an uploaded menu image. */
+export async function createPersonalLearningGroupRichMenu(input: {
   request?: typeof fetch;
   accessToken: string;
-  providerUserId: string;
   groupId: string;
   serviceSlug: string;
   enrollmentId: string;
   appUrl: string;
-  image: Buffer;
-  existingLineRichMenuId: string | null;
-  onCreated?: (lineRichMenuId: string) => Promise<void>;
 }) {
   const request = input.request ?? fetch;
-  if (
-    !input.providerUserId.trim() ||
-    !/^[0-9a-f-]{36}$/i.test(input.enrollmentId) ||
-    !/^[a-z0-9-]{1,80}$/i.test(input.serviceSlug)
-  )
+  if (!/^[0-9a-f-]{36}$/i.test(input.enrollmentId) || !/^[a-z0-9-]{1,80}$/i.test(input.serviceSlug))
     throw new ApplicationError('VALIDATION_ERROR', 'personal learning LINE scope is invalid');
   const headers = { authorization: `Bearer ${input.accessToken}` };
-  let lineRichMenuId = input.existingLineRichMenuId;
-  if (!lineRichMenuId) {
-    const learningPath = `/s/${encodeURIComponent(input.serviceSlug)}/programs/${encodeURIComponent(input.enrollmentId)}`;
-    const created = await request(`${endpoint}/v2/bot/richmenu`, {
-      method: 'POST',
-      headers: { ...headers, 'content-type': 'application/json' },
-      body: JSON.stringify({
-        size: { width: DEFAULT_LINE_RICH_MENU.width, height: DEFAULT_LINE_RICH_MENU.height },
-        selected: true,
-        name: `bunshin-learning:${input.groupId}:${randomUUID()}`.slice(0, 100),
-        chatBarText: '学習メニュー',
-        areas: DEFAULT_LINE_RICH_MENU.areas.map((area, index) => ({
-          bounds: { x: area.x, y: area.y, width: area.width, height: area.height },
-          action: {
-            type: 'uri',
-            uri: new URL(
-              `${learningPath}#${['personal-learning-practice', 'personal-learning-support', 'personal-learning-result', 'personal-learning-plan'][index]}`,
-              input.appUrl,
-            ).toString(),
-          },
-        })),
-      }),
-      signal: AbortSignal.timeout(10_000),
-    });
-    if (!created.ok) throw providerError(created.status);
-    const body = (await created.json()) as { richMenuId?: unknown };
-    if (typeof body.richMenuId !== 'string')
-      throw new ApplicationError('INTERNAL_ERROR', 'LINEの応答を確認できませんでした');
-    lineRichMenuId = body.richMenuId;
-    await input.onCreated?.(lineRichMenuId);
-  }
-  const uploaded = await request(
-    `https://api-data.line.me/v2/bot/richmenu/${encodeURIComponent(lineRichMenuId)}/content`,
+  const learningPath = `/s/${encodeURIComponent(input.serviceSlug)}/programs/${encodeURIComponent(input.enrollmentId)}`;
+  const created = await request(`${endpoint}/v2/bot/richmenu`, {
+    method: 'POST',
+    headers: { ...headers, 'content-type': 'application/json' },
+    body: JSON.stringify({
+      size: { width: DEFAULT_LINE_RICH_MENU.width, height: DEFAULT_LINE_RICH_MENU.height },
+      selected: true,
+      name: `bunshin-learning:${input.groupId}:${randomUUID()}`.slice(0, 100),
+      chatBarText: '学習メニュー',
+      areas: DEFAULT_LINE_RICH_MENU.areas.map((area, index) => ({
+        bounds: { x: area.x, y: area.y, width: area.width, height: area.height },
+        action: {
+          type: 'uri',
+          uri: new URL(
+            `${learningPath}#${['personal-learning-practice', 'personal-learning-support', 'personal-learning-result', 'personal-learning-plan'][index]}`,
+            input.appUrl,
+          ).toString(),
+        },
+      })),
+    }),
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!created.ok) throw providerError(created.status);
+  const body = (await created.json()) as { richMenuId?: unknown };
+  if (typeof body.richMenuId !== 'string' || !body.richMenuId.trim())
+    throw new ApplicationError('INTERNAL_ERROR', 'LINEの応答を確認できませんでした');
+  return body.richMenuId;
+}
+
+/** Upload only to an ID returned by createPersonalLearningGroupRichMenu in this attempt. */
+export async function uploadPersonalLearningGroupRichMenuImage(input: {
+  request?: typeof fetch;
+  accessToken: string;
+  lineRichMenuId: string;
+  image: Buffer;
+}) {
+  if (!input.lineRichMenuId.trim())
+    throw new ApplicationError('VALIDATION_ERROR', 'LINE rich menu ID is required');
+  const uploaded = await (input.request ?? fetch)(
+    `https://api-data.line.me/v2/bot/richmenu/${encodeURIComponent(input.lineRichMenuId)}/content`,
     {
       method: 'POST',
-      headers: { ...headers, 'content-type': 'image/png' },
+      headers: {
+        authorization: `Bearer ${input.accessToken}`,
+        'content-type': 'image/png',
+      },
       body: new Blob([Uint8Array.from(input.image)], { type: 'image/png' }),
       signal: AbortSignal.timeout(15_000),
     },
   );
   if (!uploaded.ok) throw providerError(uploaded.status);
-  await linkGroupRichMenuToUser({
-    request,
-    accessToken: input.accessToken,
-    providerUserId: input.providerUserId,
-    lineRichMenuId,
-  });
-  return { lineRichMenuId };
+}
+
+/** Delete a menu after it is no longer referenced; LINE 404 means it is already gone. */
+export async function deleteGroupRichMenu(input: {
+  request?: typeof fetch;
+  accessToken: string;
+  lineRichMenuId: string;
+}) {
+  if (!input.lineRichMenuId.trim())
+    throw new ApplicationError('VALIDATION_ERROR', 'LINE rich menu ID is required');
+  const removed = await (input.request ?? fetch)(
+    `${endpoint}/v2/bot/richmenu/${encodeURIComponent(input.lineRichMenuId)}`,
+    {
+      method: 'DELETE',
+      headers: { authorization: `Bearer ${input.accessToken}` },
+      signal: AbortSignal.timeout(10_000),
+    },
+  );
+  if (!removed.ok && removed.status !== 404) throw providerError(removed.status);
 }
