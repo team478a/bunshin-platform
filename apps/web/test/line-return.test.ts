@@ -41,6 +41,19 @@ describe('LINE authentication return path', () => {
     },
   );
 
+  it('preserves only explicit all-Bunshin notification consent in a scoped account return', () => {
+    const path = '/account?service=manaberu-style&lineNotifications=all';
+    expect(safeLineAuthReturnPath(path)).toBe(path);
+    expect(safeLineAuthReturnPath('/account?service=manaberu-style&lineNotifications=false')).toBe(
+      null,
+    );
+    expect(
+      safeLineAuthReturnPath(
+        '/account?service=manaberu-style&lineNotifications=all&lineNotifications=all',
+      ),
+    ).toBeNull();
+  });
+
   it.each([
     '/s/media/../fortune/line',
     '/s/media/%2e%2e/fortune/line',

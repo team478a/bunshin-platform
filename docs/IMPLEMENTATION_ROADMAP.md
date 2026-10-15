@@ -2,6 +2,8 @@
 
 LINEログインでサービス参加状態を確認できない場合のHassy/マナベル比較、およびverified sessionからの明示的なidentity連携実装は`docs/LINE_IDENTITY_LINK_IMPLEMENTATION.md`を参照。Supabase Manual Identity LinkingはBetaのため、環境設定・実機smoke・migration reviewが完了するまで本番有効化しない。
 
+LINE identity連携後のService全Bunshin通知opt-inも同文書を参照。明示同意・同一Service/本人所有範囲・友だち確認を必須とし、専用LINEは専用接続フローを維持する。本番反映・LINE実機smokeは未完了。
+
 管理者問い合わせ記録の保持期限は`docs/ADMIN_SUPPORT_CASE_RETENTION_IMPLEMENTATION.md`を参照。解決済み問い合わせとノートを解決から90日後に日次の上限付きCronで削除する。未解決は保持し、`resolvedAt`欠落の旧行は自動削除しない。Production反映と初回実行確認は未完了。
 
 LINEの参加者ホームで未ログイン/未参加時に404を返さず、ログイン・参加案内を状態別に表示する修正は`docs/SERVICE_LINE_HOME_ACCESS_GUIDANCE_IMPLEMENTATION.md`を参照。認可境界は維持する。PRレビュー/CI後にmainへ反映し、production反映後にLINE内ブラウザで未ログイン・参加済み・未参加の各状態を確認する。

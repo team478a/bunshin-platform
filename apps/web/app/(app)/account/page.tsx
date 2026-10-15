@@ -120,7 +120,7 @@ export default async function AccountPage({
           <p role="status">LINEログイン：連携済み</p>
         ) : process.env['LINE_IDENTITY_LINKING_ENABLED'] === 'true' &&
           process.env['AUTH_RETURN_ATTEMPTS_ENABLED'] === 'true' ? (
-          <form action="/auth/line/link" method="post">
+          <form action="/auth/line/link" method="post" className="form-stack">
             {scopedService ? (
               <input
                 name="returnTo"
@@ -128,11 +128,18 @@ export default async function AccountPage({
                 value={`/account?service=${scopedService.slug}`}
               />
             ) : null}
+            {scopedService ? (
+              <label>
+                <input name="lineNotifications" type="checkbox" value="all" />
+                {scopedService.displayName}
+                の全ての投稿パートナーについて、LINEで日々のお知らせを受け取る
+              </label>
+            ) : null}
             <PendingSubmitButton
               className="button button--line"
               pendingLabel="LINE連携を開始しています…"
             >
-              LINEをこのアカウントに連携
+              {scopedService ? 'LINEを連携して続ける' : 'LINEをこのアカウントに連携'}
             </PendingSubmitButton>
           </form>
         ) : (

@@ -6277,6 +6277,7 @@ model GroupLineConnection {
   configurationId       String                        @map("configuration_id") @db.Uuid
   providerUserId        String                        @map("provider_user_id") @db.VarChar(255)
   personalLearningRichMenuId String?                   @map("personal_learning_rich_menu_id") @db.VarChar(128)
+  personalLearningRichMenuPendingId String?            @map("personal_learning_rich_menu_pending_id") @db.VarChar(128)
   personalLearningRichMenuLinkedAt DateTime?           @map("personal_learning_rich_menu_linked_at") @db.Timestamptz(6)
   personalLearningRichMenuContentHash String?          @map("personal_learning_rich_menu_content_hash") @db.Char(64)
   status                LineConnectionStatus          @default(ACTIVE)
