@@ -1,3 +1,8 @@
+BEGIN;
+SET LOCAL lock_timeout = '5000ms';
+SET LOCAL statement_timeout = '60000ms';
+SET LOCAL idle_in_transaction_session_timeout = '60000ms';
+
 CREATE TABLE personal_learning_practice_support_images (
   id UUID PRIMARY KEY,
   workspace_id UUID NOT NULL,
@@ -38,3 +43,4 @@ CREATE INDEX personal_learning_support_image_owner_created_idx
 
 ALTER TABLE personal_learning_practice_support_images ENABLE ROW LEVEL SECURITY;
 -- Server repository only; no anonymous/authenticated direct read or write policies.
+COMMIT;
