@@ -12,12 +12,20 @@ import {
 } from './deploy-migrations-for-vercel.mjs';
 
 const requireModule = createRequire(import.meta.url);
-const expectedMigrations = [
-  '20261014090000_add_line_link_attempt_method',
-  '20261014091000_allow_line_link_attempt_method',
+const approvedPendingSets = [
+  {
+    migrations: [
+      '20261014090000_add_line_link_attempt_method',
+      '20261014091000_allow_line_link_attempt_method',
+    ],
+    confirmation: 'APPLY_TWO_LINE_LINK_MIGRATIONS_TO_vtkzinaudznwbsjoyszk',
+  },
+  {
+    migrations: ['20261015090000_personal_learning_rich_menu_pending'],
+    confirmation: 'APPLY_PERSONAL_LEARNING_RICH_MENU_MIGRATION_TO_vtkzinaudznwbsjoyszk',
+  },
 ];
 const expectedProjectRef = 'vtkzinaudznwbsjoyszk';
-const confirmation = 'APPLY_TWO_LINE_LINK_MIGRATIONS_TO_vtkzinaudznwbsjoyszk';
 
 function validDirectTarget(connection) {
   const url = new URL(connection);
@@ -38,7 +46,7 @@ function historyStatus(output, exitStatus) {
   return { status: 'UNKNOWN', pendingMigrations: [] };
 }
 
-async function requestConfirmation() {
+async function requestConfirmation(confirmation) {
   const terminal = createInterface({ input: stdin, output: stdout });
   try {
     return await terminal.question(`\nTo apply exactly these migrations, type ${confirmation}: `);
@@ -127,11 +135,13 @@ async function run(
     console.log('[database] Direct migration not needed: schema is already up to date.');
     return 0;
   }
-  if (
-    status.status !== 'PENDING' ||
-    status.pendingMigrations.length !== expectedMigrations.length ||
-    expectedMigrations.some((migration, index) => status.pendingMigrations[index] !== migration)
-  ) {
+  const approvedSet = approvedPendingSets.find(
+    ({ migrations }) =>
+      status.status === 'PENDING' &&
+      status.pendingMigrations.length === migrations.length &&
+      migrations.every((migration, index) => status.pendingMigrations[index] === migration),
+  );
+  if (!approvedSet) {
     console.error(
       '[database] DIRECT_MIGRATION_PENDING_SET_MISMATCH: no migration started; review migration history.',
     );
@@ -150,12 +160,12 @@ async function run(
 
   let answer;
   try {
-    answer = await confirm(confirmation);
+    answer = await confirm(approvedSet.confirmation);
   } catch {
     console.error('[database] DIRECT_MIGRATION_CONFIRMATION_UNAVAILABLE: no migration started.');
     return 1;
   }
-  if (answer !== confirmation) {
+  if (answer !== approvedSet.confirmation) {
     console.log('[database] Confirmation did not match; no migration started.');
     return 1;
   }
