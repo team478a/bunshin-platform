@@ -1,10 +1,14 @@
 import { notFound, redirect } from 'next/navigation';
 import { currentUserProvider } from '../../../../../../src/auth/current-user';
 import { resolveManagedServiceContext } from '../../../../../../src/services/public-service';
-import { programPreparationTarget } from '../../../../../../src/services/personal-learning-program-preparation';
+import {
+  pilotPreparationWritesAllowed,
+  programPreparationTarget,
+} from '../../../../../../src/services/personal-learning-program-preparation';
 import { PublicShell } from '../../../../../ui/public-shell';
 import { ProgramPreparationCard } from './card';
 import { InternalPreparationCard } from './internal-card';
+import { PilotOperationsCard } from './pilot-operations-card';
 
 export const dynamic = 'force-dynamic';
 export default async function ProgramPreparationPage({
@@ -21,6 +25,8 @@ export default async function ProgramPreparationPage({
   const service = await resolveManagedServiceContext(serviceSlug, actor.userId).catch(() => null);
   if (!service) notFound();
   const programId = programPreparationTarget(service);
+  const writesAllowed = pilotPreparationWritesAllowed();
+  const operationsAllowed = ['SERVICE_OWNER', 'SERVICE_ADMIN'].includes(service.serviceRole);
   return (
     <PublicShell showPlatformBrand={false}>
       <main className="app-page stack">
@@ -36,7 +42,11 @@ export default async function ProgramPreparationPage({
           )}
         </header>
         {programId ? (
-          <ProgramPreparationCard serviceSlug={serviceSlug} programId={programId} />
+          <ProgramPreparationCard
+            serviceSlug={serviceSlug}
+            programId={programId}
+            allowCreation={writesAllowed}
+          />
         ) : (
           <section className="card stack">
             <h2>作成操作は利用できません</h2>
@@ -47,7 +57,9 @@ export default async function ProgramPreparationPage({
             </p>
           </section>
         )}
+        {programId && operationsAllowed && <PilotOperationsCard serviceSlug={serviceSlug} />}
         {programId &&
+          writesAllowed &&
           service.serviceRole === 'SERVICE_OWNER' &&
           process.env['PERSONAL_LEARNING_PARTICIPANT_PREPARATION'] === 'true' && (
             <InternalPreparationCard serviceSlug={serviceSlug} />
