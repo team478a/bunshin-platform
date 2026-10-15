@@ -1,5 +1,12 @@
 # BUNSHIN Platform Decision Log
 
+## 2026-10-15: 個人リッチメニューのnullable列migrationを限定direct runnerへ追加
+
+- 状態: 実装PRレビュー待ち。本番DBへは未接続・未変更。
+- Vercel Productionはread-only履歴確認後、`20261015090000_personal_learning_rich_menu_pending` のtimeout bounds確認で停止し、migrationを開始しなかった。今回のpendingは `group_line_connections` へのnullable `VARCHAR(128)` 列追加1件。
+- Supavisor経由でstartup timeout settingsが有効にならない場合に備え、既存2件のLINE identity migration allowlistを維持したうえで、新migration単独の完全一致pending集合と専用確認語を追加する。未知migrationや複合集合は拒否する。
+- 直接接続runnerの実行前にProduction backup/restore手順と旧Application互換性を人間が確認する。認証情報・backup確認が未完了の状態では実行しない。
+
 ## 2026-10-14: IPv4 pooler migration preflight不適合時の限定direct経路
 
 - 状態: 実装後レビュー・merge待ち。本番migrationは未実行。

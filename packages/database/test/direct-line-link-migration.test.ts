@@ -9,6 +9,9 @@ const pendingOutput =
   'The following migration(s) have not yet been applied:\n' +
   '20261014090000_add_line_link_attempt_method\n' +
   '20261014091000_allow_line_link_attempt_method\n';
+const richMenuPendingOutput =
+  'The following migration(s) have not yet been applied:\n' +
+  '20261015090000_personal_learning_rich_menu_pending\n';
 
 describe('direct, approval-gated production migration', () => {
   afterEach(() => vi.restoreAllMocks());
@@ -73,6 +76,30 @@ describe('direct, approval-gated production migration', () => {
     ).toBe(1);
     expect(execute).toHaveBeenCalledTimes(2);
     expect(execute.mock.calls.some(([, args]) => args.includes('deploy'))).toBe(false);
+  });
+
+  it('approves only the exact single nullable rich-menu migration with its own confirmation', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    const execute = vi
+      .fn<typeof runMigrationProcess>()
+      .mockResolvedValueOnce({ reason: 'EXITED', status: 0 })
+      .mockResolvedValueOnce({ reason: 'EXITED', status: 1, capturedOutput: richMenuPendingOutput })
+      .mockResolvedValueOnce({ reason: 'EXITED', status: 0 })
+      .mockResolvedValueOnce({
+        reason: 'EXITED',
+        status: 0,
+        capturedOutput: 'Database schema is up to date!',
+      });
+    const confirm = vi.fn((phrase: string) => Promise.resolve(phrase));
+
+    expect(await runDirectLineLinkMigration(execute, environment, confirm)).toBe(0);
+    expect(confirm).toHaveBeenCalledWith(
+      'APPLY_PERSONAL_LEARNING_RICH_MENU_MIGRATION_TO_vtkzinaudznwbsjoyszk',
+    );
+    expect(execute).toHaveBeenCalledTimes(4);
+    expect(execute.mock.calls[1]![2].captureOutput).toBe(true);
+    expect(execute.mock.calls[2]![1]).toContain('migrate');
+    expect(execute.mock.calls[2]![1]).toContain('deploy');
   });
 
   it('rejects another target before connecting', async () => {
