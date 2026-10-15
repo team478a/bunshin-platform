@@ -35,7 +35,7 @@ pnpm db:migrate:deploy
 
 `migrate:dev`はlocal developmentだけで使用する。CIは空のtest DBへVercel Productionと同じwrapper経由で`migrate deploy`を実行し、その後にschema readinessとintegration testを検証する。
 
-VercelのProduction buildは、`pnpm db:migrate:vercel`、`pnpm db:assert-ready`、Web buildの順に実行する。Production以外ではwrapperがmigrationをskipし、Productionでは`DATABASE_URL`または`DIRECT_URL`が欠けていれば停止する。MigrationまたはSchema Gateが失敗した場合はbuildを失敗させ、新しいApplicationを公開しない。
+VercelのProduction buildは、`pnpm db:migrate:vercel`、`pnpm db:assert-ready`、Web buildの順に実行する。最初にread-onlyでmigration historyを確認し、最新ならmigration commandをskipする。pending時はDB timeoutの実効性を確認してからdeployし、履歴不明/failed/driftは停止する。Production以外ではwrapperがmigrationをskipし、Productionでは`DATABASE_URL`または`DIRECT_URL`が欠けていれば停止する。MigrationまたはSchema Gateが失敗した場合はbuildを失敗させ、新しいApplicationを公開しない。
 
 ## Production Release Migration Workflow
 
@@ -49,6 +49,8 @@ VercelのProduction buildは、`pnpm db:migrate:vercel`、`pnpm db:assert-ready`
 4. `main`のrequired CI `verify` / `database`が成功していることを確認する。
 5. migrationの前方互換性、backup、rollbackまたはforward-fix方針を確認する。
 6. `production` branchへの直接pushを禁止し、release PRをレビューする。
+
+SupavisorのIPv4 poolerでmigration timeout設定が有効にならない場合、DB/roleへ永続設定を追加せず、[`DEPLOYMENT_GUIDE.md`](DEPLOYMENT_GUIDE.md)の「直接接続による限定的なLINE migration」手順を使う。現在対象の2 migrationだけを明示し、direct endpointのread-only preflightと事前/事後history照合が成功した場合に限る。
 
 実行:
 

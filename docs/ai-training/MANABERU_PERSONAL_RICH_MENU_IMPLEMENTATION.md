@@ -1,6 +1,6 @@
 # マナベル個別LINEメニュー実装報告
 
-2026-10-13。基準main: `cc9d86dd`（PR #1272）。PR #1272/#1273はmainへマージ済み。本番候補はproduction基点`0acb1944`からこの機能だけを限定適用する。
+2026-10-13。基準main: `cc9d86dd`（PR #1272）。本報告の変更は次の実装PRでレビュー予定。
 
 ## 実装内容
 
@@ -9,7 +9,7 @@
 - 4つの操作は同じEnrollmentの学習ページ内の対応箇所へ遷移する。AIが自由なURL・LINEアクションを生成することはない。
 - 同じ利用者の既存メニューIDは再利用し、課題タイトルが変わったときだけ画像を更新する。タイトルのSHA-256とリンク時刻を記録して再送を抑制する。
 - 操作時に本人のsession、Service / Workspace / Membership / User / Enrollment、Pilot実行条件、Profile/承認状態、現在課題、専用LINE設定、友だち状態をサーバーで再確認する。設定停止・資格失効・友だち未追加などの場合は拒否し、標準メニューを全体上書きしない。
-- 個人メニューのID・リンク時刻・内容ハッシュ用の列を`group_line_connections`へ追加するmigrationを作成した。production用候補では5秒lock timeout・60秒statement/idle timeoutをtransaction-localに設定し、bounded migration一覧へ追加する。productionへは未適用。
+- 個人メニューのID・リンク時刻・内容ハッシュ用の列を`group_line_connections`へ追加するmigrationを作成した。productionへは未適用。
 
 ## 設計判断
 
@@ -28,9 +28,9 @@
 
 ## 次のGate
 
-1. production基点release PRのCIとレビューを完了し、対象差分が本機能だけであることを確認する。
-2. production merge前に、最新backup/restore手順、`_prisma_migrations`のpending/failed履歴、migration connection probe、DB role/RLSを実証する。未確認項目はPASS扱いしない。
-3. LINE送信なしの本番Readiness Gateは`GO_LINE_PRODUCTION`の明示入力で実施する。実LINEのmenu作成は、対象テスト利用者・Enrollment・LINE接続を特定し、標準メニュー復帰を確認できる状態で別途実施する。
+1. PRレビューで認可スコープ、migration、LINE menu lifecycle、データ保持を確認する。
+2. 合成データとmock providerで期限切れ・未フォロー・再送・失敗の回帰テストを増やす。
+3. migration適用の承認、LINE本番操作の明示承認をそれぞれ得る。実行前に標準メニューfallbackと既存顧客影響を確認する。
 4. 少数の実利用者へ提供後、初期設定→LINEメニュー→課題→途中支援→結果→再訪の利用ログと手動介入を確認する。自動テストは学習効果の証拠にしない。
 
 ## 検証
@@ -39,5 +39,4 @@
 - Web unit tests: group rich-menu provider、default menu renderer、personal-learning pilot HTTP composition。
 - Database readiness test。
 - 変更対象のESLint、Web typecheck。
-- production `/api/health/ready` の読み取り確認: `ready`、`databaseSchema: current`。この確認はbackup、migration履歴、DB role/RLS、LINE運用準備を証明しない。
 - 実AI/実LINE、本番Migration、Deployは実行していない。

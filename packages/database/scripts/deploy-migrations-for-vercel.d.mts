@@ -9,12 +9,9 @@ export type MigrationBounds = {
   processTimeoutMs: number;
 };
 export function resolveMigrationBounds(environment: NodeJS.ProcessEnv): MigrationBounds;
-export function withMigrationBounds(
-  directUrl: string,
-  bounds: MigrationBounds,
-  applicationName?: string,
-): string;
-export function assertBoundedReleaseMigrations(bounds: MigrationBounds): void;
+export function withMigrationBounds(directUrl: string, bounds: MigrationBounds): string;
+export function withMigrationConnectionMetadata(directUrl: string, applicationName: string): string;
+export function matchesExpectedProject(connection: string, projectRef: string): boolean;
 export function runVercelMigration(
   environment?: NodeJS.ProcessEnv,
   execute?: typeof import('./migration-process.mjs').runMigrationProcess,

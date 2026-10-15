@@ -102,6 +102,36 @@ describe('attempt-scoped authentication return records', () => {
     ).resolves.toMatchObject({ returnTo: '/s/media/line' });
   });
 
+  it('binds explicit LINE linking to the verified existing platform user', async () => {
+    const context = await createAuthReturnAttempt(
+      start(),
+      'LINE_LINK',
+      '/account?service=manaberu-style',
+      undefined,
+      actor,
+    );
+    await setAuthAttemptPkceFlow(context, 'line-link-flow-123');
+    const pending = await readAuthReturnContext(callback([context]), context.attempt.id, {
+      method: 'LINE_LINK',
+      actorUserId: actor,
+    });
+    await expect(
+      readAuthReturnContext(callback([context]), context.attempt.id, {
+        method: 'LINE_LINK',
+        actorUserId: '22222222-2222-4222-8222-222222222222',
+      }),
+    ).rejects.toThrow();
+    await claimAuthReturnAttempt(pending);
+    await authenticateAuthReturnAttempt(pending, actor);
+    await consumeAuthReturnAttempt(pending, actor);
+    expect(attemptRows.get(context.attempt.id)).toMatchObject({
+      method: 'LINE_LINK',
+      stage: 'CONSUMED',
+      actorUserId: null,
+      returnPath: null,
+    });
+  });
+
   it('rejects another browser, another origin, wrong provider and expired proofs', async () => {
     const context = await createAuthReturnAttempt(start(), 'LINE', '/s/media/line');
     await expect(

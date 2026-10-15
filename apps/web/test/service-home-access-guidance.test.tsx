@@ -58,6 +58,9 @@ describe('service home access guidance', () => {
     );
 
     expect(html).toContain('サービスの利用状態を確認できません');
+    expect(html).toContain('ログインは完了しています');
+    expect(html).not.toContain('LINEでログインし直す');
+    expect(html).not.toContain('/login?returnTo=');
     expect(html).not.toContain('service-auth-brand');
     expect(html).not.toContain('/s/unknown-service');
   });
@@ -81,6 +84,8 @@ describe('service home access guidance', () => {
     expect(html).toContain('サービスの利用状態を確認できません');
     expect(html).toContain(name);
     expect(html).toContain('ワタシワークスを利用しています');
+    expect(html).toContain('何度もログインし直さず');
+    expect(html).not.toContain('LINEでログインし直す');
     expect(html).not.toContain('参加案内を確認する');
     expect(html).not.toContain(`/s/${slug}`);
   });

@@ -1,0 +1,70 @@
+name: Production Migration Connection Probe
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type PROBE_PRODUCTION_DATABASE to run the read-only check
+        required: true
+        type: string
+      project_ref:
+        description: Approved 20-character Supabase project reference
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-migration-connection-probe
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    steps:
+      - name: Require main and explicit target confirmation
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+          EXPECTED_PROJECT_REF: ${{ inputs.project_ref }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$CONFIRMATION" = "PROBE_PRODUCTION_DATABASE"
+          [[ "$EXPECTED_PROJECT_REF" =~ ^[a-z0-9]{20}$ ]]
+
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.10.0
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run read-only production migration connection probe
+        env:
+          VERCEL_ENV: production
+          MIGRATION_PROBE_EXPECTED_PROJECT_REF: ${{ inputs.project_ref }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+          SUPABASE_SESSION_POOLER_HOST: ${{ vars.SUPABASE_SESSION_POOLER_HOST || secrets.SUPABASE_SESSION_POOLER_HOST }}
+        run: pnpm db:migration:probe
+
+      - name: Record probe result
+        if: success()
+        run: |
+          {
+            echo "## Production migration connection probe"
+            echo ""
+            echo "- Result: passed"
+            echo "- Database changes: none"
+            echo "- Migration deployment: not run"
+          } >> "$GITHUB_STEP_SUMMARY"

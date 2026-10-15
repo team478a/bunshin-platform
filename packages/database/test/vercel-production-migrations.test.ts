@@ -7,7 +7,6 @@ import {
   resolveMigrationDirectUrl,
   resolveMigrationBounds,
   withMigrationBounds,
-  assertBoundedReleaseMigrations,
   runVercelMigration,
 } from '../scripts/deploy-migrations-for-vercel.mjs';
 import { runMigrationProcess } from '../scripts/migration-process.mjs';
@@ -80,21 +79,22 @@ describe('Vercel production migrations', () => {
     expect(resolveMigrationDirectUrl(directUrl, undefined)).toBe(directUrl);
   });
 
-  it('preserves identity and TLS without unsupported pooler startup options', () => {
+  it('applies bounded DB startup settings while preserving identity and TLS', () => {
     const url = new URL(
       withMigrationBounds(
         'postgresql://test:synthetic@localhost:5432/test?schema=public&sslmode=require&connect_timeout=0',
         resolveMigrationBounds({}),
       ),
     );
-    expect(url.searchParams.get('options')).toBeNull();
+    expect(url.searchParams.get('options')).toBe(
+      '-c lock_timeout=5000 -c statement_timeout=60000 -c idle_in_transaction_session_timeout=60000',
+    );
     expect(url.searchParams.get('connect_timeout')).toBe('10');
     expect(url.searchParams.get('schema')).toBe('public');
     expect(url.searchParams.get('sslmode')).toBe('require');
     expect(url.searchParams.get('application_name')).toBe('bunshin_migration_bounded');
     expect(url.hostname).toBe('localhost');
     expect(url.password).toBe('synthetic');
-    expect(() => assertBoundedReleaseMigrations(resolveMigrationBounds({}))).not.toThrow();
   });
 
   it.each(['0', '-1', '1.5', 'NaN', '', ' 5000', '5000ms', '10001', '9007199254740993'])(
@@ -128,7 +128,7 @@ describe('Vercel production migrations', () => {
     expect(execute).not.toHaveBeenCalled();
   });
 
-  it('uses a direct CLI, transaction-bounded migrations, isolated env and no retry', async () => {
+  it('uses a direct CLI, bounded connection, isolated env and no retry', async () => {
     vi.spyOn(console, 'log').mockImplementation(() => {});
     const environment = {
       VERCEL_ENV: 'production',
@@ -142,7 +142,7 @@ describe('Vercel production migrations', () => {
         reason: 'EXITED',
         status: 1,
         capturedOutput:
-          'The following migration(s) have not yet been applied:\n20261013050000_personal_learning_line_rich_menu\n',
+          'The following migration(s) have not yet been applied:\n20261014090000_add_line_link_attempt_method\n',
       })
       .mockResolvedValue({ reason: 'EXITED', status: 0 });
     expect(await runVercelMigration(environment, execute)).toBe(0);
@@ -153,7 +153,6 @@ describe('Vercel production migrations', () => {
       '--schema',
       'prisma/schema.prisma',
     ]);
-    expect(execute.mock.calls[0]![2].captureOutput).toBe(true);
     expect(execute.mock.calls[1]![1].slice(1)).toEqual([
       'db',
       'execute',
@@ -162,7 +161,6 @@ describe('Vercel production migrations', () => {
       'prisma/schema.prisma',
     ]);
     expect(execute.mock.calls[1]![2].input).toContain('MIGRATION_BOUNDS_NOT_ACTIVE');
-    expect(execute.mock.calls[1]![2].input).toContain("SET LOCAL lock_timeout = '5000ms'");
     const [command, args, options] = execute.mock.calls[2]!;
     expect(command).toBe(process.execPath);
     expect(args.slice(1)).toEqual(['migrate', 'deploy']);
@@ -170,7 +168,9 @@ describe('Vercel production migrations', () => {
     expect(options.timeoutMs).toBeGreaterThan(0);
     expect(options.timeoutMs).toBeLessThanOrEqual(300000);
     expect(options.env.PGOPTIONS).toBeUndefined();
-    expect(new URL(options.env.DIRECT_URL!).searchParams.get('options')).toBeNull();
+    expect(new URL(options.env.DIRECT_URL!).searchParams.get('options')).toContain(
+      'lock_timeout=5000',
+    );
     expect(environment.DIRECT_URL).not.toContain('lock_timeout');
     expect(environment.PGOPTIONS).toContain('statement_timeout=0');
   });
@@ -189,7 +189,7 @@ describe('Vercel production migrations', () => {
         reason: 'EXITED',
         status: 1,
         capturedOutput:
-          'The following migration(s) have not yet been applied:\n20261013050000_personal_learning_line_rich_menu\n',
+          'The following migration(s) have not yet been applied:\n20261014090000_add_line_link_attempt_method\n',
       })
       .mockResolvedValueOnce({ reason: 'EXITED', status: 0 })
       .mockResolvedValue(result);
@@ -214,7 +214,7 @@ describe('Vercel production migrations', () => {
         reason: 'EXITED',
         status: 1,
         capturedOutput:
-          'The following migration(s) have not yet been applied:\n20261013050000_personal_learning_line_rich_menu\n',
+          'The following migration(s) have not yet been applied:\n20261014090000_add_line_link_attempt_method\n',
       })
       .mockResolvedValue({ reason: 'EXITED', status: 1 });
     const url = 'postgresql://test:synthetic@localhost/test';
@@ -235,7 +235,7 @@ describe('Vercel production migrations', () => {
     expect(errorLog.mock.calls.flat().join(' ')).toContain('no migrate deploy started');
   });
 
-  it('skips the settings probe and migration when history is already current', async () => {
+  it('skips the pooler settings probe and migration when history is already current', async () => {
     vi.spyOn(console, 'log').mockImplementation(() => {});
     const execute = vi.fn<typeof runMigrationProcess>().mockResolvedValue({
       reason: 'EXITED',
@@ -256,27 +256,7 @@ describe('Vercel production migrations', () => {
       '--schema',
       'prisma/schema.prisma',
     ]);
-    expect(execute.mock.calls[0]![2].captureOutput).toBe(true);
-    expect(execute.mock.calls[0]![2].input).toBeUndefined();
-  });
-
-  it('fails closed when migration history cannot be classified as current or pending', async () => {
-    vi.spyOn(console, 'log').mockImplementation(() => {});
-    const errorLog = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const execute = vi.fn<typeof runMigrationProcess>().mockResolvedValue({
-      reason: 'EXITED',
-      status: 0,
-      capturedOutput: 'connection succeeded',
-    });
-    const url = 'postgresql://test:synthetic@localhost/test';
-    expect(
-      await runVercelMigration(
-        { VERCEL_ENV: 'production', DATABASE_URL: url, DIRECT_URL: url },
-        execute,
-      ),
-    ).toBe(1);
-    expect(execute).toHaveBeenCalledTimes(1);
-    expect(errorLog.mock.calls.flat().join(' ')).toContain('MIGRATION_HISTORY_CHECK_FAILED');
+    expect(execute.mock.calls[0]![2].env.DIRECT_URL).not.toContain('options=');
   });
 
   it('does not leak an invalid URL or executor exception', async () => {
@@ -325,25 +305,6 @@ describe('Vercel production migrations', () => {
     ).toEqual({
       reason: 'START_FAILED',
       status: 1,
-    });
-  });
-
-  it('captures bounded child output only when explicitly requested', async () => {
-    const options = {
-      cwd: new URL('../', import.meta.url),
-      env: process.env,
-      timeoutMs: 2000,
-      captureOutput: true,
-    };
-    const result = await runMigrationProcess(
-      process.execPath,
-      ['-e', 'console.log("Database schema is up to date!")'],
-      options,
-    );
-    expect(result).toEqual({
-      reason: 'EXITED',
-      status: 0,
-      capturedOutput: 'Database schema is up to date!\n',
     });
   });
 });

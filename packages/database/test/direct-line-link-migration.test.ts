@@ -1,0 +1,112 @@
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { runDirectLineLinkMigration } from '../scripts/apply-line-link-migrations.mjs';
+import type { runMigrationProcess } from '../scripts/migration-process.mjs';
+
+const projectRef = 'vtkzinaudznwbsjoyszk';
+const connection = `postgresql://postgres:synthetic-secret@db.${projectRef}.supabase.co:5432/postgres?sslmode=require&connect_timeout=10`;
+const environment = { DATABASE_URL: connection, DIRECT_URL: connection };
+const pendingOutput =
+  'The following migration(s) have not yet been applied:\n' +
+  '20261014090000_add_line_link_attempt_method\n' +
+  '20261014091000_allow_line_link_attempt_method\n';
+
+describe('direct, approval-gated production migration', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it('checks the direct target and exact pending set before the explicit confirmation and deploy', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    const execute = vi
+      .fn<typeof runMigrationProcess>()
+      .mockResolvedValueOnce({ reason: 'EXITED', status: 0 })
+      .mockResolvedValueOnce({
+        reason: 'EXITED',
+        status: 0,
+        capturedOutput: pendingOutput,
+      })
+      .mockResolvedValueOnce({ reason: 'EXITED', status: 0 })
+      .mockResolvedValueOnce({
+        reason: 'EXITED',
+        status: 0,
+        capturedOutput: 'Database schema is up to date!',
+      });
+    const confirm = vi.fn((phrase: string) => Promise.resolve(phrase));
+
+    expect(await runDirectLineLinkMigration(execute, environment, confirm)).toBe(0);
+    expect(execute).toHaveBeenCalledTimes(4);
+    expect(execute.mock.calls[0]![1].slice(1)).toEqual([
+      'db',
+      'execute',
+      '--stdin',
+      '--schema',
+      'prisma/schema.prisma',
+    ]);
+    expect(execute.mock.calls[0]![2].input).toContain('BEGIN READ ONLY');
+    expect(execute.mock.calls[0]![2].input).toContain('MIGRATION');
+    expect(execute.mock.calls[1]![1].slice(1)).toEqual([
+      'migrate',
+      'status',
+      '--schema',
+      'prisma/schema.prisma',
+    ]);
+    expect(
+      new URL(execute.mock.calls[0]![2].env.DIRECT_URL!).searchParams.get('options'),
+    ).toContain('lock_timeout=5000');
+    expect(execute.mock.calls[2]![1].slice(1)).toEqual([
+      'migrate',
+      'deploy',
+      '--schema',
+      'prisma/schema.prisma',
+    ]);
+    expect(confirm).toHaveBeenCalledWith('APPLY_TWO_LINE_LINK_MIGRATIONS_TO_vtkzinaudznwbsjoyszk');
+    expect(vi.mocked(console.log).mock.calls.flat().join(' ')).not.toContain('synthetic-secret');
+  });
+
+  it('does not deploy if confirmation is missing or incorrect', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    const execute = vi
+      .fn<typeof runMigrationProcess>()
+      .mockResolvedValueOnce({ reason: 'EXITED', status: 0 })
+      .mockResolvedValueOnce({ reason: 'EXITED', status: 1, capturedOutput: pendingOutput });
+
+    expect(
+      await runDirectLineLinkMigration(execute, environment, () => Promise.resolve('no')),
+    ).toBe(1);
+    expect(execute).toHaveBeenCalledTimes(2);
+    expect(execute.mock.calls.some(([, args]) => args.includes('deploy'))).toBe(false);
+  });
+
+  it('rejects another target before connecting', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const execute = vi.fn<typeof runMigrationProcess>();
+
+    expect(
+      await runDirectLineLinkMigration(
+        execute,
+        {
+          DATABASE_URL: connection.replace(projectRef, 'abcdefghijklmnopqrst'),
+          DIRECT_URL: connection,
+        },
+        (phrase) => Promise.resolve(phrase),
+      ),
+    ).toBe(1);
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it('rejects unexpected pending migration names without asking to deploy', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const execute = vi
+      .fn<typeof runMigrationProcess>()
+      .mockResolvedValueOnce({ reason: 'EXITED', status: 0 })
+      .mockResolvedValueOnce({
+        reason: 'EXITED',
+        status: 1,
+        capturedOutput:
+          'The following migration(s) have not yet been applied:\n20261014999999_unexpected\n',
+      });
+    const confirm = vi.fn((phrase: string) => Promise.resolve(phrase));
+
+    expect(await runDirectLineLinkMigration(execute, environment, confirm)).toBe(1);
+    expect(execute).toHaveBeenCalledTimes(2);
+    expect(confirm).not.toHaveBeenCalled();
+  });
+});
