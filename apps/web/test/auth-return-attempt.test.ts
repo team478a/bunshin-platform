@@ -21,6 +21,7 @@ import {
   authEmailHash,
   emailAuthAttemptId,
   emailAuthReturnTo,
+  authReturnDestination,
   type NewAuthReturnAttempt,
 } from '../src/auth/auth-return-attempt';
 
@@ -40,6 +41,14 @@ describe('attempt-scoped authentication return records', () => {
     vi.clearAllMocks();
     attemptRows.clear();
     vi.stubEnv('AUTH_RETURN_ATTEMPTS_ENABLED', 'true');
+  });
+
+  it('returns LINE login to the exact service invitation that initiated authentication', async () => {
+    const returnTo = `/s/manaberu-style/join/${'a'.repeat(43)}`;
+    const context = await createAuthReturnAttempt(start(), 'LINE', returnTo);
+
+    expect(context.returnTo).toBe(returnTo);
+    expect(authReturnDestination(context, 'COMPLETED')).toBe(returnTo);
   });
 
   it('keeps two projects independent when completed in reverse order', async () => {

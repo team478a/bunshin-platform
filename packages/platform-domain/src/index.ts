@@ -116,7 +116,9 @@ export interface GroupInvitation {
   expiresAt: Date;
   maxUses: number;
   usedCount: number;
-  createdByUserId: string;
+  createdByUserId: string | null;
+  source: 'MANUAL' | 'LINE_FOLLOW';
+  sourceEventId: string | null;
   createdAt: Date;
   updatedAt: Date;
 }

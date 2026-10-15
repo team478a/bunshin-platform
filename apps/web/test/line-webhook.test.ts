@@ -111,6 +111,8 @@ describe('group dedicated LINE webhook adapter', () => {
     accessToken: 'dedicated-access-token',
     serviceSlug: 'sample-service',
     serviceName: 'サンプルサービス',
+    registrationMode: 'INVITATION_ONLY',
+    registrationLineEnabled: true,
   };
 
   it('does not reveal whether a malformed routing key exists', async () => {
@@ -234,15 +236,64 @@ describe('group dedicated LINE webhook adapter', () => {
     });
   });
 
-  it('does not reply again when LINE retries an already processed follow event', async () => {
+  it('creates an individual one-use invitation for a new follower of an invitation-only service', async () => {
     const body = JSON.stringify({
       events: [
         {
           type: 'follow',
           timestamp: 1787378400000,
-          webhookEventId: 'evt-duplicate-follow',
-          replyToken: 'retry-reply-token',
+          webhookEventId: 'evt-invite-follow',
+          replyToken: 'reply-token',
           source: { type: 'user', userId: 'UnewFollower' },
+        },
+      ],
+    });
+    const signature = createHmac('sha256', scope.secret).update(body).digest('base64');
+    const processor = {
+      execute: vi.fn().mockResolvedValue({ outcomes: { CONNECTION_NOT_FOUND: 1 } }),
+    };
+    const followInvitations = { create: vi.fn().mockResolvedValue(true) };
+    const followReply = { send: vi.fn().mockResolvedValue(true) };
+
+    await handleGroupLineWebhook(
+      new Request(`https://example.com/api/line/groups/${routingKey}/webhook`, {
+        method: 'POST',
+        headers: { 'x-line-signature': signature },
+        body,
+      }),
+      routingKey,
+      {
+        environment: 'PRODUCTION',
+        configurations: { get: vi.fn().mockResolvedValue(scope) },
+        processor: processor as never,
+        followInvitations,
+        followReply,
+      },
+    );
+
+    expect(followInvitations.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceId: scope.workspaceId,
+        groupId: scope.groupId,
+        sourceEventId: 'evt-invite-follow',
+        tokenHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+        expiresAt: expect.any(Date),
+      }),
+    );
+    const sent = followReply.send.mock.calls[0]?.[0];
+    expect(sent?.participationUrl).toMatch(
+      /^https:\/\/example\.com\/s\/sample-service\/join\/[A-Za-z0-9_-]{43}$/,
+    );
+  });
+
+  it('does not send an invitation when the invitation record cannot be created', async () => {
+    const body = JSON.stringify({
+      events: [
+        {
+          type: 'follow',
+          timestamp: 1787378400000,
+          webhookEventId: 'evt-failed-invite',
+          replyToken: 'reply-token',
         },
       ],
     });
@@ -260,13 +311,92 @@ describe('group dedicated LINE webhook adapter', () => {
         environment: 'PRODUCTION',
         configurations: { get: vi.fn().mockResolvedValue(scope) },
         processor: {
-          execute: vi.fn().mockResolvedValue({ outcomes: { APPLIED: 0, DUPLICATE: 1 } }),
+          execute: vi.fn().mockResolvedValue({ outcomes: { CONNECTION_NOT_FOUND: 1 } }),
         } as never,
+        followInvitations: { create: vi.fn().mockResolvedValue(false) },
+        followReply,
+      },
+    );
+    expect(followReply.send).not.toHaveBeenCalled();
+  });
+
+  it('does not mint invitation links when LINE registration is disabled for the service', async () => {
+    const body = JSON.stringify({
+      events: [
+        {
+          type: 'follow',
+          timestamp: 1787378400000,
+          webhookEventId: 'evt-line-disabled',
+          replyToken: 'reply-token',
+        },
+      ],
+    });
+    const signature = createHmac('sha256', scope.secret).update(body).digest('base64');
+    const followInvitations = { create: vi.fn().mockResolvedValue(true) };
+    const followReply = { send: vi.fn().mockResolvedValue(true) };
+
+    await handleGroupLineWebhook(
+      new Request(`https://example.com/api/line/groups/${routingKey}/webhook`, {
+        method: 'POST',
+        headers: { 'x-line-signature': signature },
+        body,
+      }),
+      routingKey,
+      {
+        environment: 'PRODUCTION',
+        configurations: {
+          get: vi.fn().mockResolvedValue({ ...scope, registrationLineEnabled: false }),
+        },
+        processor: {
+          execute: vi.fn().mockResolvedValue({ outcomes: { CONNECTION_NOT_FOUND: 1 } }),
+        } as never,
+        followInvitations,
         followReply,
       },
     );
 
+    expect(followInvitations.create).not.toHaveBeenCalled();
+    expect(followReply.send).toHaveBeenCalledWith(
+      expect.objectContaining({ participationUrl: 'https://example.com/s/sample-service' }),
+    );
+  });
+
+  it('does not reply again when LINE retries an already processed follow event', async () => {
+    const body = JSON.stringify({
+      events: [
+        {
+          type: 'follow',
+          timestamp: 1787378400000,
+          webhookEventId: 'evt-duplicate-follow',
+          replyToken: 'retry-reply-token',
+          source: { type: 'user', userId: 'UnewFollower' },
+        },
+      ],
+    });
+    const signature = createHmac('sha256', scope.secret).update(body).digest('base64');
+    const followReply = { send: vi.fn().mockResolvedValue(true) };
+    const followInvitations = { create: vi.fn().mockResolvedValue(true) };
+
+    await handleGroupLineWebhook(
+      new Request(`https://example.com/api/line/groups/${routingKey}/webhook`, {
+        method: 'POST',
+        headers: { 'x-line-signature': signature },
+        body,
+      }),
+      routingKey,
+      {
+        environment: 'PRODUCTION',
+        configurations: { get: vi.fn().mockResolvedValue(scope) },
+        processor: {
+          execute: vi.fn().mockResolvedValue({ outcomes: { APPLIED: 0, DUPLICATE: 1 } }),
+        } as never,
+        followReply,
+        followInvitations,
+      },
+    );
+
     expect(followReply.send).not.toHaveBeenCalled();
+    expect(followInvitations.create).not.toHaveBeenCalled();
   });
 
   it('replies to a follow event before the user has completed participation registration', async () => {
@@ -283,6 +413,7 @@ describe('group dedicated LINE webhook adapter', () => {
     });
     const signature = createHmac('sha256', scope.secret).update(body).digest('base64');
     const followReply = { send: vi.fn().mockResolvedValue(true) };
+    const followInvitations = { create: vi.fn().mockResolvedValue(true) };
 
     await handleGroupLineWebhook(
       new Request(`https://example.com/api/line/groups/${routingKey}/webhook`, {
@@ -300,6 +431,7 @@ describe('group dedicated LINE webhook adapter', () => {
           }),
         } as never,
         followReply,
+        followInvitations,
       },
     );
 
@@ -307,7 +439,9 @@ describe('group dedicated LINE webhook adapter', () => {
       accessToken: scope.accessToken,
       replyToken: 'unregistered-reply-token',
       serviceName: scope.serviceName,
-      participationUrl: 'https://example.com/s/sample-service',
+      participationUrl: expect.stringMatching(
+        /^https:\/\/example\.com\/s\/sample-service\/join\/[A-Za-z0-9_-]{43}$/,
+      ),
     });
   });
 });

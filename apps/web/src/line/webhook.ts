@@ -6,9 +6,11 @@ import {
   type LineWebhookEventType,
 } from '@bunshin/application';
 import { getServerEnvironment } from '@bunshin/config';
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
 import { AesGcmLineSecretCrypto, currentLineEnvironment } from './secure-configuration';
+import { GroupParticipationService } from '@bunshin/application';
+import { groupInvitationTokenHash } from '../http/group-invitations';
 
 const webhookBody = z
   .object({
@@ -134,6 +136,8 @@ export interface ActiveGroupLineWebhookConfigurationPort {
     accessToken: string;
     serviceSlug: string | null;
     serviceName: string | null;
+    registrationMode: string | null;
+    registrationLineEnabled: boolean;
   } | null>;
 }
 
@@ -144,6 +148,26 @@ export interface GroupLineFollowReplyPort {
     serviceName: string;
     participationUrl: string;
   }): Promise<boolean>;
+}
+
+export interface GroupLineFollowInvitationPort {
+  create(input: {
+    workspaceId: string;
+    groupId: string;
+    tokenHash: string;
+    sourceEventId: string;
+    expiresAt: Date;
+  }): Promise<boolean>;
+}
+
+class DatabaseGroupLineFollowInvitation implements GroupLineFollowInvitationPort {
+  async create(input: Parameters<GroupLineFollowInvitationPort['create']>[0]) {
+    const db = await import('@bunshin/database');
+    const invitation = await new GroupParticipationService(
+      new db.PrismaGroupParticipationRepository(),
+    ).createLineFollowInvitation(input);
+    return invitation !== null;
+  }
 }
 
 export class LineGroupFollowReply implements GroupLineFollowReplyPort {
@@ -217,7 +241,13 @@ export class PrismaActiveGroupLineWebhookConfiguration implements ActiveGroupLin
         encryptedAccessToken: true,
         group: {
           select: {
-            serviceConfiguration: { select: { slug: true, displayName: true } },
+            serviceConfiguration: {
+              select: {
+                slug: true,
+                displayName: true,
+                registration: { select: { mode: true, lineEnabled: true } },
+              },
+            },
           },
         },
       },
@@ -231,6 +261,9 @@ export class PrismaActiveGroupLineWebhookConfiguration implements ActiveGroupLin
           accessToken: this.crypto.decrypt(configuration.encryptedAccessToken),
           serviceSlug: configuration.group.serviceConfiguration?.slug ?? null,
           serviceName: configuration.group.serviceConfiguration?.displayName ?? null,
+          registrationMode: configuration.group.serviceConfiguration?.registration?.mode ?? null,
+          registrationLineEnabled:
+            configuration.group.serviceConfiguration?.registration?.lineEnabled ?? false,
         }
       : null;
   }
@@ -244,6 +277,7 @@ export async function handleGroupLineWebhook(
     configurations?: ActiveGroupLineWebhookConfigurationPort;
     processor?: ProcessGroupLineWebhookEvents;
     followReply?: GroupLineFollowReplyPort;
+    followInvitations?: GroupLineFollowInvitationPort;
   } = {},
 ) {
   if (!z.string().uuid().safeParse(routingKey).success)
@@ -288,11 +322,31 @@ export async function handleGroupLineWebhook(
       scoped.serviceName
     ) {
       const baseUrl = getServerEnvironment().APP_URL;
+      let participationUrl = new URL(`/s/${scoped.serviceSlug}`, baseUrl).toString();
+      if (
+        result?.outcomes.CONNECTION_NOT_FOUND === 1 &&
+        scoped.registrationMode === 'INVITATION_ONLY' &&
+        scoped.registrationLineEnabled
+      ) {
+        const token = randomBytes(32).toString('base64url');
+        const created = await (
+          dependencies.followInvitations ?? new DatabaseGroupLineFollowInvitation()
+        ).create({
+          workspaceId: scoped.workspaceId,
+          groupId: scoped.groupId,
+          tokenHash: groupInvitationTokenHash(token),
+          sourceEventId: event.providerEventId,
+          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        });
+        // Never send a token unless the invitation was durably created.
+        if (!created) continue;
+        participationUrl = new URL(`/s/${scoped.serviceSlug}/join/${token}`, baseUrl).toString();
+      }
       await (dependencies.followReply ?? new LineGroupFollowReply()).send({
         accessToken: scoped.accessToken,
         replyToken,
         serviceName: scoped.serviceName,
-        participationUrl: new URL(`/s/${scoped.serviceSlug}`, baseUrl).toString(),
+        participationUrl,
       });
     }
   }

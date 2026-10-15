@@ -16,6 +16,9 @@ export default async function LoginPage({
   const returnTo = safeLineAuthReturnPath(query.returnTo);
   const videoProjectId = videoAuthReturnProjectId(returnTo);
   const serviceSlug = serviceAuthReturnSlug(returnTo);
+  const returnsToInvitation = Boolean(
+    returnTo && /^\/s\/[a-z0-9]+(?:-[a-z0-9]+)*\/join\/[A-Za-z0-9_-]{43}$/.test(returnTo),
+  );
   let serviceConfiguration = null;
   if (serviceSlug) {
     try {
@@ -97,6 +100,11 @@ export default async function LoginPage({
           <div className="notice notice--danger" role="alert">
             <strong>メールを送れませんでした</strong>
             <span>少し時間を空けて再度お試しいただくか、LINEでログインしてください。</span>
+          </div>
+        )}
+        {returnsToInvitation && (
+          <div className="notice" role="status">
+            LINEログイン後は、ログインを始めたブラウザの招待画面に戻ります。LINEのトーク画面ではなく、戻った招待画面で内容を確認して「同意して参加する」を押してください。
           </div>
         )}
         <form action={videoProjectId ? '/auth/video-line/start' : '/auth/line'} method="post">
