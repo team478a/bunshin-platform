@@ -190,6 +190,16 @@ describe('trusted Pilot operations HTTP', () => {
       (await response(request({ ...command, reviewEvidenceKey: 'x'.repeat(3000) }), 'slug')).status,
     ).toBe(413);
   });
+  it('returns only allowlisted Pilot conflict reasons for Japanese operator guidance', async () => {
+    f.change.mockRejectedValue(new ApplicationError('CONFLICT', 'PILOT_START_NOT_READY'));
+    const responseWithReason = await response(request({ ...command, action: 'START' }), 'slug');
+    expect(responseWithReason.status).toBe(409);
+    expect((await responseWithReason.json()).error.reason).toBe('PILOT_START_NOT_READY');
+
+    f.change.mockRejectedValue(new ApplicationError('CONFLICT', 'PRIVATE_INTERNAL_DETAIL'));
+    const responseWithoutReason = await response(request(), 'slug');
+    expect((await responseWithoutReason.json()).error.reason).toBeUndefined();
+  });
   it('operation authority/flag revocation after lookup is denied', async () => {
     f.service.mockImplementation(() => {
       vi.stubEnv('PERSONAL_LEARNING_PILOT_OPERATIONS', 'false');
