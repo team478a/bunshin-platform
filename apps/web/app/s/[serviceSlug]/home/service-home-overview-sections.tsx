@@ -8,7 +8,7 @@ import { DeferRefinementButton } from '../onboarding/defer-refinement-button';
 interface ServiceHomeHeaderProps {
   displayName: string;
   logoUrl: string | null;
-  memberName: string;
+  memberName: string | null;
 }
 
 export function ServiceHomeHeader({ displayName, logoUrl, memberName }: ServiceHomeHeaderProps) {
@@ -24,7 +24,7 @@ export function ServiceHomeHeader({ displayName, logoUrl, memberName }: ServiceH
       )}
       <p className="eyebrow">あなたのサービスホーム</p>
       <h1>{displayName}</h1>
-      <p>{memberName}さん、今日も一緒に進めましょう。</p>
+      <p>{memberName?.trim() ? `${memberName.trim()}さん、` : ''}今日も一緒に進めましょう。</p>
     </header>
   );
 }
