@@ -5,6 +5,7 @@ interface MemberFeatureLinksProps {
   imageAvailable: boolean;
   isBusinessDailyService: boolean;
   isPersonalLearningService: boolean;
+  isPersonalLearningReady: boolean;
   isServiceOperator: boolean;
   promptOnlyImages: boolean;
   rewardsAvailable: boolean;
@@ -18,6 +19,7 @@ export function MemberFeatureLinks(props: MemberFeatureLinksProps) {
     imageAvailable,
     isBusinessDailyService,
     isPersonalLearningService,
+    isPersonalLearningReady,
     isServiceOperator,
     promptOnlyImages,
     rewardsAvailable,
@@ -25,6 +27,17 @@ export function MemberFeatureLinks(props: MemberFeatureLinksProps) {
     trackingLinkAvailable,
     videoAvailable,
   } = props;
+  if (isPersonalLearningService && !isPersonalLearningReady) {
+    return (
+      <section className="service-entry__card">
+        <h2>学習の準備</h2>
+        <p>AI研修の準備中です。開始のご案内をお待ちください。</p>
+        <Link className="button" href={`/s/${serviceSlug}/help` as Route}>
+          使い方・困ったとき
+        </Link>
+      </section>
+    );
+  }
   return (
     <section className="service-entry__card">
       <h2>

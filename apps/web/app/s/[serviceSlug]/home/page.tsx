@@ -242,16 +242,20 @@ export default async function ServiceMemberHome({
           currentDate: localDate,
         })
       : null;
-  const isPersonalLearningService = Boolean(
-    await db.prisma.serviceProgram.findFirst({
-      where: {
-        workspaceId: service.workspaceId,
-        groupId: service.serviceId,
-        status: 'ACTIVE',
-        settings: { path: ['moduleKey'], equals: AI_TRAINING_V1_MODULE_KEY },
-      },
-      select: { id: true },
-    }),
+  const personalLearningPrograms = await db.prisma.serviceProgram.findMany({
+    where: {
+      workspaceId: service.workspaceId,
+      groupId: service.serviceId,
+      status: { not: 'ARCHIVED' },
+      settings: { path: ['moduleKey'], equals: AI_TRAINING_V1_MODULE_KEY },
+    },
+    select: { status: true },
+  });
+  // The service identity survives a reserved Pilot being SUSPENDED before Wave 0.
+  // Archived Programs are historical and must not change the current service UX.
+  const isPersonalLearningService = personalLearningPrograms.length > 0;
+  const isPersonalLearningReady = personalLearningPrograms.some(
+    (program) => program.status === 'ACTIVE',
   );
   const currentWeek = weekRange(localDate);
   const activityRule = await currentActivityContinuityRule();
@@ -312,7 +316,7 @@ export default async function ServiceMemberHome({
         {isServiceAnnouncementVisible(announcement, now) && (
           <ServiceAnnouncementSection message={announcement.message} title={announcement.title} />
         )}
-        {onboardingRefinement && (
+        {onboardingRefinement && !isPersonalLearningService && (
           <ProfileRefinementSection
             question={onboardingRefinement.question}
             serviceSlug={service.configuration.slug}
@@ -329,12 +333,14 @@ export default async function ServiceMemberHome({
           bunshinCount={bunshins.length}
           isBusinessDailyService={isBusinessDailyService}
           isPersonalLearningService={isPersonalLearningService}
+          isPersonalLearningReady={isPersonalLearningReady}
           serviceSlug={service.configuration.slug}
         />
         <MemberFeatureLinks
           imageAvailable={imageAvailable}
           isBusinessDailyService={isBusinessDailyService}
           isPersonalLearningService={isPersonalLearningService}
+          isPersonalLearningReady={isPersonalLearningReady}
           isServiceOperator={isServiceOperator}
           promptOnlyImages={promptOnlyImages}
           rewardsAvailable={Boolean(rewardsPilotAccess)}
@@ -348,7 +354,7 @@ export default async function ServiceMemberHome({
             serviceSlug={service.configuration.slug}
           />
         )}
-        {membership.serviceRole === 'CONTENT_EDITOR' && (
+        {membership.serviceRole === 'CONTENT_EDITOR' && !isPersonalLearningService && (
           <ContentEditorLinks
             isBusinessDailyService={isBusinessDailyService}
             serviceSlug={service.configuration.slug}
