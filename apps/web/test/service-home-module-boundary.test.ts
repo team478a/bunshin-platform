@@ -2,7 +2,10 @@ import { readFileSync } from 'node:fs';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { WeeklyActivitySection } from '../app/s/[serviceSlug]/home/service-home-overview-sections';
+import {
+  ServiceHomeHeader,
+  WeeklyActivitySection,
+} from '../app/s/[serviceSlug]/home/service-home-overview-sections';
 import { MemberFeatureLinks } from '../app/s/[serviceSlug]/home/service-home-navigation-sections';
 
 const pageSource = readFileSync(
@@ -19,6 +22,24 @@ const navigationSource = readFileSync(
 );
 
 describe('service home module boundary', () => {
+  it.each([
+    { displayName: 'はっしー', expected: 'はっしーさん、今日も一緒に進めましょう。' },
+    { displayName: null, expected: '今日も一緒に進めましょう。' },
+    { displayName: ' 　', expected: '今日も一緒に進めましょう。' },
+  ])('shows a safe home greeting for display name $displayName', ({ displayName, expected }) => {
+    const markup = renderToStaticMarkup(
+      createElement(ServiceHomeHeader, {
+        displayName: 'マナベルスタイル',
+        logoUrl: null,
+        memberName: displayName,
+      }),
+    );
+
+    expect(markup).toContain(expected);
+    expect(markup).not.toContain('undefined');
+    expect(markup).not.toContain('@');
+  });
+
   it('keeps scoped data loading in the server page', () => {
     expect(pageSource).toContain('resolveMemberServiceContext');
     expect(pageSource).toContain('groupMembership.findFirst');

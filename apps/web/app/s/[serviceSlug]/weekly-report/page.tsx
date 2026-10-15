@@ -73,7 +73,11 @@ export default async function ServiceWeeklyReportPage({
       <main className="service-entry weekly-report" style={style}>
         <header className="service-entry__header">
           <p className="eyebrow">今週のふり返り</p>
-          <h1>{report.displayName}さんのできたこと</h1>
+          <h1>
+            {report.displayName?.trim()
+              ? `${report.displayName.trim()}さんのできたこと`
+              : '今週のできたこと'}
+          </h1>
           <p>
             {dateLabel(window.weekStart)}〜{dateLabel(window.weekEnd)}
           </p>
