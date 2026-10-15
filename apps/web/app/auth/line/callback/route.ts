@@ -6,6 +6,7 @@ import {
 } from '../../../../src/auth/supabase';
 import { loginErrorResponse } from '../../../../src/auth/login-error';
 import { currentLineEnvironment } from '../../../../src/line/secure-configuration';
+import { lineFriendshipStatus } from '../../../../src/line/friendship-status';
 import { recordAuthenticatedRegistrationEvent } from '../../../../src/registration/funnel';
 import {
   singleAuthAttemptId,
@@ -37,22 +38,6 @@ function lineProviderUserId(user: {
   const value =
     typeof subject === 'string' ? subject : typeof userId === 'string' ? userId : identity.id;
   return /^[\x21-\x7e]{1,255}$/.test(value) ? value : null;
-}
-
-async function lineFriendshipStatus(providerToken: string | null | undefined) {
-  if (!providerToken || providerToken.length > 4096) return null;
-  try {
-    const response = await fetch('https://api.line.me/friendship/v1/status', {
-      headers: { authorization: `Bearer ${providerToken}` },
-      cache: 'no-store',
-      signal: AbortSignal.timeout(5_000),
-    });
-    if (!response.ok) return null;
-    const value = (await response.json()) as { friendFlag?: unknown };
-    return typeof value.friendFlag === 'boolean' ? value.friendFlag : null;
-  } catch {
-    return null;
-  }
 }
 
 export async function GET(request: Request): Promise<Response> {

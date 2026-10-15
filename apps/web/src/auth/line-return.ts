@@ -85,14 +85,17 @@ export function safeLineAuthReturnPath(value: string | null | undefined): string
     if (value.split('?')[0] !== url.pathname || url.pathname.includes('%')) return null;
     if (url.pathname === '/account') {
       const slug = url.searchParams.get('service');
+      const lineNotifications = url.searchParams.getAll('lineNotifications');
       if (
         !slug ||
         !new RegExp(`^${serviceSlugPattern}$`).test(slug) ||
         url.searchParams.getAll('service').length !== 1 ||
-        [...url.searchParams.keys()].some((key) => key !== 'service')
+        lineNotifications.length > 1 ||
+        (lineNotifications.length === 1 && lineNotifications[0] !== 'all') ||
+        [...url.searchParams.keys()].some((key) => key !== 'service' && key !== 'lineNotifications')
       )
         return null;
-      return `/account?service=${slug}`;
+      return `/account?service=${slug}${lineNotifications.length ? '&lineNotifications=all' : ''}`;
     }
     if (
       (servicePagePattern.test(url.pathname) ||
