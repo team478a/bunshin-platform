@@ -7,7 +7,11 @@ const f = vi.hoisted(() => ({
   read: vi.fn(),
   currentAssignment: vi.fn(),
   render: vi.fn(),
-  activate: vi.fn(),
+  createMenu: vi.fn(),
+  uploadImage: vi.fn(),
+  linkMenu: vi.fn(),
+  deleteMenu: vi.fn(),
+  logError: vi.fn(),
 }));
 vi.mock('server-only', () => ({}));
 vi.mock('@bunshin/database', () => ({
@@ -36,7 +40,13 @@ vi.mock('../src/line/default-rich-menu', () => ({
   renderPersonalLearningLineRichMenu: f.render,
 }));
 vi.mock('../src/line/group-rich-menu-provider', () => ({
-  activatePersonalLearningGroupRichMenu: f.activate,
+  createPersonalLearningGroupRichMenu: f.createMenu,
+  uploadPersonalLearningGroupRichMenuImage: f.uploadImage,
+  linkGroupRichMenuToUser: f.linkMenu,
+  deleteGroupRichMenu: f.deleteMenu,
+}));
+vi.mock('@bunshin/observability', () => ({
+  createLogger: () => ({ child: () => ({ error: f.logError }) }),
 }));
 import {
   activatePersonalLearningLineMenu,
@@ -58,6 +68,7 @@ const connection = {
   configurationId: '00000000-0000-4000-8000-000000000007',
   providerUserId: 'U-learner',
   personalLearningRichMenuId: null as string | null,
+  personalLearningRichMenuPendingId: null as string | null,
   personalLearningRichMenuLinkedAt: null as Date | null,
   personalLearningRichMenuContentHash: null as string | null,
   configuration: { encryptedAccessToken: 'encrypted-test-token' },
@@ -74,10 +85,10 @@ describe('personal learning LINE menu service', () => {
     });
     f.currentAssignment.mockResolvedValue({ display: { title: '今回の実践' } });
     f.render.mockResolvedValue(Buffer.from([1, 2, 3]));
-    f.activate.mockImplementation(async (input: { onCreated?: (id: string) => Promise<void> }) => {
-      await input.onCreated?.('richmenu-1');
-      return { lineRichMenuId: 'richmenu-1' };
-    });
+    f.createMenu.mockResolvedValue('richmenu-1');
+    f.uploadImage.mockResolvedValue(undefined);
+    f.linkMenu.mockResolvedValue(undefined);
+    f.deleteMenu.mockResolvedValue(undefined);
   });
 
   it('requires active, followed, service-scoped dedicated LINE and reports status only', async () => {
@@ -105,14 +116,14 @@ describe('personal learning LINE menu service', () => {
     });
   });
 
-  it('stores the created menu before linking and reuses the existing ID', async () => {
+  it('stores a pending menu before upload, links it, then commits the new menu ID', async () => {
     await expect(
       activatePersonalLearningLineMenu({ actor, serviceSlug: 'manaberu-style' }),
     ).resolves.toEqual({ linked: true });
-    expect(f.activate).toHaveBeenCalledWith(
+    expect(f.createMenu).toHaveBeenCalledWith(
       expect.objectContaining({
-        providerUserId: 'U-learner',
-        existingLineRichMenuId: null,
+        groupId: actor.scope.groupId,
+        enrollmentId: actor.scope.programEnrollmentId,
         appUrl: 'https://app.example.com',
       }),
     );
@@ -124,15 +135,24 @@ describe('personal learning LINE menu service', () => {
           groupId: actor.scope.groupId,
           groupMembershipId: actor.scope.groupMembershipId,
           userId: actor.actorUserId,
-          providerUserId: 'U-learner',
+          personalLearningRichMenuPendingId: null,
         }),
-        data: { personalLearningRichMenuId: 'richmenu-1' },
+        data: { personalLearningRichMenuPendingId: 'richmenu-1' },
       }),
+    );
+    expect(f.uploadImage).toHaveBeenCalledWith(
+      expect.objectContaining({ lineRichMenuId: 'richmenu-1' }),
+    );
+    expect(f.linkMenu).toHaveBeenCalledWith(
+      expect.objectContaining({ providerUserId: 'U-learner', lineRichMenuId: 'richmenu-1' }),
     );
     expect(f.updateConnection).toHaveBeenNthCalledWith(
       2,
       expect.objectContaining({
+        where: expect.objectContaining({ personalLearningRichMenuPendingId: 'richmenu-1' }),
         data: expect.objectContaining({
+          personalLearningRichMenuId: 'richmenu-1',
+          personalLearningRichMenuPendingId: null,
           personalLearningRichMenuLinkedAt: expect.any(Date),
           personalLearningRichMenuContentHash: expect.stringMatching(/^[a-f0-9]{64}$/),
         }),
@@ -154,8 +174,87 @@ describe('personal learning LINE menu service', () => {
     await expect(
       activatePersonalLearningLineMenu({ actor, serviceSlug: 'manaberu-style' }),
     ).resolves.toEqual({ linked: true });
-    expect(f.activate).not.toHaveBeenCalled();
+    expect(f.createMenu).not.toHaveBeenCalled();
+    expect(f.uploadImage).not.toHaveBeenCalled();
+    expect(f.linkMenu).not.toHaveBeenCalled();
     expect(f.updateConnection).not.toHaveBeenCalled();
+  });
+
+  it('cleans an earlier pending menu before creating a replacement', async () => {
+    f.findConnection.mockResolvedValueOnce({
+      ...connection,
+      personalLearningRichMenuPendingId: 'richmenu-pending',
+    });
+    await expect(
+      activatePersonalLearningLineMenu({ actor, serviceSlug: 'manaberu-style' }),
+    ).resolves.toEqual({ linked: true });
+    expect(f.deleteMenu).toHaveBeenCalledWith(
+      expect.objectContaining({ lineRichMenuId: 'richmenu-pending' }),
+    );
+    expect(f.updateConnection).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        where: expect.objectContaining({ personalLearningRichMenuPendingId: 'richmenu-pending' }),
+        data: { personalLearningRichMenuPendingId: null },
+      }),
+    );
+    expect(f.updateConnection).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ data: { personalLearningRichMenuPendingId: 'richmenu-1' } }),
+    );
+  });
+
+  it('retains the new ID for retry when upload or user linking fails', async () => {
+    f.linkMenu.mockRejectedValueOnce(new Error('provider unavailable'));
+    await expect(
+      activatePersonalLearningLineMenu({ actor, serviceSlug: 'manaberu-style' }),
+    ).rejects.toThrow('provider unavailable');
+    expect(f.updateConnection).toHaveBeenCalledTimes(1);
+    expect(f.updateConnection.mock.calls[0]?.[0]).toMatchObject({
+      data: { personalLearningRichMenuPendingId: 'richmenu-1' },
+    });
+    expect(f.updateConnection.mock.calls[0]?.[0]).not.toMatchObject({
+      data: expect.objectContaining({ personalLearningRichMenuId: 'richmenu-1' }),
+    });
+  });
+
+  it('keeps the successful replacement when deletion of the old menu fails and logs the cleanup', async () => {
+    f.findConnection.mockResolvedValueOnce({
+      ...connection,
+      personalLearningRichMenuId: 'richmenu-old',
+      personalLearningRichMenuLinkedAt: new Date('2026-10-01T00:00:00Z'),
+      personalLearningRichMenuContentHash: 'old-hash',
+    });
+    f.deleteMenu.mockRejectedValueOnce(new Error('delete failed'));
+    await expect(
+      activatePersonalLearningLineMenu({ actor, serviceSlug: 'manaberu-style' }),
+    ).resolves.toEqual({ linked: true });
+    expect(f.logError).toHaveBeenCalledWith(
+      'previous personal LINE menu cleanup failed',
+      expect.objectContaining({ lineRichMenuId: 'richmenu-old', error: 'delete failed' }),
+    );
+    expect(f.updateConnection).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        data: expect.objectContaining({ personalLearningRichMenuId: 'richmenu-1' }),
+      }),
+    );
+  });
+
+  it('keeps an ID in Pending when the active-connection compare-and-set loses a race', async () => {
+    f.updateConnection.mockResolvedValueOnce({ count: 0 }).mockResolvedValueOnce({ count: 1 });
+    await expect(
+      activatePersonalLearningLineMenu({ actor, serviceSlug: 'manaberu-style' }),
+    ).rejects.toThrow('Manaberu LINE connection changed');
+    expect(f.updateConnection).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        where: expect.objectContaining({ personalLearningRichMenuPendingId: null }),
+        data: { personalLearningRichMenuPendingId: 'richmenu-1' },
+      }),
+    );
+    expect(f.uploadImage).not.toHaveBeenCalled();
+    expect(f.linkMenu).not.toHaveBeenCalled();
   });
 
   it('fails closed without a followed connection or a confirmed current assignment', async () => {
@@ -168,6 +267,6 @@ describe('personal learning LINE menu service', () => {
     await expect(
       activatePersonalLearningLineMenu({ actor, serviceSlug: 'manaberu-style' }),
     ).rejects.toThrow('current practice is required');
-    expect(f.activate).not.toHaveBeenCalled();
+    expect(f.createMenu).not.toHaveBeenCalled();
   });
 });
