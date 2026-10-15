@@ -11,6 +11,8 @@ const state = vi.hoisted(() => ({
   email: vi.fn(),
   commit: vi.fn(),
   accept: vi.fn(),
+  activateNotifications: vi.fn(),
+  friendshipStatus: vi.fn(),
   actor: '11111111-1111-4111-8111-111111111111',
   identityOwner: '11111111-1111-4111-8111-111111111111',
   lineIdentityOwner: null as string | null,
@@ -20,6 +22,12 @@ const state = vi.hoisted(() => ({
 vi.mock('server-only', () => ({}));
 vi.mock('@bunshin/observability', () => ({
   createLogger: () => ({ error: state.logError }),
+}));
+vi.mock('../src/line/friendship-status', () => ({
+  lineFriendshipStatus: state.friendshipStatus,
+}));
+vi.mock('../src/line/enable-service-bunshin-notifications', () => ({
+  enableServiceBunshinNotifications: state.activateNotifications,
 }));
 vi.mock('next/headers', () => ({
   headers: () => Promise.resolve(new Headers({ cookie: state.cookie })),
@@ -184,6 +192,8 @@ describe('attempt-scoped route contracts', () => {
     state.otp.mockResolvedValue({ data: { user: { email: 'member@example.com' } }, error: null });
     state.commit.mockResolvedValue(undefined);
     state.accept.mockResolvedValue(undefined);
+    state.activateNotifications.mockResolvedValue('ENABLED');
+    state.friendshipStatus.mockResolvedValue(null);
   });
 
   it('completes projects in reverse order using their own native PKCE flow IDs', async () => {
@@ -237,6 +247,55 @@ describe('attempt-scoped route contracts', () => {
       flowId: 'line-link-flow-12345678',
     });
     expect(attemptRows.get(attempt.id)?.stage).toBe('CONSUMED');
+  });
+
+  it('binds the explicit service-wide notification choice to the LINE link attempt', async () => {
+    vi.stubEnv('LINE_IDENTITY_LINKING_ENABLED', 'true');
+    const started = await startLineLink(
+      post('/auth/line/link', {
+        returnTo: '/account?service=manaberu-style',
+        lineNotifications: 'all',
+      }),
+    );
+    const attempt = proof(started);
+    expect(attemptRows.get(attempt.id)?.returnPath).toBe(
+      '/account?service=manaberu-style&lineNotifications=all',
+    );
+    state.exchange.mockResolvedValueOnce({
+      ...lineSuccess,
+      data: { ...lineSuccess.data, session: { provider_token: 'provider-token' } },
+    });
+    state.friendshipStatus.mockResolvedValueOnce(true);
+
+    const completed = await finishLineLink(
+      new Request(`${origin}/auth/line/link/callback?code=linked-code&authAttempt=${attempt.id}`, {
+        headers: { cookie: attempt.cookie },
+      }),
+    );
+
+    expect(location(completed).pathname).toBe('/s/manaberu-style/line');
+    expect(location(completed).searchParams.get('lineResult')).toBe('ENABLED');
+    expect(state.activateNotifications).toHaveBeenCalledWith({
+      serviceSlug: 'manaberu-style',
+      actorUserId: state.actor,
+      verifiedProviderUserId: 'U1234567890',
+      friendshipConfirmed: true,
+    });
+  });
+
+  it('does not enable notifications when the user links LINE without opting in', async () => {
+    vi.stubEnv('LINE_IDENTITY_LINKING_ENABLED', 'true');
+    const started = await startLineLink(
+      post('/auth/line/link', { returnTo: '/account?service=manaberu-style' }),
+    );
+    const attempt = proof(started);
+    const completed = await finishLineLink(
+      new Request(`${origin}/auth/line/link/callback?code=linked-code&authAttempt=${attempt.id}`, {
+        headers: { cookie: attempt.cookie },
+      }),
+    );
+    expect(location(completed).pathname).toBe('/account');
+    expect(state.activateNotifications).not.toHaveBeenCalled();
   });
 
   it('keeps LINE identity linking disabled until its explicit environment gate is enabled', async () => {

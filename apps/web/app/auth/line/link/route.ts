@@ -32,6 +32,18 @@ export async function POST(request: Request): Promise<Response> {
       typeof requestedReturnTo === 'string' ? requestedReturnTo : null,
     );
     if (requestedReturnTo && !returnTo) throw new AuthReturnContextError();
+    const notificationValues = form.getAll('lineNotifications');
+    if (
+      notificationValues.length > 1 ||
+      (notificationValues.length === 1 && notificationValues[0] !== 'all')
+    )
+      throw new AuthReturnContextError();
+    if (notificationValues[0] === 'all') {
+      const serviceSlug = returnTo?.match(/^\/account\?service=([a-z0-9]+(?:-[a-z0-9]+)*)$/)?.[1];
+      if (!serviceSlug) throw new AuthReturnContextError();
+      returnTo = safeLineAuthReturnPath(`/account?service=${serviceSlug}&lineNotifications=all`);
+      if (!returnTo) throw new AuthReturnContextError();
+    }
 
     const supabase = await createSupabaseServerClient();
     const { data: verified, error: verificationError } = await supabase.auth.getUser();

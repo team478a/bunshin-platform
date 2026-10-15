@@ -2,6 +2,8 @@ import { createHash } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import { createLogger } from '@bunshin/observability';
 import { currentUserProvider } from '../../../../../src/auth/current-user';
+import { lineFriendshipStatus } from '../../../../../src/line/friendship-status';
+import { enableServiceBunshinNotifications } from '../../../../../src/line/enable-service-bunshin-notifications';
 import { createSupabaseAttemptClient } from '../../../../../src/auth/supabase';
 import { loginErrorResponse } from '../../../../../src/auth/login-error';
 import {
@@ -134,7 +136,47 @@ export async function GET(request: Request): Promise<Response> {
     await authenticateAuthReturnAttempt(context, actor.userId);
     ownedStage = 'AUTHENTICATED';
     await consumeAuthReturnAttempt(context, actor.userId);
-    const response = NextResponse.redirect(destination(context.returnTo, request.url), 303);
+    const returnUrl = context.returnTo ? new URL(context.returnTo, request.url) : null;
+    const requestedServiceSlug =
+      returnUrl?.pathname === '/account' &&
+      returnUrl.searchParams.get('lineNotifications') === 'all'
+        ? returnUrl.searchParams.get('service')
+        : null;
+    let notificationResult: string | null = null;
+    if (requestedServiceSlug) {
+      const friendshipConfirmed =
+        (await lineFriendshipStatus(data.session?.provider_token)) === true;
+      try {
+        notificationResult = await enableServiceBunshinNotifications({
+          serviceSlug: requestedServiceSlug,
+          actorUserId: actor.userId,
+          verifiedProviderUserId: providerUserId,
+          friendshipConfirmed,
+        });
+      } catch (notificationError) {
+        // Identity linking has already succeeded. Keep that success and direct the user to
+        // the service's LINE settings instead of presenting a misleading login failure.
+        notificationResult = 'ACTIVATION_FAILED';
+        createLogger().error('service line notification activation failed', {
+          serviceSlug: requestedServiceSlug,
+          errorCode:
+            notificationError instanceof Error &&
+            /^[A-Z0-9_]{1,64}$/.test(notificationError.message)
+              ? notificationError.message
+              : 'ACTIVATION_FAILED',
+        });
+      }
+    }
+    const serviceLineReturn = requestedServiceSlug
+      ? new URL(
+          `/s/${requestedServiceSlug}/line?lineResult=${notificationResult ?? 'ACTIVATION_FAILED'}`,
+          request.url,
+        )
+      : null;
+    const response = NextResponse.redirect(
+      serviceLineReturn ?? destination(context.returnTo, request.url),
+      303,
+    );
     response.headers.set('cache-control', 'no-store');
     return clearAuthReturnCookie(response, context);
   } catch (error) {

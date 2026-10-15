@@ -4241,3 +4241,12 @@
 - LINE開始・callback失敗はメールログイン失敗と異なるエラー種別で返し、サービスの戻り先を維持してLINE認証に即した案内を出す。認証失敗の詳細・秘密情報は画面へ出さず、ログイン成功を保証する表示もしない。
 - DB schema、LINE設定、認証Provider、本番設定は変更しない。CI後の本番反映とLINE実機確認は別途行う。
 - 追加条件: 独立ブランドのLINEリンクは、未ログイン時に公開Serviceとして解決できない場合がある。`manaberu-style`、`hassy`、`sennokuni-media`の明示allowlistに限り、ブランド名とpowered-by表示だけを固定値から出す。参加状態・登録状態・運営連絡先などは推測・表示せず、未知slugは共通表示のままとする。
+
+## 2026-10-15: LINEログイン連携とサービス通知の有効化を分離し、サービス内の全Bunshinは明示同意で一括設定する
+
+- 状態: PR-Cの実装判断。メールアカウントへのLINE identity連携はPR-A/#1296、失敗時補償はPR-B/#1297でmainへ反映済み。通知連携・本番設定・実機検証は未完了。
+- LINE login identityはログイン認証用、LineConnection/GroupLineConnectionはMessaging配信用、LineNotificationPreferenceはBunshinごとの通知同意・設定用とし、互いを暗黙に推定しない。
+- サービス利用者が通知を明示的に選択した場合、選択されたサービス内の本人所有かつ有効な全Bunshinを対象とする。他サービス、別Workspace、他UserのBunshinは変更しない。
+- SHARED routingは当該Workspaceに本人の有効なLINE接続があり、友だち状態を確認できる場合にのみ通知設定を有効化する。DEDICATED routingは当該Service専用接続・友だち状態・参加同意・運用設定を別途満たす必要があり、共通接続で代用しない。
+- 実装は既存の通知設定・配信・認可境界を再利用し、通知Preferencesの重複テーブルや横断的なWorkspace検索を追加しない。新規の通知同意なしに既存設定を有効化しない。
+- production Migration、環境変数変更、実LINE送信、実利用者の設定変更は本判断・PRの範囲外。CI後にLINE内ブラウザでLINEログイン、明示同意、友だち未追加、SHARED/DEDICATED routingを別々に確認する。
