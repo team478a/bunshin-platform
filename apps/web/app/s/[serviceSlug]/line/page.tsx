@@ -17,6 +17,7 @@ export default async function ServiceLineSettingsPage({
   searchParams: Promise<{ lineResult?: string }>;
 }) {
   const { serviceSlug } = await params;
+  const lineResult = (await searchParams).lineResult;
   const actor = await (await currentUserProvider()).getCurrentUser();
   if (!actor) redirect(`/login?returnTo=${encodeURIComponent(`/s/${serviceSlug}/line`)}` as Route);
   const settings = await loadServiceLineSettings(serviceSlug, actor.userId).catch(
@@ -28,7 +29,7 @@ export default async function ServiceLineSettingsPage({
   const { service, mode, partners, available, connected, consented } = settings;
   const slug = service.configuration.slug;
   if (settings.learningService) {
-    const result = (await searchParams).lineResult;
+    const result = lineResult;
     const ready = mode === 'DEDICATED' && available && consented;
     return (
       <PublicShell showPlatformBrand={false}>
@@ -43,6 +44,14 @@ export default async function ServiceLineSettingsPage({
           <section className="settings-card form-stack">
             {result === 'follow-required' ? (
               <p role="status">公式LINEを友だち追加してから、もう一度接続を確認してください。</p>
+            ) : result === 'DEDICATED_LINE_REQUIRED' ? (
+              <p role="status">
+                LINEログインの連携は完了しました。通知を受け取るには、この画面から学習用公式LINEの接続と友だち状態を別途確認してください。
+              </p>
+            ) : result === 'ENABLED' ? (
+              <p role="status">
+                LINEログインの連携は完了しました。学習用LINEの接続は、この画面で別途確認してください。
+              </p>
             ) : result && result !== 'connected' ? (
               <p role="alert">
                 LINE接続を完了できませんでした。この画面からもう一度お試しください。繰り返す場合は運営者へお問い合わせください。
@@ -84,6 +93,39 @@ export default async function ServiceLineSettingsPage({
           <p>このサービスからのお知らせを受け取るLINEを確認できます。</p>
         </header>
         <section className="settings-card">
+          {lineResult === 'ENABLED' ? (
+            <p role="status">
+              このサービス内の投稿パートナー全員について、LINE通知を有効にしました。
+            </p>
+          ) : lineResult === 'FRIENDSHIP_NOT_CONFIRMED' ? (
+            <p role="status">
+              LINE連携は完了しました。公式LINEを友だち追加後、この画面から通知設定を確認してください。
+            </p>
+          ) : lineResult === 'DEDICATED_LINE_REQUIRED' ? (
+            <p role="status">
+              このサービスは専用LINEを使用します。各投稿パートナーの接続画面で専用LINEの友だち状態を確認してください。
+            </p>
+          ) : lineResult === 'LEGAL_CONSENT_REQUIRED' ? (
+            <p role="status">先にこのサービスの利用規約などへの同意が必要です。</p>
+          ) : lineResult === 'LINE_DISABLED' ? (
+            <p role="status">このサービスではLINE通知を利用していません。</p>
+          ) : lineResult === 'NO_BUNSHINS' ? (
+            <p role="status">
+              LINE連携は完了しました。通知を受け取る投稿パートナーを作成してください。
+            </p>
+          ) : lineResult === 'BUNSHIN_NOT_READY' ? (
+            <p role="status">
+              LINE連携は完了しました。一部の投稿パートナーで投稿設定が未完了のため、通知は有効化していません。設定を確認してください。
+            </p>
+          ) : lineResult === 'ACTIVATION_FAILED' ? (
+            <p role="status">
+              LINE連携は完了しましたが、通知設定を確認できませんでした。この画面から接続状態を確認してください。
+            </p>
+          ) : lineResult === 'SCHEDULING_RETRY_REQUIRED' ? (
+            <p role="status">
+              通知設定は保存されましたが、日々のお知らせの準備登録が完了しませんでした。ボタンをもう一度押して再試行してください。
+            </p>
+          ) : null}
           {mode === 'DISABLED' ? (
             <p>このサービスではLINE配信を利用していません。</p>
           ) : mode === 'SHARED' ? (
@@ -109,6 +151,21 @@ export default async function ServiceLineSettingsPage({
               </p>
             </>
           )}
+          {mode === 'SHARED' && partners.length > 0 ? (
+            <form
+              action={`/api/services/${encodeURIComponent(slug)}/line-notifications/enable`}
+              method="post"
+              className="form-stack"
+            >
+              <label>
+                <input name="lineNotifications" type="checkbox" value="all" required />
+                このサービス内の全ての投稿パートナーについて、LINEで日々のお知らせを受け取る
+              </label>
+              <button className="button button--primary button--full" type="submit">
+                全ての投稿パートナーでLINE通知を有効にする
+              </button>
+            </form>
+          ) : null}
           {mode !== 'DISABLED' && (mode === 'SHARED' || (available && consented)) ? (
             partners.length === 0 ? (
               <>

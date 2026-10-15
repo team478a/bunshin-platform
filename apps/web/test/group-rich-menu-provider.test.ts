@@ -1,10 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 vi.mock('server-only', () => ({}));
 import {
-  activatePersonalLearningGroupRichMenu,
+  createPersonalLearningGroupRichMenu,
+  deleteGroupRichMenu,
   linkGroupRichMenuToUser,
   publishDefaultGroupRichMenu,
   unlinkGroupRichMenuFromUser,
+  uploadPersonalLearningGroupRichMenuImage,
 } from '../src/line/group-rich-menu-provider';
 
 describe('dedicated group LINE rich menu', () => {
@@ -136,28 +138,20 @@ describe('per-user group LINE rich menu links', () => {
     ).rejects.toThrow('LINEの利用上限に達しています');
   });
 
-  it('creates, uploads, and links a learner menu without publishing it as default', async () => {
+  it('creates an image-less learner menu with enrollment-scoped links', async () => {
     const request = vi
       .fn<typeof fetch>()
-      .mockResolvedValueOnce(Response.json({ richMenuId: 'richmenu-learner' }))
-      .mockResolvedValueOnce(new Response(null, { status: 200 }))
-      .mockResolvedValueOnce(new Response(null, { status: 200 }));
-    const onCreated = vi.fn().mockResolvedValue(undefined);
+      .mockResolvedValueOnce(Response.json({ richMenuId: 'richmenu-learner' }));
     await expect(
-      activatePersonalLearningGroupRichMenu({
+      createPersonalLearningGroupRichMenu({
         request,
         accessToken: 'test-token',
-        providerUserId: 'U/learner',
         groupId: 'group-1',
         serviceSlug: 'manaberu-style',
         enrollmentId: '11111111-1111-4111-8111-111111111111',
         appUrl: 'https://app.example.com',
-        image: Buffer.from([1, 2, 3]),
-        existingLineRichMenuId: null,
-        onCreated,
       }),
-    ).resolves.toEqual({ lineRichMenuId: 'richmenu-learner' });
-    expect(onCreated).toHaveBeenCalledWith('richmenu-learner');
+    ).resolves.toBe('richmenu-learner');
     expect(request.mock.calls[0]?.[0]).toBe('https://api.line.me/v2/bot/richmenu');
     const definition = JSON.parse(request.mock.calls[0]?.[1]?.body as string) as {
       areas: Array<{ action: { uri: string } }>;
@@ -171,33 +165,84 @@ describe('per-user group LINE rich menu links', () => {
       'https://app.example.com/s/manaberu-style/programs/11111111-1111-4111-8111-111111111111#personal-learning-result',
       'https://app.example.com/s/manaberu-style/programs/11111111-1111-4111-8111-111111111111#personal-learning-plan',
     ]);
-    expect(request.mock.calls[1]?.[0]).toBe(
-      'https://api-data.line.me/v2/bot/richmenu/richmenu-learner/content',
-    );
-    expect(request.mock.calls[2]?.[0]).toBe(
-      'https://api.line.me/v2/bot/user/U%2Flearner/richmenu/richmenu-learner',
-    );
   });
 
-  it('reuses an existing LINE menu instead of consuming another menu slot', async () => {
-    const request = vi
-      .fn<typeof fetch>()
-      .mockResolvedValueOnce(new Response(null, { status: 200 }))
-      .mockResolvedValueOnce(new Response(null, { status: 200 }));
-    await activatePersonalLearningGroupRichMenu({
+  it('never uploads twice to an image-backed menu when updating changed content', async () => {
+    const imageBacked = new Set<string>();
+    const uploadTargets: string[] = [];
+    let menuSequence = 0;
+    const request = vi.fn<typeof fetch>(async (input, init) => {
+      await Promise.resolve();
+      const url = input instanceof Request ? input.url : input.toString();
+      const method = init?.method ?? 'GET';
+      if (url === 'https://api.line.me/v2/bot/richmenu' && method === 'POST') {
+        menuSequence += 1;
+        return Response.json({ richMenuId: `richmenu-${menuSequence}` });
+      }
+      const upload = url.match(
+        /^https:\/\/api-data\.line\.me\/v2\/bot\/richmenu\/([^/]+)\/content$/,
+      );
+      if (upload && method === 'POST') {
+        const menuId = decodeURIComponent(upload[1]!);
+        uploadTargets.push(menuId);
+        if (imageBacked.has(menuId)) return new Response(null, { status: 400 });
+        imageBacked.add(menuId);
+        return new Response(null, { status: 200 });
+      }
+      if (url.includes('/v2/bot/user/') && method === 'POST')
+        return new Response(null, { status: 200 });
+      if (url.includes('/v2/bot/richmenu/') && method === 'DELETE')
+        return new Response(null, { status: 200 });
+      throw new Error(`unexpected LINE API request: ${method} ${url}`);
+    });
+    const create = () =>
+      createPersonalLearningGroupRichMenu({
+        request,
+        accessToken: 'test-token',
+        groupId: 'group-1',
+        serviceSlug: 'manaberu-style',
+        enrollmentId: '11111111-1111-4111-8111-111111111111',
+        appUrl: 'https://app.example.com',
+      });
+    const upload = (lineRichMenuId: string) =>
+      uploadPersonalLearningGroupRichMenuImage({
+        request,
+        accessToken: 'test-token',
+        lineRichMenuId,
+        image: Buffer.from([1]),
+      });
+    const first = await create();
+    await upload(first);
+    await linkGroupRichMenuToUser({
       request,
       accessToken: 'test-token',
       providerUserId: 'U/learner',
-      groupId: 'group-1',
-      serviceSlug: 'manaberu-style',
-      enrollmentId: '11111111-1111-4111-8111-111111111111',
-      appUrl: 'https://app.example.com',
-      image: Buffer.from([1]),
-      existingLineRichMenuId: 'richmenu-existing',
+      lineRichMenuId: first,
     });
-    expect(request).toHaveBeenCalledTimes(2);
-    expect(request.mock.calls[0]?.[0]).toBe(
-      'https://api-data.line.me/v2/bot/richmenu/richmenu-existing/content',
-    );
+    const replacement = await create();
+    await upload(replacement);
+    await linkGroupRichMenuToUser({
+      request,
+      accessToken: 'test-token',
+      providerUserId: 'U/learner',
+      lineRichMenuId: replacement,
+    });
+    await deleteGroupRichMenu({
+      request,
+      accessToken: 'test-token',
+      lineRichMenuId: first,
+    });
+    expect(uploadTargets).toEqual(['richmenu-1', 'richmenu-2']);
+  });
+
+  it('treats deletion of an already absent pending menu as recovered', async () => {
+    const request = vi.fn<typeof fetch>().mockResolvedValue(new Response(null, { status: 404 }));
+    await expect(
+      deleteGroupRichMenu({
+        request,
+        accessToken: 'test-token',
+        lineRichMenuId: 'richmenu-already-removed',
+      }),
+    ).resolves.toBeUndefined();
   });
 });
