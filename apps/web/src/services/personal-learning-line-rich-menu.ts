@@ -2,11 +2,17 @@ import 'server-only';
 import { createHash } from 'node:crypto';
 import type { PersonalLearningActor } from '@bunshin/application';
 import { ApplicationError } from '@bunshin/shared';
+import { createLogger } from '@bunshin/observability';
 import { PrismaPersonalLearningPilotRepository, prisma } from '@bunshin/database';
 import { getServerEnvironment } from '@bunshin/config';
 import { AesGcmLineSecretCrypto, currentLineEnvironment } from '../line/secure-configuration';
 import { renderPersonalLearningLineRichMenu } from '../line/default-rich-menu';
-import { activatePersonalLearningGroupRichMenu } from '../line/group-rich-menu-provider';
+import {
+  createPersonalLearningGroupRichMenu,
+  deleteGroupRichMenu,
+  linkGroupRichMenuToUser,
+  uploadPersonalLearningGroupRichMenuImage,
+} from '../line/group-rich-menu-provider';
 
 const contentHash = (title: string) => createHash('sha256').update(title, 'utf8').digest('hex');
 
@@ -91,6 +97,7 @@ export async function activatePersonalLearningLineMenu(input: {
       configurationId: true,
       providerUserId: true,
       personalLearningRichMenuId: true,
+      personalLearningRichMenuPendingId: true,
       personalLearningRichMenuLinkedAt: true,
       personalLearningRichMenuContentHash: true,
       configuration: { select: { encryptedAccessToken: true } },
@@ -122,55 +129,115 @@ export async function activatePersonalLearningLineMenu(input: {
   )
     return { linked: true as const };
 
+  const logger = createLogger().child({
+    workspaceId: s.workspaceId,
+    groupId: s.groupId,
+    groupMembershipId: s.groupMembershipId,
+    actorUserId: input.actor.actorUserId,
+    route: 'personal-learning-line-rich-menu',
+  });
   const image = await renderPersonalLearningLineRichMenu(assignment.display.title);
   const accessToken = new AesGcmLineSecretCrypto().decrypt(
     connection.configuration.encryptedAccessToken,
   );
-  const result = await activatePersonalLearningGroupRichMenu({
+
+  const connectionIdentity = {
+    id: connection.id,
+    workspaceId: s.workspaceId,
+    groupId: s.groupId,
+    groupMembershipId: s.groupMembershipId,
+    userId: input.actor.actorUserId,
+  };
+  if (connection.personalLearningRichMenuPendingId) {
+    await deleteGroupRichMenu({
+      accessToken,
+      lineRichMenuId: connection.personalLearningRichMenuPendingId,
+    });
+    const cleared = await prisma.groupLineConnection.updateMany({
+      where: {
+        ...connectionIdentity,
+        personalLearningRichMenuPendingId: connection.personalLearningRichMenuPendingId,
+      },
+      data: { personalLearningRichMenuPendingId: null },
+    });
+    if (cleared.count !== 1)
+      throw new ApplicationError('CONFLICT', 'Manaberu pending LINE menu changed');
+  }
+
+  const oldLineRichMenuId = connection.personalLearningRichMenuId;
+  const lineRichMenuId = await createPersonalLearningGroupRichMenu({
     accessToken,
-    providerUserId: connection.providerUserId,
     groupId: s.groupId,
     serviceSlug: input.serviceSlug,
     enrollmentId: s.programEnrollmentId,
     appUrl: getServerEnvironment().APP_URL,
-    image,
-    existingLineRichMenuId: connection.personalLearningRichMenuId,
-    onCreated: async (lineRichMenuId) => {
-      const saved = await prisma.groupLineConnection.updateMany({
-        where: {
-          id: connection.id,
-          workspaceId: s.workspaceId,
-          groupId: s.groupId,
-          groupMembershipId: s.groupMembershipId,
-          userId: input.actor.actorUserId,
-          configurationId: connection.configurationId,
-          providerUserId: connection.providerUserId,
-          status: 'ACTIVE',
-        },
-        data: { personalLearningRichMenuId: lineRichMenuId },
-      });
-      if (saved.count !== 1)
-        throw new ApplicationError('CONFLICT', 'Manaberu LINE connection changed');
-    },
   });
-  const linked = await prisma.groupLineConnection.updateMany({
+
+  const pendingWhere = {
+    ...connectionIdentity,
+    configurationId: connection.configurationId,
+    providerUserId: connection.providerUserId,
+    status: 'ACTIVE' as const,
+    personalLearningRichMenuPendingId: null,
+  };
+  let pending = await prisma.groupLineConnection.updateMany({
+    where: pendingWhere,
+    data: { personalLearningRichMenuPendingId: lineRichMenuId },
+  });
+  if (pending.count !== 1) {
+    // Keep an orphan recoverable even if the connection became inactive during creation.
+    pending = await prisma.groupLineConnection.updateMany({
+      where: { ...connectionIdentity, personalLearningRichMenuPendingId: null },
+      data: { personalLearningRichMenuPendingId: lineRichMenuId },
+    });
+    if (pending.count !== 1) {
+      try {
+        await deleteGroupRichMenu({ accessToken, lineRichMenuId });
+      } catch (error) {
+        logger.error('untracked personal LINE menu cleanup failed', {
+          lineRichMenuId,
+          error: error instanceof Error ? error.message : 'unknown',
+        });
+      }
+      throw new ApplicationError('CONFLICT', 'Manaberu LINE connection changed');
+    }
+    throw new ApplicationError('CONFLICT', 'Manaberu LINE connection changed');
+  }
+
+  await uploadPersonalLearningGroupRichMenuImage({ accessToken, lineRichMenuId, image });
+  await linkGroupRichMenuToUser({
+    accessToken,
+    providerUserId: connection.providerUserId,
+    lineRichMenuId,
+  });
+
+  const committed = await prisma.groupLineConnection.updateMany({
     where: {
-      id: connection.id,
-      workspaceId: s.workspaceId,
-      groupId: s.groupId,
-      groupMembershipId: s.groupMembershipId,
-      userId: input.actor.actorUserId,
+      ...connectionIdentity,
       configurationId: connection.configurationId,
       providerUserId: connection.providerUserId,
-      personalLearningRichMenuId: result.lineRichMenuId,
       status: 'ACTIVE',
+      personalLearningRichMenuPendingId: lineRichMenuId,
     },
     data: {
+      personalLearningRichMenuId: lineRichMenuId,
+      personalLearningRichMenuPendingId: null,
       personalLearningRichMenuLinkedAt: new Date(),
       personalLearningRichMenuContentHash: nextContentHash,
     },
   });
-  if (linked.count !== 1)
+  if (committed.count !== 1)
     throw new ApplicationError('CONFLICT', 'Manaberu LINE connection changed');
+
+  if (oldLineRichMenuId && oldLineRichMenuId !== lineRichMenuId) {
+    try {
+      await deleteGroupRichMenu({ accessToken, lineRichMenuId: oldLineRichMenuId });
+    } catch (error) {
+      logger.error('previous personal LINE menu cleanup failed', {
+        lineRichMenuId: oldLineRichMenuId,
+        error: error instanceof Error ? error.message : 'unknown',
+      });
+    }
+  }
   return { linked: true as const };
 }
