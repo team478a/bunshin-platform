@@ -15,6 +15,7 @@ vi.mock('../src/auth/current-user', () => ({
 vi.mock('../src/services/public-service', () => ({ resolveManagedServiceContext: f.service }));
 vi.mock('../src/services/personal-learning-program-preparation', () => ({
   programPreparationTarget: f.target,
+  pilotPreparationWritesAllowed: () => true,
 }));
 vi.mock('../app/ui/public-shell', () => ({
   PublicShell: ({ children }: { children: React.ReactNode }) => <>{children}</>,

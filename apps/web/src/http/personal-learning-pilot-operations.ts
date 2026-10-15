@@ -17,6 +17,19 @@ import { resolveOpenAiRuntimeConfiguration } from '../ai/runtime-provider-config
 
 const headers = { 'cache-control': 'private, no-store', 'x-content-type-options': 'nosniff' };
 const denied = () => new ApplicationError('NOT_FOUND', 'pilot operation unavailable');
+const publicPilotReasons = new Set([
+  'PILOT_CONCURRENT_OPERATION',
+  'PILOT_DEFINITION_APPROVAL_REQUIRED',
+  'PILOT_EMPTY_DEDICATED_PROGRAM_REQUIRED',
+  'PILOT_ENROLLMENT_ALREADY_EXISTS',
+  'PILOT_INTERNAL_PREPARATION_CAP_REACHED',
+  'PILOT_OPERATION_REVISION_INVALID',
+  'PILOT_OPERATION_SUPERSEDED',
+  'PILOT_PROFILE_REQUIRED',
+  'PILOT_START_NOT_READY',
+  'PILOT_STATE_CHANGED',
+  'PILOT_WAVE0_CONFIGURATION_REQUIRED',
+]);
 const configKeys = [
   'PERSONAL_LEARNING_PILOT_OPERATIONS',
   'PERSONAL_LEARNING_PRODUCTION_PREPARATION',
@@ -164,6 +177,13 @@ export async function personalLearningPilotOperationsResponse(
     return Response.json({ data, requestId }, { headers });
   } catch (error) {
     const mapped = toApiError(error, requestId);
-    return Response.json(mapped.body, { status: mapped.status, headers });
+    const reason =
+      error instanceof ApplicationError && publicPilotReasons.has(error.message)
+        ? error.message
+        : undefined;
+    return Response.json(
+      reason ? { ...mapped.body, error: { ...mapped.body.error, reason } } : mapped.body,
+      { status: mapped.status, headers },
+    );
   }
 }

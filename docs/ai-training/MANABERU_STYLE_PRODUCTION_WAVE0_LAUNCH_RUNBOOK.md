@@ -169,9 +169,15 @@ Safety: 本人がCreator、代行制作/業務戦略決定なし、個人情報/
 
 ### 期限なし専用Programの新規準備（レビュー後の人間操作）
 
-管理者の最小操作画面は `/s/{serviceSlug}/manage/programs/personal-learning-preparation`。準備authorityが当該Serviceと一致し、運用flag ON・両実行flag OFFの場合だけ既存Program管理からリンクを表示する。未設定時は直接URLで設定名の読み取り専用案内だけ表示する。環境設定の登録は別の人間承認操作であり、画面から変更しない。
+管理者の最小操作画面は `/s/{serviceSlug}/manage/programs/personal-learning-preparation`。準備authorityが当該Serviceと一致し、運用flag ONの場合に限り画面を表示する。実行flagがONの間はCREATE/INITIALIZE/STARTなど通常の変更操作を隠すが、状態READと緊急STOPは表示・利用可能にする。未設定時は直接URLで設定名の読み取り専用案内だけ表示する。環境設定の登録は別の人間承認操作であり、画面から変更しない。
 
 画面で対象Service・予約Program IDを確認→「現在の状態を確認」→未作成の場合のみ人間レビュー記録識別子と確認チェック→「停止状態で作成」。応答喪失時は同一操作の再送だけを行う。既存Programは変更せず、作成後もDefinition承認・Participant・STARTには進まない。詳細と未確認事項は [管理画面実装報告](MANABERU_STYLE_PROGRAM_PREPARATION_UI_IMPLEMENTATION.md)。
+
+### 初期化・開始・緊急停止UI
+
+同画面の「Wave 0の初期化・開始・停止」カードは管理者が明示的に状態をGETし、最新stateTokenを使って操作する。Programが未初期化の場合に限りINITIALIZE、SUSPENDEDかつ開始履歴なしの場合に限りSTART、開始履歴がある場合は状態や実行flagにかかわらずSTOPを提示する。操作ごとに人間レビュー記録キーと確認を要求し、完了後にGETで状態を再確認する。状態競合は再取得して人間が再確認し、通信結果不明は同じ操作ID・同じbodyだけを再送する。
+
+START前はDefinition 3件の承認、内部1〜2名のEnrollment/Seat、各本人Profile、Service/Program一致Call Admission・価格、両Pilot実行flag OFF、Definition/Profile/Participant準備flag OFFを人間が確認する。画面のチェックはDB条件の代替ではなく、サーバー側の既存検証を緩めない。拒否された場合は表示された日本語の理由を確認し、設定値・承認・Enrollmentをこの画面で迂回しない。STOPは緊急停止用の軽い確認で実行でき、Pilot flag ON中も操作できる。STOP成功は既送信callの取消やdrain完了を意味しないため、Emergency Stop手順の全instance反映・未精算call調査を続ける。
 
 1. 専用ServiceのACTIVE Workspace/Group、SERVICE_OWNERまたはSERVICE_ADMINを確認。他AI_TRAINING_V1 Programが存在するServiceでは実行しない。
 2. 新規のlowercase UUIDをProgram IDとして予約し、PERSONAL_LEARNING_PRODUCTION_PREPARATIONのserviceProgramIdへ指定する。workspaceId/groupIdは既存の正しいService境界を指定する。値の変更は人間承認、今回の文書更新では実施しない。
