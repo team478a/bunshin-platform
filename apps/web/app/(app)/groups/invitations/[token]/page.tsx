@@ -8,6 +8,7 @@ import { currentUserProvider } from '../../../../../src/auth/current-user';
 import { groupInvitationTokenHash } from '../../../../../src/http/group-invitations';
 import { ensureUserWorkspaceLineConnection } from '../../../../../src/line/ensure-user-workspace-connection';
 import { recordAuthenticatedRegistrationEvent } from '../../../../../src/registration/funnel';
+import { safeLineAuthReturnPath } from '../../../../../src/auth/line-return';
 
 export const dynamic = 'force-dynamic';
 
@@ -51,10 +52,16 @@ async function invitationReturnPath(
 
 async function acceptInvitation(formData: FormData) {
   'use server';
-  const actor = await (await currentUserProvider()).getCurrentUser();
-  if (!actor) redirect('/login');
   const input = actionSchema.safeParse(Object.fromEntries(formData));
   if (!input.success) redirect('/groups');
+  const actor = await (await currentUserProvider()).getCurrentUser();
+  if (!actor) {
+    const returnTo = input.data.serviceSlug
+      ? `/s/${input.data.serviceSlug}/join/${input.data.token}`
+      : `/groups/invitations/${input.data.token}`;
+    const safeReturnTo = safeLineAuthReturnPath(returnTo);
+    redirect(safeReturnTo ? `/login?returnTo=${encodeURIComponent(safeReturnTo)}` : '/login');
+  }
   const serviceReturn = await invitationReturnPath(
     input.data.workspaceId,
     input.data.token,
@@ -85,10 +92,16 @@ async function acceptInvitation(formData: FormData) {
 
 async function declineInvitation(formData: FormData) {
   'use server';
-  const actor = await (await currentUserProvider()).getCurrentUser();
-  if (!actor) redirect('/login');
   const input = actionSchema.safeParse(Object.fromEntries(formData));
   if (!input.success) redirect('/groups');
+  const actor = await (await currentUserProvider()).getCurrentUser();
+  if (!actor) {
+    const returnTo = input.data.serviceSlug
+      ? `/s/${input.data.serviceSlug}/join/${input.data.token}`
+      : `/groups/invitations/${input.data.token}`;
+    const safeReturnTo = safeLineAuthReturnPath(returnTo);
+    redirect(safeReturnTo ? `/login?returnTo=${encodeURIComponent(safeReturnTo)}` : '/login');
+  }
   const serviceReturn = await invitationReturnPath(
     input.data.workspaceId,
     input.data.token,

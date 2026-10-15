@@ -21,6 +21,28 @@ class Repository implements GroupParticipationRepository {
       status: 'ACTIVE' as const,
       usedCount: 0,
       createdByUserId: input.actorUserId,
+      source: 'MANUAL' as const,
+      sourceEventId: null,
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+  createLineFollowInvitation(
+    input: Parameters<GroupParticipationRepository['createLineFollowInvitation']>[0],
+  ) {
+    return Promise.resolve({
+      id: 'follow-invitation-1',
+      workspaceId: input.workspaceId,
+      groupId: input.groupId,
+      tokenHash: input.tokenHash,
+      role: 'PARTICIPANT' as const,
+      status: 'ACTIVE' as const,
+      expiresAt: input.expiresAt,
+      maxUses: 1,
+      usedCount: 0,
+      createdByUserId: null,
+      source: 'LINE_FOLLOW' as const,
+      sourceEventId: input.sourceEventId,
       createdAt: now,
       updatedAt: now,
     });
@@ -92,6 +114,28 @@ describe('GroupParticipationService', () => {
     await expect(service.createGroup({ ...scope, name: ' ' })).rejects.toMatchObject({
       code: 'VALIDATION_ERROR',
     });
+  });
+
+  it('creates a one-use participant invitation for an idempotent LINE follow event', async () => {
+    const service = new GroupParticipationService(new Repository());
+    await expect(
+      service.createLineFollowInvitation({
+        workspaceId: 'workspace-1',
+        groupId: 'group-1',
+        tokenHash: 'b'.repeat(64),
+        sourceEventId: 'line-event-1',
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      }),
+    ).resolves.toMatchObject({ source: 'LINE_FOLLOW', maxUses: 1, role: 'PARTICIPANT' });
+    await expect(
+      service.createLineFollowInvitation({
+        workspaceId: 'workspace-1',
+        groupId: 'group-1',
+        tokenHash: 'invalid',
+        sourceEventId: 'line-event-2',
+        expiresAt: new Date(Date.now() + 60_000),
+      }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
   });
 
   it('requires a meaningful reason for membership changes', async () => {

@@ -12,6 +12,9 @@ const pendingOutput =
 const richMenuPendingOutput =
   'The following migration(s) have not yet been applied:\n' +
   '20261015090000_personal_learning_rich_menu_pending\n';
+const lineFollowInvitationPendingOutput =
+  'The following migration(s) have not yet been applied:\n' +
+  '20261015170000_add_line_follow_invitations\n';
 
 describe('direct, approval-gated production migration', () => {
   afterEach(() => vi.restoreAllMocks());
@@ -98,6 +101,33 @@ describe('direct, approval-gated production migration', () => {
     );
     expect(execute).toHaveBeenCalledTimes(4);
     expect(execute.mock.calls[1]![2].captureOutput).toBe(true);
+    expect(execute.mock.calls[2]![1]).toContain('migrate');
+    expect(execute.mock.calls[2]![1]).toContain('deploy');
+  });
+
+  it('approves only the exact LINE follow invitation migration with its own confirmation', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    const execute = vi
+      .fn<typeof runMigrationProcess>()
+      .mockResolvedValueOnce({ reason: 'EXITED', status: 0 })
+      .mockResolvedValueOnce({
+        reason: 'EXITED',
+        status: 1,
+        capturedOutput: lineFollowInvitationPendingOutput,
+      })
+      .mockResolvedValueOnce({ reason: 'EXITED', status: 0 })
+      .mockResolvedValueOnce({
+        reason: 'EXITED',
+        status: 0,
+        capturedOutput: 'Database schema is up to date!',
+      });
+    const confirm = vi.fn((phrase: string) => Promise.resolve(phrase));
+
+    expect(await runDirectLineLinkMigration(execute, environment, confirm)).toBe(0);
+    expect(confirm).toHaveBeenCalledWith(
+      'APPLY_LINE_FOLLOW_INVITATIONS_MIGRATION_TO_vtkzinaudznwbsjoyszk',
+    );
+    expect(execute).toHaveBeenCalledTimes(4);
     expect(execute.mock.calls[2]![1]).toContain('migrate');
     expect(execute.mock.calls[2]![1]).toContain('deploy');
   });

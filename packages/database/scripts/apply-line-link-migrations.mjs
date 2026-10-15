@@ -24,6 +24,10 @@ const approvedPendingSets = [
     migrations: ['20261015090000_personal_learning_rich_menu_pending'],
     confirmation: 'APPLY_PERSONAL_LEARNING_RICH_MENU_MIGRATION_TO_vtkzinaudznwbsjoyszk',
   },
+  {
+    migrations: ['20261015170000_add_line_follow_invitations'],
+    confirmation: 'APPLY_LINE_FOLLOW_INVITATIONS_MIGRATION_TO_vtkzinaudznwbsjoyszk',
+  },
 ];
 const expectedProjectRef = 'vtkzinaudznwbsjoyszk';
 
