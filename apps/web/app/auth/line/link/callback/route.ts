@@ -1,4 +1,6 @@
+import { createHash } from 'node:crypto';
 import { NextResponse } from 'next/server';
+import { createLogger } from '@bunshin/observability';
 import { currentUserProvider } from '../../../../../src/auth/current-user';
 import { createSupabaseAttemptClient } from '../../../../../src/auth/supabase';
 import { loginErrorResponse } from '../../../../../src/auth/login-error';
@@ -14,16 +16,27 @@ import {
   type AuthReturnContext,
 } from '../../../../../src/auth/auth-return-attempt';
 
-function lineProviderUserId(user: {
+type LineProviderIdentity = {
+  id: string;
+  provider: string;
+  identity_data?: Record<string, unknown> | null;
+};
+
+function lineProviderIdentity(user: {
   identities?: Array<{
     id: string;
     provider: string;
     identity_data?: Record<string, unknown> | null;
   }> | null;
-}): string | null {
-  const identity = user.identities?.find(
-    ({ provider }) => provider === 'custom:line' || provider === 'line',
+}): LineProviderIdentity | null {
+  return (
+    user.identities?.find(({ provider }) => provider === 'custom:line' || provider === 'line') ??
+    null
   );
+}
+
+function lineProviderUserId(user: { identities?: LineProviderIdentity[] | null }): string | null {
+  const identity = lineProviderIdentity(user);
   if (!identity) return null;
   const subject = identity.identity_data?.['sub'];
   const userId = identity.identity_data?.['user_id'];
@@ -40,6 +53,10 @@ export async function GET(request: Request): Promise<Response> {
   let context: AuthReturnContext | null = null;
   let claimed = false;
   let ownedStage: 'PENDING' | 'CLAIMED' | 'AUTHENTICATED' = 'PENDING';
+  let compensateLinkedIdentity:
+    (() => Promise<{ error: { code?: string | undefined } | null }>) | null = null;
+  let lineSubjectHash: string | null = null;
+  let compensationFailed = false;
   try {
     const url = new URL(request.url);
     const id = singleAuthAttemptId(url.searchParams.getAll('authAttempt'));
@@ -65,6 +82,20 @@ export async function GET(request: Request): Promise<Response> {
       flowId: attempt.pkceFlowId,
     });
     if (error || !data.user) throw error ?? new Error('LINE-linked session unavailable');
+
+    const linkedLineIdentity = data.user.identities?.find(
+      ({ provider }) => provider === 'custom:line' || provider === 'line',
+    );
+    if (linkedLineIdentity) {
+      lineSubjectHash = createHash('sha256')
+        .update(linkedLineIdentity.identity_id, 'utf8')
+        .digest('hex');
+      compensateLinkedIdentity = async () => {
+        const { error: unlinkError } =
+          await buffered.client.auth.unlinkIdentity(linkedLineIdentity);
+        return { error: unlinkError ? { code: unlinkError.code } : null };
+      };
+    }
 
     const providerUserId = lineProviderUserId(data.user);
     if (!providerUserId) throw new Error('verified LINE identity unavailable');
@@ -95,6 +126,10 @@ export async function GET(request: Request): Promise<Response> {
         });
     });
 
+    // Both identity stores now agree. A later session-cookie/attempt error must not undo only
+    // the Supabase half of this successfully reconciled pair.
+    compensateLinkedIdentity = null;
+
     await buffered.commitCookies();
     await authenticateAuthReturnAttempt(context, actor.userId);
     ownedStage = 'AUTHENTICATED';
@@ -103,13 +138,39 @@ export async function GET(request: Request): Promise<Response> {
     response.headers.set('cache-control', 'no-store');
     return clearAuthReturnCookie(response, context);
   } catch (error) {
+    if (compensateLinkedIdentity) {
+      try {
+        const { error: unlinkError } = await compensateLinkedIdentity();
+        if (unlinkError) {
+          compensationFailed = true;
+          const code = unlinkError.code;
+          createLogger().error('line identity compensation failed', {
+            lineSubjectHash,
+            errorCode:
+              typeof code === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(code)
+                ? code
+                : 'UNLINK_FAILED',
+          });
+        }
+      } catch {
+        compensationFailed = true;
+        createLogger().error('line identity compensation failed', {
+          lineSubjectHash,
+          errorCode: 'UNLINK_THROWN',
+        });
+      }
+    }
     const cancelled =
       claimed || !(error instanceof AuthReturnContextError)
         ? await cancelAuthReturnAttempt(context, ownedStage)
         : false;
     const response = loginErrorResponse(
       request,
-      error instanceof AuthReturnContextError ? 'auth-context' : 'line-link',
+      compensationFailed
+        ? 'line-link'
+        : error instanceof AuthReturnContextError
+          ? 'auth-context'
+          : 'line-link',
       context?.returnTo ?? null,
     );
     return clearAuthReturnCookie(response, claimed || cancelled ? context : null);

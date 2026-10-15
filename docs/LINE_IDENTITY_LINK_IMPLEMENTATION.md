@@ -11,6 +11,7 @@
 ## 実装
 
 - ログイン済みの本人がアカウント設定からLINEを明示連携できる。LINE認証callbackも同じPlatform Userに戻ったこと、LINE subjectが別Platform Userに属していないことを確認する。
+- SupabaseのLINE identity連携が成立した後、Platform側のEMAIL identity・actor・LINE subject所有確認に失敗した場合は、callbackで得たidentityをSupabaseからunlinkして部分成功を補償する。連携成立前の失敗ではunlinkしない。補償自体の失敗はLINE subjectのSHA-256ハッシュと安全なエラーコードのみをログに残し、既存のline-linkエラー画面へ戻す。
 - メール一致による自動統合、LINE identityの移動、Membership/Enrollment/Seatの追加・変更をしない。
 - 連携試行は専用method、origin・HttpOnly proof cookie・PKCE flow・期限・single-use CASに束縛する。callback先は既存の許可済みreturn pathのみ。
 - UI/APIは`LINE_IDENTITY_LINKING_ENABLED=true`および`AUTH_RETURN_ATTEMPTS_ENABLED=true`の両方が設定された場合だけ有効。既定無効。
@@ -18,7 +19,7 @@
 
 ## 検証 / 残課題
 
-- auth return attempt unit test、route/security tests、migration test、型検査、lintをCIで実施する。
+- auth return attempt unit test、route/security tests、migration test、型検査、lintをCIで実施する。callback検証失敗時の補償unlink（EMAIL identity不一致、actor不一致、LINE identity重複）、成立前の失敗ではunlinkしないこと、補償unlink失敗時にも既存のエラー画面へ戻ることをモックテストする。
 - CI成功は実LINE/Supabase連携・実利用者のサービス参加登録・ログイン回復の証明ではない。
 - 次のrelease gate: SupabaseのManual Identity Linking設定をDEVELOPMENTで確認、既存メールアカウントへのLINE連携、新規LINE identity、別アカウントでのcallback、既に使用中のLINE subject、LINE内ブラウザの実機smokeを人間監督下で検証する。
 - 既存のLINE identityが別Platform Userへ割当済みの場合は移動せず、運営者が本人確認後に別途調査する。

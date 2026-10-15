@@ -3,6 +3,8 @@ import { attemptRows, attemptTable } from './fixtures/auth-attempt-table';
 const state = vi.hoisted(() => ({
   oauth: vi.fn(),
   linkIdentity: vi.fn(),
+  unlinkIdentity: vi.fn(),
+  logError: vi.fn(),
   getUser: vi.fn(),
   exchange: vi.fn(),
   otp: vi.fn(),
@@ -11,10 +13,14 @@ const state = vi.hoisted(() => ({
   accept: vi.fn(),
   actor: '11111111-1111-4111-8111-111111111111',
   identityOwner: '11111111-1111-4111-8111-111111111111',
+  lineIdentityOwner: null as string | null,
   required: false,
   cookie: '',
 }));
 vi.mock('server-only', () => ({}));
+vi.mock('@bunshin/observability', () => ({
+  createLogger: () => ({ error: state.logError }),
+}));
 vi.mock('next/headers', () => ({
   headers: () => Promise.resolve(new Headers({ cookie: state.cookie })),
 }));
@@ -42,6 +48,7 @@ vi.mock('../src/auth/supabase', () => {
     auth: {
       signInWithOAuth: state.oauth,
       linkIdentity: state.linkIdentity,
+      unlinkIdentity: state.unlinkIdentity,
       getUser: state.getUser,
       exchangeCodeForSession: state.exchange,
       verifyOtp: state.otp,
@@ -66,7 +73,9 @@ vi.mock('@bunshin/database', () => ({
         Promise.resolve(
           where.provider_providerUserId.provider === 'EMAIL'
             ? { userId: state.identityOwner }
-            : null,
+            : state.lineIdentityOwner
+              ? { userId: state.lineIdentityOwner }
+              : null,
         ),
     },
     $transaction: async (operation: (tx: object) => Promise<unknown>) =>
@@ -76,7 +85,9 @@ vi.mock('@bunshin/database', () => ({
             Promise.resolve(
               where.provider_providerUserId.provider === 'EMAIL'
                 ? { userId: state.identityOwner }
-                : null,
+                : state.lineIdentityOwner
+                  ? { userId: state.lineIdentityOwner }
+                  : null,
             ),
           create: () => Promise.resolve({}),
         },
@@ -125,7 +136,12 @@ const lineSuccess = {
     user: {
       id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
       identities: [
-        { id: 'line-identity', provider: 'custom:line', identity_data: { sub: 'U1234567890' } },
+        {
+          id: 'line-identity',
+          identity_id: 'line-identity-subject',
+          provider: 'custom:line',
+          identity_data: { sub: 'U1234567890' },
+        },
       ],
     },
   },
@@ -140,6 +156,7 @@ describe('attempt-scoped route contracts', () => {
     vi.stubEnv('LINE_IDENTITY_LINKING_ENABLED', 'false');
     state.actor = '11111111-1111-4111-8111-111111111111';
     state.identityOwner = state.actor;
+    state.lineIdentityOwner = null;
     state.required = false;
     state.cookie = '';
     state.oauth.mockImplementation(() =>
@@ -162,6 +179,7 @@ describe('attempt-scoped route contracts', () => {
       error: null,
     });
     state.exchange.mockResolvedValue(lineSuccess);
+    state.unlinkIdentity.mockResolvedValue({ error: null });
     state.email.mockResolvedValue({ error: null });
     state.otp.mockResolvedValue({ data: { user: { email: 'member@example.com' } }, error: null });
     state.commit.mockResolvedValue(undefined);
@@ -241,6 +259,79 @@ describe('attempt-scoped route contracts', () => {
     expect(location(completed).pathname).toBe('/login');
     expect(location(completed).searchParams.get('error')).toBe('auth-context');
     expect(attemptRows.get(attempt.id)?.stage).toBe('CONSUMED');
+    expect(state.unlinkIdentity).toHaveBeenCalledWith(lineSuccess.data.user.identities[0]);
+  });
+
+  it('compensates a successful Supabase link when its EMAIL identity belongs to another user', async () => {
+    vi.stubEnv('LINE_IDENTITY_LINKING_ENABLED', 'true');
+    const started = await startLineLink(post('/auth/line/link', {}));
+    const attempt = proof(started);
+    state.identityOwner = '22222222-2222-4222-8222-222222222222';
+
+    const completed = await finishLineLink(
+      new Request(`${origin}/auth/line/link/callback?code=linked-code&authAttempt=${attempt.id}`, {
+        headers: { cookie: attempt.cookie },
+      }),
+    );
+
+    expect(location(completed).searchParams.get('error')).toBe('auth-context');
+    expect(state.unlinkIdentity).toHaveBeenCalledWith(lineSuccess.data.user.identities[0]);
+  });
+
+  it('compensates when the LINE subject is already owned by another platform user', async () => {
+    vi.stubEnv('LINE_IDENTITY_LINKING_ENABLED', 'true');
+    const started = await startLineLink(post('/auth/line/link', {}));
+    const attempt = proof(started);
+    state.lineIdentityOwner = '22222222-2222-4222-8222-222222222222';
+
+    const completed = await finishLineLink(
+      new Request(`${origin}/auth/line/link/callback?code=linked-code&authAttempt=${attempt.id}`, {
+        headers: { cookie: attempt.cookie },
+      }),
+    );
+
+    expect(location(completed).searchParams.get('error')).toBe('line-link');
+    expect(state.unlinkIdentity).toHaveBeenCalledWith(lineSuccess.data.user.identities[0]);
+  });
+
+  it('does not unlink if Supabase identity exchange did not succeed', async () => {
+    vi.stubEnv('LINE_IDENTITY_LINKING_ENABLED', 'true');
+    const started = await startLineLink(post('/auth/line/link', {}));
+    const attempt = proof(started);
+    state.exchange.mockResolvedValueOnce({
+      data: { user: null },
+      error: new Error('exchange failed'),
+    });
+
+    const completed = await finishLineLink(
+      new Request(`${origin}/auth/line/link/callback?code=linked-code&authAttempt=${attempt.id}`, {
+        headers: { cookie: attempt.cookie },
+      }),
+    );
+
+    expect(location(completed).searchParams.get('error')).toBe('line-link');
+    expect(state.unlinkIdentity).not.toHaveBeenCalled();
+  });
+
+  it('logs a failed compensation with a hashed LINE subject and keeps the line-link error screen', async () => {
+    vi.stubEnv('LINE_IDENTITY_LINKING_ENABLED', 'true');
+    const started = await startLineLink(post('/auth/line/link', {}));
+    const attempt = proof(started);
+    state.actor = '22222222-2222-4222-8222-222222222222';
+    state.unlinkIdentity.mockResolvedValueOnce({ error: { code: 'unlink_failed' } });
+
+    const completed = await finishLineLink(
+      new Request(`${origin}/auth/line/link/callback?code=linked-code&authAttempt=${attempt.id}`, {
+        headers: { cookie: attempt.cookie },
+      }),
+    );
+
+    expect(location(completed).searchParams.get('error')).toBe('line-link');
+    expect(state.logError).toHaveBeenCalledWith(
+      'line identity compensation failed',
+      expect.objectContaining({ lineSubjectHash: expect.stringMatching(/^[a-f0-9]{64}$/) }),
+    );
+    expect(JSON.stringify(state.logError.mock.calls)).not.toContain('U1234567890');
   });
 
   it('rejects missing proof, selectors and replay before calling the provider', async () => {
