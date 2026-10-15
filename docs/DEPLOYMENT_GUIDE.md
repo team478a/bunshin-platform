@@ -43,6 +43,8 @@ SOCIAL Intelligenceを有効にする場合、ProductionのOpenAI認証は暗号
 
 `pnpm db:migration:probe`は専用入口から同じPrisma CLI / Migration URL / timeout設定を使い、`BEGIN READ ONLY`内の設定検証だけで終了する。成功でも`migrate deploy`、schema変更、migration history更新、App buildへ進まない。通常のVercel build commandは変更しない。
 
+GitHub Actionsの`Production Migration Connection Probe` workflowからも実行できる。`main`への`workflow_dispatch`に限定し、`production` Environment内の`DATABASE_URL`、`DIRECT_URL`、必要なら`SUPABASE_SESSION_POOLER_HOST`を使用する。実行者はSupabase Dashboard URLで承認済みproject refを確認し、入力欄へ20文字のproject refと`PROBE_PRODUCTION_DATABASE`を指定する。成功してもmigration/deployは行わない。workflowはEnvironment保護ルールを適用し、credential値・生のPrisma出力をsummary/logへ出さない。
+
 実行前にcredential管理者が、承認された非公開実行環境へ既存Productionの`DATABASE_URL`、`DIRECT_URL`、必要なら`SUPABASE_SESSION_POOLER_HOST`を安全に注入する。画面のsecret表示、chatへの貼付、URLをcommand引数へ埋める、PreviewへのProduction secret複製、Gitへの保存はしない。credentialの取得・注入とこのPRのコード承認は別判断。
 
 同じ実行環境で、値が秘密ではない次の2項目を設定して実行する（PowerShell例）:
@@ -61,7 +63,9 @@ Node 24 / lockfileどおりのPrisma 6.19.3を使用する。probeの対象は`p
 
 ### Migration実行上限（公開前レビュー必須）
 
-`db:migrate:vercel`はproductionだけで、DBセッション設定の非永続probe → `prisma migrate deploy`を実行する。Prisma CLIを直接起動し、DB側の上限と両コマンド合計のprocess期限を分離する。
+`db:migrate:vercel`はproductionだけで、まず読み取り専用の`prisma migrate status`を確認する。最新ならmigrationを開始せず成功し、その後の`db:assert-ready`へ進む。pendingならDBセッション設定の非永続probe → `prisma migrate deploy`を実行する。履歴不明・failed・driftはfail-closedとする。Prisma CLIを直接起動し、DB側の上限とprocess期限を分離する。
+
+`Production Migration History Probe`は、Production GitHub Environmentを使う手動の読み取り専用診断である。`prisma migrate status`の出力から秘密情報を除き、pending migration名と履歴状態だけを記録する。最初に期待するSupabase project ref、DB名/roleを照合し、短いread-only transactionでDB identityを検証する。これはmigration、接続設定probe、deployのいずれも実行しない。既存のbounds probeが失敗した場合はこの診断で適用履歴を確認できるが、pending名だけで安全性を承認したり、手動適用したりしてはならない。
 
 | 環境変数                         | 未設定時  | 許容最大  |
 | -------------------------------- | --------- | --------- |
@@ -71,7 +75,22 @@ Node 24 / lockfileどおりのPrisma 6.19.3を使用する。probeの対象は`p
 
 正の整数のみ。`lock < statement < process`を必須とし、0（無期限）、不正値、最大超過は接続前に拒否する。DBの`idle_in_transaction_session_timeout`はstatementと同値、接続待ちは10秒。対象migrationの実測時間に対して値を人間レビューする。これは本番設定を変更する承認ではない。
 
-上限はMigration専用子processのURL startup `options`で渡す。アプリの環境・DB全体/role設定・schema/migration SQLは変更しない。既存URLに`options`があれば競合を推測解決せず拒否する。子processだけ`DATABASE_URL`と`DIRECT_URL`を同一Migration接続へ固定し、`PGOPTIONS`を除去する。poolerへの既存変換は維持するが、実poolerのstartup設定対応は本番操作前に確認する。設定probeが失敗した場合、migrate deployは開始しない。
+上限はMigration専用子processのURL startup `options`で渡す。アプリの環境・DB全体/role設定・schema/migration SQLは変更しない。既存URLに`options`があれば競合を推測解決せず拒否する。子processだけ`DATABASE_URL`と`DIRECT_URL`を同一Migration接続へ固定し、`PGOPTIONS`を除去する。設定probeが失敗した場合、migrate deployは開始しない。Supavisorがstartup optionsを反映しない場合は、poolerを迂回して直接接続できるIPv6対応PCでの限定Migration手順を使う（下記）。
+
+#### 直接接続による限定的なLINE migration（Windows / IPv6）
+
+この専用手順は、現在確認済みの2件だけを対象とする。リポジトリのNode依存をインストール済みのPCで、Node.js 24を使用してPowerShellから実行する:
+
+```powershell
+.\packages\database\scripts\apply-line-link-migrations.ps1
+```
+
+DB passwordは非表示のsecure promptで入力し、チャット、コマンド引数、ファイル、ログへ出さない。runnerは直接host/project/database/role、実際のsession timeout、migration履歴を読み取り専用で確認する。pending一覧が以下2件と完全一致しない場合は停止する:
+
+- `20261014090000_add_line_link_attempt_method`
+- `20261014091000_allow_line_link_attempt_method`
+
+一致した場合だけ、表示されたprojectとmigration名を確認して専用の確認語を入力すると実行する。成功後に履歴が最新になったことを再検証する。認証失敗、接続失敗、timeout、postcheck失敗時は再実行しない。先にmigration history、DB session、実schemaを人間が照合する。この操作はVercel build/deployを開始せず、次回のProduction buildは履歴が最新ならmigrationをskipしてschema readiness/buildへ進む。
 
 期限到達時はLinuxで所有するCLI/engineのprocess groupへSIGKILLを送る。WindowsではCLIだけの停止であり、engine子孫の終了は保証しない。いずれも**DB session/SQLの終了・rollback・全writer drainは証明しない**。非0終了・signal・期限切れ・起動失敗はbuildを停止し、自動retry/resolve/rollbackしない。先行migrationや同migrationの先行statementが適用済みである可能性を残す。
 

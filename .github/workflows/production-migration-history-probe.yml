@@ -1,0 +1,61 @@
+name: Production Migration History Probe
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type INSPECT_PRODUCTION_MIGRATION_HISTORY to run the read-only check
+        required: true
+        type: string
+      project_ref:
+        description: Approved 20-character Supabase project reference
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-migration-history-probe
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: production
+    steps:
+      - name: Require main and explicit target confirmation
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+          EXPECTED_PROJECT_REF: ${{ inputs.project_ref }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$CONFIRMATION" = "INSPECT_PRODUCTION_MIGRATION_HISTORY"
+          [[ "$EXPECTED_PROJECT_REF" =~ ^[a-z0-9]{20}$ ]]
+
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.10.0
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Read production migration history only
+        env:
+          VERCEL_ENV: production
+          MIGRATION_PROBE_EXPECTED_PROJECT_REF: ${{ inputs.project_ref }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+          SUPABASE_SESSION_POOLER_HOST: ${{ vars.SUPABASE_SESSION_POOLER_HOST || secrets.SUPABASE_SESSION_POOLER_HOST }}
+        run: |
+          set -euo pipefail
+          pnpm db:migration:history:probe | tee -a "$GITHUB_STEP_SUMMARY"

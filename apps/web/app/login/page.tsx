@@ -69,6 +69,14 @@ export default async function LoginPage({
             </span>
           </div>
         )}
+        {query.error === 'line-link' && (
+          <div className="notice notice--danger" role="alert">
+            <strong>LINEを連携できませんでした</strong>
+            <span>
+              連携を始めたアカウントで操作しているか確認してください。すでに別のアカウントに登録されたLINEは移動できません。解決しない場合は運営者へご相談ください。
+            </span>
+          </div>
+        )}
         {query.error === 'rate-limit' && (
           <div className="notice notice--danger" role="alert">
             <strong>短い時間にメールを送りすぎました</strong>

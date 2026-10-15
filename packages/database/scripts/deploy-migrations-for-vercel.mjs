@@ -1,28 +1,10 @@
 import { createRequire } from 'node:module';
-import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { performance } from 'node:perf_hooks';
 import { runMigrationProcess } from './migration-process.mjs';
 import { parseMigrationHistoryStatus } from './migration-history-status.mjs';
 
 const requireModule = createRequire(import.meta.url);
-const boundedReleaseMigrations = [
-  '20261007170000_add_oem_registration_billing',
-  '20261007173000_oem_billing_guardrails',
-  '20261011180000_ai_provider_call_admission',
-  '20261011200000_oem_service_product_policy',
-  '20261011220000_oem_product_policy_admin',
-  '20261011230000_oem_setup_fee_invoicing',
-  '20261012070000_oem_contract_period_supersession',
-  '20261012080000_oem_operational_period_supersession',
-  '20261012090000_oem_billing_policy_revision',
-  '20261013000000_personal_learning_requests',
-  '20261013010000_personal_learning_operation_cost',
-  '20261013020000_personal_learning_lesson_candidate',
-  '20261013030000_personal_learning_answer_revisions',
-  '20261013040000_personal_learning_practice_support_images',
-  '20261013050000_personal_learning_line_rich_menu',
-];
 
 export function resolveMigrationBounds(environment) {
   const bounded = (name, fallback, maximum) => {
@@ -41,11 +23,7 @@ export function resolveMigrationBounds(environment) {
   return { lockTimeoutMs, statementTimeoutMs, processTimeoutMs };
 }
 
-export function withMigrationBounds(
-  directUrl,
-  bounds,
-  applicationName = 'bunshin_migration_bounded',
-) {
+export function withMigrationConnectionMetadata(directUrl, applicationName) {
   const url = new URL(directUrl);
   if (!['postgres:', 'postgresql:'].includes(url.protocol) || url.searchParams.has('options'))
     throw new Error('INVALID_MIGRATION_CONNECTION');
@@ -54,35 +32,14 @@ export function withMigrationBounds(
   return url.toString();
 }
 
-export function assertBoundedReleaseMigrations(bounds) {
-  const required = [
-    'BEGIN;',
-    `SET LOCAL lock_timeout = '${bounds.lockTimeoutMs}ms';`,
-    `SET LOCAL statement_timeout = '${bounds.statementTimeoutMs}ms';`,
-    `SET LOCAL idle_in_transaction_session_timeout = '${bounds.statementTimeoutMs}ms';`,
-    'COMMIT;',
-  ];
-  for (const migration of boundedReleaseMigrations) {
-    const sql = readFileSync(
-      new URL(`../prisma/migrations/${migration}/migration.sql`, import.meta.url),
-      'utf8',
-    )
-      .replace(/\r\n/g, '\n')
-      .trim();
-    let previous = -1;
-    if (
-      !sql.startsWith('BEGIN;') ||
-      !sql.endsWith('COMMIT;') ||
-      required.some((statement) => {
-        const position = sql.indexOf(statement);
-        const ordered = position > previous;
-        previous = position;
-        return !ordered || sql.indexOf(statement, position + statement.length) !== -1;
-      })
-    ) {
-      throw new Error('RELEASE_MIGRATION_BOUNDS_MISSING');
-    }
-  }
+export function withMigrationBounds(directUrl, bounds) {
+  const url = new URL(withMigrationConnectionMetadata(directUrl, 'bunshin_migration_bounded'));
+  // Startup options apply to the actual migration engine connection, not another client.
+  url.searchParams.set(
+    'options',
+    `-c lock_timeout=${bounds.lockTimeoutMs} -c statement_timeout=${bounds.statementTimeoutMs} -c idle_in_transaction_session_timeout=${bounds.statementTimeoutMs}`,
+  );
+  return url.toString();
 }
 
 export function resolveMigrationDirectUrl(directUrl, sessionPoolerHost) {
@@ -120,7 +77,7 @@ export function runMigrationConnectionProbe(
   return runMigration(environment, execute, true);
 }
 
-function matchesExpectedProject(connection, projectRef) {
+export function matchesExpectedProject(connection, projectRef) {
   const url = new URL(connection);
   const direct = url.hostname === `db.${projectRef}.supabase.co`;
   const pooler = url.hostname.endsWith('.pooler.supabase.com');
@@ -152,11 +109,14 @@ async function runMigration(environment, execute, probeOnly) {
   }
 
   let migrationDirectUrl;
+  let migrationHistoryUrl;
   let bounds;
   let prismaCli;
+  let configurationDiagnostic = 'unclassified-configuration-error';
 
   try {
     if (probeOnly) {
+      configurationDiagnostic = 'probe-target-invalid';
       const expectedProject = environment.MIGRATION_PROBE_EXPECTED_PROJECT_REF;
       if (
         !/^[a-z0-9]{20}$/.test(expectedProject ?? '') ||
@@ -166,11 +126,31 @@ async function runMigration(environment, execute, probeOnly) {
         throw new Error('MIGRATION_PROBE_TARGET_INVALID');
       }
     }
+    configurationDiagnostic = 'migration-timeout-settings-invalid';
     bounds = resolveMigrationBounds(environment);
-    assertBoundedReleaseMigrations(bounds);
-    migrationDirectUrl = withMigrationBounds(
-      resolveMigrationDirectUrl(environment.DIRECT_URL, environment.SUPABASE_SESSION_POOLER_HOST),
-      bounds,
+    let directUrl;
+    try {
+      const directUrlObject = new URL(environment.DIRECT_URL);
+      if (
+        /^db\.[a-z0-9]+\.supabase\.co$/i.test(directUrlObject.hostname) &&
+        !environment.SUPABASE_SESSION_POOLER_HOST
+      ) {
+        configurationDiagnostic = 'session-pooler-host-required';
+      } else {
+        configurationDiagnostic = 'direct-url-invalid';
+      }
+      directUrl = resolveMigrationDirectUrl(
+        environment.DIRECT_URL,
+        environment.SUPABASE_SESSION_POOLER_HOST,
+      );
+    } catch {
+      throw new Error('MIGRATION_DIRECT_URL_INVALID');
+    }
+    configurationDiagnostic = 'migration-connection-url-invalid';
+    migrationDirectUrl = withMigrationBounds(directUrl, bounds);
+    migrationHistoryUrl = withMigrationConnectionMetadata(
+      directUrl,
+      'bunshin_migration_history_check',
     );
     if (
       probeOnly &&
@@ -180,12 +160,14 @@ async function runMigration(environment, execute, probeOnly) {
       ) ||
         new URL(migrationDirectUrl).port !== '5432')
     ) {
+      configurationDiagnostic = 'probe-target-invalid';
       throw new Error('MIGRATION_PROBE_TARGET_INVALID');
     }
+    configurationDiagnostic = 'prisma-cli-unavailable';
     prismaCli = requireModule.resolve('prisma/build/index.js');
   } catch {
     console.error(
-      '[database] MIGRATION_CONFIGURATION_INVALID: check URL, pooler host and bounded timeout settings; values are not logged.',
+      `[database] MIGRATION_CONFIGURATION_INVALID (${configurationDiagnostic}): values are not logged.`,
     );
     return 1;
   }
@@ -199,39 +181,40 @@ async function runMigration(environment, execute, probeOnly) {
     DIRECT_URL: migrationDirectUrl,
   };
   delete childEnvironment.PGOPTIONS;
+  const startedAt = performance.now();
   let result;
   try {
-    const startedAt = performance.now();
-    if (!probeOnly) {
-      const historyUrl = withMigrationBounds(
-        resolveMigrationDirectUrl(environment.DIRECT_URL, environment.SUPABASE_SESSION_POOLER_HOST),
-        bounds,
-        'bunshin_migration_history_check',
-      );
-      const history = await execute(
-        process.execPath,
-        [prismaCli, 'migrate', 'status', '--schema', 'prisma/schema.prisma'],
-        {
-          cwd: new URL('../', import.meta.url),
-          env: {
-            ...childEnvironment,
-            DATABASE_URL: historyUrl,
-            DIRECT_URL: historyUrl,
+    // If a prior approved direct-connection operation already applied every migration,
+    // do not require pooler startup options that this pooler may not support.
+    const history = probeOnly
+      ? undefined
+      : await execute(
+          process.execPath,
+          [prismaCli, 'migrate', 'status', '--schema', 'prisma/schema.prisma'],
+          {
+            cwd: new URL('../', import.meta.url),
+            env: {
+              ...childEnvironment,
+              DATABASE_URL: migrationHistoryUrl,
+              DIRECT_URL: migrationHistoryUrl,
+            },
+            timeoutMs: Math.min(bounds.processTimeoutMs, 60000),
+            captureOutput: true,
           },
-          timeoutMs: Math.min(bounds.processTimeoutMs, 60000),
-          captureOutput: true,
-        },
-      );
+        );
+    if (probeOnly) {
+      // Connection probe below intentionally remains independent of migration history.
+    } else {
       if (history.reason !== 'EXITED') {
         console.error('[database] MIGRATION_HISTORY_CHECK_FAILED: build stopped before migration.');
         return 1;
       }
-      const status = parseMigrationHistoryStatus(history.capturedOutput ?? '');
-      if (status.status === 'UP_TO_DATE' && history.status === 0) {
+      const parsedHistory = parseMigrationHistoryStatus(history.capturedOutput ?? '');
+      if (parsedHistory.status === 'UP_TO_DATE' && history.status === 0) {
         console.log('[database] Migrations already up to date; no migration command started.');
         return 0;
       }
-      if (status.status !== 'PENDING') {
+      if (parsedHistory.status !== 'PENDING') {
         console.error('[database] MIGRATION_HISTORY_CHECK_FAILED: build stopped before migration.');
         return 1;
       }
@@ -239,8 +222,12 @@ async function runMigration(environment, execute, probeOnly) {
         '[database] Pending migrations found; validating active DB timeout bounds before deploy.',
       );
     }
-    // Supabase's session pooler can reject PostgreSQL startup `options`. Apply and verify
-    // the same transaction-local settings used by every release migration instead.
+  } catch {
+    console.error('[database] MIGRATION_HISTORY_CHECK_FAILED: build stopped before migration.');
+    return 1;
+  }
+  try {
+    // A pooler must not silently discard startup settings. Probe with the same CLI/URL.
     const probe = await execute(
       process.execPath,
       [prismaCli, 'db', 'execute', '--stdin', '--schema', 'prisma/schema.prisma'],
@@ -249,9 +236,6 @@ async function runMigration(environment, execute, probeOnly) {
         env: childEnvironment,
         timeoutMs: bounds.processTimeoutMs,
         input: `BEGIN READ ONLY;
-      SET LOCAL lock_timeout = '${bounds.lockTimeoutMs}ms';
-      SET LOCAL statement_timeout = '${bounds.statementTimeoutMs}ms';
-      SET LOCAL idle_in_transaction_session_timeout = '${bounds.statementTimeoutMs}ms';
       DO $$ BEGIN
         ${probeOnly ? "IF current_database() <> 'postgres' OR current_user <> 'postgres' THEN RAISE EXCEPTION 'MIGRATION_PROBE_IDENTITY_MISMATCH'; END IF;" : ''}
         IF current_setting('lock_timeout')::interval <> interval '${bounds.lockTimeoutMs} milliseconds'
@@ -265,7 +249,7 @@ async function runMigration(environment, execute, probeOnly) {
     const remainingMs = Math.floor(bounds.processTimeoutMs - (performance.now() - startedAt));
     if (probe.reason !== 'EXITED' || probe.status !== 0 || remainingMs <= 0) {
       console.error(
-        '[database] MIGRATION_PREFLIGHT_FAILED: no migrate deploy started. Verify connection settings and DB sessions before retry.',
+        `[database] MIGRATION_PREFLIGHT_FAILED (${probe.diagnostic ?? probe.reason.toLowerCase()}): no migrate deploy started.`,
       );
       return 1;
     }

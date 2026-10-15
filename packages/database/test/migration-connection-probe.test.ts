@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { runMigrationConnectionProbe } from '../scripts/deploy-migrations-for-vercel.mjs';
 import type { runMigrationProcess } from '../scripts/migration-process.mjs';
 import type { MigrationProcessResult } from '../scripts/migration-process.mjs';
+import { classifyMigrationProcessFailure } from '../scripts/migration-process.mjs';
 
 const project = 'abcdefghijklmnopqrst';
 const direct = `postgresql://postgres:synthetic-secret@db.${project}.supabase.co:5432/postgres?sslmode=require`;
@@ -18,6 +19,20 @@ const environment = {
 
 describe('migration connection probe only', () => {
   afterEach(() => vi.restoreAllMocks());
+
+  it('classifies common Prisma connection failures without exposing raw output', () => {
+    expect(
+      classifyMigrationProcessFailure(
+        "Error: P1001: Can't reach database server at `db.example.supabase.co`",
+      ),
+    ).toBe('database-unreachable');
+    expect(
+      classifyMigrationProcessFailure('Error: P1000: Authentication failed for user secret-user'),
+    ).toBe('database-authentication-failed');
+    expect(classifyMigrationProcessFailure('opaque synthetic-secret error')).toBe(
+      'unclassified-preflight-error',
+    );
+  });
 
   it('succeeds with exactly one read-only settings probe and never migrates', async () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
@@ -40,8 +55,7 @@ describe('migration connection probe only', () => {
     const url = new URL(options.env.DIRECT_URL!);
     expect(url.port).toBe('5432');
     expect(decodeURIComponent(url.username)).toBe(`postgres.${project}`);
-    expect(url.searchParams.get('options')).toBeNull();
-    expect(options.input).toContain("SET LOCAL lock_timeout = '5000ms'");
+    expect(url.searchParams.get('options')).toContain('lock_timeout=5000');
     expect(environment.DIRECT_URL).toBe(direct);
     expect(log.mock.calls.flat().join(' ')).toContain('MIGRATION_CONNECTION_PROBE_PASSED');
     expect(log.mock.calls.flat().join(' ')).not.toContain('synthetic-secret');
@@ -88,6 +102,35 @@ describe('migration connection probe only', () => {
     expect(await runMigrationConnectionProbe({ ...environment, ...override }, execute)).toBe(1);
     expect(execute).not.toHaveBeenCalled();
     expect(error.mock.calls.flat().join(' ')).not.toContain('synthetic-secret');
+  });
+
+  it('labels a direct Supabase URL that cannot be safely routed through a session pooler', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const execute = vi.fn<typeof runMigrationProcess>();
+    expect(
+      await runMigrationConnectionProbe(
+        { ...environment, DIRECT_URL: direct, SUPABASE_SESSION_POOLER_HOST: '' },
+        execute,
+      ),
+    ).toBe(1);
+    expect(error.mock.calls.flat().join(' ')).toContain('session-pooler-host-required');
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it('labels a connection URL that conflicts with bounded migration settings', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const execute = vi.fn<typeof runMigrationProcess>();
+    expect(
+      await runMigrationConnectionProbe(
+        {
+          ...environment,
+          DIRECT_URL: `${environment.DIRECT_URL}&options=-c%20statement_timeout=0`,
+        },
+        execute,
+      ),
+    ).toBe(1);
+    expect(error.mock.calls.flat().join(' ')).toContain('migration-connection-url-invalid');
+    expect(execute).not.toHaveBeenCalled();
   });
 
   it.each<MigrationProcessResult>([
