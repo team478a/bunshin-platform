@@ -112,9 +112,55 @@ export class PrismaGroupParticipationRepository implements GroupParticipationRep
         expiresAt: input.expiresAt,
         maxUses: input.maxUses,
         createdByUserId: input.actorUserId,
+        source: 'MANUAL',
       },
     });
     return groupInvitationRecord(created);
+  }
+
+  async createLineFollowInvitation(
+    input: Parameters<GroupParticipationRepository['createLineFollowInvitation']>[0],
+  ) {
+    const now = new Date();
+    const group = await this.client.group.findFirst({
+      where: {
+        id: input.groupId,
+        workspaceId: input.workspaceId,
+        status: 'ACTIVE',
+        workspace: { status: 'ACTIVE', type: 'ORGANIZATION' },
+        serviceConfiguration: {
+          is: {
+            visibility: 'PUBLIC',
+            OR: [{ startsAt: null }, { startsAt: { lte: now } }],
+            AND: [{ OR: [{ endsAt: null }, { endsAt: { gt: now } }] }],
+            registration: { is: { mode: 'INVITATION_ONLY', lineEnabled: true } },
+          },
+        },
+      },
+      select: { id: true },
+    });
+    if (!group) return null;
+    try {
+      const created = await this.client.groupInvitation.create({
+        data: {
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          tokenHash: input.tokenHash,
+          role: 'PARTICIPANT',
+          expiresAt: input.expiresAt,
+          maxUses: 1,
+          source: 'LINE_FOLLOW',
+          sourceEventId: input.sourceEventId,
+          createdByUserId: null,
+        },
+      });
+      return groupInvitationRecord(created);
+    } catch (error) {
+      // A webhook delivery may be retried; an event can create at most one invite.
+      if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2002')
+        return null;
+      throw error;
+    }
   }
 
   async acceptInvitation(input: Parameters<GroupParticipationRepository['acceptInvitation']>[0]) {

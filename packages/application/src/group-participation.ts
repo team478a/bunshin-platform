@@ -23,6 +23,13 @@ export interface GroupParticipationRepository {
       maxUses: number;
     },
   ): Promise<GroupInvitation | null>;
+  createLineFollowInvitation(input: {
+    workspaceId: string;
+    groupId: string;
+    tokenHash: string;
+    sourceEventId: string;
+    expiresAt: Date;
+  }): Promise<GroupInvitation | null>;
   acceptInvitation(
     input: GroupActorScope & { tokenHash: string; now: Date },
   ): Promise<GroupMembership | null>;
@@ -87,6 +94,21 @@ export class GroupParticipationService {
     });
     if (result === null) throw new ApplicationError('FORBIDDEN', 'invitation management denied');
     return result;
+  }
+
+  async createLineFollowInvitation(input: {
+    workspaceId: string;
+    groupId: string;
+    tokenHash: string;
+    sourceEventId: string;
+    expiresAt: Date;
+  }) {
+    if (!/^[a-f0-9]{64}$/.test(input.tokenHash))
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid tokenHash');
+    required(input.sourceEventId, 'sourceEventId', 255);
+    if (input.expiresAt.getTime() <= Date.now())
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid expiresAt');
+    return this.repository.createLineFollowInvitation(input);
   }
 
   async acceptInvitation(input: GroupActorScope & { tokenHash: string; now?: Date }) {

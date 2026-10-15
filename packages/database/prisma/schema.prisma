@@ -241,6 +241,11 @@ enum GroupInvitationStatus {
   REVOKED
 }
 
+enum GroupInvitationSource {
+  MANUAL
+  LINE_FOLLOW
+}
+
 enum CampaignPostingApprovalStatus {
   PENDING
   APPROVED
@@ -4096,12 +4101,14 @@ model GroupInvitation {
   expiresAt       DateTime              @map("expires_at") @db.Timestamptz(6)
   maxUses         Int                   @default(1) @map("max_uses")
   usedCount       Int                   @default(0) @map("used_count")
-  createdByUserId String                @map("created_by_user_id") @db.Uuid
+  createdByUserId String?               @map("created_by_user_id") @db.Uuid
+  source          GroupInvitationSource @default(MANUAL)
+  sourceEventId   String?               @unique @map("source_event_id") @db.VarChar(255)
   createdAt       DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt       DateTime              @updatedAt @map("updated_at") @db.Timestamptz(6)
   workspace       Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   group           Group                 @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  createdBy       User                  @relation("GroupInvitationCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  createdBy       User?                 @relation("GroupInvitationCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
 
   @@index([workspaceId, groupId, status])
   @@index([expiresAt, status])

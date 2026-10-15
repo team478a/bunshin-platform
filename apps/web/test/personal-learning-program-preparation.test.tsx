@@ -1,7 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 vi.mock('@bunshin/config', () => ({ getServerEnvironment: () => ({ APP_ENV: 'production' }) }));
-import { programPreparationTarget } from '../src/services/personal-learning-program-preparation';
+import {
+  pilotPreparationWritesAllowed,
+  programPreparationTarget,
+} from '../src/services/personal-learning-program-preparation';
 import { ProgramPreparationCard } from '../app/s/[serviceSlug]/manage/programs/personal-learning-preparation/card';
 import {
   createPreparationCommand,
@@ -32,10 +35,11 @@ describe('stopped dedicated Program preparation UI', () => {
     expect(programPreparationTarget({ workspaceId: id, serviceId: id })).toBeNull();
   });
   it.each(['PERSONAL_LEARNING_PILOT', 'PERSONAL_LEARNING_PRODUCTION_CLOSED_PILOT'])(
-    'closes with %s enabled',
+    'keeps the emergency operations target visible with %s enabled but hides other writes',
     (flag) => {
       vi.stubEnv(flag, 'true');
-      expect(programPreparationTarget({ workspaceId: id, serviceId: group })).toBeNull();
+      expect(programPreparationTarget({ workspaceId: id, serviceId: group })).toBe(program);
+      expect(pilotPreparationWritesAllowed()).toBe(false);
     },
   );
   it('refuses absent, malformed or extra authority and disabled operation flag', () => {
@@ -54,7 +58,7 @@ describe('stopped dedicated Program preparation UI', () => {
     const fetcher = vi.fn();
     vi.stubGlobal('fetch', fetcher);
     const html = renderToStaticMarkup(
-      <ProgramPreparationCard serviceSlug="test" programId={program} />,
+      <ProgramPreparationCard serviceSlug="test" programId={program} allowCreation />,
     );
     expect(fetcher).not.toHaveBeenCalled();
     expect(html).toContain('現在の状態を確認');

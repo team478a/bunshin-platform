@@ -1,5 +1,12 @@
 # BUNSHIN Platform Decision Log
 
+## 2026-10-15: 個人リッチメニューのnullable列migrationを限定direct runnerへ追加
+
+- 状態: 実装PRレビュー待ち。本番DBへは未接続・未変更。
+- Vercel Productionはread-only履歴確認後、`20261015090000_personal_learning_rich_menu_pending` のtimeout bounds確認で停止し、migrationを開始しなかった。今回のpendingは `group_line_connections` へのnullable `VARCHAR(128)` 列追加1件。
+- Supavisor経由でstartup timeout settingsが有効にならない場合に備え、既存2件のLINE identity migration allowlistを維持したうえで、新migration単独の完全一致pending集合と専用確認語を追加する。未知migrationや複合集合は拒否する。
+- 直接接続runnerの実行前にProduction backup/restore手順と旧Application互換性を人間が確認する。認証情報・backup確認が未完了の状態では実行しない。
+
 ## 2026-10-14: IPv4 pooler migration preflight不適合時の限定direct経路
 
 - 状態: 実装後レビュー・merge待ち。本番migrationは未実行。
@@ -4250,3 +4257,12 @@
 - SHARED routingは当該Workspaceに本人の有効なLINE接続があり、友だち状態を確認できる場合にのみ通知設定を有効化する。DEDICATED routingは当該Service専用接続・友だち状態・参加同意・運用設定を別途満たす必要があり、共通接続で代用しない。
 - 実装は既存の通知設定・配信・認可境界を再利用し、通知Preferencesの重複テーブルや横断的なWorkspace検索を追加しない。新規の通知同意なしに既存設定を有効化しない。
 - production Migration、環境変数変更、実LINE送信、実利用者の設定変更は本判断・PRの範囲外。CI後にLINE内ブラウザでLINEログイン、明示同意、友だち未追加、SHARED/DEDICATED routingを別々に確認する。
+
+## 2026-10-15: 招待限定ServiceはLINE友だち追加へ個別の参加招待を自動返信する
+
+- 状態: 実装PRレビュー待ち。DB migration適用、本番設定、LINE実機確認は未実施。
+- 有効なDEDICATED Service LINEで新規FOLLOWを受け、Serviceが公開中・`INVITATION_ONLY`・LINE登録有効の場合、イベント単位で7日間・1回限りの参加招待を作成し、Reply APIで個別URLを返す。招待作成に成功しない場合はリンクを返信しない。
+- 招待URLを開くとログインへ進み、OAuth callbackは元の招待URLへ同じブラウザで戻す。ログイン後も参加内容の確認と本人の明示同意を必須とする。LINEアプリのトーク画面へ強制遷移する仕様とはしない。LINE Loginを外部ブラウザで開始した場合はそのブラウザへ戻る。
+- 自動招待は既存の手動招待と同じBearer linkモデルとし、受け取った人が転送できる。個人LINE IDへの暗号学的束縛は行わない。Messaging channelとLINE Login channelのProvider同一性が確認されていないため、ID同一性を仮定しない。
+- 作成者はシステム（null）として記録し、`LINE_FOLLOW`とWebhook event IDで出所・重複を追跡する。生Webhook本文、replyToken、LINE user IDは保存しない。認証利用者やMembershipをWebhookから作成しない。
+- migration、本番環境設定、実LINE送信、既存メンバーの招待/参加変更はこのPRに含めない。実機でFOLLOW→自動返信→LINEログイン→招待画面へ戻る→本人同意→参加完了を確認してから本番利用する。

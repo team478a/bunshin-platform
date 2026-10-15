@@ -102,6 +102,19 @@ export class PrismaPersonalLearningPilotOperations {
     const openCallCount = await tx.personalLearningCallAdmission.count({
       where: { ...this.authority, settledAt: null },
     });
+    const started = Boolean(
+      await tx.programAuditLog.findFirst({
+        where: {
+          workspaceId: this.authority.workspaceId,
+          groupId: this.authority.groupId,
+          resourceType: 'SERVICE_PROGRAM',
+          resourceId: p.id,
+          action: { startsWith: 'PILOT_OPERATION_' },
+          afterData: { path: ['operation'], equals: 'START' },
+        },
+        select: { id: true },
+      }),
+    );
     const s = p.settings as Prisma.JsonObject;
     return {
       exists: true,
@@ -109,6 +122,7 @@ export class PrismaPersonalLearningPilotOperations {
       status: p.status,
       initialized: Object.hasOwn(s, 'personalLearningPilot'),
       enabled: (s.personalLearningPilot as Prisma.JsonObject | undefined)?.enabled === true,
+      started,
       openCallCount,
       drainStatus: 'UNKNOWN' as const,
     };
@@ -122,6 +136,7 @@ export class PrismaPersonalLearningPilotOperations {
         status: 'ABSENT' as const,
         initialized: false,
         enabled: false,
+        started: false,
         openCallCount: 0,
         drainStatus: 'UNKNOWN' as const,
       };
