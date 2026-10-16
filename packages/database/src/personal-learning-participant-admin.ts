@@ -90,6 +90,19 @@ export class PrismaPersonalLearningParticipantAdminRepository {
             revokedAt: true,
           },
         }),
+        enrollments: await tx.$queryRaw<{ id: string; name: string }[]>`
+          SELECT e.id, u.display_name AS name
+          FROM program_enrollments e
+          JOIN group_memberships m ON m.id=e.group_membership_id
+            AND m.workspace_id=e.workspace_id AND m.group_id=e.group_id
+          JOIN users u ON u.id=m.user_id AND u.status::text='ACTIVE'
+          WHERE e.workspace_id=${a.workspaceId}::uuid AND e.group_id=${a.groupId}::uuid
+            AND e.service_program_id=${a.serviceProgramId}::uuid
+            AND e.status::text='ACTIVE' AND e.starts_at IS NOT NULL AND e.starts_at<=now()
+            AND (e.ends_at IS NULL OR e.ends_at>now())
+            AND m.status::text='ACTIVE' AND m.service_role::text='PARTICIPANT'
+          ORDER BY e.created_at ASC, e.id ASC
+        `,
       };
     });
   }

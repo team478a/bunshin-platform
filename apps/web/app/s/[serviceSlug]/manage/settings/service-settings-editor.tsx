@@ -6,6 +6,12 @@ import {
   readServiceOnboardingSettings,
 } from '../../../../../src/services/service-onboarding-settings';
 import { enforceBusinessDailyServiceSettings } from '../../../../../src/services/business-daily-service-settings';
+import {
+  serviceRegistrationModeFromPolicy,
+  serviceRegistrationPolicyFromMode,
+  type ServiceRegistrationAccess,
+  type ServiceRegistrationApproval,
+} from '../../../../../src/services/service-registration-policy';
 import { ServiceBasicsFields } from './service-basics-fields';
 import { ServiceOnboardingFields } from './service-onboarding-fields';
 import type {
@@ -38,6 +44,13 @@ export function ServiceSettingsEditor({
     value.registration.surveyConfig,
   );
   const businessFreeSettingsLocked = onboarding.businessProfileEnabled;
+  const initialRegistrationPolicy = serviceRegistrationPolicyFromMode(value.registration.mode);
+  const [registrationAccess, setRegistrationAccess] = useState<ServiceRegistrationAccess>(
+    initialRegistrationPolicy.access,
+  );
+  const [registrationApproval, setRegistrationApproval] = useState<ServiceRegistrationApproval>(
+    initialRegistrationPolicy.approval,
+  );
   const [profileQuestions, setProfileQuestions] = useState(onboarding.profileQuestions);
   const [businessProfileEnabled, setBusinessProfileEnabled] = useState(
     onboarding.businessProfileEnabled,
@@ -88,7 +101,10 @@ export function ServiceSettingsEditor({
           primaryColor: text('primaryColor'),
           secondaryColor: text('secondaryColor'),
           fontFamily: text('fontFamily'),
-          registrationMode: text('registrationMode'),
+          registrationMode: serviceRegistrationModeFromPolicy(
+            registrationAccess,
+            registrationApproval,
+          ),
           emailEnabled: data.has('emailEnabled'),
           lineEnabled: data.has('lineEnabled'),
           inviteCodeEnabled: businessFreeSettingsLocked ? false : data.has('inviteCodeEnabled'),
@@ -140,6 +156,13 @@ export function ServiceSettingsEditor({
         value={value}
         businessFreeSettingsLocked={businessFreeSettingsLocked}
         announcement={announcement}
+        registrationAccess={registrationAccess}
+        registrationApproval={registrationApproval}
+        onRegistrationAccessChange={(access) => {
+          setRegistrationAccess(access);
+          if (access === 'CLOSED') setRegistrationApproval('AUTO');
+        }}
+        onRegistrationApprovalChange={setRegistrationApproval}
       />
       <ServiceOnboardingFields
         serviceSlug={serviceSlug}

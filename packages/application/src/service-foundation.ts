@@ -6,6 +6,7 @@ export type ServiceVisibility = (typeof SERVICE_VISIBILITIES)[number];
 export const SERVICE_REGISTRATION_MODES = [
   'PUBLIC',
   'INVITATION_ONLY',
+  'INVITATION_APPROVAL_REQUIRED',
   'APPROVAL_REQUIRED',
   'CLOSED',
 ] as const;

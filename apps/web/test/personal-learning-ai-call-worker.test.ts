@@ -58,6 +58,9 @@ vi.mock('../src/ai/openai-cost-admission', () => ({
 vi.mock('../src/services/personal-learning-call-admission', () => ({
   admitPersonalLearningCall: fake.admit,
 }));
+vi.mock('../src/services/ai-training-consent', () => ({
+  requireAiTrainingUsageConsent: vi.fn().mockResolvedValue(undefined),
+}));
 vi.mock('../src/observability/personal-learning-ai-call', () => ({
   preparePersonalLearningAiCall: fake.prepare,
 }));

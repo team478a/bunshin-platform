@@ -9,6 +9,8 @@ import { groupInvitationTokenHash } from '../../../../../src/http/group-invitati
 import { ensureUserWorkspaceLineConnection } from '../../../../../src/line/ensure-user-workspace-connection';
 import { recordAuthenticatedRegistrationEvent } from '../../../../../src/registration/funnel';
 import { safeLineAuthReturnPath } from '../../../../../src/auth/line-return';
+import { invitationAcceptedPath } from '../../../../../src/services/ai-training-consent-policy';
+import { hasAiTrainingServiceProgram } from '../../../../../src/services/service-ai-training-mode';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,7 +28,7 @@ async function invitationReturnPath(
   workspaceId: string,
   token: string,
   serviceSlug?: string,
-): Promise<{ accepted: Route; declined: Route } | null> {
+): Promise<{ accepted: Route; declined: Route; pending: Route } | null> {
   if (!serviceSlug) return null;
   const db = await import('@bunshin/database');
   const service = await db.prisma.serviceConfiguration.findFirst({
@@ -40,14 +42,21 @@ async function invitationReturnPath(
         },
       },
     },
-    select: { slug: true },
+    select: { slug: true, group: { select: { id: true } } },
   });
-  return service
-    ? {
-        accepted: `/s/${service.slug}/home` as Route,
-        declined: `/s/${service.slug}` as Route,
-      }
-    : null;
+  if (!service) return null;
+  const isAiTrainingService = await hasAiTrainingServiceProgram({
+    workspaceId,
+    serviceId: service.group.id,
+  });
+  return {
+    // The helper returns a runtime-validated internal route; Next's generated route type
+    // is narrower during `next build` than during the standalone lint task.
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
+    accepted: invitationAcceptedPath(service.slug, isAiTrainingService) as Route,
+    declined: `/s/${service.slug}` as Route,
+    pending: `/s/${service.slug}` as Route,
+  };
 }
 
 async function acceptInvitation(formData: FormData) {
@@ -67,9 +76,10 @@ async function acceptInvitation(formData: FormData) {
     input.data.token,
     input.data.serviceSlug,
   );
+  let accepted: { status: string } | null;
   try {
     const db = await import('@bunshin/database');
-    await new GroupParticipationService(
+    accepted = await new GroupParticipationService(
       new db.PrismaGroupParticipationRepository(),
     ).acceptInvitation({
       workspaceId: input.data.workspaceId,
@@ -79,6 +89,9 @@ async function acceptInvitation(formData: FormData) {
   } catch {
     redirect(serviceReturn?.declined ?? '/groups?error=invitation');
   }
+  if (!accepted) redirect(serviceReturn?.declined ?? '/groups?error=invitation');
+  if (accepted.status === 'PENDING_APPROVAL')
+    redirect(serviceReturn?.pending ?? '/groups?pending=approval');
   await ensureUserWorkspaceLineConnection(actor.userId, input.data.workspaceId);
   await recordAuthenticatedRegistrationEvent({
     eventType: 'GROUP_JOINED',
@@ -168,7 +181,15 @@ export async function InvitationContent({
         select: {
           name: true,
           workspace: { select: { name: true } },
-          serviceConfiguration: { select: { slug: true, displayName: true, operatorName: true } },
+          // Service-participation approval is separate from accepting an invitation and any Program Enrollment.
+          serviceConfiguration: {
+            select: {
+              slug: true,
+              displayName: true,
+              operatorName: true,
+              registration: { select: { mode: true } },
+            },
+          },
         },
       },
     },
@@ -184,6 +205,11 @@ export async function InvitationContent({
           {invitation.group.serviceConfiguration?.operatorName ?? invitation.group.workspace.name}
           から招待されています。
         </p>
+        {invitation.role === 'PARTICIPANT' &&
+          invitation.group.serviceConfiguration?.registration?.mode ===
+            'INVITATION_APPROVAL_REQUIRED' && (
+            <p>招待を受けたあと、運営者が確認して承認するとサービスを利用できます。</p>
+          )}
       </header>
       <section className="settings-card">
         <h2>参加する前に確認してください</h2>
@@ -204,8 +230,12 @@ export async function InvitationContent({
           <label>
             <input type="checkbox" required /> 内容を確認し、サービスへの参加に同意します
           </label>
-          <PendingSubmitButton className="button button--primary" pendingLabel="参加しています…">
-            同意して参加する
+          <PendingSubmitButton className="button button--primary" pendingLabel="送信しています…">
+            {invitation.role === 'PARTICIPANT' &&
+            invitation.group.serviceConfiguration?.registration?.mode ===
+              'INVITATION_APPROVAL_REQUIRED'
+              ? '同意して参加を申し込む'
+              : '同意して参加する'}
           </PendingSubmitButton>
         </form>
         <form action={declineInvitation}>

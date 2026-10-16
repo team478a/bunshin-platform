@@ -20,7 +20,12 @@ export interface ServiceSettingsValue {
     fontFamily: string;
   };
   registration: {
-    mode: 'PUBLIC' | 'INVITATION_ONLY' | 'APPROVAL_REQUIRED' | 'CLOSED';
+    mode:
+      | 'PUBLIC'
+      | 'INVITATION_ONLY'
+      | 'INVITATION_APPROVAL_REQUIRED'
+      | 'APPROVAL_REQUIRED'
+      | 'CLOSED';
     emailEnabled: boolean;
     lineEnabled: boolean;
     inviteCodeEnabled: boolean;

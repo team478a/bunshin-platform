@@ -133,7 +133,12 @@ export class PrismaGroupParticipationRepository implements GroupParticipationRep
             visibility: 'PUBLIC',
             OR: [{ startsAt: null }, { startsAt: { lte: now } }],
             AND: [{ OR: [{ endsAt: null }, { endsAt: { gt: now } }] }],
-            registration: { is: { mode: 'INVITATION_ONLY', lineEnabled: true } },
+            registration: {
+              is: {
+                mode: { in: ['INVITATION_ONLY', 'INVITATION_APPROVAL_REQUIRED'] },
+                lineEnabled: true,
+              },
+            },
           },
         },
       },
@@ -175,6 +180,21 @@ export class PrismaGroupParticipationRepository implements GroupParticipationRep
         },
       });
       if (invitation === null || invitation.usedCount >= invitation.maxUses) return null;
+      const serviceRegistration =
+        invitation.role === 'PARTICIPANT'
+          ? await tx.serviceRegistrationPolicy.findUnique({
+              where: { groupId: invitation.groupId },
+              select: { mode: true },
+            })
+          : null;
+      const existingGroupMembership = await tx.groupMembership.findUnique({
+        where: { groupId_userId: { groupId: invitation.groupId, userId: input.actorUserId } },
+        select: { status: true },
+      });
+      const requiresManualApproval =
+        invitation.role === 'PARTICIPANT' &&
+        serviceRegistration?.mode === 'INVITATION_APPROVAL_REQUIRED' &&
+        existingGroupMembership?.status !== 'ACTIVE';
       const entitlement = await tx.organizationEntitlement.findUnique({
         where: { workspaceId: input.workspaceId },
         select: { maxMembers: true, suspended: true, startsAt: true, endsAt: true },
@@ -240,19 +260,19 @@ export class PrismaGroupParticipationRepository implements GroupParticipationRep
           userId: input.actorUserId,
           role: invitation.role,
           serviceRole: invitation.role === 'MANAGER' ? 'SERVICE_ADMIN' : 'PARTICIPANT',
-          status: 'ACTIVE',
+          status: requiresManualApproval ? 'PENDING_APPROVAL' : 'ACTIVE',
           consentedAt: input.now,
         },
         update: {
           role: invitation.role,
           serviceRole: invitation.role === 'MANAGER' ? 'SERVICE_ADMIN' : 'PARTICIPANT',
-          status: 'ACTIVE',
+          status: requiresManualApproval ? 'PENDING_APPROVAL' : 'ACTIVE',
           consentedAt: input.now,
           declinedAt: null,
           revokedAt: null,
         },
       });
-      if (invitation.role === 'PARTICIPANT')
+      if (invitation.role === 'PARTICIPANT' && !requiresManualApproval)
         await recordOemRegistration(
           tx,
           membership,
@@ -260,6 +280,20 @@ export class PrismaGroupParticipationRepository implements GroupParticipationRep
           input.now,
           'participant accepted invitation',
         );
+      if (requiresManualApproval)
+        await tx.groupMembershipAuditLog.create({
+          data: {
+            workspaceId: input.workspaceId,
+            groupId: invitation.groupId,
+            groupMembershipId: membership.id,
+            action: 'REQUESTED',
+            beforeData: existingGroupMembership ? { status: existingGroupMembership.status } : {},
+            afterData: { role: membership.role, status: membership.status },
+            reason: 'invitation accepted; operator approval required',
+            performedByUserId: input.actorUserId,
+            occurredAt: input.now,
+          },
+        });
       return groupMembershipRecord(membership);
     });
   }

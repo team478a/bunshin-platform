@@ -325,7 +325,9 @@ export async function handleGroupLineWebhook(
       let participationUrl = new URL(`/s/${scoped.serviceSlug}`, baseUrl).toString();
       if (
         result?.outcomes.CONNECTION_NOT_FOUND === 1 &&
-        scoped.registrationMode === 'INVITATION_ONLY' &&
+        ['INVITATION_ONLY', 'INVITATION_APPROVAL_REQUIRED'].includes(
+          scoped.registrationMode ?? '',
+        ) &&
         scoped.registrationLineEnabled
       ) {
         const token = randomBytes(32).toString('base64url');

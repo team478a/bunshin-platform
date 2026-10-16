@@ -1,5 +1,13 @@
 # BUNSHIN Platform Decision Log
 
+## 2026-10-16: OEMサービスの参加受付と承認を独立設定にする
+
+- 状態: 実装中。migration/CI確認後にPRレビュー対象。本番設定変更・本番Migration・デプロイは含まない。
+- サービス参加ポリシーは「参加できる人（公開/招待のみ）」と「承認方式（自動/運営者確認）」を独立して選択する。既存の受付停止（CLOSED）は独立した停止状態として維持する。
+- 既存値との対応は、公開＋自動=`PUBLIC`、公開＋手動=`APPROVAL_REQUIRED`、招待＋自動=`INVITATION_ONLY`、招待＋手動=`INVITATION_APPROVAL_REQUIRED`。LINE友だち追加の自動招待は招待限定の両方式で利用する。
+- 招待＋手動は招待受諾時に`PENDING_APPROVAL`を記録する。承認までサービスアクセス、正式登録課金記録、参加完了通知を開始しない。管理者承認後に既存の参加承認処理がこれらを有効化する。
+- サービスMembershipの受付とProgram Enrollment、参加枠/Seat、決済、AI利用同意は別の状態・運用として維持する。既存Serviceの設定値をこの変更で書き換えない。
+
 ## 2026-10-16: AI研修サービスの参加導線をSNS作成から分離する
 
 - 状態: PR-1 (#1303) 更新後のCI待ち。マージ・Production反映前。
@@ -4281,3 +4289,20 @@
 - 社内テスター上限を1〜3へ変更し、今回の候補人数を3人とする。DB準備・Seat付与・開始時にserver側で設定上限を再検証し、4人目以上は拒否する。これは外部Waveのcapを変えず、参加者の本人同意や学習開始を自動化しない。
 - 試験候補はProgram全体の日次20 AI試行（3人合計）、同時実行1、日次費用Hard Stop $1（1,000,000 USD micros）。週累計$5は現行Admissionに週次Hard Stopがないため、実際の請求/利用額を人間が監視して到達時に停止する運用基準であり、強制可能なコード上限ではない。
 - 設定開始前に実際のモデル・価格・推定予約額・Provider側budget・料金確認手段・監視/停止担当を確認する。現在のモデル設定やsecretをこの変更では読み書きしない。モデル変更、環境変数、Migration、Production deploy、Definition APPROVE、登録、Pilot START、有料呼出しは別途承認と証拠が必要。NO-GOを維持する。
+
+## 2026-10-16 追記: 社内Wave 0もLINE招待から通常登録・明示的内部枠付与を通す
+
+- 状態: 実装中（本番反映・LINE実機E2E・参加枠付与は未実施）。
+- 社内テスターも、LINEで届くサービス招待URL → LINE Login → 招待内容確認と本人同意 → Service Membershipの順で参加する。その後、サービス管理者が既存のプログラム管理画面でAI研修Enrollmentを作成し、停止中Wave 0の参加者管理画面で、対象Enrollmentへ`INTERNAL` Seatを一人ずつ明示付与する。
+- 招待受諾によってProgram Enrollment、学習Profile、AI同意、Seat、Pilot開始を自動作成しない。サービス参加と研修資格・AI利用許可を分離する。内部枠は設定済み上限（今回3人）と既存RepositoryのSerializable transaction/allowlist/監査を使い、管理者確認とレビュー証跡なしに付与しない。
+- Seat付与後、本人はLINE内のサービスホームから既存の「参加中のプログラム」へ進む。Wave 0のプッシュ通知は従来の通知OFFを維持し、この変更でLINE送信を開始しない。公開登録・外部Checkoutの判断にも影響させない。
+- UI追加は既存participant-admin APIとmigration済みschemaを再利用する。Production環境flag、上限、Definition承認、Profile回答、Pilot START、Provider送信、Migration、Deploy、実LINE送信を変更・実行しない。
+
+## 2026-10-16: Manaberu招待後の参加確認とAI利用同意
+
+- 状態: 実装中。招待Membershipの自動生成範囲は維持し、Enrollment・INTERNAL Seat・AI同意・Pilot開始は自動作成しない。
+- AI_TRAINING_V1を持つサービスだけ、LINE招待を本人が受諾した後に専用の研修参加確認画面へ移す。他サービスの招待受諾は従来のサービスホームへ移す。
+- 管理者が既存管理画面でEnrollment作成・INTERNAL Seat付与したことをサーバー側で検証するまで、AI利用同意画面を出さない。テスター本人が外部AI送信内容を確認し、チェックした場合のみEnrollment/version単位の同意記録を作る。
+- 同意はUI表示だけの条件にしない。Pilot personal-learning access、評価Job enqueue、評価Job実行・Provider直前で、最新同意とEnrollment・INTERNAL Seatを再検証する。欠落/失効はfail-closedとし、既存Pilot feature flagや運用Gateを迂回しない。
+- Consent evidenceは専用のappend-only/versioned tableへ保存し、同意文面のversionとSHA-256 digest、consentedAt、workspace/group/enrollment/membership/user scopeを保持する。招待同意や通常のService Legal ConsentをAI送信許可として流用しない。旧versionの同意は新versionへの同意とみなさない。
+- Production migration/deploy、環境flag、Provider/LINE呼び出し、内部Seat付与、Pilot STARTはこの判断/実装の範囲外。LINE内ブラウザの実機復帰・DB migration・実AI呼び出しは別々に証拠化する。

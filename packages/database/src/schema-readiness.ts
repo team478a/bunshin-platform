@@ -1,1 +1,1 @@
-export const LATEST_DATABASE_MIGRATION = '20261015170000_add_line_follow_invitations';
+export const LATEST_DATABASE_MIGRATION = '20261016150000_invitation_manual_service_registration';

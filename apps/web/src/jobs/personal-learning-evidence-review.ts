@@ -8,6 +8,7 @@ import {
 } from '@bunshin/application';
 import { ApplicationError } from '@bunshin/shared';
 import { personalLearningPilotExecutionAllowed } from '../services/personal-learning-pilot-access';
+import { requireAiTrainingUsageConsent } from '../services/ai-training-consent';
 import { admitPersonalLearningCall } from '../services/personal-learning-call-admission';
 import { reserveOpenAiRuntimeConfiguration } from '../ai/runtime-provider-configuration';
 import { recordOpenAiUsageAndSettle } from '../ai/openai-cost-admission';
@@ -69,6 +70,12 @@ export async function executePersonalLearningEvidenceReview(input: {
   });
   if (!program || !personalLearningPilotExecutionAllowed(program.settings, enrollment.id, true))
     throw new ApplicationError('NOT_FOUND', 'practice evaluator unavailable');
+  await requireAiTrainingUsageConsent({
+    workspaceId: input.workspaceId,
+    groupId: input.groupId,
+    enrollmentId: enrollment.id,
+    userId: input.actorUserId,
+  });
   const answer = await db.prisma.trainingMissionAnswer.findFirst({
     where: {
       id: input.answerId,
@@ -139,6 +146,12 @@ export async function executePersonalLearningEvidenceReview(input: {
       generate: async () => {
         const policy = personalLearningPilotExecutionAllowed(program.settings, enrollment.id, true);
         if (!policy) throw new ApplicationError('FORBIDDEN', 'practice evaluator unavailable');
+        await requireAiTrainingUsageConsent({
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          enrollmentId: enrollment.id,
+          userId: input.actorUserId,
+        });
         const admission = await admitPersonalLearningCall({
           actor,
           assignmentId: answer.missionAssignmentId,

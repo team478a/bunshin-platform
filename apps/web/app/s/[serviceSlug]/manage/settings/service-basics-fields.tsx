@@ -1,4 +1,8 @@
 import type { ServiceAnnouncementSettings, ServiceSettingsValue } from './service-settings-types';
+import type {
+  ServiceRegistrationAccess,
+  ServiceRegistrationApproval,
+} from '../../../../../src/services/service-registration-policy';
 
 function dateTimeInputValue(value: string | null) {
   if (!value) return '';
@@ -12,10 +16,18 @@ export function ServiceBasicsFields({
   value,
   businessFreeSettingsLocked,
   announcement,
+  registrationAccess,
+  registrationApproval,
+  onRegistrationAccessChange,
+  onRegistrationApprovalChange,
 }: {
   value: ServiceSettingsValue;
   businessFreeSettingsLocked: boolean;
   announcement: ServiceAnnouncementSettings;
+  registrationAccess: ServiceRegistrationAccess;
+  registrationApproval: ServiceRegistrationApproval;
+  onRegistrationAccessChange: (value: ServiceRegistrationAccess) => void;
+  onRegistrationApprovalChange: (value: ServiceRegistrationApproval) => void;
 }) {
   return (
     <>
@@ -107,15 +119,40 @@ export function ServiceBasicsFields({
           placeholder="https://..."
         />
       </label>
-      <label>
-        新しい人の参加方法
-        <select name="registrationMode" defaultValue={value.registration.mode}>
-          <option value="INVITATION_ONLY">招待された人だけ</option>
-          <option value="PUBLIC">誰でも参加できる</option>
-          <option value="APPROVAL_REQUIRED">管理者が確認してから参加</option>
-          <option value="CLOSED">新しい参加を止める</option>
-        </select>
-      </label>
+      <fieldset>
+        <legend>新しい人の参加方法</legend>
+        <label>
+          参加できる人
+          <select
+            name="registrationAccess"
+            value={registrationAccess}
+            onChange={(event) =>
+              onRegistrationAccessChange(event.currentTarget.value as ServiceRegistrationAccess)
+            }
+          >
+            <option value="INVITATION_ONLY">招待された人だけ</option>
+            <option value="PUBLIC">誰でも申し込める</option>
+            <option value="CLOSED">新しい参加を止める</option>
+          </select>
+        </label>
+        <label>
+          参加の承認
+          <select
+            name="registrationApproval"
+            value={registrationApproval}
+            disabled={registrationAccess === 'CLOSED'}
+            onChange={(event) =>
+              onRegistrationApprovalChange(event.currentTarget.value as ServiceRegistrationApproval)
+            }
+          >
+            <option value="AUTO">自動承認</option>
+            <option value="MANUAL">運営者が確認して承認</option>
+          </select>
+        </label>
+        <small>
+          招待の有無と承認方法を別々に選べます。受付停止中は、新しい人は招待・公開申込のどちらからも参加できません。
+        </small>
+      </fieldset>
       <fieldset>
         <legend>ログイン・参加に使う方法</legend>
         <label>

@@ -268,6 +268,7 @@ enum ServiceVisibility {
 enum ServiceRegistrationMode {
   PUBLIC
   INVITATION_ONLY
+  INVITATION_APPROVAL_REQUIRED
   APPROVAL_REQUIRED
   CLOSED
 }
@@ -422,6 +423,7 @@ model ProgramEnrollment {
   updatedAt         DateTime                    @updatedAt @map("updated_at") @db.Timestamptz(3)
   paidPurchase      ProgramPurchase?            @relation("ProgramPurchasePaidEnrollment")
   trainingRetention TrainingDataRetentionState?
+  aiUsageConsents AiTrainingUsageConsent[]
   personalLearningGoalConfirmations PersonalLearningGoalConfirmation[]
   personalLearningRequests PersonalLearningRequest[]
   practiceSupportImages PersonalLearningPracticeSupportImage[]
@@ -447,6 +449,25 @@ model TrainingDataRetentionState {
   @@unique([workspaceId, groupId, programEnrollmentId], map: "training_retention_scope_enrollment_key")
   @@index([workspaceId, groupId], map: "training_retention_scope_idx")
   @@map("training_data_retention_states")
+}
+
+/// 明示的な外部AI利用同意。AI_TRAINING PilotのEnrollmentごと・文面版ごとに履歴を保持する。
+model AiTrainingUsageConsent {
+  id                  String            @id @default(uuid()) @db.Uuid
+  workspaceId         String            @map("workspace_id") @db.Uuid
+  groupId             String            @map("group_id") @db.Uuid
+  programEnrollmentId String            @map("program_enrollment_id") @db.Uuid
+  groupMembershipId   String            @map("group_membership_id") @db.Uuid
+  userId              String            @map("user_id") @db.Uuid
+  consentVersion      String            @map("consent_version") @db.VarChar(80)
+  textDigest          String            @map("text_digest") @db.Char(64)
+  consentedAt         DateTime          @default(now()) @map("consented_at") @db.Timestamptz(3)
+  enrollment          ProgramEnrollment @relation(fields: [workspaceId, groupId, programEnrollmentId], references: [workspaceId, groupId, id], onDelete: Cascade, onUpdate: Cascade)
+  groupMembership     GroupMembership   @relation(fields: [workspaceId, groupId, groupMembershipId, userId], references: [workspaceId, groupId, id, userId], onDelete: Cascade, onUpdate: Cascade)
+
+  @@unique([workspaceId, groupId, programEnrollmentId, consentVersion], map: "ai_training_usage_consent_enrollment_version_key")
+  @@index([workspaceId, groupId, userId, consentedAt], map: "ai_training_usage_consent_user_idx")
+  @@map("ai_training_usage_consents")
 }
 
 model ProgramMissionAssignment {
@@ -3513,6 +3534,7 @@ model GroupMembership {
   serviceMembershipEvents         ServiceMembershipEvent[]
   serviceUsageEvents              ServiceUsageEvent[]
   socialActivityBarrierCases      SocialActivityBarrierCase[]
+  aiTrainingUsageConsents         AiTrainingUsageConsent[]
 
   @@unique([groupId, userId])
   @@unique([workspaceId, groupId, id])
