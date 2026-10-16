@@ -14,6 +14,7 @@ export interface ServiceLaunchReadinessInput {
   emailEnabled: boolean;
   lineEnabled: boolean;
   onboardingQuestionCount: number;
+  isAiTrainingService?: boolean;
   publishedLegalTypes: string[];
   activeFeatureCount: number;
   activeParticipantCount: number;
@@ -72,7 +73,9 @@ export function buildServiceLaunchReadiness(
         : input.onboardingQuestionCount > 0,
       detail: businessDailyIdeas
         ? '業種、商品・サービス、対象顧客、発信目的を企業ごとに登録します。'
-        : '参加者に合う投稿パートナーを作るための質問です。',
+        : input.isAiTrainingService
+          ? '参加者の目標や経験を確認し、AI研修の学習内容を個別に準備するための質問です。'
+          : '参加者に合う投稿パートナーを作るための質問です。',
       path: `${base}/settings`,
     },
     ...(businessDailyIdeas
