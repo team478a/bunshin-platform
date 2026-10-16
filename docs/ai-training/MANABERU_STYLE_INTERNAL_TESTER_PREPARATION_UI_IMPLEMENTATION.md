@@ -12,9 +12,9 @@
 `/s/{serviceSlug}/manage/programs/personal-learning-preparation`
 
 1. 「本人の準備状態を確認」。認証済み本人のMembership・専用Programの適格Offering・本人Enrollment・本人Seatをserverで解決する。他参加者の名簿/Seat・email・Profileは返さない。
-2. policy未設定の場合だけ、内部上限1人または2人を人間が選ぶ。初期値は未選択。外部累計上限100、Wave 0、外部受付0を表示して確認し、`CONFIGURE`する。既存policyをこのUIから上書きしない。
+2. policy未設定の場合だけ、内部上限1〜3人を人間が選ぶ。初期値は未選択。外部累計上限100、Wave 0、外部受付0を表示して確認し、`CONFIGURE`する。既存policyをこのUIから上書きしない。
 3. 再確認後、本人の無料・招待制・GUIDED・期限なしEnrollmentを`PREPARE_ENROLLMENT`。Offeringが複数適格または不明なら選択を推測せず停止。
-4. 再確認後、本人Enrollmentへ`ADMIT kind=INTERNAL`。外部100人枠を消費しない。取消済み/異種Seat、inactive/期限付きEnrollment、Wave 0以外、内部上限1〜2以外は停止する。
+4. 再確認後、本人Enrollmentへ`ADMIT kind=INTERNAL`。外部100人枠を消費しない。取消済み/異種Seat、inactive/期限付きEnrollment、Wave 0以外、内部上限1〜3以外は停止する。
 5. 再確認で現在の本人Enrollmentとlive INTERNAL Seatが読めた場合だけ、既存本人学習準備画面へのリンクを表示。本人がProfileを回答する。準備完了をPilot開始・Definition承認・実課金許可としない。
 
 各操作は独立した人間確認・reviewEvidenceKeyが必要。前のチェック状態を次操作へ流用しない。証跡キーは100文字以内の識別子であり、秘密情報・相談本文を入力しない。
@@ -24,6 +24,7 @@
 - 新規は`GET /api/services/{serviceSlug}/ai-training/internal-preparation`の限定projectionのみ。queryによるUser/Program/Enrollment指定を拒否。POSTなし、private/no-store。
 - 実session、管理Service resolver、server固定authority、両実行flag OFF、operations/participant preparation flagを要求。既存Repositoryの停止中・専用Program・通知隔離認可を再利用し、非同期読取後も環境条件を再確認する。
 - 本人Membershipはworkspace/group/user完全一致かつACTIVE SERVICE_OWNERに限定。Enrollment/Offeringは同workspace/group/programに限定する。個人情報・他参加者Seatを返さない。role変更や追加Membershipを作らない。
+- Wave 0の内部人数上限は1〜3。設定値を超えるEnrollment準備・Seat・開始はserver側で拒否し、上限を増やしてもPilot開始・AI利用・課金は有効化しない。
 - 書込は既存`pilot-operations` / `pilot-participants`だけ。既存Origin/JSONサイズ/strict入力、DB内再認可、lock、CAS、idempotency、cap、auditを変更しない。GETの表示情報は実行許可の代わりにならない。
 - 初回CONFIGURE、本人Enrollment作成、INTERNAL Seat付与のみ。INITIALIZE/START/STOP/REVOKE、Wave拡大、EXTERNAL付与、Definition APPROVE、Profile代入、Goal/Plan作成はUIに設けない。
 

@@ -4274,3 +4274,10 @@
 - 自動招待は既存の手動招待と同じBearer linkモデルとし、受け取った人が転送できる。個人LINE IDへの暗号学的束縛は行わない。Messaging channelとLINE Login channelのProvider同一性が確認されていないため、ID同一性を仮定しない。
 - 作成者はシステム（null）として記録し、`LINE_FOLLOW`とWebhook event IDで出所・重複を追跡する。生Webhook本文、replyToken、LINE user IDは保存しない。認証利用者やMembershipをWebhookから作成しない。
 - migration、本番環境設定、実LINE送信、既存メンバーの招待/参加変更はこのPRに含めない。実機でFOLLOW→自動返信→LINEログイン→招待画面へ戻る→本人同意→参加完了を確認してから本番利用する。
+
+## 2026-10-16: Manaberu Style社内Wave 0を3人で準備する（開始・本番設定は別Gate）
+
+- 状態: ユーザー指定の人数・費用候補。3人対応コードはPRレビュー/CI待ち。Production設定、Enrollment/Seat/Profile、Definition承認、Pilot enable、Provider呼出しは未実施。
+- 社内テスター上限を1〜3へ変更し、今回の候補人数を3人とする。DB準備・Seat付与・開始時にserver側で設定上限を再検証し、4人目以上は拒否する。これは外部Waveのcapを変えず、参加者の本人同意や学習開始を自動化しない。
+- 試験候補はProgram全体の日次20 AI試行（3人合計）、同時実行1、日次費用Hard Stop $1（1,000,000 USD micros）。週累計$5は現行Admissionに週次Hard Stopがないため、実際の請求/利用額を人間が監視して到達時に停止する運用基準であり、強制可能なコード上限ではない。
+- 設定開始前に実際のモデル・価格・推定予約額・Provider側budget・料金確認手段・監視/停止担当を確認する。現在のモデル設定やsecretをこの変更では読み書きしない。モデル変更、環境変数、Migration、Production deploy、Definition APPROVE、登録、Pilot START、有料呼出しは別途承認と証拠が必要。NO-GOを維持する。
