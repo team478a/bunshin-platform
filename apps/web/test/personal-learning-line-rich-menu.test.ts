@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const f = vi.hoisted(() => ({
   findConnection: vi.fn(),
+  findEnrollment: vi.fn(),
+  readPractice: vi.fn(),
   updateConnection: vi.fn(),
   readiness: vi.fn(),
   read: vi.fn(),
@@ -20,11 +22,15 @@ vi.mock('@bunshin/database', () => ({
       findFirst: f.findConnection,
       updateMany: f.updateConnection,
     },
+    programEnrollment: { findFirst: f.findEnrollment },
   },
   PrismaPersonalLearningPilotRepository: class {
     readiness = f.readiness;
     read = f.read;
     currentAssignment = f.currentAssignment;
+  },
+  PrismaPersonalLearningPracticeRepository: class {
+    readPractice = f.readPractice;
   },
 }));
 vi.mock('@bunshin/config', () => ({
@@ -50,6 +56,7 @@ vi.mock('@bunshin/observability', () => ({
 }));
 import {
   activatePersonalLearningLineMenu,
+  dynamicPersonalLearningPracticeTitle,
   personalLearningLineMenuStatus,
 } from '../src/services/personal-learning-line-rich-menu';
 
@@ -78,6 +85,11 @@ describe('personal learning LINE menu service', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     f.findConnection.mockResolvedValue({ ...connection });
+    f.findEnrollment.mockResolvedValue({
+      serviceProgram: {
+        settings: { personalLearningPilot: { learningMode: 'FIXED_DEFINITIONS_V1' } },
+      },
+    });
     f.updateConnection.mockResolvedValue({ count: 1 });
     f.readiness.mockResolvedValue({ profileReady: true, approvalReady: true });
     f.read.mockResolvedValue({
@@ -158,6 +170,56 @@ describe('personal learning LINE menu service', () => {
         }),
       }),
     );
+  });
+
+  it('uses the dynamic current practice title instead of fixed pilot assignments', async () => {
+    f.findEnrollment.mockResolvedValue({
+      serviceProgram: {
+        settings: {
+          personalLearningPilot: {
+            enabled: true,
+            enrollmentIds: [actor.scope.programEnrollmentId],
+            learningMode: 'DYNAMIC_V1',
+            learningFeatures: {
+              conversation: false,
+              multiTopic: false,
+              lineLearning: true,
+              extendedScope: false,
+            },
+          },
+        },
+      },
+    });
+    f.readPractice.mockResolvedValue({
+      allowed: true,
+      current: { candidate: { proposal: { outcome: '自分の作業に合う練習' } } },
+    });
+
+    const dynamicActor = {
+      ...actor,
+      programSettings: {
+        personalLearningPilot: {
+          enabled: true,
+          enrollmentIds: [actor.scope.programEnrollmentId],
+          learningMode: 'DYNAMIC_V1',
+          learningFeatures: {
+            conversation: false,
+            multiTopic: false,
+            lineLearning: true,
+            extendedScope: false,
+          },
+        },
+      },
+    };
+    await expect(dynamicPersonalLearningPracticeTitle(dynamicActor)).resolves.toBe(
+      '自分の作業に合う練習',
+    );
+    await expect(
+      activatePersonalLearningLineMenu({ actor: dynamicActor, serviceSlug: 'manaberu-style' }),
+    ).resolves.toEqual({ linked: true });
+    expect(f.render).toHaveBeenCalledWith('自分の作業に合う練習');
+    expect(f.readiness).not.toHaveBeenCalled();
+    expect(f.currentAssignment).not.toHaveBeenCalled();
   });
 
   it('does not call LINE again when the same menu content is already active', async () => {

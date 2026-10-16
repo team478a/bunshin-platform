@@ -1,6 +1,7 @@
 import 'server-only';
 import { createHash } from 'node:crypto';
 import type { PersonalLearningActor } from '@bunshin/application';
+import { personalLearningFeatureEnabled, personalLearningMode } from '@bunshin/capability-training';
 import { ApplicationError } from '@bunshin/shared';
 import { createLogger } from '@bunshin/observability';
 import { PrismaPersonalLearningPilotRepository, prisma } from '@bunshin/database';
@@ -15,6 +16,21 @@ import {
 } from '../line/group-rich-menu-provider';
 
 const contentHash = (title: string) => createHash('sha256').update(title, 'utf8').digest('hex');
+
+/** Dynamic Programs use the learner's current confirmed practice, never a fixed Pilot assignment. */
+export async function dynamicPersonalLearningPracticeTitle(
+  actor: PersonalLearningActor & { programSettings?: unknown },
+) {
+  const settings = actor.programSettings;
+  if (personalLearningMode(settings) !== 'DYNAMIC_V1') return undefined;
+  if (!personalLearningFeatureEnabled(settings, 'lineLearning'))
+    throw new ApplicationError('NOT_FOUND', 'LINE learning is not enabled');
+  const db = await import('@bunshin/database');
+  const practice = await new db.PrismaPersonalLearningPracticeRepository(prisma).readPractice(
+    actor,
+  );
+  return practice.current?.candidate.proposal.outcome.trim() || null;
+}
 
 export async function personalLearningLineMenuStatus(
   actor: PersonalLearningActor,
@@ -106,22 +122,26 @@ export async function activatePersonalLearningLineMenu(input: {
   if (!connection)
     throw new ApplicationError('CONFLICT', 'active Manaberu LINE connection required');
   const pilot = new PrismaPersonalLearningPilotRepository(prisma);
-  const readiness = await pilot.readiness(input.actor);
-  if (!readiness.profileReady || !readiness.approvalReady)
-    throw new ApplicationError('CONFLICT', 'learning setup is not ready');
-  const state = await pilot.read({ scope: s, actorUserId: input.actor.actorUserId });
-  const current = state.plans.find((row) => row.isCurrent && row.goalActive);
-  const assignment = current
-    ? await pilot.currentAssignment({
-        scope: s,
-        actorUserId: input.actor.actorUserId,
-        planId: current.plan.planId,
-        revision: current.plan.revision,
-      })
-    : null;
-  if (!assignment || !assignment.display.title.trim())
-    throw new ApplicationError('CONFLICT', 'current practice is required');
-  const nextContentHash = contentHash(assignment.display.title);
+  const dynamicTitle = await dynamicPersonalLearningPracticeTitle(input.actor);
+  let practiceTitle = dynamicTitle;
+  if (dynamicTitle === undefined) {
+    const readiness = await pilot.readiness(input.actor);
+    if (!readiness.profileReady || !readiness.approvalReady)
+      throw new ApplicationError('CONFLICT', 'learning setup is not ready');
+    const state = await pilot.read({ scope: s, actorUserId: input.actor.actorUserId });
+    const current = state.plans.find((row) => row.isCurrent && row.goalActive);
+    const assignment = current
+      ? await pilot.currentAssignment({
+          scope: s,
+          actorUserId: input.actor.actorUserId,
+          planId: current.plan.planId,
+          revision: current.plan.revision,
+        })
+      : null;
+    practiceTitle = assignment?.display?.title.trim() || null;
+  }
+  if (!practiceTitle) throw new ApplicationError('CONFLICT', 'current practice is required');
+  const nextContentHash = contentHash(practiceTitle);
   if (
     connection.personalLearningRichMenuId &&
     connection.personalLearningRichMenuLinkedAt &&
@@ -136,7 +156,7 @@ export async function activatePersonalLearningLineMenu(input: {
     actorUserId: input.actor.actorUserId,
     route: 'personal-learning-line-rich-menu',
   });
-  const image = await renderPersonalLearningLineRichMenu(assignment.display.title);
+  const image = await renderPersonalLearningLineRichMenu(practiceTitle);
   const accessToken = new AesGcmLineSecretCrypto().decrypt(
     connection.configuration.encryptedAccessToken,
   );

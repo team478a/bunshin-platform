@@ -9,6 +9,8 @@ import {
   consultAiTrainingLearning,
   projectAiTrainingLearnerProfiles,
   personalLearningPilotAllows,
+  personalLearningDynamicProgramAllows,
+  personalLearningMode,
   parseAiTrainingActionDisplay,
   AI_TRAINING_LEARNING_DEFINITION_FIXTURES,
 } from '@bunshin/capability-training';
@@ -17,7 +19,7 @@ import { PrismaPersonalLearningRouterBridge } from './personal-learning-router';
 import { requirePersonalLearningPilotSeat } from './personal-learning-pilot-seat';
 
 type Tx = Prisma.TransactionClient;
-async function requirePilot(tx: Tx, input: PersonalLearningActor) {
+async function requirePilot(tx: Tx, input: PersonalLearningActor, allowDynamic = false) {
   const s = input.scope;
   const programs = await tx.$queryRaw<{ settings: unknown }[]>`
     SELECT p.settings FROM service_programs p JOIN program_enrollments e
@@ -25,16 +27,20 @@ async function requirePilot(tx: Tx, input: PersonalLearningActor) {
     WHERE e.id=${s.programEnrollmentId}::uuid AND e.workspace_id=${s.workspaceId}::uuid
       AND e.group_id=${s.groupId}::uuid AND e.group_membership_id=${s.groupMembershipId}::uuid
     FOR SHARE OF p`;
-  if (
-    programs.length !== 1 ||
-    !personalLearningPilotAllows(programs[0]?.settings, s.programEnrollmentId)
-  )
+  const mode = personalLearningMode(programs[0]?.settings);
+  const programAllowed =
+    mode === 'FIXED_DEFINITIONS_V1'
+      ? personalLearningPilotAllows(programs[0]?.settings, s.programEnrollmentId)
+      : allowDynamic &&
+        personalLearningDynamicProgramAllows(programs[0]?.settings, s.programEnrollmentId);
+  if (programs.length !== 1 || !programAllowed)
     throw new ApplicationError('NOT_FOUND', 'personal learning pilot unavailable');
-  await requirePersonalLearningPilotSeat(tx, s);
+  await requirePersonalLearningPilotSeat(tx, s, mode === 'DYNAMIC_V1');
 }
 
 /** HTTP composition uses this gated subclass, never an ungated persistence port. */
 export class PrismaPersonalLearningPilotRepository extends PrismaPersonalLearningPersistenceRepository {
+  protected allowDynamicLearning = false;
   authorizeAccess(input: PersonalLearningActor, requireSeat = false) {
     return this.authorized(input, false, async (tx) => {
       await requirePersonalLearningPilotSeat(tx, input.scope, requireSeat);
@@ -47,7 +53,7 @@ export class PrismaPersonalLearningPilotRepository extends PrismaPersonalLearnin
     work: (tx: Tx, now: Date) => Promise<T>,
   ) {
     return super.authorized(input, write, async (tx, now) => {
-      await requirePilot(tx, input);
+      await requirePilot(tx, input, this.allowDynamicLearning);
       return work(tx, now);
     });
   }

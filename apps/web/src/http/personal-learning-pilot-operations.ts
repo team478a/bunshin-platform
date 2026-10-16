@@ -19,6 +19,7 @@ const headers = { 'cache-control': 'private, no-store', 'x-content-type-options'
 const denied = () => new ApplicationError('NOT_FOUND', 'pilot operation unavailable');
 const publicPilotReasons = new Set([
   'PILOT_CONCURRENT_OPERATION',
+  'PILOT_CONFIG_REQUIRES_SUSPENDED',
   'PILOT_DEFINITION_APPROVAL_REQUIRED',
   'PILOT_EMPTY_DEDICATED_PROGRAM_REQUIRED',
   'PILOT_ENROLLMENT_ALREADY_EXISTS',

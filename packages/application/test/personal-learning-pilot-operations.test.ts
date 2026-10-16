@@ -22,6 +22,30 @@ describe('bounded Pilot operation contract', () => {
       }),
     ).not.toBeNull();
   });
+  it('accepts exact learning mode and feature configuration operations', () => {
+    expect(
+      parsePilotOperation({ ...c, action: 'SET_LEARNING_MODE', learningMode: 'DYNAMIC_V1' }),
+    ).not.toBeNull();
+    expect(
+      parsePilotOperation({
+        ...c,
+        action: 'SET_LEARNING_FEATURES',
+        learningFeatures: {
+          conversation: false,
+          multiTopic: false,
+          lineLearning: false,
+          extendedScope: false,
+        },
+      }),
+    ).not.toBeNull();
+    expect(
+      parsePilotOperation({
+        ...c,
+        action: 'SET_LEARNING_FEATURES',
+        learningFeatures: { conversation: true },
+      }),
+    ).toBeNull();
+  });
   it.each([
     { ...c, userId: c.operationId },
     { ...c, confirmation: 'automatic' },

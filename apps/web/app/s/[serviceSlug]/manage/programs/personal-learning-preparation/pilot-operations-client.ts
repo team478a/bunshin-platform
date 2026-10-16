@@ -7,6 +7,14 @@ export type PilotOperationsSnapshot = {
   enabled: boolean;
   started: boolean;
   stateToken: string;
+  learningMode: 'DYNAMIC_V1' | 'FIXED_DEFINITIONS_V1';
+  learningFeatures: {
+    conversation: boolean;
+    multiTopic: boolean;
+    lineLearning: boolean;
+    extendedScope: boolean;
+  };
+  openCallCount: number;
 };
 
 export function pilotOperationsSnapshot(value: unknown): PilotOperationsSnapshot | null {
@@ -19,7 +27,17 @@ export function pilotOperationsSnapshot(value: unknown): PilotOperationsSnapshot
     typeof v.enabled !== 'boolean' ||
     typeof v.started !== 'boolean' ||
     typeof v.stateToken !== 'string' ||
-    !/^[a-f0-9]{64}$/.test(v.stateToken)
+    !/^[a-f0-9]{64}$/.test(v.stateToken) ||
+    !['DYNAMIC_V1', 'FIXED_DEFINITIONS_V1'].includes(String(v.learningMode)) ||
+    !v.learningFeatures ||
+    typeof v.learningFeatures !== 'object' ||
+    Array.isArray(v.learningFeatures) ||
+    ['conversation', 'multiTopic', 'lineLearning', 'extendedScope'].some(
+      (key) => typeof (v.learningFeatures as Record<string, unknown>)[key] !== 'boolean',
+    ) ||
+    typeof v.openCallCount !== 'number' ||
+    !Number.isSafeInteger(v.openCallCount) ||
+    v.openCallCount < 0
   )
     return null;
   return {
@@ -29,6 +47,9 @@ export function pilotOperationsSnapshot(value: unknown): PilotOperationsSnapshot
     enabled: v.enabled,
     started: v.started,
     stateToken: v.stateToken,
+    learningMode: v.learningMode as PilotOperationsSnapshot['learningMode'],
+    learningFeatures: v.learningFeatures as PilotOperationsSnapshot['learningFeatures'],
+    openCallCount: v.openCallCount,
   };
 }
 
@@ -42,23 +63,37 @@ export function availablePilotOperation(snapshot: PilotOperationsSnapshot | null
 
 export function createPilotOperationCommand(
   snapshot: PilotOperationsSnapshot | null,
-  action: 'INITIALIZE' | 'START' | 'STOP',
+  action: 'INITIALIZE' | 'START' | 'STOP' | 'SET_LEARNING_MODE' | 'SET_LEARNING_FEATURES',
   evidence: string,
   confirmed: boolean,
+  value?: unknown,
 ) {
   if (
     !confirmed ||
     !snapshot ||
-    availablePilotOperation(snapshot) !== action ||
+    (['INITIALIZE', 'START', 'STOP'].includes(action) &&
+      availablePilotOperation(snapshot) !== action) ||
+    (['SET_LEARNING_MODE', 'SET_LEARNING_FEATURES'].includes(action) &&
+      (snapshot.status !== 'SUSPENDED' || snapshot.enabled)) ||
     !/^[a-zA-Z0-9_.:-]{1,100}$/.test(evidence)
   )
     return null;
+  const config =
+    action === 'SET_LEARNING_MODE' && (value === 'DYNAMIC_V1' || value === 'FIXED_DEFINITIONS_V1')
+      ? { learningMode: value }
+      : action === 'SET_LEARNING_FEATURES' &&
+          value &&
+          typeof value === 'object' &&
+          !Array.isArray(value)
+        ? { learningFeatures: value }
+        : {};
   return parsePilotOperation({
     action,
     operationId: crypto.randomUUID(),
     expectedStateToken: snapshot.stateToken,
     confirmation: 'CONFIRM_PILOT_OPERATION',
     reviewEvidenceKey: evidence,
+    ...config,
   });
 }
 
@@ -79,6 +114,8 @@ export function pilotOperationErrorMessage(reason: unknown, status?: number) {
     return '専用の空Programではないため操作できません。対象Programを確認してください。';
   if (reason === 'PILOT_OPERATION_SUPERSEDED')
     return 'この操作はすでに後続状態へ進んでいます。最新状態を確認してください。';
+  if (reason === 'PILOT_CONFIG_REQUIRES_SUSPENDED')
+    return '学習モード・機能設定は停止中のProgramでのみ変更できます。';
   if (status === 404 || status === 403)
     return '操作権限または運用設定を確認できません。環境担当者に確認してください。';
   if (status === 409) return '状態が競合しました。再取得してから操作してください。';
@@ -123,7 +160,15 @@ export async function submitPilotOperation(
       (command.action === 'STOP' &&
         after.status === 'SUSPENDED' &&
         !after.enabled &&
-        after.started);
+        after.started) ||
+      (command.action === 'SET_LEARNING_MODE' &&
+        after.learningMode === command.learningMode &&
+        after.status === 'SUSPENDED' &&
+        !after.enabled) ||
+      (command.action === 'SET_LEARNING_FEATURES' &&
+        JSON.stringify(after.learningFeatures) === JSON.stringify(command.learningFeatures) &&
+        after.status === 'SUSPENDED' &&
+        !after.enabled);
     return saved ? { result: 'SAVED' } : { result: 'REJECTED' };
   } catch {
     return { result: 'RETRY' };

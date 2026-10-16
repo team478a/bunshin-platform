@@ -4314,3 +4314,28 @@
 - 同意はUI表示だけの条件にしない。Pilot personal-learning access、評価Job enqueue、評価Job実行・Provider直前で、最新同意とEnrollment・INTERNAL Seatを再検証する。欠落/失効はfail-closedとし、既存Pilot feature flagや運用Gateを迂回しない。
 - Consent evidenceは専用のappend-only/versioned tableへ保存し、同意文面のversionとSHA-256 digest、consentedAt、workspace/group/enrollment/membership/user scopeを保持する。招待同意や通常のService Legal ConsentをAI送信許可として流用しない。旧versionの同意は新versionへの同意とみなさない。
 - Production migration/deploy、環境flag、Provider/LINE呼び出し、内部Seat付与、Pilot STARTはこの判断/実装の範囲外。LINE内ブラウザの実機復帰・DB migration・実AI呼び出しは別々に証拠化する。
+
+## 2026-10-16: マナベルスタイルは生成AIの進化と競合せず取り込む
+
+- 状態: サービス責任者の決定として記録。PR-0 Draft PRで明示確認待ち。根拠は2026-10-17付「マナベルスタイル 動的経路の本線化に関するサービス責任者の決定」およびAI進化方針書。
+- マナベルの価値を、本人の上達、個別化、AI機能の本人向け翻訳、継続、本人が管理できるモデル非依存の学習記録に置く。AIの代行、手順・プロンプト暗記、特定ツール版の教材を価値の中心にしない。自由希望から始まる動的経路を本線とする。
+- Providerは用途別Port/Adapterで分離し、モデル名ではなく能力で機能を選ぶ。AIの新能力を再実装せず、安全な境界内で利用する一方、本人記録・学習段階・同意/受講枠/費用/停止/監査・LINE伴走はマナベルが担う。
+- 手本の後には本人が試す一歩を必ず残す。本人像は同一本人のマナベル内に限定し、推測は未確認として根拠を示し、本人が確認・修正・削除できる。モデル比較はPR-Eの評価セット、PR-Gの独自手順を使い、人間承認後に行う。ツール新機能は出典付きで運営者が承認した場合に限り練習テーマへ反映する。
+- 研究結果は設計の参考であり、マナベルの学習効果の保証・広告根拠にしない。詳細な対象・条件・限界は`docs/ai-training/ADR_MANABERU_AI_EVOLUTION_POLICY.md`に記録する。
+- 実装順はPR-0→A→B→C→D→E→F→G→H→I。PRは1本ずつDraft＋報告・田中確認とし、マージ、Production release、migration、環境変更、Pilot開始をそれぞれ分離する。内部テスターは段階公開、外部公開はA〜G・通し評価承認・自動削除本番稼働後とする。
+
+## 2026-10-17: マナベル動的経路の保持・削除・Export・運営閲覧範囲
+
+- 状態: サービス責任者の選択として記録。PR-0 Draft PRで明示確認待ち。決定記録の質問1〜2への回答が根拠。
+- 対象: 動的経路で新たに保存する学習会話、提出物、相談画像、LINE受信本文・画像、希望・環境、学習要約・本人像。
+- 既存AI研修データの`TRAINING_RETENTION_V1`（`packages/capability-training/src/personal-data-retention.ts`）に揃える。会話・提出・画像・LINE本文は作成から90日、希望・環境は受講終了後90日、構造化要約・本人像は受講終了後1年。90日は解決済みサポート案件保持の流用ではない。期間ロジックを新設せず既存ルールを拡張する。
+- 本人は自身のデータを確認・修正・Export・削除できる。会話本文は通常、運営者に表示しない。運営者は件数・状態などの運用情報のみを閲覧し、本人がサポート目的で明示共有した会話だけを例外とし、本人が共有を撤回できるようにする。本文閲覧を実装する場合はアクセス監査を含める。
+- 会話・テーマ・本人像・LINE受信データを既存の本人Export/削除対象へ含める。自動削除のProduction有効化は別承認と実動作確認を必要とする。現行retention repository/APIは存在するが、`apps/web/vercel.json`にAI研修retention cronは登録されていない。外部公開前の自動削除稼働は未解決Gate。
+
+## 2026-10-17: Phase 1完了とPhase 2以降への移行を承認
+
+- 状態: 承認済み。田中はCodexとの作業スレッドで「Phase 1の完了とPhase 2以降への移行も承認します」と明示した（2026-10-17）。
+- 承認対象: Phase 1実装報告`docs/PHASE1_IMPLEMENTATION_REPORT.md`に記録された基盤完了と、Phase 2以降の作業開始。
+- PR #1のGitHub正式レビューsubmissionは確認できなかったという監査事実は維持する。今回の明示承認がレビュー証跡の欠落を遡及的に埋めるものではなく、Phase 1完了・移行判断を別途承認した証跡である。
+- この承認は、本番デプロイ、DB migrationの適用、AI/LINE実呼出し、Pilot開始、外部公開を承認しない。それぞれのRelease Gateを維持する。
+- これによりRoadmapの順序に従ってPR-Aへ進む。

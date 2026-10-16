@@ -2,7 +2,9 @@ import 'server-only';
 import { getServerEnvironment } from '@bunshin/config';
 import {
   personalLearningPilotAllows,
+  personalLearningDynamicProgramAllows,
   isPersonalLearningPilotProgram,
+  personalLearningMode,
   parsePilotParticipantPolicy,
 } from '@bunshin/capability-training';
 import { ApplicationError } from '@bunshin/shared';
@@ -23,10 +25,15 @@ export function personalLearningPilotExecutionAllowed(
   enrollmentId: string,
   requirePilot = false,
 ) {
+  const dynamic = personalLearningMode(settings) === 'DYNAMIC_V1';
+  const allowed = dynamic
+    ? process.env['PERSONAL_LEARNING_REQUEST_INTAKE'] === 'true' &&
+      personalLearningDynamicProgramAllows(settings, enrollmentId)
+    : personalLearningPilotAllows(settings, enrollmentId);
   return (
     (!requirePilot && !isPersonalLearningPilotProgram(settings)) ||
     (personalLearningPilotEnabled() &&
-      personalLearningPilotAllows(settings, enrollmentId) &&
+      allowed &&
       (getServerEnvironment().APP_ENV !== 'production' ||
         parsePilotParticipantPolicy(
           (settings as { personalLearningPilot?: { participantControl?: unknown } })
@@ -100,7 +107,7 @@ export async function resolvePersonalLearningPilot(
     enrollmentId: scope.programEnrollmentId,
     userId,
   });
-  return { scope, actorUserId: userId };
+  return { scope, actorUserId: userId, programSettings: program.settings };
 }
 
 /** Existing Answer/Assessment routes remain V1 routes, but a reserved Program cannot bypass the Pilot flag. */

@@ -6,6 +6,7 @@ import {
   personalLearningRequestEnabled,
 } from '../../../../../../src/services/personal-learning-request-access';
 import { PersonalLearningRequestCard } from './card';
+import { personalLearningMode } from '@bunshin/capability-training';
 export const dynamic = 'force-dynamic';
 export default async function Page({
   params,
@@ -25,12 +26,33 @@ export default async function Page({
       actor.userId,
     );
     const db = await import('@bunshin/database');
+    const enrollment = await db.prisma.programEnrollment.findFirst({
+      where: {
+        id: input.scope.programEnrollmentId,
+        workspaceId: input.scope.workspaceId,
+        groupId: input.scope.groupId,
+      },
+      select: { serviceProgramId: true },
+    });
+    const program = enrollment
+      ? await db.prisma.serviceProgram.findFirst({
+          where: {
+            id: enrollment.serviceProgramId,
+            workspaceId: input.scope.workspaceId,
+            groupId: input.scope.groupId,
+          },
+          select: { settings: true },
+        })
+      : null;
+    const dynamicMode = personalLearningMode(program?.settings) === 'DYNAMIC_V1';
     const initial = await new db.PrismaPersonalLearningRequestRepository(db.prisma).readRequest(
       input,
     );
     return (
       <main style={{ maxWidth: 560, margin: '0 auto', padding: 20 }}>
+        {dynamicMode && <p className="eyebrow">内部テスト中</p>}
         <PersonalLearningRequestCard
+          dynamicMode={dynamicMode}
           endpoint={`/api/services/${serviceSlug}/ai-training/enrollments/${programEnrollmentId}/learning-request`}
           initial={initial}
           practiceEndpoint={`/api/services/${serviceSlug}/ai-training/enrollments/${programEnrollmentId}/learning-request/practice`}
