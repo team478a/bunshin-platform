@@ -15,6 +15,8 @@ import {
   createPersonalLearningProgramDefinition,
   parsePilotParticipantPolicy,
   personalLearningPilotAllows,
+  personalLearningFeatures,
+  personalLearningMode,
   AI_TRAINING_LEARNING_DEFINITION_FIXTURES,
 } from '@bunshin/capability-training';
 import { ApplicationError } from '@bunshin/shared';
@@ -40,6 +42,12 @@ const digest = (value: unknown) =>
 const token = (p: ServiceProgram) => digest({ id: p.id, status: p.status, settings: p.settings });
 type Guard = (action: PilotOperation['action'] | 'READ') => void;
 const absentToken = (a: PersonalLearningPreparationAuthority) => digest({ ...a, state: 'ABSENT' });
+const defaultLearningFeatures: Prisma.JsonObject = {
+  conversation: false,
+  multiTopic: false,
+  lineLearning: false,
+  extendedScope: false,
+};
 
 /** No env mutation, Provider calls, Definition approval or automatic Seat admission. */
 export class PrismaPersonalLearningPilotOperations {
@@ -122,6 +130,8 @@ export class PrismaPersonalLearningPilotOperations {
       status: p.status,
       initialized: Object.hasOwn(s, 'personalLearningPilot'),
       enabled: (s.personalLearningPilot as Prisma.JsonObject | undefined)?.enabled === true,
+      learningMode: personalLearningMode(s),
+      learningFeatures: personalLearningFeatures(s),
       started,
       openCallCount,
       drainStatus: 'UNKNOWN' as const,
@@ -136,6 +146,13 @@ export class PrismaPersonalLearningPilotOperations {
         status: 'ABSENT' as const,
         initialized: false,
         enabled: false,
+        learningMode: 'FIXED_DEFINITIONS_V1' as const,
+        learningFeatures: Object.freeze({
+          conversation: false,
+          multiTopic: false,
+          lineLearning: false,
+          extendedScope: false,
+        }),
         started: false,
         openCallCount: 0,
         drainStatus: 'UNKNOWN' as const,
@@ -222,7 +239,12 @@ export class PrismaPersonalLearningPilotOperations {
           supportModes: ['GUIDED'],
           participation: 'INVITATION_ONLY',
           personalLearningProgramVersion: 'PERSONAL_LEARNING_OPEN_ENDED_V1',
-          personalLearningPilot: { enabled: false, enrollmentIds: [] },
+          personalLearningPilot: {
+            enabled: false,
+            enrollmentIds: [],
+            learningMode: 'FIXED_DEFINITIONS_V1',
+            learningFeatures: defaultLearningFeatures,
+          },
           trainingOperations: { notificationsEnabled: false, postponedReminderEnabled: false },
           personalLearningPilotOperations: { version: 'PILOT_OPERATIONS_V1', revision: 1 },
         },
@@ -363,7 +385,12 @@ export class PrismaPersonalLearningPilotOperations {
           throw conflict('PILOT_EMPTY_DEDICATED_PROGRAM_REQUIRED');
         next = {
           ...settings,
-          personalLearningPilot: { enabled: false, enrollmentIds: [] },
+          personalLearningPilot: {
+            enabled: false,
+            enrollmentIds: [],
+            learningMode: 'FIXED_DEFINITIONS_V1',
+            learningFeatures: defaultLearningFeatures,
+          },
           trainingOperations: {
             ...operationsSettings,
             notificationsEnabled: false,
@@ -380,183 +407,201 @@ export class PrismaPersonalLearningPilotOperations {
         };
         status = 'SUSPENDED';
       } else {
-        await requirePersonalLearningPreparationAuthority(tx, a, a, p.id, true);
-        if (c.action === 'PREPARE_ENROLLMENT') {
-          const policy = parsePilotParticipantPolicy(pilot?.participantControl);
-          if (
-            !policy ||
-            policy.currentWave !== 0 ||
-            policy.internalParticipantCap < 1 ||
-            policy.internalParticipantCap > 3
-          )
-            throw conflict('PILOT_WAVE0_CONFIGURATION_REQUIRED');
-          if ((await tx.programEnrollment.count({ where: a })) >= policy.internalParticipantCap)
-            throw conflict('PILOT_INTERNAL_PREPARATION_CAP_REACHED');
-          const members = await tx.$queryRaw<
-            { id: string }[]
-          >`SELECT m.id FROM group_memberships m JOIN users u ON u.id=m.user_id
+        if (c.action === 'SET_LEARNING_MODE' || c.action === 'SET_LEARNING_FEATURES') {
+          if (p.status !== 'SUSPENDED' || pilot?.enabled !== false)
+            throw conflict('PILOT_CONFIG_REQUIRES_SUSPENDED');
+          await requirePersonalLearningPreparationAuthority(tx, a, a, p.id, true);
+          next.personalLearningPilot = {
+            ...pilot,
+            ...(c.action === 'SET_LEARNING_MODE' ? { learningMode: c.learningMode } : {}),
+            ...(c.action === 'SET_LEARNING_FEATURES'
+              ? { learningFeatures: { ...c.learningFeatures } }
+              : {}),
+          };
+        } else {
+          await requirePersonalLearningPreparationAuthority(tx, a, a, p.id, true);
+          if (c.action === 'PREPARE_ENROLLMENT') {
+            const policy = parsePilotParticipantPolicy(pilot?.participantControl);
+            if (
+              !policy ||
+              policy.currentWave !== 0 ||
+              policy.internalParticipantCap < 1 ||
+              policy.internalParticipantCap > 3
+            )
+              throw conflict('PILOT_WAVE0_CONFIGURATION_REQUIRED');
+            if ((await tx.programEnrollment.count({ where: a })) >= policy.internalParticipantCap)
+              throw conflict('PILOT_INTERNAL_PREPARATION_CAP_REACHED');
+            const members = await tx.$queryRaw<
+              { id: string }[]
+            >`SELECT m.id FROM group_memberships m JOIN users u ON u.id=m.user_id
             WHERE m.id=${c.groupMembershipId}::uuid AND m.workspace_id=${a.workspaceId}::uuid AND m.group_id=${a.groupId}::uuid
             AND m.status::text='ACTIVE' AND m.service_role::text IN ('PARTICIPANT','SERVICE_OWNER') AND u.status::text='ACTIVE' FOR SHARE OF m,u`;
-          const offerings = await tx.$queryRaw<
-            { id: string }[]
-          >`SELECT id FROM program_offerings WHERE id=${c.programOfferingId}::uuid AND workspace_id=${a.workspaceId}::uuid AND group_id=${a.groupId}::uuid AND service_program_id=${p.id}::uuid FOR SHARE`;
-          if (members.length !== 1 || offerings.length !== 1) throw unavailable();
-          const o = await tx.programOffering.findUniqueOrThrow({
-            where: { id: c.programOfferingId },
-          });
-          if (
-            !o.termsSnapshot ||
-            typeof o.termsSnapshot !== 'object' ||
-            Array.isArray(o.termsSnapshot)
-          )
-            throw unavailable();
-          const terms = o.termsSnapshot as { participation?: string; supportModes?: string[] };
-          const now = new Date();
-          if (
-            o.status !== 'ACTIVE' ||
-            !o.isFree ||
-            o.priceReference !== null ||
-            terms.participation !== 'INVITATION_ONLY' ||
-            !Array.isArray(terms.supportModes) ||
-            !terms.supportModes.includes('GUIDED') ||
-            (o.startsAt && o.startsAt > now) ||
-            (o.endsAt && o.endsAt <= now)
-          )
-            throw unavailable();
-          if (
-            await tx.programEnrollment.count({
-              where: { ...a, groupMembershipId: c.groupMembershipId },
-            })
-          )
-            throw conflict('PILOT_ENROLLMENT_ALREADY_EXISTS');
-          const e = await tx.programEnrollment.create({
-            data: {
-              ...a,
-              groupMembershipId: c.groupMembershipId,
-              programOfferingId: o.id,
-              status: 'ACTIVE',
-              supportMode: 'GUIDED',
-              goalSnapshot: { goal: '' },
-              offeringSnapshot: {
-                version: o.version,
-                isFree: true,
-                seller: o.seller,
-                apiCostOwner: o.apiCostOwner,
-                supportOwner: o.supportOwner,
-                contentOwner: o.contentOwner,
-                characterOwner: o.characterOwner,
-                terms: o.termsSnapshot,
-              },
-              invitedByUserId: actorUserId,
-              startsAt: now,
-            },
-          });
-          programEnrollmentId = e.id;
-        } else {
-          const policy = parsePilotParticipantPolicy(pilot?.participantControl);
-          const admission = parsePersonalLearningCallAdmissionPolicy(this.admission);
-          if (
-            !policy ||
-            policy.currentWave !== 0 ||
-            policy.currentWaveCap !== 0 ||
-            policy.internalParticipantCap < 1 ||
-            policy.internalParticipantCap > 3 ||
-            !admission ||
-            ['workspaceId', 'groupId', 'serviceProgramId'].some(
-              (k) =>
-                admission[k as keyof PersonalLearningPreparationAuthority] !==
-                a[k as keyof PersonalLearningPreparationAuthority],
-            )
-          )
-            throw conflict('PILOT_WAVE0_CONFIGURATION_REQUIRED');
-          const seats = await tx.personalLearningPilotSeat.findMany({ where: a });
-          const active = seats.filter((s) => !s.revokedAt);
-          if (
-            !active.length ||
-            active.length > policy.internalParticipantCap ||
-            seats.some((s) => s.kind !== 'INTERNAL') ||
-            (await tx.personalLearningCallAdmission.count({ where: { ...a, settledAt: null } }))
-          )
-            throw conflict('PILOT_START_NOT_READY');
-          const projected = { ...settings, personalLearningPilot: { ...pilot, enabled: true } };
-          for (const seat of active) {
+            const offerings = await tx.$queryRaw<
+              { id: string }[]
+            >`SELECT id FROM program_offerings WHERE id=${c.programOfferingId}::uuid AND workspace_id=${a.workspaceId}::uuid AND group_id=${a.groupId}::uuid AND service_program_id=${p.id}::uuid FOR SHARE`;
+            if (members.length !== 1 || offerings.length !== 1) throw unavailable();
+            const o = await tx.programOffering.findUniqueOrThrow({
+              where: { id: c.programOfferingId },
+            });
             if (
-              !seat.programEnrollmentId ||
-              !personalLearningPilotAllows(projected, seat.programEnrollmentId)
+              !o.termsSnapshot ||
+              typeof o.termsSnapshot !== 'object' ||
+              Array.isArray(o.termsSnapshot)
             )
-              throw conflict('PILOT_START_NOT_READY');
-            const e = await tx.programEnrollment.findFirst({
-              where: {
+              throw unavailable();
+            const terms = o.termsSnapshot as { participation?: string; supportModes?: string[] };
+            const now = new Date();
+            if (
+              o.status !== 'ACTIVE' ||
+              !o.isFree ||
+              o.priceReference !== null ||
+              terms.participation !== 'INVITATION_ONLY' ||
+              !Array.isArray(terms.supportModes) ||
+              !terms.supportModes.includes('GUIDED') ||
+              (o.startsAt && o.startsAt > now) ||
+              (o.endsAt && o.endsAt <= now)
+            )
+              throw unavailable();
+            if (
+              await tx.programEnrollment.count({
+                where: { ...a, groupMembershipId: c.groupMembershipId },
+              })
+            )
+              throw conflict('PILOT_ENROLLMENT_ALREADY_EXISTS');
+            const e = await tx.programEnrollment.create({
+              data: {
                 ...a,
-                id: seat.programEnrollmentId,
+                groupMembershipId: c.groupMembershipId,
+                programOfferingId: o.id,
                 status: 'ACTIVE',
-                startsAt: { lte: new Date() },
-                OR: [{ endsAt: null }, { endsAt: { gt: new Date() } }],
+                supportMode: 'GUIDED',
+                goalSnapshot: { goal: '' },
+                offeringSnapshot: {
+                  version: o.version,
+                  isFree: true,
+                  seller: o.seller,
+                  apiCostOwner: o.apiCostOwner,
+                  supportOwner: o.supportOwner,
+                  contentOwner: o.contentOwner,
+                  characterOwner: o.characterOwner,
+                  terms: o.termsSnapshot,
+                },
+                invitedByUserId: actorUserId,
+                startsAt: now,
               },
             });
-            if (!e) throw conflict('PILOT_START_NOT_READY');
-            const m = await tx.groupMembership.findFirst({
-              where: { workspaceId: a.workspaceId, groupId: a.groupId, id: e.groupMembershipId },
-            });
-            if (!m || !(await tx.user.count({ where: { id: m.userId, status: 'ACTIVE' } })))
+            programEnrollmentId = e.id;
+          } else {
+            const policy = parsePilotParticipantPolicy(pilot?.participantControl);
+            const admission = parsePersonalLearningCallAdmissionPolicy(this.admission);
+            const mode = personalLearningMode(settings);
+            if (
+              !mode ||
+              !policy ||
+              policy.currentWave !== 0 ||
+              policy.currentWaveCap !== 0 ||
+              policy.internalParticipantCap < 1 ||
+              policy.internalParticipantCap > 3 ||
+              !admission ||
+              ['workspaceId', 'groupId', 'serviceProgramId'].some(
+                (k) =>
+                  admission[k as keyof PersonalLearningPreparationAuthority] !==
+                  a[k as keyof PersonalLearningPreparationAuthority],
+              )
+            )
+              throw conflict('PILOT_WAVE0_CONFIGURATION_REQUIRED');
+            const seats = await tx.personalLearningPilotSeat.findMany({ where: a });
+            const active = seats.filter((s) => !s.revokedAt);
+            if (
+              !active.length ||
+              active.length > policy.internalParticipantCap ||
+              seats.some((s) => s.kind !== 'INTERNAL') ||
+              (await tx.personalLearningCallAdmission.count({ where: { ...a, settledAt: null } }))
+            )
               throw conflict('PILOT_START_NOT_READY');
-            await requirePersonalLearningPilotSeat(
-              tx,
-              { ...a, programEnrollmentId: e.id, userId: m.userId },
-              true,
-            );
-            if (
-              !(await tx.trainingParticipantProfile.count({
+            const projected = { ...settings, personalLearningPilot: { ...pilot, enabled: true } };
+            for (const seat of active) {
+              if (
+                !seat.programEnrollmentId ||
+                !personalLearningPilotAllows(projected, seat.programEnrollmentId)
+              )
+                throw conflict('PILOT_START_NOT_READY');
+              const e = await tx.programEnrollment.findFirst({
                 where: {
-                  workspaceId: a.workspaceId,
-                  groupId: a.groupId,
-                  programEnrollmentId: e.id,
-                  groupMembershipId: m.id,
-                  userId: m.userId,
-                  updatedByUserId: m.userId,
-                },
-              })) ||
-              !(await tx.programActionEvent.count({
-                where: {
-                  workspaceId: a.workspaceId,
-                  groupId: a.groupId,
-                  programEnrollmentId: e.id,
-                  actorUserId: m.userId,
-                  eventType: 'PERSONAL_LEARNING_PILOT_PROFILE_INITIALIZED',
-                },
-              }))
-            )
-              throw conflict('PILOT_PROFILE_REQUIRED');
-          }
-          for (const d of AI_TRAINING_LEARNING_DEFINITION_FIXTURES) {
-            const approval = await tx.learningDefinitionApproval.findFirst({
-              where: {
-                workspaceId: a.workspaceId,
-                groupId: a.groupId,
-                ...d.reference,
-                approvalStatus: 'APPROVED',
-                approvedAt: { lte: new Date() },
-              },
-            });
-            if (
-              !approval?.approvedByUserId ||
-              !(await tx.user.count({
-                where: { id: approval.approvedByUserId, status: 'ACTIVE' },
-              })) ||
-              !(await tx.groupMembership.count({
-                where: {
-                  workspaceId: a.workspaceId,
-                  groupId: a.groupId,
-                  userId: approval.approvedByUserId,
+                  ...a,
+                  id: seat.programEnrollmentId,
                   status: 'ACTIVE',
-                  serviceRole: { in: ['SERVICE_OWNER', 'SERVICE_ADMIN'] },
+                  startsAt: { lte: new Date() },
+                  OR: [{ endsAt: null }, { endsAt: { gt: new Date() } }],
                 },
-              }))
-            )
-              throw conflict('PILOT_DEFINITION_APPROVAL_REQUIRED');
+              });
+              if (!e) throw conflict('PILOT_START_NOT_READY');
+              const m = await tx.groupMembership.findFirst({
+                where: { workspaceId: a.workspaceId, groupId: a.groupId, id: e.groupMembershipId },
+              });
+              if (!m || !(await tx.user.count({ where: { id: m.userId, status: 'ACTIVE' } })))
+                throw conflict('PILOT_START_NOT_READY');
+              await requirePersonalLearningPilotSeat(
+                tx,
+                { ...a, programEnrollmentId: e.id, userId: m.userId },
+                true,
+              );
+              if (
+                mode === 'FIXED_DEFINITIONS_V1' &&
+                (!(await tx.trainingParticipantProfile.count({
+                  where: {
+                    workspaceId: a.workspaceId,
+                    groupId: a.groupId,
+                    programEnrollmentId: e.id,
+                    groupMembershipId: m.id,
+                    userId: m.userId,
+                    updatedByUserId: m.userId,
+                  },
+                })) ||
+                  !(await tx.programActionEvent.count({
+                    where: {
+                      workspaceId: a.workspaceId,
+                      groupId: a.groupId,
+                      programEnrollmentId: e.id,
+                      actorUserId: m.userId,
+                      eventType: 'PERSONAL_LEARNING_PILOT_PROFILE_INITIALIZED',
+                    },
+                  })))
+              )
+                throw conflict('PILOT_PROFILE_REQUIRED');
+            }
+            for (const d of mode === 'FIXED_DEFINITIONS_V1'
+              ? AI_TRAINING_LEARNING_DEFINITION_FIXTURES
+              : []) {
+              const approval = await tx.learningDefinitionApproval.findFirst({
+                where: {
+                  workspaceId: a.workspaceId,
+                  groupId: a.groupId,
+                  ...d.reference,
+                  approvalStatus: 'APPROVED',
+                  approvedAt: { lte: new Date() },
+                },
+              });
+              if (
+                !approval?.approvedByUserId ||
+                !(await tx.user.count({
+                  where: { id: approval.approvedByUserId, status: 'ACTIVE' },
+                })) ||
+                !(await tx.groupMembership.count({
+                  where: {
+                    workspaceId: a.workspaceId,
+                    groupId: a.groupId,
+                    userId: approval.approvedByUserId,
+                    status: 'ACTIVE',
+                    serviceRole: { in: ['SERVICE_OWNER', 'SERVICE_ADMIN'] },
+                  },
+                }))
+              )
+                throw conflict('PILOT_DEFINITION_APPROVAL_REQUIRED');
+            }
+            next.personalLearningPilot = { ...pilot, enabled: true };
+            status = 'ACTIVE';
           }
-          next.personalLearningPilot = { ...pilot, enabled: true };
-          status = 'ACTIVE';
         }
       }
       const oldControl = settings.personalLearningPilotOperations as Prisma.JsonObject | undefined;

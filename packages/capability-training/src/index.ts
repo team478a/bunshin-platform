@@ -279,4 +279,12 @@ export {
   personalLearningPilotAllows,
   personalLearningPilotProfilePreparationAllows,
   personalLearningPublicRegistrationCapacity,
+  personalLearningMode,
+  personalLearningFeatures,
+  personalLearningFeatureEnabled,
+  personalLearningDynamicProgramAllows,
+  PERSONAL_LEARNING_FEATURE_KEYS,
+  type PersonalLearningMode,
+  type PersonalLearningFeature,
+  type PersonalLearningFeatures,
 } from './personal-learning-pilot';

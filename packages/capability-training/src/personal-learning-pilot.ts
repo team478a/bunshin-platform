@@ -6,6 +6,65 @@ const object = (value: unknown): Record<string, unknown> | null =>
     ? (value as Record<string, unknown>)
     : null;
 
+export type PersonalLearningMode = 'DYNAMIC_V1' | 'FIXED_DEFINITIONS_V1';
+export const PERSONAL_LEARNING_FEATURE_KEYS = [
+  'conversation',
+  'multiTopic',
+  'lineLearning',
+  'extendedScope',
+] as const;
+export type PersonalLearningFeature = (typeof PERSONAL_LEARNING_FEATURE_KEYS)[number];
+export type PersonalLearningFeatures = Readonly<Record<PersonalLearningFeature, boolean>>;
+const defaultFeatures: PersonalLearningFeatures = Object.freeze({
+  conversation: false,
+  multiTopic: false,
+  lineLearning: false,
+  extendedScope: false,
+});
+
+/** Missing mode is the legacy contract; malformed explicit values fail closed. */
+export function personalLearningMode(settings: unknown): PersonalLearningMode | null {
+  const pilot = object(object(settings)?.['personalLearningPilot']);
+  const mode = pilot?.['learningMode'];
+  if (mode === undefined) return 'FIXED_DEFINITIONS_V1';
+  return mode === 'DYNAMIC_V1' || mode === 'FIXED_DEFINITIONS_V1' ? mode : null;
+}
+
+/** Feature switches are always opt-in; old Programs and malformed settings stay OFF. */
+export function personalLearningFeatures(settings: unknown): PersonalLearningFeatures | null {
+  const pilot = object(object(settings)?.['personalLearningPilot']);
+  const raw = pilot?.['learningFeatures'];
+  if (raw === undefined) return defaultFeatures;
+  const features = object(raw);
+  if (
+    !features ||
+    Object.keys(features).length !== PERSONAL_LEARNING_FEATURE_KEYS.length ||
+    PERSONAL_LEARNING_FEATURE_KEYS.some((key) => typeof features[key] !== 'boolean')
+  )
+    return null;
+  return Object.freeze({
+    conversation: features['conversation'] as boolean,
+    multiTopic: features['multiTopic'] as boolean,
+    lineLearning: features['lineLearning'] as boolean,
+    extendedScope: features['extendedScope'] as boolean,
+  });
+}
+
+export function personalLearningFeatureEnabled(
+  settings: unknown,
+  feature: PersonalLearningFeature,
+): boolean {
+  return personalLearningFeatures(settings)?.[feature] === true;
+}
+
+export function personalLearningDynamicProgramAllows(settings: unknown, enrollmentId: string) {
+  return (
+    personalLearningMode(settings) === 'DYNAMIC_V1' &&
+    personalLearningFeatures(settings) !== null &&
+    personalLearningPilotAllows(settings, enrollmentId)
+  );
+}
+
 /** A reserved Program never falls back to the legacy scheduler, even when disabled/malformed. */
 export function isPersonalLearningPilotProgram(settings: unknown): boolean {
   const root = object(settings);
@@ -42,8 +101,16 @@ export function personalLearningPilotAllows(settings: unknown, enrollmentId: str
     root?.['moduleKey'] === 'AI_TRAINING_V1' &&
     pilot?.['enabled'] === true &&
     Object.keys(pilot).every((key) =>
-      ['enabled', 'enrollmentIds', ...(capped ? ['participantControl'] : [])].includes(key),
+      [
+        'enabled',
+        'enrollmentIds',
+        ...(capped ? ['participantControl'] : []),
+        ...(Object.hasOwn(pilot, 'learningMode') ? ['learningMode'] : []),
+        ...(Object.hasOwn(pilot, 'learningFeatures') ? ['learningFeatures'] : []),
+      ].includes(key),
     ) &&
+    personalLearningMode(settings) !== null &&
+    personalLearningFeatures(settings) !== null &&
     (!capped || policy !== null) &&
     Array.isArray(ids) &&
     ids.length > 0 &&

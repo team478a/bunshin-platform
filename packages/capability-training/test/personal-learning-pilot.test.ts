@@ -3,6 +3,9 @@ import {
   isPersonalLearningPilotProgram,
   personalLearningPilotAllows,
   personalLearningPilotProfilePreparationAllows,
+  personalLearningMode,
+  personalLearningFeatures,
+  personalLearningDynamicProgramAllows,
 } from '../src';
 const id = '00000000-0000-4000-8000-000000000001';
 const settings = {
@@ -66,5 +69,55 @@ describe('restricted Personal Learning pilot', () => {
   );
   it('leaves old V1 programs unreserved', () => {
     expect(isPersonalLearningPilotProgram({ moduleKey: 'AI_TRAINING_V1' })).toBe(false);
+  });
+  it('defaults legacy Programs to fixed mode with every optional feature off', () => {
+    expect(personalLearningMode(settings)).toBe('FIXED_DEFINITIONS_V1');
+    expect(personalLearningFeatures(settings)).toEqual({
+      conversation: false,
+      multiTopic: false,
+      lineLearning: false,
+      extendedScope: false,
+    });
+    expect(personalLearningDynamicProgramAllows(settings, id)).toBe(false);
+  });
+  it('allows only an enabled, allowlisted dynamic Program and fails closed on malformed feature settings', () => {
+    const dynamic = {
+      ...settings,
+      personalLearningPilot: {
+        ...settings.personalLearningPilot,
+        learningMode: 'DYNAMIC_V1',
+        learningFeatures: {
+          conversation: false,
+          multiTopic: false,
+          lineLearning: false,
+          extendedScope: false,
+        },
+      },
+    };
+    expect(personalLearningDynamicProgramAllows(dynamic, id)).toBe(true);
+    expect(
+      personalLearningDynamicProgramAllows(dynamic, '00000000-0000-4000-8000-000000000002'),
+    ).toBe(false);
+    expect(
+      personalLearningDynamicProgramAllows(
+        {
+          ...dynamic,
+          personalLearningPilot: { ...dynamic.personalLearningPilot, learningMode: 'future' },
+        },
+        id,
+      ),
+    ).toBe(false);
+    expect(
+      personalLearningDynamicProgramAllows(
+        {
+          ...dynamic,
+          personalLearningPilot: {
+            ...dynamic.personalLearningPilot,
+            learningFeatures: { conversation: true },
+          },
+        },
+        id,
+      ),
+    ).toBe(false);
   });
 });

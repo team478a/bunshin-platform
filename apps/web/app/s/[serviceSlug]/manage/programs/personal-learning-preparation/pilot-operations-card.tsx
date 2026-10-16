@@ -9,7 +9,7 @@ import {
   type PilotOperationsSnapshot,
 } from './pilot-operations-client';
 
-const startChecks = [
+const fixedStartChecks = [
   '3件の学習Definitionが運営者により承認済み',
   '内部参加者1〜3名のEnrollment・Seatが準備済み',
   '各内部参加者の本人Profileが準備済み',
@@ -17,12 +17,38 @@ const startChecks = [
   'PERSONAL_LEARNING_PILOT / PERSONAL_LEARNING_PRODUCTION_CLOSED_PILOT がOFF',
   'DEFINITION_ADMIN / PROFILE_PREPARATION / PARTICIPANT_PREPARATION の各準備flagがOFF',
 ];
+const dynamicStartChecks = [
+  'DYNAMIC_V1・許可リスト・内部Seatの対応が一致している',
+  '内部参加者1〜3名がACTIVEで、Wave上限内',
+  '未精算Callが0件',
+  '対象Programと一致するCall Admission・価格設定・予約上限を確認済み',
+  'PERSONAL_LEARNING_PILOT / PERSONAL_LEARNING_PRODUCTION_CLOSED_PILOT がOFF',
+  'DEFINITION_ADMIN / PROFILE_PREPARATION / PARTICIPANT_PREPARATION の各準備flagがOFF',
+];
+const startChecksForMode = (mode: PilotOperationsSnapshot['learningMode']) =>
+  mode === 'DYNAMIC_V1' ? dynamicStartChecks : fixedStartChecks;
+const featureLabels = {
+  conversation: '本人との対話',
+  multiTopic: '複数テーマ学習',
+  lineLearning: 'LINE学習',
+  extendedScope: '拡張範囲',
+} as const;
 
 export function PilotOperationsCard({ serviceSlug }: { serviceSlug: string }) {
   const endpoint = `/api/services/${encodeURIComponent(serviceSlug)}/ai-training/pilot-operations`;
   const [snapshot, setSnapshot] = useState<PilotOperationsSnapshot | null>(null);
   const [evidence, setEvidence] = useState('');
-  const [checks, setChecks] = useState<boolean[]>(startChecks.map(() => false));
+  const [checks, setChecks] = useState<boolean[]>(fixedStartChecks.map(() => false));
+  const [learningMode, setLearningMode] =
+    useState<PilotOperationsSnapshot['learningMode']>('FIXED_DEFINITIONS_V1');
+  const [learningFeatures, setLearningFeatures] = useState<
+    PilotOperationsSnapshot['learningFeatures']
+  >({
+    conversation: false,
+    multiTopic: false,
+    lineLearning: false,
+    extendedScope: false,
+  });
   const [confirmed, setConfirmed] = useState(false);
   const [message, setMessage] = useState('まず現在の状態を確認してください。');
   const [busy, setBusy] = useState(false);
@@ -41,9 +67,11 @@ export function PilotOperationsCard({ serviceSlug }: { serviceSlug: string }) {
       const current = pilotOperationsSnapshot(body.data);
       if (!current) throw new Error('invalid receipt');
       setSnapshot(current);
+      setLearningMode(current.learningMode);
+      setLearningFeatures(current.learningFeatures);
       setEvidence('');
       setConfirmed(false);
-      setChecks(startChecks.map(() => false));
+      setChecks(startChecksForMode(current.learningMode).map(() => false));
       const action = availablePilotOperation(current);
       setMessage(
         action === 'STOP'
@@ -63,12 +91,16 @@ export function PilotOperationsCard({ serviceSlug }: { serviceSlug: string }) {
     }
   }
 
-  async function submit(action: 'INITIALIZE' | 'START' | 'STOP') {
+  async function submit(
+    action: 'INITIALIZE' | 'START' | 'STOP' | 'SET_LEARNING_MODE' | 'SET_LEARNING_FEATURES',
+    value?: unknown,
+  ) {
     if (lock.current) return;
     const allStartChecks = action !== 'START' || checks.every(Boolean);
     const acknowledged = action === 'START' ? allStartChecks : confirmed;
     const command =
-      pending.current ?? createPilotOperationCommand(snapshot, action, evidence, acknowledged);
+      pending.current ??
+      createPilotOperationCommand(snapshot, action, evidence, acknowledged, value);
     if (!command) return;
     pending.current = command;
     lock.current = true;
@@ -85,20 +117,23 @@ export function PilotOperationsCard({ serviceSlug }: { serviceSlug: string }) {
     pending.current = null;
     setSnapshot(null);
     setConfirmed(false);
-    setChecks(startChecks.map(() => false));
+    setChecks(snapshot ? startChecksForMode(snapshot.learningMode).map(() => false) : []);
     setMessage(
       result.result === 'SAVED'
         ? action === 'START'
           ? '開始状態を再取得して確認しました。実運用の監視・停止担当はRunbookに従ってください。'
           : action === 'STOP'
             ? '停止状態を再取得して確認しました。送信済みCallのdrain確認は別途必要です。'
-            : '初期化状態を再取得して確認しました。開始はしていません。'
+            : action === 'INITIALIZE'
+              ? '初期化状態を再取得して確認しました。開始はしていません。'
+              : '設定変更を再取得して確認しました。'
         : (result.message ?? '操作を確認できませんでした。状態を再取得してください。'),
     );
   }
 
   const action = availablePilotOperation(snapshot);
   const evidenceValid = /^[a-zA-Z0-9_.:-]{1,100}$/.test(evidence);
+  const startChecks = startChecksForMode(snapshot?.learningMode ?? 'FIXED_DEFINITIONS_V1');
   return (
     <section className="card stack">
       <h2>Wave 0の初期化・開始・停止</h2>
@@ -113,8 +148,85 @@ export function PilotOperationsCard({ serviceSlug }: { serviceSlug: string }) {
         <p>
           Program: {snapshot.exists ? 'あり' : 'なし'} / 状態: {snapshot.status} / 初期化:
           {snapshot.initialized ? '済み' : '未'} / 開始履歴: {snapshot.started ? 'あり' : 'なし'} /
-          実行: {snapshot.enabled ? 'ON' : 'OFF'}
+          実行: {snapshot.enabled ? 'ON' : 'OFF'} / モード: {snapshot.learningMode} / 未精算Call:
+          {snapshot.openCallCount}
         </p>
+      )}
+      {snapshot?.initialized && snapshot.status === 'SUSPENDED' && !snapshot.enabled && (
+        <fieldset className="stack">
+          <legend>停止中の学習モード・機能設定</legend>
+          <label>
+            学習モード
+            <select
+              value={learningMode}
+              disabled={busy || retry}
+              onChange={(event) => setLearningMode(event.target.value as typeof learningMode)}
+            >
+              <option value="FIXED_DEFINITIONS_V1">固定Definition方式</option>
+              <option value="DYNAMIC_V1">動的学習方式</option>
+            </select>
+          </label>
+          {Object.entries(featureLabels).map(([key, label]) => (
+            <label key={key}>
+              <input
+                type="checkbox"
+                checked={learningFeatures[key as keyof typeof learningFeatures]}
+                disabled={busy || retry}
+                onChange={(event) =>
+                  setLearningFeatures((current) => ({
+                    ...current,
+                    [key]: event.target.checked,
+                  }))
+                }
+              />
+              {label}（初期値OFF）
+            </label>
+          ))}
+          <label>
+            設定変更のレビュー記録ID
+            <input
+              value={evidence}
+              maxLength={100}
+              disabled={busy || retry}
+              onChange={(e) => setEvidence(e.target.value)}
+            />
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={confirmed}
+              disabled={busy || retry}
+              onChange={(e) => setConfirmed(e.target.checked)}
+            />
+            停止状態・対象Program・変更内容を確認しました
+          </label>
+          <button
+            type="button"
+            disabled={
+              busy ||
+              retry ||
+              !confirmed ||
+              !evidenceValid ||
+              learningMode === snapshot.learningMode
+            }
+            onClick={() => void submit('SET_LEARNING_MODE', learningMode)}
+          >
+            学習モードを保存
+          </button>
+          <button
+            type="button"
+            disabled={
+              busy ||
+              retry ||
+              !confirmed ||
+              !evidenceValid ||
+              JSON.stringify(learningFeatures) === JSON.stringify(snapshot.learningFeatures)
+            }
+            onClick={() => void submit('SET_LEARNING_FEATURES', learningFeatures)}
+          >
+            機能設定を保存
+          </button>
+        </fieldset>
       )}
       {action === 'INITIALIZE' && (
         <>
@@ -228,7 +340,9 @@ export function PilotOperationsCard({ serviceSlug }: { serviceSlug: string }) {
             if (
               pendingAction === 'INITIALIZE' ||
               pendingAction === 'START' ||
-              pendingAction === 'STOP'
+              pendingAction === 'STOP' ||
+              pendingAction === 'SET_LEARNING_MODE' ||
+              pendingAction === 'SET_LEARNING_FEATURES'
             )
               void submit(pendingAction);
           }}

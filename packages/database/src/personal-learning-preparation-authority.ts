@@ -5,6 +5,8 @@ import {
 } from '@bunshin/application';
 import {
   personalLearningPilotProfilePreparationAllows,
+  personalLearningFeatures,
+  personalLearningMode,
   parsePilotParticipantPolicy,
   parseAiTrainingOperationsSettings,
 } from '@bunshin/capability-training';
@@ -36,25 +38,39 @@ export async function requirePersonalLearningPreparationAuthority(
           enabled?: boolean;
           enrollmentIds?: unknown[];
           participantControl?: unknown;
+          learningMode?: unknown;
+          learningFeatures?: unknown;
         };
       }
     | undefined;
   const first = settings?.personalLearningPilot?.enrollmentIds?.[0];
   const pilot = settings?.personalLearningPilot;
+  const modeValid = personalLearningMode(settings) !== null;
+  const featuresValid = personalLearningFeatures(settings) !== null;
   const emptyValid =
     (allowEmpty || !!parsePilotParticipantPolicy(pilot?.participantControl)) &&
     pilot?.enabled === false &&
     Array.isArray(pilot.enrollmentIds) &&
     pilot.enrollmentIds.length === 0 &&
     Object.keys(pilot).every((k) =>
-      ['enabled', 'enrollmentIds', 'participantControl'].includes(k),
+      [
+        'enabled',
+        'enrollmentIds',
+        'participantControl',
+        'learningMode',
+        'learningFeatures',
+      ].includes(k),
     ) &&
+    modeValid &&
+    featuresValid &&
     (!Object.hasOwn(pilot, 'participantControl') ||
       !!parsePilotParticipantPolicy(pilot.participantControl)) &&
     !parseAiTrainingOperationsSettings(settings).notificationsEnabled &&
     !parseAiTrainingOperationsSettings(settings).postponedReminderEnabled;
   if (
     rows.length !== 1 ||
+    !modeValid ||
+    !featuresValid ||
     (!emptyValid &&
       (typeof first !== 'string' ||
         !personalLearningPilotProfilePreparationAllows(settings, first)))

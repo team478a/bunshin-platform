@@ -25,6 +25,8 @@ const object = (value: unknown): Record<string, unknown> =>
 
 /** Fresh execution authorization, separate from the historical AI-call fact repository. */
 export class PrismaPersonalLearningAssessmentGate extends PrismaPersonalLearningPilotRepository {
+  protected override allowDynamicLearning = true;
+
   authorizeAssessment(actor: PersonalLearningActor, assignmentId: string, answerId: string) {
     return this.authorized(actor, true, (tx) =>
       this.validateAssessment(tx, actor, assignmentId, answerId),

@@ -78,7 +78,12 @@ export async function personalLearningRequestResponse(
     }
     const actor = await (await currentUserProvider()).getCurrentUser();
     if (!actor) throw new ApplicationError('UNAUTHENTICATED', 'session required');
-    const input = await resolvePersonalLearningRequestActor(slug, enrollmentId, actor.userId);
+    const input = await resolvePersonalLearningRequestActor(
+      slug,
+      enrollmentId,
+      actor.userId,
+      'conversation',
+    );
     const db = await import('@bunshin/database');
     const repository = new db.PrismaPersonalLearningRequestRepository(db.prisma);
     const saved =
