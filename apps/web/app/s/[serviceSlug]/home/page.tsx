@@ -3,7 +3,11 @@ import {
   ServiceParticipationService,
   businessGrowthProgramStatus,
 } from '@bunshin/application';
-import { AI_TRAINING_V1_MODULE_KEY } from '@bunshin/capability-training';
+import {
+  AI_TRAINING_V1_MODULE_KEY,
+  isPersonalLearningPilotProgram,
+} from '@bunshin/capability-training';
+import { ApplicationError } from '@bunshin/shared';
 import { GetMissionProgress } from '@bunshin/capability-social';
 import type { CSSProperties } from 'react';
 import type { Metadata, Route } from 'next';
@@ -24,6 +28,11 @@ import {
   readServiceOnboardingSettings,
 } from '../../../../src/services/service-onboarding-settings';
 import { isPromptOnlyImageService } from '../../../../src/services/service-image-policy';
+import {
+  isPersonalLearningProgramActive,
+  isPersonalLearningServiceProgram,
+} from '../../../../src/services/personal-learning-service-mode';
+import { resolvePersonalLearningPilot } from '../../../../src/services/personal-learning-pilot-access';
 import {
   nextOnboardingRefinement,
   readServiceOnboardingAnswers,
@@ -242,17 +251,46 @@ export default async function ServiceMemberHome({
           currentDate: localDate,
         })
       : null;
-  const isPersonalLearningService = Boolean(
-    await db.prisma.serviceProgram.findFirst({
+  const personalLearningPrograms = (
+    await db.prisma.serviceProgram.findMany({
       where: {
         workspaceId: service.workspaceId,
         groupId: service.serviceId,
-        status: 'ACTIVE',
+        status: { in: ['ACTIVE', 'SUSPENDED'] },
         settings: { path: ['moduleKey'], equals: AI_TRAINING_V1_MODULE_KEY },
       },
+      select: { id: true, status: true, settings: true },
+    })
+  ).filter(isPersonalLearningServiceProgram);
+  const isPersonalLearningService = personalLearningPrograms.length > 0;
+  let isPersonalLearningAvailable = false;
+  for (const program of personalLearningPrograms) {
+    if (!isPersonalLearningProgramActive(program)) continue;
+    if (!isPersonalLearningPilotProgram(program.settings)) {
+      isPersonalLearningAvailable = true;
+      break;
+    }
+    const enrollments = await db.prisma.programEnrollment.findMany({
+      where: {
+        workspaceId: service.workspaceId,
+        groupId: service.serviceId,
+        groupMembershipId: membership.id,
+        serviceProgramId: program.id,
+        status: 'ACTIVE',
+      },
       select: { id: true },
-    }),
-  );
+    });
+    for (const enrollment of enrollments) {
+      try {
+        await resolvePersonalLearningPilot(service.configuration.slug, enrollment.id, actor.userId);
+        isPersonalLearningAvailable = true;
+        break;
+      } catch (error) {
+        if (!(error instanceof ApplicationError) || error.code !== 'NOT_FOUND') throw error;
+      }
+    }
+    if (isPersonalLearningAvailable) break;
+  }
   const currentWeek = weekRange(localDate);
   const activityRule = await currentActivityContinuityRule();
   const assignmentRepository = new db.PrismaBunshinCapabilityAssignmentRepository();
@@ -328,12 +366,14 @@ export default async function ServiceMemberHome({
           activities={activities}
           bunshinCount={bunshins.length}
           isBusinessDailyService={isBusinessDailyService}
+          isPersonalLearningAvailable={isPersonalLearningAvailable}
           isPersonalLearningService={isPersonalLearningService}
           serviceSlug={service.configuration.slug}
         />
         <MemberFeatureLinks
           imageAvailable={imageAvailable}
           isBusinessDailyService={isBusinessDailyService}
+          isPersonalLearningAvailable={isPersonalLearningAvailable}
           isPersonalLearningService={isPersonalLearningService}
           isServiceOperator={isServiceOperator}
           promptOnlyImages={promptOnlyImages}

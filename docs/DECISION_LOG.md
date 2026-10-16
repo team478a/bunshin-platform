@@ -1,5 +1,13 @@
 # BUNSHIN Platform Decision Log
 
+## 2026-10-16: Personal Learningのサービス種別と実行可能状態を分離する
+
+- 状態: 実装PRレビュー待ち。Production設定、Pilot状態、Migration、Enrollment、実行flagは変更しない。
+- `AI_TRAINING_V1` の `ACTIVE` または `SUSPENDED` Programがあればサービス種別をAI研修として扱う。開始前の予約Programが停止中でも、SNS用のホーム表示へfallbackしない。`DRAFT` と `ARCHIVED` は現行サービス種別の判定から除外する。
+- 学習可能状態は別に判定する。通常ProgramはACTIVEを要求し、予約Pilot Programは既存の本人Enrollment・Pilot実行認可が通る場合だけ学習リンクを表示する。未準備時は学習準備中の案内を表示する。
+- AI研修サービスからBunshin/SNS作成導線を表示せず、直接 `/bunshins/new` に来た場合もサービスホームへ戻す。他ServiceのSNS導線は維持する。
+- 根拠: `docs/ai-training/MANABERU_STYLE_PRODUCTION_WAVE0_LAUNCH_RUNBOOK.md` のPilot開始NO-GO境界。画面修正はWave 0開始・Definition承認・Production操作の承認ではない。
+
 ## 2026-10-15: 個人リッチメニューのnullable列migrationを限定direct runnerへ追加
 
 - 状態: 実装PRレビュー待ち。本番DBへは未接続・未変更。

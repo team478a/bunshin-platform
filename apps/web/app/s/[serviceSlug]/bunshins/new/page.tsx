@@ -6,6 +6,8 @@ import { currentUserProvider } from '../../../../../src/auth/current-user';
 import { memberServiceMetadata } from '../../../../../src/services/member-service-metadata';
 import { isRouteNotFound } from '../../../../../src/navigation/route-not-found';
 import { resolveMemberServiceContext } from '../../../../../src/services/public-service';
+import { AI_TRAINING_V1_MODULE_KEY } from '@bunshin/capability-training';
+import { isPersonalLearningServiceProgram } from '../../../../../src/services/personal-learning-service-mode';
 import { PublicShell } from '../../../../ui/public-shell';
 import { ServiceBunshinForm } from './service-bunshin-form';
 import { ServiceBunshinProposals } from './service-bunshin-proposals';
@@ -51,6 +53,18 @@ export default async function NewServiceBunshinPage({
     select: { id: true, serviceOnboardingResponse: { select: { id: true } } },
   });
   if (!membership) redirect(`/s/${service.configuration.slug}` as Route);
+  const trainingProgram = await db.prisma.serviceProgram.findFirst({
+    where: {
+      workspaceId: service.workspaceId,
+      groupId: service.serviceId,
+      status: { in: ['ACTIVE', 'SUSPENDED'] },
+      settings: { path: ['moduleKey'], equals: AI_TRAINING_V1_MODULE_KEY },
+    },
+    select: { status: true, settings: true },
+  });
+  if (trainingProgram && isPersonalLearningServiceProgram(trainingProgram)) {
+    redirect(`/s/${service.configuration.slug}/home` as Route);
+  }
   const style = {
     '--service-primary': service.configuration.brand.primaryColor,
     '--service-secondary': service.configuration.brand.secondaryColor,

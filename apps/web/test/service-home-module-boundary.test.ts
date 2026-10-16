@@ -41,6 +41,7 @@ describe('service home module boundary', () => {
         activities: [],
         bunshinCount: 0,
         isBusinessDailyService: false,
+        isPersonalLearningAvailable: true,
         isPersonalLearningService: true,
         serviceSlug: 'manaberu-style',
       }),
@@ -49,6 +50,7 @@ describe('service home module boundary', () => {
       createElement(MemberFeatureLinks, {
         imageAvailable: false,
         isBusinessDailyService: false,
+        isPersonalLearningAvailable: true,
         isPersonalLearningService: true,
         isServiceOperator: false,
         promptOnlyImages: false,
@@ -63,5 +65,52 @@ describe('service home module boundary', () => {
     expect(overview).not.toContain('投稿パートナー');
     expect(navigation).toContain('学習プログラム・課題を見る');
     expect(navigation).not.toContain('投稿パートナー');
+  });
+
+  it('shows a preparation-only state for a reserved training service', () => {
+    const overview = renderToStaticMarkup(
+      createElement(WeeklyActivitySection, {
+        activities: [],
+        bunshinCount: 0,
+        isBusinessDailyService: false,
+        isPersonalLearningAvailable: false,
+        isPersonalLearningService: true,
+        serviceSlug: 'manaberu-style',
+      }),
+    );
+    const navigation = renderToStaticMarkup(
+      createElement(MemberFeatureLinks, {
+        imageAvailable: false,
+        isBusinessDailyService: false,
+        isPersonalLearningAvailable: false,
+        isPersonalLearningService: true,
+        isServiceOperator: false,
+        promptOnlyImages: false,
+        rewardsAvailable: false,
+        serviceSlug: 'manaberu-style',
+        trackingLinkAvailable: false,
+        videoAvailable: false,
+      }),
+    );
+
+    expect(overview).toContain('AI研修の準備中です');
+    expect(overview).not.toContain('学習プログラムを開く');
+    expect(overview).not.toContain('投稿パートナー');
+    expect(navigation).toContain('AI研修の準備中です');
+    expect(navigation).not.toContain('学習プログラム・課題を見る');
+    expect(navigation).not.toContain('投稿パートナー');
+  });
+
+  it('recognizes suspended AI Training services and redirects direct social creation access', () => {
+    const directCreationPage = readFileSync(
+      new URL('../app/s/[serviceSlug]/bunshins/new/page.tsx', import.meta.url),
+      'utf8',
+    );
+
+    expect(pageSource).toContain("status: { in: ['ACTIVE', 'SUSPENDED'] }");
+    expect(pageSource).toContain('.filter(isPersonalLearningServiceProgram)');
+    expect(directCreationPage).toContain("status: { in: ['ACTIVE', 'SUSPENDED'] }");
+    expect(directCreationPage).toContain('isPersonalLearningServiceProgram(trainingProgram)');
+    expect(directCreationPage).toContain('redirect(`/s/${service.configuration.slug}/home`');
   });
 });

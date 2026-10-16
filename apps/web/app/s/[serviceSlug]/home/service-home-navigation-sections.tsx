@@ -4,6 +4,7 @@ import Link from 'next/link';
 interface MemberFeatureLinksProps {
   imageAvailable: boolean;
   isBusinessDailyService: boolean;
+  isPersonalLearningAvailable: boolean;
   isPersonalLearningService: boolean;
   isServiceOperator: boolean;
   promptOnlyImages: boolean;
@@ -17,6 +18,7 @@ export function MemberFeatureLinks(props: MemberFeatureLinksProps) {
   const {
     imageAvailable,
     isBusinessDailyService,
+    isPersonalLearningAvailable,
     isPersonalLearningService,
     isServiceOperator,
     promptOnlyImages,
@@ -34,16 +36,20 @@ export function MemberFeatureLinks(props: MemberFeatureLinksProps) {
             ? '学習を進める'
             : '利用できる機能'}
       </h2>
-      {!isBusinessDailyService &&
+      {isPersonalLearningService && !isPersonalLearningAvailable ? (
+        <p>AI研修の準備中です。開始のご案内をお待ちください。</p>
+      ) : (
+        !isBusinessDailyService &&
         !promptOnlyImages &&
         !imageAvailable &&
         !videoAvailable &&
         !rewardsAvailable &&
         !isServiceOperator && (
           <p>現在、利用できる機能を準備しています。サービス運営者からの案内をお待ちください。</p>
-        )}
+        )
+      )}
       <div className="service-home-actions">
-        {isPersonalLearningService && (
+        {isPersonalLearningService && isPersonalLearningAvailable && (
           <Link className="button button--primary" href={`/s/${serviceSlug}/programs` as Route}>
             学習プログラム・課題を見る
           </Link>

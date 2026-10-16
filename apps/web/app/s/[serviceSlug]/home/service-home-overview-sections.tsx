@@ -107,19 +107,25 @@ export function WeeklyActivitySection({
   activities,
   bunshinCount,
   isBusinessDailyService,
+  isPersonalLearningAvailable,
   isPersonalLearningService,
   serviceSlug,
 }: {
   activities: ServiceActivity[];
   bunshinCount: number;
   isBusinessDailyService: boolean;
+  isPersonalLearningAvailable: boolean;
   isPersonalLearningService: boolean;
   serviceSlug: string;
 }) {
   return (
     <section className="service-entry__card">
       <h2>{isPersonalLearningService ? '今日の学習' : '今週の進み具合'}</h2>
-      {bunshinCount === 0 ? (
+      {isPersonalLearningService && !isPersonalLearningAvailable ? (
+        <div className="empty-state">
+          <p>AI研修の準備中です。開始のご案内をお待ちください。</p>
+        </div>
+      ) : bunshinCount === 0 ? (
         <div className="empty-state">
           <p>
             {isPersonalLearningService
