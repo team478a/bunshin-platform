@@ -2,7 +2,10 @@ import { readFileSync } from 'node:fs';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { WeeklyActivitySection } from '../app/s/[serviceSlug]/home/service-home-overview-sections';
+import {
+  ServiceHomeHeader,
+  WeeklyActivitySection,
+} from '../app/s/[serviceSlug]/home/service-home-overview-sections';
 import { MemberFeatureLinks } from '../app/s/[serviceSlug]/home/service-home-navigation-sections';
 
 const pageSource = readFileSync(
@@ -19,6 +22,24 @@ const navigationSource = readFileSync(
 );
 
 describe('service home module boundary', () => {
+  it.each([
+    { displayName: 'はっしー', expected: 'はっしーさん、今日も一緒に進めましょう。' },
+    { displayName: null, expected: '今日も一緒に進めましょう。' },
+    { displayName: ' 　', expected: '今日も一緒に進めましょう。' },
+  ])('shows a safe home greeting for display name $displayName', ({ displayName, expected }) => {
+    const markup = renderToStaticMarkup(
+      createElement(ServiceHomeHeader, {
+        displayName: 'マナベルスタイル',
+        logoUrl: null,
+        memberName: displayName,
+      }),
+    );
+
+    expect(markup).toContain(expected);
+    expect(markup).not.toContain('undefined');
+    expect(markup).not.toContain('@');
+  });
+
   it('keeps scoped data loading in the server page', () => {
     expect(pageSource).toContain('resolveMemberServiceContext');
     expect(pageSource).toContain('groupMembership.findFirst');
@@ -42,6 +63,7 @@ describe('service home module boundary', () => {
         bunshinCount: 0,
         isBusinessDailyService: false,
         isPersonalLearningService: true,
+        isPersonalLearningReady: true,
         serviceSlug: 'manaberu-style',
       }),
     );
@@ -50,6 +72,7 @@ describe('service home module boundary', () => {
         imageAvailable: false,
         isBusinessDailyService: false,
         isPersonalLearningService: true,
+        isPersonalLearningReady: true,
         isServiceOperator: false,
         promptOnlyImages: false,
         rewardsAvailable: false,
@@ -63,5 +86,49 @@ describe('service home module boundary', () => {
     expect(overview).not.toContain('投稿パートナー');
     expect(navigation).toContain('学習プログラム・課題を見る');
     expect(navigation).not.toContain('投稿パートナー');
+  });
+
+  it('shows preparation guidance and no social links while an AI training service is paused', () => {
+    const overview = renderToStaticMarkup(
+      createElement(WeeklyActivitySection, {
+        activities: [],
+        bunshinCount: 0,
+        isBusinessDailyService: false,
+        isPersonalLearningService: true,
+        isPersonalLearningReady: false,
+        serviceSlug: 'manaberu-style',
+      }),
+    );
+    const navigation = renderToStaticMarkup(
+      createElement(MemberFeatureLinks, {
+        imageAvailable: true,
+        isBusinessDailyService: false,
+        isPersonalLearningService: true,
+        isPersonalLearningReady: false,
+        isServiceOperator: false,
+        promptOnlyImages: true,
+        rewardsAvailable: true,
+        serviceSlug: 'manaberu-style',
+        trackingLinkAvailable: true,
+        videoAvailable: true,
+      }),
+    );
+
+    expect(overview).toContain('AI研修の準備中です');
+    expect(overview).not.toContain('/bunshins');
+    expect(navigation).toContain('AI研修の準備中です');
+    expect(navigation).not.toContain('/bunshins');
+    expect(navigation).not.toContain('/activity');
+    expect(navigation).not.toContain('/weekly-report');
+    expect(navigation).not.toContain('/images');
+    expect(navigation).not.toContain('/videos');
+  });
+
+  it('classifies only non-archived AI training programs as the current service module', () => {
+    expect(pageSource).toContain("status: { not: 'ARCHIVED' }");
+    expect(pageSource).toContain(
+      'const isPersonalLearningService = personalLearningPrograms.length > 0',
+    );
+    expect(pageSource).toContain("program.status === 'ACTIVE'");
   });
 });

@@ -5,6 +5,7 @@ import { buildServiceLaunchReadiness } from '../../../../src/services/service-la
 import { readServiceOnboardingSettings } from '../../../../src/services/service-onboarding-settings';
 import { isFortuneServicePackage } from '../../../../src/services/service-creation-templates';
 import { isPromptOnlyImageService } from '../../../../src/services/service-image-policy';
+import { hasAiTrainingServiceProgram } from '../../../../src/services/service-ai-training-mode';
 import { selectServiceManagementSections } from '../../../../src/services/service-management-navigation';
 import { buildSideHustleContentFunnel } from '../../../../src/services/side-hustle-content-funnel';
 import { buildPerformanceFeedbackSummary } from '../../../../src/services/performance-feedback-summary';
@@ -30,6 +31,10 @@ export async function loadServiceManagementHome(serviceSlug: string) {
     configuration.registration.surveyConfig,
   );
   const isBusinessDailyService = onboarding.businessProfileEnabled;
+  const isAiTrainingService = await hasAiTrainingServiceProgram({
+    workspaceId: service.workspaceId,
+    serviceId: service.serviceId,
+  });
   const records = await readServiceManagementHomeRecords({
     workspaceId: service.workspaceId,
     serviceId: service.serviceId,
@@ -139,6 +144,7 @@ export async function loadServiceManagementHome(serviceSlug: string) {
     emailEnabled: configuration.registration.emailEnabled,
     lineEnabled: configuration.registration.lineEnabled,
     onboardingQuestionCount: onboarding.questions.length,
+    isAiTrainingService,
     publishedLegalTypes: group.serviceLegalDocuments.map((item) => item.type),
     activeFeatureCount: group.featurePolicies.length,
     activeParticipantCount: group.memberships.length,
