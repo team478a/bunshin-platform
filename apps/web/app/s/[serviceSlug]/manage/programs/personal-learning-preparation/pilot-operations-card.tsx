@@ -11,7 +11,7 @@ import {
 
 const startChecks = [
   '3件の学習Definitionが運営者により承認済み',
-  '内部参加者1〜2名のEnrollment・Seatが準備済み',
+  '内部参加者1〜3名のEnrollment・Seatが準備済み',
   '各内部参加者の本人Profileが準備済み',
   '対象Programと一致するCall Admission・価格設定を確認済み',
   'PERSONAL_LEARNING_PILOT / PERSONAL_LEARNING_PRODUCTION_CLOSED_PILOT がOFF',

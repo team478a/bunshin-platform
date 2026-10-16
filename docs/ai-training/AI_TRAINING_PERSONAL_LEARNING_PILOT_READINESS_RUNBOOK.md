@@ -2,7 +2,9 @@
 
 ## 現行方針（2026-10-06更新）
 
-開始Gateの現行正本は [Production Closed Pilot Runbook](PERSONAL_LEARNING_PRODUCTION_CLOSED_PILOT_RUNBOOK.md)。基準main `b462cdb9320cdfae2522f43e7ae4620cb02016d3`。stagingはoptional verification environmentであり、Pilot開始必須条件から外す。Production上の内部1〜2人から段階拡大し、全体Hard Capは100人。一般公開ではない。現在はNO-GO。
+2026-10-16追記: ユーザー指定の社内Wave 0人数上限は3人。これは既存の1〜2人提案を今回のテスト人数で置き換える希望値であり、実環境準備や開始を承認したことを意味しない。詳細は現行の[Wave 0 Launch Runbook](MANABERU_STYLE_PRODUCTION_WAVE0_LAUNCH_RUNBOOK.md)。
+
+開始Gateの現行正本は [Production Closed Pilot Runbook](PERSONAL_LEARNING_PRODUCTION_CLOSED_PILOT_RUNBOOK.md)。基準main `b462cdb9320cdfae2522f43e7ae4620cb02016d3`。stagingはoptional verification environmentであり、Pilot開始必須条件から外す。Production上の内部最大3人から段階拡大し、全体Hard Capは100人。一般公開ではない。現在はNO-GO。
 
 現コードのproduction拒否と1〜5件allowlistはまだ維持している。#1154に費用計測、#1155にDefinition管理API、#1156に本人Profile初期化APIが追加済みだが、管理/準備APIも非production限定。これらを本番対応済み・実承認済みとは扱わない。追加実装は新RunbookのPR A/B/C計画として人間レビューを待つ。
 

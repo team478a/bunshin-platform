@@ -1,5 +1,9 @@
 # Personal Learning Production Closed Pilot Runbook
 
+## 2026-10-16 社内Wave 0人数更新
+
+最新の運用人数指定は[Manaberu Style Wave 0 Launch Runbook](MANABERU_STYLE_PRODUCTION_WAVE0_LAUNCH_RUNBOOK.md)を参照。指示元ユーザーは社内テスター上限3人を指定した。過去監査の1〜2人記述は当時の記録であり、今回の人数希望で他のNO-GO/承認・費用・release Gateは通過しない。Production設定・登録・開始は未実施。
+
 ## 2026-10-07 Wave 0 Launch操作手順（未実行）
 
 [Launch Runbook](MANABERU_STYLE_PRODUCTION_WAVE0_LAUNCH_RUNBOOK.md)と[Execution Checklist](MANABERU_STYLE_WAVE0_EXECUTION_CHECKLIST.md)を追加。最新main #1164のAPI/config/MigrationとPhase A〜Kを照合し、専用Program初期化・ACTIVE/SUSPENDED/enable/disable操作未確定、Enrollment APIと準備状態の順序問題をBlockerとして記録する。合成Profile UI確認は実認証/DB/実端末確認の代替ではない。Production操作は一切行わず、開始NO-GOと別人間承認を維持する。以下は過去時点の監査履歴。
@@ -26,7 +30,7 @@
 
 **現在の開始判定: NO-GO。** Production Closed Pilotは長期方針として可能だが、現コードはproductionを拒否し、人数・費用・実環境検証にも未完条件がある。stagingはoptional verification environmentであり、開始必須条件ではない。安全確認・人間承認・実認証は省略しない。
 
-Development / CI / Test → Production Release Gate → Internal Production Test（Wave 0、1〜2人）→各Waveの人間レビュー→最大100人。Production infrastructure利用と一般公開を区別し、一般ユーザー、旧30日V1、他Packageには新UIを出さない。
+Development / CI / Test → Production Release Gate → Internal Production Test（Wave 0、最大3人）→各Waveの人間レビュー→最大100人。Production infrastructure利用と一般公開を区別し、一般ユーザー、旧30日V1、他Packageには新UIを出さない。
 
 本書のマージはProduction DB接続・Migration適用・deploy・Pilot enable・Definition APPROVE・Enrollment作成・実課金Provider利用・招待の承認ではない。実操作は別承認を待つ。
 

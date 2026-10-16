@@ -387,7 +387,7 @@ export class PrismaPersonalLearningPilotOperations {
             !policy ||
             policy.currentWave !== 0 ||
             policy.internalParticipantCap < 1 ||
-            policy.internalParticipantCap > 2
+            policy.internalParticipantCap > 3
           )
             throw conflict('PILOT_WAVE0_CONFIGURATION_REQUIRED');
           if ((await tx.programEnrollment.count({ where: a })) >= policy.internalParticipantCap)
@@ -460,7 +460,7 @@ export class PrismaPersonalLearningPilotOperations {
             policy.currentWave !== 0 ||
             policy.currentWaveCap !== 0 ||
             policy.internalParticipantCap < 1 ||
-            policy.internalParticipantCap > 2 ||
+            policy.internalParticipantCap > 3 ||
             !admission ||
             ['workspaceId', 'groupId', 'serviceProgramId'].some(
               (k) =>
@@ -473,7 +473,7 @@ export class PrismaPersonalLearningPilotOperations {
           const active = seats.filter((s) => !s.revokedAt);
           if (
             !active.length ||
-            active.length > 2 ||
+            active.length > policy.internalParticipantCap ||
             seats.some((s) => s.kind !== 'INTERNAL') ||
             (await tx.personalLearningCallAdmission.count({ where: { ...a, settledAt: null } }))
           )

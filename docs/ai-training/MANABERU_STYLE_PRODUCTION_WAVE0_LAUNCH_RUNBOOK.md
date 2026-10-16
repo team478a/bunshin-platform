@@ -1,5 +1,11 @@
 # マナベルスタイル by ワタシワークス — Production Wave 0 Launch Runbook
 
+### 2026-10-16 社内テスター3人・試験予算案（環境設定/開始は未実施）
+
+指示元ユーザーの指定により、Wave 0の社内テスター上限を3人へ拡張する。今回の人数候補は3人。席数上限の変更であり、参加者のEnrollment/Seat/Profile準備、Definition承認、Pilot開始、Provider呼出しの承認ではない。production開始は他のGate確認までNO-GO。
+
+費用設定候補はProgram全体で1日最大20 AI試行、同時実行1件、Program日次費用Hard Stop $1（`dailyCostLimitUsdMicros=1000000`）。20回は3人合計であり各人20回ではない。週累計$5は現行Admissionで強制されないため、実際の請求/利用額を運用担当が監視し、$5到達時に停止する運用上限とする。開始前に実モデル・価格・予約額・Provider側budget・費用確認方法を照合して人間が承認する。環境設定は未変更であり、有料呼出しは開始していない。
+
 ### 2026-10-10 学習設計の承認登録UI（本番未反映）
 
 既存APIへの1件ずつのレビュー画面は[承認登録UI実装報告](MANABERU_STYLE_DEFINITION_REVIEW_UI_IMPLEMENTATION.md)。画面は `/s/{serviceSlug}/manage/programs/learning-definition-review`。初期表示は保存せず、GET後に人間が7項目・公開SHA・非公開証跡・最終確認を入力する。登録応答後もGET/監査で現在状態を確認。教育設計の人間承認と本番APPROVEは別段階。画面追加をDefinition管理flag変更・本番Deploy・APPROVE・START・課金同意としない。main/productionの分離releaseと既存Gateを維持する。
@@ -36,7 +42,7 @@
 
 SERVICE_OWNER本人を内部テスターにする最小操作は、`/s/{serviceSlug}/manage/programs/personal-learning-preparation`へ追加する。詳細は[内部テスター準備UI](MANABERU_STYLE_INTERNAL_TESTER_PREPARATION_UI_IMPLEMENTATION.md)。本記載は実登録/本番deploy/STARTの証拠・承認ではない。
 
-停止中の専用Programと両実行flag OFF、既存operations/participant preparation flag・固定authorityが必要。「本人の準備状態を確認」→ 初回だけ内部上限1〜2を明示選択・確認 → CONFIGURE → 状態再確認 → 本人Enrollment準備 → 状態再確認 → INTERNAL参加権付与 → 状態再確認 → 本人Profile準備画面の順。各段階で人間レビュー証跡・本人対象確認をやり直す。稼働中、失効、不正/複数Offering、既存人数設定の修復、START/承認はこの画面で行わない。本文・secretの入力/手動SQLによる迂回を禁止する。
+停止中の専用Programと両実行flag OFF、既存operations/participant preparation flag・固定authorityが必要。「本人の準備状態を確認」→ 初回だけ内部上限1〜3を明示選択・確認 → CONFIGURE → 状態再確認 → 本人Enrollment準備 → 状態再確認 → INTERNAL参加権付与 → 状態再確認 → 本人Profile準備画面の順。各段階で人間レビュー証跡・本人対象確認をやり直す。稼働中、失効、不正/複数Offering、既存人数設定の修復、START/承認はこの画面で行わない。本文・secretの入力/手動SQLによる迂回を禁止する。
 
 ### 2026-10-08 学習導線照合（最新の限定観測）
 
@@ -48,7 +54,7 @@ Vercelの実公開SHAは`24afc8a170097741844e068653b191bc822b1c2e`（#1180）。
 
 **開始判定はNO-GO。文書は操作承認ではない。** 本書は将来の人間承認後に実行する順序を定義する。初版はProduction読取も未実施。今回の別指示によるRead-only監査では既存認証済みDashboard/CLI metadataとREAD ONLY transactionのSELECTのみ実施した。Migration、deploy、設定、Definition承認、参加者登録、enable、key変更、実Provider利用は一切実施していない。以下の変更command/API例は未実行。
 
-Wave 0は内部1〜2人の実環境E2Eであり、外部募集ではない。内部枠と外部100人枠を分離し、一般ユーザー・旧30日V1へ表示しない。内部Domain名は維持する。staging配備は必須でなく、隔離restore/DDL検証に使う環境は別途必要。
+Wave 0は内部1〜3人の実環境E2Eであり、外部募集ではない。内部枠と外部100人枠を分離し、一般ユーザー・旧30日V1へ表示しない。内部Domain名は維持する。staging配備は必須でなく、隔離restore/DDL検証に使う環境は別途必要。
 
 実行記録は[Execution Checklist](MANABERU_STYLE_WAVE0_EXECUTION_CHECKLIST.md)へ。公開GitへUUID名簿、session、dump、secret、本文を貼らず、アクセス制限された証跡のキーのみ記録する。各Phaseの失敗/UNKNOWNでは次へ進まない。
 
@@ -177,7 +183,7 @@ Safety: 本人がCreator、代行制作/業務戦略決定なし、個人情報/
 
 同画面の「Wave 0の初期化・開始・停止」カードは管理者が明示的に状態をGETし、最新stateTokenを使って操作する。Programが未初期化の場合に限りINITIALIZE、SUSPENDEDかつ開始履歴なしの場合に限りSTART、開始履歴がある場合は状態や実行flagにかかわらずSTOPを提示する。操作ごとに人間レビュー記録キーと確認を要求し、完了後にGETで状態を再確認する。状態競合は再取得して人間が再確認し、通信結果不明は同じ操作ID・同じbodyだけを再送する。
 
-START前はDefinition 3件の承認、内部1〜2名のEnrollment/Seat、各本人Profile、Service/Program一致Call Admission・価格、両Pilot実行flag OFF、Definition/Profile/Participant準備flag OFFを人間が確認する。画面のチェックはDB条件の代替ではなく、サーバー側の既存検証を緩めない。拒否された場合は表示された日本語の理由を確認し、設定値・承認・Enrollmentをこの画面で迂回しない。STOPは緊急停止用の軽い確認で実行でき、Pilot flag ON中も操作できる。STOP成功は既送信callの取消やdrain完了を意味しないため、Emergency Stop手順の全instance反映・未精算call調査を続ける。
+START前はDefinition 3件の承認、内部1〜3名のEnrollment/Seat、各本人Profile、Service/Program一致Call Admission・価格、両Pilot実行flag OFF、Definition/Profile/Participant準備flag OFFを人間が確認する。画面のチェックはDB条件の代替ではなく、サーバー側の既存検証を緩めない。拒否された場合は表示された日本語の理由を確認し、設定値・承認・Enrollmentをこの画面で迂回しない。STOPは緊急停止用の軽い確認で実行でき、Pilot flag ON中も操作できる。STOP成功は既送信callの取消やdrain完了を意味しないため、Emergency Stop手順の全instance反映・未精算call調査を続ける。
 
 1. 専用ServiceのACTIVE Workspace/Group、SERVICE_OWNERまたはSERVICE_ADMINを確認。他AI_TRAINING_V1 Programが存在するServiceでは実行しない。
 2. 新規のlowercase UUIDをProgram IDとして予約し、PERSONAL_LEARNING_PRODUCTION_PREPARATIONのserviceProgramIdへ指定する。workspaceId/groupIdは既存の正しいService境界を指定する。値の変更は人間承認、今回の文書更新では実施しない。
@@ -199,21 +205,21 @@ START前はDefinition 3件の承認、内部1〜2名のEnrollment/Seat、各本�
 
 ProgramDefinitionの必須phase表示範囲・schedule/cadenceは既存schemaを満たす参照metadataであり、学習期限ではない。実際の進行はConfirmed Plan/Routerで決め、旧30日Schedulerから隔離する。詳細・検証は [専用Program準備実装報告](MANABERU_STYLE_PERSONAL_LEARNING_PROGRAM_PREPARATION_IMPLEMENTATION.md) を参照。
 
-| 実key/正本                                                                                                             | 停止準備 / Wave 0候補                                                                                                                                                                                                                                       |
-| ---------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| APP_ENV / VERCEL_ENV                                                                                                   | production / production。偽stagingは禁止                                                                                                                                                                                                                    |
-| PERSONAL_LEARNING_PILOT / PERSONAL_LEARNING_PRODUCTION_CLOSED_PILOT                                                    | 準備は両方false、開始承認後だけ両方true                                                                                                                                                                                                                     |
-| PERSONAL_LEARNING_PRODUCTION_PREPARATION                                                                               | JSON: workspaceId/groupId/serviceProgramIdのlowercase UUID3つのみ。groupIdはService。全instanceで単一authority                                                                                                                                              |
-| PERSONAL_LEARNING_DEFINITION_ADMIN / PERSONAL_LEARNING_PARTICIPANT_PREPARATION / PERSONAL_LEARNING_PROFILE_PREPARATION | 必要準備時のみtrue、開始前に全てfalse。authorityと運用flagはSTOP経路のため維持                                                                                                                                                                              |
-| PERSONAL_LEARNING_PILOT_OPERATIONS                                                                                     | 既定false。レビュー済み操作時true、稼働中も停止担当が到達できるよう維持。STARTは両実行flag OFFでのみ可能                                                                                                                                                    |
-| ServiceProgram.status / settings.moduleKey                                                                             | 準備SUSPENDED、実行ACTIVE / AI_TRAINING_V1を維持                                                                                                                                                                                                            |
-| settings.trainingOperations                                                                                            | notificationsEnabled=false、postponedReminderEnabled=falseを明示。既存他field維持                                                                                                                                                                           |
-| settings.personalLearningPilot                                                                                         | enabled=false、enrollmentIds=[]で開始。台帳CONFIGURE/ADMITがparticipantControl/allowlistを管理。手でallowlistを追加しない                                                                                                                                   |
-| participantControl                                                                                                     | CONFIGUREでexternalParticipantCap=100、internalParticipantCap=2、currentWave=0を候補。API算出currentWaveCap=0、version=PILOT_PARTICIPANT_CAP_V1、revisionはserver管理。1人なら内部cap=1も可。人間承認前に運用値確定しない                                   |
-| PERSONAL_LEARNING_CALL_ADMISSION                                                                                       | JSONにworkspaceId/groupId/serviceProgramId、dailyAttemptLimit、maxConcurrent、model、maxRequestBytes、maxOutputTokens、dailyCostLimitUsdMicrosの9項目のみ                                                                                                   |
-| Admission初期数値候補                                                                                                  | Program全体UTC日次dailyAttemptLimit=12、maxConcurrent=1、maxRequestBytes=16384、maxOutputTokens=2048。dailyCostLimitUsdMicrosは実価格から人間承認し、本文書で値を捏造しない。実payload/schemaの完了余裕と課金予算を人間レビュー、足りなければ停止して再承認 |
-| model/provider                                                                                                         | 既存runtimeで解決するOpenAI Assessmentのみ。modelは管理設定/legacyの実modelと完全一致させる。新model/key追加なし、default名をREADYの証拠にしない                                                                                                            |
-| PERSONAL_LEARNING_AI_PRICING                                                                                           | 配列: provider/model/effectiveFrom/inputPriceMicrosPerMillion/outputPriceMicrosPerMillion/cachedInputPriceMicrosPerMillion/currency=USD/pricingVersion。実応答modelの最新単価を人間確認、仮価格禁止                                                         |
+| 実key/正本                                                                                                             | 停止準備 / Wave 0候補                                                                                                                                                                                                                                                                                                                      |
+| ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| APP_ENV / VERCEL_ENV                                                                                                   | production / production。偽stagingは禁止                                                                                                                                                                                                                                                                                                   |
+| PERSONAL_LEARNING_PILOT / PERSONAL_LEARNING_PRODUCTION_CLOSED_PILOT                                                    | 準備は両方false、開始承認後だけ両方true                                                                                                                                                                                                                                                                                                    |
+| PERSONAL_LEARNING_PRODUCTION_PREPARATION                                                                               | JSON: workspaceId/groupId/serviceProgramIdのlowercase UUID3つのみ。groupIdはService。全instanceで単一authority                                                                                                                                                                                                                             |
+| PERSONAL_LEARNING_DEFINITION_ADMIN / PERSONAL_LEARNING_PARTICIPANT_PREPARATION / PERSONAL_LEARNING_PROFILE_PREPARATION | 必要準備時のみtrue、開始前に全てfalse。authorityと運用flagはSTOP経路のため維持                                                                                                                                                                                                                                                             |
+| PERSONAL_LEARNING_PILOT_OPERATIONS                                                                                     | 既定false。レビュー済み操作時true、稼働中も停止担当が到達できるよう維持。STARTは両実行flag OFFでのみ可能                                                                                                                                                                                                                                   |
+| ServiceProgram.status / settings.moduleKey                                                                             | 準備SUSPENDED、実行ACTIVE / AI_TRAINING_V1を維持                                                                                                                                                                                                                                                                                           |
+| settings.trainingOperations                                                                                            | notificationsEnabled=false、postponedReminderEnabled=falseを明示。既存他field維持                                                                                                                                                                                                                                                          |
+| settings.personalLearningPilot                                                                                         | enabled=false、enrollmentIds=[]で開始。台帳CONFIGURE/ADMITがparticipantControl/allowlistを管理。手でallowlistを追加しない                                                                                                                                                                                                                  |
+| participantControl                                                                                                     | CONFIGUREでexternalParticipantCap=100、internalParticipantCap=3、currentWave=0を今回の候補。API算出currentWaveCap=0、version=PILOT_PARTICIPANT_CAP_V1、revisionはserver管理。1/2人で実施する場合は該当人数へ下げる。人間承認前に運用値確定しない                                                                                           |
+| PERSONAL_LEARNING_CALL_ADMISSION                                                                                       | JSONにworkspaceId/groupId/serviceProgramId、dailyAttemptLimit、maxConcurrent、model、maxRequestBytes、maxOutputTokens、dailyCostLimitUsdMicrosの9項目のみ                                                                                                                                                                                  |
+| Admission初期数値候補                                                                                                  | Program全体UTC日次dailyAttemptLimit=20、maxConcurrent=1、maxRequestBytes=16384、maxOutputTokens=2048、dailyCostLimitUsdMicros=1000000（$1）を今回の候補とする。20回は3人合計。週$5は実請求額の監視・停止基準であり現行Admissionの強制上限ではない。実価格・payload/schema・Provider budget・費用監視を人間レビューし、未確認なら開始しない |
+| model/provider                                                                                                         | 既存runtimeで解決するOpenAI Assessmentのみ。modelは管理設定/legacyの実modelと完全一致させる。新model/key追加なし、default名をREADYの証拠にしない                                                                                                                                                                                           |
+| PERSONAL_LEARNING_AI_PRICING                                                                                           | 配列: provider/model/effectiveFrom/inputPriceMicrosPerMillion/outputPriceMicrosPerMillion/cachedInputPriceMicrosPerMillion/currency=USD/pricingVersion。実応答modelの最新単価を人間確認、仮価格禁止                                                                                                                                        |
 
 `dailyCallAttemptLimit`/`concurrentCallLimit`/`requestByteLimit`というkeyは存在しない。実名はdailyAttemptLimit/maxConcurrent/maxRequestBytes。参加者APIは2KiB、Definition APIは4KiBの固定body上限で、Provider byte上限とは別。AdmissionはUTC日次attemptに加え、最大request bytesを入力token上限として予約するUSD予算Hard Stopを持つ。失敗/retryも予約を消費し、settledAt=nullは翌日も同時枠を保持する。
 
@@ -221,7 +227,7 @@ ProgramDefinitionの必須phase表示範囲・schedule/cadenceは既存schemaを
 
 ## Phase F — Internal Participant Preparation
 
-1. 本人同意と内部1〜2人の非公開名簿、ACTIVE User/Workspace、専用ServiceのACTIVE PARTICIPANT Membershipを確認。所有者本人も内部テスターになる場合のみ、ACTIVE SERVICE_OWNERを維持し、下記の本人EnrollmentとINTERNAL/cohort INTERNAL Seatを明示付与する。管理権限だけでは学習不可。降格・二重Membership・別人のProfile代入は行わない。例外の実装・回帰根拠は[所有者内部学習実装報告](MANABERU_STYLE_INTERNAL_OWNER_LEARNING_IMPLEMENTATION.md)を参照し、対象releaseへの反映を別途確認する。
+1. 本人同意と内部1〜3人の非公開名簿、ACTIVE User/Workspace、専用ServiceのACTIVE PARTICIPANT Membershipを確認。所有者本人も内部テスターになる場合のみ、ACTIVE SERVICE_OWNERを維持し、下記の本人EnrollmentとINTERNAL/cohort INTERNAL Seatを明示付与する。管理権限だけでは学習不可。降格・二重Membership・別人のProfile代入は行わない。例外の実装・回帰根拠は[所有者内部学習実装報告](MANABERU_STYLE_INTERNAL_OWNER_LEARNING_IMPLEMENTATION.md)を参照し、対象releaseへの反映を別途確認する。
 2. 新規ServiceはPhase EのCREATE_PROGRAMで期限なし専用Programを直接準備し、下記CONFIGUREを先に行う。既存の空Programの場合だけ互換INITIALIZEを検討。その後GETの最新stateTokenでPREPARE_ENROLLMENTを送る。管理者session、groupMembershipId/receiptのprogramOfferingIdを検証し、SUSPENDEDのままGUIDED Enrollmentを準備する。Goalは空、startsAtはserver設定、固定終了期限は設定しない。Seatはまだ付与しない。
 3. 従来のACTIVE専用Enrollment APIは変更しない。PilotでACTIVE↔SUSPENDEDを一時切替して登録する手順は採用しない。旧V1 setup/期間延長/30日V1変換なし。具体例は運用操作実装報告を参照。
 4. 停止状態で `GET /api/services/{serviceSlug}/ai-training/pilot-participants`。data.policy/seats、累計INTERNAL/EXTERNAL、revoked含むを確認。初回空台帳/allowlist、expectedRevision=0を確認。
@@ -235,12 +241,12 @@ ProgramDefinitionの必須phase表示範囲・schedule/cadenceは既存schemaを
   "confirmation": "CONFIRM_PILOT_PARTICIPANT_OPERATION",
   "reviewEvidenceKey": "wave0-reviewed-config",
   "externalParticipantCap": 100,
-  "internalParticipantCap": 2,
+  "internalParticipantCap": 3,
   "currentWave": 0
 }
 ```
 
-6. receipt/GETの最新数値revisionを使い、一人ずつaction=ADMIT、programEnrollmentId、kind=INTERNAL、common4項目（operationId/expectedRevision/confirmation/reviewEvidenceKey）をPOST。CONFIGURE用3項目は送らない。GETでINTERNAL/cohort INTERNAL/枠1〜2、EXTERNAL=0とallowlist一致を確認。Seat付与はEnrollment作成ではない。取消はREVOKE、枠は累計に残り再利用不可。
+6. receipt/GETの最新数値revisionを使い、一人ずつaction=ADMIT、programEnrollmentId、kind=INTERNAL、common4項目（operationId/expectedRevision/confirmation/reviewEvidenceKey）をPOST。CONFIGURE用3項目は送らない。GETでINTERNAL/cohort INTERNAL/枠1〜3、EXTERNAL=0とallowlist一致を確認。Seat付与はEnrollment作成ではない。取消はREVOKE、枠は累計に残り再利用不可。
 7. 409/CAS競合は再GETと人間再確認、無条件retryしない。同body/UUIDの応答喪失再送は二重Seat消費なし。異なるUserアカウントの同一自然人は自動判定できず人間が確認する。
 8. 本人がLoginし `/s/{serviceSlug}/programs/{programEnrollmentId}` を開く。Profile準備flag=true、Program SUSPENDED、Pilot disabled、Seat/allowlist、両実行flag=falseが必要。
 9. 仕事SALES/OFFICE/MANAGER/OTHER、経験BEGINNER/INTERMEDIATE、時間5/10/15分を本人選択し本人確認→「確認して保存する」。3項目は必須、**保存時UNKNOWNは不可**。不明なら未選択で運営へ相談しREADYにしない。BEGINNERは明示回答であり未回答/未経験の推定ではない。工具別経験等は今回不要/UNKNOWNのまま。自由文/業務秘密/成果物は入力しない。
@@ -290,7 +296,7 @@ Migration、deploy/V1 smoke、3版APPROVED、内部参加者/Profile、Provider/
 
 ## Phase I — Observation
 
-内部1〜2人が最低1Planまたは十分な縦フローを完走するまで観測。固定日数を自動設定せず、責任者が監視間隔/通知先/許容latency/原価Alert/5xx閾値を開始前に承認する。各初回Assessment直後と各session終了時に確認する運用を候補とする。
+内部1〜3人が最低1Planまたは十分な縦フローを完走するまで観測。固定日数を自動設定せず、責任者が監視間隔/通知先/許容latency/原価Alert/5xx閾値を開始前に承認する。各初回Assessment直後と各session終了時に確認する運用を候補とする。
 
 Vercel runtime logsでrequestId/HTTP 5xx/fixed error、Router status/reason、Provider error/timeout、Job失敗・retryを確認。DBではscope限定でAssignment重複、current Goal/Plan、Event、Admissionの日次attempt/未終了枠を照合する。[P1-G SQL](P1G_AI_COST_ANALYSIS.sql)はworkspace/group/期間をbindして利用し、Programを対象へ限定。canonical原価はAI_CALL Eventのみ、AiUsageEventを再加算しない。
 

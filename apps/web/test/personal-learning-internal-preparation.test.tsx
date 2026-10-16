@@ -50,9 +50,13 @@ describe('stopped own INTERNAL preparation', () => {
   });
   it('requires explicit cap, bounded human review and confirmation', () => {
     expect(internalCommand(initial, 'review', true, '')).toBeNull();
-    expect(internalCommand(initial, 'review', true, '3')).toBeNull();
+    expect(internalCommand(initial, 'review', true, '4')).toBeNull();
     expect(internalCommand(initial, 'review', false, '1')).toBeNull();
     expect(internalCommand(initial, 'private text', true, '1')).toBeNull();
+    expect(internalCommand(initial, 'review', true, '3')).toMatchObject({
+      action: 'CONFIGURE',
+      internalParticipantCap: 3,
+    });
     expect(internalCommand(initial, 'review', true, '2')).toMatchObject({
       action: 'CONFIGURE',
       expectedRevision: 0,
@@ -93,7 +97,7 @@ describe('stopped own INTERNAL preparation', () => {
       { ...initial, operation: { ...initial.operation, status: 'ACTIVE' } },
       { ...initial, operation: { ...initial.operation, exists: false } },
       { ...configured, policy: { ...configured.policy!, currentWave: 1, currentWaveCap: 5 } },
-      { ...configured, policy: { ...configured.policy!, internalParticipantCap: 5 } },
+      { ...configured, policy: { ...configured.policy!, internalParticipantCap: 4 } },
       { ...configured, programOfferingId: null },
       { ...prepared, enrollmentReady: false },
       { ...prepared, seatStatus: 'REVOKED' as const },
@@ -115,6 +119,17 @@ describe('stopped own INTERNAL preparation', () => {
       { ...initial, operation: { ...initial.operation, stateToken: 'bad' } },
     ])
       expect(internalSnapshot(s)).toBeNull();
+  });
+  it('accepts a three-person internal cap but rejects values above the Wave 0 maximum', () => {
+    const three = {
+      ...configured,
+      policy: { ...configured.policy!, internalParticipantCap: 3 },
+    };
+    expect(internalStep(three)).toBe('PREPARE_ENROLLMENT');
+    expect(internalCommand(initial, 'review', true, '4')).toBeNull();
+    expect(internalStep({ ...three, policy: { ...three.policy, internalParticipantCap: 4 } })).toBe(
+      'BLOCKED',
+    );
   });
   it('lost response replays exactly the same command; never advances automatically', async () => {
     const command = internalCommand(initial, 'review', true, '1')!;

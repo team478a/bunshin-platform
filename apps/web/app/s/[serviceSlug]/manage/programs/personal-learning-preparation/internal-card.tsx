@@ -130,6 +130,7 @@ export function InternalPreparationCard({ serviceSlug }: { serviceSlug: string }
                   <option value="">選択してください</option>
                   <option value="1">1人</option>
                   <option value="2">2人</option>
+                  <option value="3">3人</option>
                 </select>
               </label>
             </>
@@ -171,7 +172,7 @@ export function InternalPreparationCard({ serviceSlug }: { serviceSlug: string }
               busy ||
               !confirmed ||
               !/^[a-zA-Z0-9_.:-]{1,100}$/.test(evidence) ||
-              (step === 'CONFIGURE' && !['1', '2'].includes(cap))
+              (step === 'CONFIGURE' && !['1', '2', '3'].includes(cap))
             }
             onClick={() => void submit()}
           >

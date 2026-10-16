@@ -1,5 +1,9 @@
 # マナベルスタイル Wave 0 実行チェックシート
 
+## 2026-10-16 社内3人テストの希望値
+
+ユーザー指定: 社内テスター上限3人。試験候補はProgram合計で20 AI試行/UTC日、同時実行1、Program日次費用Hard Stop $1。週$5は現行Admissionで強制されず、運用担当が実費を監視して到達時停止する候補。実モデル/価格/実際のAdmission値/請求確認・停止担当は引き続きUNKNOWN。Productionへの設定、参加者登録、Definition承認、Pilot enable、Provider呼出しは未実施で、GO判定ではない。
+
 [Launch Runbook](MANABERU_STYLE_PRODUCTION_WAVE0_LAUNCH_RUNBOOK.md)と併用する。現在は全Production操作未実施、UNKNOWN、開始NO-GO。未記入をPASSにしない。証跡は非公開保管先のキーのみ、秘密/個人本文/UUID名簿を公開Gitへ貼らない。
 
 ## 対象固定・担当
@@ -8,7 +12,7 @@
 - Vercel project / alias / Supabase project / DB role（識別子のみ）: UNKNOWN
 - Workspace / Service / Program対応の非公開証跡キー: UNKNOWN
 - release責任者 / DB owner / Migration担当 / 停止担当 / Definition reviewer: UNKNOWN
-- 内部人数（1〜2）/監視間隔/原価Alert/5xx・latency閾値/通知先: UNKNOWN
+- 内部人数（上限3人のユーザー指定）/監視間隔/原価Alert/5xx・latency閾値/通知先: 人数希望のみ確定、その他UNKNOWN
 - backup方式 / timestamp / 成功証跡 / restore実行者 / RPO / 実測RTO: UNKNOWN
 - 非公開実行記録の保管先 / 保持期間 / 参加者同意: UNKNOWN
 
@@ -21,7 +25,7 @@
 | 固定SHA Production deploy                       | 未記入                 | UNKNOWN |
 | 3Definition教育判断とAPPROVE操作                | 未記入                 | UNKNOWN |
 | authority/上限/モデル・費用/監視/停止手段の設定 | 未記入                 | UNKNOWN |
-| 内部1〜2人のEnrollment/Seat準備                 | 未記入                 | UNKNOWN |
+| 内部最大3人のEnrollment/Seat準備                | 未記入                 | UNKNOWN |
 | 本人Profile回答・Provider送信への同意           | 未記入                 | UNKNOWN |
 | Pilot enable / 実Provider費用 / 停止試験・再開  | 未記入                 | UNKNOWN |
 | Wave1移行（この記録では実行しない）             | 未記入                 | UNKNOWN |
