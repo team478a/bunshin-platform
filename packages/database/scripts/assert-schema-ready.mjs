@@ -2,6 +2,7 @@ import { readdir } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { PrismaClient } from '@prisma/client';
+import { runtimeDatabaseUrl } from '../src/runtime-database-url.ts';
 
 const packageDirectory = join(dirname(fileURLToPath(import.meta.url)), '..');
 const migrationDirectory = join(packageDirectory, 'prisma', 'migrations');
@@ -15,7 +16,11 @@ if (!latestMigration) throw new Error('No database migrations were found.');
 const databaseUrl = process.env.DATABASE_URL?.trim();
 if (!databaseUrl) throw new Error('DATABASE_URL is required for the schema readiness gate.');
 
-const client = new PrismaClient({ datasources: { db: { url: databaseUrl } } });
+// The schema gate runs against the same pooled DATABASE_URL as serverless runtime.
+// Supabase transaction poolers require Prisma's prepared statements to be disabled.
+const client = new PrismaClient({
+  datasources: { db: { url: runtimeDatabaseUrl(databaseUrl) ?? databaseUrl } },
+});
 try {
   const rows = await client.$queryRawUnsafe(
     `SELECT EXISTS (
