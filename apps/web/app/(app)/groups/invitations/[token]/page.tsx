@@ -50,6 +50,9 @@ async function invitationReturnPath(
     serviceId: service.group.id,
   });
   return {
+    // The helper returns a runtime-validated internal route; Next's generated route type
+    // is narrower during `next build` than during the standalone lint task.
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
     accepted: invitationAcceptedPath(service.slug, isAiTrainingService) as Route,
     declined: `/s/${service.slug}` as Route,
   };
