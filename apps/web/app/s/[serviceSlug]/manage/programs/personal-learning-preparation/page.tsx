@@ -6,6 +6,7 @@ import {
   programPreparationTarget,
 } from '../../../../../../src/services/personal-learning-program-preparation';
 import { PublicShell } from '../../../../../ui/public-shell';
+import { personalLearningFeatureEnabled } from '@bunshin/capability-training';
 import { ProgramPreparationCard } from './card';
 import { InternalPreparationCard } from './internal-card';
 import { InternalParticipantsCard } from './internal-participants-card';
@@ -26,6 +27,18 @@ export default async function ProgramPreparationPage({
   const service = await resolveManagedServiceContext(serviceSlug, actor.userId).catch(() => null);
   if (!service) notFound();
   const programId = programPreparationTarget(service);
+  const db = await import('@bunshin/database');
+  const program = programId
+    ? await db.prisma.serviceProgram.findFirst({
+        where: {
+          id: programId,
+          workspaceId: service.workspaceId,
+          groupId: service.serviceId,
+        },
+        select: { settings: true },
+      })
+    : null;
+  const conversationEnabled = personalLearningFeatureEnabled(program?.settings, 'conversation');
   const writesAllowed = pilotPreparationWritesAllowed();
   const operationsAllowed = ['SERVICE_OWNER', 'SERVICE_ADMIN'].includes(service.serviceRole);
   return (
@@ -41,6 +54,12 @@ export default async function ProgramPreparationPage({
               学習設計のレビュー・承認準備
             </a>
           )}
+          {conversationEnabled &&
+            ['SERVICE_OWNER', 'SERVICE_ADMIN'].includes(service.serviceRole) && (
+              <a href={`/s/${serviceSlug}/manage/programs/learning-conversations`}>
+                受講者が共有した研修会話
+              </a>
+            )}
         </header>
         {programId ? (
           <ProgramPreparationCard

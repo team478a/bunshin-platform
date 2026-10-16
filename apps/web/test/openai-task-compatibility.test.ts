@@ -9,7 +9,11 @@ import {
 } from '../src/ai/openai-task-compatibility';
 import { OpenAiTrainingAnswerEvaluator } from '../src/providers/openai-training-answer-evaluator';
 
-const tasks: OpenAiCompatibilityTask[] = ['SOCIAL_PLANNER', 'TRAINING_ASSESSMENT'];
+const tasks: OpenAiCompatibilityTask[] = [
+  'SOCIAL_PLANNER',
+  'TRAINING_ASSESSMENT',
+  'LEARNING_CONVERSATION',
+];
 const models = ['gpt-5.2', 'gpt-5.2-2025-12-11', 'gpt-5-mini', 'gpt-5-mini-2025-08-07'];
 function request(task: OpenAiCompatibilityTask) {
   return {
@@ -26,7 +30,9 @@ function request(task: OpenAiCompatibilityTask) {
               ? 'learning_support'
               : task === 'LEARNING_LESSON'
                 ? 'learning_lesson'
-                : 'training_evaluation',
+                : task === 'LEARNING_CONVERSATION'
+                  ? 'learning_conversation'
+                  : 'training_evaluation',
         strict: true,
         schema: { type: 'object', additionalProperties: false },
       },

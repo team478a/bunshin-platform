@@ -7,6 +7,7 @@ import {
 } from '../../../../../../src/services/personal-learning-request-access';
 import { PersonalLearningRequestCard } from './card';
 import { personalLearningMode } from '@bunshin/capability-training';
+import { personalLearningFeatureEnabled } from '@bunshin/capability-training';
 export const dynamic = 'force-dynamic';
 export default async function Page({
   params,
@@ -63,6 +64,25 @@ export default async function Page({
           initialCandidate={await new db.PrismaLearningCandidateRepository(db.prisma).readCandidate(
             input,
           )}
+          conversationEndpoint={
+            dynamicMode && personalLearningFeatureEnabled(program?.settings, 'conversation')
+              ? `/api/services/${serviceSlug}/ai-training/enrollments/${programEnrollmentId}/learning-request/conversation`
+              : undefined
+          }
+          initialConversation={
+            dynamicMode && personalLearningFeatureEnabled(program?.settings, 'conversation')
+              ? await new db.PrismaPersonalLearningConversationRepository(
+                  db.prisma,
+                ).readConversation(
+                  await resolvePersonalLearningRequestActor(
+                    serviceSlug,
+                    programEnrollmentId,
+                    actor.userId,
+                    'conversation',
+                  ),
+                )
+              : null
+          }
         />
       </main>
     );

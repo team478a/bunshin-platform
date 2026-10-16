@@ -2,11 +2,13 @@
 import { useState } from 'react';
 import { LearningCandidateCard } from './candidate-card';
 import { LearningPracticeCard } from './practice-card';
+import { LearningConversationCard } from './conversation-card';
 import type {
   SavedPersonalLearningRequest,
   PersonalLearningRequestContent,
   SavedLearningLessonCandidate,
   PersonalLearningPracticeState,
+  PersonalLearningConversationState,
 } from '@bunshin/application';
 
 export function PersonalLearningRequestCard({
@@ -17,6 +19,8 @@ export function PersonalLearningRequestCard({
   initialCandidate = null,
   practiceEndpoint,
   initialPractice = { allowed: false, current: null },
+  conversationEndpoint,
+  initialConversation = null,
 }: {
   dynamicMode?: boolean;
   endpoint: string;
@@ -25,6 +29,8 @@ export function PersonalLearningRequestCard({
   initialCandidate?: SavedLearningLessonCandidate | null;
   practiceEndpoint?: string;
   initialPractice?: PersonalLearningPracticeState;
+  conversationEndpoint?: string | undefined;
+  initialConversation?: PersonalLearningConversationState | null | undefined;
 }) {
   const [content, setContent] = useState<PersonalLearningRequestContent>({
     originalText: initial?.originalText ?? '',
@@ -165,6 +171,15 @@ export function PersonalLearningRequestCard({
         </button>
       </form>
       <p role="status">{message}</p>
+      {conversationEndpoint && saved && matchesSaved && (
+        <LearningConversationCard
+          key={saved.id}
+          endpoint={conversationEndpoint}
+          sharingEndpoint={`${conversationEndpoint}/share`}
+          request={saved}
+          initial={initialConversation?.requestId === saved.id ? initialConversation : null}
+        />
+      )}
       {candidateEndpoint &&
         !practice.current &&
         saved &&

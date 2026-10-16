@@ -193,6 +193,22 @@ export class PrismaTrainingPersonalDataExportRepository implements TrainingPerso
           orderBy: [{ occurredAt: 'asc' }, { id: 'asc' }],
           take,
         });
+        const conversationEvents = await tx.programActionEvent.findMany({
+          where: {
+            ...scope,
+            actorUserId: input.actorUserId,
+            eventType: {
+              in: [
+                'PERSONAL_LEARNING_CONVERSATION_MESSAGE',
+                'PERSONAL_LEARNING_CONVERSATION_RESPONSE',
+                'PERSONAL_LEARNING_CONVERSATION_SHARE',
+              ],
+            },
+          },
+          select: { id: true, eventType: true, occurredAt: true, metadata: true },
+          orderBy: [{ occurredAt: 'asc' }, { id: 'asc' }],
+          take,
+        });
         const practiceSupportImages = practiceSupport.length
           ? await tx.personalLearningPracticeSupportImage.findMany({
               where: {
@@ -270,6 +286,7 @@ export class PrismaTrainingPersonalDataExportRepository implements TrainingPerso
             practiceNotes,
             practiceSupport,
             practiceSupportImages,
+            conversationEvents,
           ].some((rows) => rows.length > TRAINING_EXPORT_MAX_ROWS)
         )
           return { outcome: 'TOO_LARGE' };
@@ -281,6 +298,7 @@ export class PrismaTrainingPersonalDataExportRepository implements TrainingPerso
               pilotSeats.length +
               learningRequests.length +
               practiceSupport.length +
+              conversationEvents.length +
               practiceSupportImages.length +
               practiceNotes.length >
             0
@@ -291,6 +309,41 @@ export class PrismaTrainingPersonalDataExportRepository implements TrainingPerso
                       kind: 'PRACTICE_SUPPORT',
                       occurredAt: iso(row.occurredAt),
                     })),
+                    ...conversationEvents.map((row) => {
+                      const metadata =
+                        row.metadata &&
+                        typeof row.metadata === 'object' &&
+                        !Array.isArray(row.metadata)
+                          ? (row.metadata as Record<string, unknown>)
+                          : {};
+                      return {
+                        kind: 'CONVERSATION',
+                        event: row.eventType,
+                        threadId: typeof metadata.threadId === 'string' ? metadata.threadId : null,
+                        requestRevision:
+                          typeof metadata.requestRevision === 'number'
+                            ? metadata.requestRevision
+                            : null,
+                        role:
+                          row.eventType === 'PERSONAL_LEARNING_CONVERSATION_MESSAGE'
+                            ? 'USER'
+                            : row.eventType === 'PERSONAL_LEARNING_CONVERSATION_RESPONSE'
+                              ? 'ASSISTANT'
+                              : null,
+                        text: typeof metadata.text === 'string' ? metadata.text : null,
+                        status: typeof metadata.status === 'string' ? metadata.status : null,
+                        responseStatus:
+                          typeof metadata.responseStatus === 'string'
+                            ? metadata.responseStatus
+                            : null,
+                        shared: typeof metadata.shared === 'boolean' ? metadata.shared : null,
+                        promptVersion:
+                          typeof metadata.promptVersion === 'string'
+                            ? metadata.promptVersion
+                            : null,
+                        occurredAt: iso(row.occurredAt),
+                      };
+                    }),
                     ...practiceNotes.map((row) => ({
                       ...row,
                       kind: 'PRACTICE_NOTE',

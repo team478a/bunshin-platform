@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import type { Prisma, PrismaClient } from '@prisma/client';
 import { ApplicationError } from '@bunshin/shared';
 import {
+  PERSONAL_LEARNING_CONVERSATION_VERSION,
   validatePersonalLearningTextOperation,
   validateAiCallMeasurement,
   estimateAiCallCost,
@@ -11,7 +12,9 @@ import {
   type AiCallMeasurement,
   type AiTokenPricing,
 } from '@bunshin/application';
+import { personalLearningFeatureEnabled } from '@bunshin/capability-training';
 import { PrismaPracticeSupportRepository } from './personal-learning-practice-support';
+import { CONVERSATION_MESSAGE_EVENT } from './personal-learning-conversation';
 import { reserveLearningProgramBudget } from './personal-learning-call-budget';
 import { personalLearningOperationHash as operationHash } from './personal-learning-operation-identity';
 
@@ -35,6 +38,8 @@ const bodyHash = (input: PersonalLearningTextOperation) =>
     input.promptVersion,
     ...(input.practice ? [input.practice] : []),
   ]);
+const metadataObject = (value: Prisma.JsonValue | null): Record<string, unknown> =>
+  value && typeof value === 'object' && !Array.isArray(value) ? value : {};
 interface Context {
   version: 'LEARNING_TEXT_OPERATION_V1';
   bodyHash: string;
@@ -71,6 +76,54 @@ export class PrismaPersonalLearningTextOperationRepository
   ) {
     super(operationClient, now);
   }
+  private async assertConversationAdmission(
+    tx: Prisma.TransactionClient,
+    input: PersonalLearningTextOperation,
+  ) {
+    const actor = input.actor;
+    const [request, enrollment] = await Promise.all([
+      tx.personalLearningRequest.findFirst({
+        where: {
+          ...actor.scope,
+          id: input.requestId,
+          revision: input.expectedRequestRevision,
+        },
+      }),
+      tx.programEnrollment.findUnique({ where: { id: actor.scope.programEnrollmentId } }),
+    ]);
+    if (!request || !enrollment || enrollment.serviceProgramId !== input.policy.serviceProgramId)
+      throw new ApplicationError('CONFLICT', 'learning conversation changed');
+    const program = await tx.serviceProgram.findFirst({
+      where: {
+        id: enrollment.serviceProgramId,
+        workspaceId: actor.scope.workspaceId,
+        groupId: actor.scope.groupId,
+      },
+      select: { settings: true },
+    });
+    if (!program || !personalLearningFeatureEnabled(program.settings, 'conversation'))
+      throw new ApplicationError('NOT_FOUND', 'learning conversation unavailable');
+    const row = await tx.programActionEvent.findUnique({
+      where: {
+        workspaceId_groupId_idempotencyKey: {
+          workspaceId: actor.scope.workspaceId,
+          groupId: actor.scope.groupId,
+          idempotencyKey: `learning-conversation-request:${input.operationId}`,
+        },
+      },
+    });
+    const metadata = metadataObject(row?.metadata ?? null);
+    if (
+      row?.actorUserId !== actor.scope.userId ||
+      row.programEnrollmentId !== actor.scope.programEnrollmentId ||
+      row.eventType !== CONVERSATION_MESSAGE_EVENT ||
+      metadata.version !== PERSONAL_LEARNING_CONVERSATION_VERSION ||
+      metadata.threadId !== input.requestId ||
+      metadata.requestRevision !== input.expectedRequestRevision ||
+      metadata.operationId !== input.operationId
+    )
+      throw new ApplicationError('CONFLICT', 'learning conversation changed');
+  }
   async admit(input: PersonalLearningTextOperation) {
     validatePersonalLearningTextOperation(input);
     return this.authorized(input.actor, true, async (tx) => {
@@ -83,6 +136,8 @@ export class PrismaPersonalLearningTextOperationRepository
         throw new ApplicationError('NOT_FOUND', 'learning program unavailable');
       if (input.operationKind === 'PRACTICE_SUPPORT') {
         await this.assertSupportAdmission(tx, input);
+      } else if (input.operationKind === 'CONVERSATION_TURN') {
+        await this.assertConversationAdmission(tx, input);
       } else {
         const wish = await tx.personalLearningRequest.findFirst({
           where: s,
