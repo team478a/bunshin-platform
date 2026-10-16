@@ -13,6 +13,7 @@ import { resolvePersonalLearningPilot } from '../services/personal-learning-pilo
 import { resolvePersonalLearningFocus } from '../services/personal-learning-focus';
 import {
   activatePersonalLearningLineMenu,
+  dynamicPersonalLearningPracticeTitle,
   personalLearningLineMenuStatus,
 } from '../services/personal-learning-line-rich-menu';
 const logger = createLogger();
@@ -124,6 +125,18 @@ export async function personalLearningPilotResponse(
     if (!actor) throw new ApplicationError('UNAUTHENTICATED', 'session required');
     const input = await resolvePersonalLearningPilot(serviceSlug, enrollmentId, actor.userId);
     const db = await import('@bunshin/database');
+    const dynamicPracticeTitle = await dynamicPersonalLearningPracticeTitle(input);
+    if (dynamicPracticeTitle !== undefined) {
+      if (request.method === 'GET') {
+        const lineMenu = await personalLearningLineMenuStatus(input, dynamicPracticeTitle);
+        return respond({ practiceTitle: dynamicPracticeTitle, lineMenu });
+      }
+      const dynamicCommand = body.parse(await request.json());
+      if (dynamicCommand.operation !== 'ACTIVATE_LINE_MENU')
+        throw new ApplicationError('NOT_FOUND', 'fixed learning operation unavailable');
+      await activatePersonalLearningLineMenu({ actor: input, serviceSlug });
+      return respond({ linked: true });
+    }
     const repository = new db.PrismaPersonalLearningPilotRepository(db.prisma);
     if (request.method === 'GET') {
       const state = await repository.read(input);

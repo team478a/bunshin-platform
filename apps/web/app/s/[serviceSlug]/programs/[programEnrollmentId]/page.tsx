@@ -10,6 +10,7 @@ import {
   AiTrainingV1Policy,
   TrainingRuntimeError,
   isPersonalLearningPilotProgram,
+  personalLearningMode,
 } from '@bunshin/capability-training';
 import type { CSSProperties } from 'react';
 import { ApplicationError } from '@bunshin/shared';
@@ -102,6 +103,9 @@ export default async function ProgramParticipantPage({
         if (error instanceof ApplicationError && error.code === 'NOT_FOUND')
           redirect(`/s/${serviceSlug}/training`);
         throw error;
+      }
+      if (personalLearningMode(program.settings) === 'DYNAMIC_V1') {
+        redirect(`/s/${serviceSlug}/programs/${programEnrollmentId}/learning-request`);
       }
       if (process.env['PERSONAL_LEARNING_PROFILE_PREPARATION'] === 'true') {
         let initialProfile;

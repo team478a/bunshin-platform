@@ -3,7 +3,7 @@ import {
   ServiceParticipationService,
   businessGrowthProgramStatus,
 } from '@bunshin/application';
-import { AI_TRAINING_V1_MODULE_KEY } from '@bunshin/capability-training';
+import { AI_TRAINING_V1_MODULE_KEY, personalLearningMode } from '@bunshin/capability-training';
 import { GetMissionProgress } from '@bunshin/capability-social';
 import type { CSSProperties } from 'react';
 import type { Metadata, Route } from 'next';
@@ -44,6 +44,11 @@ import {
 } from './service-home-navigation-sections';
 import { ServiceHomeAccessGuidance } from './service-home-access-guidance';
 import { serviceAuthBrandForSlug } from '../../../../src/services/service-auth-brand';
+import {
+  personalLearningRequestEnabled,
+  resolvePersonalLearningRequestActor,
+} from '../../../../src/services/personal-learning-request-access';
+import { ApplicationError } from '@bunshin/shared';
 
 export const dynamic = 'force-dynamic';
 
@@ -249,7 +254,7 @@ export default async function ServiceMemberHome({
       status: { not: 'ARCHIVED' },
       settings: { path: ['moduleKey'], equals: AI_TRAINING_V1_MODULE_KEY },
     },
-    select: { status: true },
+    select: { id: true, status: true, settings: true },
   });
   // The service identity survives a reserved Pilot being SUSPENDED before Wave 0.
   // Archived Programs are historical and must not change the current service UX.
@@ -257,6 +262,40 @@ export default async function ServiceMemberHome({
   const isPersonalLearningReady = personalLearningPrograms.some(
     (program) => program.status === 'ACTIVE',
   );
+  let personalLearningPathHref: Route | null = null;
+  if (isPersonalLearningReady && personalLearningRequestEnabled()) {
+    const dynamicProgramIds = personalLearningPrograms
+      .filter(
+        (program) =>
+          program.status === 'ACTIVE' && personalLearningMode(program.settings) === 'DYNAMIC_V1',
+      )
+      .map((program) => program.id);
+    if (dynamicProgramIds.length) {
+      const enrollments = await db.prisma.programEnrollment.findMany({
+        where: {
+          workspaceId: service.workspaceId,
+          groupId: service.serviceId,
+          groupMembershipId: membership.id,
+          serviceProgramId: { in: dynamicProgramIds },
+          status: 'ACTIVE',
+          startsAt: { lte: now },
+          OR: [{ endsAt: null }, { endsAt: { gt: now } }],
+        },
+        orderBy: { startsAt: 'desc' },
+        select: { id: true },
+      });
+      for (const enrollment of enrollments) {
+        try {
+          await resolvePersonalLearningRequestActor(serviceSlug, enrollment.id, actor.userId);
+          personalLearningPathHref =
+            `/s/${service.configuration.slug}/programs/${enrollment.id}/learning-request` as Route;
+          break;
+        } catch (error) {
+          if (!(error instanceof ApplicationError) || error.code !== 'NOT_FOUND') throw error;
+        }
+      }
+    }
+  }
   const currentWeek = weekRange(localDate);
   const activityRule = await currentActivityContinuityRule();
   const assignmentRepository = new db.PrismaBunshinCapabilityAssignmentRepository();
@@ -334,6 +373,7 @@ export default async function ServiceMemberHome({
           isBusinessDailyService={isBusinessDailyService}
           isPersonalLearningService={isPersonalLearningService}
           isPersonalLearningReady={isPersonalLearningReady}
+          personalLearningPathHref={personalLearningPathHref}
           serviceSlug={service.configuration.slug}
         />
         <MemberFeatureLinks

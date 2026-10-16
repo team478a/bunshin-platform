@@ -27,6 +27,7 @@ const f = vi.hoisted(() => ({
   readPractice: vi.fn(),
   lineMenuStatus: vi.fn(),
   activateLineMenu: vi.fn(),
+  dynamicPracticeTitle: vi.fn(),
 }));
 vi.mock('../src/auth/current-user', () => ({
   currentUserProvider: () => Promise.resolve({ getCurrentUser: f.actor }),
@@ -38,6 +39,7 @@ vi.mock('../src/services/personal-learning-pilot-access', () => ({
 vi.mock('../src/services/personal-learning-line-rich-menu', () => ({
   personalLearningLineMenuStatus: f.lineMenuStatus,
   activatePersonalLearningLineMenu: f.activateLineMenu,
+  dynamicPersonalLearningPracticeTitle: f.dynamicPracticeTitle,
 }));
 vi.mock('@bunshin/database', () => ({
   prisma: { programMemberGoal: { findFirst: f.storedGoal } },
@@ -103,6 +105,7 @@ describe('Personal Learning pilot HTTP composition', () => {
     });
     f.lineMenuStatus.mockResolvedValue({ available: false, linked: false });
     f.activateLineMenu.mockResolvedValue({ linked: true });
+    f.dynamicPracticeTitle.mockResolvedValue(undefined);
     f.consult.mockImplementation((input: { consultation: LearningConsultationRequest }) =>
       Promise.resolve(consultAiTrainingLearning(consultationContext(), input.consultation)),
     );
