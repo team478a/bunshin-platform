@@ -28,6 +28,13 @@ const approvedPendingSets = [
     migrations: ['20261015170000_add_line_follow_invitations'],
     confirmation: 'APPLY_LINE_FOLLOW_INVITATIONS_MIGRATION_TO_vtkzinaudznwbsjoyszk',
   },
+  {
+    migrations: [
+      '20261016120000_ai_training_usage_consent',
+      '20261016150000_invitation_manual_service_registration',
+    ],
+    confirmation: 'APPLY_AI_TRAINING_ENROLLMENT_MIGRATIONS_TO_vtkzinaudznwbsjoyszk',
+  },
 ];
 const expectedProjectRef = 'vtkzinaudznwbsjoyszk';
 
