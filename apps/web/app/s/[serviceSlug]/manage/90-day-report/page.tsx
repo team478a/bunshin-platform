@@ -71,7 +71,7 @@ export default async function ManagedBusinessProgramReportPage({
                   `/s/${service.configuration.slug}/manage/90-day-report?user=${participant.userId}` as Route
                 }
               >
-                {participant.user.displayName}
+                {participant.user.displayName?.trim() || '参加者'}
               </Link>
             ))}
           </nav>
@@ -83,7 +83,7 @@ export default async function ManagedBusinessProgramReportPage({
         {report ? (
           <>
             <header className="app-page__heading business-program-report__person">
-              <p className="eyebrow">{report.displayName}さん</p>
+              <p className="eyebrow">{report.displayName?.trim() || '参加者'}</p>
               <h2>{report.businessName}</h2>
             </header>
             {report.latestCycleNumber > 1 ? (
