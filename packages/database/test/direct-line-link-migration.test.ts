@@ -15,6 +15,10 @@ const richMenuPendingOutput =
 const lineFollowInvitationPendingOutput =
   'The following migration(s) have not yet been applied:\n' +
   '20261015170000_add_line_follow_invitations\n';
+const aiTrainingEnrollmentPendingOutput =
+  'The following migration(s) have not yet been applied:\n' +
+  '20261016120000_ai_training_usage_consent\n' +
+  '20261016150000_invitation_manual_service_registration\n';
 
 describe('direct, approval-gated production migration', () => {
   afterEach(() => vi.restoreAllMocks());
@@ -130,6 +134,52 @@ describe('direct, approval-gated production migration', () => {
     expect(execute).toHaveBeenCalledTimes(4);
     expect(execute.mock.calls[2]![1]).toContain('migrate');
     expect(execute.mock.calls[2]![1]).toContain('deploy');
+  });
+
+  it('approves only the exact AI training enrollment migrations with their own confirmation', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    const execute = vi
+      .fn<typeof runMigrationProcess>()
+      .mockResolvedValueOnce({ reason: 'EXITED', status: 0 })
+      .mockResolvedValueOnce({
+        reason: 'EXITED',
+        status: 1,
+        capturedOutput: aiTrainingEnrollmentPendingOutput,
+      })
+      .mockResolvedValueOnce({ reason: 'EXITED', status: 0 })
+      .mockResolvedValueOnce({
+        reason: 'EXITED',
+        status: 0,
+        capturedOutput: 'Database schema is up to date!',
+      });
+    const confirm = vi.fn((phrase: string) => Promise.resolve(phrase));
+
+    expect(await runDirectLineLinkMigration(execute, environment, confirm)).toBe(0);
+    expect(confirm).toHaveBeenCalledWith(
+      'APPLY_AI_TRAINING_ENROLLMENT_MIGRATIONS_TO_vtkzinaudznwbsjoyszk',
+    );
+    expect(execute).toHaveBeenCalledTimes(4);
+    expect(execute.mock.calls[2]![1]).toContain('migrate');
+    expect(execute.mock.calls[2]![1]).toContain('deploy');
+  });
+
+  it('rejects extra migrations combined with the AI training enrollment set', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const execute = vi
+      .fn<typeof runMigrationProcess>()
+      .mockResolvedValueOnce({ reason: 'EXITED', status: 0 })
+      .mockResolvedValueOnce({
+        reason: 'EXITED',
+        status: 1,
+        capturedOutput:
+          aiTrainingEnrollmentPendingOutput + '20261015170000_add_line_follow_invitations\n',
+      });
+    const confirm = vi.fn((phrase: string) => Promise.resolve(phrase));
+
+    expect(await runDirectLineLinkMigration(execute, environment, confirm)).toBe(1);
+    expect(execute).toHaveBeenCalledTimes(2);
+    expect(confirm).not.toHaveBeenCalled();
+    expect(execute.mock.calls.some(([, args]) => args.includes('deploy'))).toBe(false);
   });
 
   it('rejects another target before connecting', async () => {
