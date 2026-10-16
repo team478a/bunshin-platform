@@ -106,7 +106,7 @@ async function run(
     {
       cwd,
       env: childEnvironment,
-      timeoutMs: Math.min(bounds.processTimeoutMs, 30000),
+      timeoutMs: Math.min(bounds.processTimeoutMs, 90000),
       input: `BEGIN READ ONLY;
       DO $$ BEGIN
         IF current_database() <> 'postgres' OR current_user <> 'postgres'
@@ -119,6 +119,12 @@ async function run(
     },
   );
   if (identity.reason !== 'EXITED' || identity.status !== 0) {
+    if (identity.reason === 'DEADLINE_EXCEEDED') {
+      console.error(
+        '[database] DIRECT_MIGRATION_PREFLIGHT_TIMED_OUT: Prisma did not finish the read-only check within 90 seconds; credentials remain unverified and no migration started.',
+      );
+      return 1;
+    }
     console.error(
       `[database] DIRECT_MIGRATION_PREFLIGHT_FAILED (${identity.diagnostic ?? identity.reason.toLowerCase()}): no migration started.`,
     );

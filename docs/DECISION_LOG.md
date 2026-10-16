@@ -39,6 +39,12 @@
 - runner失敗/timeout/未確認終了後は自動retryせず、session、schema、migration historyを照合する。手動SQL、migration resolve、secret表示/保存、別のpending migration適用は行わない。
 - Source: `packages/database/scripts/apply-line-link-migrations.mjs`、`apply-line-link-migrations.ps1`、`deploy-migrations-for-vercel.mjs`、`docs/DEPLOYMENT_GUIDE.md`。
 
+## 2026-10-14: Direct migration preflight timeoutは認証成功として扱わない
+
+- 実行時にTCP/5432到達性は確認できたが、Prismaの最初のread-only DB preflightが30秒で終了しなかった。これはpasswordの正否を証明しない。migrationが未開始であることを固定ログに明示する。
+- 初回のPrisma接続上限を90秒へ延長するが、期限切れは引き続きfail-closedとし、pending history確認やmigration deployへ進めない。TCP socket testとPostgreSQL TLS/auth/SQL成功を混同しない。
+- Source: `packages/database/scripts/apply-line-link-migrations.mjs`、`packages/database/test/direct-line-link-migration.test.ts`。
+
 ## 2026-10-14: メールとLINEのログインIDは本人のverified sessionからのみ明示連携する
 
 - 状態: 実装PRレビュー待ち。migration・本番設定・LINE実機smokeは未実施。
