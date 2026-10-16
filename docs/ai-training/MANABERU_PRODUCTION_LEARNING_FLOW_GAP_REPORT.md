@@ -6,9 +6,21 @@
 
 ## 結論
 
-Wave 0の本番開始手順は、承認済みの固定3Definitionを使う限定的な学習経路を前提としている。一方、2026-10-12〜13にmainへ入った自由希望から始める新しい学習経路は、入口の `personalLearningRequestEnabled()` が `PERSONAL_LEARNING_REQUEST_INTAKE=true` **かつ** `APP_ENV` が `development` または `staging` の場合だけ有効である。したがって、このコードのままではProductionでフラグをtrueにするだけでは有効にならず、該当機能をWave 0の参加者へ提供できない。
+現在のコードとWave 0 Runbookは限定的な固定Definition経路を記述している。一方、2026-10-16〜17にサービス責任者は、マナベルスタイルは自由希望から始まる動的経路を本線にし、固定経路はマナベルでは使わない（既存コードは残す）と決定した。決定でコードの状態は変わらず、main上の動的経路も `personalLearningRequestEnabled()` が `PERSONAL_LEARNING_REQUEST_INTAKE=true` **かつ** `APP_ENV` が `development` または `staging` の場合だけ有効であるため、Productionでフラグをtrueにするだけでは提供できない。
 
-さらに、Launch Runbook上のWave 0は現時点でもNO-GOであり、Production release、全migrationの確認、実DBとrole/RLS、Definitionの人間承認、内部Seat/Profile、実AI費用・Admission、停止/drain等が別々のGateとして残る。本書は新経路の本番公開やWave 0開始の承認ではない。
+決定済みの提供方針と、まだ必要な承認・技術検証は以下の表で分離する。Launch Runbook上のWave 0は引き続きNO-GOであり、Production release、全migration、実DBとrole/RLS、本人同意、実AI費用・Admission、停止/drain、自動削除等が未解決。これは新経路の本番公開やWave 0開始の承認ではない。
+
+## サービス責任者の決定で解消したもの（2026-10-16〜17）
+
+| 項目                     | 決定内容                                                                                                                                   | 記録先                                                                       |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------- |
+| マナベルの本線           | 教材なし・自由希望起点の動的経路。固定経路はマナベルでは使わないが既存コードは残す                                                         | [AI進化方針ADR](ADR_MANABERU_AI_EVOLUTION_POLICY.md)、`docs/DECISION_LOG.md` |
+| 外部初回公開の機能範囲   | 会話、複数テーマ、LINE学習、対応範囲の拡大を含める。内部テスターはA/B後から段階公開                                                        | 本線化指示書v3 §3、ADR                                                       |
+| PRの進め方               | PR-0→A→B→C→D→E→F→G、続いてH/I。1本ずつDraft＋報告・田中確認後に次へ                                                                        | ADR、`docs/IMPLEMENTATION_ROADMAP.md`                                        |
+| 保持・本人操作・運営閲覧 | 動的経路データは`TRAINING_RETENTION_V1`に揃える。本人は確認・修正・Export・削除可。運営者は件数/状態だけで、本人が明示共有した会話のみ例外 | `docs/DECISION_LOG.md`、本線化指示書v3 §4                                    |
+| Phase 1→Phase 2の承認    | **未解消**。PR #1のマージは確認したが、GitHub上の正式レビューsubmission/コメントは確認できず。田中のPR-0上での明示承認が必要               | §「まだ未解決」の表、本PR実装報告                                            |
+
+※上記は提供方針の決定であり、機能実装、Migration、Production設定、Pilot開始、外部公開の許可ではない。
 
 ## 本番Wave 0で想定している既存フロー
 
@@ -39,7 +51,7 @@ Launch RunbookのProduction E2Eは、自由希望をその場で教材化する�
 
 ## 本番で有効化するために不足するものと推奨順
 
-1. **提供範囲の人間判断**: Wave 0に固定3Definitionだけを使うのか、自由希望の動的経路も含めるのか決める。後者を選ぶ場合、固定経路の承認を流用せず、利用者の価値・誤回答時の対応・教育品質レビューを別に定義する。
+1. **提供範囲の設計判断は解消済み**: マナベルの本線は動的経路とする。実装・Production Gate・教育品質の検証は別項目として残る。
 2. **機能完成レビュー**: 希望→候補→同版確認→実践→途中支援→証拠別レビュー→継続/次課題→再ログインまで、異なる希望の実経路で確認する。現在の報告では実AI・実受講者の通し検証や学習効果は未確認。tool-specificな根拠が不足する場合の質問停止も確認する。
 3. **Admission/費用の運営値決定**: `PERSONAL_LEARNING_LESSON_ADMISSION` のService/Program完全一致、固定model、UTC日次attempt上限、同時実行上限、最大request bytes、最大output tokens、USD日次上限を承認する。`PERSONAL_LEARNING_AI_PRICING` の有効なProvider/model/価格版と一致させ、Provider account全体のAdmission/予算も別Gateとして確認する。欠損、料金不明、通信終了不明、Usage保存失敗は0円・空き枠とせず拒否/要調査のままにする。
 4. **Release/DBレビュー**: mainとproductionの全差分、必要migration、checksum/drift、Backup/隔離restore、role/RLS、rollback互換性をDB ownerとrelease責任者が確認する。コード公開より先に、どのDB versionが必要かを固定する。
@@ -60,11 +72,18 @@ Launch RunbookのProduction E2Eは、自由希望をその場で教材化する�
 - **既存V1/通知への波及**: 予約Program marker、allowlist、通知OFF、scheduler/broadcast除外、既存V1継続を再検証する。共通CronやLINE送信を全停止して代用しない。
 - **停止不能/処理中call**: Kill switchを実際に操作できる担当・instance反映・既送信callのdrainを確認する。STOP操作や環境更新だけでは送信済みcallの取消にならない。
 
-## 判断待ち
+## まだ未解決で、別途の承認・検証が必要なもの
 
-- Wave 0は固定3Definitionだけで開始するか、それとも#1261〜#1270相当の新経路を完成後に含めるか。
-- 新経路を含める場合の初期対象、質問停止・人間サポート、Admission上限・実費予算、観測期間/停止閾値。
-- 本番向けのGate変更と必要release/migrationの固定範囲。現時点ではProduction request intakeは拒否される設計を維持する。
+| 項目                                                   | 必要な確認・承認                                                                                                                                               | 担当/時期     |
+| ------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- |
+| Phase 1完了とPhase 2以降への移行                       | PR #1の正式レビュー記録がない事実を踏まえ、田中がPR-0上で明示承認。承認前にPR-Aへ着手しない                                                                    | PR-0          |
+| 機能完成・教育品質                                     | 動的経路の希望→実践→支援→提出→次実践を、実AI・実受講者または承認済み評価で通し確認する。学習効果は別途評価し、未検証を効果として表示しない                     | PR-G          |
+| Admission・費用・テーマ数・範囲外リスト・LINE Push上限 | PR-C〜Fで具体案を提出し、田中が運用値を決める                                                                                                                  | 該当PR        |
+| Release/DB/本番Gate                                    | mainとproduction差分、migration/checksum/drift、Backup/restore、role/RLS、rollback、同意、停止/drainを人間レビュー                                             | 各本番release |
+| 自動削除                                               | `TRAINING_RETENTION_V1`の対象拡張、Export/削除全経路、AI研修retention cronの本番登録・動作確認と別途承認。現状の`apps/web/vercel.json`にはretention cronがない | 外部公開前    |
+| 運用開始・外部公開                                     | 本番release、内部Enrollment/Seat/Profile、費用・監視、停止手順、Wave 0開始、外部公開を別々に承認                                                               | Runbook/PR-G  |
+
+現在もProduction request intakeは拒否される設計であり、この文書更新では変更しない。Launch RunbookとExecution Checklistの実環境NO-GO/UNKNOWNは保持する。
 
 本書は判断材料であり、環境値・Production設定・ServiceProgram・Definition承認・Enrollment/Seat・Pilot開始/停止・Deployを実施していない。
 
