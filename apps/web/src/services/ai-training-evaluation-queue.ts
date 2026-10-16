@@ -1,10 +1,14 @@
 import 'server-only';
 
 import { EnqueueJob, TRAINING_ANSWER_EVALUATION_JOB_TYPE } from '@bunshin/application';
-import { AI_TRAINING_V1_MODULE_KEY } from '@bunshin/capability-training';
+import {
+  AI_TRAINING_V1_MODULE_KEY,
+  isPersonalLearningPilotProgram,
+} from '@bunshin/capability-training';
 import { getServerEnvironment } from '@bunshin/config';
 import { ApplicationError } from '@bunshin/shared';
 import { personalLearningPilotExecutionAllowed } from './personal-learning-pilot-access';
+import { requireAiTrainingUsageConsent } from './ai-training-consent';
 
 const runtimeEnvironment = {
   development: 'DEVELOPMENT',
@@ -75,6 +79,13 @@ export async function enqueueAiTrainingEvaluation(input: {
     });
     if (!program || !personalLearningPilotExecutionAllowed(program.settings, input.enrollmentId))
       throw new ApplicationError('NOT_FOUND', 'training program unavailable');
+    if (isPersonalLearningPilotProgram(program.settings))
+      await requireAiTrainingUsageConsent({
+        workspaceId: input.workspaceId,
+        groupId: input.groupId,
+        enrollmentId: input.enrollmentId,
+        userId: input.actorUserId,
+      });
     const answer = await tx.trainingMissionAnswer.findFirst({
       where: {
         id: input.answerId,

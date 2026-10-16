@@ -8,6 +8,7 @@ import {
 import { ApplicationError } from '@bunshin/shared';
 import { z } from 'zod';
 import { resolveMemberServiceContext, type PublicServiceContext } from './public-service';
+import { requireAiTrainingUsageConsent } from './ai-training-consent';
 
 export function personalLearningPilotEnabled() {
   return (
@@ -93,6 +94,12 @@ export async function resolvePersonalLearningPilot(
       { scope, actorUserId: userId },
       getServerEnvironment().APP_ENV === 'production',
     );
+  await requireAiTrainingUsageConsent({
+    workspaceId: scope.workspaceId,
+    groupId: scope.groupId,
+    enrollmentId: scope.programEnrollmentId,
+    userId,
+  });
   return { scope, actorUserId: userId };
 }
 

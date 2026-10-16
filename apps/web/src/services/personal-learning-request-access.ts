@@ -3,6 +3,7 @@ import { getServerEnvironment } from '@bunshin/config';
 import { ApplicationError } from '@bunshin/shared';
 import type { PersonalLearningActor } from '@bunshin/application';
 import { resolveMemberServiceContext } from './public-service';
+import { requireAiTrainingUsageConsent } from './ai-training-consent';
 
 /** Incomplete lesson flow must not be exposed in production. No learner allowlist. */
 export function personalLearningRequestEnabled() {
@@ -34,6 +35,12 @@ export async function resolvePersonalLearningRequestActor(
     select: { id: true },
   });
   if (!member) throw new ApplicationError('NOT_FOUND', 'learning request unavailable');
+  await requireAiTrainingUsageConsent({
+    workspaceId: service.workspaceId,
+    groupId: service.serviceId,
+    enrollmentId,
+    userId,
+  });
   return {
     actorUserId: userId,
     scope: {

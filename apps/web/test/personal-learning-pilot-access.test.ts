@@ -9,6 +9,9 @@ const f = vi.hoisted(() => ({
 }));
 vi.mock('@bunshin/config', () => ({ getServerEnvironment: () => ({ APP_ENV: f.environment }) }));
 vi.mock('../src/services/public-service', () => ({ resolveMemberServiceContext: f.service }));
+vi.mock('../src/services/ai-training-consent', () => ({
+  requireAiTrainingUsageConsent: vi.fn().mockResolvedValue(undefined),
+}));
 vi.mock('@bunshin/database', () => ({
   PrismaPersonalLearningPilotRepository: class {
     authorizeAccess = f.authorize;

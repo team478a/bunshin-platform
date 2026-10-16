@@ -9,6 +9,8 @@ import { groupInvitationTokenHash } from '../../../../../src/http/group-invitati
 import { ensureUserWorkspaceLineConnection } from '../../../../../src/line/ensure-user-workspace-connection';
 import { recordAuthenticatedRegistrationEvent } from '../../../../../src/registration/funnel';
 import { safeLineAuthReturnPath } from '../../../../../src/auth/line-return';
+import { invitationAcceptedPath } from '../../../../../src/services/ai-training-consent-policy';
+import { hasAiTrainingServiceProgram } from '../../../../../src/services/service-ai-training-mode';
 
 export const dynamic = 'force-dynamic';
 
@@ -40,14 +42,20 @@ async function invitationReturnPath(
         },
       },
     },
-    select: { slug: true },
+    select: { slug: true, group: { select: { id: true } } },
   });
-  return service
-    ? {
-        accepted: `/s/${service.slug}/home` as Route,
-        declined: `/s/${service.slug}` as Route,
-      }
-    : null;
+  if (!service) return null;
+  const isAiTrainingService = await hasAiTrainingServiceProgram({
+    workspaceId,
+    serviceId: service.group.id,
+  });
+  return {
+    // The helper returns a runtime-validated internal route; Next's generated route type
+    // is narrower during `next build` than during the standalone lint task.
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
+    accepted: invitationAcceptedPath(service.slug, isAiTrainingService) as Route,
+    declined: `/s/${service.slug}` as Route,
+  };
 }
 
 async function acceptInvitation(formData: FormData) {

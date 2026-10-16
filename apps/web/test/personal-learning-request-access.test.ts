@@ -2,6 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const f = vi.hoisted(() => ({ environment: 'development', service: vi.fn(), membership: vi.fn() }));
 vi.mock('@bunshin/config', () => ({ getServerEnvironment: () => ({ APP_ENV: f.environment }) }));
 vi.mock('../src/services/public-service', () => ({ resolveMemberServiceContext: f.service }));
+vi.mock('../src/services/ai-training-consent', () => ({
+  requireAiTrainingUsageConsent: vi.fn().mockResolvedValue(undefined),
+}));
 vi.mock('@bunshin/database', () => ({ prisma: { groupMembership: { findFirst: f.membership } } }));
 import {
   personalLearningRequestEnabled,
