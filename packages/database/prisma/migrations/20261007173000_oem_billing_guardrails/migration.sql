@@ -1,3 +1,8 @@
+BEGIN;
+SET LOCAL lock_timeout = '5000ms';
+SET LOCAL statement_timeout = '60000ms';
+SET LOCAL idle_in_transaction_session_timeout = '60000ms';
+
 -- Existing enum/application already support these consented states. Preserve all prior predicates.
 ALTER TABLE "group_memberships" DROP CONSTRAINT "group_memberships_state_check";
 ALTER TABLE "group_memberships" ADD CONSTRAINT "group_memberships_state_check" CHECK (
@@ -48,3 +53,4 @@ END; $$;
 CREATE TRIGGER "oem_registration_history" BEFORE UPDATE OR DELETE ON "oem_registration_periods" FOR EACH ROW EXECUTE FUNCTION "protect_oem_period"();
 CREATE TRIGGER "oem_offering_history" BEFORE UPDATE OR DELETE ON "oem_offering_periods" FOR EACH ROW EXECUTE FUNCTION "protect_oem_period"();
 CREATE TRIGGER "oem_contract_history" BEFORE UPDATE OR DELETE ON "oem_contract_periods" FOR EACH ROW EXECUTE FUNCTION "protect_oem_period"();
+COMMIT;

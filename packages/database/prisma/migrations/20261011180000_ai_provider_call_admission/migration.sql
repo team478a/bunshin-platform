@@ -1,3 +1,8 @@
+BEGIN;
+SET LOCAL lock_timeout = '5000ms';
+SET LOCAL statement_timeout = '60000ms';
+SET LOCAL idle_in_transaction_session_timeout = '60000ms';
+
 -- Additive global provider cost reservation ledger. No historical rows are inferred.
 CREATE TABLE "ai_provider_call_admissions" (
   "id" UUID NOT NULL,
@@ -19,3 +24,4 @@ CREATE INDEX "ai_provider_call_admissions_day_idx" ON "ai_provider_call_admissio
 CREATE INDEX "ai_provider_call_admissions_open_idx" ON "ai_provider_call_admissions"("environment", "provider", "settled_at");
 ALTER TABLE "ai_provider_call_admissions" ENABLE ROW LEVEL SECURITY;
 -- No public policy: existing trusted server role only.
+COMMIT;

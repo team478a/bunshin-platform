@@ -1,3 +1,8 @@
+BEGIN;
+SET LOCAL lock_timeout = '5000ms';
+SET LOCAL statement_timeout = '60000ms';
+SET LOCAL idle_in_transaction_session_timeout = '60000ms';
+
 -- DropIndex
 DROP INDEX "commercial_pricing_schedules_effective_from_key";
 
@@ -144,3 +149,4 @@ ALTER TABLE "oem_billing_policies" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "oem_registration_periods" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "oem_offering_periods" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "oem_contract_periods" ENABLE ROW LEVEL SECURITY;
+COMMIT;
