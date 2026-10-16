@@ -99,7 +99,7 @@ describe('service home module boundary', () => {
         isPersonalLearningService: true,
         isPersonalLearningReady: true,
         personalLearningPathHref:
-          '/s/manaberu-style/programs/00000000-0000-4000-8000-000000000001/learning-request' as Route,
+          '/s/manaberu-style/programs/00000000-0000-4000-8000-000000000001/learning-request' as unknown as Route,
         serviceSlug: 'manaberu-style',
       }),
     );
