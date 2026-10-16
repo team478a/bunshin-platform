@@ -24,6 +24,21 @@ describe('service launch readiness', () => {
     expect(items.every((item) => item.ready)).toBe(true);
   });
 
+  it('describes initial onboarding as training preparation for AI Training services', () => {
+    const items = buildServiceLaunchReadiness({ ...readyInput, isAiTrainingService: true });
+    expect(items.find((item) => item.key === 'ONBOARDING')?.detail).toContain(
+      'AI研修の学習内容を個別に準備',
+    );
+    expect(items.find((item) => item.key === 'ONBOARDING')?.detail).not.toContain('投稿パートナー');
+  });
+
+  it('keeps the SNS onboarding explanation for other services', () => {
+    const items = buildServiceLaunchReadiness({ ...readyInput, isAiTrainingService: false });
+    expect(items.find((item) => item.key === 'ONBOARDING')?.detail).toBe(
+      '参加者に合う投稿パートナーを作るための質問です。',
+    );
+  });
+
   it('requires the verified dedicated LINE and its default rich menu together', () => {
     const items = buildServiceLaunchReadiness({
       ...readyInput,

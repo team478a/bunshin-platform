@@ -6,6 +6,7 @@ import { currentUserProvider } from '../../../../../src/auth/current-user';
 import { memberServiceMetadata } from '../../../../../src/services/member-service-metadata';
 import { isRouteNotFound } from '../../../../../src/navigation/route-not-found';
 import { resolveMemberServiceContext } from '../../../../../src/services/public-service';
+import { hasAiTrainingServiceProgram } from '../../../../../src/services/service-ai-training-mode';
 import { PublicShell } from '../../../../ui/public-shell';
 import { ServiceBunshinForm } from './service-bunshin-form';
 import { ServiceBunshinProposals } from './service-bunshin-proposals';
@@ -51,6 +52,14 @@ export default async function NewServiceBunshinPage({
     select: { id: true, serviceOnboardingResponse: { select: { id: true } } },
   });
   if (!membership) redirect(`/s/${service.configuration.slug}` as Route);
+  if (
+    await hasAiTrainingServiceProgram({
+      workspaceId: service.workspaceId,
+      serviceId: service.serviceId,
+    })
+  ) {
+    redirect(`/s/${service.configuration.slug}/home` as Route);
+  }
   const style = {
     '--service-primary': service.configuration.brand.primaryColor,
     '--service-secondary': service.configuration.brand.secondaryColor,

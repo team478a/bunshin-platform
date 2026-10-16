@@ -4,6 +4,7 @@ import { notFound, redirect } from 'next/navigation';
 import { currentUserProvider } from '../../../../src/auth/current-user';
 import { isRouteNotFound } from '../../../../src/navigation/route-not-found';
 import { resolveMemberServiceContext } from '../../../../src/services/public-service';
+import { hasAiTrainingServiceProgram } from '../../../../src/services/service-ai-training-mode';
 import { readServiceOnboardingSettings } from '../../../../src/services/service-onboarding-settings';
 import {
   answersForCurrentQuestions,
@@ -36,6 +37,10 @@ export default async function ServiceOnboardingPage({
   const returnTo = `/s/${serviceSlug}/onboarding`;
   if (!actor) redirect(`/login?returnTo=${encodeURIComponent(returnTo)}` as Route);
   const service = await context(serviceSlug, actor.userId);
+  const isAiTrainingService = await hasAiTrainingServiceProgram({
+    workspaceId: service.workspaceId,
+    serviceId: service.serviceId,
+  });
   const db = await import('@bunshin/database');
   const membership = await db.prisma.groupMembership.findFirst({
     where: {
@@ -134,6 +139,7 @@ export default async function ServiceOnboardingPage({
         <section className="service-entry__card">
           <ServiceOnboardingForm
             serviceSlug={serviceSlug}
+            isAiTrainingService={isAiTrainingService}
             questions={settings.questions}
             initialAnswers={initialAnswers}
             focusQuestionIndex={editing ? (refinement?.index ?? null) : null}
