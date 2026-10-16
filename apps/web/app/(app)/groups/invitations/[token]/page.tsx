@@ -50,7 +50,7 @@ async function invitationReturnPath(
     serviceId: service.group.id,
   });
   return {
-    accepted: invitationAcceptedPath(service.slug, isAiTrainingService),
+    accepted: invitationAcceptedPath(service.slug, isAiTrainingService) as Route,
     declined: `/s/${service.slug}` as Route,
   };
 }
