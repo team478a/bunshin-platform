@@ -77,9 +77,9 @@ Node 24 / lockfileどおりのPrisma 6.19.3を使用する。probeの対象は`p
 
 上限はMigration専用子processのURL startup `options`で渡す。アプリの環境・DB全体/role設定・schema/migration SQLは変更しない。既存URLに`options`があれば競合を推測解決せず拒否する。子processだけ`DATABASE_URL`と`DIRECT_URL`を同一Migration接続へ固定し、`PGOPTIONS`を除去する。設定probeが失敗した場合、migrate deployは開始しない。Supavisorがstartup optionsを反映しない場合は、poolerを迂回して直接接続できるIPv6対応PCでの限定Migration手順を使う（下記）。
 
-#### 直接接続による限定的なLINE migration（Windows / IPv6）
+#### 直接接続による限定migration（Windows / IPv6）
 
-この専用手順は、承認済みのpending集合が次のいずれか一方と完全一致する場合だけ対象とする。2件のLINE identity migrationをまとめて適用するか、nullable列追加の個人リッチメニューmigration 1件だけを適用する。両集合の混在・追加migration・未知のmigrationは停止する。リポジトリのNode依存をインストール済みのPCで、Node.js 24を使用してPowerShellから実行する:
+この専用手順は、承認済みのpending集合がrunnerのallowlistにあるいずれか1組と完全一致する場合だけ対象とする。集合間の混在・追加migration・未知のmigrationは停止する。リポジトリのNode依存をインストール済みのPCで、Node.js 24を使用してPowerShellから実行する:
 
 ```powershell
 .\packages\database\scripts\apply-line-link-migrations.ps1
@@ -90,7 +90,12 @@ DB passwordは非表示のsecure promptで入力し、チャット、コマン�
 - `20261014090000_add_line_link_attempt_method`
 - `20261014091000_allow_line_link_attempt_method`
 
-一致した場合だけ、表示されたprojectとmigration名を確認してその集合専用の確認語を入力すると実行する。個人リッチメニューmigrationは `group_line_connections` へnullableな `VARCHAR(128)` 列を1つ追加する。実行前にproduction backupの存在とrestore手順を人間が確認し、旧Applicationとの前方互換性をレビューする。成功後に履歴が最新になったことを再検証する。認証失敗、接続失敗、timeout、postcheck失敗時は再実行しない。先にmigration history、DB session、実schemaを人間が照合する。この操作はVercel build/deployを開始せず、次回のProduction buildは履歴が最新ならmigrationをskipしてschema readiness/buildへ進む。
+一致した場合だけ、表示されたprojectとmigration名を確認してその集合専用の確認語を入力すると実行する。個人リッチメニューmigrationは `group_line_connections` へnullableな `VARCHAR(128)` 列を1つ追加する。2026-10-16のAI研修参加migration組は、同意証跡テーブルとサービス参加承認enum値を追加する。実行前にproduction backupが最新で対象DBを含むこと、restore手順と復旧担当が確認済みであることを人間が確認し、旧Applicationとの前方互換性をレビューする。成功後に履歴が最新になったことを再検証する。認証失敗、接続失敗、timeout、postcheck失敗時は再実行しない。先にmigration history、DB session、実schemaを人間が照合する。この操作はVercel build/deployを開始せず、次回のProduction buildは履歴が最新ならmigrationをskipしてschema readiness/buildへ進む。
+
+AI研修Enrollment Policyのpending集合は、以下の2件と完全一致する場合のみ対象とする。専用確認語は`APPLY_AI_TRAINING_ENROLLMENT_MIGRATIONS_TO_vtkzinaudznwbsjoyszk`。
+
+- `20261016120000_ai_training_usage_consent`
+- `20261016150000_invitation_manual_service_registration`
 
 期限到達時はLinuxで所有するCLI/engineのprocess groupへSIGKILLを送る。WindowsではCLIだけの停止であり、engine子孫の終了は保証しない。いずれも**DB session/SQLの終了・rollback・全writer drainは証明しない**。非0終了・signal・期限切れ・起動失敗はbuildを停止し、自動retry/resolve/rollbackしない。先行migrationや同migrationの先行statementが適用済みである可能性を残す。
 

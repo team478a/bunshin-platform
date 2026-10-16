@@ -1,5 +1,13 @@
 # BUNSHIN Platform Decision Log
 
+## 2026-10-16: OEM研修Enrollmentの限定production migration経路
+
+- 状態: 専用allowlistとテストを追加。Production migrationは未実行。
+- Vercelで`MIGRATION_PREFLIGHT_FAILED (migration-bounds-not-active)`となり、`migrate deploy`は開始されていない。Supavisor経由でsession timeout上限を検証できないため、既存のWindows/IPv6 direct runnerを再利用する。
+- 許可するpending集合は`20261016120000_ai_training_usage_consent`と`20261016150000_invitation_manual_service_registration`の2件完全一致のみ。専用確認語、Production project/database/role検証、read-only history/session設定preflight、deploy後history再確認を必須とする。部分集合、追加migration、混在は停止する。
+- 既存のbackup完了申告はあるが、timestamp・対象範囲・restore evidenceは独立検証されていない。実行前に担当者が最新backupとrestore手順を確認する。失敗/結果不明時に自動retry、migration resolve、rollbackはしない。
+- このmigrationはVercel deployを開始しない。migration historyが最新と確認された後に、別途Production deploymentを確認する。
+
 ## 2026-10-16: OEMサービスの参加受付と承認を独立設定にする
 
 - 状態: 実装中。migration/CI確認後にPRレビュー対象。本番設定変更・本番Migration・デプロイは含まない。
