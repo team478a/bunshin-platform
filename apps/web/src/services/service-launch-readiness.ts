@@ -10,7 +10,8 @@ export interface ServiceLaunchReadinessInput {
   serviceSlug: string;
   operatorName: string;
   contactEmail: string | null;
-  registrationMode: 'PUBLIC' | 'INVITATION_ONLY' | 'APPROVAL_REQUIRED' | 'CLOSED';
+  registrationMode:
+    'PUBLIC' | 'INVITATION_ONLY' | 'INVITATION_APPROVAL_REQUIRED' | 'APPROVAL_REQUIRED' | 'CLOSED';
   emailEnabled: boolean;
   lineEnabled: boolean;
   onboardingQuestionCount: number;

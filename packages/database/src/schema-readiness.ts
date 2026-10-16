@@ -1,1 +1,1 @@
-export const LATEST_DATABASE_MIGRATION = '20261016120000_ai_training_usage_consent';
+export const LATEST_DATABASE_MIGRATION = '20261016150000_invitation_manual_service_registration';

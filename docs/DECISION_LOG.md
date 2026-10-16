@@ -1,5 +1,13 @@
 # BUNSHIN Platform Decision Log
 
+## 2026-10-16: OEMサービスの参加受付と承認を独立設定にする
+
+- 状態: 実装中。migration/CI確認後にPRレビュー対象。本番設定変更・本番Migration・デプロイは含まない。
+- サービス参加ポリシーは「参加できる人（公開/招待のみ）」と「承認方式（自動/運営者確認）」を独立して選択する。既存の受付停止（CLOSED）は独立した停止状態として維持する。
+- 既存値との対応は、公開＋自動=`PUBLIC`、公開＋手動=`APPROVAL_REQUIRED`、招待＋自動=`INVITATION_ONLY`、招待＋手動=`INVITATION_APPROVAL_REQUIRED`。LINE友だち追加の自動招待は招待限定の両方式で利用する。
+- 招待＋手動は招待受諾時に`PENDING_APPROVAL`を記録する。承認までサービスアクセス、正式登録課金記録、参加完了通知を開始しない。管理者承認後に既存の参加承認処理がこれらを有効化する。
+- サービスMembershipの受付とProgram Enrollment、参加枠/Seat、決済、AI利用同意は別の状態・運用として維持する。既存Serviceの設定値をこの変更で書き換えない。
+
 ## 2026-10-16: AI研修サービスの参加導線をSNS作成から分離する
 
 - 状態: PR-1 (#1303) 更新後のCI待ち。マージ・Production反映前。

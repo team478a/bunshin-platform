@@ -3,7 +3,8 @@ import { ApplicationError } from '@bunshin/shared';
 import { normalizeServiceReferralCode } from './service-referral-credit';
 
 export interface ServiceParticipationView {
-  registrationMode: 'PUBLIC' | 'INVITATION_ONLY' | 'APPROVAL_REQUIRED' | 'CLOSED';
+  registrationMode:
+    'PUBLIC' | 'INVITATION_ONLY' | 'INVITATION_APPROVAL_REQUIRED' | 'APPROVAL_REQUIRED' | 'CLOSED';
   membership: GroupMembership | null;
   legalDocuments: Array<{
     id: string;

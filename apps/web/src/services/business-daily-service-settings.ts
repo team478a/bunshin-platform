@@ -11,7 +11,8 @@ export type BusinessDailyServiceSettings = {
 
 export type BusinessFreeRegistrationSettings = {
   businessProfileEnabled: boolean;
-  registrationMode: 'PUBLIC' | 'INVITATION_ONLY' | 'APPROVAL_REQUIRED' | 'CLOSED';
+  registrationMode:
+    'PUBLIC' | 'INVITATION_ONLY' | 'INVITATION_APPROVAL_REQUIRED' | 'APPROVAL_REQUIRED' | 'CLOSED';
   emailEnabled: boolean;
   lineEnabled: boolean;
   inviteCodeEnabled: boolean;

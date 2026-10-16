@@ -6108,6 +6108,76 @@ describe('database ownership boundaries', () => {
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
 
+  it('keeps invite-only manual-approval participants pending until an operator approves them', async () => {
+    const accounts = new CreateUserWithPersonalWorkspace(new PrismaAccountUnitOfWork(client));
+    const owner = await accounts.execute({ displayName: 'Manual invite owner' });
+    const participant = await accounts.execute({ displayName: 'Manual invite participant' });
+    const organization = await client.workspace.create({
+      data: {
+        type: 'ORGANIZATION',
+        name: `Manual invite organization ${randomUUID()}`,
+        memberships: { create: { userId: owner.user.id, role: 'OWNER' } },
+      },
+    });
+    const group = await client.group.create({
+      data: { workspaceId: organization.id, name: `Manual invite group ${randomUUID()}` },
+    });
+    const configuration = await client.serviceConfiguration.create({
+      data: {
+        workspaceId: organization.id,
+        groupId: group.id,
+        slug: `manual-invite-${randomUUID()}`,
+        displayName: 'Manual invite service',
+        description: 'Invitation-only with operator approval',
+        operatorName: 'Operator',
+        createdByUserId: owner.user.id,
+        updatedByUserId: owner.user.id,
+      },
+    });
+    await client.serviceRegistrationPolicy.create({
+      data: {
+        workspaceId: organization.id,
+        groupId: group.id,
+        configurationId: configuration.id,
+        mode: 'INVITATION_APPROVAL_REQUIRED',
+        lineEnabled: true,
+      },
+    });
+    const service = new GroupParticipationService(new PrismaGroupParticipationRepository(client));
+    const tokenHash = randomUUID().replaceAll('-', '').padEnd(64, 'b');
+    await service.createInvitation({
+      workspaceId: organization.id,
+      actorUserId: owner.user.id,
+      groupId: group.id,
+      tokenHash,
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+
+    const requested = await service.acceptInvitation({
+      workspaceId: organization.id,
+      actorUserId: participant.user.id,
+      tokenHash,
+    });
+
+    expect(requested.status).toBe('PENDING_APPROVAL');
+    await expect(
+      client.groupMembershipAuditLog.findFirst({
+        where: { groupId: group.id, groupMembershipId: requested.id },
+        orderBy: { occurredAt: 'desc' },
+      }),
+    ).resolves.toMatchObject({ action: 'REQUESTED' });
+    await expect(
+      new PrismaServiceParticipationRepository(client).approve({
+        workspaceId: organization.id,
+        serviceId: group.id,
+        groupMembershipId: requested.id,
+        actorUserId: owner.user.id,
+        reason: 'approved in integration test',
+        now: new Date(),
+      }),
+    ).resolves.toMatchObject({ status: 'ACTIVE' });
+  });
+
   it('allows an active Group Manager to invite only within that Group', async () => {
     const accounts = new CreateUserWithPersonalWorkspace(new PrismaAccountUnitOfWork(client));
     const owner = await accounts.execute({ displayName: 'Permission Owner' });
