@@ -53,7 +53,7 @@ describe('Program preparation server page', () => {
     expect(html).toContain('現在の状態を確認');
     expect(html).not.toContain('停止状態で作成</button>');
   });
-  it('shows own internal preparation only to SERVICE_OWNER with its preparation flag', async () => {
+  it('shows owner self-preparation and manager seat grants only with its preparation flag', async () => {
     f.target.mockReturnValue('33333333-3333-4333-8333-333333333333');
     vi.stubEnv('PERSONAL_LEARNING_PARTICIPANT_PREPARATION', 'true');
     f.service.mockResolvedValue({
@@ -61,10 +61,21 @@ describe('Program preparation server page', () => {
       serviceId: 'service',
       serviceRole: 'SERVICE_OWNER',
     });
-    expect(renderToStaticMarkup(await Page(props))).toContain('内部テスターとして本人を準備');
-    for (const serviceRole of ['SERVICE_ADMIN', 'CONTENT_EDITOR', 'PARTICIPANT']) {
+    const ownerHtml = renderToStaticMarkup(await Page(props));
+    expect(ownerHtml).toContain('内部テスターとして本人を準備');
+    expect(ownerHtml).toContain('招待参加者へ内部研修枠を付与');
+    f.service.mockResolvedValue({
+      workspaceId: 'workspace',
+      serviceId: 'service',
+      serviceRole: 'SERVICE_ADMIN',
+    });
+    expect(renderToStaticMarkup(await Page(props))).not.toContain('内部テスターとして本人を準備');
+    expect(renderToStaticMarkup(await Page(props))).toContain('招待参加者へ内部研修枠を付与');
+    for (const serviceRole of ['CONTENT_EDITOR', 'PARTICIPANT']) {
       f.service.mockResolvedValue({ workspaceId: 'workspace', serviceId: 'service', serviceRole });
-      expect(renderToStaticMarkup(await Page(props))).not.toContain('内部テスターとして本人を準備');
+      const html = renderToStaticMarkup(await Page(props));
+      expect(html).not.toContain('内部テスターとして本人を準備');
+      expect(html).not.toContain('招待参加者へ内部研修枠を付与');
     }
     f.service.mockResolvedValue({
       workspaceId: 'workspace',
@@ -72,6 +83,8 @@ describe('Program preparation server page', () => {
       serviceRole: 'SERVICE_OWNER',
     });
     vi.stubEnv('PERSONAL_LEARNING_PARTICIPANT_PREPARATION', 'false');
-    expect(renderToStaticMarkup(await Page(props))).not.toContain('内部テスターとして本人を準備');
+    const disabledHtml = renderToStaticMarkup(await Page(props));
+    expect(disabledHtml).not.toContain('内部テスターとして本人を準備');
+    expect(disabledHtml).not.toContain('招待参加者へ内部研修枠を付与');
   });
 });

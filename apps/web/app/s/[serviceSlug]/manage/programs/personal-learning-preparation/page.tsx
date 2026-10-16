@@ -8,6 +8,7 @@ import {
 import { PublicShell } from '../../../../../ui/public-shell';
 import { ProgramPreparationCard } from './card';
 import { InternalPreparationCard } from './internal-card';
+import { InternalParticipantsCard } from './internal-participants-card';
 import { PilotOperationsCard } from './pilot-operations-card';
 
 export const dynamic = 'force-dynamic';
@@ -63,6 +64,12 @@ export default async function ProgramPreparationPage({
           service.serviceRole === 'SERVICE_OWNER' &&
           process.env['PERSONAL_LEARNING_PARTICIPANT_PREPARATION'] === 'true' && (
             <InternalPreparationCard serviceSlug={serviceSlug} />
+          )}
+        {programId &&
+          writesAllowed &&
+          operationsAllowed &&
+          process.env['PERSONAL_LEARNING_PARTICIPANT_PREPARATION'] === 'true' && (
+            <InternalParticipantsCard serviceSlug={serviceSlug} />
           )}
       </main>
     </PublicShell>

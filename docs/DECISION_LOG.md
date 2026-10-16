@@ -4281,3 +4281,11 @@
 - 社内テスター上限を1〜3へ変更し、今回の候補人数を3人とする。DB準備・Seat付与・開始時にserver側で設定上限を再検証し、4人目以上は拒否する。これは外部Waveのcapを変えず、参加者の本人同意や学習開始を自動化しない。
 - 試験候補はProgram全体の日次20 AI試行（3人合計）、同時実行1、日次費用Hard Stop $1（1,000,000 USD micros）。週累計$5は現行Admissionに週次Hard Stopがないため、実際の請求/利用額を人間が監視して到達時に停止する運用基準であり、強制可能なコード上限ではない。
 - 設定開始前に実際のモデル・価格・推定予約額・Provider側budget・料金確認手段・監視/停止担当を確認する。現在のモデル設定やsecretをこの変更では読み書きしない。モデル変更、環境変数、Migration、Production deploy、Definition APPROVE、登録、Pilot START、有料呼出しは別途承認と証拠が必要。NO-GOを維持する。
+
+## 2026-10-16 追記: 社内Wave 0もLINE招待から通常登録・明示的内部枠付与を通す
+
+- 状態: 実装中（本番反映・LINE実機E2E・参加枠付与は未実施）。
+- 社内テスターも、LINEで届くサービス招待URL → LINE Login → 招待内容確認と本人同意 → Service Membershipの順で参加する。その後、サービス管理者が既存のプログラム管理画面でAI研修Enrollmentを作成し、停止中Wave 0の参加者管理画面で、対象Enrollmentへ`INTERNAL` Seatを一人ずつ明示付与する。
+- 招待受諾によってProgram Enrollment、学習Profile、AI同意、Seat、Pilot開始を自動作成しない。サービス参加と研修資格・AI利用許可を分離する。内部枠は設定済み上限（今回3人）と既存RepositoryのSerializable transaction/allowlist/監査を使い、管理者確認とレビュー証跡なしに付与しない。
+- Seat付与後、本人はLINE内のサービスホームから既存の「参加中のプログラム」へ進む。Wave 0のプッシュ通知は従来の通知OFFを維持し、この変更でLINE送信を開始しない。公開登録・外部Checkoutの判断にも影響させない。
+- UI追加は既存participant-admin APIとmigration済みschemaを再利用する。Production環境flag、上限、Definition承認、Profile回答、Pilot START、Provider送信、Migration、Deploy、実LINE送信を変更・実行しない。
