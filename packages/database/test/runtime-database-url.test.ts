@@ -1,5 +1,11 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { runtimeDatabaseUrl } from '../src/runtime-database-url';
+
+const schemaReadinessScript = readFileSync(
+  new URL('../scripts/assert-schema-ready.mjs', import.meta.url),
+  'utf8',
+);
 
 describe('runtimeDatabaseUrl', () => {
   it('adds safe Prisma settings to a transaction pooler URL', () => {
@@ -33,6 +39,13 @@ describe('runtimeDatabaseUrl', () => {
     expect(result.searchParams.get('sslmode')).toBe('require');
     expect(result.username).toBe('user');
     expect(result.password).toBe('secret');
+  });
+
+  it('uses the runtime pooler URL normalization in the production schema gate', () => {
+    expect(schemaReadinessScript).toContain(
+      "import { runtimeDatabaseUrl } from '../src/runtime-database-url.ts';",
+    );
+    expect(schemaReadinessScript).toContain('runtimeDatabaseUrl(databaseUrl) ?? databaseUrl');
   });
 
   it('does not modify direct or unrelated session-pooler URLs', () => {

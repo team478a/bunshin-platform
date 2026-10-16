@@ -5,6 +5,7 @@
 - `DATABASE_URL` はSupabase Transaction Pooler（ポート6543）を使用する。
 - アプリはTransaction Poolerを検出し、Prisma向けに `pgbouncer=true` と
   `connection_limit=1` を自動適用する。Vercelへの入力時に付け忘れても実行時に補正される。
+- Vercel build中のschema readiness gateも同じURL補正を通して接続する。
 - Supabase Shared Poolerの5432がRuntimeに設定されている場合も、実行時は6543へ補正する。
   2026-09-08に画像試作の再表示と既存ジョブで発生した `EMAXCONNSESSION` の再発を防ぐ。
   補正対象は `*.pooler.supabase.com` に限り、移行用 `DIRECT_URL` は変更しない。
