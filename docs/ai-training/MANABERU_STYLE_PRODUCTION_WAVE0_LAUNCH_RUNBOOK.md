@@ -6,6 +6,12 @@
 
 費用設定候補はProgram全体で1日最大20 AI試行、同時実行1件、Program日次費用Hard Stop $1（`dailyCostLimitUsdMicros=1000000`）。20回は3人合計であり各人20回ではない。週累計$5は現行Admissionで強制されないため、実際の請求/利用額を運用担当が監視し、$5到達時に停止する運用上限とする。開始前に実モデル・価格・予約額・Provider側budget・費用確認方法を照合して人間が承認する。環境設定は未変更であり、有料呼出しは開始していない。
 
+### 2026-10-16 社内テスターの通常参加フロー（UI追加PR。production未反映）
+
+内部テスターも招待URLから通常参加する。LINE上のFOLLOW自動返信 → 招待URL → LINE Login → 招待内容を確認して本人同意 → Service Membership → 管理者が既存「実践プログラム」画面でAI研修Enrollment作成 → 管理者が「Personal Learning準備」の参加者欄で対象Enrollmentへ`INTERNAL` Seatを明示付与 → 本人がLINE内サービスホームの「参加中のプログラム」から学習へ進む。サービス招待はMembershipのみを作り、Enrollment/Seat/AI同意/学習開始を自動化しない。
+
+参加者向けホームは通常のLINE内ブラウザ画面を使う。Wave 0の学習通知・リマインダーはOFFのままなので、Seat付与はLINEメッセージ送信を意味しない。内部枠付与画面は停止中Program・既存運用flag・固定authorityの条件内でのみ利用できる。PR merge / UI表示 / Seat付与 / Pilot START / production deployは別状態として記録し、未反映のコードを本番機能として案内しない。
+
 ### 2026-10-10 学習設計の承認登録UI（本番未反映）
 
 既存APIへの1件ずつのレビュー画面は[承認登録UI実装報告](MANABERU_STYLE_DEFINITION_REVIEW_UI_IMPLEMENTATION.md)。画面は `/s/{serviceSlug}/manage/programs/learning-definition-review`。初期表示は保存せず、GET後に人間が7項目・公開SHA・非公開証跡・最終確認を入力する。登録応答後もGET/監査で現在状態を確認。教育設計の人間承認と本番APPROVEは別段階。画面追加をDefinition管理flag変更・本番Deploy・APPROVE・START・課金同意としない。main/productionの分離releaseと既存Gateを維持する。
