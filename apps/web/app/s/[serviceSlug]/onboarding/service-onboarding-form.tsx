@@ -14,6 +14,7 @@ const OTHER = '__OTHER__';
 
 export function ServiceOnboardingForm({
   serviceSlug,
+  isAiTrainingService,
   questions,
   initialAnswers,
   focusQuestionIndex,
@@ -24,6 +25,7 @@ export function ServiceOnboardingForm({
   initialBusinessProfile,
 }: {
   serviceSlug: string;
+  isAiTrainingService: boolean;
   questions: string[];
   initialAnswers: string[];
   focusQuestionIndex: number | null;
@@ -141,7 +143,7 @@ export function ServiceOnboardingForm({
     const result = (await response.json()) as { data?: { bunshinId?: string | null } };
     const bunshinId = result.data?.bunshinId;
     router.replace(
-      editMode
+      editMode || isAiTrainingService
         ? `/s/${encodeURIComponent(serviceSlug)}/home`
         : businessProfileEnabled && bunshinId
           ? `/s/${encodeURIComponent(serviceSlug)}/diagnosis`
