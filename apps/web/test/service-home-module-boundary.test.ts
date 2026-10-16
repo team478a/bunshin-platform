@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import type { Route } from 'next';
 import { describe, expect, it } from 'vitest';
 import {
   ServiceHomeHeader,
@@ -64,6 +65,7 @@ describe('service home module boundary', () => {
         isBusinessDailyService: false,
         isPersonalLearningService: true,
         isPersonalLearningReady: true,
+        personalLearningPathHref: null,
         serviceSlug: 'manaberu-style',
       }),
     );
@@ -88,6 +90,26 @@ describe('service home module boundary', () => {
     expect(navigation).not.toContain('投稿パートナー');
   });
 
+  it('links the Manaberu home learning action to the authorized dynamic current location', () => {
+    const overview = renderToStaticMarkup(
+      createElement(WeeklyActivitySection, {
+        activities: [],
+        bunshinCount: 2,
+        isBusinessDailyService: false,
+        isPersonalLearningService: true,
+        isPersonalLearningReady: true,
+        personalLearningPathHref:
+          '/s/manaberu-style/programs/00000000-0000-4000-8000-000000000001/learning-request' as Route,
+        serviceSlug: 'manaberu-style',
+      }),
+    );
+
+    expect(overview).toContain('今日の学習を続ける');
+    expect(overview).toContain('/learning-request');
+    expect(overview).not.toContain('今週の進み具合');
+    expect(overview).not.toContain('投稿パートナー');
+  });
+
   it('shows preparation guidance and no social links while an AI training service is paused', () => {
     const overview = renderToStaticMarkup(
       createElement(WeeklyActivitySection, {
@@ -96,6 +118,7 @@ describe('service home module boundary', () => {
         isBusinessDailyService: false,
         isPersonalLearningService: true,
         isPersonalLearningReady: false,
+        personalLearningPathHref: null,
         serviceSlug: 'manaberu-style',
       }),
     );

@@ -10,6 +10,7 @@ import type {
 } from '@bunshin/application';
 
 export function PersonalLearningRequestCard({
+  dynamicMode = false,
   endpoint,
   initial,
   candidateEndpoint,
@@ -17,6 +18,7 @@ export function PersonalLearningRequestCard({
   practiceEndpoint,
   initialPractice = { allowed: false, current: null },
 }: {
+  dynamicMode?: boolean;
   endpoint: string;
   initial: SavedPersonalLearningRequest | null;
   candidateEndpoint?: string;
@@ -83,14 +85,20 @@ export function PersonalLearningRequestCard({
           onChange={setPractice}
         />
       )}
-      <h1>AIを使って、何ができるようになりたいですか？</h1>
+      <h1>
+        {dynamicMode
+          ? 'AIでできるようになりたいこと'
+          : 'AIを使って、何ができるようになりたいですか？'}
+      </h1>
       <p>あなたの希望を元のまま保存します。未回答の経験や能力は推測しません。</p>
       <p>
-        {practiceEndpoint
-          ? '希望の下書き保存では現在の実践を切り替えません。教材の本人確認後、実践開始を別に確認します。'
-          : candidateEndpoint
-            ? 'この検証画面では教材候補の確認までです。実践課題の開始は準備中で、現在の課題は切り替わりません。'
-            : 'この検証画面では希望の保存までです。教材の生成・確定はまだ行いません。現在の課題は切り替わりません。'}
+        {dynamicMode
+          ? '希望を保存し、内容に合う小さな実践課題へ進みます。今の実践は、新しい課題を確認して開始するまで切り替わりません。'
+          : practiceEndpoint
+            ? '希望の下書き保存では現在の実践を切り替えません。教材の本人確認後、実践開始を別に確認します。'
+            : candidateEndpoint
+              ? 'この検証画面では教材候補の確認までです。実践課題の開始は準備中で、現在の課題は切り替わりません。'
+              : 'この検証画面では希望の保存までです。教材の生成・確定はまだ行いません。現在の課題は切り替わりません。'}
       </p>
       {saved && (
         <p>

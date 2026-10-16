@@ -107,7 +107,7 @@ export async function resolvePersonalLearningPilot(
     enrollmentId: scope.programEnrollmentId,
     userId,
   });
-  return { scope, actorUserId: userId };
+  return { scope, actorUserId: userId, programSettings: program.settings };
 }
 
 /** Existing Answer/Assessment routes remain V1 routes, but a reserved Program cannot bypass the Pilot flag. */

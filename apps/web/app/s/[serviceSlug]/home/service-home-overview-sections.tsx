@@ -109,6 +109,7 @@ export function WeeklyActivitySection({
   isBusinessDailyService,
   isPersonalLearningService,
   isPersonalLearningReady,
+  personalLearningPathHref,
   serviceSlug,
 }: {
   activities: ServiceActivity[];
@@ -116,51 +117,47 @@ export function WeeklyActivitySection({
   isBusinessDailyService: boolean;
   isPersonalLearningService: boolean;
   isPersonalLearningReady: boolean;
+  personalLearningPathHref: Route | null;
   serviceSlug: string;
 }) {
   return (
     <section className="service-entry__card">
       <h2>{isPersonalLearningService ? '今日の学習' : '今週の進み具合'}</h2>
-      {isPersonalLearningService && !isPersonalLearningReady ? (
-        <div className="empty-state">
-          <p>AI研修の準備中です。開始のご案内をお待ちください。</p>
-        </div>
+      {isPersonalLearningService ? (
+        !isPersonalLearningReady ? (
+          <div className="empty-state">
+            <p>AI研修の準備中です。開始のご案内をお待ちください。</p>
+          </div>
+        ) : (
+          <div className="empty-state">
+            <p>希望・現在の実践・前回の続きから、今日の学習を進められます。</p>
+            <Link
+              className="button button--primary button--full"
+              href={personalLearningPathHref ?? (`/s/${serviceSlug}/programs` as Route)}
+            >
+              {personalLearningPathHref ? '今日の学習を続ける' : '学習プログラムを開く'}
+            </Link>
+          </div>
+        )
       ) : bunshinCount === 0 ? (
         <div className="empty-state">
-          <p>
-            {isPersonalLearningService
-              ? '受講中の学習プログラムから、今日の課題と前回の続きへ進めます。'
-              : 'まずは、投稿を一緒に考えるパートナーを作りましょう。'}
-          </p>
+          <p>まずは、投稿を一緒に考えるパートナーを作りましょう。</p>
           <Link
             className="button button--primary button--full"
-            href={
-              isPersonalLearningService
-                ? `/s/${serviceSlug}/programs`
-                : `/s/${serviceSlug}/bunshins/new`
-            }
+            href={`/s/${serviceSlug}/bunshins/new`}
           >
-            {isPersonalLearningService ? '学習プログラムを開く' : '投稿パートナーを作る'}
+            投稿パートナーを作る
           </Link>
         </div>
       ) : activities.length === 0 ? (
         <div className="empty-state">
           <p>
-            {isPersonalLearningService
-              ? '学習プログラムを開くと、現在の課題と前回の続きが確認できます。'
-              : isBusinessDailyService
-                ? '今日の集客活動が届くと、ここに今週の記録が表示されます。'
-                : '投稿の準備が整うと、ここに今週の記録が表示されます。'}
+            {isBusinessDailyService
+              ? '今日の集客活動が届くと、ここに今週の記録が表示されます。'
+              : '投稿の準備が整うと、ここに今週の記録が表示されます。'}
           </p>
-          <Link
-            className="button button--primary button--full"
-            href={
-              isPersonalLearningService
-                ? `/s/${serviceSlug}/programs`
-                : `/s/${serviceSlug}/bunshins`
-            }
-          >
-            {isPersonalLearningService ? '学習プログラムを開く' : '投稿パートナーを見る'}
+          <Link className="button button--primary button--full" href={`/s/${serviceSlug}/bunshins`}>
+            投稿パートナーを見る
           </Link>
         </div>
       ) : (
