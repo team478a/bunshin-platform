@@ -11,9 +11,11 @@ import {
 export function ProgramPreparationCard({
   serviceSlug,
   programId,
+  allowCreation,
 }: {
   serviceSlug: string;
   programId: string;
+  allowCreation: boolean;
 }) {
   const endpoint = `/api/services/${encodeURIComponent(serviceSlug)}/ai-training/pilot-operations`;
   const [snapshot, setSnapshot] = useState<PreparationSnapshot | null>(null);
@@ -88,35 +90,39 @@ export function ProgramPreparationCard({
       <button type="button" disabled={busy || retry} onClick={() => void refresh()}>
         現在の状態を確認
       </button>
-      {snapshot && !snapshot.exists && snapshot.status === 'ABSENT' && !snapshot.enabled && (
-        <>
-          <label>
-            人間レビュー記録の識別子（本文・秘密情報は入力しない）
-            <input
-              value={evidence}
-              maxLength={100}
-              disabled={busy || retry}
-              onChange={(e) => setEvidence(e.target.value)}
-            />
-          </label>
-          <label>
-            <input
-              type="checkbox"
-              checked={confirmed}
-              disabled={busy || retry}
-              onChange={(e) => setConfirmed(e.target.checked)}
-            />
-            対象Service・Programと停止状態での作成を確認しました
-          </label>
-          <button
-            type="button"
-            disabled={busy || retry || !confirmed || !/^[a-zA-Z0-9_.:-]{1,100}$/.test(evidence)}
-            onClick={() => void submit()}
-          >
-            停止状態で作成
-          </button>
-        </>
-      )}
+      {allowCreation &&
+        snapshot &&
+        !snapshot.exists &&
+        snapshot.status === 'ABSENT' &&
+        !snapshot.enabled && (
+          <>
+            <label>
+              人間レビュー記録の識別子（本文・秘密情報は入力しない）
+              <input
+                value={evidence}
+                maxLength={100}
+                disabled={busy || retry}
+                onChange={(e) => setEvidence(e.target.value)}
+              />
+            </label>
+            <label>
+              <input
+                type="checkbox"
+                checked={confirmed}
+                disabled={busy || retry}
+                onChange={(e) => setConfirmed(e.target.checked)}
+              />
+              対象Service・Programと停止状態での作成を確認しました
+            </label>
+            <button
+              type="button"
+              disabled={busy || retry || !confirmed || !/^[a-zA-Z0-9_.:-]{1,100}$/.test(evidence)}
+              onClick={() => void submit()}
+            >
+              停止状態で作成
+            </button>
+          </>
+        )}
       {retry && (
         <button type="button" disabled={busy} onClick={() => void submit()}>
           同じ操作を再送して確認

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { resolveAuthenticatedMemberServicePage } from '../../../../src/services/member-service-page';
 import { memberServiceMetadata } from '../../../../src/services/member-service-metadata';
+import { hasAiTrainingServiceProgram } from '../../../../src/services/service-ai-training-mode';
 import { readServiceOnboardingSettings } from '../../../../src/services/service-onboarding-settings';
 import { PublicShell } from '../../../ui/public-shell';
 
@@ -37,6 +38,14 @@ export default async function BusinessSnsDiagnosisPage({
     serviceSlug,
     `/s/${serviceSlug}/diagnosis`,
   );
+  if (
+    await hasAiTrainingServiceProgram({
+      workspaceId: service.workspaceId,
+      serviceId: service.serviceId,
+    })
+  ) {
+    redirect(`/s/${service.configuration.slug}/home` as Route);
+  }
   const settings = readServiceOnboardingSettings(
     service.configuration.registration.onboardingConfig,
     service.configuration.registration.surveyConfig,

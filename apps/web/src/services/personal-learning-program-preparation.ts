@@ -6,9 +6,7 @@ import { parsePersonalLearningPreparationAuthority } from '@bunshin/application'
 export function programPreparationTarget(service: { workspaceId: string; serviceId: string }) {
   if (
     !['production', 'staging', 'development'].includes(getServerEnvironment().APP_ENV) ||
-    process.env['PERSONAL_LEARNING_PILOT_OPERATIONS'] !== 'true' ||
-    process.env['PERSONAL_LEARNING_PILOT'] === 'true' ||
-    process.env['PERSONAL_LEARNING_PRODUCTION_CLOSED_PILOT'] === 'true'
+    process.env['PERSONAL_LEARNING_PILOT_OPERATIONS'] !== 'true'
   )
     return null;
   let raw: unknown;
@@ -25,4 +23,12 @@ export function programPreparationTarget(service: { workspaceId: string; service
   )
     return null;
   return authority.serviceProgramId;
+}
+
+/** Hide non-emergency mutations while execution flags are active; READ/STOP remain available. */
+export function pilotPreparationWritesAllowed() {
+  return (
+    process.env['PERSONAL_LEARNING_PILOT'] !== 'true' &&
+    process.env['PERSONAL_LEARNING_PRODUCTION_CLOSED_PILOT'] !== 'true'
+  );
 }

@@ -1,5 +1,13 @@
 # BUNSHIN Platform Decision Log
 
+## 2026-10-16: AI研修サービスの参加導線をSNS作成から分離する
+
+- 状態: PR-1 (#1303) 更新後のCI待ち。マージ・Production反映前。
+- `settings.moduleKey = AI_TRAINING_V1` のServiceProgramが1件以上あり、状態が`ARCHIVED`でないサービスをAI研修サービスとする。判定はサーバー側で行い、最初の質問フォームへフラグを渡す。
+- 研修サービスの初期質問保存後はホームへ遷移する。`/bunshins/new`および`/diagnosis`の直アクセスもホームへ戻す。通常サービスは既存の診断・投稿パートナー導線を維持する。
+- 運営画面の「最初の質問」は研修向け説明へ切り替える。DB状態、Enrollment、Pilotの開始・承認状態は変更しない。
+- 根拠: Manaberuの本人学習導線をSNS集客・投稿パートナー導線から分離する。Pilot運用Runbookの開始・承認Gateは別途維持する。
+
 ## 2026-10-15: 個人リッチメニューのnullable列migrationを限定direct runnerへ追加
 
 - 状態: 実装PRレビュー待ち。本番DBへは未接続・未変更。
