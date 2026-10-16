@@ -13,6 +13,7 @@ import {
 } from '@bunshin/capability-training';
 import { ApplicationError } from '@bunshin/shared';
 import { personalLearningPilotExecutionAllowed } from '../services/personal-learning-pilot-access';
+import { requireAiTrainingUsageConsent } from '../services/ai-training-consent';
 import { admitPersonalLearningCall } from '../services/personal-learning-call-admission';
 import { reserveOpenAiRuntimeConfiguration } from '../ai/runtime-provider-configuration';
 import { recordOpenAiUsageAndSettle } from '../ai/openai-cost-admission';
@@ -122,6 +123,20 @@ export function createTrainingAnswerEvaluationJobHandler(): TrainingAnswerEvalua
         assignment.targetResourceType === 'PERSONAL_LEARNING_PLAN';
       if (!personalLearningPilotExecutionAllowed(program.settings, enrollment.id, requirePilot))
         throw new TrainingAnswerEvaluationJobError('TRAINING_EVALUATION_SCOPE_REVOKED', false);
+      if (requirePilot) {
+        try {
+          await requireAiTrainingUsageConsent({
+            workspaceId: input.workspaceId,
+            groupId: input.groupId,
+            enrollmentId: enrollment.id,
+            userId: input.actorUserId,
+          });
+        } catch (error) {
+          if (error instanceof ApplicationError && error.code === 'NOT_FOUND')
+            throw new TrainingAnswerEvaluationJobError('TRAINING_EVALUATION_SCOPE_REVOKED', false);
+          throw error;
+        }
+      }
       if (assignment.missionDefinitionKey === 'PERSONAL_LEARNING_DYNAMIC_PRACTICE') {
         await executePersonalLearningEvidenceReview(input);
         return;
@@ -212,6 +227,12 @@ export function createTrainingAnswerEvaluationJobHandler(): TrainingAnswerEvalua
                 answer.missionAssignmentId,
                 answer.id,
               );
+              await requireAiTrainingUsageConsent({
+                workspaceId: input.workspaceId,
+                groupId: input.groupId,
+                enrollmentId: enrollment.id,
+                userId: input.actorUserId,
+              });
               // Recheck the environment switch after asynchronous DB authorization.
               if (
                 !personalLearningPilotExecutionAllowed(currentProgram.settings, enrollment.id, true)
@@ -252,6 +273,13 @@ export function createTrainingAnswerEvaluationJobHandler(): TrainingAnswerEvalua
                   'TRAINING_EVALUATION_SCOPE_REVOKED',
                   false,
                 );
+              if (requirePilot)
+                await requireAiTrainingUsageConsent({
+                  workspaceId: input.workspaceId,
+                  groupId: input.groupId,
+                  enrollmentId: enrollment.id,
+                  userId: input.actorUserId,
+                });
               providerAttempted = true;
               return await new OpenAiTrainingAnswerEvaluator({
                 apiKey: runtime.apiKey,

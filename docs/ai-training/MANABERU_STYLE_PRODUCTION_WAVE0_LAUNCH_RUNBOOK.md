@@ -8,9 +8,19 @@
 
 ### 2026-10-16 社内テスターの通常参加フロー（UI追加PR。production未反映）
 
-内部テスターも招待URLから通常参加する。LINE上のFOLLOW自動返信 → 招待URL → LINE Login → 招待内容を確認して本人同意 → Service Membership → 管理者が既存「実践プログラム」画面でAI研修Enrollment作成 → 管理者が「Personal Learning準備」の参加者欄で対象Enrollmentへ`INTERNAL` Seatを明示付与 → 本人がLINE内サービスホームの「参加中のプログラム」から学習へ進む。サービス招待はMembershipのみを作り、Enrollment/Seat/AI同意/学習開始を自動化しない。
+内部テスターも招待URLから通常参加する。LINE上のFOLLOW自動返信 → 招待URL → LINE Login → 招待内容を確認して本人同意 → Service Membership → AI研修サービスなら研修参加確認画面へ移動（他サービスは従来どおりサービスホーム）→ 管理者が既存「実践プログラム」画面でAI研修Enrollment作成 → 管理者が「Personal Learning準備」の参加者欄で対象Enrollmentへ`INTERNAL` Seatを明示付与 → 本人が確認画面を再表示 → Seat確認後に外部AI利用の説明・明示同意 → Enrollmentごとの同意記録を保存 → 研修へ進む。サービス招待はMembershipのみを作り、Enrollment/Seat/AI同意/学習開始を自動化しない。
 
 参加者向けホームは通常のLINE内ブラウザ画面を使う。Wave 0の学習通知・リマインダーはOFFのままなので、Seat付与はLINEメッセージ送信を意味しない。内部枠付与画面は停止中Program・既存運用flag・固定authorityの条件内でのみ利用できる。PR merge / UI表示 / Seat付与 / Pilot START / production deployは別状態として記録し、未反映のコードを本番機能として案内しない。
+
+外部AI同意は`AI_TRAINING_EXTERNAL_AI_V1`の文面版・本文digest・同意日時をEnrollment単位で保存する。同意記録・有効Enrollment・未取消のINTERNAL Seatの全てをサーバー/APIとProvider送信直前のJobで再確認する。未同意、旧文面版、別Enrollment、Seat取消・欠落ではAI送信しない。既存の非Pilot AI研修と他サービスの招待遷移は変えない。
+
+### 2026-10-16 追記: LINE招待後の研修確認・外部AI同意Gate
+
+- 状態: 実装中（Migration/Deploy/実機LINE確認/テスター登録/Seat付与/Pilot START/Provider呼出しは未実施）。
+- 招待受諾後の遷移だけをAI研修サービス `/s/{slug}/training` へ変更し、非AI研修サービスは従来の `/home` のままとする。Enrollment/INTERNAL Seatの確認待ちは案内のみで、作成・付与しない。
+- 有効なEnrollmentと現在有効なINTERNAL Seatが確認できた場合のみ、外部AIへ送られるデータと入力禁止情報を提示し、本人のチェック同意をEnrollment/version単位で保存する。
+- 同意Gateはpersonal-learning API、評価Job enqueue、評価worker、および動的実践評価workerで再確認する。Provider直前にも同意・Seatを検査する。Enrollment/Seat/同意いずれかが無効なら送信を拒否する。Pilotの既存停止/開始Gateは変更しない。
+- additive migrationは`ai_training_usage_consents`のみで、旧同意の推測/backfillは行わない。ProductionへのMigrationはDeploy時に必要となるが、この実装作業では実行しない。
 
 ### 2026-10-10 学習設計の承認登録UI（本番未反映）
 

@@ -4289,3 +4289,12 @@
 - 招待受諾によってProgram Enrollment、学習Profile、AI同意、Seat、Pilot開始を自動作成しない。サービス参加と研修資格・AI利用許可を分離する。内部枠は設定済み上限（今回3人）と既存RepositoryのSerializable transaction/allowlist/監査を使い、管理者確認とレビュー証跡なしに付与しない。
 - Seat付与後、本人はLINE内のサービスホームから既存の「参加中のプログラム」へ進む。Wave 0のプッシュ通知は従来の通知OFFを維持し、この変更でLINE送信を開始しない。公開登録・外部Checkoutの判断にも影響させない。
 - UI追加は既存participant-admin APIとmigration済みschemaを再利用する。Production環境flag、上限、Definition承認、Profile回答、Pilot START、Provider送信、Migration、Deploy、実LINE送信を変更・実行しない。
+
+## 2026-10-16: Manaberu招待後の参加確認とAI利用同意
+
+- 状態: 実装中。招待Membershipの自動生成範囲は維持し、Enrollment・INTERNAL Seat・AI同意・Pilot開始は自動作成しない。
+- AI_TRAINING_V1を持つサービスだけ、LINE招待を本人が受諾した後に専用の研修参加確認画面へ移す。他サービスの招待受諾は従来のサービスホームへ移す。
+- 管理者が既存管理画面でEnrollment作成・INTERNAL Seat付与したことをサーバー側で検証するまで、AI利用同意画面を出さない。テスター本人が外部AI送信内容を確認し、チェックした場合のみEnrollment/version単位の同意記録を作る。
+- 同意はUI表示だけの条件にしない。Pilot personal-learning access、評価Job enqueue、評価Job実行・Provider直前で、最新同意とEnrollment・INTERNAL Seatを再検証する。欠落/失効はfail-closedとし、既存Pilot feature flagや運用Gateを迂回しない。
+- Consent evidenceは専用のappend-only/versioned tableへ保存し、同意文面のversionとSHA-256 digest、consentedAt、workspace/group/enrollment/membership/user scopeを保持する。招待同意や通常のService Legal ConsentをAI送信許可として流用しない。旧versionの同意は新versionへの同意とみなさない。
+- Production migration/deploy、環境flag、Provider/LINE呼び出し、内部Seat付与、Pilot STARTはこの判断/実装の範囲外。LINE内ブラウザの実機復帰・DB migration・実AI呼び出しは別々に証拠化する。

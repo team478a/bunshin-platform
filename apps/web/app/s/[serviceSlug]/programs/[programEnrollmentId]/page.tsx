@@ -13,7 +13,7 @@ import {
 } from '@bunshin/capability-training';
 import type { CSSProperties } from 'react';
 import { ApplicationError } from '@bunshin/shared';
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import { resolveAuthenticatedMemberServicePage } from '../../../../../src/services/member-service-page';
 import { PublicShell } from '../../../../ui/public-shell';
 import { AiResaleActionCard } from './ai-resale-action-card';
@@ -25,6 +25,7 @@ import { resolvePersonalLearningPilot } from '../../../../../src/services/person
 import { readPersonalLearningProfilePreparation } from '../../../../../src/services/personal-learning-profile-preparation-page';
 import { PersonalLearningProfilePreparationCard } from './personal-learning-profile-preparation-card';
 import { personalLearningRequestEnabled } from '../../../../../src/services/personal-learning-request-access';
+import { requireAiTrainingUsageConsent } from '../../../../../src/services/ai-training-consent';
 
 export const dynamic = 'force-dynamic';
 
@@ -90,6 +91,18 @@ export default async function ProgramParticipantPage({
 
   if (moduleKey === AI_TRAINING_V1_MODULE_KEY) {
     if (isPersonalLearningPilotProgram(program.settings)) {
+      try {
+        await requireAiTrainingUsageConsent({
+          workspaceId: service.workspaceId,
+          groupId: service.serviceId,
+          enrollmentId: programEnrollmentId,
+          userId: actor.userId,
+        });
+      } catch (error) {
+        if (error instanceof ApplicationError && error.code === 'NOT_FOUND')
+          redirect(`/s/${serviceSlug}/training`);
+        throw error;
+      }
       if (process.env['PERSONAL_LEARNING_PROFILE_PREPARATION'] === 'true') {
         let initialProfile;
         try {

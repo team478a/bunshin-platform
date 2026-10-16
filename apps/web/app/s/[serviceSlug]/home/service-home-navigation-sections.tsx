@@ -32,6 +32,9 @@ export function MemberFeatureLinks(props: MemberFeatureLinksProps) {
       <section className="service-entry__card">
         <h2>学習の準備</h2>
         <p>AI研修の準備中です。開始のご案内をお待ちください。</p>
+        <Link className="button button--primary" href={`/s/${serviceSlug}/training` as Route}>
+          研修の参加状況を確認する
+        </Link>
         <Link className="button" href={`/s/${serviceSlug}/help` as Route}>
           使い方・困ったとき
         </Link>
@@ -57,9 +60,14 @@ export function MemberFeatureLinks(props: MemberFeatureLinksProps) {
         )}
       <div className="service-home-actions">
         {isPersonalLearningService && (
-          <Link className="button button--primary" href={`/s/${serviceSlug}/programs` as Route}>
-            学習プログラム・課題を見る
-          </Link>
+          <>
+            <Link className="button button--primary" href={`/s/${serviceSlug}/training` as Route}>
+              研修の参加状況・同意を確認する
+            </Link>
+            <Link className="button" href={`/s/${serviceSlug}/programs` as Route}>
+              学習プログラム・課題を見る
+            </Link>
+          </>
         )}
         {promptOnlyImages && (
           <div className="notice">
