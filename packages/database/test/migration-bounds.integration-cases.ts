@@ -53,10 +53,15 @@ export function registerMigrationBoundsIntegrationCases(client: PrismaClient) {
         });
       });
       child.stdin.on('error', () => {});
-      child.stdin.end(sql);
+      child.stdin.end(`BEGIN;
+        SET LOCAL lock_timeout = '100ms';
+        SET LOCAL statement_timeout = '1000ms';
+        SET LOCAL idle_in_transaction_session_timeout = '1000ms';
+        ${sql}
+        COMMIT;`);
     });
 
-  describe('actual Prisma schema engine startup bounds', () => {
+  describe('actual Prisma schema engine transaction bounds', () => {
     it('preserves an earlier migration, stops on SQL timeout, and does not resolve/retry failures', async () => {
       // A new synthetic schema inside the already verified disposable database only.
       const schema = `migration_bounds_${randomUUID().replaceAll('-', '')}`;
@@ -106,7 +111,7 @@ export function registerMigrationBoundsIntegrationCases(client: PrismaClient) {
       }
     }, 30000);
 
-    it('applies settings to the SQL engine session, not another client', async () => {
+    it('applies transaction-local settings to the SQL engine session', async () => {
       const result = await executeProbe(`
         DO $$ BEGIN
           IF current_setting('lock_timeout')::interval <> interval '100 milliseconds'
