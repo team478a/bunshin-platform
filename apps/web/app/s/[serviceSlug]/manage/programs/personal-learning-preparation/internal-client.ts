@@ -55,7 +55,7 @@ export function internalStep(s: InternalSnapshot | null) {
   if (
     s.policy.currentWave !== 0 ||
     s.policy.currentWaveCap !== 0 ||
-    ![1, 2].includes(s.policy.internalParticipantCap)
+    ![1, 2, 3].includes(s.policy.internalParticipantCap)
   )
     return 'BLOCKED';
   if (!s.programEnrollmentId) return s.programOfferingId ? 'PREPARE_ENROLLMENT' : 'BLOCKED';
@@ -66,7 +66,7 @@ type ParticipantCommand =
   | {
       action: 'CONFIGURE';
       externalParticipantCap: 100;
-      internalParticipantCap: 1 | 2;
+      internalParticipantCap: 1 | 2 | 3;
       currentWave: 0;
     }
   | { action: 'ADMIT'; programEnrollmentId: string; kind: 'INTERNAL' };
@@ -101,12 +101,12 @@ export function internalCommand(
     expectedRevision: s.policy?.revision ?? 0,
     confirmation: 'CONFIRM_PILOT_PARTICIPANT_OPERATION' as const,
   };
-  if (step === 'CONFIGURE' && ['1', '2'].includes(internalCap))
+  if (step === 'CONFIGURE' && ['1', '2', '3'].includes(internalCap))
     return {
       ...participant,
       action: step,
       externalParticipantCap: 100,
-      internalParticipantCap: Number(internalCap) as 1 | 2,
+      internalParticipantCap: Number(internalCap) as 1 | 2 | 3,
       currentWave: 0,
     };
   if (step === 'ADMIT' && s.programEnrollmentId)
@@ -141,7 +141,7 @@ export async function submitInternal(
       (command.expectedRevision !== 0 ||
         command.currentWave !== 0 ||
         command.externalParticipantCap !== 100 ||
-        ![1, 2].includes(command.internalParticipantCap) ||
+        ![1, 2, 3].includes(command.internalParticipantCap) ||
         Object.keys(command).length !== 8)) ||
     (command.action === 'ADMIT' &&
       (command.kind !== 'INTERNAL' ||

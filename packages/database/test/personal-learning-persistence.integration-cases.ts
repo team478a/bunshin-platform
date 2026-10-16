@@ -2276,6 +2276,55 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
         'PILOT_INTERNAL_PREPARATION_CAP_REACHED',
       );
     });
+    it('allows three internal Wave 0 preparations and blocks a fourth', async () => {
+      const f = await operationsFixture();
+      const seats = await f.initialize();
+      await seats.change(f.owner.id, {
+        action: 'CONFIGURE',
+        operationId: randomUUID(),
+        expectedRevision: 1,
+        confirmation: 'CONFIRM_PILOT_PARTICIPANT_OPERATION',
+        reviewEvidenceKey: 'synthetic-three-tester-review',
+        externalParticipantCap: 100,
+        internalParticipantCap: 3,
+        currentWave: 0,
+      });
+      const members = [f.member];
+      for (let index = 0; index < 3; index++) {
+        const user = await client.user.create({
+          data: { displayName: `Synthetic learner ${index}` },
+        });
+        members.push(
+          await client.groupMembership.create({
+            data: {
+              workspaceId: f.authority.workspaceId,
+              groupId: f.authority.groupId,
+              userId: user.id,
+              serviceRole: 'PARTICIPANT',
+              status: 'ACTIVE',
+              consentedAt: now,
+            },
+          }),
+        );
+      }
+      for (const member of members.slice(0, 3)) {
+        await f.ops.change(f.owner.id, {
+          ...(await f.command('INITIALIZE')),
+          action: 'PREPARE_ENROLLMENT',
+          groupMembershipId: member.id,
+          programOfferingId: f.enrollment.programOfferingId,
+        });
+      }
+      await expect(
+        f.ops.change(f.owner.id, {
+          ...(await f.command('INITIALIZE')),
+          action: 'PREPARE_ENROLLMENT',
+          groupMembershipId: members[3]!.id,
+          programOfferingId: f.enrollment.programOfferingId,
+        }),
+      ).rejects.toThrow('PILOT_INTERNAL_PREPARATION_CAP_REACHED');
+      expect(await client.programEnrollment.count({ where: f.authority })).toBe(3);
+    });
     it('operations reject disabled actors and cross-workspace authority', async () => {
       const f = await operationsFixture();
       const foreign = new PrismaPersonalLearningPilotOperations(
