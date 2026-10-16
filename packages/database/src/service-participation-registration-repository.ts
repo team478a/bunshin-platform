@@ -72,7 +72,9 @@ export class PrismaServiceParticipationRegistrationRepository {
         if (
           configuration?.registration === null ||
           configuration === null ||
-          ['INVITATION_ONLY', 'CLOSED'].includes(configuration.registration.mode)
+          ['INVITATION_ONLY', 'INVITATION_APPROVAL_REQUIRED', 'CLOSED'].includes(
+            configuration.registration.mode,
+          )
         )
           return null;
 

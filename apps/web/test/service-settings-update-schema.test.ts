@@ -102,4 +102,14 @@ describe('service settings update schema', () => {
       parseServiceSettingsUpdatePayload({ ...officialSettingsPayload, logoUrl: 'invalid' }),
     ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
   });
+
+  it('accepts invitation-only registration with manual operator approval', async () => {
+    const result = await serviceSettingsUpdateSchema.safeParseAsync({
+      ...officialSettingsPayload,
+      registrationMode: 'INVITATION_APPROVAL_REQUIRED',
+    });
+    expect(result.success, result.success ? undefined : JSON.stringify(result.error.issues)).toBe(
+      true,
+    );
+  });
 });

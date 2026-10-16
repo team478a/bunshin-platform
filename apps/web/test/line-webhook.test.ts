@@ -286,6 +286,52 @@ describe('group dedicated LINE webhook adapter', () => {
     );
   });
 
+  it('also sends a one-use invitation when invite-only registration requires manual approval', async () => {
+    const body = JSON.stringify({
+      events: [
+        {
+          type: 'follow',
+          timestamp: 1787378400000,
+          webhookEventId: 'evt-manual-invite-follow',
+          replyToken: 'reply-token',
+          source: { type: 'user', userId: 'UmanualInviteFollower' },
+        },
+      ],
+    });
+    const signature = createHmac('sha256', scope.secret).update(body).digest('base64');
+    const followInvitations = { create: vi.fn().mockResolvedValue(true) };
+    const followReply = { send: vi.fn().mockResolvedValue(true) };
+
+    const response = await handleGroupLineWebhook(
+      new Request(`https://example.com/api/line/groups/${routingKey}/webhook`, {
+        method: 'POST',
+        headers: { 'x-line-signature': signature },
+        body,
+      }),
+      routingKey,
+      {
+        environment: 'PRODUCTION',
+        configurations: {
+          get: vi.fn().mockResolvedValue({
+            ...scope,
+            registrationMode: 'INVITATION_APPROVAL_REQUIRED',
+          }),
+        },
+        processor: {
+          execute: vi.fn().mockResolvedValue({ outcomes: { CONNECTION_NOT_FOUND: 1 } }),
+        } as never,
+        followInvitations,
+        followReply,
+      },
+    );
+
+    expect(response.status).toBe(200);
+    expect(followInvitations.create).toHaveBeenCalledOnce();
+    expect(followReply.send).toHaveBeenCalledWith(
+      expect.objectContaining({ participationUrl: expect.stringContaining('/join/') }),
+    );
+  });
+
   it('does not send an invitation when the invitation record cannot be created', async () => {
     const body = JSON.stringify({
       events: [

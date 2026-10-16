@@ -23,6 +23,11 @@ const registrationCopy = {
       '運営者から届いた招待用のリンクを開いてください。すでに参加済みの方はログインできます。',
     action: '参加済みの方はこちら',
   },
+  INVITATION_APPROVAL_REQUIRED: {
+    title: '招待された方が参加を申し込めます',
+    description: '運営者から届いた招待用のリンクを開いてください。参加には運営者の確認が必要です。',
+    action: '参加済みの方はこちら',
+  },
   APPROVAL_REQUIRED: {
     title: '参加には運営者の確認が必要です',
     description: 'ログイン後に参加を申し込み、運営者からの連絡をお待ちください。',
