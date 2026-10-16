@@ -21,12 +21,17 @@ import {
   AI_TRAINING_V1_MODULE_KEY,
   AI_TRAINING_LEARNING_DEFINITION_FIXTURES,
   AI_TRAINING_CONSULTATION_RULE_VERSION,
+  personalLearningDynamicProgramAllows,
+  personalLearningMode,
   consultAiTrainingLearning,
   projectAiTrainingLearnerProfiles,
 } from '@bunshin/capability-training';
 import { lockTrainingEnrollmentData } from './training-data-lock';
 import { trainingEnrollmentPeriodWhere } from './training-enrollment-period';
-import { requireTrainingLearnerRole } from './personal-learning-pilot-seat';
+import {
+  requirePersonalLearningPilotSeat,
+  requireTrainingLearnerRole,
+} from './personal-learning-pilot-seat';
 
 type Tx = Prisma.TransactionClient;
 type Confirmation = Prisma.PersonalLearningGoalConfirmationGetPayload<{ include: { goal: true } }>;
@@ -95,11 +100,20 @@ export class PrismaPersonalLearningPersistenceRepository implements PersonalLear
             },
           });
           if (!enrollment) denied();
-          const programs = await tx.$queryRaw<{ id: string }[]>`
-          SELECT id FROM service_programs WHERE id=${enrollment.serviceProgramId}::uuid
+          const programs = await tx.$queryRaw<{ id: string; settings: unknown }[]>`
+          SELECT id, settings FROM service_programs WHERE id=${enrollment.serviceProgramId}::uuid
             AND workspace_id=${s.workspaceId}::uuid AND group_id=${s.groupId}::uuid
             AND status::text='ACTIVE' AND settings->>'moduleKey'=${AI_TRAINING_V1_MODULE_KEY} FOR SHARE`;
           if (programs.length !== 1) denied();
+          if (personalLearningMode(programs[0]?.settings) === 'DYNAMIC_V1') {
+            if (!personalLearningDynamicProgramAllows(programs[0]?.settings, enrollment.id))
+              denied();
+            await requirePersonalLearningPilotSeat(
+              tx,
+              { ...s, programEnrollmentId: enrollment.id },
+              true,
+            );
+          }
           const deletion = await tx.programAuditLog.findFirst({
             where: {
               workspaceId: s.workspaceId,

@@ -17,6 +17,14 @@ const snapshot: PilotOperationsSnapshot = {
   enabled: false,
   started: false,
   stateToken: 'a'.repeat(64),
+  learningMode: 'FIXED_DEFINITIONS_V1',
+  learningFeatures: {
+    conversation: false,
+    multiTopic: false,
+    lineLearning: false,
+    extendedScope: false,
+  },
+  openCallCount: 0,
 };
 const evidence = 'review-2026-10-16';
 const confirmation = 'CONFIRM_PILOT_OPERATION';
@@ -50,6 +58,24 @@ describe('Wave 0 operations UI boundaries', () => {
       reviewEvidenceKey: evidence,
       expectedStateToken: snapshot.stateToken,
     });
+  });
+
+  it('only permits audited learning configuration while suspended and disabled', () => {
+    expect(
+      createPilotOperationCommand(snapshot, 'SET_LEARNING_MODE', evidence, false, 'DYNAMIC_V1'),
+    ).toBeNull();
+    expect(
+      createPilotOperationCommand(snapshot, 'SET_LEARNING_MODE', evidence, true, 'DYNAMIC_V1'),
+    ).toMatchObject({ action: 'SET_LEARNING_MODE', learningMode: 'DYNAMIC_V1' });
+    expect(
+      createPilotOperationCommand(
+        { ...snapshot, status: 'ACTIVE', enabled: true },
+        'SET_LEARNING_FEATURES',
+        evidence,
+        true,
+        snapshot.learningFeatures,
+      ),
+    ).toBeNull();
   });
 
   it('requires verified started-history state, never inferring it from enabled alone', () => {

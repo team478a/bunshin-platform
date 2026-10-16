@@ -40,7 +40,12 @@ export async function learningPracticeSupportResponse(
       throw new ApplicationError('VALIDATION_ERROR', 'JSON required');
     const user = await (await currentUserProvider()).getCurrentUser();
     if (!user) throw new ApplicationError('UNAUTHENTICATED', 'session required');
-    const actor = await resolvePersonalLearningRequestActor(slug, enrollmentId, user.userId);
+    const actor = await resolvePersonalLearningRequestActor(
+      slug,
+      enrollmentId,
+      user.userId,
+      'conversation',
+    );
     const input = body.parse(await boundedLearningJson(request, MAX_BODY_BYTES + 8_000));
     const image = input.imageDataUrl
       ? await normalizePracticeSupportImage(input.imageDataUrl)
@@ -86,7 +91,12 @@ export async function learningPracticeSupportImageResponse(
       return Response.json({ error: { code: 'METHOD_NOT_ALLOWED' } }, { status: 405, headers });
     const user = await (await currentUserProvider()).getCurrentUser();
     if (!user) throw new ApplicationError('UNAUTHENTICATED', 'session required');
-    const actor = await resolvePersonalLearningRequestActor(slug, enrollmentId, user.userId);
+    const actor = await resolvePersonalLearningRequestActor(
+      slug,
+      enrollmentId,
+      user.userId,
+      'conversation',
+    );
     const image = await new PrismaPracticeSupportRepository(prisma).readSupportImage({
       actor,
       requestId,

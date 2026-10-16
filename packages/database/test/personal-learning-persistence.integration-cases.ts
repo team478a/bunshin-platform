@@ -2137,12 +2137,83 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
         }),
       ).toBe(0);
       expect(await client.personalLearningPilotSeat.count({ where: f.authority })).toBe(0);
+      expect(await f.ops.read(f.owner.id)).toMatchObject({
+        learningMode: 'FIXED_DEFINITIONS_V1',
+        learningFeatures: {
+          conversation: false,
+          multiTopic: false,
+          lineLearning: false,
+          extendedScope: false,
+        },
+      });
       await expect(
         f.ops.change(f.owner.id, {
           ...(await f.command('START')),
           expectedStateToken: '0'.repeat(64),
         }),
       ).rejects.toThrow('PILOT_STATE_CHANGED');
+    });
+    it('audits dynamic mode/features while suspended and skips fixed-only START prerequisites', async () => {
+      const f = await operationsFixture();
+      await f.initialize();
+      const modeCommand = {
+        ...(await f.command('INITIALIZE')),
+        action: 'SET_LEARNING_MODE' as const,
+        learningMode: 'DYNAMIC_V1' as const,
+      };
+      expect(await f.ops.change(f.owner.id, modeCommand)).toMatchObject({
+        status: 'SUSPENDED',
+        enabled: false,
+        learningMode: 'DYNAMIC_V1',
+      });
+      const featureCommand = {
+        ...(await f.command('INITIALIZE')),
+        action: 'SET_LEARNING_FEATURES' as const,
+        learningFeatures: {
+          conversation: true,
+          multiTopic: false,
+          lineLearning: false,
+          extendedScope: false,
+        },
+      };
+      expect(await f.ops.change(f.owner.id, featureCommand)).toMatchObject({
+        learningFeatures: {
+          conversation: true,
+          multiTopic: false,
+          lineLearning: false,
+          extendedScope: false,
+        },
+      });
+      // Prepare an internal seat in a separate fixture, switch mode, then remove fixed-only evidence.
+      const g = await operationsFixture();
+      const id = await g.ready();
+      await g.ops.change(g.owner.id, {
+        ...(await g.command('INITIALIZE')),
+        action: 'SET_LEARNING_MODE',
+        learningMode: 'DYNAMIC_V1',
+      });
+      await client.trainingParticipantProfile.deleteMany({ where: { programEnrollmentId: id } });
+      await client.programActionEvent.deleteMany({
+        where: {
+          programEnrollmentId: id,
+          eventType: 'PERSONAL_LEARNING_PILOT_PROFILE_INITIALIZED',
+        },
+      });
+      await client.learningDefinitionApproval.deleteMany({
+        where: { workspaceId: f.scope.workspaceId },
+      });
+      expect(await g.ops.change(g.owner.id, await g.command('START'))).toMatchObject({
+        status: 'ACTIVE',
+        enabled: true,
+        learningMode: 'DYNAMIC_V1',
+      });
+      await expect(
+        g.ops.change(g.owner.id, {
+          ...(await g.command('INITIALIZE')),
+          action: 'SET_LEARNING_MODE',
+          learningMode: 'FIXED_DEFINITIONS_V1',
+        }),
+      ).rejects.toThrow('PILOT_CONFIG_REQUIRES_SUSPENDED');
     });
     it('operations reject conversion of a legacy populated Program', async () => {
       const f = await fixture(false);

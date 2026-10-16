@@ -27,7 +27,7 @@ describe('service launch readiness', () => {
   it('describes initial onboarding as training preparation for AI Training services', () => {
     const items = buildServiceLaunchReadiness({ ...readyInput, isAiTrainingService: true });
     expect(items.find((item) => item.key === 'ONBOARDING')?.detail).toContain(
-      'AI研修の学習内容を個別に準備',
+      'AI研修の動的な課題候補を個別に準備',
     );
     expect(items.find((item) => item.key === 'ONBOARDING')?.detail).not.toContain('投稿パートナー');
   });

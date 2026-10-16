@@ -2,7 +2,9 @@ import 'server-only';
 import { getServerEnvironment } from '@bunshin/config';
 import {
   personalLearningPilotAllows,
+  personalLearningDynamicProgramAllows,
   isPersonalLearningPilotProgram,
+  personalLearningMode,
   parsePilotParticipantPolicy,
 } from '@bunshin/capability-training';
 import { ApplicationError } from '@bunshin/shared';
@@ -23,10 +25,15 @@ export function personalLearningPilotExecutionAllowed(
   enrollmentId: string,
   requirePilot = false,
 ) {
+  const dynamic = personalLearningMode(settings) === 'DYNAMIC_V1';
+  const allowed = dynamic
+    ? process.env['PERSONAL_LEARNING_REQUEST_INTAKE'] === 'true' &&
+      personalLearningDynamicProgramAllows(settings, enrollmentId)
+    : personalLearningPilotAllows(settings, enrollmentId);
   return (
     (!requirePilot && !isPersonalLearningPilotProgram(settings)) ||
     (personalLearningPilotEnabled() &&
-      personalLearningPilotAllows(settings, enrollmentId) &&
+      allowed &&
       (getServerEnvironment().APP_ENV !== 'production' ||
         parsePilotParticipantPolicy(
           (settings as { personalLearningPilot?: { participantControl?: unknown } })

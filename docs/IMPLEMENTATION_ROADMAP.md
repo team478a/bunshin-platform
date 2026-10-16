@@ -6,7 +6,7 @@
 
 各PRは1本ずつDraft PR＋実装報告で提出し、田中の確認後に次へ進む。内部テスターへの公開はA/B後の基本経路から段階的に行い、外部初回公開はA〜Gの本番反映、通し検証の承認、自動削除の本番稼働など、同ADRとギャップ報告に記載する条件がすべて満たされるまで行わない。PRのマージはproduction反映やPilot開始の証明ではない。
 
-PR-0ではPR #1のレビュー証跡を照合した。PR #1は2026-08-18にリポジトリ所有者がマージ済みだが、GitHub上の正式レビューsubmissionおよびコメントは見つからなかった。したがってPhase 1の人間レビュー承認済みとは扱わない。田中がPR-0上でPhase 1完了とPhase 2以降への移行を明示承認するまでPR-Aへ進まない。
+PR-0ではPR #1のレビュー証跡を照合した。PR #1は2026-08-18にリポジトリ所有者がマージ済みだが、GitHub上の正式レビューsubmissionおよびコメントは見つからなかった。田中は2026-10-17にCodex作業スレッド上でPhase 1完了とPhase 2以降への移行を明示承認した（`docs/DECISION_LOG.md`）。この承認はPR #1の正式レビューsubmissionが存在したことを意味せず、Production deploy・migration・Pilot開始・外部公開も承認しない。Roadmapの順序に従いPR-Aへ進む。
 
 LINEログインでサービス参加状態を確認できない場合のHassy/マナベル比較、およびverified sessionからの明示的なidentity連携実装は`docs/LINE_IDENTITY_LINK_IMPLEMENTATION.md`を参照。Supabase Manual Identity LinkingはBetaのため、環境設定・実機smoke・migration reviewが完了するまで本番有効化しない。
 

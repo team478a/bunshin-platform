@@ -75,7 +75,7 @@ export function buildServiceLaunchReadiness(
       detail: businessDailyIdeas
         ? '業種、商品・サービス、対象顧客、発信目的を企業ごとに登録します。'
         : input.isAiTrainingService
-          ? '参加者の目標や経験を確認し、AI研修の学習内容を個別に準備するための質問です。'
+          ? '参加者の希望や経験を確認し、AI研修の動的な課題候補を個別に準備するための質問です。'
           : '参加者に合う投稿パートナーを作るための質問です。',
       path: `${base}/settings`,
     },
