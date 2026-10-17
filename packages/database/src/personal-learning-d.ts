@@ -255,7 +255,12 @@ export class PrismaPersonalLearningPersonaRepository {
       return { outcome: 'INVALID' as const };
     if (!(await ownsEnabledDynamicEnrollment(scope, this.client)))
       return { outcome: 'NOT_FOUND' as const };
-    const key = { ...memberScopeWhere(scope), attributeKey };
+    const key = {
+      workspaceId: scope.workspaceId,
+      groupId: scope.groupId,
+      groupMembershipId: scope.groupMembershipId,
+      attributeKey,
+    };
     const existing = await this.client.personalLearningPersonaItem.findUnique({
       where: { workspaceId_groupId_groupMembershipId_attributeKey: key },
     });
