@@ -481,22 +481,27 @@ export function registerPersonalLearningDIntegrationCases(client: PrismaClient) 
           shared: true,
         }),
       ).rejects.toThrow();
-      await expect(
-        requests.saveRequest({
-          actorUserId: firstActor.actorUserId,
-          scope: firstActor.scope,
-          topicId: firstActor.topicId,
-          expectedRevision: 1,
-          idempotencyKey: randomUUID(),
-          content: {
-            originalText: '他テーマを更新しようとする',
-            deviceType: 'PC',
-            toolDescription: '検証ツール',
-            experienceDescription: null,
-            currentPosition: null,
-          },
-        }),
-      ).rejects.toThrow();
+      const updatedFirstRequest = await requests.saveRequest({
+        actorUserId: firstActor.actorUserId,
+        scope: firstActor.scope,
+        topicId: firstActor.topicId,
+        expectedRevision: 1,
+        idempotencyKey: randomUUID(),
+        content: {
+          originalText: '他テーマではなく一つ目のテーマだけ更新',
+          deviceType: 'PC',
+          toolDescription: '検証ツール',
+          experienceDescription: null,
+          currentPosition: null,
+        },
+      });
+      expect(updatedFirstRequest).toMatchObject({
+        originalText: '他テーマではなく一つ目のテーマだけ更新',
+        revision: 2,
+      });
+      expect((await requests.readRequest(firstActor))?.originalText).toBe(
+        '他テーマではなく一つ目のテーマだけ更新',
+      );
       expect((await requests.readRequest(secondActor))?.originalText).toBe('二つ目の学習希望');
 
       const goals = await Promise.all(

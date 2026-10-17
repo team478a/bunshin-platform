@@ -56,8 +56,9 @@ export default async function Page({
     const pagePath = `/s/${serviceSlug}/programs/${programEnrollmentId}/learning-request`;
     const topicEndpoint = `/api/services/${serviceSlug}/ai-training/enrollments/${programEnrollmentId}/topics`;
     const topics = multiTopic
-      ? ((await new db.PrismaPersonalLearningTopicRepository(db.prisma).list(input.scope)) ?? [])
-          .filter((topic) => topic.status === 'ACTIVE')
+      ? (
+          (await new db.PrismaPersonalLearningTopicRepository(db.prisma).list(input.scope)) ?? []
+        ).filter((topic) => topic.status === 'ACTIVE')
       : [];
     if (multiTopic && !input.topicId) {
       return (
