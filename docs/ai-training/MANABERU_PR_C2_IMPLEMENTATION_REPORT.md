@@ -28,12 +28,14 @@
 
 ## 4. 実行した検証
 
-- 追記予定。GitHub ActionsのCI（Database統合テスト含む）完了後にrun URLと結果を記載する。
+- ローカル: `@bunshin/application` の会話テスト 7件、WebのProvider/Serviceテスト 10件が成功。
+- ローカル: Application・Database・Webのtypecheck、Application/Databaseのlint、変更したWebファイルのlint、変更ファイルのformat check、`git diff --check` が成功。
+- GitHub Actions CI run [#38995775401](https://github.com/team478a/bunshin-platform/actions/runs/38995775401): `verify` と `database` の両jobが成功。`verify` はformat check・typecheck・lint・全test・learning UI test・buildを完了。`database` はDB validate/migrate/readinessおよび `pnpm test:integration` を完了。
+- Database統合テストはGitHub Actionsの一時PostgreSQL環境で実行し、同一スレッドの候補再生成、明示された端末・ツールの補完、元の希望文の維持を含む。
 
 ## 5. 未解決事項
 
-- 実際のAIによる社内評価と本番設定でのAdmission値確認は未実施。
-- PR-C1 #1328のレビュー・マージは未完了。本PRもDraftのまま維持し、本番リリースは行わない。
+- 実際のAIによる社内評価と本番設定でのAdmission値確認は未実施。PR-C1 #1328および本PRのユーザー確認・マージは未完了。本番リリースは行わない。
 
 ## 6. 次へ進む条件
 
