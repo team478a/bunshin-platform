@@ -8,12 +8,15 @@ import type {
 import { validateLearningLessonProposal } from '@bunshin/application';
 import { serializeOpenAiTaskRequest } from '../ai/openai-task-compatibility';
 import { generateLearningStructured } from './openai-learning-lesson';
-import { learningProposalPolicy } from './learning-proposal-policy';
+import {
+  LEARNING_CONVERSATION_SAFETY_POLICY,
+  learningProposalPolicy,
+} from './learning-proposal-policy';
 
-export const LEARNING_CONVERSATION_PROMPT_VERSION = 'learning-conversation-same-thread-v2';
+export const LEARNING_CONVERSATION_PROMPT_VERSION = 'learning-conversation-same-thread-v3';
 export function learningConversationPromptVersion(extendedScope: boolean) {
   return extendedScope
-    ? 'learning-conversation-same-thread-v3'
+    ? 'learning-conversation-same-thread-v4'
     : LEARNING_CONVERSATION_PROMPT_VERSION;
 }
 export interface LearningConversationEnvironmentCapture {
@@ -108,6 +111,7 @@ export function learningConversationBody(input: {
     store: false,
     max_output_tokens: input.permit.maxOutputTokens,
     input: [
+      { role: 'system', content: LEARNING_CONVERSATION_SAFETY_POLICY },
       {
         role: 'system',
         content: `提案を作成・再作成する場合は次の共通提案方針に従ってください。${proposalPolicy.instructions} 同一テーマの同じ相談スレッドで会話を続け、応答1回に扱うことを1つに絞り、最後に本人が次に試せる小さな一歩を必ず残してください。課題の開始、提出、評価、修了、次の課題への遷移は別の明示操作に委ねてください。教材候補がNEEDS_CONTEXTの場合だけcurrentMessageを確認質問への回答として評価し、十分な根拠があれば同じ共有提案方針に従ってregeneratedProposalを返してください。不足が残る場合はNEEDS_CONTEXTの質問を含む候補を返してください。本人が明示した場合だけ端末とAIツール名をenvironmentCaptureへ返し、推測は禁止です。候補再生成は教材の実行・確定や実践の切替を意味しません。候補がNEEDS_CONTEXTでない場合にregeneratedProposalまたはenvironmentCaptureを返しても、アプリケーションはこれらを適用せずmessageだけを使います。返信は自然な短い日本語の本文にしてください。`,

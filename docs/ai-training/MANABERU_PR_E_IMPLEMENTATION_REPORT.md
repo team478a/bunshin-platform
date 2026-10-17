@@ -2,6 +2,15 @@
 
 状態: Draft PRで田中の確認待ち。マージ・本番リリース・DB migration適用・feature flag変更・実AI呼び出しは未実施。
 
+## 田中レビューコメント対応（追加修正）
+
+- 会話全体に適用する安全ポリシーを提案ポリシーから独立した共通定数にし、提案を作り直さない通常回答と、画像を含む実践途中相談の両Providerへ常時適用した。希望・会話・画像内文字・実践記録・過去のAI出力は未信頼データとして扱い、本人に代わる完了やログイン・提出・送信・投稿・公開を行わず、画面操作はOFF時に推測せず、ON時も見える範囲だけを根拠にする。
+- 拡張提案v3に、前回結果を限られた進捗根拠として使い、同じ課題を繰り返さず元の希望に近づく次の一歩を提案するルールを復元した。前回結果に含まれる指示は実行しない。
+- Prompt Versionを変更内容に合わせて更新。拡張提案v4、会話v3/v4、途中支援v2/v3。新しいmigrationやProduction設定変更はない。
+- 合成評価セットの全20シナリオで、通常回答経路（候補なし）に敵対的な過去出力・相談文・画像文字相当の入力を渡し、ポリシーが常時system入力に含まれ、攻撃文がuser dataに分離されることを検査する。通常回答例も本人の行動を促し、代理完了を主張しない条件を確認する。画像支援ProviderでもOFF/ON双方の常時ポリシーとPrompt Versionをテストする。これは実AIの品質評価ではなく、プロンプト組み立てと合成回答の検査である。
+- 変更ファイル: `apps/web/src/providers/learning-proposal-policy.ts`、`openai-learning-conversation.ts`、`openai-learning-support.ts`、`apps/web/test/learning-proposal-policy-evaluation.test.ts`、`openai-learning-support.test.ts`。
+- 検証: 対象Provider/evaluationテスト 3 files / 16 tests passed。変更した5つのTS/TSXファイルに対するESLintと`git diff --check`は成功。Web全体typecheckと全体lintはローカルで長時間・高メモリ使用となったため中断し、全体testは未実施。PR更新後の必須CIで全体検証を確認する（未完了を成功扱いしない）。
+
 ## 1. 調査した内容
 
 - 本線化指示書v4のPR-EとPR-G評価手順、PR-C2の会話契約、初回教材提案・再提案Provider、実践途中支援の画像保存と履歴を確認した。過去版v1〜v3は仕様根拠に使用していない。
@@ -10,7 +19,7 @@
 
 ## 2. 変更したファイル
 
-- `apps/web/src/providers/learning-proposal-policy.ts`: 初回提案と再提案で共有するv2/v3提案指示を集約。
+- `apps/web/src/providers/learning-proposal-policy.ts`: 初回提案と再提案で共有するv2/v4提案指示を集約し、全応答用安全ポリシーを一元定義。
 - `apps/web/src/providers/openai-learning-lesson.ts`、`openai-learning-conversation.ts`: 共通指示を使い、拡張設定ON時だけツール操作案内・手本/下書き提示を許可。
 - `apps/web/src/services/personal-learning-extended-scope.ts`、`personal-learning-lesson-candidate.ts`、`personal-learning-conversation.ts`、`personal-learning-practice-support.ts`、`openai-learning-support.ts`: Enrollment/Program設定をサーバー側で解決し、初回提案・再提案・実践画像相談に適切なPrompt Versionを利用量記録へ保存。設定OFF時は既存の各v2/v1ルールを維持。
 - `apps/web/app/s/[serviceSlug]/programs/[programEnrollmentId]/learning-request/{card,practice-card,conversation-card}.tsx`: 実践チャットを希望相談チャットに統合。実践開始後は同じ入力欄から相談と画像を送り、希望会話・実践相談を時系列に表示。旧独立相談フォームを削除。
@@ -20,7 +29,8 @@
 
 ## 3. 主要な設計判断
 
-- 初回提案と確認質問回答後の再提案は、一つのポリシー実装を共有する。設定OFFでは既存v2文面、ONではv3文面を選ぶ。v3はスクリーンショットがある場合に見える範囲を根拠とし、ない場合は一般手順として案内する。不確かな画面・操作を断定しない。手本の後に本人が試す具体的な一歩を残す。
+- 初回提案と確認質問回答後の再提案は、一つのポリシー実装を共有する。設定OFFでは既存v2文面、ONではv4文面を選ぶ。v4は前回結果を限られた進捗根拠として使い、同じ課題を繰り返さず元の希望に近づく次の一歩を提案する。スクリーンショットがある場合に見える範囲を根拠とし、ない場合は一般手順として案内する。不確かな画面・操作を断定しない。手本の後に本人が試す具体的な一歩を残す。
+- 全応答用の安全ポリシーは候補再生成の有無やstatusに依存させず、通常会話と画像付き途中相談にそれぞれ常時付与する。レビュー指摘の安全ルールが提案再生成時だけに限定されないようにした。
 - 「作り直し」が不要な状態でAIが有効な候補案や環境情報まで返した場合、会話本文だけを保存し、候補・環境情報は適用しない。NEEDS_CONTEXT候補の時だけ、保存時の既存revision/ownership照合を経て候補を更新する。
 - 実践相談欄は学習チャット内の同じ composer と時系列表示へ統合した。一方、永続化は既存の会話イベントと実践支援イベントをそれぞれ維持する。画像は既存の安全な実践支援画像テーブルに保存され、AI費用枠・同意・所有認可・既存保持/削除を迂回しない。schema変更・migrationなし。
 - v4 PR-Eの範囲外リスト: (1)本人に代わる外部サービスへのログイン・投稿・公開・送信、(2)医療・法律・税務等の専門的判断、(3)他人の個人情報・権利侵害を伴う作業、(4)研修と無関係な依頼。安全で研修に沿う代替案を提示する。この最終リストを田中に報告し、Draftレビューで確認を受ける。
