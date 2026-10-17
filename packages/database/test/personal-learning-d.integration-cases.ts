@@ -133,6 +133,8 @@ export function registerPersonalLearningDIntegrationCases(client: PrismaClient) 
         data: {
           settings: {
             moduleKey: 'AI_TRAINING_V1',
+            notificationsEnabled: false,
+            postponedReminderEnabled: false,
             personalLearningPilot: {
               enabled: true,
               enrollmentIds: [enrollmentId],
