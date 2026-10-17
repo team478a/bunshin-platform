@@ -58,7 +58,10 @@ export async function prepareLearningLesson(
   if (!reservation) throw new ApplicationError('CONFIGURATION_ERROR', 'lesson price unavailable');
   const extendedScope = await resolvePersonalLearningExtendedScope(actor);
   const proposalPolicy = learningProposalPolicy(extendedScope);
-  const body = learningLessonBody(request, policy.model, policy, extendedScope); // Validate byte limit before admission.
+  const personaContext = await new db.PrismaPersonalLearningPersonaRepository(db.prisma).listForAi(
+    actor.scope,
+  );
+  const body = learningLessonBody(request, policy.model, policy, extendedScope, personaContext); // Validate byte limit before admission.
   let providerAdmission: AdmittedOpenAiRuntimeConfiguration | null = null;
   let usageKey = '';
   let permitId = '';

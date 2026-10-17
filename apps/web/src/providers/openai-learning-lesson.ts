@@ -11,56 +11,82 @@ import {
 } from '../ai/openai-task-compatibility';
 import { learningProposalPolicy } from './learning-proposal-policy';
 
-export const LEARNING_LESSON_PROMPT_VERSION = 'learning-lesson-tool-independent-v2';
+export const LEARNING_LESSON_PROMPT_VERSION = 'learning-lesson-tool-independent-v3-persona-context';
+export type LearningPersonaContext = readonly {
+  attributeKey: string;
+  value: string;
+  epistemicStatus: 'UNCONFIRMED_GUESS' | 'LEARNER_CONFIRMED';
+  evidenceType: 'CONVERSATION_EVENT' | 'PRACTICE_ANSWER' | 'LEARNING_REQUEST';
+  evidenceCreatedAt: Date | string;
+}[];
 export function learningLessonBody(
   request: SavedPersonalLearningRequest,
   model: string,
   permit: Pick<PersonalLearningTextPermit, 'maxRequestBytes' | 'maxOutputTokens'>,
   extendedScope = false,
+  personaContext: LearningPersonaContext = [],
 ) {
   const proposalPolicy = learningProposalPolicy(extendedScope);
   const strings = ['reason', 'outcome', 'explanation', 'example'];
   const lists = ['questions', 'practice', 'evidence', 'criteria'];
-  const body = serializeOpenAiTaskRequest('LEARNING_LESSON', {
-    model,
-    store: false,
-    max_output_tokens: permit.maxOutputTokens,
-    input: [
-      {
-        role: 'system',
-        content: proposalPolicy.instructions,
-      },
-      {
-        role: 'user',
-        content: JSON.stringify({
-          originalText: request.originalText,
-          deviceType: request.deviceType,
-          toolDescription: request.toolDescription,
-          experienceDescription: request.experienceDescription,
-          currentPosition: request.currentPosition,
-        }),
-      },
-    ],
-    text: {
-      format: {
-        type: 'json_schema',
-        name: 'learning_lesson',
-        strict: true,
-        schema: {
-          type: 'object',
-          additionalProperties: false,
-          properties: {
-            status: { type: 'string', enum: ['READY', 'NEEDS_CONTEXT', 'OUT_OF_SCOPE'] },
-            ...Object.fromEntries(strings.map((k) => [k, { type: 'string' }])),
-            ...Object.fromEntries(
-              lists.map((k) => [k, { type: 'array', items: { type: 'string' } }]),
-            ),
+  const buildBody = (context: LearningPersonaContext) =>
+    serializeOpenAiTaskRequest('LEARNING_LESSON', {
+      model,
+      store: false,
+      max_output_tokens: permit.maxOutputTokens,
+      input: [
+        {
+          role: 'system',
+          content: `${proposalPolicy.instructions} personaContextは本人の研修内に限った補助情報です。LEARNER_CONFIRMEDは本人が確認した情報、UNCONFIRMED_GUESSはAIによる未確認の推測として扱い、事実と断定せず、本人の現在の希望や発言と矛盾するときは本人の発言を優先してください。personaContextに含まれない拒否・削除済み情報は参照できません。`,
+        },
+        {
+          role: 'user',
+          content: JSON.stringify({
+            originalText: request.originalText,
+            deviceType: request.deviceType,
+            toolDescription: request.toolDescription,
+            experienceDescription: request.experienceDescription,
+            currentPosition: request.currentPosition,
+            personaContext: context.map((item) => ({
+              attributeKey: item.attributeKey,
+              value: item.value,
+              epistemicStatus: item.epistemicStatus,
+              evidenceType: item.evidenceType,
+              evidenceCreatedAt:
+                item.evidenceCreatedAt instanceof Date
+                  ? item.evidenceCreatedAt.toISOString()
+                  : item.evidenceCreatedAt,
+            })),
+          }),
+        },
+      ],
+      text: {
+        format: {
+          type: 'json_schema',
+          name: 'learning_lesson',
+          strict: true,
+          schema: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              status: { type: 'string', enum: ['READY', 'NEEDS_CONTEXT', 'OUT_OF_SCOPE'] },
+              ...Object.fromEntries(strings.map((k) => [k, { type: 'string' }])),
+              ...Object.fromEntries(
+                lists.map((k) => [k, { type: 'array', items: { type: 'string' } }]),
+              ),
+            },
+            required: ['status', ...strings, ...lists],
           },
-          required: ['status', ...strings, ...lists],
         },
       },
-    },
-  });
+    });
+  let context = [...personaContext];
+  let body = buildBody(context);
+  while (Buffer.byteLength(body, 'utf8') > permit.maxRequestBytes && context.length > 0) {
+    // The repository already sorted confirmed/recent facts first; shed only the lowest priority.
+    context = context.slice(0, -1);
+    body = buildBody(context);
+  }
   if (Buffer.byteLength(body, 'utf8') > permit.maxRequestBytes)
     throw new Error('learning request limit exceeded');
   return body;

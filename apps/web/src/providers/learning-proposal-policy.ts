@@ -1,6 +1,8 @@
 /** Shared proposal rules used by the first proposal and question-answer regeneration. */
-export const LEARNING_PROPOSAL_PROMPT_VERSION = 'learning-lesson-tool-independent-v2';
-export const LEARNING_PROPOSAL_EXTENDED_PROMPT_VERSION = 'learning-proposal-tool-guidance-v4';
+export const LEARNING_PROPOSAL_PROMPT_VERSION =
+  'learning-lesson-tool-independent-v3-persona-context';
+export const LEARNING_PROPOSAL_EXTENDED_PROMPT_VERSION =
+  'learning-proposal-tool-guidance-v5-persona-context';
 
 /** Safety rules that apply to every learner-facing reply, not only proposal generation. */
 export const LEARNING_CONVERSATION_SAFETY_POLICY =

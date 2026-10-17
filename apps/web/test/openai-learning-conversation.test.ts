@@ -34,6 +34,57 @@ describe('versioned learning conversation provider', () => {
     expect(prompt).toContain('課題の開始、提出、評価、修了');
   });
 
+  it('passes current reviewed persona context to the next conversation request', () => {
+    const body = learningConversationBody({
+      request,
+      history: [],
+      currentMessage: '次に何をすればいいですか？',
+      candidate: null,
+      practice: null,
+      model: 'gpt-5.2',
+      permit: { maxRequestBytes: 12000, maxOutputTokens: 400 },
+      personaContext: [
+        {
+          attributeKey: 'preferred_learning_style',
+          value: '短い例があると進めやすい',
+          epistemicStatus: 'UNCONFIRMED_GUESS',
+          evidenceType: 'CONVERSATION_EVENT',
+          evidenceCreatedAt: '2026-10-16T00:00:00.000Z',
+        },
+      ],
+    });
+    const parsed = JSON.parse(body) as { input: { role: string; content: string }[] };
+    const learnerData = JSON.parse(parsed.input.find((item) => item.role === 'user')!.content);
+    expect(learnerData.personaContext[0]).toMatchObject({
+      attributeKey: 'preferred_learning_style',
+      epistemicStatus: 'UNCONFIRMED_GUESS',
+    });
+  });
+  it('keeps higher-priority persona context when fitting the conversation request byte limit', () => {
+    const body = learningConversationBody({
+      request,
+      history: [],
+      currentMessage: '続けてください',
+      candidate: null,
+      practice: null,
+      model: 'gpt-5.2',
+      permit: { maxRequestBytes: 12_000, maxOutputTokens: 400 },
+      personaContext: [
+        ...Array.from({ length: 20 }, (_, index) => ({
+          attributeKey: `guess_${index}`,
+          value: 'x'.repeat(900),
+          epistemicStatus: 'UNCONFIRMED_GUESS' as const,
+          evidenceType: 'CONVERSATION_EVENT' as const,
+          evidenceCreatedAt: '2026-10-17T00:00:00.000Z',
+        })),
+      ],
+    });
+    expect(Buffer.byteLength(body, 'utf8')).toBeLessThanOrEqual(12_000);
+    const parsed = JSON.parse(body) as { input: { role: string; content: string }[] };
+    const data = JSON.parse(parsed.input.find((item) => item.role === 'user')!.content);
+    expect(data.personaContext.length).toBeLessThan(20);
+  });
+
   it.each(['ANSWER', 'NEEDS_CONTEXT', 'OUT_OF_SCOPE'] as const)(
     'accepts bounded %s replies without deciding learner progress',
     (status) => {

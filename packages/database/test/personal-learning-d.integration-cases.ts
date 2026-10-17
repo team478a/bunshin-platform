@@ -21,7 +21,7 @@ const now = new Date('2026-10-17T03:00:00Z');
 
 /** Called only inside the live disposable database integration suite. */
 export function registerPersonalLearningDIntegrationCases(client: PrismaClient) {
-  describe('PR-D-1 tenant boundaries and rejected persona persistence', () => {
+  describe('PR-D-3 reviewed persona access and next-call AI projection', () => {
     const cleanup: Array<() => Promise<void>> = [];
     afterEach(async () => {
       await client.personalLearningSavedExample.deleteMany();
@@ -368,11 +368,62 @@ export function registerPersonalLearningDIntegrationCases(client: PrismaClient) 
           evidenceType: 'LEARNING_REQUEST' as const,
           evidenceId: randomUUID(),
           evidenceCreatedAt: now,
+          updatedAt: new Date(now.getTime() + index * 1_000),
         })),
       });
+      const confirmed = await client.personalLearningPersonaItem.createMany({
+        data: [0, 1].map((index) => ({
+          workspaceId: first.scope.workspaceId,
+          groupId: first.scope.groupId,
+          groupMembershipId: first.scope.groupMembershipId,
+          userId: first.scope.userId,
+          attributeKey: `confirmed_${index}`,
+          value: `Confirmed ${index}`,
+          status: 'CONFIRMED' as const,
+          evidenceType: 'LEARNING_REQUEST' as const,
+          evidenceId: randomUUID(),
+          evidenceCreatedAt: now,
+          updatedAt: new Date(now.getTime() + 100_000 + index * 1_000),
+        })),
+      });
+      expect(confirmed.count).toBe(2);
       const aiIntake = await persona.listForAi(first.scope);
       expect(aiIntake).toHaveLength(20);
       expect(aiIntake.some((item) => item.attributeKey === 'preferred_learning_style')).toBe(false);
+      expect(aiIntake.slice(0, 2).map((item) => item.attributeKey)).toEqual([
+        'confirmed_1',
+        'confirmed_0',
+      ]);
+
+      const rejectedNext = await client.personalLearningPersonaItem.findUniqueOrThrow({
+        where: {
+          workspaceId_groupId_groupMembershipId_attributeKey: {
+            workspaceId: first.scope.workspaceId,
+            groupId: first.scope.groupId,
+            groupMembershipId: first.scope.groupMembershipId,
+            attributeKey: 'inference_0',
+          },
+        },
+      });
+      await persona.review(first.scope, rejectedNext.id, { status: 'REJECTED' });
+      expect(await persona.listForAi(first.scope)).not.toEqual(
+        expect.arrayContaining([expect.objectContaining({ attributeKey: 'inference_0' })]),
+      );
+
+      const deletedNext = await client.personalLearningPersonaItem.findUniqueOrThrow({
+        where: {
+          workspaceId_groupId_groupMembershipId_attributeKey: {
+            workspaceId: first.scope.workspaceId,
+            groupId: first.scope.groupId,
+            groupMembershipId: first.scope.groupMembershipId,
+            attributeKey: 'inference_1',
+          },
+        },
+      });
+      expect(await persona.delete(first.scope, deletedNext.id)).toBe(true);
+      expect(await persona.listForAi(first.scope)).not.toEqual(
+        expect.arrayContaining([expect.objectContaining({ attributeKey: 'inference_1' })]),
+      );
 
       const examples = new PrismaPersonalLearningSavedExamplesRepository(client);
       expect(await examples.list(featureOff.scope)).toEqual([]);

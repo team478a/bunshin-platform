@@ -453,7 +453,13 @@ export class PrismaPersonalLearningPersonaRepository {
         evidenceId: true,
         evidenceCreatedAt: true,
       },
-      orderBy: [{ updatedAt: 'asc' }, { id: 'asc' }],
+      // Confirmed facts are more reliable; within each status, prefer recently reviewed/inferred.
+      orderBy: [
+        { status: 'asc' },
+        { updatedAt: 'desc' },
+        { evidenceCreatedAt: 'desc' },
+        { id: 'asc' },
+      ],
       take: 20,
     });
     return items.flatMap((item) => {
