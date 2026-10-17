@@ -209,7 +209,12 @@ export function registerPersonalLearningDIntegrationCases(client: PrismaClient) 
           startsAt: now,
         },
       });
-      const currentSettings = first.program.settings as Record<string, unknown>;
+      const currentProgram = await client.serviceProgram.findUnique({
+        where: { id: first.program.id },
+        select: { settings: true },
+      });
+      if (!currentProgram) throw new Error('integration test program disappeared');
+      const currentSettings = currentProgram.settings as Record<string, unknown>;
       const pilot = currentSettings.personalLearningPilot as Record<string, unknown>;
       await client.serviceProgram.update({
         where: { id: first.program.id },
