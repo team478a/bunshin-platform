@@ -15,6 +15,7 @@
 - `apps/web/src/services/personal-learning-extended-scope.ts`、`personal-learning-lesson-candidate.ts`、`personal-learning-conversation.ts`、`personal-learning-practice-support.ts`、`openai-learning-support.ts`: Enrollment/Program設定をサーバー側で解決し、初回提案・再提案・実践画像相談に適切なPrompt Versionを利用量記録へ保存。設定OFF時は既存の各v2/v1ルールを維持。
 - `apps/web/app/s/[serviceSlug]/programs/[programEnrollmentId]/learning-request/{card,practice-card,conversation-card}.tsx`: 実践チャットを希望相談チャットに統合。実践開始後は同じ入力欄から相談と画像を送り、希望会話・実践相談を時系列に表示。旧独立相談フォームを削除。
 - `apps/web/test/fixtures/learning-proposal-evaluation-set.ts`、`apps/web/test/learning-proposal-policy-evaluation.test.ts`、`apps/web/test/personal-learning-conversation-service.test.ts`: 合成評価セットと共有ポリシー、候補再生成分岐、不要な候補出力を無視する挙動を検証。
+- `scripts/test/learning-ui/main.tsx`、`scripts/test/learning-ui/practice-support.e2e.ts`: 合成Learning UIにも希望相談・実践相談の共有スレッドを組み込み、画像添付・再訪・失敗時保持・停止中の送信防止を検証。
 - `docs/DECISION_LOG.md`、`docs/IMPLEMENTATION_ROADMAP.md`、本報告を更新。
 
 ## 3. 主要な設計判断
@@ -27,10 +28,11 @@
 ## 4. 実行した検証
 
 - Web全テスト: 501 files / 3,612 tests passed、2 skipped（全3,614件）。Providerはモックで、実API呼び出しなし。
+- Learning UI E2E: 9 files / 39 tests passed。統合チャット上で実践相談を同じスレッドに表示すること、画像添付、再訪時の復元、失敗時の入力保持、停止中の送信防止を確認。最初のCIでは旧「個別の途中相談フォーム」を前提にしたE2E 6件が失敗したため、実UIに合わせてテストと合成ハーネスを更新し、ローカルで全件再確認した。PR更新後のCI再実行は確認待ち。
 - `pnpm --filter web typecheck`: 成功。`pnpm --filter web lint`: 成功。`pnpm --filter web build`: 成功（Next.js production build）。
 - Prettierで変更したTS/TSXを整形。
 - `git diff --check`: 成功。
-- CIの全体verify/database、DB統合結果はDraft作成後にGitHub Actionsで確認し、結果をこの報告へ追記する。未実行の検証を成功扱いにしない。
+- Draft作成後のGitHub Actions初回runではDatabase job（db validate/migrate/readiness/integration）が成功し、verifyはLearning UI E2Eの旧UI前提テストで失敗した。E2E修正をPRへpush後、最新CIの全verify/databaseを再確認し、この報告を更新する。未実行の検証を成功扱いにしない。
 
 ### 合成評価セットの範囲
 
