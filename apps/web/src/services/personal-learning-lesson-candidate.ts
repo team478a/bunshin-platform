@@ -32,6 +32,12 @@ export async function prepareLearningLesson(
     throw new ApplicationError('CONFLICT', 'learning wish changed');
   const prior = await candidates.readCandidate(actor);
   if (prior) return prior; // Retry and revisit do not create another AI call.
+  const persona = await new db.PrismaPersonalLearningPersonaRepository(db.prisma).listForAi({
+    workspaceId: actor.scope.workspaceId,
+    groupId: actor.scope.groupId,
+    groupMembershipId: actor.scope.groupMembershipId,
+    userId: actor.actorUserId,
+  });
   let configuration: unknown;
   try {
     configuration = JSON.parse(process.env['PERSONAL_LEARNING_LESSON_ADMISSION'] ?? 'null');
@@ -58,7 +64,7 @@ export async function prepareLearningLesson(
   if (!reservation) throw new ApplicationError('CONFIGURATION_ERROR', 'lesson price unavailable');
   const extendedScope = await resolvePersonalLearningExtendedScope(actor);
   const proposalPolicy = learningProposalPolicy(extendedScope);
-  const body = learningLessonBody(request, policy.model, policy, extendedScope); // Validate byte limit before admission.
+  const body = learningLessonBody(request, policy.model, policy, extendedScope, persona); // Validate byte limit before admission.
   let providerAdmission: AdmittedOpenAiRuntimeConfiguration | null = null;
   let usageKey = '';
   let permitId = '';

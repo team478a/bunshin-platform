@@ -288,3 +288,13 @@ export {
   type PersonalLearningFeature,
   type PersonalLearningFeatures,
 } from './personal-learning-pilot';
+export {
+  PERSONAL_LEARNING_ACTIVE_TOPIC_LIMIT,
+  canCreatePersonalLearningTopic,
+  personaItemsForAi,
+  personalLearningTopicLimit,
+} from './personal-learning-topics';
+export type {
+  PersonalLearningPersonaStatus,
+  PersonalLearningTopicStatus,
+} from './personal-learning-topics';
