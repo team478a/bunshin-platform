@@ -32,7 +32,8 @@
 - `pnpm --filter web typecheck`: 成功。`pnpm --filter web lint`: 成功。`pnpm --filter web build`: 成功（Next.js production build）。
 - Prettierで変更したTS/TSXを整形。
 - `git diff --check`: 成功。
-- Draft作成後のGitHub Actions初回runではDatabase job（db validate/migrate/readiness/integration）が成功し、verifyはLearning UI E2Eの旧UI前提テストで失敗した。E2E修正をPRへpush後、最新CIの全verify/databaseを再確認し、この報告を更新する。未実行の検証を成功扱いにしない。
+- GitHub Actions run `39003336113`（E2E修正を含むcommit `cabda2e5`）: `verify` と `database` の両jobが成功。verifyのformat check / typecheck / lint / 全test / Chromium準備 / Learning UI E2E / buildが全て成功し、Learning UI E2Eは9 files / 39 tests。Databaseではdb validate / CI用DB migration / readiness / 統合テストが成功（1分52秒）。これはCI用DBでありproduction DBには接続していない。
+- 初回runは旧UI前提のLearning UI E2Eが失敗したが、統合チャットの合成ハーネスと期待値を修正した後のrun `39003336113` ですべて成功した。未実行の検証を成功扱いにしない。
 
 ### 合成評価セットの範囲
 
@@ -40,7 +41,6 @@
 
 ## 5. 未解決事項
 
-- GitHub ActionsのPRチェック結果（特にDatabase統合テスト）はDraft提出後に確認する。
 - 田中による範囲外リストとPR-E実装の確認・マージは未完了。
 - 実AI品質、人手評価、実画像を含む実機動作、PR-Gの会話実施と採点は未実施。
 - Productionリリース、DB migration、feature flag、Pilot/外部公開の変更はしていない。
