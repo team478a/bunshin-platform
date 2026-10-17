@@ -490,10 +490,20 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
         requestId: f.wish.id,
         operatorUserId: f.owner.id,
       };
-      expect(await conversation.readSharedConversationForOperator(operatorInput)).toMatchObject({
+      const sharedConversation =
+        await conversation.readSharedConversationForOperator(operatorInput);
+      expect(sharedConversation).toMatchObject({
         requestId: f.wish.id,
-        messages: [{ text: command.text }],
       });
+      expect(sharedConversation?.messages).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ role: 'USER', text: command.text }),
+          expect.objectContaining({
+            role: 'ASSISTANT',
+            text: '回答を受け取りました。次の確認をします。',
+          }),
+        ]),
+      );
       expect(
         await client.programAuditLog.count({
           where: {
