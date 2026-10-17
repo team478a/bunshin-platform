@@ -28,6 +28,10 @@ function fixture() {
     $queryRaw: vi.fn().mockResolvedValue([]),
     $executeRaw: vi.fn().mockResolvedValue(0),
     personalLearningPilotSeat: { ...table(), findFirst: vi.fn().mockResolvedValue(null) },
+    personalLearningTopic: table(),
+    personalLearningPersonaItem: table(),
+    personalLearningPersonaSuppression: table(),
+    personalLearningSavedExample: table(),
     groupMembership: {
       findFirst: vi.fn().mockResolvedValue({ id: 'membership-a', serviceRole: 'PARTICIPANT' }),
     },

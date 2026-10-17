@@ -2223,6 +2223,426 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
         }),
       ).not.toBeNull();
     });
+    it('dynamic retention purges D-1 topics, reviewed persona, suppressions, and saved examples after the summary deadline', async () => {
+      const f = await fixture(false);
+      const retentionNow = new Date(Date.now() + 1_000);
+      const program = await client.serviceProgram.findUniqueOrThrow({
+        where: { id: f.enrollment.serviceProgramId },
+      });
+      await client.serviceProgram.update({
+        where: { id: program.id },
+        data: {
+          settings: {
+            moduleKey: 'AI_TRAINING_V1',
+            personalLearningPilot: {
+              enabled: true,
+              enrollmentIds: [f.enrollment.id],
+              learningMode: 'DYNAMIC_V1',
+              learningFeatures: {
+                conversation: false,
+                multiTopic: true,
+                lineLearning: false,
+                extendedScope: false,
+              },
+            },
+          },
+        },
+      });
+      await client.programEnrollment.update({
+        where: { id: f.enrollment.id },
+        data: {
+          status: 'EXPIRED',
+          startsAt: new Date(retentionNow.getTime() - 3 * 366 * 86_400_000),
+          endsAt: new Date(retentionNow.getTime() - 2 * 366 * 86_400_000),
+        },
+      });
+      await client.personalLearningTopic.create({
+        data: {
+          workspaceId: f.scope.workspaceId,
+          groupId: f.scope.groupId,
+          programEnrollmentId: f.enrollment.id,
+          groupMembershipId: f.scope.groupMembershipId,
+          userId: f.scope.userId,
+          title: 'old topic',
+        },
+      });
+      await client.personalLearningPersonaItem.create({
+        data: {
+          workspaceId: f.scope.workspaceId,
+          groupId: f.scope.groupId,
+          groupMembershipId: f.scope.groupMembershipId,
+          userId: f.scope.userId,
+          attributeKey: 'learning_style',
+          value: 'short examples',
+          status: 'CONFIRMED',
+          evidenceType: 'LEARNING_REQUEST',
+          evidenceId: randomUUID(),
+          evidenceCreatedAt: new Date(retentionNow.getTime() - 3 * 366 * 86_400_000),
+        },
+      });
+      await client.personalLearningPersonaSuppression.create({
+        data: {
+          workspaceId: f.scope.workspaceId,
+          groupId: f.scope.groupId,
+          groupMembershipId: f.scope.groupMembershipId,
+          userId: f.scope.userId,
+          attributeKey: 'rejected_fact',
+        },
+      });
+      await client.personalLearningSavedExample.create({
+        data: {
+          workspaceId: f.scope.workspaceId,
+          groupId: f.scope.groupId,
+          groupMembershipId: f.scope.groupMembershipId,
+          userId: f.scope.userId,
+          title: 'old example',
+          content: 'expired learner-owned content',
+          sourceType: 'LEARNER_AUTHORED',
+          sourceId: randomUUID(),
+        },
+      });
+      await client.platformAdmin.create({
+        data: { userId: f.owner.id, role: 'SUPER_ADMIN', status: 'ACTIVE' },
+      });
+
+      const retention = new PrismaTrainingRetentionExecutionRepository(client);
+      const input = {
+        workspaceId: f.scope.workspaceId,
+        groupId: f.scope.groupId,
+        programEnrollmentId: f.enrollment.id,
+        operatorUserId: f.owner.id,
+        now: retentionNow,
+      };
+      const preview = await retention.preview(input);
+      if (preview.outcome !== 'PREVIEW') throw new Error('D-4 retention preview missing');
+      expect(preview.preview.counts).toMatchObject({
+        dynamicLearningDataDue: 4,
+        dynamicTopicsDue: 1,
+        personaItemsDue: 1,
+        personaSuppressionsDue: 1,
+        savedExamplesDue: 1,
+      });
+      expect(
+        await retention.execute({ ...input, revision: preview.preview.revision }),
+      ).toMatchObject({
+        outcome: 'APPLIED',
+      });
+      expect(
+        await client.personalLearningTopic.count({ where: { groupId: f.scope.groupId } }),
+      ).toBe(0);
+      expect(
+        await client.personalLearningPersonaItem.count({ where: { groupId: f.scope.groupId } }),
+      ).toBe(0);
+      expect(
+        await client.personalLearningPersonaSuppression.count({
+          where: { groupId: f.scope.groupId },
+        }),
+      ).toBe(0);
+      expect(
+        await client.personalLearningSavedExample.count({ where: { groupId: f.scope.groupId } }),
+      ).toBe(0);
+    });
+
+    it('privacy export and ALL deletion include existing D tables after learning mode and multiTopic are disabled', async () => {
+      const f = await fixture(false);
+      await client.serviceProgram.update({
+        where: { id: f.enrollment.serviceProgramId },
+        data: {
+          settings: {
+            moduleKey: 'AI_TRAINING_V1',
+            personalLearningPilot: {
+              enabled: true,
+              learningMode: 'DYNAMIC_V1',
+              learningFeatures: { multiTopic: true },
+            },
+          },
+        },
+      });
+      await client.personalLearningTopic.create({
+        data: {
+          workspaceId: f.scope.workspaceId,
+          groupId: f.scope.groupId,
+          programEnrollmentId: f.enrollment.id,
+          groupMembershipId: f.scope.groupMembershipId,
+          userId: f.scope.userId,
+          title: 'Existing topic after OFF',
+        },
+      });
+      await client.personalLearningPersonaItem.create({
+        data: {
+          workspaceId: f.scope.workspaceId,
+          groupId: f.scope.groupId,
+          groupMembershipId: f.scope.groupMembershipId,
+          userId: f.scope.userId,
+          attributeKey: 'learning_style',
+          value: '短い手順',
+          status: 'CONFIRMED',
+          evidenceType: 'LEARNING_REQUEST',
+          evidenceId: randomUUID(),
+          evidenceCreatedAt: now,
+        },
+      });
+      await client.personalLearningPersonaSuppression.create({
+        data: {
+          workspaceId: f.scope.workspaceId,
+          groupId: f.scope.groupId,
+          groupMembershipId: f.scope.groupMembershipId,
+          userId: f.scope.userId,
+          attributeKey: 'rejected_fact',
+        },
+      });
+      await client.personalLearningSavedExample.create({
+        data: {
+          workspaceId: f.scope.workspaceId,
+          groupId: f.scope.groupId,
+          groupMembershipId: f.scope.groupMembershipId,
+          userId: f.scope.userId,
+          title: 'Saved after opt-out',
+          content: '本人が保存した例',
+          sourceType: 'LEARNER_AUTHORED',
+          sourceId: randomUUID(),
+        },
+      });
+      await client.serviceProgram.update({
+        where: { id: f.enrollment.serviceProgramId },
+        data: { settings: { moduleKey: 'AI_TRAINING_V1' } },
+      });
+      const input = {
+        workspaceId: f.scope.workspaceId,
+        groupId: f.scope.groupId,
+        programEnrollmentId: f.enrollment.id,
+        actorUserId: f.scope.userId,
+      };
+      const exported = await new PrismaTrainingPersonalDataExportRepository(client).read(input);
+      if (exported.outcome !== 'FOUND') throw new Error('privacy export missing');
+      expect(exported.data.dynamicLearning).toHaveLength(4);
+
+      const deletion = new PrismaTrainingPersonalDataDeletionRepository(client);
+      const target = { ...input, target: { kind: 'ALL' as const } };
+      const preview = await deletion.preview(target);
+      if (preview.outcome !== 'PREVIEW') throw new Error('ALL deletion preview missing');
+      expect(preview.preview.counts.dynamicLearningData).toBe(4);
+      expect(
+        await deletion.delete({ ...target, revision: preview.preview.revision, now }),
+      ).toMatchObject({ outcome: 'DELETED' });
+      expect(
+        await client.personalLearningTopic.count({ where: { groupId: f.scope.groupId } }),
+      ).toBe(0);
+      expect(
+        await client.personalLearningPersonaItem.count({ where: { groupId: f.scope.groupId } }),
+      ).toBe(0);
+      expect(
+        await client.personalLearningPersonaSuppression.count({
+          where: { groupId: f.scope.groupId },
+        }),
+      ).toBe(0);
+      expect(
+        await client.personalLearningSavedExample.count({ where: { groupId: f.scope.groupId } }),
+      ).toBe(0);
+    });
+
+    it('service-scoped D retention waits for active sibling enrollment and uses service-wide end and last use', async () => {
+      const f = await fixture(false);
+      const retentionNow = new Date('2026-10-18T00:00:00Z');
+      const firstEnd = new Date(retentionNow.getTime() - 3 * 366 * 86_400_000);
+      await client.serviceProgram.update({
+        where: { id: f.enrollment.serviceProgramId },
+        data: {
+          settings: {
+            moduleKey: 'AI_TRAINING_V1',
+            personalLearningPilot: {
+              enabled: true,
+              learningMode: 'DYNAMIC_V1',
+              learningFeatures: { multiTopic: true },
+            },
+          },
+        },
+      });
+      await client.programEnrollment.update({
+        where: { id: f.enrollment.id },
+        data: {
+          status: 'EXPIRED',
+          startsAt: new Date(retentionNow.getTime() - 4 * 366 * 86_400_000),
+          endsAt: firstEnd,
+        },
+      });
+      const originalProgram = await client.serviceProgram.findUniqueOrThrow({
+        where: { id: f.enrollment.serviceProgramId },
+      });
+      const secondProgram = await client.serviceProgram.create({
+        data: {
+          workspaceId: f.scope.workspaceId,
+          groupId: f.scope.groupId,
+          programTemplateVersionId: originalProgram.programTemplateVersionId,
+          displayName: 'Second course in same service',
+          description: 'Synthetic sibling enrollment',
+          status: 'ACTIVE',
+          settings: { moduleKey: 'AI_TRAINING_V1' },
+          createdByUserId: f.owner.id,
+        },
+      });
+      const secondOffering = await client.programOffering.create({
+        data: {
+          workspaceId: f.scope.workspaceId,
+          groupId: f.scope.groupId,
+          serviceProgramId: secondProgram.id,
+          version: 1,
+          status: 'ACTIVE',
+          seller: 'SERVICE',
+          priceOwner: 'SERVICE',
+          paymentOwner: 'SERVICE',
+          apiCostOwner: 'PLATFORM',
+          supportOwner: 'SERVICE',
+          contentOwner: 'SERVICE',
+          characterOwner: 'SERVICE',
+          termsSnapshot: {},
+          createdByUserId: f.owner.id,
+        },
+      });
+      const secondEnrollment = await client.programEnrollment.create({
+        data: {
+          workspaceId: f.scope.workspaceId,
+          groupId: f.scope.groupId,
+          groupMembershipId: f.scope.groupMembershipId,
+          serviceProgramId: secondProgram.id,
+          programOfferingId: secondOffering.id,
+          status: 'ACTIVE',
+          supportMode: 'GUIDED',
+          goalSnapshot: {},
+          offeringSnapshot: {},
+          invitedByUserId: f.owner.id,
+          startsAt: new Date(retentionNow.getTime() - 100 * 86_400_000),
+          endsAt: new Date(retentionNow.getTime() + 100 * 86_400_000),
+        },
+      });
+      await client.personalLearningTopic.create({
+        data: {
+          workspaceId: f.scope.workspaceId,
+          groupId: f.scope.groupId,
+          programEnrollmentId: f.enrollment.id,
+          groupMembershipId: f.scope.groupMembershipId,
+          userId: f.scope.userId,
+          title: 'Old enrollment topic',
+          lastLearnerUseAt: firstEnd,
+        },
+      });
+      await client.personalLearningPersonaItem.create({
+        data: {
+          workspaceId: f.scope.workspaceId,
+          groupId: f.scope.groupId,
+          groupMembershipId: f.scope.groupMembershipId,
+          userId: f.scope.userId,
+          attributeKey: 'learning_style',
+          value: 'service scoped',
+          status: 'CONFIRMED',
+          evidenceType: 'LEARNING_REQUEST',
+          evidenceId: randomUUID(),
+          evidenceCreatedAt: firstEnd,
+          lastLearnerUseAt: new Date(retentionNow.getTime() - 10 * 86_400_000),
+        },
+      });
+      await client.personalLearningPersonaSuppression.create({
+        data: {
+          workspaceId: f.scope.workspaceId,
+          groupId: f.scope.groupId,
+          groupMembershipId: f.scope.groupMembershipId,
+          userId: f.scope.userId,
+          attributeKey: 'rejected_fact',
+        },
+      });
+      await client.personalLearningSavedExample.create({
+        data: {
+          workspaceId: f.scope.workspaceId,
+          groupId: f.scope.groupId,
+          groupMembershipId: f.scope.groupMembershipId,
+          userId: f.scope.userId,
+          title: 'service example',
+          content: 'service-scoped',
+          sourceType: 'LEARNER_AUTHORED',
+          sourceId: randomUUID(),
+          lastLearnerUseAt: new Date(retentionNow.getTime() - 10 * 86_400_000),
+        },
+      });
+      await client.platformAdmin.create({
+        data: { userId: f.owner.id, role: 'SUPER_ADMIN', status: 'ACTIVE' },
+      });
+      await client.serviceProgram.update({
+        where: { id: f.enrollment.serviceProgramId },
+        data: { settings: { moduleKey: 'AI_TRAINING_V1' } },
+      });
+
+      const retention = new PrismaTrainingRetentionExecutionRepository(client);
+      const input = {
+        workspaceId: f.scope.workspaceId,
+        groupId: f.scope.groupId,
+        programEnrollmentId: f.enrollment.id,
+        operatorUserId: f.owner.id,
+        now: retentionNow,
+      };
+      let preview = await retention.preview(input);
+      if (preview.outcome !== 'PREVIEW')
+        throw new Error('active-sibling retention preview missing');
+      expect(preview.preview.counts).toMatchObject({
+        dynamicTopicsDue: 1,
+        personaItemsDue: 0,
+        personaSuppressionsDue: 0,
+        savedExamplesDue: 0,
+      });
+      await retention.execute({ ...input, revision: preview.preview.revision });
+      expect(
+        await client.personalLearningPersonaItem.count({ where: { groupId: f.scope.groupId } }),
+      ).toBe(1);
+
+      await client.programEnrollment.update({
+        where: { id: secondEnrollment.id },
+        data: {
+          status: 'EXPIRED',
+          startsAt: new Date(retentionNow.getTime() - 200 * 86_400_000),
+          endsAt: new Date(retentionNow.getTime() - 100 * 86_400_000),
+        },
+      });
+      preview = await retention.preview(input);
+      if (preview.outcome !== 'PREVIEW') throw new Error('service retention preview missing');
+      expect(preview.preview.counts).toMatchObject({
+        personaItemsDue: 0,
+        personaSuppressionsDue: 0,
+        savedExamplesDue: 0,
+      });
+      await retention.execute({ ...input, revision: preview.preview.revision });
+      expect(
+        await client.personalLearningSavedExample.count({ where: { groupId: f.scope.groupId } }),
+      ).toBe(1);
+
+      await client.personalLearningPersonaItem.updateMany({
+        where: { groupMembershipId: f.scope.groupMembershipId },
+        data: { lastLearnerUseAt: new Date(retentionNow.getTime() - 3 * 366 * 86_400_000) },
+      });
+      await client.personalLearningSavedExample.updateMany({
+        where: { groupMembershipId: f.scope.groupMembershipId },
+        data: { lastLearnerUseAt: new Date(retentionNow.getTime() - 3 * 366 * 86_400_000) },
+      });
+      preview = await retention.preview(input);
+      if (preview.outcome !== 'PREVIEW')
+        throw new Error('expired service retention preview missing');
+      expect(preview.preview.counts).toMatchObject({
+        personaItemsDue: 1,
+        personaSuppressionsDue: 1,
+        savedExamplesDue: 1,
+      });
+      await retention.execute({ ...input, revision: preview.preview.revision });
+      expect(
+        await client.personalLearningPersonaItem.count({ where: { groupId: f.scope.groupId } }),
+      ).toBe(0);
+      expect(
+        await client.personalLearningPersonaSuppression.count({
+          where: { groupId: f.scope.groupId },
+        }),
+      ).toBe(0);
+      expect(
+        await client.personalLearningSavedExample.count({ where: { groupId: f.scope.groupId } }),
+      ).toBe(0);
+    });
+
     it('dynamic retention deletes activity records in batches beyond 2,000 and falls back to enrollment start', async () => {
       const f = await fixture(false);
       const program = await client.serviceProgram.findUniqueOrThrow({

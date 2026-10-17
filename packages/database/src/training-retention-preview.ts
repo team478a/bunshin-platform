@@ -14,6 +14,7 @@ import {
 } from '@bunshin/capability-training';
 import type { Prisma, PrismaClient } from '@prisma/client';
 import { prisma } from './index';
+import { trainingRetentionSnapshot } from './training-retention-snapshot';
 
 async function readRetentionPreview(
   tx: Prisma.TransactionClient,
@@ -23,13 +24,21 @@ async function readRetentionPreview(
   const scope = { workspaceId: input.workspaceId, groupId: input.groupId };
   const programs = await tx.serviceProgram.findMany({
     where: { ...scope, settings: { path: ['moduleKey'], equals: AI_TRAINING_V1_MODULE_KEY } },
-    select: { id: true },
+    select: { id: true, settings: true },
     take: 1001,
   });
   if (programs.length > 1000) return { outcome: 'TOO_LARGE' };
   const enrollments = await tx.programEnrollment.findMany({
     where: { ...scope, serviceProgramId: { in: programs.map(({ id }) => id) } },
-    select: { id: true, groupMembershipId: true, status: true, endsAt: true },
+    select: {
+      id: true,
+      groupMembershipId: true,
+      serviceProgramId: true,
+      status: true,
+      startsAt: true,
+      endsAt: true,
+      updatedAt: true,
+    },
     orderBy: { id: 'asc' },
     take: TRAINING_RETENTION_MAX_ENROLLMENTS + 1,
   });
@@ -43,13 +52,15 @@ async function readRetentionPreview(
     scoreProfilesDue: 0,
     progressSnapshotsDue: 0,
     retainedToolkit: 0,
+    dynamicLearningDataDue: 0,
     endDateUnresolved: 0,
     ownershipUnresolved: 0,
   };
+  const countedServiceSummary = new Set<string>();
   for (const enrollment of enrollments) {
     const membership = await tx.groupMembership.findFirst({
       where: { ...scope, id: enrollment.groupMembershipId, serviceRole: 'PARTICIPANT' },
-      select: { userId: true },
+      select: { id: true, userId: true },
     });
     if (!membership) {
       summary.ownershipUnresolved++;
@@ -92,6 +103,35 @@ async function readRetentionPreview(
     if (ended.progressAndScoresDue && !retention?.progressPurgedAt)
       summary.scoreProfilesDue += profiles;
     summary.progressSnapshotsDue += progress;
+    const program = programs.find(({ id }) => id === enrollment.serviceProgramId);
+    if (program) {
+      const dynamicSnapshot = await trainingRetentionSnapshot(
+        tx,
+        {
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          programEnrollmentId: enrollment.id,
+          operatorUserId: membership.userId,
+          now: input.now,
+        },
+        { outcome: 'OWNED', enrollment, membership, program },
+      );
+      if (dynamicSnapshot.outcome === 'PREVIEW' && dynamicSnapshot.dynamic) {
+        const counts = dynamicSnapshot.preview.counts;
+        const serviceSummaryAlreadyCounted = countedServiceSummary.has(
+          enrollment.groupMembershipId,
+        );
+        summary.dynamicLearningDataDue =
+          (summary.dynamicLearningDataDue ?? 0) +
+          (counts.dynamicTopicsDue ?? 0) +
+          (serviceSummaryAlreadyCounted
+            ? 0
+            : (counts.personaItemsDue ?? 0) +
+              (counts.personaSuppressionsDue ?? 0) +
+              (counts.savedExamplesDue ?? 0));
+        countedServiceSummary.add(enrollment.groupMembershipId);
+      } else if (dynamicSnapshot.outcome === 'TOO_LARGE') return { outcome: 'TOO_LARGE' };
+    }
   }
   return { outcome: 'PREVIEW', summary };
 }
