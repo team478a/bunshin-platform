@@ -41,7 +41,7 @@
 - Web関連ユニットテスト: 2ファイル14テスト成功（保存例UI、運営保持画面）。
 - サービス認証route inventoryテスト: 106 tests passed。保存例ページがLINE認証復帰先として受理され、登録済みrouteも維持されることを確認。
 - Prettier check、`git diff --check`: 成功。
-- この追加修正後の統合テストは、使い捨てPostgreSQLを使うGitHub Actions `database` CIで確認予定。以前のrun `39053622740`は今回の修正前のheadに対する成功結果のため、今回の検証結果とは扱わない。本番DBには接続していない。
+- 追加修正後のGitHub Actions run `39057952450` が成功（`verify` / `database`）。使い捨てPostgreSQL上の `pnpm test:integration` を含むDB統合テスト、buildを含むCIが通過した。以前のrun `39053622740`は今回の修正前のheadに対する成功結果のため、今回の検証結果とは扱わない。本番DBには接続していない。
 
 ## 5. 未解決事項・次の条件
 
