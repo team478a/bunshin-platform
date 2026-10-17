@@ -448,17 +448,16 @@ async function dynamicTrainingRetentionSnapshot(
     .map(({ startsAt }) => startsAt)
     .filter((value): value is Date => value instanceof Date)
     .reduce<Date | null>((latest, date) => (!latest || date > latest ? date : latest), null);
-  const serviceLastLearnerUseAt = [
-    latestServiceEvent?.occurredAt,
-    latestServiceRequest?.createdAt,
-    latestServiceAnswer?.createdAt,
-    ...latestDynamicDataUse.map((row) => row?.lastLearnerUseAt),
-  ]
-    .filter((value): value is Date => value instanceof Date)
-    .reduce<Date | null>(
-      (latest, date) => (!latest || date > latest ? date : latest),
-      serviceFallbackStart,
-    );
+  const serviceLastLearnerUseAt =
+    [
+      latestServiceEvent?.occurredAt,
+      latestServiceRequest?.createdAt,
+      latestServiceAnswer?.createdAt,
+      ...latestDynamicDataUse.map((row) => row?.lastLearnerUseAt),
+    ]
+      .filter((value): value is Date => value instanceof Date)
+      .reduce<Date | null>((latest, date) => (!latest || date > latest ? date : latest), null) ??
+    serviceFallbackStart;
   const latestEnrollmentTopicUse = await tx.personalLearningTopic.findFirst({
     where: {
       workspaceId: input.workspaceId,
