@@ -16,12 +16,25 @@ export function AiTrainingDataDeletionCard({
   const headingId = useId();
   const [choice, setChoice] = useState('ALL');
   const [answers, setAnswers] = useState<TrainingDataDeletionPreview['answers']>([]);
+  const [learningRequests, setLearningRequests] = useState<
+    TrainingDataDeletionPreview['learningRequests']
+  >([]);
   const [preview, setPreview] = useState<TrainingDataDeletionPreview | null>(null);
   const [confirmed, setConfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
-  const target: TrainingDataDeletionTarget =
-    choice === 'ALL' ? { kind: 'ALL' } : { kind: 'ANSWER', answerId: choice };
+  const target: TrainingDataDeletionTarget = choice.startsWith('REQUEST:')
+    ? (() => {
+        const [, requestId, revision] = choice.split(':');
+        return {
+          kind: 'LEARNING_REQUEST',
+          requestId: requestId!,
+          requestRevision: Number(revision),
+        };
+      })()
+    : choice === 'ALL'
+      ? { kind: 'ALL' }
+      : { kind: 'ANSWER', answerId: choice };
   const base = `/api/services/${encodeURIComponent(serviceSlug)}/ai-training/enrollments/${encodeURIComponent(programEnrollmentId)}/personal-data`;
 
   async function submit(action: 'preview' | 'delete') {
@@ -58,12 +71,16 @@ export function AiTrainingDataDeletionCard({
       const result = (await response.json()) as { data: { preview: TrainingDataDeletionPreview } };
       if (action === 'preview') {
         setPreview(result.data.preview);
-        if (choice === 'ALL') setAnswers(result.data.preview.answers);
+        if (choice === 'ALL') {
+          setAnswers(result.data.preview.answers);
+          setLearningRequests(result.data.preview.learningRequests);
+        }
         setConfirmed(false);
       } else {
         setPreview(null);
         setConfirmed(false);
         setAnswers([]);
+        setLearningRequests([]);
         setChoice('ALL');
         setMessage('アプリ内の対象データを削除しました。表示を更新してください。');
       }
@@ -97,14 +114,23 @@ export function AiTrainingDataDeletionCard({
               {new Date(answer.createdAt).toLocaleString('ja-JP')}の回答
             </option>
           ))}
+          {learningRequests.map((request) => (
+            <option key={request.id} value={`REQUEST:${request.id}:${request.revision}`}>
+              {new Date(request.createdAt).toLocaleString('ja-JP')}の学習テーマ・会話
+            </option>
+          ))}
         </select>
       </label>
       <p>
-        回答を1件選ぶには、まず「削除対象を確認」を押してください。回答本文はこの一覧には表示しません。
+        回答または学習テーマ・会話を1件選ぶには、まず「削除対象を確認」を押してください。本文はこの一覧には表示しません。
       </p>
       {choice === 'ALL' ? (
         <p>
           回答・AI評価・関連Toolkit・仕事情報・点数・進捗・課題・活動履歴・目標・研修設定を削除します。参加状態は変わりません。継続する場合は初期設定を入力し直してください。
+        </p>
+      ) : choice.startsWith('REQUEST:') ? (
+        <p>
+          選んだ学習テーマ・会話とその希望・環境を削除します。参加状態や他の学習テーマは残ります。
         </p>
       ) : (
         <p>
@@ -131,6 +157,9 @@ export function AiTrainingDataDeletionCard({
             {preview.counts.goals}件 / 研修設定 {preview.counts.preferences}件
             {preview.counts.learningRequests !== undefined && (
               <> / 自由な学習希望 {preview.counts.learningRequests}件</>
+            )}
+            {preview.counts.conversationEvents !== undefined && (
+              <> / 会話イベント {preview.counts.conversationEvents}件</>
             )}
           </p>
           <p>未完了の関連評価は停止します。外部AIへ送信済みの処理は撤回を保証できません。</p>

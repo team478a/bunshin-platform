@@ -114,6 +114,16 @@ export class PrismaTrainingPersonalDataDeletionRepository implements TrainingPer
             },
           });
           await tx.programActionEvent.deleteMany({ where: snapshot.eventWhere });
+          if (input.target.kind === 'LEARNING_REQUEST') {
+            await tx.personalLearningRequest.deleteMany({
+              where: {
+                ...personal,
+                groupMembershipId: owned.membershipId,
+                id: input.target.requestId,
+                revision: input.target.requestRevision,
+              },
+            });
+          }
           if (all) {
             await tx.personalLearningRequest.deleteMany({
               where: { ...personal, groupMembershipId: owned.membershipId },
@@ -266,6 +276,8 @@ export class PrismaTrainingPersonalDataDeletionRepository implements TrainingPer
     owned: { membershipId: string; enrollmentUpdatedAt: Date },
   ) {
     const all = input.target.kind === 'ALL';
+    const answerTarget = input.target.kind === 'ANSWER';
+    const learningRequestTarget = input.target.kind === 'LEARNING_REQUEST';
     const scope = {
       workspaceId: input.workspaceId,
       groupId: input.groupId,
@@ -278,13 +290,36 @@ export class PrismaTrainingPersonalDataDeletionRepository implements TrainingPer
     const answers = await tx.trainingMissionAnswer.findMany({
       where: {
         ...personal,
-        ...(input.target.kind === 'ANSWER' ? { id: input.target.answerId } : {}),
+        ...(input.target.kind === 'ANSWER'
+          ? { id: input.target.answerId }
+          : all
+            ? {}
+            : { id: { in: [] } }),
       },
       select: { ...select, missionAssignmentId: true, createdAt: true, evaluationStatus: true },
       orderBy,
       take,
     });
-    if (!all && !answers.length) return { outcome: 'NOT_FOUND' } as const;
+    const learningRequests =
+      all || learningRequestTarget
+        ? await tx.personalLearningRequest.findMany({
+            where: {
+              ...personal,
+              groupMembershipId: owned.membershipId,
+              ...(input.target.kind === 'LEARNING_REQUEST'
+                ? {
+                    id: input.target.requestId,
+                    revision: input.target.requestRevision,
+                  }
+                : {}),
+            },
+            select: { id: true, revision: true, createdAt: true, updatedAt: true },
+            orderBy,
+            take,
+          })
+        : [];
+    if (answerTarget && !answers.length) return { outcome: 'NOT_FOUND' } as const;
+    if (learningRequestTarget && !learningRequests.length) return { outcome: 'NOT_FOUND' } as const;
     const toolkit = await tx.trainingToolkitItem.findMany({
       where: {
         ...personal,
@@ -294,24 +329,29 @@ export class PrismaTrainingPersonalDataDeletionRepository implements TrainingPer
       orderBy,
       take,
     });
-    const eventWhere: Prisma.ProgramActionEventWhereInput = {
+    let eventWhere: Prisma.ProgramActionEventWhereInput = {
       ...scope,
       eventType: { not: TRAINING_ENROLLMENT_EXPIRED_EVENT },
       ...(all
         ? {}
-        : {
-            actorUserId: input.actorUserId,
-            OR: [
-              {
-                sourceResourceType: 'TRAINING_MISSION_ANSWER',
-                sourceResourceId: { in: answers.map((row) => row.id) },
-              },
-              {
-                sourceResourceType: 'TRAINING_TOOLKIT_ITEM',
-                sourceResourceId: { in: toolkit.map((row) => row.id) },
-              },
-            ],
-          }),
+        : learningRequestTarget
+          ? {
+              actorUserId: input.actorUserId,
+              id: { in: [] as string[] },
+            }
+          : {
+              actorUserId: input.actorUserId,
+              OR: [
+                {
+                  sourceResourceType: 'TRAINING_MISSION_ANSWER',
+                  sourceResourceId: { in: answers.map((row) => row.id) },
+                },
+                {
+                  sourceResourceType: 'TRAINING_TOOLKIT_ITEM',
+                  sourceResourceId: { in: toolkit.map((row) => row.id) },
+                },
+              ],
+            }),
     };
     const activities = await tx.programActionEvent.findMany({
       where: eventWhere,
@@ -319,6 +359,59 @@ export class PrismaTrainingPersonalDataDeletionRepository implements TrainingPer
       orderBy,
       take,
     });
+    let conversationEventsCount = 0;
+    if (learningRequestTarget) {
+      const threadEvents = await tx.programActionEvent.findMany({
+        where: {
+          ...scope,
+          OR: [
+            {
+              actorUserId: input.actorUserId,
+              eventType: {
+                in: [
+                  'PERSONAL_LEARNING_CONVERSATION_MESSAGE',
+                  'PERSONAL_LEARNING_CONVERSATION_RESPONSE',
+                  'PERSONAL_LEARNING_CONVERSATION_SHARE',
+                ],
+              },
+            },
+            {
+              sourceResourceType: 'PERSONAL_LEARNING_REQUEST',
+              sourceResourceId: learningRequests[0]!.id,
+            },
+          ],
+        },
+        select: {
+          id: true,
+          eventType: true,
+          sourceResourceType: true,
+          sourceResourceId: true,
+          createdAt: true,
+          metadata: true,
+        },
+        orderBy,
+        take,
+      });
+      const matching = threadEvents.filter((row) => {
+        const metadata =
+          row.metadata && typeof row.metadata === 'object' && !Array.isArray(row.metadata)
+            ? (row.metadata as Record<string, unknown>)
+            : {};
+        return row.sourceResourceType === 'PERSONAL_LEARNING_REQUEST'
+          ? row.sourceResourceId === learningRequests[0]?.id
+          : metadata['threadId'] === learningRequests[0]?.id &&
+              metadata['requestRevision'] === learningRequests[0]?.revision;
+      });
+      conversationEventsCount = matching.filter(({ eventType }) =>
+        eventType.startsWith('PERSONAL_LEARNING_CONVERSATION_'),
+      ).length;
+      eventWhere = { ...scope, id: { in: matching.map(({ id }) => id) } };
+      activities.splice(
+        0,
+        activities.length,
+        ...matching.map(({ id, createdAt }) => ({ id, createdAt })),
+      );
+    }
     const [profiles, progress, assignments, goals, preferences] = all
       ? await Promise.all([
           tx.trainingParticipantProfile.findMany({
@@ -353,14 +446,6 @@ export class PrismaTrainingPersonalDataDeletionRepository implements TrainingPer
       goals,
       preferences,
     };
-    const learningRequests = all
-      ? await tx.personalLearningRequest.findMany({
-          where: { ...personal, groupMembershipId: owned.membershipId },
-          select,
-          orderBy,
-          take,
-        })
-      : [];
     const snapshotRows = { ...rows, learningRequests };
     if (Object.values(snapshotRows).some((list) => list.length > TRAINING_EXPORT_MAX_ROWS))
       return { outcome: 'TOO_LARGE' } as const;
@@ -393,12 +478,26 @@ export class PrismaTrainingPersonalDataDeletionRepository implements TrainingPer
           goals: goals.length,
           preferences: preferences.length,
           ...(learningRequests.length > 0 ? { learningRequests: learningRequests.length } : {}),
+          ...(learningRequestTarget ? { conversationEvents: conversationEventsCount } : {}),
         },
         answers: answers.map((row) => ({
           id: row.id,
           createdAt: row.createdAt.toISOString(),
           evaluationStatus: row.evaluationStatus,
         })),
+        learningRequests: learningRequests.map((row) => ({
+          id: row.id,
+          revision: row.revision,
+          createdAt: row.createdAt.toISOString(),
+        })),
+        ...(learningRequestTarget
+          ? {
+              learningRequest: {
+                id: learningRequests[0]!.id,
+                revision: learningRequests[0]!.revision,
+              },
+            }
+          : {}),
       },
     };
   }
