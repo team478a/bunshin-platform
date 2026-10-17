@@ -3,6 +3,7 @@ import type { PersonalLearningPractice, SavedPracticeSupport } from '@bunshin/ap
 import {
   learningSupportBody,
   generateLearningSupport,
+  learningSupportPromptVersion,
 } from '../src/providers/openai-learning-support';
 const practice: PersonalLearningPractice = {
   assignmentId: 'a',
@@ -85,6 +86,28 @@ function raw(value: unknown = advice) {
   };
 }
 describe('practice support Provider', () => {
+  it('keeps the prior scope when OFF and adds screenshot-grounded tool guidance only when ON', () => {
+    const system = (extendedScope: boolean) => {
+      const outgoing = JSON.parse(
+        learningSupportBody(
+          practice,
+          request,
+          'gpt-5.2',
+          { maxRequestBytes: 16000, maxOutputTokens: 1000 },
+          null,
+          extendedScope,
+        ),
+      ) as { input: { role: string; content: string }[] };
+      return outgoing.input.find((item) => item.role === 'system')!.content;
+    };
+    expect(learningSupportPromptVersion(false)).toBe('learning-practice-support-vision-v1');
+    expect(system(false)).toContain('公式参照情報は未接続');
+    expect(learningSupportPromptVersion(true)).toBe('learning-practice-support-vision-v2');
+    expect(system(true)).toContain('一般的な手順');
+    expect(system(true)).toContain('本人が自分で試す具体的な一歩');
+    expect(system(true)).toContain('外部サービスへのログイン・投稿・公開・送信');
+  });
+
   it('sends the saved screenshot as low-detail input without changing the approved request', () => {
     const bytes = Buffer.from([255, 216, 255, 217]);
     const image = {

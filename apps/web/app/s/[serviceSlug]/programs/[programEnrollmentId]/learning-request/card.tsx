@@ -180,6 +180,9 @@ export function PersonalLearningRequestCard({
           request={saved}
           initial={initialConversation?.requestId === saved.id ? initialConversation : null}
           candidate={candidate?.requestId === saved.id ? candidate : null}
+          practiceEndpoint={practiceEndpoint ?? ''}
+          practice={practice}
+          onPracticeChange={setPractice}
           onCandidateChange={setCandidate}
         />
       )}
