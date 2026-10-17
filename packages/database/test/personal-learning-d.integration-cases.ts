@@ -2,6 +2,10 @@ import { randomUUID } from 'node:crypto';
 import type { PrismaClient } from '@prisma/client';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
+  personalLearningDynamicProgramAllows,
+  personalLearningFeatureEnabled,
+} from '@bunshin/capability-training';
+import {
   PrismaPersonalLearningPersonaRepository,
   PrismaPersonalLearningSavedExamplesRepository,
   PrismaPersonalLearningTopicRepository,
@@ -244,6 +248,15 @@ export function registerPersonalLearningDIntegrationCases(client: PrismaClient) 
       expect(await topics.create(fixedPath.scope, { title: 'Must not be stored' })).toMatchObject({
         outcome: 'NOT_FOUND',
       });
+      const freshProgram = await client.serviceProgram.findUniqueOrThrow({
+        where: { id: first.program.id },
+        select: { settings: true },
+      });
+      expect(personalLearningDynamicProgramAllows(freshProgram.settings, first.enrollmentId)).toBe(
+        true,
+      );
+      expect(personalLearningFeatureEnabled(freshProgram.settings, 'multiTopic')).toBe(true);
+      expect(await topics.list(first.scope)).not.toBeNull();
       const created = await topics.create(first.scope, { title: 'Private topic' });
       expect(created.outcome).toBe('CREATED');
       if (created.outcome !== 'CREATED') throw new Error('test topic not created');
