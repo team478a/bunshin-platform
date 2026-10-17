@@ -25,7 +25,14 @@ export async function personalLearningTopicsResponse(
     }
     const user = await (await currentUserProvider()).getCurrentUser();
     if (!user) throw new ApplicationError('UNAUTHENTICATED', 'session required');
-    const actor = await resolvePersonalLearningRequestActor(slug, enrollmentId, user.userId);
+    const actor = await resolvePersonalLearningRequestActor(
+      slug,
+      enrollmentId,
+      user.userId,
+      undefined,
+      undefined,
+      { allowUnselectedTopic: true },
+    );
     const repo = new PrismaPersonalLearningTopicRepository(prisma);
     if (request.method === 'GET')
       return Response.json({ data: await repo.list(actor.scope) }, { headers });

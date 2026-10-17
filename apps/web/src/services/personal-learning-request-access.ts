@@ -23,6 +23,7 @@ export async function resolvePersonalLearningRequestActor(
   userId: string,
   requiredFeature?: PersonalLearningFeature,
   selectedTopicId?: string | null,
+  options: { allowUnselectedTopic?: boolean } = {},
 ): Promise<PersonalLearningActor> {
   if (
     !personalLearningRequestEnabled() ||
@@ -124,6 +125,10 @@ export async function resolvePersonalLearningRequestActor(
     } else if (topics.length === 1) {
       // A single migrated theme keeps the enrollment URL and one-theme experience unchanged.
       topicId = topics[0]!.id;
+    } else if (!options.allowUnselectedTopic) {
+      // Zero or ambiguous themes must never authorize a wish, conversation, practice, or candidate.
+      // Theme selection/list/create surfaces opt in explicitly while doing no topic-scoped work.
+      throw new ApplicationError('NOT_FOUND', 'learning request unavailable');
     }
   } else {
     // multiTopic OFF keeps the original single-theme route bound to its oldest migrated wish.

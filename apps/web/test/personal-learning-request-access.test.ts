@@ -110,18 +110,17 @@ describe('learning request exposure and ownership', () => {
     expect(f.topics).not.toHaveBeenCalled();
   });
   it('selects only an active owned theme when multiTopic is enabled', async () => {
-    f.program.mockResolvedValue({
-      settings: {
-        ...settings,
-        personalLearningPilot: {
-          ...settings.personalLearningPilot,
-          learningFeatures: {
-            ...settings.personalLearningPilot.learningFeatures,
-            multiTopic: true,
-          },
+    const multiTopicSettings = {
+      ...settings,
+      personalLearningPilot: {
+        ...settings.personalLearningPilot,
+        learningFeatures: {
+          ...settings.personalLearningPilot.learningFeatures,
+          multiTopic: true,
         },
       },
-    });
+    };
+    f.program.mockResolvedValue({ settings: multiTopicSettings });
     f.topics.mockResolvedValue([{ id: '00000000-0000-4000-8000-000000000002' }]);
     await expect(
       resolvePersonalLearningRequestActor(
@@ -154,6 +153,51 @@ describe('learning request exposure and ownership', () => {
         '00000000-0000-4000-8000-000000000099',
       ),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+  it('rejects an unresolved theme when multiTopic is enabled, except on explicit selection surfaces', async () => {
+    const multiTopicSettings = {
+      ...settings,
+      personalLearningPilot: {
+        ...settings.personalLearningPilot,
+        learningFeatures: {
+          ...settings.personalLearningPilot.learningFeatures,
+          multiTopic: true,
+        },
+      },
+    };
+    f.program.mockResolvedValue({ settings: multiTopicSettings });
+
+    f.topics.mockResolvedValue([]);
+    await expect(
+      resolvePersonalLearningRequestActor('slug', enrollmentId, 'user'),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    const selectionActor = await resolvePersonalLearningRequestActor(
+      'slug',
+      enrollmentId,
+      'user',
+      undefined,
+      undefined,
+      { allowUnselectedTopic: true },
+    );
+    expect(selectionActor.scope.userId).toBe('user');
+    expect(selectionActor).not.toHaveProperty('topicId');
+
+    f.topics.mockResolvedValue([
+      { id: '00000000-0000-4000-8000-000000000002' },
+      { id: '00000000-0000-4000-8000-000000000003' },
+    ]);
+    await expect(
+      resolvePersonalLearningRequestActor('slug', enrollmentId, 'user'),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(
+      resolvePersonalLearningRequestActor(
+        'slug',
+        enrollmentId,
+        'user',
+        undefined,
+        '00000000-0000-4000-8000-000000000003',
+      ),
+    ).resolves.toMatchObject({ topicId: '00000000-0000-4000-8000-000000000003' });
   });
   it('non-member denied', async () => {
     f.membership.mockResolvedValue(null);

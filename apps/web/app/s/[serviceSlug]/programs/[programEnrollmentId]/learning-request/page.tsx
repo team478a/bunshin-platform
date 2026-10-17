@@ -31,6 +31,7 @@ export default async function Page({
       actor.userId,
       undefined,
       selectedTopicId,
+      { allowUnselectedTopic: true },
     );
     const db = await import('@bunshin/database');
     const enrollment = await db.prisma.programEnrollment.findFirst({
