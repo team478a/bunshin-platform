@@ -42,7 +42,8 @@
 - Database/Web typecheck: 成功。変更対象のESLintとPrettier check: 成功。
 - Database unit test: 208 files / 1,026 tests成功。本人像UI test: 1 file / 1 test成功。
 - 使い捨てPostgreSQLで新migration適用と`db:assert-ready`: 成功。本人像の統合テストを絞って実行: 2 tests成功（238件skip）。
-- 同DBで全統合テストを実行した際は239/240件成功。失敗した1件は既存の別領域のAI利用枠`personal_learning_call_admissions_settled_check`制約違反で、本人像関連ではない。CIの`database`結果も確認し、未解決なら報告を更新する。
+- 同DBで全統合テストを実行した際は239/240件成功。失敗した1件は既存の別領域のAI利用枠`personal_learning_call_admissions_settled_check`制約違反で、本人像関連ではない。PR CI run `39038320542` では全体の`verify`・`database`が成功し、統合テストも成功した。
+- PR CI `verify`: format check / typecheck / lint / 全test / Learning UI test / build成功。`database`: `db:validate` / migration deploy / readiness gate / integration test成功。
 - Database readinessの`LATEST_DATABASE_MIGRATION`を本PRのmigrationに追随させた。migrationは隔離された使い捨てDBにのみ適用。本番には接続していない。
 - 本番migration適用・本番へのプログラム反映・フラグ変更は行っていない。
 
@@ -53,5 +54,5 @@
 
 ## 7. 次へ進める条件
 
-- 追補PRの`verify`および`database`が成功し、削除/抑止/本人による解除の経路をレビューする。
+- 追補PRの`verify`および`database`は成功済み。削除/抑止/本人による解除の経路をレビューする。
 - 推測生成は本PRに含めず、上記提案を別途確認後に実装判断する。
