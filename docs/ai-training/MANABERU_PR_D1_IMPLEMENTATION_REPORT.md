@@ -37,17 +37,17 @@
 | `@bunshin/capability-training` unit tests | 30 files / 474 tests成功    |
 | `@bunshin/database` unit tests            | 208 files / 1,024 tests成功 |
 | D-1対象ファイルのESLint                   | 成功                        |
-| CI `verify`                               | GitHub Actions確認後に記載  |
-| CI `database`（PostgreSQL統合テスト含む） | GitHub Actions確認後に記載  |
+| CI `verify`                               | 成功（run 39016845076: format / typecheck / lint / unit tests / learning UI / build） |
+| CI `database`（PostgreSQL統合テスト含む） | 成功（run 39016845076: db:validate / ephemeral PostgreSQL migration・readiness / integration tests） |
 
 ## 5. 本番反映順序・未解決事項
 
 - 本番適用が別途承認された場合の順序は **migration適用 → その後にプログラムを反映**。プログラムを先に反映すると未作成テーブルを参照する可能性がある。現時点では本番migration・deploy・flag変更のいずれも行っていない。
 - このPRはD-1の保存基盤のみ。D-2（テーマ別目標・計画・会話）、D-3（本人像の確認画面とAI投入接続）、D-4（活用例UI・書き出し・保存期間処理）は別々のDraft PRと実装報告にする。
 - D-3は画面・本人同意後に限ってAI接続し、このPRの上限20件取得を利用する。
-- CI `verify`と`database`の成功状態を確認するまで、受入完了とは報告しない。
+- GitHub Actions run `39016845076` は、D-1差分（commit `d46f0946`）に対して `verify` と `database` の両方が成功した。databaseジョブのmigrationはCI専用の使い捨てPostgreSQLに対する検証であり、本番DBには適用していない。
 
 ## 6. 次へ進める条件
 
-- D-1のDraft差分、DB統合テスト、CI `verify`/`database`成功を確認して田中へ提出する。
+- D-1のDraft差分、DB統合テスト、CI `verify`/`database`成功を確認済み。田中のレビューを待つ。
 - 田中の確認前にマージしない。production migration・deploy・flag変更は、別途明示承認があるまで実施しない。
