@@ -140,6 +140,70 @@ export class PrismaPersonalLearningTopicRepository {
             lastLearnerUseAt: new Date(),
           },
         });
+        if (activeCount === 0) {
+          // When an enrollment entered the legacy single-theme flow after the D-1 migration,
+          // adopt its existing rows into this first theme before exposing the topic-scoped flow.
+          const legacyScope = {
+            workspaceId: scope.workspaceId,
+            groupId: scope.groupId,
+            programEnrollmentId: scope.programEnrollmentId,
+            groupMembershipId: scope.groupMembershipId,
+          };
+          await tx.personalLearningRequest.updateMany({
+            where: { ...legacyScope, userId: scope.userId, topicId: null },
+            data: { topicId: topic.id },
+          });
+          await tx.personalLearningGoalConfirmation.updateMany({
+            where: { ...legacyScope, userId: scope.userId, topicId: null },
+            data: { topicId: topic.id },
+          });
+          await tx.personalLearningPlanRevision.updateMany({
+            where: { ...legacyScope, userId: scope.userId, topicId: null },
+            data: { topicId: topic.id },
+          });
+          await tx.$executeRaw`
+            UPDATE program_mission_assignments a
+            SET display_snapshot = jsonb_set(
+              COALESCE(a.display_snapshot, '{}'::jsonb),
+              '{dynamicPractice,topicId}',
+              to_jsonb(${topic.id}::text),
+              true
+            )
+            FROM personal_learning_plan_revisions p
+            WHERE p.workspace_id = ${scope.workspaceId}::uuid
+              AND p.group_id = ${scope.groupId}::uuid
+              AND p.program_enrollment_id = ${scope.programEnrollmentId}::uuid
+              AND p.group_membership_id = ${scope.groupMembershipId}::uuid
+              AND p.user_id = ${scope.userId}::uuid
+              AND p.topic_id = ${topic.id}::uuid
+              AND a.workspace_id = p.workspace_id
+              AND a.group_id = p.group_id
+              AND a.program_enrollment_id = p.program_enrollment_id
+              AND a.target_resource_type = 'PERSONAL_LEARNING_PLAN'
+              AND a.target_resource_id = p.plan_id
+              AND a.display_snapshot ? 'dynamicPractice'
+          `;
+          await tx.$executeRaw`
+            UPDATE program_action_events e
+            SET metadata = jsonb_set(COALESCE(e.metadata, '{}'::jsonb), '{topicId}', to_jsonb(${topic.id}::text), true)
+            FROM personal_learning_requests r
+            WHERE r.workspace_id = ${scope.workspaceId}::uuid
+              AND r.group_id = ${scope.groupId}::uuid
+              AND r.program_enrollment_id = ${scope.programEnrollmentId}::uuid
+              AND r.group_membership_id = ${scope.groupMembershipId}::uuid
+              AND r.user_id = ${scope.userId}::uuid
+              AND r.topic_id = ${topic.id}::uuid
+              AND e.workspace_id = r.workspace_id
+              AND e.group_id = r.group_id
+              AND e.program_enrollment_id = r.program_enrollment_id
+              AND e.metadata->>'threadId' = r.id::text
+              AND e.event_type IN (
+                'PERSONAL_LEARNING_CONVERSATION_MESSAGE',
+                'PERSONAL_LEARNING_CONVERSATION_RESPONSE',
+                'PERSONAL_LEARNING_CONVERSATION_SHARE'
+              )
+          `;
+        }
         return { outcome: 'CREATED' as const, topic };
       },
       { isolationLevel: 'Serializable' },

@@ -1,15 +1,20 @@
 import { randomUUID } from 'node:crypto';
-import type { PrismaClient } from '@prisma/client';
+import type { Prisma, PrismaClient } from '@prisma/client';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   personalLearningDynamicProgramAllows,
   personalLearningFeatureEnabled,
+  AI_TRAINING_LEARNING_DEFINITION_FIXTURES,
 } from '@bunshin/capability-training';
 import {
   PrismaPersonalLearningPersonaRepository,
   PrismaPersonalLearningSavedExamplesRepository,
   PrismaPersonalLearningTopicRepository,
 } from '../src/personal-learning-d';
+import { PrismaPersonalLearningRequestRepository } from '../src/personal-learning-request';
+import { PrismaPersonalLearningConversationRepository } from '../src/personal-learning-conversation';
+import { PrismaPersonalLearningPersistenceRepository } from '../src/personal-learning-persistence';
+import { pilotParticipantHash } from '../src/personal-learning-pilot-seat';
 import { cleanupProgramFixtures } from './program-fixture-cleanup';
 
 const now = new Date('2026-10-17T03:00:00Z');
@@ -146,6 +151,14 @@ export function registerPersonalLearningDIntegrationCases(client: PrismaClient) 
             personalLearningPilot: {
               enabled: true,
               enrollmentIds: [enrollmentId],
+              participantControl: {
+                version: 'PILOT_PARTICIPANT_CAP_V1',
+                revision: 1,
+                externalParticipantCap: 5,
+                internalParticipantCap: 0,
+                currentWave: 1,
+                currentWaveCap: 5,
+              },
               learningMode: options.learningMode ?? 'DYNAMIC_V1',
               learningFeatures: {
                 conversation: true,
@@ -155,6 +168,18 @@ export function registerPersonalLearningDIntegrationCases(client: PrismaClient) 
               },
             },
           },
+        },
+      });
+      await client.personalLearningPilotSeat.create({
+        data: {
+          workspaceId: workspace.id,
+          groupId: group.id,
+          serviceProgramId: program.id,
+          participantHash: pilotParticipantHash(program.id, user.id),
+          programEnrollmentId: enrollmentId,
+          kind: 'EXTERNAL',
+          cohort: 'WAVE_1',
+          seatNumber: 1,
         },
       });
       cleanup.push(async () => {
@@ -367,6 +392,200 @@ export function registerPersonalLearningDIntegrationCases(client: PrismaClient) 
       expect(await examples.delete(second.scope, saved.item.id)).toBe(false);
       expect(await examples.delete(sameWorkspaceOtherService.scope, saved.item.id)).toBe(false);
       expect(await examples.list(first.scope)).toHaveLength(1);
+    });
+
+    it('keeps each wish and conversation on its selected topic and rejects a cross-topic update', async () => {
+      const fixture = await serviceFixture('PR-D-2 topic separation');
+      const topicRepository = new PrismaPersonalLearningTopicRepository(client);
+      const first = await topicRepository.create(fixture.scope, { title: '一つ目のテーマ' });
+      const second = await topicRepository.create(fixture.scope, { title: '二つ目のテーマ' });
+      if (first.outcome !== 'CREATED' || second.outcome !== 'CREATED')
+        throw new Error('topic fixture creation failed');
+      const requests = new PrismaPersonalLearningRequestRepository(client);
+      const conversations = new PrismaPersonalLearningConversationRepository(client);
+      const firstActor = {
+        scope: fixture.scope,
+        actorUserId: fixture.user.id,
+        topicId: first.topic.id,
+      };
+      const secondActor = {
+        scope: fixture.scope,
+        actorUserId: fixture.user.id,
+        topicId: second.topic.id,
+      };
+      const sharedIdempotencyKey = 'same-key-in-independent-topics';
+      const firstRequest = await requests.saveRequest({
+        actorUserId: firstActor.actorUserId,
+        scope: firstActor.scope,
+        topicId: firstActor.topicId,
+        expectedRevision: 0,
+        idempotencyKey: sharedIdempotencyKey,
+        content: {
+          originalText: '一つ目の学習希望',
+          deviceType: 'PC',
+          toolDescription: '検証ツール',
+          experienceDescription: null,
+          currentPosition: null,
+        },
+      });
+      const secondRequest = await requests.saveRequest({
+        actorUserId: secondActor.actorUserId,
+        scope: secondActor.scope,
+        topicId: secondActor.topicId,
+        expectedRevision: 0,
+        idempotencyKey: sharedIdempotencyKey,
+        content: {
+          originalText: '二つ目の学習希望',
+          deviceType: 'PC',
+          toolDescription: '検証ツール',
+          experienceDescription: null,
+          currentPosition: null,
+        },
+      });
+      const firstTurn = {
+        actor: firstActor,
+        requestId: firstRequest.id,
+        requestRevision: firstRequest.revision,
+        operationId: randomUUID(),
+        text: '一つ目だけの相談',
+      };
+      const secondTurn = {
+        actor: secondActor,
+        requestId: secondRequest.id,
+        requestRevision: secondRequest.revision,
+        operationId: randomUUID(),
+        text: '二つ目だけの相談',
+      };
+      await conversations.prepareTurn(firstTurn);
+      await conversations.prepareTurn(secondTurn);
+      expect((await requests.readRequest(firstActor))?.originalText).toBe('一つ目の学習希望');
+      expect((await requests.readRequest(secondActor))?.originalText).toBe('二つ目の学習希望');
+      await expect(
+        requests.readRequest({ ...firstActor, topicId: randomUUID() }),
+      ).rejects.toThrow();
+      expect(
+        (await conversations.readConversation(firstActor))?.messages.map((m) => m.text),
+      ).toEqual(['一つ目だけの相談']);
+      expect(
+        (await conversations.readConversation(secondActor))?.messages.map((m) => m.text),
+      ).toEqual(['二つ目だけの相談']);
+      await expect(
+        conversations.prepareTurn({ ...firstTurn, requestId: secondRequest.id }),
+      ).rejects.toThrow();
+      await expect(
+        conversations.setConversationSharing({
+          actor: secondActor,
+          requestId: firstRequest.id,
+          requestRevision: firstRequest.revision,
+          operationId: randomUUID(),
+          shared: true,
+        }),
+      ).rejects.toThrow();
+      await expect(
+        requests.saveRequest({
+          actorUserId: firstActor.actorUserId,
+          scope: firstActor.scope,
+          topicId: firstActor.topicId,
+          expectedRevision: 1,
+          idempotencyKey: randomUUID(),
+          content: {
+            originalText: '他テーマを更新しようとする',
+            deviceType: 'PC',
+            toolDescription: '検証ツール',
+            experienceDescription: null,
+            currentPosition: null,
+          },
+        }),
+      ).rejects.toThrow();
+      expect((await requests.readRequest(secondActor))?.originalText).toBe('二つ目の学習希望');
+
+      const goals = await Promise.all(
+        [
+          { actor: firstActor, title: '一つ目の目標', key: 'TOPIC_ONE' },
+          { actor: secondActor, title: '二つ目の目標', key: 'TOPIC_TWO' },
+        ].map(async ({ actor, title, key }) => {
+          const goal = await client.programMemberGoal.create({
+            data: {
+              workspaceId: fixture.scope.workspaceId,
+              groupId: fixture.scope.groupId,
+              programEnrollmentId: fixture.scope.programEnrollmentId,
+              groupMembershipId: fixture.scope.groupMembershipId,
+              title,
+              metricType: 'ACTION',
+              targetValue: 1,
+              currentValue: 0,
+              unit: 'integration',
+              startsAt: now,
+              createdByUserId: fixture.user.id,
+              updatedByUserId: fixture.user.id,
+            },
+          });
+          await client.personalLearningGoalConfirmation.create({
+            data: {
+              workspaceId: fixture.scope.workspaceId,
+              groupId: fixture.scope.groupId,
+              programEnrollmentId: fixture.scope.programEnrollmentId,
+              groupMembershipId: fixture.scope.groupMembershipId,
+              userId: fixture.user.id,
+              programMemberGoalId: goal.id,
+              topicId: actor.topicId,
+              packageKey: 'AI_TRAINING_V1',
+              goalKey: key,
+              semanticVersion: 'V1',
+              consultationRuleVersion: 'V1',
+              scopeRuleVersion: 'V1',
+              confirmedAt: now,
+            },
+          });
+          const planId = randomUUID();
+          await client.personalLearningPlanRevision.create({
+            data: {
+              ...fixture.scope,
+              userId: fixture.user.id,
+              topicId: actor.topicId,
+              planId,
+              revision: 1,
+              previousRevision: null,
+              revisionReason: 'INITIAL',
+              programMemberGoalId: goal.id,
+              contractVersion: 'PERSONAL_LEARNING_PLAN_V1',
+              ruleVersion: 'V1',
+              status: 'DRAFT',
+              steps: JSON.parse(
+                JSON.stringify(
+                  AI_TRAINING_LEARNING_DEFINITION_FIXTURES.map((definition) => ({
+                    definition: definition.reference,
+                    prerequisites: definition.prerequisites,
+                    selectionReason: 'GOAL_ALIGNMENT',
+                  })),
+                ),
+              ) as Prisma.InputJsonValue,
+              createdAt: now,
+              updatedAt: now,
+            },
+          });
+          return { goalId: goal.id, planId };
+        }),
+      );
+      const persistence = new PrismaPersonalLearningPersistenceRepository(client);
+      const firstState = await persistence.read(firstActor);
+      const secondState = await persistence.read(secondActor);
+      expect(firstState.goals.map((item) => item.reference.reference.programMemberGoalId)).toEqual([
+        goals[0]!.goalId,
+      ]);
+      expect(secondState.goals.map((item) => item.reference.reference.programMemberGoalId)).toEqual(
+        [goals[1]!.goalId],
+      );
+      expect(firstState.plans).toHaveLength(1);
+      expect(secondState.plans).toHaveLength(1);
+      await expect(
+        persistence.confirmPlan({
+          ...secondActor,
+          planId: goals[0]!.planId,
+          expectedRevision: 1,
+          idempotencyKey: randomUUID(),
+        }),
+      ).rejects.toThrow();
     });
   });
 }

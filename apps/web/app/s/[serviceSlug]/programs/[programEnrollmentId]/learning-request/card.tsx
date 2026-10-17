@@ -11,6 +11,11 @@ import type {
   PersonalLearningConversationState,
 } from '@bunshin/application';
 
+const appendPath = (url: string, suffix: string) => {
+  const queryAt = url.indexOf('?');
+  return queryAt < 0 ? `${url}${suffix}` : `${url.slice(0, queryAt)}${suffix}${url.slice(queryAt)}`;
+};
+
 export function PersonalLearningRequestCard({
   dynamicMode = false,
   endpoint,
@@ -176,7 +181,7 @@ export function PersonalLearningRequestCard({
         <LearningConversationCard
           key={saved.id}
           endpoint={conversationEndpoint}
-          sharingEndpoint={`${conversationEndpoint}/share`}
+          sharingEndpoint={appendPath(conversationEndpoint, '/share')}
           request={saved}
           initial={initialConversation?.requestId === saved.id ? initialConversation : null}
           candidate={candidate?.requestId === saved.id ? candidate : null}

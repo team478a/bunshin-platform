@@ -83,6 +83,7 @@ export async function personalLearningRequestResponse(
       enrollmentId,
       actor.userId,
       'conversation',
+      new URL(request.url).searchParams.get('topicId'),
     );
     const db = await import('@bunshin/database');
     const repository = new db.PrismaPersonalLearningRequestRepository(db.prisma);

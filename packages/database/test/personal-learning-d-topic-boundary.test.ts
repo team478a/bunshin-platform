@@ -9,6 +9,13 @@ const migration = readFileSync(
   ),
   'utf8',
 );
+const topicScopeMigration = readFileSync(
+  new URL(
+    '../prisma/migrations/20261017120000_personal_learning_topic_scope/migration.sql',
+    import.meta.url,
+  ),
+  'utf8',
+);
 
 describe('PR-D dynamic learning data boundaries', () => {
   it('scopes topics, persona facts and saved examples to the same service membership and user', () => {
@@ -51,5 +58,26 @@ describe('PR-D dynamic learning data boundaries', () => {
       expect(block).not.toContain('BunshinMemory');
     }
     expect(migration).not.toContain('bunshin_memories');
+  });
+
+  it('moves existing goals, plans, wishes and conversation records to the initial topic additively', () => {
+    expect(topicScopeMigration).toContain('UPDATE personal_learning_requests');
+    expect(topicScopeMigration).toContain('UPDATE personal_learning_goal_confirmations');
+    expect(topicScopeMigration).toContain('UPDATE personal_learning_plan_revisions');
+    expect(topicScopeMigration).toContain('UPDATE program_mission_assignments');
+    expect(topicScopeMigration).toContain("'{topicId}'");
+    expect(topicScopeMigration).toContain('personal_learning_request_topic_revision_key');
+    expect(topicScopeMigration).toContain('personal_learning_request_topic_operation_key');
+    expect(topicScopeMigration).toContain('learning_confirmation_topic_fk');
+    expect(topicScopeMigration).toContain('learning_plan_topic_fk');
+    expect(topicScopeMigration).not.toMatch(/\bDROP\s+(TABLE|COLUMN)\b/i);
+    for (const model of [
+      'PersonalLearningRequest',
+      'PersonalLearningGoalConfirmation',
+      'PersonalLearningPlanRevision',
+    ]) {
+      const block = schema.split(`model ${model} {`)[1]?.split('\n}')[0] ?? '';
+      expect(block).toContain('topicId');
+    }
   });
 });

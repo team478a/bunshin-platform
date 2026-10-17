@@ -23,6 +23,7 @@ import {
   AI_TRAINING_CONSULTATION_RULE_VERSION,
   personalLearningDynamicProgramAllows,
   personalLearningMode,
+  personalLearningFeatureEnabled,
   consultAiTrainingLearning,
   projectAiTrainingLearnerProfiles,
 } from '@bunshin/capability-training';
@@ -60,6 +61,8 @@ const refKey = (ref: LearningDefinitionReference) =>
   `${ref.packageKey}:${ref.definitionKey}:${ref.version}`;
 const uuid = (value: string) =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+const topicWhere = (input: PersonalLearningActor) =>
+  input.topicId ? { topicId: input.topicId } : {};
 
 /** Explicit client only. No public API, default connection, Provider, or Runtime registration. */
 export class PrismaPersonalLearningPersistenceRepository implements PersonalLearningPersistenceRepository {
@@ -108,6 +111,22 @@ export class PrismaPersonalLearningPersistenceRepository implements PersonalLear
           if (personalLearningMode(programs[0]?.settings) === 'DYNAMIC_V1') {
             if (!personalLearningDynamicProgramAllows(programs[0]?.settings, enrollment.id))
               denied();
+            if (personalLearningFeatureEnabled(programs[0]?.settings, 'multiTopic')) {
+              if (!input.topicId) denied();
+              const topic = await tx.personalLearningTopic.findFirst({
+                where: {
+                  id: input.topicId,
+                  workspaceId: s.workspaceId,
+                  groupId: s.groupId,
+                  programEnrollmentId: s.programEnrollmentId,
+                  groupMembershipId: s.groupMembershipId,
+                  userId: s.userId,
+                  status: 'ACTIVE',
+                },
+                select: { id: true },
+              });
+              if (!topic) denied();
+            }
             await requirePersonalLearningPilotSeat(
               tx,
               { ...s, programEnrollmentId: enrollment.id },
@@ -203,7 +222,7 @@ export class PrismaPersonalLearningPersistenceRepository implements PersonalLear
     return definePersonalLearningPlan(base as PersonalLearningPlan);
   }
   protected async executablePlan(tx: Tx, input: PersonalLearningActor, planId: string) {
-    const where = { ...input.scope, planId };
+    const where = { ...input.scope, ...topicWhere(input), planId };
     const include = { goalConfirmation: { include: { goal: true } } } as const;
     const current = await tx.personalLearningPlanRevision.findFirst({
       where: { ...where, status: { in: ['CONFIRMED', 'COMPLETED'] } },
@@ -230,7 +249,9 @@ export class PrismaPersonalLearningPersistenceRepository implements PersonalLear
   ): Promise<PersonalLearningReceipt> {
     validatePersonalLearningWrite(input);
     const s = input.scope;
-    const idempotencyKey = `PERSONAL_LEARNING_${input.idempotencyKey}`;
+    const idempotencyKey = input.topicId
+      ? `PERSONAL_LEARNING_TOPIC_${hash({ topicId: input.topicId, key: input.idempotencyKey })}`
+      : `PERSONAL_LEARNING_${input.idempotencyKey}`;
     const prior = await tx.programActionEvent.findUnique({
       where: {
         workspaceId_groupId_idempotencyKey: {
@@ -246,12 +267,14 @@ export class PrismaPersonalLearningPersistenceRepository implements PersonalLear
         goalId?: string;
         planId?: string | null;
         revision?: number | null;
+        topicId?: string | null;
       };
       if (
         prior.actorUserId !== s.userId ||
         prior.programEnrollmentId !== s.programEnrollmentId ||
         prior.eventType !== operation ||
         data.digest !== digest ||
+        (data.topicId ?? null) !== (input.topicId ?? null) ||
         !data.goalId
       )
         conflict();
@@ -267,7 +290,7 @@ export class PrismaPersonalLearningPersistenceRepository implements PersonalLear
         sourceResourceType: 'PERSONAL_LEARNING',
         sourceResourceId: result.planId ?? result.goalId,
         idempotencyKey,
-        metadata: { digest, ...result },
+        metadata: { digest, ...result, topicId: input.topicId ?? null },
         actorUserId: s.userId,
         occurredAt: now,
       },
@@ -279,14 +302,21 @@ export class PrismaPersonalLearningPersistenceRepository implements PersonalLear
     return await this.authorized(input, true, async (tx, now) => {
       const s = input.scope;
       const profile = await tx.trainingParticipantProfile.findFirst({ where: { ...s } });
-      const goals = await tx.programMemberGoal.findMany({
-        where: {
-          workspaceId: s.workspaceId,
-          groupId: s.groupId,
-          programEnrollmentId: s.programEnrollmentId,
-          groupMembershipId: s.groupMembershipId,
-        },
-      });
+      const goals = input.topicId
+        ? (
+            await tx.personalLearningGoalConfirmation.findMany({
+              where: { ...s, topicId: input.topicId },
+              include: { goal: true },
+            })
+          ).map(({ goal }) => goal)
+        : await tx.programMemberGoal.findMany({
+            where: {
+              workspaceId: s.workspaceId,
+              groupId: s.groupId,
+              programEnrollmentId: s.programEnrollmentId,
+              groupMembershipId: s.groupMembershipId,
+            },
+          });
       const projections = projectAiTrainingLearnerProfiles({ scope: s, profile, goals });
       const result = consultAiTrainingLearning(
         { ...projections, scope: s, approvedDefinitionRefs: await this.approved(tx, input) },
@@ -320,6 +350,7 @@ export class PrismaPersonalLearningPersistenceRepository implements PersonalLear
           await tx.personalLearningGoalConfirmation.create({
             data: {
               ...s,
+              topicId: input.topicId ?? null,
               programMemberGoalId: goal.id,
               packageKey: result.candidate.goal.semanticRef.packageKey,
               goalKey: result.candidate.goal.semanticRef.goalKey,
@@ -338,7 +369,7 @@ export class PrismaPersonalLearningPersistenceRepository implements PersonalLear
   private async goal(tx: Tx, input: PersonalLearningActor, goalId: string) {
     if (!uuid(goalId)) conflict();
     const row = await tx.personalLearningGoalConfirmation.findFirst({
-      where: { ...input.scope, programMemberGoalId: goalId },
+      where: { ...input.scope, ...topicWhere(input), programMemberGoalId: goalId },
       include: { goal: true },
     });
     if (!row || row.goal.status !== 'ACTIVE') denied();
@@ -397,7 +428,7 @@ export class PrismaPersonalLearningPersistenceRepository implements PersonalLear
         hash({ plan, expectedRevision: input.expectedRevision }),
         async () => {
           const previous = await tx.personalLearningPlanRevision.findFirst({
-            where: { ...input.scope, planId: plan.planId },
+            where: { ...input.scope, ...topicWhere(input), planId: plan.planId },
             orderBy: { revision: 'desc' },
             include: { goalConfirmation: { include: { goal: true } } },
           });
@@ -409,7 +440,11 @@ export class PrismaPersonalLearningPersistenceRepository implements PersonalLear
           if (previous) definePersonalLearningPlanRevision(this.restore(previous), plan);
           else if (
             await tx.personalLearningPlanRevision.count({
-              where: { ...input.scope, programMemberGoalId: row.programMemberGoalId },
+              where: {
+                ...input.scope,
+                ...topicWhere(input),
+                programMemberGoalId: row.programMemberGoalId,
+              },
             })
           )
             conflict();
@@ -417,6 +452,7 @@ export class PrismaPersonalLearningPersistenceRepository implements PersonalLear
           await tx.personalLearningPlanRevision.create({
             data: {
               ...input.scope,
+              topicId: input.topicId ?? null,
               planId: plan.planId,
               revision: plan.revision,
               previousRevision: plan.previousRevision?.revision ?? null,
@@ -449,7 +485,12 @@ export class PrismaPersonalLearningPersistenceRepository implements PersonalLear
       conflict();
     return await this.authorized(input, true, async (tx, now) => {
       const row = await tx.personalLearningPlanRevision.findFirst({
-        where: { ...input.scope, planId: input.planId, revision: input.expectedRevision },
+        where: {
+          ...input.scope,
+          ...topicWhere(input),
+          planId: input.planId,
+          revision: input.expectedRevision,
+        },
         include: { goalConfirmation: { include: { goal: true } } },
       });
       if (!row || row.revision !== input.expectedRevision) conflict();
@@ -464,12 +505,17 @@ export class PrismaPersonalLearningPersistenceRepository implements PersonalLear
         async () => {
           if (row.status !== 'DRAFT') conflict();
           const latest = await tx.personalLearningPlanRevision.findFirst({
-            where: { ...input.scope, planId: row.planId },
+            where: { ...input.scope, ...topicWhere(input), planId: row.planId },
             orderBy: { revision: 'desc' },
           });
           if (latest?.revision !== input.expectedRevision) conflict();
           const executing = await tx.personalLearningPlanRevision.findFirst({
-            where: { ...input.scope, planId: row.planId, status: 'CONFIRMED' },
+            where: {
+              ...input.scope,
+              ...topicWhere(input),
+              planId: row.planId,
+              status: 'CONFIRMED',
+            },
             orderBy: { revision: 'desc' },
           });
           // Also fail closed for history left by the old DRAFT-time supersession behavior.
@@ -506,11 +552,11 @@ export class PrismaPersonalLearningPersistenceRepository implements PersonalLear
   read(input: PersonalLearningActor) {
     return this.authorized(input, false, async (tx) => {
       const goals = await tx.personalLearningGoalConfirmation.findMany({
-        where: { ...input.scope },
+        where: { ...input.scope, ...topicWhere(input) },
         include: { goal: true },
       });
       const rows = await tx.personalLearningPlanRevision.findMany({
-        where: { ...input.scope },
+        where: { ...input.scope, ...topicWhere(input) },
         orderBy: [{ planId: 'asc' }, { revision: 'asc' }],
         take: 1001,
         include: { goalConfirmation: { include: { goal: true } } },

@@ -14,6 +14,7 @@ export function personalLearningOperationHash(
         s.programEnrollmentId,
         s.groupMembershipId,
         s.userId,
+        input.actor.topicId ?? null,
         input.operationId,
         attempt,
       ]),

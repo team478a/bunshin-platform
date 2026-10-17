@@ -44,6 +44,7 @@ export async function personalLearningConversationResponse(
       enrollmentId,
       user.userId,
       'conversation',
+      new URL(request.url).searchParams.get('topicId'),
     );
     const input = body.parse(await boundedLearningJson(request, 8_000));
     const data = await sendPersonalLearningConversationTurn({ actor, ...input });
@@ -89,6 +90,7 @@ export async function personalLearningConversationSharingResponse(
       enrollmentId,
       user.userId,
       'conversation',
+      new URL(request.url).searchParams.get('topicId'),
     );
     const input = sharingBody.parse(await boundedLearningJson(request, 2_000));
     const data = await new PrismaPersonalLearningConversationRepository(

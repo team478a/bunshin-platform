@@ -6,6 +6,8 @@ const f = vi.hoisted(() => ({
   membership: vi.fn(),
   enrollment: vi.fn(),
   program: vi.fn(),
+  request: vi.fn(),
+  topics: vi.fn(),
   transaction: vi.fn(),
   seat: vi.fn(),
 }));
@@ -19,6 +21,8 @@ vi.mock('@bunshin/database', () => ({
     groupMembership: { findFirst: f.membership },
     programEnrollment: { findFirst: f.enrollment },
     serviceProgram: { findFirst: f.program },
+    personalLearningRequest: { findFirst: f.request },
+    personalLearningTopic: { findMany: f.topics },
     $transaction: f.transaction,
   },
   requirePersonalLearningPilotSeat: f.seat,
@@ -52,6 +56,8 @@ describe('learning request exposure and ownership', () => {
     f.membership.mockResolvedValue({ id: 'member', serviceRole: 'PARTICIPANT' });
     f.enrollment.mockResolvedValue({ id: enrollmentId, serviceProgramId: 'program' });
     f.program.mockResolvedValue({ settings });
+    f.request.mockResolvedValue(null);
+    f.topics.mockResolvedValue([]);
     f.transaction.mockImplementation((work: (tx: unknown) => unknown) => work({}));
     f.seat.mockResolvedValue(undefined);
   });
@@ -98,6 +104,56 @@ describe('learning request exposure and ownership', () => {
       }),
       true,
     );
+    expect(f.request).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ topicId: { not: null } }) }),
+    );
+    expect(f.topics).not.toHaveBeenCalled();
+  });
+  it('selects only an active owned theme when multiTopic is enabled', async () => {
+    f.program.mockResolvedValue({
+      settings: {
+        ...settings,
+        personalLearningPilot: {
+          ...settings.personalLearningPilot,
+          learningFeatures: {
+            ...settings.personalLearningPilot.learningFeatures,
+            multiTopic: true,
+          },
+        },
+      },
+    });
+    f.topics.mockResolvedValue([{ id: '00000000-0000-4000-8000-000000000002' }]);
+    await expect(
+      resolvePersonalLearningRequestActor(
+        'slug',
+        enrollmentId,
+        'user',
+        undefined,
+        '00000000-0000-4000-8000-000000000002',
+      ),
+    ).resolves.toMatchObject({ topicId: '00000000-0000-4000-8000-000000000002' });
+    expect(f.topics).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          workspaceId: 'workspace',
+          groupId: 'service',
+          programEnrollmentId: enrollmentId,
+          groupMembershipId: 'member',
+          userId: 'user',
+          status: 'ACTIVE',
+        }),
+        take: 4,
+      }),
+    );
+    await expect(
+      resolvePersonalLearningRequestActor(
+        'slug',
+        enrollmentId,
+        'user',
+        undefined,
+        '00000000-0000-4000-8000-000000000099',
+      ),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
   it('non-member denied', async () => {
     f.membership.mockResolvedValue(null);

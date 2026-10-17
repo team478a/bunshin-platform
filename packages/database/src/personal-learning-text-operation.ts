@@ -31,6 +31,7 @@ const digest = (v: unknown) =>
 const bodyHash = (input: PersonalLearningTextOperation) =>
   digest([
     input.requestId,
+    input.actor.topicId ?? null,
     input.expectedRequestRevision,
     input.operationKind,
     input.provider,
@@ -85,6 +86,7 @@ export class PrismaPersonalLearningTextOperationRepository
       tx.personalLearningRequest.findFirst({
         where: {
           ...actor.scope,
+          ...(actor.topicId ? { topicId: actor.topicId } : {}),
           id: input.requestId,
           revision: input.expectedRequestRevision,
         },
@@ -108,7 +110,9 @@ export class PrismaPersonalLearningTextOperationRepository
         workspaceId_groupId_idempotencyKey: {
           workspaceId: actor.scope.workspaceId,
           groupId: actor.scope.groupId,
-          idempotencyKey: `learning-conversation-request:${input.operationId}`,
+          idempotencyKey: actor.topicId
+            ? `learning-conversation-request:${actor.topicId}:${input.operationId}`
+            : `learning-conversation-request:${input.operationId}`,
         },
       },
     });
@@ -120,7 +124,8 @@ export class PrismaPersonalLearningTextOperationRepository
       metadata.version !== PERSONAL_LEARNING_CONVERSATION_VERSION ||
       metadata.threadId !== input.requestId ||
       metadata.requestRevision !== input.expectedRequestRevision ||
-      metadata.operationId !== input.operationId
+      metadata.operationId !== input.operationId ||
+      (actor.topicId !== undefined && metadata.topicId !== actor.topicId)
     )
       throw new ApplicationError('CONFLICT', 'learning conversation changed');
   }
@@ -140,7 +145,7 @@ export class PrismaPersonalLearningTextOperationRepository
         await this.assertConversationAdmission(tx, input);
       } else {
         const wish = await tx.personalLearningRequest.findFirst({
-          where: s,
+          where: { ...s, ...(input.actor.topicId ? { topicId: input.actor.topicId } : {}) },
           orderBy: { revision: 'desc' },
         });
         if (wish?.id !== input.requestId || wish.revision !== input.expectedRequestRevision)

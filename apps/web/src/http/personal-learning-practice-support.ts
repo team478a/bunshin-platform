@@ -45,6 +45,7 @@ export async function learningPracticeSupportResponse(
       enrollmentId,
       user.userId,
       'conversation',
+      new URL(request.url).searchParams.get('topicId'),
     );
     const input = body.parse(await boundedLearningJson(request, MAX_BODY_BYTES + 8_000));
     const image = input.imageDataUrl
@@ -96,6 +97,7 @@ export async function learningPracticeSupportImageResponse(
       enrollmentId,
       user.userId,
       'conversation',
+      new URL(request.url).searchParams.get('topicId'),
     );
     const image = await new PrismaPracticeSupportRepository(prisma).readSupportImage({
       actor,

@@ -51,6 +51,14 @@ export class PrismaPersonalLearningPracticeRepository
         programEnrollmentId: actor.scope.programEnrollmentId,
         ruleVersion: PERSONAL_LEARNING_PRACTICE_VERSION,
         status: { in: ['PRESENTED', 'STARTED'] },
+        ...(actor.topicId
+          ? {
+              displaySnapshot: {
+                path: ['dynamicPractice', 'topicId'],
+                equals: actor.topicId,
+              },
+            }
+          : {}),
       },
       orderBy: { sequence: 'desc' },
       take: 2,
@@ -96,6 +104,7 @@ export class PrismaPersonalLearningPracticeRepository
       where: {
         ...actor.scope,
         planId: row.targetResourceId,
+        ...(actor.topicId ? { topicId: actor.topicId } : {}),
         revision: Number(data.planRevision),
         status: 'CONFIRMED',
         programMemberGoalId: data.goalId,
@@ -205,7 +214,11 @@ export class PrismaPersonalLearningPracticeRepository
     const proposalRequest =
       typeof proposalRequestId === 'string'
         ? await tx.personalLearningRequest.findFirst({
-            where: { ...actor.scope, id: proposalRequestId },
+            where: {
+              ...actor.scope,
+              ...(actor.topicId ? { topicId: actor.topicId } : {}),
+              id: proposalRequestId,
+            },
           })
         : null;
     const nextCandidate = proposalRequest?.lessonCandidate
@@ -270,7 +283,11 @@ export class PrismaPersonalLearningPracticeRepository
         )
           return conflict();
         const existing = await tx.personalLearningRequest.findFirst({
-          where: { ...actor.scope, id: priorId },
+          where: {
+            ...actor.scope,
+            ...(actor.topicId ? { topicId: actor.topicId } : {}),
+            id: priorId,
+          },
         });
         if (!existing) return conflict();
         return {
@@ -285,10 +302,14 @@ export class PrismaPersonalLearningPracticeRepository
         };
       }
       const previousRequest = await tx.personalLearningRequest.findFirst({
-        where: { ...actor.scope, id: practice.candidate.requestId },
+        where: {
+          ...actor.scope,
+          ...(actor.topicId ? { topicId: actor.topicId } : {}),
+          id: practice.candidate.requestId,
+        },
       });
       const latestRequest = await tx.personalLearningRequest.findFirst({
-        where: actor.scope,
+        where: { ...actor.scope, ...(actor.topicId ? { topicId: actor.topicId } : {}) },
         orderBy: { revision: 'desc' },
       });
       if (!previousRequest || latestRequest?.id !== previousRequest.id) return conflict();
@@ -309,6 +330,7 @@ export class PrismaPersonalLearningPracticeRepository
       const saved = await tx.personalLearningRequest.create({
         data: {
           ...actor.scope,
+          topicId: actor.topicId ?? null,
           id: requestId,
           revision,
           originalText: previousRequest.originalText,
@@ -336,6 +358,7 @@ export class PrismaPersonalLearningPracticeRepository
           idempotencyKey: eventKey,
           occurredAt: now,
           metadata: {
+            ...(actor.topicId ? { topicId: actor.topicId } : {}),
             requestId: saved.id,
             requestRevision: saved.revision,
             sourceCandidateId: practice.candidate.id,
@@ -399,7 +422,7 @@ export class PrismaPersonalLearningPracticeRepository
         }
       }
       const row = await tx.personalLearningRequest.findFirst({
-        where: s,
+        where: { ...s, ...(actor.topicId ? { topicId: actor.topicId } : {}) },
         orderBy: { revision: 'desc' },
       });
       if (
@@ -486,6 +509,7 @@ export class PrismaPersonalLearningPracticeRepository
         const previousPlan = await tx.personalLearningPlanRevision.findFirst({
           where: {
             ...s,
+            ...(actor.topicId ? { topicId: actor.topicId } : {}),
             planId: current.planId,
             revision: current.planRevision,
             status: 'CONFIRMED',
@@ -519,6 +543,7 @@ export class PrismaPersonalLearningPracticeRepository
         await tx.personalLearningPlanRevision.create({
           data: {
             ...s,
+            topicId: actor.topicId ?? null,
             planId: current.planId,
             revision: planRevision,
             previousRevision: current.planRevision,
@@ -580,6 +605,7 @@ export class PrismaPersonalLearningPracticeRepository
             displaySnapshot: json({
               dynamicPractice: {
                 version: PERSONAL_LEARNING_PRACTICE_VERSION,
+                ...(actor.topicId ? { topicId: actor.topicId } : {}),
                 scope: s,
                 goalId: current.goalId,
                 planId: current.planId,
@@ -609,6 +635,7 @@ export class PrismaPersonalLearningPracticeRepository
             idempotencyKey: `practice-next-start:${running.id}:${candidate.id}`,
             occurredAt: now,
             metadata: {
+              ...(actor.topicId ? { topicId: actor.topicId } : {}),
               previousAssignmentId: running.id,
               assignmentId: assignment.id,
               candidateId: candidate.id,
@@ -655,7 +682,13 @@ export class PrismaPersonalLearningPracticeRepository
             status: { in: ['PRESENTED', 'STARTED'] },
           },
         })) ||
-        (await tx.personalLearningPlanRevision.count({ where: { ...s, status: 'CONFIRMED' } }))
+        (await tx.personalLearningPlanRevision.count({
+          where: {
+            ...s,
+            ...(actor.topicId ? { topicId: actor.topicId } : {}),
+            status: 'CONFIRMED',
+          },
+        }))
       )
         return conflict();
       const version = await tx.programTemplateVersion.findFirst({
@@ -686,6 +719,7 @@ export class PrismaPersonalLearningPracticeRepository
       await tx.personalLearningGoalConfirmation.create({
         data: {
           ...s,
+          topicId: actor.topicId ?? null,
           programMemberGoalId: goal.id,
           packageKey: 'AI_TRAINING_V1',
           goalKey: semantic,
@@ -699,6 +733,7 @@ export class PrismaPersonalLearningPracticeRepository
       await tx.personalLearningPlanRevision.create({
         data: {
           ...s,
+          topicId: actor.topicId ?? null,
           planId,
           revision: 1,
           revisionReason: 'INITIAL',
@@ -754,6 +789,7 @@ export class PrismaPersonalLearningPracticeRepository
           displaySnapshot: json({
             dynamicPractice: {
               version: PERSONAL_LEARNING_PRACTICE_VERSION,
+              ...(actor.topicId ? { topicId: actor.topicId } : {}),
               scope: s,
               goalId: goal.id,
               planId,
@@ -777,6 +813,7 @@ export class PrismaPersonalLearningPracticeRepository
           idempotencyKey: 'practice-start:' + candidate.id,
           occurredAt: now,
           metadata: json({
+            ...(actor.topicId ? { topicId: actor.topicId } : {}),
             goalId: goal.id,
             planId,
             planRevision: 1,
@@ -825,10 +862,11 @@ export class PrismaPersonalLearningPracticeRepository
       const row = await this.current(tx, actor);
       if (!row || row.id !== input.assignmentId) return conflict();
       const current = await this.projectPractice(tx, actor, row);
-      const key = 'practice-note:' + input.operationId;
+      const key = `practice-note:${actor.topicId ?? 'legacy'}:${input.operationId}`;
       const digest = createHash('sha256')
         .update(
           JSON.stringify({
+            topicId: actor.topicId ?? null,
             assignmentId: row.id,
             text: input.text,
             expectedRevision: input.expectedRevision,
@@ -867,6 +905,7 @@ export class PrismaPersonalLearningPracticeRepository
           idempotencyKey: key,
           occurredAt: now,
           metadata: {
+            ...(actor.topicId ? { topicId: actor.topicId } : {}),
             digest,
             revision: input.expectedRevision + 1,
             text: input.text,
