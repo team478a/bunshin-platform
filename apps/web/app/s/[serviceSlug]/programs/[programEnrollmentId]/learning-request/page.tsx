@@ -56,6 +56,7 @@ export default async function Page({
     const multiTopic = personalLearningFeatureEnabled(program?.settings, 'multiTopic');
     const pagePath = `/s/${serviceSlug}/programs/${programEnrollmentId}/learning-request`;
     const topicEndpoint = `/api/services/${serviceSlug}/ai-training/enrollments/${programEnrollmentId}/topics`;
+    const personaPath = `/s/${serviceSlug}/programs/${programEnrollmentId}/persona`;
     const topics = multiTopic
       ? (
           (await new db.PrismaPersonalLearningTopicRepository(db.prisma).list(input.scope)) ?? []
@@ -65,6 +66,9 @@ export default async function Page({
       return (
         <main style={{ maxWidth: 560, margin: '0 auto', padding: 20 }}>
           <LearningTopicSelector endpoint={topicEndpoint} pagePath={pagePath} topics={topics} />
+          <p>
+            <a href={personaPath}>AIが理解していることを確認・修正する</a>
+          </p>
         </main>
       );
     }
@@ -82,6 +86,11 @@ export default async function Page({
             topics={topics}
             selectedTopicId={input.topicId}
           />
+        )}
+        {multiTopic && (
+          <p>
+            <a href={personaPath}>AIが理解していることを確認・修正する</a>
+          </p>
         )}
         <PersonalLearningRequestCard
           dynamicMode={dynamicMode}

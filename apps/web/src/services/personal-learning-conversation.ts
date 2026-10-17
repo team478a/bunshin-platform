@@ -29,6 +29,9 @@ export async function sendPersonalLearningConversationTurn(
   const extendedScope = await resolvePersonalLearningExtendedScope(command.actor);
   const promptVersion = learningConversationPromptVersion(extendedScope);
   const currentPractice = (await repository.readPractice(command.actor)).current;
+  const personaContext = await new db.PrismaPersonalLearningPersonaRepository(db.prisma).listForAi(
+    command.actor.scope,
+  );
   const practice = currentPractice
     ? {
         startedAt: currentPractice.startedAt,
@@ -91,6 +94,7 @@ export async function sendPersonalLearningConversationTurn(
       model: policy.model,
       permit: policy,
       extendedScope,
+      personaContext,
     });
     const value = await executePersonalLearningTextOperation(
       new db.PrismaPersonalLearningTextOperationRepository(db.prisma),
