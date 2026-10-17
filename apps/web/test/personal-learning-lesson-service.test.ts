@@ -12,6 +12,7 @@ const f = vi.hoisted(() => ({
   generate: vi.fn(),
   prices: vi.fn(),
   extendedScope: vi.fn(),
+  persona: vi.fn(),
 }));
 vi.mock('@bunshin/database', () => ({
   prisma: { personalLearningCallAdmission: { findUnique: f.cost } },
@@ -21,6 +22,9 @@ vi.mock('@bunshin/database', () => ({
   },
   PrismaPersonalLearningRequestRepository: class {
     readRequest = f.request;
+  },
+  PrismaPersonalLearningPersonaRepository: class {
+    listForAi = f.persona;
   },
   PrismaPersonalLearningTextOperationRepository: class {
     admit = f.admit;
@@ -94,6 +98,7 @@ describe('lesson generation composition', () => {
       createdAt: '2026-10-13T00:00:00Z',
     });
     f.prior.mockResolvedValue(null);
+    f.persona.mockResolvedValue([]);
     f.extendedScope.mockResolvedValue(false);
     f.resolve.mockResolvedValue({ model });
     f.reserve.mockResolvedValue({ model, apiKey: 'synthetic', admission: { id: 'synthetic' } });

@@ -19,6 +19,7 @@ const f = vi.hoisted(() => ({
   body: vi.fn(),
   generate: vi.fn(),
   extendedScope: vi.fn(),
+  persona: vi.fn(),
 }));
 vi.mock('@bunshin/database', () => ({
   prisma: { personalLearningCallAdmission: { findUnique: f.admission } },
@@ -35,6 +36,9 @@ vi.mock('@bunshin/database', () => ({
   PrismaPersonalLearningTextOperationRepository: class {},
   PrismaPersonalLearningRequestRepository: class {
     readRequest = f.readWish;
+  },
+  PrismaPersonalLearningPersonaRepository: class {
+    listForAi = f.persona;
   },
 }));
 vi.mock('@bunshin/application', async (importOriginal) => {
@@ -108,6 +112,7 @@ describe('personal learning conversation orchestration', () => {
     f.prepare.mockResolvedValue({ created: true, context: [], request: { id, status: 'PENDING' } });
     f.read.mockResolvedValue(state);
     f.readWish.mockResolvedValue(wish);
+    f.persona.mockResolvedValue([]);
     f.candidate.mockResolvedValue(null);
     f.extendedScope.mockResolvedValue(false);
     f.practice.mockResolvedValue({ allowed: true, current: null });
