@@ -9,7 +9,8 @@
 - Prompt Versionを変更内容に合わせて更新。拡張提案v4、会話v3/v4、途中支援v2/v3。新しいmigrationやProduction設定変更はない。
 - 合成評価セットの全20シナリオで、通常回答経路（候補なし）に敵対的な過去出力・相談文・画像文字相当の入力を渡し、ポリシーが常時system入力に含まれ、攻撃文がuser dataに分離されることを検査する。通常回答例も本人の行動を促し、代理完了を主張しない条件を確認する。画像支援ProviderでもOFF/ON双方の常時ポリシーとPrompt Versionをテストする。これは実AIの品質評価ではなく、プロンプト組み立てと合成回答の検査である。
 - 変更ファイル: `apps/web/src/providers/learning-proposal-policy.ts`、`openai-learning-conversation.ts`、`openai-learning-support.ts`、`apps/web/test/learning-proposal-policy-evaluation.test.ts`、`openai-learning-support.test.ts`。
-- 検証: 対象Provider/evaluationテスト 3 files / 16 tests passed。変更した5つのTS/TSXファイルに対するESLintと`git diff --check`は成功。Web全体typecheckと全体lintはローカルで長時間・高メモリ使用となったため中断し、全体testは未実施。PR更新後の必須CIで全体検証を確認する（未完了を成功扱いしない）。
+- ローカル検証: 対象Provider/evaluationテスト 3 files / 16 tests passed。変更したTypeScriptファイルのESLintと`git diff --check`は成功。全体typecheck/lintはローカルで高メモリ・長時間化したため中断したが、下記PR CIで完了を確認した。
+- 今回の修正commit `8cea9b2543ed4908c13f98dbabc023a521d38a16` のGitHub Actions run `39006428888`: `verify` と `database` の両方が成功。verifyはformat check / typecheck / lint / Web全テスト（501 files, 3,613 passed, 2 skipped）/ Learning UI E2E（9 files, 39 passed）/ production buildが成功。databaseはdb validate / CI DB migration / readiness / 統合テストが成功。production DBは使用していない。
 
 ## 1. 調査した内容
 
@@ -42,7 +43,7 @@
 - `pnpm --filter web typecheck`: 成功。`pnpm --filter web lint`: 成功。`pnpm --filter web build`: 成功（Next.js production build）。
 - Prettierで変更したTS/TSXを整形。
 - `git diff --check`: 成功。
-- GitHub Actions run `39003336113`（E2E修正を含むcommit `cabda2e5`）: `verify` と `database` の両jobが成功。verifyのformat check / typecheck / lint / 全test / Chromium準備 / Learning UI E2E / buildが全て成功し、Learning UI E2Eは9 files / 39 tests。Databaseではdb validate / CI用DB migration / readiness / 統合テストが成功（1分52秒）。これはCI用DBでありproduction DBには接続していない。
+- GitHub Actions run `39003336113`（E2E修正を含むcommit `cabda2e5`）: `verify` と `database` の両jobが成功。verifyのformat check / typecheck / lint / 全test / Chromium準備 / Learning UI E2E / buildが全て成功し、Learning UI E2Eは9 files / 39 tests。Databaseではdb validate / CI用DB migration / readiness / 統合テストが成功（1分52秒）。これは先行commitに対する履歴であり、最新検証は上記`39006428888`。
 - 初回runは旧UI前提のLearning UI E2Eが失敗したが、統合チャットの合成ハーネスと期待値を修正した後のrun `39003336113` ですべて成功した。未実行の検証を成功扱いにしない。
 
 ### 合成評価セットの範囲
