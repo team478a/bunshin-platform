@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import type {
   PersonalLearningConversationState,
+  SavedLearningLessonCandidate,
   SavedPersonalLearningRequest,
 } from '@bunshin/application';
 
@@ -10,11 +11,15 @@ export function LearningConversationCard({
   sharingEndpoint,
   request,
   initial,
+  candidate,
+  onCandidateChange,
 }: {
   endpoint: string;
   sharingEndpoint: string;
   request: SavedPersonalLearningRequest;
   initial: PersonalLearningConversationState | null;
+  candidate: SavedLearningLessonCandidate | null;
+  onCandidateChange: (value: SavedLearningLessonCandidate | null) => void;
 }) {
   const [state, setState] = useState(initial);
   const [text, setText] = useState('');
@@ -71,12 +76,16 @@ export function LearningConversationCard({
         }),
       });
       const result = (await response.json()) as {
-        data?: PersonalLearningConversationState;
+        data?: {
+          conversation: PersonalLearningConversationState;
+          candidate: SavedLearningLessonCandidate | null;
+        };
         error?: { message: string };
       };
-      if (!response.ok || !result.data)
+      if (!response.ok || !result.data?.conversation)
         throw new Error(result.error?.message ?? '返信を取得できませんでした。');
-      setState(result.data);
+      setState(result.data.conversation);
+      onCandidateChange(result.data.candidate);
       setText('');
       setOperationId('');
     } catch (caught) {
@@ -89,7 +98,19 @@ export function LearningConversationCard({
   return (
     <section aria-labelledby="learning-conversation-title" className="panel">
       <h2 id="learning-conversation-title">学習について相談する</h2>
-      <p>保存した希望をもとに相談できます。AIは実践課題の開始・評価・修了を決めません。</p>
+      <p>
+        保存した希望をもとに同じ相談スレッドで続けられます。AIは実践課題の開始・評価・修了を決めません。
+      </p>
+      {candidate?.proposal.status === 'NEEDS_CONTEXT' && (
+        <aside aria-label="教材候補の確認質問">
+          <p>教材候補を作るため、次の質問にこのチャットから回答できます。</p>
+          <ul>
+            {candidate.proposal.questions.map((question, index) => (
+              <li key={index}>{question}</li>
+            ))}
+          </ul>
+        </aside>
+      )}
       <ol aria-label="学習相談の会話">
         {state?.messages.map((message) => (
           <li key={message.id}>
@@ -141,7 +162,11 @@ export function LearningConversationCard({
               setText(event.target.value);
               if (operationId) setOperationId('');
             }}
-            placeholder="分からないことや、次に試したいことを書いてください"
+            placeholder={
+              candidate?.proposal.status === 'NEEDS_CONTEXT'
+                ? '上の確認質問への回答を書いてください'
+                : '分からないことや、次に試したいことを書いてください'
+            }
           />
         </label>
         <button disabled={pending || !text.trim()} type="submit">

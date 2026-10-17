@@ -1,8 +1,10 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import type { Prisma, PrismaClient } from '@prisma/client';
 import { ApplicationError } from '@bunshin/shared';
 import {
-  PERSONAL_LEARNING_CONVERSATION_CONTEXT_TURNS,
+  LEARNING_CANDIDATE_POLICY,
+  boundPersonalLearningConversationContext,
+  validateLearningLessonProposal,
   PERSONAL_LEARNING_CONVERSATION_VERSION,
   validatePersonalLearningConversationCommand,
   validatePersonalLearningConversationResponse,
@@ -11,6 +13,7 @@ import {
   type PersonalLearningConversationRepository,
   type PersonalLearningConversationState,
   type PersonalLearningActor,
+  type SavedLearningLessonCandidate,
 } from '@bunshin/application';
 import { personalLearningFeatureEnabled } from '@bunshin/capability-training';
 import { PrismaPersonalLearningPracticeRepository } from './personal-learning-practice';
@@ -496,9 +499,9 @@ export class PrismaPersonalLearningConversationRepository
     revision: number,
   ) {
     const state = await this.projectConversation(tx, actor, requestId, revision);
-    const ready = state.messages
-      .filter((message) => message.role === 'USER' && message.status === 'READY')
-      .slice(-PERSONAL_LEARNING_CONVERSATION_CONTEXT_TURNS);
+    const ready = state.messages.filter(
+      (message) => message.role === 'USER' && message.status === 'READY',
+    );
     const byMessage = await tx.programActionEvent.findMany({
       where: {
         workspaceId: actor.scope.workspaceId,
@@ -510,15 +513,17 @@ export class PrismaPersonalLearningConversationRepository
       orderBy: [{ occurredAt: 'asc' }, { id: 'asc' }],
       take: 2000,
     });
-    const result: { role: 'USER' | 'ASSISTANT'; text: string }[] = [];
+    const exchanges: { role: 'USER' | 'ASSISTANT'; text: string }[][] = [];
     for (const message of ready) {
-      result.push({ role: 'USER', text: message.text });
       const reply = byMessage.find((row) => object(row.metadata).requestId === message.id);
       const response = reply ? object(reply.metadata).text : null;
       if (typeof response !== 'string' || !response.trim()) return conflict();
-      result.push({ role: 'ASSISTANT', text: response });
+      exchanges.push([
+        { role: 'USER', text: message.text },
+        { role: 'ASSISTANT', text: response },
+      ]);
     }
-    return result;
+    return boundPersonalLearningConversationContext(exchanges);
   }
 
   async completeTurn(input: Parameters<PersonalLearningConversationRepository['completeTurn']>[0]) {
@@ -557,6 +562,67 @@ export class PrismaPersonalLearningConversationRepository
         },
       });
       if (!usage) return conflict();
+      if (input.regeneratedCandidate) {
+        const proposal = validateLearningLessonProposal(input.regeneratedCandidate.proposal);
+        const requestRow = await tx.personalLearningRequest.findFirst({
+          where: {
+            ...actor.scope,
+            id: input.command.requestId,
+            revision: input.command.requestRevision,
+          },
+        });
+        const currentCandidate = requestRow?.lessonCandidate as
+          (SavedLearningLessonCandidate & { confirmedAt?: string | null }) | null;
+        if (
+          !requestRow ||
+          !currentCandidate ||
+          currentCandidate.policyVersion !== LEARNING_CANDIDATE_POLICY ||
+          currentCandidate.requestId !== requestRow.id ||
+          currentCandidate.requestRevision !== requestRow.revision ||
+          currentCandidate.id !== input.regeneratedCandidate.expectedCandidateId ||
+          currentCandidate.proposal.status !== 'NEEDS_CONTEXT' ||
+          requestRow.candidateConfirmedAt
+        )
+          return conflict();
+        const capture = input.regeneratedCandidate.environmentCapture;
+        if (
+          capture !== null &&
+          (Object.keys(capture).length !== 2 ||
+            !['deviceType', 'toolDescription'].every((key) => Object.hasOwn(capture, key)) ||
+            (capture.deviceType !== null &&
+              !['SMARTPHONE', 'PC', 'BOTH'].includes(capture.deviceType)) ||
+            (capture.toolDescription !== null &&
+              (typeof capture.toolDescription !== 'string' ||
+                capture.toolDescription !== capture.toolDescription.trim() ||
+                !capture.toolDescription ||
+                capture.toolDescription.length > 240)))
+        )
+          return conflict();
+        const deviceType = requestRow.deviceType ?? capture?.deviceType ?? null;
+        const toolDescription = requestRow.toolDescription ?? capture?.toolDescription ?? null;
+        if (proposal.status === 'READY' && (!deviceType || !toolDescription)) return conflict();
+        const candidate: SavedLearningLessonCandidate = {
+          id: randomUUID(),
+          requestId: requestRow.id,
+          requestRevision: requestRow.revision,
+          originalText: requestRow.originalText,
+          policyVersion: LEARNING_CANDIDATE_POLICY,
+          materialVersion: 1,
+          promptVersion: input.promptVersion,
+          usageKey: operationKey,
+          createdAt: now.toISOString(),
+          confirmedAt: null,
+          proposal,
+        };
+        await tx.personalLearningRequest.update({
+          where: { id: requestRow.id },
+          data: {
+            lessonCandidate: candidate as unknown as Prisma.InputJsonValue,
+            candidateConfirmedAt: null,
+            ...(capture ? { deviceType, toolDescription } : {}),
+          },
+        });
+      }
       const reply = await tx.programActionEvent.create({
         data: {
           workspaceId: actor.scope.workspaceId,

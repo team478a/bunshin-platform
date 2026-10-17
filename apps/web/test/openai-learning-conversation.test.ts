@@ -21,6 +21,8 @@ describe('versioned learning conversation provider', () => {
       request,
       history: [{ role: 'ASSISTANT', text: 'どんな文章ですか？' }],
       currentMessage: '社内向けのお知らせです',
+      candidate: null,
+      practice: null,
       model: 'gpt-5.2',
       permit: { maxRequestBytes: 12000, maxOutputTokens: 400 },
     });
@@ -28,7 +30,7 @@ describe('versioned learning conversation provider', () => {
     const prompt = parsed.input.map(({ content }) => content).join('\n');
     expect(prompt).toContain(request.originalText);
     expect(prompt).toContain('社内向けのお知らせです');
-    expect(prompt).toContain('本人が試す次の一歩');
+    expect(prompt).toContain('最後に本人が次に試せる小さな一歩');
     expect(prompt).toContain('課題の開始、提出、評価、修了');
   });
 
@@ -36,18 +38,54 @@ describe('versioned learning conversation provider', () => {
     'accepts bounded %s replies without deciding learner progress',
     (status) => {
       expect(
-        validateLearningConversationReply({ status, message: '次に試す一歩を一つ考えましょう。' }),
+        validateLearningConversationReply({
+          status,
+          message: '次に試す一歩を一つ考えましょう。',
+          regeneratedProposal: null,
+          environmentCapture: null,
+        }),
       ).toEqual({
         status,
         message: '次に試す一歩を一つ考えましょう。',
+        regeneratedProposal: null,
+        environmentCapture: null,
       });
     },
   );
 
   it('rejects extra provider output fields and empty responses', () => {
     expect(() =>
-      validateLearningConversationReply({ status: 'ANSWER', message: '回答', score: 1 }),
+      validateLearningConversationReply({
+        status: 'ANSWER',
+        message: '回答',
+        regeneratedProposal: null,
+        environmentCapture: null,
+        score: 1,
+      }),
     ).toThrow();
-    expect(() => validateLearningConversationReply({ status: 'ANSWER', message: ' ' })).toThrow();
+    expect(() =>
+      validateLearningConversationReply({
+        status: 'ANSWER',
+        message: ' ',
+        regeneratedProposal: null,
+        environmentCapture: null,
+      }),
+    ).toThrow();
+    expect(() =>
+      validateLearningConversationReply({
+        status: 'ANSWER',
+        message: '回答',
+        regeneratedProposal: { status: 'READY' },
+        environmentCapture: null,
+      }),
+    ).toThrow();
+    expect(() =>
+      validateLearningConversationReply({
+        status: 'ANSWER',
+        message: '回答',
+        regeneratedProposal: null,
+        environmentCapture: { deviceType: 'PC', toolDescription: 'ChatGPT' },
+      }),
+    ).toThrow();
   });
 });

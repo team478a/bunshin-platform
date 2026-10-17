@@ -23,11 +23,28 @@ export async function sendPersonalLearningConversationTurn(
 ) {
   const db = await import('@bunshin/database');
   const repository = new db.PrismaPersonalLearningConversationRepository(db.prisma);
+  const candidates = new db.PrismaLearningCandidateRepository(db.prisma);
+  const candidate = await candidates.readCandidate(command.actor);
+  const currentPractice = (await repository.readPractice(command.actor)).current;
+  const practice = currentPractice
+    ? {
+        startedAt: currentPractice.startedAt,
+        outcome: currentPractice.candidate.proposal.outcome,
+        practice: currentPractice.candidate.proposal.practice,
+        latestNote: currentPractice.note?.text.slice(0, 500) ?? null,
+        latestSubmission: currentPractice.submissions.at(-1)?.content.slice(0, 1600) ?? null,
+        latestSupport:
+          currentPractice.support.history
+            .filter((item) => item.status === 'READY')
+            .at(-1)
+            ?.advice?.nextAction.slice(0, 600) ?? null,
+      }
+    : null;
   const prepared = await repository.prepareTurn(command);
   if (!prepared.created) {
     const state = await repository.readConversation(command.actor);
     if (!state) throw new ApplicationError('CONFLICT', 'learning conversation unavailable');
-    return state;
+    return { conversation: state, candidate: await candidates.readCandidate(command.actor) };
   }
 
   let runtimeAdmission: AdmittedOpenAiRuntimeConfiguration | null = null;
@@ -66,6 +83,8 @@ export async function sendPersonalLearningConversationTurn(
       request,
       history: prepared.context,
       currentMessage: command.text,
+      candidate,
+      practice,
       model: policy.model,
       permit: policy,
     });
@@ -113,13 +132,28 @@ export async function sendPersonalLearningConversationTurn(
       },
     );
     if (!value) throw new ApplicationError('AI_PROVIDER_UNAVAILABLE', 'conversation unavailable');
-    return await repository.completeTurn({
+    if (
+      (value.regeneratedProposal || value.environmentCapture) &&
+      candidate?.proposal.status !== 'NEEDS_CONTEXT'
+    )
+      throw new ApplicationError('AI_PROVIDER_UNAVAILABLE', 'conversation unavailable');
+    const conversation = await repository.completeTurn({
       command,
       response: value.message,
       responseStatus: value.status,
+      ...(candidate?.proposal.status === 'NEEDS_CONTEXT' && value.regeneratedProposal
+        ? {
+            regeneratedCandidate: {
+              expectedCandidateId: candidate.id,
+              proposal: value.regeneratedProposal,
+              environmentCapture: value.environmentCapture,
+            },
+          }
+        : {}),
       promptVersion: LEARNING_CONVERSATION_PROMPT_VERSION,
       usageKey,
     });
+    return { conversation, candidate: await candidates.readCandidate(command.actor) };
   } catch (error) {
     await repository.failTurn(command);
     throw error;
