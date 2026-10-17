@@ -317,21 +317,80 @@ export class PrismaPersonalLearningPersonaRepository {
     const value = input.value.trim();
     if (!attributeKey || attributeKey.length > 80 || !value || value.length > 1000)
       return { outcome: 'INVALID' as const };
-    if (!(await ownsEnabledDynamicEnrollment(scope, this.client)))
-      return { outcome: 'NOT_FOUND' as const };
     const key = {
       workspaceId: scope.workspaceId,
       groupId: scope.groupId,
       groupMembershipId: scope.groupMembershipId,
       attributeKey,
     };
-    const existing = await this.client.personalLearningPersonaItem.findUnique({
-      where: { workspaceId_groupId_groupMembershipId_attributeKey: key },
-    });
-    if (existing?.status === 'REJECTED') return { outcome: 'REJECTED' as const, item: existing };
-    if (existing) {
+    try {
+      return await this.client.$transaction(
+        async (tx) => {
+          if (!(await ownsEnabledDynamicEnrollment(scope, tx)))
+            return { outcome: 'NOT_FOUND' as const };
+          const suppression = await tx.personalLearningPersonaSuppression.findUnique({
+            where: { workspaceId_groupId_groupMembershipId_attributeKey: key },
+            select: { attributeKey: true },
+          });
+          // A suppression is a content-free tombstone. Only an explicit learner action removes it.
+          if (suppression) return { outcome: 'SUPPRESSED' as const };
+          const existing = await tx.personalLearningPersonaItem.findUnique({
+            where: { workspaceId_groupId_groupMembershipId_attributeKey: key },
+          });
+          if (existing?.status === 'REJECTED')
+            return { outcome: 'REJECTED' as const, item: existing };
+          if (existing) {
+            const updated = await tx.personalLearningPersonaItem.updateMany({
+              where: { ...memberScopeWhere(scope), id: existing.id, status: { not: 'REJECTED' } },
+              data: {
+                ...input,
+                attributeKey,
+                value,
+                status: 'UNCONFIRMED',
+                lastLearnerUseAt: new Date(),
+              },
+            });
+            const item = await tx.personalLearningPersonaItem.findUnique({
+              where: { workspaceId_groupId_groupMembershipId_attributeKey: key },
+            });
+            return item?.status === 'REJECTED'
+              ? { outcome: 'REJECTED' as const, item }
+              : updated.count
+                ? { outcome: 'SAVED' as const, item }
+                : { outcome: 'NOT_FOUND' as const };
+          }
+          const item = await tx.personalLearningPersonaItem.create({
+            data: {
+              ...memberScopeWhere(scope),
+              ...input,
+              attributeKey,
+              value,
+              status: 'UNCONFIRMED',
+              lastLearnerUseAt: new Date(),
+            },
+          });
+          return { outcome: 'SAVED' as const, item };
+        },
+        { isolationLevel: 'Serializable' },
+      );
+    } catch (error) {
+      if (
+        !(error instanceof Prisma.PrismaClientKnownRequestError) ||
+        !['P2002', 'P2034'].includes(error.code)
+      )
+        throw error;
+      const suppression = await this.client.personalLearningPersonaSuppression.findUnique({
+        where: { workspaceId_groupId_groupMembershipId_attributeKey: key },
+        select: { attributeKey: true },
+      });
+      if (suppression) return { outcome: 'SUPPRESSED' as const };
+      const raced = await this.client.personalLearningPersonaItem.findUnique({
+        where: { workspaceId_groupId_groupMembershipId_attributeKey: key },
+      });
+      if (raced?.status === 'REJECTED') return { outcome: 'REJECTED' as const, item: raced };
+      if (!raced) throw error;
       const updated = await this.client.personalLearningPersonaItem.updateMany({
-        where: { ...memberScopeWhere(scope), id: existing.id, status: { not: 'REJECTED' } },
+        where: { ...memberScopeWhere(scope), id: raced.id, status: { not: 'REJECTED' } },
         data: {
           ...input,
           attributeKey,
@@ -348,43 +407,6 @@ export class PrismaPersonalLearningPersonaRepository {
         : updated.count
           ? { outcome: 'SAVED' as const, item }
           : { outcome: 'NOT_FOUND' as const };
-    }
-    try {
-      const item = await this.client.personalLearningPersonaItem.create({
-        data: {
-          ...memberScopeWhere(scope),
-          ...input,
-          attributeKey,
-          value,
-          status: 'UNCONFIRMED',
-          lastLearnerUseAt: new Date(),
-        },
-      });
-      return { outcome: 'SAVED' as const, item };
-    } catch (error) {
-      if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002')
-        throw error;
-      const raced = await this.client.personalLearningPersonaItem.findUnique({
-        where: { workspaceId_groupId_groupMembershipId_attributeKey: key },
-      });
-      if (raced?.status === 'REJECTED') return { outcome: 'REJECTED' as const, item: raced };
-      if (!raced) throw error;
-      await this.client.personalLearningPersonaItem.updateMany({
-        where: { ...memberScopeWhere(scope), id: raced.id, status: { not: 'REJECTED' } },
-        data: {
-          ...input,
-          attributeKey,
-          value,
-          status: 'UNCONFIRMED',
-          lastLearnerUseAt: new Date(),
-        },
-      });
-      const item = await this.client.personalLearningPersonaItem.findUnique({
-        where: { workspaceId_groupId_groupMembershipId_attributeKey: key },
-      });
-      return item?.status === 'REJECTED'
-        ? { outcome: 'REJECTED' as const, item }
-        : { outcome: 'SAVED' as const, item };
     }
   }
 
@@ -415,9 +437,49 @@ export class PrismaPersonalLearningPersonaRepository {
   }
 
   async delete(scope: MemberScope, itemId: string) {
+    return this.client.$transaction(
+      async (tx) => {
+        if (!(await ownsEnabledDynamicEnrollment(scope, tx))) return false;
+        const item = await tx.personalLearningPersonaItem.findFirst({
+          where: { ...memberScopeWhere(scope), id: itemId },
+          select: { attributeKey: true },
+        });
+        if (!item) return false;
+        await tx.personalLearningPersonaItem.deleteMany({
+          where: { ...memberScopeWhere(scope), id: itemId },
+        });
+        await tx.personalLearningPersonaSuppression.upsert({
+          where: {
+            workspaceId_groupId_groupMembershipId_attributeKey: {
+              workspaceId: scope.workspaceId,
+              groupId: scope.groupId,
+              groupMembershipId: scope.groupMembershipId,
+              attributeKey: item.attributeKey,
+            },
+          },
+          create: { ...memberScopeWhere(scope), attributeKey: item.attributeKey },
+          update: {},
+        });
+        return true;
+      },
+      { isolationLevel: 'Serializable' },
+    );
+  }
+
+  async listSuppressedAttributes(scope: MemberScope) {
+    if (!(await ownsEnabledDynamicEnrollment(scope, this.client))) return [];
+    const suppressions = await this.client.personalLearningPersonaSuppression.findMany({
+      where: memberScopeWhere(scope),
+      select: { attributeKey: true },
+      orderBy: [{ createdAt: 'desc' }, { attributeKey: 'asc' }],
+    });
+    return suppressions.map(({ attributeKey }) => attributeKey);
+  }
+
+  async allowReinference(scope: MemberScope, attributeKey: string) {
     if (!(await ownsEnabledDynamicEnrollment(scope, this.client))) return false;
-    const result = await this.client.personalLearningPersonaItem.deleteMany({
-      where: { ...memberScopeWhere(scope), id: itemId },
+    const result = await this.client.personalLearningPersonaSuppression.deleteMany({
+      where: { ...memberScopeWhere(scope), attributeKey },
     });
     return result.count > 0;
   }

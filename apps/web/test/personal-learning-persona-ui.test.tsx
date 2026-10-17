@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { PersonalLearningPersonaCard } from '../app/s/[serviceSlug]/programs/[programEnrollmentId]/persona/persona-card';
 
 describe('D-3 learner persona review UI', () => {
-  it('labels guesses, links evidence, supports review/edit/reject/delete, and leaves re-inference policy undecided', () => {
+  it('labels guesses, links evidence, supports review/edit/reject/delete, and lets the learner allow re-inference', () => {
     const html = renderToStaticMarkup(
       <PersonalLearningPersonaCard
         serviceSlug="manaberu-style"
@@ -21,6 +21,7 @@ describe('D-3 learner persona review UI', () => {
               '/s/manaberu-style/programs/11111111-1111-4111-8111-111111111111/learning-request?topicId=44444444-4444-4444-8444-444444444444#learning-request-record',
           },
         ]}
+        initialSuppressedAttributes={['preferred_learning_style']}
       />,
     );
     expect(html).toContain('AIによる推測');
@@ -29,8 +30,9 @@ describe('D-3 learner persona review UI', () => {
     expect(html).toContain('この内容で確認');
     expect(html).toContain('違う');
     expect(html).toContain('削除');
-    expect(html).toContain('案A');
-    expect(html).toContain('案B');
-    expect(html).toContain('決定待ち');
+    expect(html).toContain('再推測しない項目');
+    expect(html).toContain('今後の再推測を許可');
+    expect(html).not.toContain('田中');
+    expect(html).not.toContain('決定待ち');
   });
 });

@@ -28,12 +28,15 @@ export function PersonalLearningPersonaCard({
   serviceSlug,
   enrollmentId,
   initialItems,
+  initialSuppressedAttributes,
 }: {
   serviceSlug: string;
   enrollmentId: string;
   initialItems: PersonaItem[];
+  initialSuppressedAttributes: string[];
 }) {
   const [items, setItems] = useState(initialItems);
+  const [suppressedAttributes, setSuppressedAttributes] = useState(initialSuppressedAttributes);
   const [drafts, setDrafts] = useState<Record<string, string>>(
     Object.fromEntries(initialItems.map((item) => [item.id, item.value])),
   );
@@ -70,7 +73,9 @@ export function PersonalLearningPersonaCard({
 
   async function remove(item: PersonaItem) {
     if (
-      !window.confirm('この項目を削除します。次回以降のAIには渡されなくなります。よろしいですか？')
+      !window.confirm(
+        '削除すると、この内容はAIに渡されず、再び推測されることもありません。削除しますか？',
+      )
     )
       return;
     setBusyId(item.id);
@@ -83,11 +88,36 @@ export function PersonalLearningPersonaCard({
       });
       if (!response.ok) throw new Error('削除できませんでした。画面を更新して再度お試しください。');
       setItems((current) => current.filter((row) => row.id !== item.id));
+      setSuppressedAttributes((current) => [
+        item.attributeKey,
+        ...current.filter((attributeKey) => attributeKey !== item.attributeKey),
+      ]);
       setDrafts((current) =>
         Object.fromEntries(Object.entries(current).filter(([id]) => id !== item.id)),
       );
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '削除できませんでした。');
+    } finally {
+      setBusyId('');
+    }
+  }
+
+  async function allowReinference(attributeKey: string) {
+    setBusyId(attributeKey);
+    setError('');
+    try {
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ allowReinferenceFor: attributeKey }),
+      });
+      if (!response.ok)
+        throw new Error('設定を変更できませんでした。画面を更新して再度お試しください。');
+      setSuppressedAttributes((current) =>
+        current.filter((suppressed) => suppressed !== attributeKey),
+      );
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : '設定を変更できませんでした。');
     } finally {
       setBusyId('');
     }
@@ -172,18 +202,28 @@ export function PersonalLearningPersonaCard({
       {items.some((item) => item.status === 'REJECTED') && (
         <p>「違う」とした項目は、次のAI呼び出しには渡しません。</p>
       )}
-      <aside>
-        <h3>削除後に同じ内容を再推測するか（決定待ち）</h3>
-        <p>
-          どちらにするかは未決定です。案A：削除は現在の項目だけに適用し、将来の新しい記録から同じ内容が再推測されることを許可する。案B：削除した属性を抑止記録として残し、本人が許可するまで同じ属性を再推測しない。
-        </p>
-        <p>
-          現時点の削除操作は項目を完全に削除し、次回のAI呼び出しから除外します。将来の再推測ルールは、田中の決定後に実装します。
-        </p>
-        <p>
-          提案：本人が明示的に許可するまで同じ属性を再推測しない案Bを推奨します。これは提案であり、まだ採用していません。
-        </p>
-      </aside>
+      {suppressedAttributes.length > 0 && (
+        <section aria-labelledby="persona-suppressed-title">
+          <h3 id="persona-suppressed-title">再推測しない項目</h3>
+          <p>
+            削除した項目の内容は保存されず、AIに渡されません。許可すると、今後の推測対象に戻ります。
+          </p>
+          <ul className="service-entry__list">
+            {suppressedAttributes.map((attributeKey) => (
+              <li key={attributeKey} className="service-entry__card">
+                <p>{attributeKey}</p>
+                <button
+                  type="button"
+                  disabled={busyId === attributeKey}
+                  onClick={() => void allowReinference(attributeKey)}
+                >
+                  今後の再推測を許可
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
     </section>
   );
 }
