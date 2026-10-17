@@ -426,6 +426,7 @@ model ProgramEnrollment {
   aiUsageConsents AiTrainingUsageConsent[]
   personalLearningGoalConfirmations PersonalLearningGoalConfirmation[]
   personalLearningRequests PersonalLearningRequest[]
+  personalLearningTopics PersonalLearningTopic[]
   practiceSupportImages PersonalLearningPracticeSupportImage[]
 
   @@unique([groupMembershipId, serviceProgramId])
@@ -673,6 +674,76 @@ model TrainingToolkitItem {
   @@index([workspaceId, groupId, programEnrollmentId, createdAt])
   @@index([workspaceId, groupId, userId, createdAt])
   @@map("training_toolkit_items")
+}
+
+/// Dynamic learning data belongs to one learner and one service membership; it is never Bunshin Memory.
+model PersonalLearningTopic {
+  id                  String   @id @default(uuid()) @db.Uuid
+  workspaceId         String   @map("workspace_id") @db.Uuid
+  groupId             String   @map("group_id") @db.Uuid
+  programEnrollmentId String   @map("program_enrollment_id") @db.Uuid
+  groupMembershipId   String   @map("group_membership_id") @db.Uuid
+  userId              String   @map("user_id") @db.Uuid
+  title               String   @db.VarChar(160)
+  status              String   @default("ACTIVE") @db.VarChar(16)
+  sourceRequestId     String?  @map("source_request_id") @db.Uuid
+  goalSnapshot        Json?    @map("goal_snapshot")
+  planSnapshot        Json?    @map("plan_snapshot")
+  lastLearnerUseAt    DateTime? @map("last_learner_use_at") @db.Timestamptz(3)
+  endedAt             DateTime? @map("ended_at") @db.Timestamptz(3)
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  enrollment          ProgramEnrollment @relation(fields: [workspaceId, groupId, programEnrollmentId, groupMembershipId], references: [workspaceId, groupId, id, groupMembershipId], onDelete: Cascade)
+  membership          GroupMembership @relation(fields: [workspaceId, groupId, groupMembershipId, userId], references: [workspaceId, groupId, id, userId], onDelete: Cascade)
+
+  @@unique([workspaceId, groupId, id])
+  @@unique([workspaceId, groupId, programEnrollmentId, id])
+  @@index([workspaceId, groupId, groupMembershipId, status, updatedAt])
+  @@map("personal_learning_topics")
+}
+
+/// Inferred learner profile facts are service-scoped and require learner review; evidence stores references only.
+model PersonalLearningPersonaItem {
+  id                String   @id @default(uuid()) @db.Uuid
+  workspaceId       String   @map("workspace_id") @db.Uuid
+  groupId           String   @map("group_id") @db.Uuid
+  groupMembershipId String   @map("group_membership_id") @db.Uuid
+  userId            String   @map("user_id") @db.Uuid
+  attributeKey      String   @map("attribute_key") @db.VarChar(80)
+  value             String   @db.VarChar(1000)
+  status            String   @default("UNCONFIRMED") @db.VarChar(16)
+  evidenceType      String   @map("evidence_type") @db.VarChar(40)
+  evidenceId        String   @map("evidence_id") @db.Uuid
+  evidenceCreatedAt DateTime @map("evidence_created_at") @db.Timestamptz(3)
+  lastLearnerUseAt  DateTime? @map("last_learner_use_at") @db.Timestamptz(3)
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  membership        GroupMembership @relation(fields: [workspaceId, groupId, groupMembershipId, userId], references: [workspaceId, groupId, id, userId], onDelete: Cascade)
+
+  @@unique([workspaceId, groupId, groupMembershipId, attributeKey])
+  @@index([workspaceId, groupId, groupMembershipId, status, updatedAt])
+  @@map("personal_learning_persona_items")
+}
+
+/// Learner-owned examples survive topic pause/completion; owner-facing APIs expose only counts.
+model PersonalLearningSavedExample {
+  id                String   @id @default(uuid()) @db.Uuid
+  workspaceId       String   @map("workspace_id") @db.Uuid
+  groupId           String   @map("group_id") @db.Uuid
+  groupMembershipId String   @map("group_membership_id") @db.Uuid
+  userId            String   @map("user_id") @db.Uuid
+  title             String   @db.VarChar(160)
+  content           String   @db.Text
+  sourceType        String   @map("source_type") @db.VarChar(40)
+  sourceId          String   @map("source_id") @db.Uuid
+  lastLearnerUseAt  DateTime? @map("last_learner_use_at") @db.Timestamptz(3)
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  membership        GroupMembership @relation(fields: [workspaceId, groupId, groupMembershipId, userId], references: [workspaceId, groupId, id, userId], onDelete: Cascade)
+
+  @@unique([workspaceId, groupId, groupMembershipId, id])
+  @@index([workspaceId, groupId, groupMembershipId, createdAt])
+  @@map("personal_learning_saved_examples")
 }
 
 /// AI研修Package専用。Serviceが人間承認した支援Skillの論理identity。
@@ -3495,6 +3566,9 @@ model GroupMembership {
   id                           String                           @id @default(uuid()) @db.Uuid
   personalLearningGoalConfirmations PersonalLearningGoalConfirmation[]
   personalLearningRequests PersonalLearningRequest[]
+  personalLearningTopics PersonalLearningTopic[]
+  personalLearningPersonaItems PersonalLearningPersonaItem[]
+  personalLearningSavedExamples PersonalLearningSavedExample[]
   practiceSupportImages PersonalLearningPracticeSupportImage[]
   workspaceId                  String                           @map("workspace_id") @db.Uuid
   groupId                      String                           @map("group_id") @db.Uuid

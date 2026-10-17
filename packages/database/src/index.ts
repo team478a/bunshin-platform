@@ -83,6 +83,12 @@ export {
 } from './training-barrier';
 export { PrismaTrainingToolkitRepository } from './training-toolkit';
 export type { SaveTrainingToolkitItemResult, TrainingToolkitItemView } from './training-toolkit';
+export {
+  PrismaPersonalLearningPersonaRepository,
+  PrismaPersonalLearningSavedExamplesRepository,
+  PrismaPersonalLearningTopicRepository,
+} from './personal-learning-d';
+export type { DynamicLearningScope, PersonaItemInput } from './personal-learning-d';
 export { PrismaTrainingGrowthRepository } from './training-growth';
 export { PrismaAiTrainingRuntimeRepository } from './training-runtime';
 export { PrismaTrainingParticipantProfileRepository } from './training-profile';

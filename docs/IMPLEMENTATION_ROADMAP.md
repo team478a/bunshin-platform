@@ -6,7 +6,7 @@ PR-E（対応範囲の拡大）は`docs/ai-training/MANABERU_PR_E_IMPLEMENTATION
 
 ## マナベルスタイル 動的AI研修の本線化（2026-10-17）
 
-動的な要望起点のAI研修と、AI進化を取り込む方針は[ADR](ai-training/ADR_MANABERU_AI_EVOLUTION_POLICY.md)を参照する。作業順は **PR-0（文書のみ）→ A → B → C → D → E → F → G → H → I**。PR-A〜Gの仕様・受入条件はサービス責任者が提示した「動的学習本線化指示書 v3」を基準にし、PR-HはProvider抽象化とモデル比較、PR-IはAIツール新機能を練習テーマへ反映する。
+動的な要望起点のAI研修と、AI進化を取り込む方針は[ADR](ai-training/ADR_MANABERU_AI_EVOLUTION_POLICY.md)を参照する。作業順は **PR-0（文書のみ）→ A → B → C → D → E → F → G → H → I**。PR-A〜Gの仕様・受入条件はサービス責任者が提示した「動的学習本線化指示書 v4」と決定記録を基準にし、以前のv1〜v3は使用しない。PR-HはProvider抽象化とモデル比較、PR-IはAIツール新機能を練習テーマへ反映する。
 
 各PRは1本ずつDraft PR＋実装報告で提出し、田中の確認後に次へ進む。内部テスターへの公開はA/B後の基本経路から段階的に行い、外部初回公開はA〜Gの本番反映、通し検証の承認、自動削除の本番稼働など、同ADRとギャップ報告に記載する条件がすべて満たされるまで行わない。PRのマージはproduction反映やPilot開始の証明ではない。
 
