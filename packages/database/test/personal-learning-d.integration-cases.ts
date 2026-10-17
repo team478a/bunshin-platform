@@ -515,6 +515,7 @@ export function registerPersonalLearningDIntegrationCases(client: PrismaClient) 
               groupId: fixture.scope.groupId,
               programEnrollmentId: fixture.scope.programEnrollmentId,
               groupMembershipId: fixture.scope.groupMembershipId,
+              topicId: actor.topicId,
               title,
               metricType: 'ACTION',
               targetValue: 1,

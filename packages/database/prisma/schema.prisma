@@ -697,6 +697,7 @@ model PersonalLearningTopic {
   membership          GroupMembership @relation(fields: [workspaceId, groupId, groupMembershipId, userId], references: [workspaceId, groupId, id, userId], onDelete: Cascade)
   requests            PersonalLearningRequest[]
   goalConfirmations   PersonalLearningGoalConfirmation[]
+  memberGoals         ProgramMemberGoal[]
   planRevisions       PersonalLearningPlanRevision[]
 
   @@unique([workspaceId, groupId, id])
@@ -930,6 +931,7 @@ model ProgramMemberGoal {
   groupId             String                  @map("group_id") @db.Uuid
   programEnrollmentId String                  @map("program_enrollment_id") @db.Uuid
   groupMembershipId   String                  @map("group_membership_id") @db.Uuid
+  topicId             String?                 @map("topic_id") @db.Uuid
   goalDefinitionId    String?                 @map("goal_definition_id") @db.Uuid
   title               String                  @db.VarChar(160)
   metricType          ProgramGoalMetricType   @map("metric_type")
@@ -943,6 +945,7 @@ model ProgramMemberGoal {
   updatedByUserId     String                  @map("updated_by_user_id") @db.Uuid
   createdAt           DateTime                @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt           DateTime                @updatedAt @map("updated_at") @db.Timestamptz(3)
+  topic               PersonalLearningTopic?  @relation(fields: [workspaceId, groupId, programEnrollmentId, topicId], references: [workspaceId, groupId, programEnrollmentId, id], onDelete: Cascade, map: "program_member_goals_topic_fkey")
   personalLearningConfirmations PersonalLearningGoalConfirmation[]
 
   @@unique([workspaceId, groupId, id])

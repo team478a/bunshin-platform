@@ -16,6 +16,13 @@ const topicScopeMigration = readFileSync(
   ),
   'utf8',
 );
+const goalTopicScopeMigration = readFileSync(
+  new URL(
+    '../prisma/migrations/20261017130000_personal_learning_goal_topic_scope/migration.sql',
+    import.meta.url,
+  ),
+  'utf8',
+);
 
 describe('PR-D dynamic learning data boundaries', () => {
   it('scopes topics, persona facts and saved examples to the same service membership and user', () => {
@@ -79,5 +86,15 @@ describe('PR-D dynamic learning data boundaries', () => {
       const block = schema.split(`model ${model} {`)[1]?.split('\n}')[0] ?? '';
       expect(block).toContain('topicId');
     }
+  });
+
+  it('preserves one active legacy goal while allowing one active goal per topic', () => {
+    const goal = schema.split('model ProgramMemberGoal {')[1]?.split('\n}')[0] ?? '';
+    expect(goal).toContain('topicId');
+    expect(goalTopicScopeMigration).toContain('SET topic_id = c.topic_id');
+    expect(goalTopicScopeMigration).toContain('program_member_goals_legacy_active_key');
+    expect(goalTopicScopeMigration).toContain('program_member_goals_topic_active_key');
+    expect(goalTopicScopeMigration).toContain('program_member_goals_topic_fkey');
+    expect(goalTopicScopeMigration).not.toMatch(/\bDROP\s+(TABLE|COLUMN)\b/i);
   });
 });

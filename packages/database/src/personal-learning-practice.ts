@@ -705,6 +705,7 @@ export class PrismaPersonalLearningPracticeRepository
           groupId: s.groupId,
           programEnrollmentId: s.programEnrollmentId,
           groupMembershipId: s.groupMembershipId,
+          topicId: actor.topicId ?? null,
           title: row.originalText.slice(0, 160),
           metricType: 'ACTION',
           targetValue: 1,

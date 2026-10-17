@@ -336,6 +336,7 @@ export class PrismaPersonalLearningPersistenceRepository implements PersonalLear
               groupId: s.groupId,
               programEnrollmentId: s.programEnrollmentId,
               groupMembershipId: s.groupMembershipId,
+              topicId: input.topicId ?? null,
               title: result.candidate.learningObjective,
               metricType: 'ACTION',
               targetValue: 1,
