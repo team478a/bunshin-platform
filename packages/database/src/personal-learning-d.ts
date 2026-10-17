@@ -19,6 +19,15 @@ type MemberScope = Pick<
   'workspaceId' | 'groupId' | 'groupMembershipId' | 'userId'
 >;
 
+function memberScopeWhere(scope: MemberScope) {
+  return {
+    workspaceId: scope.workspaceId,
+    groupId: scope.groupId,
+    groupMembershipId: scope.groupMembershipId,
+    userId: scope.userId,
+  };
+}
+
 /** New D tables are never touched until an owned active dynamic enrollment has the opt-in flag. */
 async function ownsEnabledDynamicEnrollment(
   scope: MemberScope,
@@ -234,7 +243,7 @@ export class PrismaPersonalLearningPersonaRepository {
   private async listOwned(scope: MemberScope) {
     if (!(await ownsEnabledDynamicEnrollment(scope, this.client))) return [];
     return this.client.personalLearningPersonaItem.findMany({
-      where: scope,
+      where: memberScopeWhere(scope),
       orderBy: [{ updatedAt: 'desc' }, { id: 'asc' }],
     });
   }
@@ -246,14 +255,14 @@ export class PrismaPersonalLearningPersonaRepository {
       return { outcome: 'INVALID' as const };
     if (!(await ownsEnabledDynamicEnrollment(scope, this.client)))
       return { outcome: 'NOT_FOUND' as const };
-    const key = { ...scope, attributeKey };
+    const key = { ...memberScopeWhere(scope), attributeKey };
     const existing = await this.client.personalLearningPersonaItem.findUnique({
       where: { workspaceId_groupId_groupMembershipId_attributeKey: key },
     });
     if (existing?.status === 'REJECTED') return { outcome: 'REJECTED' as const, item: existing };
     if (existing) {
       const updated = await this.client.personalLearningPersonaItem.updateMany({
-        where: { ...scope, id: existing.id, status: { not: 'REJECTED' } },
+        where: { ...memberScopeWhere(scope), id: existing.id, status: { not: 'REJECTED' } },
         data: {
           ...input,
           attributeKey,
@@ -274,7 +283,7 @@ export class PrismaPersonalLearningPersonaRepository {
     try {
       const item = await this.client.personalLearningPersonaItem.create({
         data: {
-          ...scope,
+          ...memberScopeWhere(scope),
           ...input,
           attributeKey,
           value,
@@ -292,7 +301,7 @@ export class PrismaPersonalLearningPersonaRepository {
       if (raced?.status === 'REJECTED') return { outcome: 'REJECTED' as const, item: raced };
       if (!raced) throw error;
       await this.client.personalLearningPersonaItem.updateMany({
-        where: { ...scope, id: raced.id, status: { not: 'REJECTED' } },
+        where: { ...memberScopeWhere(scope), id: raced.id, status: { not: 'REJECTED' } },
         data: {
           ...input,
           attributeKey,
@@ -320,7 +329,7 @@ export class PrismaPersonalLearningPersonaRepository {
     if (!(await ownsEnabledDynamicEnrollment(scope, this.client)))
       return { outcome: 'NOT_FOUND' as const };
     const result = await this.client.personalLearningPersonaItem.updateMany({
-      where: { ...scope, id: itemId },
+      where: { ...memberScopeWhere(scope), id: itemId },
       data: {
         ...(input.value !== undefined ? { value: input.value.trim(), status: 'CONFIRMED' } : {}),
         ...(input.status ? { status: input.status } : {}),
@@ -331,7 +340,7 @@ export class PrismaPersonalLearningPersonaRepository {
     return {
       outcome: 'UPDATED' as const,
       item: await this.client.personalLearningPersonaItem.findFirst({
-        where: { ...scope, id: itemId },
+        where: { ...memberScopeWhere(scope), id: itemId },
       }),
     };
   }
@@ -339,14 +348,16 @@ export class PrismaPersonalLearningPersonaRepository {
   async delete(scope: MemberScope, itemId: string) {
     if (!(await ownsEnabledDynamicEnrollment(scope, this.client))) return false;
     const result = await this.client.personalLearningPersonaItem.deleteMany({
-      where: { ...scope, id: itemId },
+      where: { ...memberScopeWhere(scope), id: itemId },
     });
     return result.count > 0;
   }
 
   async deleteAll(scope: MemberScope) {
     if (!(await ownsEnabledDynamicEnrollment(scope, this.client))) return 0;
-    const result = await this.client.personalLearningPersonaItem.deleteMany({ where: scope });
+    const result = await this.client.personalLearningPersonaItem.deleteMany({
+      where: memberScopeWhere(scope),
+    });
     return result.count;
   }
 
@@ -364,7 +375,7 @@ export class PrismaPersonalLearningPersonaRepository {
   > {
     if (!(await ownsEnabledDynamicEnrollment(scope, this.client))) return [];
     const items = await this.client.personalLearningPersonaItem.findMany({
-      where: { ...scope, status: { in: ['UNCONFIRMED', 'CONFIRMED'] } },
+      where: { ...memberScopeWhere(scope), status: { in: ['UNCONFIRMED', 'CONFIRMED'] } },
       select: {
         attributeKey: true,
         value: true,
@@ -405,7 +416,7 @@ export class PrismaPersonalLearningSavedExamplesRepository {
   private async listOwned(scope: MemberScope) {
     if (!(await ownsEnabledDynamicEnrollment(scope, this.client))) return [];
     return this.client.personalLearningSavedExample.findMany({
-      where: scope,
+      where: memberScopeWhere(scope),
       orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
     });
   }
@@ -423,7 +434,13 @@ export class PrismaPersonalLearningSavedExamplesRepository {
     return {
       outcome: 'SAVED' as const,
       item: await this.client.personalLearningSavedExample.create({
-        data: { ...scope, ...input, title, content, lastLearnerUseAt: new Date() },
+        data: {
+          ...memberScopeWhere(scope),
+          ...input,
+          title,
+          content,
+          lastLearnerUseAt: new Date(),
+        },
       }),
     };
   }
@@ -431,7 +448,7 @@ export class PrismaPersonalLearningSavedExamplesRepository {
   async delete(scope: MemberScope, id: string) {
     if (!(await ownsEnabledDynamicEnrollment(scope, this.client))) return false;
     const result = await this.client.personalLearningSavedExample.deleteMany({
-      where: { ...scope, id },
+      where: { ...memberScopeWhere(scope), id },
     });
     return result.count > 0;
   }
@@ -439,7 +456,7 @@ export class PrismaPersonalLearningSavedExamplesRepository {
   async touch(scope: MemberScope, id: string, at: Date) {
     if (!(await ownsEnabledDynamicEnrollment(scope, this.client))) return false;
     const result = await this.client.personalLearningSavedExample.updateMany({
-      where: { ...scope, id },
+      where: { ...memberScopeWhere(scope), id },
       data: { lastLearnerUseAt: at },
     });
     return result.count > 0;
