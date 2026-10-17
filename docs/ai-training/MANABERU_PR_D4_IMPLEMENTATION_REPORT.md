@@ -13,6 +13,7 @@
 - `apps/web/app/s/[serviceSlug]/programs/[programEnrollmentId]/examples/page.tsx`、`examples/saved-examples.tsx`: 本人専用の活用例一覧・保存・削除画面を追加。
 - `apps/web/app/api/services/[serviceSlug]/ai-training/enrollments/[programEnrollmentId]/personal-learning/examples/route.ts`、`apps/web/src/http/personal-learning-saved-examples.ts`: 本人認証・同一Service/Workspace/User・有効な動的受講・`multiTopic` gateを通したAPIを追加。保存内容はタイトル160文字、本文8,000文字まで。利用者作成の保存例として記録し、ID以外の他ユーザー指定を受け付けない。
 - `apps/web/app/s/[serviceSlug]/programs/[programEnrollmentId]/learning-request/page.tsx`: 学習画面から活用例と本人像画面へのリンクを追加。動的経路では既存の本人Export・一括削除カードも表示し、動的画面からも退会/データ持ち出しに到達できるようにした。
+- `apps/web/src/auth/line-return.ts`: LINEログイン後に保存例ページへ戻ることを許可リストへ追加。認証ルートinventoryテストで全サービスページのreturn pathを確認。
 - `packages/capability-training/src/personal-data-export.ts`、`packages/database/src/training-personal-data-export.ts`: D-1のテーマ、本人像、再推測抑止、保存例を、同一受講の本人Export JSONへ追加。新しいD系テーブルは`DYNAMIC_V1`かつ`multiTopic` ONのときだけ読み込む。件数・ファイルサイズ上限は既存Export規則を維持。
 - `packages/capability-training/src/personal-data-deletion.ts`、`packages/database/src/training-personal-data-deletion.ts`: Preview revisionにD系レコードID・更新日時を束縛し、本人一括削除でテーマ、本人像、再推測抑止、保存例を削除。フラグOFFまたは固定研修ではD系テーブルに触れない。
 - `packages/database/src/personal-learning-d.ts`: テーマ・本人像・活用例を本人が閲覧した時に`lastLearnerUseAt`を更新し、動的保持期限を延長する。
@@ -37,8 +38,9 @@
 - Database関連ユニットテスト: 3ファイル24テスト成功（保持Preview、Export、テーマ境界）。
 - Capability Training関連ユニットテスト: 2ファイル18テスト成功（保持・Export・削除規則）。
 - Web関連ユニットテスト: 2ファイル14テスト成功（保存例UI、運営保持画面）。
+- サービス認証route inventoryテスト: 106 tests passed。保存例ページがLINE認証復帰先として受理され、登録済みrouteも維持されることを確認。
 - Prettier check、`git diff --check`: 成功。
-- DB統合テストには、D系データを含めた本人Export・一括削除・保持期限削除、および別ユーザー等の境界ケースを追加した。統合テストとCI `verify` / `database` はDraft PR上で実行し、結果を追記する。使い捨てPostgreSQLを使い、本番DBには接続しない。
+- GitHub Actions run `39053622740` の`database`（使い捨てPostgreSQL統合テスト）と`verify`（format、typecheck、lint、全unit tests、learning-ui E2E、build）はすべて成功。本番DBには接続していない。
 
 ## 5. 未解決事項・次の条件
 
