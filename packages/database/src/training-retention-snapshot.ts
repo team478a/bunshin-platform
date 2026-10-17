@@ -35,6 +35,7 @@ export async function trainingRetentionOwner(
       groupMembershipId: true,
       serviceProgramId: true,
       status: true,
+      startsAt: true,
       endsAt: true,
       updatedAt: true,
     },
@@ -238,7 +239,7 @@ async function dynamicTrainingRetentionSnapshot(
     ...owned.enrollment,
     recordedEnd: state?.endedAt ?? null,
   });
-  const [learnerEvents, requests, answerDates, dueImages] = await Promise.all([
+  const [learnerEvents, latestRequest, latestAnswer, dueImages, dueImageCount] = await Promise.all([
     tx.programActionEvent.findMany({
       where: {
         ...scope,
@@ -247,19 +248,17 @@ async function dynamicTrainingRetentionSnapshot(
       },
       select: { id: true, occurredAt: true },
       orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }],
-      take: TRAINING_EXPORT_MAX_ROWS + 1,
+      take: 1,
     }),
-    tx.personalLearningRequest.findMany({
+    tx.personalLearningRequest.findFirst({
       where: { ...personal, groupMembershipId: owned.membership.id },
-      select: { id: true, createdAt: true, updatedAt: true },
-      orderBy: { id: 'asc' },
-      take: TRAINING_EXPORT_MAX_ROWS + 1,
+      select: { createdAt: true },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     }),
-    tx.trainingMissionAnswer.findMany({
+    tx.trainingMissionAnswer.findFirst({
       where: personal,
-      select: { id: true, missionAssignmentId: true, createdAt: true, updatedAt: true },
-      orderBy: { id: 'asc' },
-      take: TRAINING_EXPORT_MAX_ROWS + 1,
+      select: { createdAt: true },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     }),
     tx.personalLearningPracticeSupportImage.findMany({
       where: {
@@ -269,20 +268,23 @@ async function dynamicTrainingRetentionSnapshot(
       },
       select: { id: true, requestEventId: true, createdAt: true },
       orderBy: { id: 'asc' },
-      take: TRAINING_EXPORT_MAX_ROWS + 1,
+      take: TRAINING_EXPORT_MAX_ROWS,
+    }),
+    tx.personalLearningPracticeSupportImage.count({
+      where: {
+        ...scope,
+        userId: owned.membership.userId,
+        createdAt: { lte: new Date(input.now.getTime() - 90 * 86_400_000) },
+      },
     }),
   ]);
-  if (
-    [learnerEvents, requests, answerDates, dueImages].some(
-      (rows) => rows.length > TRAINING_EXPORT_MAX_ROWS,
-    )
-  )
-    return { outcome: 'TOO_LARGE' } as const;
-  const lastLearnerUseAt = [
-    ...learnerEvents.map(({ occurredAt }) => occurredAt),
-    ...requests.map(({ createdAt }) => createdAt),
-    ...answerDates.map(({ createdAt }) => createdAt),
-  ].reduce<Date | null>((latest, date) => (!latest || date > latest ? date : latest), null);
+  const lastLearnerUseAt =
+    [
+      ...learnerEvents.map(({ occurredAt }) => occurredAt),
+      ...(latestRequest ? [latestRequest.createdAt] : []),
+      ...(latestAnswer ? [latestAnswer.createdAt] : []),
+    ].reduce<Date | null>((latest, date) => (!latest || date > latest ? date : latest), null) ??
+    owned.enrollment.startsAt;
   const contentDue = personalLearningDynamicContentDeletionDue({
     endedAt,
     lastLearnerUseAt,
@@ -293,8 +295,24 @@ async function dynamicTrainingRetentionSnapshot(
     lastLearnerUseAt,
     now: input.now,
   });
-  const selectedAnswers = contentDue ? answerDates : [];
-  const selectedRequests = contentDue ? requests : [];
+  const [selectedRequests, selectedAnswers] = contentDue
+    ? await Promise.all([
+        tx.personalLearningRequest.findMany({
+          where: { ...personal, groupMembershipId: owned.membership.id },
+          select: { id: true, createdAt: true, updatedAt: true },
+          orderBy: { id: 'asc' },
+          take: TRAINING_EXPORT_MAX_ROWS + 1,
+        }),
+        tx.trainingMissionAnswer.findMany({
+          where: personal,
+          select: { id: true, missionAssignmentId: true, createdAt: true, updatedAt: true },
+          orderBy: { id: 'asc' },
+          take: TRAINING_EXPORT_MAX_ROWS + 1,
+        }),
+      ])
+    : [[], []];
+  if ([selectedRequests, selectedAnswers].some((rows) => rows.length > TRAINING_EXPORT_MAX_ROWS))
+    return { outcome: 'TOO_LARGE' } as const;
   const contentEvents = contentDue
     ? await tx.programActionEvent.findMany({
         where: {
@@ -312,7 +330,7 @@ async function dynamicTrainingRetentionSnapshot(
         },
         select: { id: true, eventType: true, createdAt: true },
         orderBy: { id: 'asc' },
-        take: TRAINING_EXPORT_MAX_ROWS + 1,
+        take: TRAINING_EXPORT_MAX_ROWS,
       })
     : [];
   const [profiles, assignments, snapshots, goals, preferences, toolkit] = summaryDue
@@ -367,7 +385,11 @@ async function dynamicTrainingRetentionSnapshot(
     practiceSupportImages: dueImages,
     toolkit,
   };
-  if (Object.values(rows).some((list) => list.length > TRAINING_EXPORT_MAX_ROWS))
+  if (
+    Object.entries(rows).some(
+      ([key, list]) => key !== 'practiceSupportImages' && list.length > TRAINING_EXPORT_MAX_ROWS,
+    )
+  )
     return { outcome: 'TOO_LARGE' } as const;
   const counts = {
     answers: selectedAnswers.length,
@@ -395,6 +417,7 @@ async function dynamicTrainingRetentionSnapshot(
         state,
         endedAt,
         lastLearnerUseAt,
+        dueImageCount,
         rows,
       }),
     )
