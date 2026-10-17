@@ -33,7 +33,7 @@
 - Database保持/個人削除テスト: 17 passed。Web削除API/UIテスト: 8 passed。
 - WebとDatabaseのTypeScript typecheckが完了し、エラーなし。
 - 変更対象ファイルのPrettier checkと`git diff --check`が通過。
-- PostgreSQL実データベース統合ケースは追加済み。初回CI run #38990610780で新規統合テストのfixture不備2件（会話テストを不必要に動的pilot配下にしていた点、期間制約を満たさない終了日時）を検出し修正した。修正後のCI再実行結果を確認中。PR #1327の旧CI成功は今回差分の検証扱いにしない。
+- PostgreSQL実データベース統合ケースは追加済み。CI run #38990610780で終了日時が開始日時より前になるfixture不備を検出し修正。再実行 #38991219945ではPilot予約Programに必要な参加枠データの不足と、DB制約に合わせていない画像MIME type（`image/png`ではなく`image/jpeg`）を検出し修正した。次のCI結果を確認中。PR #1327の旧CI成功は今回差分の検証扱いにしない。
 
 ## 5. 未解決事項
 

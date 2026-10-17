@@ -336,6 +336,14 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
             personalLearningPilot: {
               enabled: true,
               enrollmentIds: [f.enrollment.id],
+              participantControl: {
+                version: 'PILOT_PARTICIPANT_CAP_V1',
+                revision: 1,
+                externalParticipantCap: 5,
+                internalParticipantCap: 0,
+                currentWave: 1,
+                currentWaveCap: 5,
+              },
               learningFeatures: {
                 conversation: true,
                 multiTopic: false,
@@ -344,6 +352,18 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
               },
             },
           },
+        },
+      });
+      await client.personalLearningPilotSeat.create({
+        data: {
+          workspaceId: f.scope.workspaceId,
+          groupId: f.scope.groupId,
+          serviceProgramId: f.enrollment.serviceProgramId,
+          participantHash: pilotParticipantHash(f.enrollment.serviceProgramId, f.scope.userId),
+          programEnrollmentId: f.enrollment.id,
+          kind: 'EXTERNAL',
+          cohort: 'WAVE_1',
+          seatNumber: 1,
         },
       });
       const conversation = new PrismaPersonalLearningConversationRepository(client, () => now);
@@ -2059,7 +2079,7 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
           missionAssignmentId: assignment.id,
           requestEventId: supportEvent.id,
           userId: second.scope.userId,
-          mimeType: 'image/png',
+          mimeType: 'image/jpeg',
           sha256: 'a'.repeat(64),
           sizeBytes: 1,
           bytes: Buffer.from([1]),
