@@ -6,6 +6,8 @@ const f = vi.hoisted(() => ({
   prepare: vi.fn(),
   read: vi.fn(),
   readWish: vi.fn(),
+  candidate: vi.fn(),
+  practice: vi.fn(),
   complete: vi.fn(),
   fail: vi.fn(),
   execute: vi.fn(),
@@ -22,8 +24,12 @@ vi.mock('@bunshin/database', () => ({
   PrismaPersonalLearningConversationRepository: class {
     prepareTurn = f.prepare;
     readConversation = f.read;
+    readPractice = f.practice;
     completeTurn = f.complete;
     failTurn = f.fail;
+  },
+  PrismaLearningCandidateRepository: class {
+    readCandidate = f.candidate;
   },
   PrismaPersonalLearningTextOperationRepository: class {},
   PrismaPersonalLearningRequestRepository: class {
@@ -45,7 +51,7 @@ vi.mock('../src/observability/personal-learning-ai-call', () => ({
 vi.mock('../src/providers/openai-learning-conversation', () => ({
   learningConversationBody: f.body,
   generateLearningConversation: f.generate,
-  LEARNING_CONVERSATION_PROMPT_VERSION: 'conversation-v1',
+  LEARNING_CONVERSATION_PROMPT_VERSION: 'conversation-v2',
 }));
 
 import { sendPersonalLearningConversationTurn } from '../src/services/personal-learning-conversation';
@@ -97,6 +103,8 @@ describe('personal learning conversation orchestration', () => {
     f.prepare.mockResolvedValue({ created: true, context: [], request: { id, status: 'PENDING' } });
     f.read.mockResolvedValue(state);
     f.readWish.mockResolvedValue(wish);
+    f.candidate.mockResolvedValue(null);
+    f.practice.mockResolvedValue({ allowed: true, current: null });
     f.complete.mockResolvedValue(state);
     f.fail.mockResolvedValue(undefined);
     f.runtime.mockResolvedValue({ model: 'synthetic' });
@@ -120,7 +128,12 @@ describe('personal learning conversation orchestration', () => {
     f.admission.mockResolvedValue({ reservedCostUsdMicros: 100n, settledAt: new Date() });
     f.body.mockReturnValue('bounded-body');
     f.generate.mockResolvedValue({
-      value: { status: 'NEEDS_CONTEXT', message: 'どの画面を見ていますか？' },
+      value: {
+        status: 'NEEDS_CONTEXT',
+        message: 'どの画面を見ていますか？',
+        regeneratedProposal: null,
+        environmentCapture: null,
+      },
       measurement: {
         provider: 'openai',
         model: 'synthetic',
@@ -148,7 +161,10 @@ describe('personal learning conversation orchestration', () => {
 
   it('returns an idempotent prior turn without a new AI call or reservation', async () => {
     f.prepare.mockResolvedValue({ created: false });
-    expect(await sendPersonalLearningConversationTurn(command)).toEqual(state);
+    expect(await sendPersonalLearningConversationTurn(command)).toEqual({
+      conversation: state,
+      candidate: null,
+    });
     expect(f.runtime).not.toHaveBeenCalled();
     expect(f.execute).not.toHaveBeenCalled();
     expect(f.generate).not.toHaveBeenCalled();
@@ -168,6 +184,8 @@ describe('personal learning conversation orchestration', () => {
         request: wish,
         currentMessage: command.text,
         history: [],
+        candidate: null,
+        practice: null,
       }),
     );
     expect(f.reserve).toHaveBeenCalledWith(
@@ -181,10 +199,85 @@ describe('personal learning conversation orchestration', () => {
       expect.objectContaining({
         command,
         response: 'どの画面を見ていますか？',
-        promptVersion: 'conversation-v1',
+        promptVersion: 'conversation-v2',
       }),
     );
     expect(f.settle).toHaveBeenCalledOnce();
+  });
+
+  it('regenerates a NEEDS_CONTEXT candidate using the same chat turn and keeps the original wish', async () => {
+    const currentCandidate = {
+      id: 'candidate-old',
+      requestId: id,
+      requestRevision: 1,
+      originalText: wish.originalText,
+      policyVersion: 'LEARNER_PRACTICE_TOOL_INDEPENDENT_V1',
+      materialVersion: 1,
+      promptVersion: 'lesson-v1',
+      usageKey: `personal-learning-operation:${'b'.repeat(64)}`,
+      createdAt: '2026-10-17T00:00:00.000Z',
+      confirmedAt: null,
+      proposal: {
+        status: 'NEEDS_CONTEXT',
+        reason: '端末の確認が必要',
+        questions: ['どの端末を使いますか？'],
+        outcome: '',
+        explanation: '',
+        example: '',
+        practice: [],
+        evidence: [],
+        criteria: [],
+      },
+    };
+    f.candidate.mockResolvedValueOnce(currentCandidate).mockResolvedValueOnce({
+      ...currentCandidate,
+      id: 'candidate-new',
+    });
+    f.generate.mockResolvedValueOnce({
+      value: {
+        status: 'ANSWER',
+        message: '回答を反映して教材候補を更新しました。',
+        regeneratedProposal: {
+          status: 'NEEDS_CONTEXT',
+          reason: '使うAIツールの確認が必要',
+          questions: ['使いたいAIツールはありますか？'],
+          outcome: '',
+          explanation: '',
+          example: '',
+          practice: [],
+          evidence: [],
+          criteria: [],
+        },
+        environmentCapture: { deviceType: 'PC', toolDescription: 'ChatGPT' },
+      },
+      measurement: {
+        provider: 'openai',
+        model: 'synthetic',
+        inputTokens: 1,
+        outputTokens: 1,
+        cachedInputTokens: 0,
+        latencyMs: 1,
+        success: true,
+        errorCategory: null,
+        validationResult: 'VALID',
+        fallbackUsed: false,
+        occurredAt: '2026-10-17T00:00:00.000Z',
+      },
+      requestFinished: true,
+    });
+
+    await sendPersonalLearningConversationTurn(command);
+
+    expect(f.body).toHaveBeenCalledWith(expect.objectContaining({ candidate: currentCandidate }));
+    expect(f.complete).toHaveBeenCalledWith(
+      expect.objectContaining({
+        regeneratedCandidate: expect.objectContaining({
+          expectedCandidateId: 'candidate-old',
+          environmentCapture: { deviceType: 'PC', toolDescription: 'ChatGPT' },
+        }),
+      }),
+    );
+    expect(wish.originalText).toBe('AIで業務を効率化したい');
   });
 
   it('fails closed if existing admission limits are absent and does not call AI', async () => {

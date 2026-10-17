@@ -42,6 +42,7 @@ export function PersonalLearningRequestCard({
   const [saved, setSaved] = useState(initial);
   const [practice, setPractice] = useState(initialPractice);
   const [confirmedCandidate, setConfirmedCandidate] = useState(initialCandidate);
+  const [candidate, setCandidate] = useState(initialCandidate);
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState('');
   const [retry, setRetry] = useState<{ key: string; serialized: string } | null>(null);
@@ -178,6 +179,8 @@ export function PersonalLearningRequestCard({
           sharingEndpoint={`${conversationEndpoint}/share`}
           request={saved}
           initial={initialConversation?.requestId === saved.id ? initialConversation : null}
+          candidate={candidate?.requestId === saved.id ? candidate : null}
+          onCandidateChange={setCandidate}
         />
       )}
       {candidateEndpoint &&
@@ -187,10 +190,11 @@ export function PersonalLearningRequestCard({
           ([key, value]) => value === saved[key as keyof PersonalLearningRequestContent],
         ) && (
           <LearningCandidateCard
-            key={saved.id}
+            key={`${saved.id}:${candidate?.id ?? 'none'}`}
             endpoint={candidateEndpoint}
             request={saved}
-            initial={initialCandidate?.requestId === saved.id ? initialCandidate : null}
+            initial={candidate?.requestId === saved.id ? candidate : null}
+            onChange={setCandidate}
             {...(practiceEndpoint ? { onConfirmed: setConfirmedCandidate } : {})}
           />
         )}

@@ -379,6 +379,91 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
       expect(first).toMatchObject({ created: true, request: { status: 'PENDING' } });
       const replay = await conversation.prepareTurn(command);
       expect(replay).toMatchObject({ created: false, request: { id: first.request.id } });
+      const pendingCandidate = {
+        id: randomUUID(),
+        requestId: f.wish.id,
+        requestRevision: f.wish.revision,
+        originalText: f.wish.originalText,
+        policyVersion: 'LEARNER_PRACTICE_TOOL_INDEPENDENT_V1',
+        materialVersion: 1,
+        promptVersion: 'SYNTHETIC_V1',
+        usageKey: `personal-learning-operation:${'a'.repeat(64)}`,
+        createdAt: now.toISOString(),
+        confirmedAt: null,
+        proposal: {
+          status: 'NEEDS_CONTEXT',
+          reason: '利用環境が未確認',
+          questions: ['どのAIツールを使いますか？'],
+          outcome: '',
+          explanation: '',
+          example: '',
+          practice: [],
+          evidence: [],
+          criteria: [],
+        },
+      };
+      await client.personalLearningRequest.update({
+        where: { id: f.wish.id },
+        data: { lessonCandidate: pendingCandidate },
+      });
+      const turnOperation = {
+        ...f.input,
+        operationId: command.operationId,
+        operationKind: 'CONVERSATION_TURN' as const,
+        promptVersion: 'learning-conversation-same-thread-v2',
+      };
+      const textOperations = new PrismaPersonalLearningTextOperationRepository(client, () => now);
+      const permit = await textOperations.admit(turnOperation);
+      await textOperations.record({
+        operation: turnOperation,
+        permit,
+        measurement: f.measurement,
+        requestFinished: true,
+      });
+      const updatedState = await conversation.completeTurn({
+        command,
+        response: '回答を受け取りました。次の確認をします。',
+        responseStatus: 'ANSWER',
+        promptVersion: 'learning-conversation-same-thread-v2',
+        usageKey: `personal-learning-operation:${permit.operationHash}`,
+        regeneratedCandidate: {
+          expectedCandidateId: pendingCandidate.id,
+          environmentCapture: { deviceType: 'PC', toolDescription: 'AIチャット' },
+          proposal: {
+            status: 'NEEDS_CONTEXT',
+            reason: '次の確認が必要',
+            questions: ['どの端末を使いますか？'],
+            outcome: '',
+            explanation: '',
+            example: '',
+            practice: [],
+            evidence: [],
+            criteria: [],
+          },
+        },
+      });
+      expect(updatedState).toMatchObject({
+        threadId: f.wish.id,
+        requestId: f.wish.id,
+        requestRevision: f.wish.revision,
+        messages: [
+          { role: 'USER', text: command.text },
+          { role: 'ASSISTANT', text: '回答を受け取りました。次の確認をします。' },
+        ],
+      });
+      const updatedCandidate = await conversation.readCandidate(f.actor);
+      expect(updatedCandidate?.id).not.toBe(pendingCandidate.id);
+      expect(updatedCandidate).toMatchObject({
+        originalText: f.wish.originalText,
+        proposal: { reason: '次の確認が必要', questions: ['どの端末を使いますか？'] },
+      });
+      expect(
+        await client.personalLearningRequest.findUniqueOrThrow({ where: { id: f.wish.id } }),
+      ).toMatchObject({
+        originalText: f.wish.originalText,
+        deviceType: 'PC',
+        toolDescription: 'AIチャット',
+      });
       expect(
         await client.programActionEvent.count({
           where: {
@@ -457,7 +542,7 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
         throw new Error('conversation deletion preview missing');
       expect(threadPreview.preview.counts).toMatchObject({
         learningRequests: 1,
-        conversationEvents: 3,
+        conversationEvents: 4,
       });
       expect(
         await deletion.delete({
