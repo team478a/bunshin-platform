@@ -15,8 +15,9 @@ import { personalLearningPricingRegistry } from '../observability/personal-learn
 import {
   generateLearningConversation,
   learningConversationBody,
-  LEARNING_CONVERSATION_PROMPT_VERSION,
+  learningConversationPromptVersion,
 } from '../providers/openai-learning-conversation';
+import { resolvePersonalLearningExtendedScope } from './personal-learning-extended-scope';
 
 export async function sendPersonalLearningConversationTurn(
   command: PersonalLearningConversationCommand,
@@ -25,6 +26,8 @@ export async function sendPersonalLearningConversationTurn(
   const repository = new db.PrismaPersonalLearningConversationRepository(db.prisma);
   const candidates = new db.PrismaLearningCandidateRepository(db.prisma);
   const candidate = await candidates.readCandidate(command.actor);
+  const extendedScope = await resolvePersonalLearningExtendedScope(command.actor);
+  const promptVersion = learningConversationPromptVersion(extendedScope);
   const currentPractice = (await repository.readPractice(command.actor)).current;
   const practice = currentPractice
     ? {
@@ -87,6 +90,7 @@ export async function sendPersonalLearningConversationTurn(
       practice,
       model: policy.model,
       permit: policy,
+      extendedScope,
     });
     const value = await executePersonalLearningTextOperation(
       new db.PrismaPersonalLearningTextOperationRepository(db.prisma),
@@ -98,7 +102,7 @@ export async function sendPersonalLearningConversationTurn(
         operationKind: 'CONVERSATION_TURN',
         attempt: 1,
         provider: 'openai',
-        promptVersion: LEARNING_CONVERSATION_PROMPT_VERSION,
+        promptVersion,
         policy,
         pricingRegistry: personalLearningPricingRegistry(),
       },
@@ -132,11 +136,6 @@ export async function sendPersonalLearningConversationTurn(
       },
     );
     if (!value) throw new ApplicationError('AI_PROVIDER_UNAVAILABLE', 'conversation unavailable');
-    if (
-      (value.regeneratedProposal || value.environmentCapture) &&
-      candidate?.proposal.status !== 'NEEDS_CONTEXT'
-    )
-      throw new ApplicationError('AI_PROVIDER_UNAVAILABLE', 'conversation unavailable');
     const conversation = await repository.completeTurn({
       command,
       response: value.message,
@@ -150,7 +149,7 @@ export async function sendPersonalLearningConversationTurn(
             },
           }
         : {}),
-      promptVersion: LEARNING_CONVERSATION_PROMPT_VERSION,
+      promptVersion,
       usageKey,
     });
     return { conversation, candidate: await candidates.readCandidate(command.actor) };

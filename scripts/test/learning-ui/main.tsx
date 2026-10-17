@@ -21,6 +21,35 @@ createRoot(document.getElementById('root')!).render(
       endpoint="/api/synthetic/wish"
       initial={lessonWish}
       initialCandidate={practiceFixture.candidate}
+      conversationEndpoint="/api/synthetic/conversation"
+      initialConversation={{
+        threadId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        requestId: lessonWish.id,
+        requestRevision: lessonWish.revision,
+        messages: [
+          {
+            id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+            operationId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+            role: 'USER',
+            text: 'AIでお店の紹介を練習したい',
+            status: 'READY',
+            createdAt: '2026-10-12T00:00:00Z',
+            promptVersion: null,
+            responseStatus: null,
+          },
+          {
+            id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+            operationId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+            role: 'ASSISTANT',
+            text: '紹介文の見出しを一緒に考えましょう。',
+            status: 'READY',
+            createdAt: '2026-10-12T00:00:01Z',
+            promptVersion: 'synthetic-conversation-v1',
+            responseStatus: 'ANSWER',
+          },
+        ],
+        sharedAt: null,
+      }}
       practiceEndpoint="/api/synthetic/practice"
       initialPractice={{
         allowed: !new URLSearchParams(window.location.search).has('stopped'),

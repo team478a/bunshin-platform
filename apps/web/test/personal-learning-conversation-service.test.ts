@@ -18,6 +18,7 @@ const f = vi.hoisted(() => ({
   admission: vi.fn(),
   body: vi.fn(),
   generate: vi.fn(),
+  extendedScope: vi.fn(),
 }));
 vi.mock('@bunshin/database', () => ({
   prisma: { personalLearningCallAdmission: { findUnique: f.admission } },
@@ -51,7 +52,11 @@ vi.mock('../src/observability/personal-learning-ai-call', () => ({
 vi.mock('../src/providers/openai-learning-conversation', () => ({
   learningConversationBody: f.body,
   generateLearningConversation: f.generate,
-  LEARNING_CONVERSATION_PROMPT_VERSION: 'conversation-v2',
+  learningConversationPromptVersion: (extendedScope: boolean) =>
+    extendedScope ? 'conversation-v3' : 'conversation-v2',
+}));
+vi.mock('../src/services/personal-learning-extended-scope', () => ({
+  resolvePersonalLearningExtendedScope: f.extendedScope,
 }));
 
 import { sendPersonalLearningConversationTurn } from '../src/services/personal-learning-conversation';
@@ -104,6 +109,7 @@ describe('personal learning conversation orchestration', () => {
     f.read.mockResolvedValue(state);
     f.readWish.mockResolvedValue(wish);
     f.candidate.mockResolvedValue(null);
+    f.extendedScope.mockResolvedValue(false);
     f.practice.mockResolvedValue({ allowed: true, current: null });
     f.complete.mockResolvedValue(state);
     f.fail.mockResolvedValue(undefined);
@@ -278,6 +284,59 @@ describe('personal learning conversation orchestration', () => {
       }),
     );
     expect(wish.originalText).toBe('AIで業務を効率化したい');
+  });
+
+  it('uses only the reply when AI returns an unnecessary proposal for a candidate that needs no context', async () => {
+    const unsolicitedProposal = {
+      status: 'READY',
+      reason: '提案',
+      questions: [],
+      outcome: '成果',
+      explanation: '説明',
+      example: '例',
+      practice: ['一歩'],
+      evidence: ['証拠'],
+      criteria: ['基準'],
+    };
+    f.generate.mockResolvedValueOnce({
+      value: {
+        status: 'ANSWER',
+        message: '短い返事だけを使います。',
+        regeneratedProposal: unsolicitedProposal,
+        environmentCapture: { deviceType: 'PC', toolDescription: 'ChatGPT' },
+      },
+      measurement: {
+        provider: 'openai',
+        model: 'synthetic',
+        inputTokens: 1,
+        outputTokens: 1,
+        cachedInputTokens: 0,
+        latencyMs: 1,
+        success: true,
+        errorCategory: null,
+        validationResult: 'VALID',
+        fallbackUsed: false,
+        occurredAt: '2026-10-17T00:00:00.000Z',
+      },
+      requestFinished: true,
+    });
+    await sendPersonalLearningConversationTurn(command);
+    expect(f.complete).toHaveBeenCalledWith(
+      expect.objectContaining({
+        response: '短い返事だけを使います。',
+      }),
+    );
+    expect(f.complete.mock.calls[0]?.[0]).not.toHaveProperty('regeneratedCandidate');
+    expect(f.fail).not.toHaveBeenCalled();
+  });
+
+  it('selects extended proposal guidance from the server-side Program feature only', async () => {
+    f.extendedScope.mockResolvedValue(true);
+    await sendPersonalLearningConversationTurn(command);
+    expect(f.body).toHaveBeenCalledWith(expect.objectContaining({ extendedScope: true }));
+    expect(f.complete).toHaveBeenCalledWith(
+      expect.objectContaining({ promptVersion: 'conversation-v3' }),
+    );
   });
 
   it('fails closed if existing admission limits are absent and does not call AI', async () => {

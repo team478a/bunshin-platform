@@ -13,6 +13,7 @@ const f = vi.hoisted(() => ({
   admission: vi.fn(),
   body: vi.fn(),
   generate: vi.fn(),
+  extendedScope: vi.fn(),
 }));
 vi.mock('@bunshin/database', () => ({
   prisma: { personalLearningCallAdmission: { findUnique: f.admission } },
@@ -38,7 +39,11 @@ vi.mock('../src/observability/personal-learning-ai-call', () => ({
 vi.mock('../src/providers/openai-learning-support', () => ({
   learningSupportBody: f.body,
   generateLearningSupport: f.generate,
-  LEARNING_SUPPORT_PROMPT_VERSION: 'support-v1',
+  learningSupportPromptVersion: (extendedScope: boolean) =>
+    extendedScope ? 'support-v2' : 'support-v1',
+}));
+vi.mock('../src/services/personal-learning-extended-scope', () => ({
+  resolvePersonalLearningExtendedScope: f.extendedScope,
 }));
 import { requestPracticeSupport } from '../src/services/personal-learning-practice-support';
 const id = '11111111-1111-4111-8111-111111111111';
@@ -92,6 +97,7 @@ describe('practice support orchestration', () => {
       }),
     );
     f.prepare.mockResolvedValue({ practice, request, created: true });
+    f.extendedScope.mockResolvedValue(false);
     f.complete.mockResolvedValue(practice);
     f.fail.mockResolvedValue(undefined);
     f.runtime.mockResolvedValue({ model: 'synthetic' });
