@@ -18,6 +18,7 @@ export interface TrainingPersonalDataSnapshot {
   activities: TrainingExportRecord[];
   goals: TrainingExportRecord[];
   personalLearning?: TrainingExportRecord[];
+  dynamicLearning?: TrainingExportRecord[];
 }
 
 export interface TrainingPersonalDataScope {
@@ -56,6 +57,7 @@ export class ExportTrainingPersonalData {
         result.data.activities,
         result.data.goals,
         result.data.personalLearning ?? [],
+        result.data.dynamicLearning ?? [],
       ].some((rows) => rows.length > TRAINING_EXPORT_MAX_ROWS)
     ) {
       return { outcome: 'TOO_LARGE' };
@@ -73,6 +75,7 @@ export class ExportTrainingPersonalData {
       ...result.data.activities,
       ...result.data.goals,
       ...(result.data.personalLearning ?? []),
+      ...(result.data.dynamicLearning ?? []),
     ];
     for (const record of records) {
       contentBytes += encoder.encode(JSON.stringify(record)).byteLength;

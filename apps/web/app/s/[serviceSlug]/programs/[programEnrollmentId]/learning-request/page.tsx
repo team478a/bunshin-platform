@@ -9,6 +9,7 @@ import { PersonalLearningRequestCard } from './card';
 import { personalLearningMode } from '@bunshin/capability-training';
 import { personalLearningFeatureEnabled } from '@bunshin/capability-training';
 import { LearningTopicSelector } from './topic-selector';
+import { AiTrainingDataExportCard } from '../ai-training-data-export-card';
 export const dynamic = 'force-dynamic';
 export default async function Page({
   params,
@@ -57,6 +58,7 @@ export default async function Page({
     const pagePath = `/s/${serviceSlug}/programs/${programEnrollmentId}/learning-request`;
     const topicEndpoint = `/api/services/${serviceSlug}/ai-training/enrollments/${programEnrollmentId}/topics`;
     const personaPath = `/s/${serviceSlug}/programs/${programEnrollmentId}/persona`;
+    const examplesPath = `/s/${serviceSlug}/programs/${programEnrollmentId}/examples`;
     const topics = multiTopic
       ? (
           (await new db.PrismaPersonalLearningTopicRepository(db.prisma).list(input.scope)) ?? []
@@ -68,6 +70,9 @@ export default async function Page({
           <LearningTopicSelector endpoint={topicEndpoint} pagePath={pagePath} topics={topics} />
           <p>
             <a href={personaPath}>AIが理解していることを確認・修正する</a>
+          </p>
+          <p>
+            <a href={examplesPath}>保存した活用例・手本を見る</a>
           </p>
         </main>
       );
@@ -88,9 +93,14 @@ export default async function Page({
           />
         )}
         {multiTopic && (
-          <p>
-            <a href={personaPath}>AIが理解していることを確認・修正する</a>
-          </p>
+          <>
+            <p>
+              <a href={personaPath}>AIが理解していることを確認・修正する</a>
+            </p>
+            <p>
+              <a href={examplesPath}>保存した活用例・手本を見る</a>
+            </p>
+          </>
         )}
         <PersonalLearningRequestCard
           dynamicMode={dynamicMode}
@@ -125,6 +135,14 @@ export default async function Page({
               : null
           }
         />
+        {dynamicMode && (
+          <div className="mt-8">
+            <AiTrainingDataExportCard
+              serviceSlug={serviceSlug}
+              programEnrollmentId={programEnrollmentId}
+            />
+          </div>
+        )}
       </main>
     );
   } catch (error) {

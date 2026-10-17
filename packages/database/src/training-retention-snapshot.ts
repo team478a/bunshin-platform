@@ -4,6 +4,7 @@ import {
   TRAINING_EXPORT_MAX_ROWS,
   personalLearningDynamicContentDeletionDue,
   personalLearningDynamicSummaryDeletionDue,
+  personalLearningFeatureEnabled,
   personalLearningMode,
   trainingAnswerRetentionCutoff,
   trainingEndRetentionEligibility,
@@ -285,6 +286,51 @@ async function dynamicTrainingRetentionSnapshot(
       ...(latestAnswer ? [latestAnswer.createdAt] : []),
     ].reduce<Date | null>((latest, date) => (!latest || date > latest ? date : latest), null) ??
     owned.enrollment.startsAt;
+  const dTablesEnabled = personalLearningFeatureEnabled(owned.program.settings, 'multiTopic');
+  const latestDynamicDataUse = dTablesEnabled
+    ? await Promise.all([
+        tx.personalLearningSavedExample.findFirst({
+          where: {
+            workspaceId: input.workspaceId,
+            groupId: input.groupId,
+            groupMembershipId: owned.membership.id,
+            userId: owned.membership.userId,
+            lastLearnerUseAt: { not: null },
+          },
+          select: { lastLearnerUseAt: true },
+          orderBy: [{ lastLearnerUseAt: 'desc' }, { id: 'desc' }],
+        }),
+        tx.personalLearningPersonaItem.findFirst({
+          where: {
+            workspaceId: input.workspaceId,
+            groupId: input.groupId,
+            groupMembershipId: owned.membership.id,
+            userId: owned.membership.userId,
+            lastLearnerUseAt: { not: null },
+          },
+          select: { lastLearnerUseAt: true },
+          orderBy: [{ lastLearnerUseAt: 'desc' }, { id: 'desc' }],
+        }),
+        tx.personalLearningTopic.findFirst({
+          where: {
+            workspaceId: input.workspaceId,
+            groupId: input.groupId,
+            groupMembershipId: owned.membership.id,
+            userId: owned.membership.userId,
+            lastLearnerUseAt: { not: null },
+          },
+          select: { lastLearnerUseAt: true },
+          orderBy: [{ lastLearnerUseAt: 'desc' }, { id: 'desc' }],
+        }),
+      ])
+    : [];
+  const summaryLastLearnerUseAt = latestDynamicDataUse
+    .map((row) => row?.lastLearnerUseAt)
+    .filter((value): value is Date => value instanceof Date)
+    .reduce<Date | null>(
+      (latest, date) => (!latest || date > latest ? date : latest),
+      lastLearnerUseAt,
+    );
   const contentDue = personalLearningDynamicContentDeletionDue({
     endedAt,
     lastLearnerUseAt,
@@ -292,7 +338,7 @@ async function dynamicTrainingRetentionSnapshot(
   });
   const summaryDue = personalLearningDynamicSummaryDeletionDue({
     endedAt,
-    lastLearnerUseAt,
+    lastLearnerUseAt: summaryLastLearnerUseAt,
     now: input.now,
   });
   const [selectedRequests, selectedAnswers] = contentDue
@@ -333,7 +379,18 @@ async function dynamicTrainingRetentionSnapshot(
         take: TRAINING_EXPORT_MAX_ROWS,
       })
     : [];
-  const [profiles, assignments, snapshots, goals, preferences, toolkit] = summaryDue
+  const [
+    profiles,
+    assignments,
+    snapshots,
+    goals,
+    preferences,
+    toolkit,
+    dynamicTopics,
+    personaItems,
+    personaSuppressions,
+    savedExamples,
+  ] = summaryDue
     ? await Promise.all([
         tx.trainingParticipantProfile.findMany({
           where: { ...personal, groupMembershipId: owned.membership.id },
@@ -371,8 +428,59 @@ async function dynamicTrainingRetentionSnapshot(
           orderBy: { id: 'asc' },
           take: TRAINING_EXPORT_MAX_ROWS + 1,
         }),
+        dTablesEnabled
+          ? tx.personalLearningTopic.findMany({
+              where: {
+                ...scope,
+                groupMembershipId: owned.membership.id,
+                userId: owned.membership.userId,
+              },
+              select: { id: true, updatedAt: true },
+              orderBy: { id: 'asc' },
+              take: TRAINING_EXPORT_MAX_ROWS + 1,
+            })
+          : [],
+        dTablesEnabled
+          ? tx.personalLearningPersonaItem.findMany({
+              where: {
+                workspaceId: input.workspaceId,
+                groupId: input.groupId,
+                groupMembershipId: owned.membership.id,
+                userId: owned.membership.userId,
+              },
+              select: { id: true, updatedAt: true },
+              orderBy: { id: 'asc' },
+              take: TRAINING_EXPORT_MAX_ROWS + 1,
+            })
+          : [],
+        dTablesEnabled
+          ? tx.personalLearningPersonaSuppression.findMany({
+              where: {
+                workspaceId: input.workspaceId,
+                groupId: input.groupId,
+                groupMembershipId: owned.membership.id,
+                userId: owned.membership.userId,
+              },
+              select: { id: true, createdAt: true },
+              orderBy: { id: 'asc' },
+              take: TRAINING_EXPORT_MAX_ROWS + 1,
+            })
+          : [],
+        dTablesEnabled
+          ? tx.personalLearningSavedExample.findMany({
+              where: {
+                workspaceId: input.workspaceId,
+                groupId: input.groupId,
+                groupMembershipId: owned.membership.id,
+                userId: owned.membership.userId,
+              },
+              select: { id: true, updatedAt: true },
+              orderBy: { id: 'asc' },
+              take: TRAINING_EXPORT_MAX_ROWS + 1,
+            })
+          : [],
       ])
-    : [[], [], [], [], [], []];
+    : [[], [], [], [], [], [], [], [], [], []];
   const rows = {
     answers: selectedAnswers,
     profiles,
@@ -384,6 +492,10 @@ async function dynamicTrainingRetentionSnapshot(
     learningRequests: selectedRequests,
     practiceSupportImages: dueImages,
     toolkit,
+    dynamicTopics,
+    personaItems,
+    personaSuppressions,
+    savedExamples,
   };
   if (
     Object.entries(rows).some(
@@ -403,6 +515,15 @@ async function dynamicTrainingRetentionSnapshot(
     preferences: preferences.length,
     retainedToolkit: 0,
     toolkitDue: toolkit.length,
+    dynamicTopicsDue: dynamicTopics.length,
+    personaItemsDue: personaItems.length,
+    personaSuppressionsDue: personaSuppressions.length,
+    savedExamplesDue: savedExamples.length,
+    dynamicLearningDataDue:
+      dynamicTopics.length +
+      personaItems.length +
+      personaSuppressions.length +
+      savedExamples.length,
     learningRequests: selectedRequests.length,
     conversationEvents: contentEvents.filter(({ eventType }) =>
       eventType.startsWith('PERSONAL_LEARNING_CONVERSATION_'),
@@ -417,6 +538,7 @@ async function dynamicTrainingRetentionSnapshot(
         state,
         endedAt,
         lastLearnerUseAt,
+        summaryLastLearnerUseAt,
         dueImageCount,
         rows,
       }),

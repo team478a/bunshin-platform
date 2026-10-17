@@ -97,6 +97,7 @@ export interface TrainingRetentionPreviewSummary {
   scoreProfilesDue: number;
   progressSnapshotsDue: number;
   retainedToolkit: number;
+  dynamicLearningDataDue?: number;
   endDateUnresolved: number;
   ownershipUnresolved: number;
 }
@@ -136,6 +137,10 @@ export interface TrainingRetentionExecutionCounts {
   conversationEvents?: number;
   practiceSupportImages?: number;
   toolkitDue?: number;
+  dynamicTopicsDue?: number;
+  personaItemsDue?: number;
+  savedExamplesDue?: number;
+  personaSuppressionsDue?: number;
 }
 export type TrainingRetentionExecutionPreview = {
   revision: string;

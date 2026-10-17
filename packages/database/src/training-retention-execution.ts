@@ -114,6 +114,45 @@ export class PrismaTrainingRetentionExecutionRepository implements TrainingReten
               await tx.programActionEvent.deleteMany({
                 where: { ...scope, id: { in: rows.activities.map(({ id }) => id) } },
               });
+            if (rows.dynamicTopics.length)
+              await tx.personalLearningTopic.deleteMany({
+                where: {
+                  ...scope,
+                  groupMembershipId: owned.membership.id,
+                  userId: owned.membership.userId,
+                  id: { in: rows.dynamicTopics.map(({ id }) => id) },
+                },
+              });
+            if (rows.personaItems.length)
+              await tx.personalLearningPersonaItem.deleteMany({
+                where: {
+                  workspaceId: input.workspaceId,
+                  groupId: input.groupId,
+                  groupMembershipId: owned.membership.id,
+                  userId: owned.membership.userId,
+                  id: { in: rows.personaItems.map(({ id }) => id) },
+                },
+              });
+            if (rows.personaSuppressions.length)
+              await tx.personalLearningPersonaSuppression.deleteMany({
+                where: {
+                  workspaceId: input.workspaceId,
+                  groupId: input.groupId,
+                  groupMembershipId: owned.membership.id,
+                  userId: owned.membership.userId,
+                  id: { in: rows.personaSuppressions.map(({ id }) => id) },
+                },
+              });
+            if (rows.savedExamples.length)
+              await tx.personalLearningSavedExample.deleteMany({
+                where: {
+                  workspaceId: input.workspaceId,
+                  groupId: input.groupId,
+                  groupMembershipId: owned.membership.id,
+                  userId: owned.membership.userId,
+                  id: { in: rows.savedExamples.map(({ id }) => id) },
+                },
+              });
             if (rows.learningRequests.length)
               await tx.personalLearningRequest.deleteMany({
                 where: {
