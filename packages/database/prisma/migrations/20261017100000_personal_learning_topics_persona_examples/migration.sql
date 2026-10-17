@@ -33,7 +33,7 @@ INSERT INTO personal_learning_topics (
 SELECT DISTINCT ON (workspace_id, group_id, program_enrollment_id)
   gen_random_uuid(), workspace_id, group_id, program_enrollment_id, group_membership_id, user_id,
   COALESCE(NULLIF(left(btrim(original_text), 160), ''), '最初の学習テーマ'),
-  'ACTIVE', id, created_at, CURRENT_TIMESTAMP
+  'ACTIVE', id, NULL, CURRENT_TIMESTAMP
 FROM personal_learning_requests
 ORDER BY workspace_id, group_id, program_enrollment_id, revision ASC, id ASC;
 

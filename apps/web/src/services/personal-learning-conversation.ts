@@ -25,12 +25,6 @@ export async function sendPersonalLearningConversationTurn(
   const db = await import('@bunshin/database');
   const repository = new db.PrismaPersonalLearningConversationRepository(db.prisma);
   const candidates = new db.PrismaLearningCandidateRepository(db.prisma);
-  const persona = await new db.PrismaPersonalLearningPersonaRepository(db.prisma).listForAi({
-    workspaceId: command.actor.scope.workspaceId,
-    groupId: command.actor.scope.groupId,
-    groupMembershipId: command.actor.scope.groupMembershipId,
-    userId: command.actor.actorUserId,
-  });
   const candidate = await candidates.readCandidate(command.actor);
   const extendedScope = await resolvePersonalLearningExtendedScope(command.actor);
   const promptVersion = learningConversationPromptVersion(extendedScope);
@@ -97,7 +91,6 @@ export async function sendPersonalLearningConversationTurn(
       model: policy.model,
       permit: policy,
       extendedScope,
-      persona,
     });
     const value = await executePersonalLearningTextOperation(
       new db.PrismaPersonalLearningTextOperationRepository(db.prisma),

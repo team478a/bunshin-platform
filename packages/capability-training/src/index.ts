@@ -291,10 +291,6 @@ export {
 export {
   PERSONAL_LEARNING_ACTIVE_TOPIC_LIMIT,
   canCreatePersonalLearningTopic,
-  personaItemsForAi,
   personalLearningTopicLimit,
 } from './personal-learning-topics';
-export type {
-  PersonalLearningPersonaStatus,
-  PersonalLearningTopicStatus,
-} from './personal-learning-topics';
+export type { PersonalLearningTopicStatus } from './personal-learning-topics';

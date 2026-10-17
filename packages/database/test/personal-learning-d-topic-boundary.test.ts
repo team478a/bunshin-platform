@@ -30,8 +30,14 @@ describe('PR-D dynamic learning data boundaries', () => {
     expect(migration).toContain('INSERT INTO personal_learning_topics');
     expect(migration).toContain('FROM personal_learning_requests');
     expect(migration).toContain('revision ASC');
+    expect(migration).toMatch(/'ACTIVE',\s*id,\s*NULL,\s*CURRENT_TIMESTAMP/);
     expect(migration).not.toMatch(/\bDROP\s+(TABLE|COLUMN)\b/i);
     expect(migration).not.toMatch(/\bDELETE\s+FROM\s+personal_learning_requests\b/i);
+  });
+
+  it('leaves null last-use dates for retention to fall back to enrollment start', () => {
+    expect(migration).toContain('last_learner_use_at');
+    expect(migration).toMatch(/'ACTIVE',\s*id,\s*NULL,\s*CURRENT_TIMESTAMP/);
   });
 
   it('does not create a path from learner persona/example data into Bunshin Memory', () => {

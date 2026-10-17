@@ -17,11 +17,6 @@ export function learningLessonBody(
   model: string,
   permit: Pick<PersonalLearningTextPermit, 'maxRequestBytes' | 'maxOutputTokens'>,
   extendedScope = false,
-  persona: readonly {
-    attributeKey: string;
-    value: string;
-    epistemicStatus: 'UNCONFIRMED_GUESS' | 'LEARNER_CONFIRMED';
-  }[] = [],
 ) {
   const proposalPolicy = learningProposalPolicy(extendedScope);
   const strings = ['reason', 'outcome', 'explanation', 'example'];
@@ -43,11 +38,6 @@ export function learningLessonBody(
           toolDescription: request.toolDescription,
           experienceDescription: request.experienceDescription,
           currentPosition: request.currentPosition,
-          persona: persona.map(({ attributeKey, value, epistemicStatus }) => ({
-            attributeKey,
-            value,
-            epistemicStatus,
-          })),
         }),
       },
     ],

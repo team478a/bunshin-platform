@@ -25,13 +25,6 @@ describe('versioned learning conversation provider', () => {
       practice: null,
       model: 'gpt-5.2',
       permit: { maxRequestBytes: 12000, maxOutputTokens: 400 },
-      persona: [
-        {
-          attributeKey: 'preferredLearningStyle',
-          value: '短い説明がよい',
-          epistemicStatus: 'UNCONFIRMED_GUESS',
-        },
-      ],
     });
     const parsed = JSON.parse(body) as { input: { role: string; content: string }[] };
     const prompt = parsed.input.map(({ content }) => content).join('\n');
@@ -39,8 +32,6 @@ describe('versioned learning conversation provider', () => {
     expect(prompt).toContain('社内向けのお知らせです');
     expect(prompt).toContain('最後に本人が次に試せる小さな一歩');
     expect(prompt).toContain('課題の開始、提出、評価、修了');
-    expect(prompt).toContain('UNCONFIRMED_GUESS');
-    expect(prompt).toContain('短い説明がよい');
   });
 
   it.each(['ANSWER', 'NEEDS_CONTEXT', 'OUT_OF_SCOPE'] as const)(

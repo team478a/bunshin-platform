@@ -46,32 +46,6 @@ describe('lesson Provider', () => {
       experienceDescription: null,
     });
   });
-  it('passes only scoped persona attributes with explicit certainty labels', () => {
-    const v = JSON.parse(
-      learningLessonBody(
-        wish,
-        'gpt-5.2-2025-12-11',
-        { maxRequestBytes: 16000, maxOutputTokens: 2000 },
-        false,
-        [
-          {
-            attributeKey: 'preferredLearningStyle',
-            value: '短い例から試す',
-            epistemicStatus: 'UNCONFIRMED_GUESS',
-          },
-        ],
-      ),
-    ) as { input: { content: string }[] };
-    expect(JSON.parse(v.input[1]!.content)).toMatchObject({
-      persona: [
-        {
-          attributeKey: 'preferredLearningStyle',
-          value: '短い例から試す',
-          epistemicStatus: 'UNCONFIRMED_GUESS',
-        },
-      ],
-    });
-  });
   it('rejects byte overflow and unsupported models before fetch', () => {
     expect(() =>
       learningLessonBody(wish, 'gpt-5.2', { maxRequestBytes: 1, maxOutputTokens: 2000 }),

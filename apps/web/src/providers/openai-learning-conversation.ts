@@ -104,11 +104,6 @@ export function learningConversationBody(input: {
   model: string;
   permit: Pick<PersonalLearningTextPermit, 'maxRequestBytes' | 'maxOutputTokens'>;
   extendedScope?: boolean;
-  persona?: readonly {
-    attributeKey: string;
-    value: string;
-    epistemicStatus: 'UNCONFIRMED_GUESS' | 'LEARNER_CONFIRMED';
-  }[];
 }) {
   const proposalPolicy = learningProposalPolicy(input.extendedScope === true);
   const body = serializeOpenAiTaskRequest('LEARNING_CONVERSATION', {
@@ -143,11 +138,6 @@ export function learningConversationBody(input: {
               }
             : null,
           practice: input.practice,
-          persona: (input.persona ?? []).map(({ attributeKey, value, epistemicStatus }) => ({
-            attributeKey,
-            value,
-            epistemicStatus,
-          })),
         }),
       },
     ],
