@@ -56,12 +56,12 @@
 - Topic-boundary and database-readiness unit tests — 9 passed.
 - `git diff --check` — passed.
 - The database integration case now covers two topics in the same enrollment: independent wishes and conversation projections, identical idempotency keys across topics, cross-topic request/conversation/plan update rejection, and topic-scoped goal/plan reads. It also retains the existing cross-user/service/workspace checks.
-- Live PostgreSQL integration tests have not been run locally; they require the disposable integration database used by CI. CI `verify` and `database` are required before review completion.
+- Live PostgreSQL integration tests are run in the disposable database provided by CI, not against a local or production database.
+- GitHub Actions run [39024440572](https://github.com/team478a/bunshin-platform/actions/runs/39024440572) — `verify` passed (format, typecheck, lint, tests, learning UI, build); `database` passed (migration/readiness and PostgreSQL integration tests).
 
 ## 5. 未解決事項
 
-- The first PostgreSQL CI run caught that the legacy active-goal unique index still limited an enrollment to one active goal. D-2 now adds topic scope to learning goals, backfills existing confirmed goals, and preserves the legacy uniqueness rule for rows without a topic. Await the rerun of the database integration suite for confirmation.
-- Confirm migration execution order for any eventual release: apply both additive D-2 migrations first, then deploy the program. Do not enable `multiTopic` until both are verified. No production migration, deployment, or flag change was performed for this PR.
+- For any eventual release, apply both additive D-2 migrations first, then deploy the program. Do not enable `multiTopic` until both are verified. No production migration, deployment, or flag change was performed for this PR.
 
 ## 6. 次Phaseへ進める条件
 
