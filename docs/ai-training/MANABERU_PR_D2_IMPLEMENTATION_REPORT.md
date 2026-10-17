@@ -63,7 +63,7 @@
 - `git diff --check` — 成功
 - DB統合テストでは、同一受講の2テーマ間の希望・会話の独立性、同じ冪等性キーの分離、テーマをまたぐ希望／会話／計画更新の拒否、テーマ単位の目標・計画参照を確認します。従来のユーザー／サービス／ワークスペース境界テストも維持しています。
 - PostgreSQL統合テストはCIの使い捨てDBで実行し、本番DBやローカルの実DBには接続していません。
-- 既存のCI run [39024440572](https://github.com/team478a/bunshin-platform/actions/runs/39024440572) では修正前のPRコミットに対する`verify`と`database`が成功済みです。今回の修正後のCI結果は、再実行後に追記します。
+- 修正後のGitHub Actions run [39028544870](https://github.com/team478a/bunshin-platform/actions/runs/39028544870) — `verify` 成功（format、typecheck、lint、全テスト、learning UI、build）、`database` 成功（migration/readiness、PostgreSQL統合テスト）。
 
 ## 5. 未解決事項・本番反映
 
