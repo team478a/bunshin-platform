@@ -336,7 +336,6 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
             personalLearningPilot: {
               enabled: true,
               enrollmentIds: [f.enrollment.id],
-              learningMode: 'DYNAMIC_V1',
               learningFeatures: {
                 conversation: true,
                 multiTopic: false,
@@ -1928,7 +1927,11 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
       });
       await client.programEnrollment.update({
         where: { id: f.enrollment.id },
-        data: { status: 'EXPIRED', endsAt: new Date(now.getTime() - 100 * 86_400_000) },
+        data: {
+          status: 'EXPIRED',
+          startsAt: new Date(now.getTime() - 200 * 86_400_000),
+          endsAt: new Date(now.getTime() - 100 * 86_400_000),
+        },
       });
       await client.platformAdmin.create({
         data: { userId: f.owner.id, role: 'SUPER_ADMIN', status: 'ACTIVE' },
