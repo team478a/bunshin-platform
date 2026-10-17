@@ -38,13 +38,14 @@
 - `pnpm db:migrate:vercel`、`pnpm db:assert-ready`: 使い捨てローカルPostgreSQLで成功。
 - `pnpm test:integration`: 使い捨てローカルPostgreSQLで1 file / 240 tests 成功。本人像の拒否・削除の次回取得反映、確認済み優先・新しい順を含む。
 - 対象ファイルのESLint: 成功。対象ファイルのPrettier check: 成功。
-- GitHub Actions `verify` / `database` の結果はDraft PR作成後に追記する。
+- GitHub Actions run `39035069979`（修正後のHEAD `2a6fed96`）: `verify` 成功、`database` 成功。`verify`内のformat check / typecheck / lint / 全test / learning-ui / buildが成功し、`database`内のdb:validate / migrate:vercel / assert-ready / integration testが成功。
+- 先行run `39034457825` は、既存Provider service testのDB mock未更新とLINE auth return許可リスト漏れで失敗。両方を修正し、該当3ファイル・116 testsを個別に再確認後、上記の修正版runで全CIが成功。
 - ローカル統合テストDBは使い捨てPostgreSQLコンテナで、検証後に停止・削除した。本番DBには接続・変更していない。
 
 ## 5. 未解決事項
 
 - 削除項目を将来再推測してよいか、案A/Bの最終決定。
-- Draft PRの`verify` / `database` CI完了後にrun番号と結果を追記する。
+- PR #1333はDraftのまま確認待ち。
 - 本番migration適用・反映・`multiTopic`変更は行っていない。田中の承認前に実施しない。
 
 ## 6. 次Phaseへ進める条件
