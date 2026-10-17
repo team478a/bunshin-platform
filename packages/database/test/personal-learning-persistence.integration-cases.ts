@@ -2225,6 +2225,7 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
     });
     it('dynamic retention purges D-1 topics, reviewed persona, suppressions, and saved examples after the summary deadline', async () => {
       const f = await fixture(false);
+      const retentionNow = new Date(Date.now() + 1_000);
       const program = await client.serviceProgram.findUniqueOrThrow({
         where: { id: f.enrollment.serviceProgramId },
       });
@@ -2237,7 +2238,12 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
               enabled: true,
               enrollmentIds: [f.enrollment.id],
               learningMode: 'DYNAMIC_V1',
-              learningFeatures: { multiTopic: true },
+              learningFeatures: {
+                conversation: false,
+                multiTopic: true,
+                lineLearning: false,
+                extendedScope: false,
+              },
             },
           },
         },
@@ -2246,8 +2252,8 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
         where: { id: f.enrollment.id },
         data: {
           status: 'EXPIRED',
-          startsAt: new Date(now.getTime() - 3 * 366 * 86_400_000),
-          endsAt: new Date(now.getTime() - 2 * 366 * 86_400_000),
+          startsAt: new Date(retentionNow.getTime() - 3 * 366 * 86_400_000),
+          endsAt: new Date(retentionNow.getTime() - 2 * 366 * 86_400_000),
         },
       });
       await client.personalLearningTopic.create({
@@ -2271,7 +2277,7 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
           status: 'CONFIRMED',
           evidenceType: 'LEARNING_REQUEST',
           evidenceId: randomUUID(),
-          evidenceCreatedAt: new Date(now.getTime() - 3 * 366 * 86_400_000),
+          evidenceCreatedAt: new Date(retentionNow.getTime() - 3 * 366 * 86_400_000),
         },
       });
       await client.personalLearningPersonaSuppression.create({
@@ -2305,7 +2311,7 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
         groupId: f.scope.groupId,
         programEnrollmentId: f.enrollment.id,
         operatorUserId: f.owner.id,
-        now,
+        now: retentionNow,
       };
       const preview = await retention.preview(input);
       if (preview.outcome !== 'PREVIEW') throw new Error('D-4 retention preview missing');
