@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
 type Example = { id: string; title: string; content: string; createdAt: string };
 
@@ -15,6 +15,7 @@ export function PersonalLearningSavedExamples({
 }) {
   const [items, setItems] = useState(initialItems);
   const [message, setMessage] = useState('');
+  const formRef = useRef<HTMLFormElement>(null);
   const endpoint = `/api/services/${serviceSlug}/ai-training/enrollments/${enrollmentId}/personal-learning/examples`;
 
   async function save(formData: FormData) {
@@ -27,7 +28,7 @@ export function PersonalLearningSavedExamples({
     if (!response.ok) return setMessage('保存できませんでした。入力内容を確認してください。');
     const body = (await response.json()) as { data: Example };
     setItems((current) => [body.data, ...current]);
-    (document.querySelector('#saved-example-form') as HTMLFormElement | null)?.reset();
+    formRef.current?.reset();
     setMessage('活用例を保存しました。');
   }
 
@@ -45,6 +46,7 @@ export function PersonalLearningSavedExamples({
   return (
     <section className="space-y-6">
       <form
+        ref={formRef}
         id="saved-example-form"
         action={save}
         className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5"
