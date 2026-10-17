@@ -77,6 +77,117 @@ export class PrismaTrainingRetentionExecutionRepository implements TrainingReten
           const snapshot = await trainingRetentionSnapshot(tx, input, owned);
           if (snapshot.outcome !== 'PREVIEW') return snapshot;
           if (snapshot.preview.revision !== input.revision) return { outcome: 'CONFLICT' };
+          if (snapshot.dynamic) {
+            const { scope, personal, rows, endedAt } = snapshot;
+            if (Object.values(snapshot.preview.counts).every((count) => count === 0))
+              return { outcome: 'ALREADY_APPLIED', counts: snapshot.preview.counts };
+            const answerIds = rows.answers.map(({ id }) => id);
+            await tx.job.updateMany({
+              where: {
+                workspaceId: input.workspaceId,
+                requestedBy: owned.membership.userId,
+                jobType: 'TRAINING_ANSWER_EVALUATE',
+                status: { in: ['PENDING', 'LEASED', 'RETRY_SCHEDULED'] },
+                payloadReference: {
+                  in: answerIds.map(
+                    (id) =>
+                      `training-evaluation:${input.groupId}:${input.programEnrollmentId}:${id}:${owned.membership.userId}`,
+                  ),
+                },
+              },
+              data: {
+                status: 'CANCELLED',
+                cancelledAt: input.now,
+                leaseOwner: null,
+                leaseExpiresAt: null,
+                nextRetryAt: null,
+              },
+            });
+            await tx.trainingMissionAnswer.deleteMany({
+              where: { ...personal, id: { in: answerIds } },
+            });
+            if (rows.toolkit.length)
+              await tx.trainingToolkitItem.deleteMany({
+                where: { ...personal, id: { in: rows.toolkit.map(({ id }) => id) } },
+              });
+            if (rows.activities.length)
+              await tx.programActionEvent.deleteMany({
+                where: { ...scope, id: { in: rows.activities.map(({ id }) => id) } },
+              });
+            if (rows.learningRequests.length)
+              await tx.personalLearningRequest.deleteMany({
+                where: {
+                  ...personal,
+                  groupMembershipId: owned.membership.id,
+                  id: { in: rows.learningRequests.map(({ id }) => id) },
+                },
+              });
+            if (rows.practiceSupportImages.length)
+              await tx.personalLearningPracticeSupportImage.deleteMany({
+                where: {
+                  ...scope,
+                  userId: owned.membership.userId,
+                  id: { in: rows.practiceSupportImages.map(({ id }) => id) },
+                },
+              });
+            if (snapshot.progress) {
+              await tx.trainingParticipantProfile.deleteMany({
+                where: { ...personal, groupMembershipId: owned.membership.id },
+              });
+              await tx.programProgressSnapshot.deleteMany({ where: scope });
+              await tx.programMissionAssignment.deleteMany({ where: scope });
+              await tx.programMemberGoal.deleteMany({
+                where: { ...scope, groupMembershipId: owned.membership.id },
+              });
+              await tx.programMemberPreference.deleteMany({
+                where: { ...scope, groupMembershipId: owned.membership.id },
+              });
+              await tx.programEnrollment.updateMany({
+                where: {
+                  workspaceId: input.workspaceId,
+                  groupId: input.groupId,
+                  id: input.programEnrollmentId,
+                  groupMembershipId: owned.membership.id,
+                },
+                data: { goalSnapshot: {} },
+              });
+              await tx.$executeRaw(Prisma.sql`
+                UPDATE program_audit_logs SET
+                  before_data = CASE WHEN jsonb_typeof(before_data) = 'object' THEN before_data - 'goalSnapshot' - 'goal_snapshot' ELSE before_data END,
+                  after_data = CASE WHEN jsonb_typeof(after_data) = 'object' THEN after_data - 'goalSnapshot' - 'goal_snapshot' ELSE after_data END
+                WHERE workspace_id = ${input.workspaceId}::uuid AND group_id = ${input.groupId}::uuid
+                  AND resource_type = 'PROGRAM_ENROLLMENT' AND resource_id = ${input.programEnrollmentId}::uuid
+              `);
+            }
+            if (snapshot.work || snapshot.progress) {
+              await tx.trainingDataRetentionState.upsert({
+                where: { programEnrollmentId: input.programEnrollmentId },
+                create: {
+                  ...scope,
+                  endedAt,
+                  ...(snapshot.work ? { workRedactedAt: input.now } : {}),
+                  ...(snapshot.progress ? { progressPurgedAt: input.now } : {}),
+                },
+                update: {
+                  ...(snapshot.work ? { workRedactedAt: input.now } : {}),
+                  ...(snapshot.progress ? { progressPurgedAt: input.now } : {}),
+                },
+              });
+            }
+            await tx.programAuditLog.create({
+              data: {
+                ...auditScope,
+                beforeData: Prisma.DbNull,
+                afterData: {
+                  revision: input.revision,
+                  counts: snapshot.preview.counts,
+                  policyVersion: 'PERSONAL_LEARNING_DYNAMIC_RETENTION_V1',
+                },
+                performedAt: input.now,
+              },
+            });
+            return { outcome: 'APPLIED', counts: snapshot.preview.counts };
+          }
           const { scope, personal, rows, work, progress } = snapshot;
           const answerIds = rows.answers.map(({ id }) => id);
           const assignments = rows.answers.map(({ missionAssignmentId }) => missionAssignmentId);
