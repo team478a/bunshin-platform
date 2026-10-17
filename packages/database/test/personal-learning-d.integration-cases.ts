@@ -28,14 +28,20 @@ export function registerPersonalLearningDIntegrationCases(client: PrismaClient) 
 
     async function serviceFixture(
       name: string,
-      options: { multiTopic?: boolean; learningMode?: 'DYNAMIC_V1' | 'FIXED_DEFINITIONS_V1' } = {},
+      options: {
+        multiTopic?: boolean;
+        learningMode?: 'DYNAMIC_V1' | 'FIXED_DEFINITIONS_V1';
+        workspaceId?: string;
+      } = {},
     ) {
       const multiTopic = options.multiTopic ?? true;
       const owner = await client.user.create({ data: { displayName: `${name} owner` } });
       const user = await client.user.create({ data: { displayName: `${name} learner` } });
-      const workspace = await client.workspace.create({
-        data: { type: 'ORGANIZATION', name: `${name}-${randomUUID()}` },
-      });
+      const workspace = options.workspaceId
+        ? await client.workspace.findUniqueOrThrow({ where: { id: options.workspaceId } })
+        : await client.workspace.create({
+            data: { type: 'ORGANIZATION', name: `${name}-${randomUUID()}` },
+          });
       const group = await client.group.create({ data: { workspaceId: workspace.id, name } });
       await client.groupMembership.create({
         data: {
@@ -154,7 +160,8 @@ export function registerPersonalLearningDIntegrationCases(client: PrismaClient) 
       cleanup.push(async () => {
         await client.groupMembership.deleteMany({ where: { groupId: group.id } });
         await client.group.deleteMany({ where: { id: group.id } });
-        await client.workspace.deleteMany({ where: { id: workspace.id } });
+        if (!options.workspaceId)
+          await client.workspace.deleteMany({ where: { id: workspace.id } });
         await client.user.deleteMany({ where: { id: { in: [owner.id, user.id] } } });
       });
       return {
@@ -179,6 +186,9 @@ export function registerPersonalLearningDIntegrationCases(client: PrismaClient) 
     it('keeps rejected inferences rejected and prevents cross-service/workspace/user access', async () => {
       const first = await serviceFixture('PR-D-1 first service');
       const second = await serviceFixture('PR-D-1 other workspace');
+      const sameWorkspaceOtherService = await serviceFixture('PR-D-1 other service', {
+        workspaceId: first.workspace.id,
+      });
       const featureOff = await serviceFixture('PR-D-1 feature off', { multiTopic: false });
       const fixedPath = await serviceFixture('PR-D-1 fixed path', {
         learningMode: 'FIXED_DEFINITIONS_V1',
@@ -266,10 +276,14 @@ export function registerPersonalLearningDIntegrationCases(client: PrismaClient) 
       if (created.outcome !== 'CREATED') throw new Error('test topic not created');
       expect(await topics.list(sameServiceOtherUser)).toEqual([]);
       expect(await topics.list(second.scope)).toEqual([]);
+      expect(await topics.list(sameWorkspaceOtherService.scope)).toEqual([]);
       expect(
         await topics.setStatus(sameServiceOtherUser, created.topic.id, 'COMPLETED'),
       ).toBeNull();
       expect(await topics.setStatus(second.scope, created.topic.id, 'COMPLETED')).toBeNull();
+      expect(
+        await topics.setStatus(sameWorkspaceOtherService.scope, created.topic.id, 'COMPLETED'),
+      ).toBeNull();
 
       const persona = new PrismaPersonalLearningPersonaRepository(client);
       expect(await persona.list(featureOff.scope)).toEqual([]);
@@ -306,6 +320,7 @@ export function registerPersonalLearningDIntegrationCases(client: PrismaClient) 
       });
       expect(await persona.list(sameServiceOtherUser)).toEqual([]);
       expect(await persona.list(second.scope)).toEqual([]);
+      expect(await persona.list(sameWorkspaceOtherService.scope)).toEqual([]);
       expect(
         await persona.review(sameServiceOtherUser, rejected.id, { status: 'CONFIRMED' }),
       ).toMatchObject({
@@ -315,6 +330,7 @@ export function registerPersonalLearningDIntegrationCases(client: PrismaClient) 
         await persona.review(second.scope, rejected.id, { status: 'CONFIRMED' }),
       ).toMatchObject({ outcome: 'NOT_FOUND' });
       expect(await persona.delete(second.scope, rejected.id)).toBe(false);
+      expect(await persona.delete(sameWorkspaceOtherService.scope, rejected.id)).toBe(false);
       await client.personalLearningPersonaItem.createMany({
         data: Array.from({ length: 25 }, (_, index) => ({
           workspaceId: first.scope.workspaceId,
@@ -346,8 +362,10 @@ export function registerPersonalLearningDIntegrationCases(client: PrismaClient) 
       if (saved.outcome !== 'SAVED') throw new Error('test example not saved');
       expect(await examples.list(sameServiceOtherUser)).toEqual([]);
       expect(await examples.list(second.scope)).toEqual([]);
+      expect(await examples.list(sameWorkspaceOtherService.scope)).toEqual([]);
       expect(await examples.delete(sameServiceOtherUser, saved.item.id)).toBe(false);
       expect(await examples.delete(second.scope, saved.item.id)).toBe(false);
+      expect(await examples.delete(sameWorkspaceOtherService.scope, saved.item.id)).toBe(false);
       expect(await examples.list(first.scope)).toHaveLength(1);
     });
   });
