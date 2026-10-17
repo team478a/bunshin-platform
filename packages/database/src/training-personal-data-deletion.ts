@@ -2,8 +2,6 @@ import { createHash } from 'node:crypto';
 import {
   AI_TRAINING_V1_MODULE_KEY,
   TRAINING_EXPORT_MAX_ROWS,
-  personalLearningFeatureEnabled,
-  personalLearningMode,
   type TrainingDataDeletionInput,
   type TrainingDataDeletionPreviewResult,
   type TrainingDataDeletionResult,
@@ -330,9 +328,6 @@ export class PrismaTrainingPersonalDataDeletionRepository implements TrainingPer
       programEnrollmentId: input.programEnrollmentId,
     };
     const personal = { ...scope, userId: input.actorUserId };
-    const dTablesEnabled =
-      personalLearningMode(owned.programSettings) === 'DYNAMIC_V1' &&
-      personalLearningFeatureEnabled(owned.programSettings, 'multiTopic');
     const take = TRAINING_EXPORT_MAX_ROWS + 1;
     const orderBy = { id: 'asc' as const };
     const select = { id: true, updatedAt: true } as const;
@@ -486,7 +481,7 @@ export class PrismaTrainingPersonalDataDeletionRepository implements TrainingPer
         ])
       : [[], [], [], [], []];
     const [dynamicTopics, dynamicPersonaItems, dynamicPersonaSuppressions, dynamicSavedExamples] =
-      all && dTablesEnabled
+      all
         ? await Promise.all([
             tx.personalLearningTopic.findMany({
               where: {
@@ -571,15 +566,14 @@ export class PrismaTrainingPersonalDataDeletionRepository implements TrainingPer
       outcome: 'PREVIEW' as const,
       answers,
       eventWhere,
-      dynamicLearningIds:
-        all && dTablesEnabled
-          ? {
-              topics: dynamicTopics.map(({ id }) => id),
-              personaItems: dynamicPersonaItems.map(({ id }) => id),
-              personaSuppressions: dynamicPersonaSuppressions.map(({ id }) => id),
-              savedExamples: dynamicSavedExamples.map(({ id }) => id),
-            }
-          : null,
+      dynamicLearningIds: all
+        ? {
+            topics: dynamicTopics.map(({ id }) => id),
+            personaItems: dynamicPersonaItems.map(({ id }) => id),
+            personaSuppressions: dynamicPersonaSuppressions.map(({ id }) => id),
+            savedExamples: dynamicSavedExamples.map(({ id }) => id),
+          }
+        : null,
       preview: {
         revision,
         counts: {
@@ -591,7 +585,7 @@ export class PrismaTrainingPersonalDataDeletionRepository implements TrainingPer
           activities: activities.length,
           goals: goals.length,
           preferences: preferences.length,
-          ...(all && dTablesEnabled
+          ...(all
             ? {
                 dynamicLearningData:
                   dynamicTopics.length +

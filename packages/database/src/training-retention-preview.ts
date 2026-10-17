@@ -2,7 +2,6 @@ import {
   AI_TRAINING_V1_MODULE_KEY,
   TRAINING_RETENTION_MAX_ENROLLMENTS,
   TRAINING_RETENTION_POLICY_VERSION,
-  personalLearningMode,
   trainingAnswerRetentionCutoff,
   trainingEndRetentionEligibility,
   trainingRetentionEndDate,
@@ -57,6 +56,7 @@ async function readRetentionPreview(
     endDateUnresolved: 0,
     ownershipUnresolved: 0,
   };
+  const countedServiceSummary = new Set<string>();
   for (const enrollment of enrollments) {
     const membership = await tx.groupMembership.findFirst({
       where: { ...scope, id: enrollment.groupMembershipId, serviceRole: 'PARTICIPANT' },
@@ -104,7 +104,7 @@ async function readRetentionPreview(
       summary.scoreProfilesDue += profiles;
     summary.progressSnapshotsDue += progress;
     const program = programs.find(({ id }) => id === enrollment.serviceProgramId);
-    if (program && personalLearningMode(program.settings) === 'DYNAMIC_V1') {
+    if (program) {
       const dynamicSnapshot = await trainingRetentionSnapshot(
         tx,
         {
@@ -116,11 +116,21 @@ async function readRetentionPreview(
         },
         { outcome: 'OWNED', enrollment, membership, program },
       );
-      if (dynamicSnapshot.outcome === 'PREVIEW' && dynamicSnapshot.dynamic)
+      if (dynamicSnapshot.outcome === 'PREVIEW' && dynamicSnapshot.dynamic) {
+        const counts = dynamicSnapshot.preview.counts;
+        const serviceSummaryAlreadyCounted = countedServiceSummary.has(
+          enrollment.groupMembershipId,
+        );
         summary.dynamicLearningDataDue =
           (summary.dynamicLearningDataDue ?? 0) +
-          (dynamicSnapshot.preview.counts.dynamicLearningDataDue ?? 0);
-      else if (dynamicSnapshot.outcome === 'TOO_LARGE') return { outcome: 'TOO_LARGE' };
+          (counts.dynamicTopicsDue ?? 0) +
+          (serviceSummaryAlreadyCounted
+            ? 0
+            : (counts.personaItemsDue ?? 0) +
+              (counts.personaSuppressionsDue ?? 0) +
+              (counts.savedExamplesDue ?? 0));
+        countedServiceSummary.add(enrollment.groupMembershipId);
+      } else if (dynamicSnapshot.outcome === 'TOO_LARGE') return { outcome: 'TOO_LARGE' };
     }
   }
   return { outcome: 'PREVIEW', summary };

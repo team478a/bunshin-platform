@@ -14,18 +14,18 @@
 - `apps/web/app/api/services/[serviceSlug]/ai-training/enrollments/[programEnrollmentId]/personal-learning/examples/route.ts`、`apps/web/src/http/personal-learning-saved-examples.ts`: 本人認証・同一Service/Workspace/User・有効な動的受講・`multiTopic` gateを通したAPIを追加。保存内容はタイトル160文字、本文8,000文字まで。利用者作成の保存例として記録し、ID以外の他ユーザー指定を受け付けない。
 - `apps/web/app/s/[serviceSlug]/programs/[programEnrollmentId]/learning-request/page.tsx`: 学習画面から活用例と本人像画面へのリンクを追加。動的経路では既存の本人Export・一括削除カードも表示し、動的画面からも退会/データ持ち出しに到達できるようにした。
 - `apps/web/src/auth/line-return.ts`: LINEログイン後に保存例ページへ戻ることを許可リストへ追加。認証ルートinventoryテストで全サービスページのreturn pathを確認。
-- `packages/capability-training/src/personal-data-export.ts`、`packages/database/src/training-personal-data-export.ts`: D-1のテーマ、本人像、再推測抑止、保存例を、同一受講の本人Export JSONへ追加。新しいD系テーブルは`DYNAMIC_V1`かつ`multiTopic` ONのときだけ読み込む。件数・ファイルサイズ上限は既存Export規則を維持。
-- `packages/capability-training/src/personal-data-deletion.ts`、`packages/database/src/training-personal-data-deletion.ts`: Preview revisionにD系レコードID・更新日時を束縛し、本人一括削除でテーマ、本人像、再推測抑止、保存例を削除。フラグOFFまたは固定研修ではD系テーブルに触れない。
+- `packages/capability-training/src/personal-data-export.ts`、`packages/database/src/training-personal-data-export.ts`: D-1のテーマ、本人像、再推測抑止、保存例を本人Export JSONへ追加。これらはデータ権利処理の対象であり、`learningMode` / `multiTopic` の値にかかわらず読み出す。件数・ファイルサイズ上限は既存Export規則を維持。
+- `packages/capability-training/src/personal-data-deletion.ts`、`packages/database/src/training-personal-data-deletion.ts`: Preview revisionにD系レコードID・更新日時を束縛し、本人一括削除でテーマ、本人像、再推測抑止、保存例を削除。既存レコードはフラグOFFや固定研修への変更後も対象にする。
 - `packages/database/src/personal-learning-d.ts`: テーマ・本人像・活用例を本人が閲覧した時に`lastLearnerUseAt`を更新し、動的保持期限を延長する。
-- `packages/database/src/training-retention-snapshot.ts`、`training-retention-execution.ts`、`training-retention-preview.ts`、`apps/web/app/s/[serviceSlug]/manage/training/retention/retention-summary.tsx`: 決定6に沿った期限判定と削除対象に、テーマ・本人像・抑止記録・保存例を追加。運営向けPreviewには内容を表示せず、件数と保持ルールだけを表示する。
+- `packages/database/src/training-retention-snapshot.ts`、`training-retention-execution.ts`、`training-retention-preview.ts`、`apps/web/app/s/[serviceSlug]/manage/training/retention/retention-summary.tsx`: 決定6に沿った期限判定と削除対象に、テーマ・本人像・抑止記録・保存例を追加。テーマは受講単位、本人像・抑止記録・保存例はサービス単位の保持範囲として扱う。運営向けPreviewは内容を表示せず、件数のみを複数受講間で二重計上しない。
 - `apps/web/test/personal-learning-saved-examples-ui.test.tsx`、`packages/database/test/personal-learning-d.integration-cases.ts`、`personal-learning-persistence.integration-cases.ts`: 画面、境界、Export・一括削除、期限削除を検証するテストを追加。
 
 ## 3. 主要な設計判断
 
 - 保存例はログイン中の本人が自分で作成・保存・削除する。別ユーザー、別Workspace、別Serviceのデータへアクセスできない。運営者の画面には本文を表示しない。
 - Exportは既存の本人用JSONにD-1データを加える。一括削除も既存のPreview/確認revision/トランザクション境界を再利用するため、追加の削除経路を作らない。
-- 動的研修の会話・希望・提出は「最終本人操作から1年、または受講終了から90日の早い方」、相談画像・LINE受信画像は作成から90日、テーマ・本人像・保存例は「最終本人利用から2年、または受講終了から1年の早い方」。削除判断に使う本人操作は既存の受講単位集計を維持し、システム通知・運営者操作・AI応答では延長しない。
-- D系テーブルの読取・更新・削除は`DYNAMIC_V1`かつ該当フラグ`multiTopic`がONの場合だけ。`multiTopic`の初期状態はOFFのまま。
+- 動的研修の会話・希望・提出は「最終本人操作から1年、または受講終了から90日の早い方」、相談画像・LINE受信画像は作成から90日、テーマ・本人像・抑止記録・保存例は「最終本人利用から2年、または受講終了から1年の早い方」。ただし本人像・抑止記録・保存例は同一サービス（`workspaceId` + `groupId`）・同一Membershipの受講全体で期限を判定し、有効な受講が1件でも残る間は削除しない。最終利用も同サービス配下の受講記録を横断して判定し、システム通知・運営者操作・AI応答では延長しない。
+- 新テーブルの作成・通常利用は従来どおり機能設定に従う一方、Export・本人一括削除・保存期間削除は既存レコードを必ず対象にする。自動削除は設定がOFFでも残存データを検出して実行経路へ進む。`multiTopic`の初期状態はOFFのまま。
 - D-4で新規migrationは追加していない。D-1（20261017100000）、D-2（20261017120000、20261017130000）、D-3追補（20261017140000）のDB構造が先に必要。本番反映を別途承認された場合も、未適用migrationを適用・検証してからプログラムを反映する。保持Cronの有効化、Production DB変更、Deploy、feature flag変更は本PRに含めない。
 
 ## 4. 検証
@@ -36,11 +36,12 @@
 - `pnpm --filter @bunshin/capability-training exec tsc --noEmit`: 成功。
 - `pnpm --filter web exec tsc --noEmit`: 成功。
 - Database関連ユニットテスト: 3ファイル24テスト成功（保持Preview、Export、テーマ境界）。
+- 追加したDB統合テスト: `learningMode`/`multiTopic`をONでデータを作成後OFFにし、Export・本人一括削除・自動削除が引き続き対象にすることを確認。受講が2件あるとき、有効な兄弟受講中はサービス単位データを保持し、終了日と最後の利用日をサービス全体から判定する。
 - Capability Training関連ユニットテスト: 2ファイル18テスト成功（保持・Export・削除規則）。
 - Web関連ユニットテスト: 2ファイル14テスト成功（保存例UI、運営保持画面）。
 - サービス認証route inventoryテスト: 106 tests passed。保存例ページがLINE認証復帰先として受理され、登録済みrouteも維持されることを確認。
 - Prettier check、`git diff --check`: 成功。
-- GitHub Actions run `39053622740` の`database`（使い捨てPostgreSQL統合テスト）と`verify`（format、typecheck、lint、全unit tests、learning-ui E2E、build）はすべて成功。本番DBには接続していない。
+- この追加修正後の統合テストは、使い捨てPostgreSQLを使うGitHub Actions `database` CIで確認予定。以前のrun `39053622740`は今回の修正前のheadに対する成功結果のため、今回の検証結果とは扱わない。本番DBには接続していない。
 
 ## 5. 未解決事項・次の条件
 
