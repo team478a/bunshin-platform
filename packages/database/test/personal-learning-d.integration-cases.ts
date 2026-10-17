@@ -267,6 +267,7 @@ export function registerPersonalLearningDIntegrationCases(client: PrismaClient) 
       expect(
         await topics.setStatus(sameServiceOtherUser, created.topic.id, 'COMPLETED'),
       ).toBeNull();
+      expect(await topics.setStatus(second.scope, created.topic.id, 'COMPLETED')).toBeNull();
 
       const persona = new PrismaPersonalLearningPersonaRepository(client);
       expect(await persona.list(featureOff.scope)).toEqual([]);
@@ -308,6 +309,10 @@ export function registerPersonalLearningDIntegrationCases(client: PrismaClient) 
       ).toMatchObject({
         outcome: 'NOT_FOUND',
       });
+      expect(
+        await persona.review(second.scope, rejected.id, { status: 'CONFIRMED' }),
+      ).toMatchObject({ outcome: 'NOT_FOUND' });
+      expect(await persona.delete(second.scope, rejected.id)).toBe(false);
       await client.personalLearningPersonaItem.createMany({
         data: Array.from({ length: 25 }, (_, index) => ({
           workspaceId: first.scope.workspaceId,
@@ -340,6 +345,7 @@ export function registerPersonalLearningDIntegrationCases(client: PrismaClient) 
       expect(await examples.list(sameServiceOtherUser)).toEqual([]);
       expect(await examples.list(second.scope)).toEqual([]);
       expect(await examples.delete(sameServiceOtherUser, saved.item.id)).toBe(false);
+      expect(await examples.delete(second.scope, saved.item.id)).toBe(false);
       expect(await examples.list(first.scope)).toHaveLength(1);
     });
   });
