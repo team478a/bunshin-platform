@@ -13,6 +13,7 @@ export interface TrainingDataDeletionCounts {
   activities: number;
   goals: number;
   preferences: number;
+  dynamicLearningData?: number;
   learningRequests?: number;
   conversationEvents?: number;
 }

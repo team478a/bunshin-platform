@@ -273,6 +273,49 @@ export class PrismaTrainingPersonalDataExportRepository implements TrainingPerso
             orderBy: { revision: 'asc' },
           }),
         ]);
+        const dynamicLearning = await Promise.all([
+          tx.personalLearningTopic.findMany({
+            where: {
+              workspaceId: input.workspaceId,
+              groupId: input.groupId,
+              programEnrollmentId: enrollment.id,
+              groupMembershipId: membership.id,
+              userId: input.actorUserId,
+            },
+            orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+            take,
+          }),
+          tx.personalLearningPersonaItem.findMany({
+            where: {
+              workspaceId: input.workspaceId,
+              groupId: input.groupId,
+              groupMembershipId: membership.id,
+              userId: input.actorUserId,
+            },
+            orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+            take,
+          }),
+          tx.personalLearningPersonaSuppression.findMany({
+            where: {
+              workspaceId: input.workspaceId,
+              groupId: input.groupId,
+              groupMembershipId: membership.id,
+              userId: input.actorUserId,
+            },
+            orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+            take,
+          }),
+          tx.personalLearningSavedExample.findMany({
+            where: {
+              workspaceId: input.workspaceId,
+              groupId: input.groupId,
+              groupMembershipId: membership.id,
+              userId: input.actorUserId,
+            },
+            orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+            take,
+          }),
+        ]);
         if (
           [
             assignments,
@@ -287,6 +330,7 @@ export class PrismaTrainingPersonalDataExportRepository implements TrainingPerso
             practiceSupport,
             practiceSupportImages,
             conversationEvents,
+            ...dynamicLearning,
           ].some((rows) => rows.length > TRAINING_EXPORT_MAX_ROWS)
         )
           return { outcome: 'TOO_LARGE' };
@@ -431,6 +475,36 @@ export class PrismaTrainingPersonalDataExportRepository implements TrainingPerso
               startsAt: iso(row.startsAt),
               dueAt: iso(row.dueAt),
             })),
+            dynamicLearning: [
+              ...dynamicLearning[0].map((row) => ({
+                kind: 'TOPIC',
+                ...row,
+                createdAt: iso(row.createdAt),
+                updatedAt: iso(row.updatedAt),
+                lastLearnerUseAt: iso(row.lastLearnerUseAt),
+                endedAt: iso(row.endedAt),
+              })),
+              ...dynamicLearning[1].map((row) => ({
+                kind: 'PERSONA_ITEM',
+                ...row,
+                createdAt: iso(row.createdAt),
+                updatedAt: iso(row.updatedAt),
+                lastLearnerUseAt: iso(row.lastLearnerUseAt),
+                evidenceCreatedAt: iso(row.evidenceCreatedAt),
+              })),
+              ...dynamicLearning[2].map((row) => ({
+                kind: 'PERSONA_REINFERENCE_SUPPRESSION',
+                ...row,
+                createdAt: iso(row.createdAt),
+              })),
+              ...dynamicLearning[3].map((row) => ({
+                kind: 'SAVED_EXAMPLE',
+                ...row,
+                createdAt: iso(row.createdAt),
+                updatedAt: iso(row.updatedAt),
+                lastLearnerUseAt: iso(row.lastLearnerUseAt),
+              })),
+            ],
           },
         };
       },

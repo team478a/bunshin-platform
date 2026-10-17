@@ -97,6 +97,7 @@ describe('training retention preview', () => {
         policyVersion: 'TRAINING_RETENTION_V1',
         enrollments: 1,
         answersAndEvaluationsDue: 2,
+        dynamicLearningDataDue: 0,
         workProfilesDue: 1,
         scoreProfilesDue: 1,
         progressSnapshotsDue: 1,
@@ -112,7 +113,7 @@ describe('training retention preview', () => {
           groupId: 'group',
           settings: { path: ['moduleKey'], equals: 'AI_TRAINING_V1' },
         },
-        select: { id: true },
+        select: { id: true, settings: true },
       }),
     );
     expect(tx.trainingMissionAnswer.count).toHaveBeenCalledWith({

@@ -23,6 +23,10 @@ export function TrainingRetentionSummary({
         ['点数の期限対象（プロフィール件数）', summary.scoreProfilesDue],
         ['進捗の期限対象（スナップショット件数）', summary.progressSnapshotsDue],
         ['保存Toolkit（保持件数）', summary.retainedToolkit],
+        [
+          '動的研修データの期限対象（テーマ・本人像・保存活用例等）',
+          summary.dynamicLearningDataDue ?? 0,
+        ],
       ] as const)
     : [];
   return (
@@ -109,6 +113,11 @@ export function TrainingRetentionSummary({
           <li>仕事情報：確定した研修終了から90日</li>
           <li>学習進捗・点数：確定した研修終了から暦年の1年</li>
           <li>本人が保存したToolkit：期限処理では保持</li>
+          <li>動的研修の会話・希望・提出：最後の本人操作から1年、または受講終了から90日の早い方</li>
+          <li>相談画像・LINE受信画像：作成から90日</li>
+          <li>
+            動的研修のテーマ・本人像・保存活用例：最後の本人利用から2年、または受講終了から1年の早い方
+          </li>
         </ul>
         <p>
           確定した終了記録を使用します。期限終了の過去の予定終了日を除き、予定終了日や更新日時から実際の終了日を推定しません。

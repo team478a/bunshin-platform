@@ -71,6 +71,7 @@ export class PrismaTrainingPersonalDataDeletionRepository implements TrainingPer
                 activities: 0,
                 goals: 0,
                 preferences: 0,
+                dynamicLearningData: 0,
               },
             };
           }
@@ -128,6 +129,45 @@ export class PrismaTrainingPersonalDataDeletionRepository implements TrainingPer
             await tx.personalLearningRequest.deleteMany({
               where: { ...personal, groupMembershipId: owned.membershipId },
             });
+            const dynamicLearningIds = snapshot.dynamicLearningIds;
+            if (dynamicLearningIds) {
+              await tx.personalLearningTopic.deleteMany({
+                where: {
+                  workspaceId: input.workspaceId,
+                  groupId: input.groupId,
+                  groupMembershipId: owned.membershipId,
+                  userId: input.actorUserId,
+                  id: { in: dynamicLearningIds.topics },
+                },
+              });
+              await tx.personalLearningPersonaItem.deleteMany({
+                where: {
+                  workspaceId: input.workspaceId,
+                  groupId: input.groupId,
+                  groupMembershipId: owned.membershipId,
+                  userId: input.actorUserId,
+                  id: { in: dynamicLearningIds.personaItems },
+                },
+              });
+              await tx.personalLearningPersonaSuppression.deleteMany({
+                where: {
+                  workspaceId: input.workspaceId,
+                  groupId: input.groupId,
+                  groupMembershipId: owned.membershipId,
+                  userId: input.actorUserId,
+                  id: { in: dynamicLearningIds.personaSuppressions },
+                },
+              });
+              await tx.personalLearningSavedExample.deleteMany({
+                where: {
+                  workspaceId: input.workspaceId,
+                  groupId: input.groupId,
+                  groupMembershipId: owned.membershipId,
+                  userId: input.actorUserId,
+                  id: { in: dynamicLearningIds.savedExamples },
+                },
+              });
+            }
             // Preserve cumulative capacity, but remove the Enrollment link and revoke access.
             await tx.personalLearningPilotSeat.updateMany({
               where: {
@@ -266,14 +306,18 @@ export class PrismaTrainingPersonalDataDeletionRepository implements TrainingPer
     });
     return program &&
       (await trainingPersonalDataRoleAllows(tx, input, membership.serviceRole, program))
-      ? { membershipId: membership.id, enrollmentUpdatedAt: enrollment.updatedAt }
+      ? {
+          membershipId: membership.id,
+          enrollmentUpdatedAt: enrollment.updatedAt,
+          programSettings: program.settings,
+        }
       : null;
   }
 
   private async snapshot(
     tx: Prisma.TransactionClient,
     input: TrainingDataDeletionInput,
-    owned: { membershipId: string; enrollmentUpdatedAt: Date },
+    owned: { membershipId: string; enrollmentUpdatedAt: Date; programSettings: Prisma.JsonValue },
   ) {
     const all = input.target.kind === 'ALL';
     const answerTarget = input.target.kind === 'ANSWER';
@@ -436,6 +480,55 @@ export class PrismaTrainingPersonalDataDeletionRepository implements TrainingPer
           }),
         ])
       : [[], [], [], [], []];
+    const [dynamicTopics, dynamicPersonaItems, dynamicPersonaSuppressions, dynamicSavedExamples] =
+      all
+        ? await Promise.all([
+            tx.personalLearningTopic.findMany({
+              where: {
+                workspaceId: input.workspaceId,
+                groupId: input.groupId,
+                groupMembershipId: owned.membershipId,
+                userId: input.actorUserId,
+              },
+              select,
+              orderBy,
+              take,
+            }),
+            tx.personalLearningPersonaItem.findMany({
+              where: {
+                workspaceId: input.workspaceId,
+                groupId: input.groupId,
+                groupMembershipId: owned.membershipId,
+                userId: input.actorUserId,
+              },
+              select,
+              orderBy,
+              take,
+            }),
+            tx.personalLearningPersonaSuppression.findMany({
+              where: {
+                workspaceId: input.workspaceId,
+                groupId: input.groupId,
+                groupMembershipId: owned.membershipId,
+                userId: input.actorUserId,
+              },
+              select: { id: true, createdAt: true },
+              orderBy,
+              take,
+            }),
+            tx.personalLearningSavedExample.findMany({
+              where: {
+                workspaceId: input.workspaceId,
+                groupId: input.groupId,
+                groupMembershipId: owned.membershipId,
+                userId: input.actorUserId,
+              },
+              select,
+              orderBy,
+              take,
+            }),
+          ])
+        : [[], [], [], []];
     const rows = {
       answers,
       toolkit,
@@ -446,7 +539,14 @@ export class PrismaTrainingPersonalDataDeletionRepository implements TrainingPer
       goals,
       preferences,
     };
-    const snapshotRows = { ...rows, learningRequests };
+    const snapshotRows = {
+      ...rows,
+      learningRequests,
+      dynamicTopics,
+      dynamicPersonaItems,
+      dynamicPersonaSuppressions,
+      dynamicSavedExamples,
+    };
     if (Object.values(snapshotRows).some((list) => list.length > TRAINING_EXPORT_MAX_ROWS))
       return { outcome: 'TOO_LARGE' } as const;
     const revision = createHash('sha256')
@@ -466,6 +566,14 @@ export class PrismaTrainingPersonalDataDeletionRepository implements TrainingPer
       outcome: 'PREVIEW' as const,
       answers,
       eventWhere,
+      dynamicLearningIds: all
+        ? {
+            topics: dynamicTopics.map(({ id }) => id),
+            personaItems: dynamicPersonaItems.map(({ id }) => id),
+            personaSuppressions: dynamicPersonaSuppressions.map(({ id }) => id),
+            savedExamples: dynamicSavedExamples.map(({ id }) => id),
+          }
+        : null,
       preview: {
         revision,
         counts: {
@@ -477,6 +585,15 @@ export class PrismaTrainingPersonalDataDeletionRepository implements TrainingPer
           activities: activities.length,
           goals: goals.length,
           preferences: preferences.length,
+          ...(all
+            ? {
+                dynamicLearningData:
+                  dynamicTopics.length +
+                  dynamicPersonaItems.length +
+                  dynamicPersonaSuppressions.length +
+                  dynamicSavedExamples.length,
+              }
+            : {}),
           ...(learningRequests.length > 0 ? { learningRequests: learningRequests.length } : {}),
           ...(learningRequestTarget ? { conversationEvents: conversationEventsCount } : {}),
         },

@@ -14,6 +14,8 @@ import {
 import { PrismaPersonalLearningRequestRepository } from '../src/personal-learning-request';
 import { PrismaPersonalLearningConversationRepository } from '../src/personal-learning-conversation';
 import { PrismaPersonalLearningPersistenceRepository } from '../src/personal-learning-persistence';
+import { PrismaTrainingPersonalDataExportRepository } from '../src/training-personal-data-export';
+import { PrismaTrainingPersonalDataDeletionRepository } from '../src/training-personal-data-deletion';
 import { pilotParticipantHash } from '../src/personal-learning-pilot-seat';
 import { cleanupProgramFixtures } from './program-fixture-cleanup';
 
@@ -497,6 +499,74 @@ export function registerPersonalLearningDIntegrationCases(client: PrismaClient) 
       expect(await examples.delete(second.scope, saved.item.id)).toBe(false);
       expect(await examples.delete(sameWorkspaceOtherService.scope, saved.item.id)).toBe(false);
       expect(await examples.list(first.scope)).toHaveLength(1);
+    });
+
+    it('exports and learner-deletes topic, persona, suppression, and saved-example data', async () => {
+      const f = await serviceFixture('PR-D-4 export and delete');
+      const topic = await new PrismaPersonalLearningTopicRepository(client).create(f.scope, {
+        title: '本人の学習テーマ',
+      });
+      if (topic.outcome !== 'CREATED') throw new Error('topic fixture creation failed');
+      const persona = new PrismaPersonalLearningPersonaRepository(client);
+      const inferred = await persona.save(f.scope, {
+        attributeKey: 'preferred_learning_style',
+        value: '短い例で学びたい',
+        evidenceType: 'LEARNING_REQUEST',
+        evidenceId: randomUUID(),
+        evidenceCreatedAt: now,
+      });
+      if (inferred.outcome !== 'SAVED' || !inferred.item)
+        throw new Error('persona fixture creation failed');
+      expect(await persona.delete(f.scope, inferred.item.id)).toBe(true);
+      const example = await new PrismaPersonalLearningSavedExamplesRepository(client).save(
+        f.scope,
+        {
+          title: '使い回せる手本',
+          content: '自分で保存した例文',
+          sourceType: 'LEARNER_AUTHORED',
+          sourceId: randomUUID(),
+        },
+      );
+      if (example.outcome !== 'SAVED') throw new Error('saved example fixture creation failed');
+      const scope = {
+        workspaceId: f.scope.workspaceId,
+        groupId: f.scope.groupId,
+        programEnrollmentId: f.scope.programEnrollmentId,
+        actorUserId: f.scope.userId,
+      };
+      const exported = await new PrismaTrainingPersonalDataExportRepository(client).read(scope);
+      expect(exported.outcome).toBe('FOUND');
+      if (exported.outcome !== 'FOUND') throw new Error('personal export missing');
+      expect(exported.data.dynamicLearning).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ kind: 'TOPIC', title: '本人の学習テーマ' }),
+          expect.objectContaining({ kind: 'PERSONA_REINFERENCE_SUPPRESSION' }),
+          expect.objectContaining({ kind: 'SAVED_EXAMPLE', content: '自分で保存した例文' }),
+        ]),
+      );
+
+      const deletion = new PrismaTrainingPersonalDataDeletionRepository(client);
+      const preview = await deletion.preview({ ...scope, target: { kind: 'ALL' } });
+      if (preview.outcome !== 'PREVIEW') throw new Error('deletion preview missing');
+      expect(preview.preview.counts.dynamicLearningData).toBe(3);
+      expect(
+        await deletion.delete({
+          ...scope,
+          target: { kind: 'ALL' },
+          revision: preview.preview.revision,
+          now,
+        }),
+      ).toMatchObject({ outcome: 'DELETED' });
+      expect(await client.personalLearningTopic.count({ where: { groupId: f.group.id } })).toBe(0);
+      expect(
+        await client.personalLearningPersonaItem.count({ where: { groupId: f.group.id } }),
+      ).toBe(0);
+      expect(
+        await client.personalLearningPersonaSuppression.count({ where: { groupId: f.group.id } }),
+      ).toBe(0);
+      expect(
+        await client.personalLearningSavedExample.count({ where: { groupId: f.group.id } }),
+      ).toBe(0);
     });
 
     it('keeps each wish and conversation on its selected topic and rejects a cross-topic update', async () => {

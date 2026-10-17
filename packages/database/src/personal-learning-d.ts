@@ -87,6 +87,17 @@ export class PrismaPersonalLearningTopicRepository {
       scope.programEnrollmentId,
     );
     if (!enrollment) return null;
+    await this.client.personalLearningTopic.updateMany({
+      where: {
+        workspaceId: scope.workspaceId,
+        groupId: scope.groupId,
+        programEnrollmentId: scope.programEnrollmentId,
+        groupMembershipId: scope.groupMembershipId,
+        userId: scope.userId,
+        status: 'ACTIVE',
+      },
+      data: { lastLearnerUseAt: new Date() },
+    });
     return this.client.personalLearningTopic.findMany({
       where: {
         workspaceId: scope.workspaceId,
@@ -306,6 +317,10 @@ export class PrismaPersonalLearningPersonaRepository {
 
   private async listOwned(scope: MemberScope) {
     if (!(await ownsEnabledDynamicEnrollment(scope, this.client))) return [];
+    await this.client.personalLearningPersonaItem.updateMany({
+      where: memberScopeWhere(scope),
+      data: { lastLearnerUseAt: new Date() },
+    });
     return this.client.personalLearningPersonaItem.findMany({
       where: memberScopeWhere(scope),
       orderBy: [{ updatedAt: 'desc' }, { id: 'asc' }],
@@ -552,6 +567,10 @@ export class PrismaPersonalLearningSavedExamplesRepository {
 
   private async listOwned(scope: MemberScope) {
     if (!(await ownsEnabledDynamicEnrollment(scope, this.client))) return [];
+    await this.client.personalLearningSavedExample.updateMany({
+      where: memberScopeWhere(scope),
+      data: { lastLearnerUseAt: new Date() },
+    });
     return this.client.personalLearningSavedExample.findMany({
       where: memberScopeWhere(scope),
       orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],

@@ -77,6 +77,46 @@ export async function trainingRetentionSnapshot(
   if (personalLearningMode(owned.program.settings) === 'DYNAMIC_V1') {
     return dynamicTrainingRetentionSnapshot(tx, input, owned, state);
   }
+  // D tables can outlive the feature/mode which created them. Keep their cleanup path
+  // reachable after an operator disables DYNAMIC_V1 or multiTopic.
+  const [dynamicTopics, personaItems, personaSuppressions, savedExamples] = await Promise.all([
+    tx.personalLearningTopic.count({
+      where: {
+        workspaceId: input.workspaceId,
+        groupId: input.groupId,
+        programEnrollmentId: input.programEnrollmentId,
+        groupMembershipId: owned.membership.id,
+        userId: owned.membership.userId,
+      },
+    }),
+    tx.personalLearningPersonaItem.count({
+      where: {
+        workspaceId: input.workspaceId,
+        groupId: input.groupId,
+        groupMembershipId: owned.membership.id,
+        userId: owned.membership.userId,
+      },
+    }),
+    tx.personalLearningPersonaSuppression.count({
+      where: {
+        workspaceId: input.workspaceId,
+        groupId: input.groupId,
+        groupMembershipId: owned.membership.id,
+        userId: owned.membership.userId,
+      },
+    }),
+    tx.personalLearningSavedExample.count({
+      where: {
+        workspaceId: input.workspaceId,
+        groupId: input.groupId,
+        groupMembershipId: owned.membership.id,
+        userId: owned.membership.userId,
+      },
+    }),
+  ]);
+  if (dynamicTopics + personaItems + personaSuppressions + savedExamples > 0) {
+    return dynamicTrainingRetentionSnapshot(tx, input, owned, state);
+  }
   const endedAt = trainingRetentionEndDate({
     ...owned.enrollment,
     recordedEnd: state?.endedAt ?? null,
@@ -285,6 +325,154 @@ async function dynamicTrainingRetentionSnapshot(
       ...(latestAnswer ? [latestAnswer.createdAt] : []),
     ].reduce<Date | null>((latest, date) => (!latest || date > latest ? date : latest), null) ??
     owned.enrollment.startsAt;
+  const [serviceEnrollments, latestDynamicDataUse] = await Promise.all([
+    tx.programEnrollment.findMany({
+      where: {
+        workspaceId: input.workspaceId,
+        groupId: input.groupId,
+        groupMembershipId: owned.membership.id,
+      },
+      select: { id: true, status: true, startsAt: true, endsAt: true },
+      orderBy: { id: 'asc' },
+      take: TRAINING_EXPORT_MAX_ROWS + 1,
+    }),
+    Promise.all([
+      tx.personalLearningSavedExample.findFirst({
+        where: {
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          groupMembershipId: owned.membership.id,
+          userId: owned.membership.userId,
+          lastLearnerUseAt: { not: null },
+        },
+        select: { lastLearnerUseAt: true },
+        orderBy: [{ lastLearnerUseAt: 'desc' }, { id: 'desc' }],
+      }),
+      tx.personalLearningPersonaItem.findFirst({
+        where: {
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          groupMembershipId: owned.membership.id,
+          userId: owned.membership.userId,
+          lastLearnerUseAt: { not: null },
+        },
+        select: { lastLearnerUseAt: true },
+        orderBy: [{ lastLearnerUseAt: 'desc' }, { id: 'desc' }],
+      }),
+      tx.personalLearningTopic.findFirst({
+        where: {
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          groupMembershipId: owned.membership.id,
+          userId: owned.membership.userId,
+          lastLearnerUseAt: { not: null },
+        },
+        select: { lastLearnerUseAt: true },
+        orderBy: [{ lastLearnerUseAt: 'desc' }, { id: 'desc' }],
+      }),
+    ]),
+  ]);
+  if (serviceEnrollments.length > TRAINING_EXPORT_MAX_ROWS)
+    return { outcome: 'TOO_LARGE' } as const;
+  const serviceEnrollmentIds = serviceEnrollments.map(({ id }) => id);
+  const siblingStates = await tx.trainingDataRetentionState.findMany({
+    where: {
+      workspaceId: input.workspaceId,
+      groupId: input.groupId,
+      programEnrollmentId: { in: serviceEnrollmentIds },
+    },
+    select: { programEnrollmentId: true, endedAt: true },
+  });
+  const siblingEndById = new Map(
+    siblingStates.map(({ programEnrollmentId, endedAt }) => [programEnrollmentId, endedAt]),
+  );
+  const serviceHasActiveEnrollment = serviceEnrollments.some(({ status }) => status === 'ACTIVE');
+  const serviceEndUnresolved = serviceEnrollments.some(
+    (enrollment) =>
+      enrollment.status !== 'INVITED' &&
+      enrollment.status !== 'ACTIVE' &&
+      !trainingRetentionEndDate({
+        ...enrollment,
+        recordedEnd: siblingEndById.get(enrollment.id) ?? null,
+      }),
+  );
+  const serviceEnds = serviceEnrollments
+    .map((enrollment) =>
+      trainingRetentionEndDate({
+        ...enrollment,
+        recordedEnd: siblingEndById.get(enrollment.id) ?? null,
+      }),
+    )
+    .filter((value): value is Date => value instanceof Date);
+  const serviceEndedAt = serviceEndUnresolved
+    ? null
+    : serviceEnds.reduce<Date | null>(
+        (latest, date) => (!latest || date > latest ? date : latest),
+        null,
+      );
+  const [latestServiceEvent, latestServiceRequest, latestServiceAnswer] = await Promise.all([
+    tx.programActionEvent.findFirst({
+      where: {
+        workspaceId: input.workspaceId,
+        groupId: input.groupId,
+        programEnrollmentId: { in: serviceEnrollmentIds },
+        actorUserId: owned.membership.userId,
+        eventType: { in: [...DYNAMIC_LEARNER_ACTION_EVENTS] },
+      },
+      select: { occurredAt: true },
+      orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }],
+    }),
+    tx.personalLearningRequest.findFirst({
+      where: {
+        workspaceId: input.workspaceId,
+        groupId: input.groupId,
+        programEnrollmentId: { in: serviceEnrollmentIds },
+        userId: owned.membership.userId,
+        groupMembershipId: owned.membership.id,
+      },
+      select: { createdAt: true },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    }),
+    tx.trainingMissionAnswer.findFirst({
+      where: {
+        workspaceId: input.workspaceId,
+        groupId: input.groupId,
+        programEnrollmentId: { in: serviceEnrollmentIds },
+        userId: owned.membership.userId,
+      },
+      select: { createdAt: true },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    }),
+  ]);
+  const serviceFallbackStart = serviceEnrollments
+    .map(({ startsAt }) => startsAt)
+    .filter((value): value is Date => value instanceof Date)
+    .reduce<Date | null>((latest, date) => (!latest || date > latest ? date : latest), null);
+  const serviceLastLearnerUseAt =
+    [
+      latestServiceEvent?.occurredAt,
+      latestServiceRequest?.createdAt,
+      latestServiceAnswer?.createdAt,
+      ...latestDynamicDataUse.map((row) => row?.lastLearnerUseAt),
+    ]
+      .filter((value): value is Date => value instanceof Date)
+      .reduce<Date | null>((latest, date) => (!latest || date > latest ? date : latest), null) ??
+    serviceFallbackStart;
+  const latestEnrollmentTopicUse = await tx.personalLearningTopic.findFirst({
+    where: {
+      workspaceId: input.workspaceId,
+      groupId: input.groupId,
+      programEnrollmentId: input.programEnrollmentId,
+      groupMembershipId: owned.membership.id,
+      userId: owned.membership.userId,
+      lastLearnerUseAt: { not: null },
+    },
+    select: { lastLearnerUseAt: true },
+    orderBy: [{ lastLearnerUseAt: 'desc' }, { id: 'desc' }],
+  });
+  const summaryLastLearnerUseAt = [lastLearnerUseAt, latestEnrollmentTopicUse?.lastLearnerUseAt]
+    .filter((value): value is Date => value instanceof Date)
+    .reduce<Date | null>((latest, date) => (!latest || date > latest ? date : latest), null);
   const contentDue = personalLearningDynamicContentDeletionDue({
     endedAt,
     lastLearnerUseAt,
@@ -292,9 +480,16 @@ async function dynamicTrainingRetentionSnapshot(
   });
   const summaryDue = personalLearningDynamicSummaryDeletionDue({
     endedAt,
-    lastLearnerUseAt,
+    lastLearnerUseAt: summaryLastLearnerUseAt,
     now: input.now,
   });
+  const serviceSummaryDue =
+    !serviceHasActiveEnrollment &&
+    personalLearningDynamicSummaryDeletionDue({
+      endedAt: serviceEndedAt,
+      lastLearnerUseAt: serviceLastLearnerUseAt,
+      now: input.now,
+    });
   const [selectedRequests, selectedAnswers] = contentDue
     ? await Promise.all([
         tx.personalLearningRequest.findMany({
@@ -333,46 +528,121 @@ async function dynamicTrainingRetentionSnapshot(
         take: TRAINING_EXPORT_MAX_ROWS,
       })
     : [];
-  const [profiles, assignments, snapshots, goals, preferences, toolkit] = summaryDue
-    ? await Promise.all([
-        tx.trainingParticipantProfile.findMany({
-          where: { ...personal, groupMembershipId: owned.membership.id },
-          select: { id: true, updatedAt: true },
-          orderBy: { id: 'asc' },
-          take: TRAINING_EXPORT_MAX_ROWS + 1,
-        }),
-        tx.programMissionAssignment.findMany({
-          where: scope,
-          select: { id: true, updatedAt: true },
-          orderBy: { id: 'asc' },
-          take: TRAINING_EXPORT_MAX_ROWS + 1,
-        }),
-        tx.programProgressSnapshot.findMany({
-          where: scope,
-          select: { id: true, updatedAt: true },
-          orderBy: { id: 'asc' },
-          take: TRAINING_EXPORT_MAX_ROWS + 1,
-        }),
-        tx.programMemberGoal.findMany({
-          where: { ...scope, groupMembershipId: owned.membership.id },
-          select: { id: true, updatedAt: true },
-          orderBy: { id: 'asc' },
-          take: TRAINING_EXPORT_MAX_ROWS + 1,
-        }),
-        tx.programMemberPreference.findMany({
-          where: { ...scope, groupMembershipId: owned.membership.id },
-          select: { id: true, updatedAt: true },
-          orderBy: { id: 'asc' },
-          take: TRAINING_EXPORT_MAX_ROWS + 1,
-        }),
-        tx.trainingToolkitItem.findMany({
-          where: personal,
-          select: { id: true, updatedAt: true },
-          orderBy: { id: 'asc' },
-          take: TRAINING_EXPORT_MAX_ROWS + 1,
-        }),
-      ])
-    : [[], [], [], [], [], []];
+  const [
+    profiles,
+    assignments,
+    snapshots,
+    goals,
+    preferences,
+    toolkit,
+    dynamicTopics,
+    personaItems,
+    personaSuppressions,
+    savedExamples,
+  ] =
+    summaryDue || serviceSummaryDue
+      ? await Promise.all([
+          summaryDue
+            ? tx.trainingParticipantProfile.findMany({
+                where: { ...personal, groupMembershipId: owned.membership.id },
+                select: { id: true, updatedAt: true },
+                orderBy: { id: 'asc' },
+                take: TRAINING_EXPORT_MAX_ROWS + 1,
+              })
+            : [],
+          summaryDue
+            ? tx.programMissionAssignment.findMany({
+                where: scope,
+                select: { id: true, updatedAt: true },
+                orderBy: { id: 'asc' },
+                take: TRAINING_EXPORT_MAX_ROWS + 1,
+              })
+            : [],
+          summaryDue
+            ? tx.programProgressSnapshot.findMany({
+                where: scope,
+                select: { id: true, updatedAt: true },
+                orderBy: { id: 'asc' },
+                take: TRAINING_EXPORT_MAX_ROWS + 1,
+              })
+            : [],
+          summaryDue
+            ? tx.programMemberGoal.findMany({
+                where: { ...scope, groupMembershipId: owned.membership.id },
+                select: { id: true, updatedAt: true },
+                orderBy: { id: 'asc' },
+                take: TRAINING_EXPORT_MAX_ROWS + 1,
+              })
+            : [],
+          summaryDue
+            ? tx.programMemberPreference.findMany({
+                where: { ...scope, groupMembershipId: owned.membership.id },
+                select: { id: true, updatedAt: true },
+                orderBy: { id: 'asc' },
+                take: TRAINING_EXPORT_MAX_ROWS + 1,
+              })
+            : [],
+          summaryDue
+            ? tx.trainingToolkitItem.findMany({
+                where: personal,
+                select: { id: true, updatedAt: true },
+                orderBy: { id: 'asc' },
+                take: TRAINING_EXPORT_MAX_ROWS + 1,
+              })
+            : [],
+          summaryDue
+            ? tx.personalLearningTopic.findMany({
+                where: {
+                  ...scope,
+                  groupMembershipId: owned.membership.id,
+                  userId: owned.membership.userId,
+                },
+                select: { id: true, updatedAt: true },
+                orderBy: { id: 'asc' },
+                take: TRAINING_EXPORT_MAX_ROWS + 1,
+              })
+            : [],
+          serviceSummaryDue
+            ? tx.personalLearningPersonaItem.findMany({
+                where: {
+                  workspaceId: input.workspaceId,
+                  groupId: input.groupId,
+                  groupMembershipId: owned.membership.id,
+                  userId: owned.membership.userId,
+                },
+                select: { id: true, updatedAt: true },
+                orderBy: { id: 'asc' },
+                take: TRAINING_EXPORT_MAX_ROWS + 1,
+              })
+            : [],
+          serviceSummaryDue
+            ? tx.personalLearningPersonaSuppression.findMany({
+                where: {
+                  workspaceId: input.workspaceId,
+                  groupId: input.groupId,
+                  groupMembershipId: owned.membership.id,
+                  userId: owned.membership.userId,
+                },
+                select: { id: true, createdAt: true },
+                orderBy: { id: 'asc' },
+                take: TRAINING_EXPORT_MAX_ROWS + 1,
+              })
+            : [],
+          serviceSummaryDue
+            ? tx.personalLearningSavedExample.findMany({
+                where: {
+                  workspaceId: input.workspaceId,
+                  groupId: input.groupId,
+                  groupMembershipId: owned.membership.id,
+                  userId: owned.membership.userId,
+                },
+                select: { id: true, updatedAt: true },
+                orderBy: { id: 'asc' },
+                take: TRAINING_EXPORT_MAX_ROWS + 1,
+              })
+            : [],
+        ])
+      : [[], [], [], [], [], [], [], [], [], []];
   const rows = {
     answers: selectedAnswers,
     profiles,
@@ -384,6 +654,10 @@ async function dynamicTrainingRetentionSnapshot(
     learningRequests: selectedRequests,
     practiceSupportImages: dueImages,
     toolkit,
+    dynamicTopics,
+    personaItems,
+    personaSuppressions,
+    savedExamples,
   };
   if (
     Object.entries(rows).some(
@@ -403,6 +677,15 @@ async function dynamicTrainingRetentionSnapshot(
     preferences: preferences.length,
     retainedToolkit: 0,
     toolkitDue: toolkit.length,
+    dynamicTopicsDue: dynamicTopics.length,
+    personaItemsDue: personaItems.length,
+    personaSuppressionsDue: personaSuppressions.length,
+    savedExamplesDue: savedExamples.length,
+    dynamicLearningDataDue:
+      dynamicTopics.length +
+      personaItems.length +
+      personaSuppressions.length +
+      savedExamples.length,
     learningRequests: selectedRequests.length,
     conversationEvents: contentEvents.filter(({ eventType }) =>
       eventType.startsWith('PERSONAL_LEARNING_CONVERSATION_'),
@@ -417,6 +700,11 @@ async function dynamicTrainingRetentionSnapshot(
         state,
         endedAt,
         lastLearnerUseAt,
+        summaryLastLearnerUseAt,
+        serviceEndedAt,
+        serviceLastLearnerUseAt,
+        serviceHasActiveEnrollment,
+        serviceEndUnresolved,
         dueImageCount,
         rows,
       }),
@@ -436,7 +724,8 @@ async function dynamicTrainingRetentionSnapshot(
       revision,
       counts,
       endDateUnresolved:
-        ['COMPLETED', 'CANCELLED', 'EXPIRED'].includes(owned.enrollment.status) && !endedAt,
+        (['COMPLETED', 'CANCELLED', 'EXPIRED'].includes(owned.enrollment.status) && !endedAt) ||
+        serviceEndUnresolved,
     },
   };
 }
