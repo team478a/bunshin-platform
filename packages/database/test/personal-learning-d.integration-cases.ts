@@ -25,6 +25,7 @@ export function registerPersonalLearningDIntegrationCases(client: PrismaClient) 
     const cleanup: Array<() => Promise<void>> = [];
     afterEach(async () => {
       await client.personalLearningSavedExample.deleteMany();
+      await client.personalLearningPersonaSuppression.deleteMany();
       await client.personalLearningPersonaItem.deleteMany();
       await client.personalLearningTopic.deleteMany();
       await cleanupProgramFixtures(client);
@@ -421,7 +422,60 @@ export function registerPersonalLearningDIntegrationCases(client: PrismaClient) 
         },
       });
       expect(await persona.delete(first.scope, deletedNext.id)).toBe(true);
+      expect(
+        await client.personalLearningPersonaItem.findUnique({ where: { id: deletedNext.id } }),
+      ).toBeNull();
+      expect(
+        await client.personalLearningPersonaSuppression.findUnique({
+          where: {
+            workspaceId_groupId_groupMembershipId_attributeKey: {
+              workspaceId: first.scope.workspaceId,
+              groupId: first.scope.groupId,
+              groupMembershipId: first.scope.groupMembershipId,
+              attributeKey: 'inference_1',
+            },
+          },
+        }),
+      ).toMatchObject({
+        workspaceId: first.scope.workspaceId,
+        groupId: first.scope.groupId,
+        groupMembershipId: first.scope.groupMembershipId,
+        userId: first.scope.userId,
+        attributeKey: 'inference_1',
+      });
+      const deletedRetry = await persona.save(first.scope, {
+        attributeKey: 'inference_1',
+        value: 'should not be persisted after deletion',
+        evidenceType: 'LEARNING_REQUEST',
+        evidenceId: randomUUID(),
+        evidenceCreatedAt: now,
+      });
+      expect(deletedRetry).toEqual({ outcome: 'SUPPRESSED' });
       expect(await persona.listForAi(first.scope)).not.toEqual(
+        expect.arrayContaining([expect.objectContaining({ attributeKey: 'inference_1' })]),
+      );
+      expect(await persona.listSuppressedAttributes(first.scope)).toContain('inference_1');
+      expect(await persona.listSuppressedAttributes(sameServiceOtherUser)).not.toContain(
+        'inference_1',
+      );
+      expect(await persona.listSuppressedAttributes(sameWorkspaceOtherService.scope)).not.toContain(
+        'inference_1',
+      );
+      expect(await persona.allowReinference(sameServiceOtherUser, 'inference_1')).toBe(false);
+      expect(await persona.allowReinference(sameWorkspaceOtherService.scope, 'inference_1')).toBe(
+        false,
+      );
+      expect(await persona.allowReinference(first.scope, 'inference_1')).toBe(true);
+      expect(await persona.listSuppressedAttributes(first.scope)).not.toContain('inference_1');
+      const allowedRetry = await persona.save(first.scope, {
+        attributeKey: 'inference_1',
+        value: 're-created only after learner permission',
+        evidenceType: 'LEARNING_REQUEST',
+        evidenceId: randomUUID(),
+        evidenceCreatedAt: now,
+      });
+      expect(allowedRetry.outcome).toBe('SAVED');
+      expect(await persona.listForAi(first.scope)).toEqual(
         expect.arrayContaining([expect.objectContaining({ attributeKey: 'inference_1' })]),
       );
 

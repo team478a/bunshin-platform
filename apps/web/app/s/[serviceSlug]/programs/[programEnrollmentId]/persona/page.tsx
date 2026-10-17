@@ -108,6 +108,7 @@ export default async function PersonalLearningPersonaPage({
     const db = await import('@bunshin/database');
     const repository = new PrismaPersonalLearningPersonaRepository(prisma);
     const items = await repository.list(scoped.scope);
+    const suppressedAttributes = await repository.listSuppressedAttributes(scoped.scope);
     const viewItems = await Promise.all(
       items.map(async (item) => ({
         id: item.id,
@@ -131,6 +132,7 @@ export default async function PersonalLearningPersonaPage({
           serviceSlug={serviceSlug}
           enrollmentId={programEnrollmentId}
           initialItems={viewItems}
+          initialSuppressedAttributes={suppressedAttributes}
         />
         <a
           className="button button--secondary button--full"

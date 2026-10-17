@@ -729,6 +729,22 @@ model PersonalLearningPersonaItem {
   @@map("personal_learning_persona_items")
 }
 
+/// Learner-approved suppression marker only; intentionally stores no inferred value or evidence.
+model PersonalLearningPersonaSuppression {
+  id                String   @id @default(uuid()) @db.Uuid
+  workspaceId       String   @map("workspace_id") @db.Uuid
+  groupId           String   @map("group_id") @db.Uuid
+  groupMembershipId String   @map("group_membership_id") @db.Uuid
+  userId            String   @map("user_id") @db.Uuid
+  attributeKey      String   @map("attribute_key") @db.VarChar(80)
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  membership        GroupMembership @relation(fields: [workspaceId, groupId, groupMembershipId, userId], references: [workspaceId, groupId, id, userId], onDelete: Cascade, onUpdate: Cascade)
+
+  @@unique([workspaceId, groupId, groupMembershipId, attributeKey], map: "personal_learning_persona_suppressions_member_attribute_key")
+  @@index([workspaceId, groupId, groupMembershipId, createdAt], map: "personal_learning_persona_suppressions_member_created_idx")
+  @@map("personal_learning_persona_suppressions")
+}
+
 /// Learner-owned examples survive topic pause/completion; owner-facing APIs expose only counts.
 model PersonalLearningSavedExample {
   id                String   @id @default(uuid()) @db.Uuid
@@ -3581,6 +3597,7 @@ model GroupMembership {
   personalLearningRequests PersonalLearningRequest[]
   personalLearningTopics PersonalLearningTopic[]
   personalLearningPersonaItems PersonalLearningPersonaItem[]
+  personalLearningPersonaSuppressions PersonalLearningPersonaSuppression[]
   personalLearningSavedExamples PersonalLearningSavedExample[]
   practiceSupportImages PersonalLearningPracticeSupportImage[]
   workspaceId                  String                           @map("workspace_id") @db.Uuid

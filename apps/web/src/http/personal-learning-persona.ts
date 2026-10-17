@@ -25,7 +25,7 @@ export async function personalLearningPersonaResponse(
 ) {
   const requestId = requestIdFromHeader(request.headers.get('x-request-id'));
   try {
-    if (!['GET', 'PATCH', 'DELETE'].includes(request.method))
+    if (!['GET', 'PATCH', 'DELETE', 'POST'].includes(request.method))
       return Response.json({ error: { code: 'METHOD_NOT_ALLOWED' } }, { status: 405, headers });
     if (request.method !== 'GET') {
       requireSameOrigin(request);
@@ -45,6 +45,7 @@ export async function personalLearningPersonaResponse(
     const repository = new PrismaPersonalLearningPersonaRepository(prisma);
     if (request.method === 'GET') {
       const items = await repository.list(actor.scope);
+      const suppressedAttributes = await repository.listSuppressedAttributes(actor.scope);
       return Response.json(
         {
           data: items.map((item) => ({
@@ -56,12 +57,30 @@ export async function personalLearningPersonaResponse(
             evidenceId: item.evidenceId,
             evidenceCreatedAt: item.evidenceCreatedAt.toISOString(),
           })),
+          suppressedAttributes,
           requestId,
         },
         { headers },
       );
     }
     const json = await boundedLearningJson(request, 4096);
+    if (request.method === 'POST') {
+      const parsed = z
+        .object({ allowReinferenceFor: z.string().trim().min(1).max(80) })
+        .strict()
+        .safeParse(json);
+      if (!parsed.success)
+        throw new ApplicationError('VALIDATION_ERROR', 'invalid re-inference permission');
+      const allowed = await repository.allowReinference(
+        actor.scope,
+        parsed.data.allowReinferenceFor,
+      );
+      if (!allowed) throw new ApplicationError('NOT_FOUND', 'suppression unavailable');
+      return Response.json(
+        { data: { allowed: true, attributeKey: parsed.data.allowReinferenceFor }, requestId },
+        { headers },
+      );
+    }
     if (request.method === 'DELETE') {
       const parsedDelete = z.object({ itemId: z.uuid() }).strict().safeParse(json);
       if (!parsedDelete.success)
