@@ -41,6 +41,11 @@ export default async function ProgramPreparationPage({
               学習設計のレビュー・承認準備
             </a>
           )}
+          {['SERVICE_OWNER', 'SERVICE_ADMIN'].includes(service.serviceRole) && (
+            <a href={`/s/${serviceSlug}/manage/programs/learning-conversations`}>
+              受講者が共有した研修会話
+            </a>
+          )}
         </header>
         {programId ? (
           <ProgramPreparationCard
