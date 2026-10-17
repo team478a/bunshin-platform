@@ -535,7 +535,7 @@ export function registerPersonalLearningDIntegrationCases(client: PrismaClient) 
               userId: fixture.user.id,
               programMemberGoalId: goal.id,
               topicId: actor.topicId,
-              packageKey: 'AI_TRAINING_V1',
+              packageKey: 'AI_TRAINING',
               goalKey: key,
               semanticVersion: 'V1',
               consultationRuleVersion: 'V1',
