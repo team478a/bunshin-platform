@@ -29,15 +29,15 @@
 
 ## 4. 実行した検証
 
-| 検証                                      | 結果                        |
-| ----------------------------------------- | --------------------------- |
-| `@bunshin/database db:validate`           | 成功                        |
-| `@bunshin/database` TypeScript typecheck  | 成功                        |
-| D-1 migration/tenant boundary unit tests  | 4件成功                     |
-| `@bunshin/capability-training` unit tests | 30 files / 474 tests成功    |
-| `@bunshin/database` unit tests            | 208 files / 1,024 tests成功 |
-| D-1対象ファイルのESLint                   | 成功                        |
-| CI `verify`                               | 成功（run 39016845076: format / typecheck / lint / unit tests / learning UI / build） |
+| 検証                                      | 結果                                                                                                 |
+| ----------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `@bunshin/database db:validate`           | 成功                                                                                                 |
+| `@bunshin/database` TypeScript typecheck  | 成功                                                                                                 |
+| D-1 migration/tenant boundary unit tests  | 4件成功                                                                                              |
+| `@bunshin/capability-training` unit tests | 30 files / 474 tests成功                                                                             |
+| `@bunshin/database` unit tests            | 208 files / 1,024 tests成功                                                                          |
+| D-1対象ファイルのESLint                   | 成功                                                                                                 |
+| CI `verify`                               | 成功（run 39016845076: format / typecheck / lint / unit tests / learning UI / build）                |
 | CI `database`（PostgreSQL統合テスト含む） | 成功（run 39016845076: db:validate / ephemeral PostgreSQL migration・readiness / integration tests） |
 
 ## 5. 本番反映順序・未解決事項
