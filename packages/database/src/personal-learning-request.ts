@@ -65,7 +65,7 @@ export class PrismaPersonalLearningRequestRepository
     return this.authorized(input, true, async (tx) => {
       await this.normalLearner(tx, input);
       const row = await tx.personalLearningRequest.findFirst({
-        where: input.scope,
+        where: { ...input.scope, ...(input.topicId ? { topicId: input.topicId } : {}) },
         orderBy: { revision: 'desc' },
       });
       return row ? project(row) : null;
@@ -82,13 +82,18 @@ export class PrismaPersonalLearningRequestRepository
           toolDescription: input.content.toolDescription,
           experienceDescription: input.content.experienceDescription,
           currentPosition: input.content.currentPosition,
+          topicId: input.topicId ?? null,
         }),
       )
       .digest('hex');
     return this.authorized(input, true, async (tx) => {
       await this.normalLearner(tx, input);
       const previous = await tx.personalLearningRequest.findFirst({
-        where: { ...input.scope, idempotencyKey: input.idempotencyKey },
+        where: {
+          ...input.scope,
+          ...(input.topicId ? { topicId: input.topicId } : {}),
+          idempotencyKey: input.idempotencyKey,
+        },
       });
       if (previous) {
         if (previous.digest !== digest)
@@ -96,7 +101,7 @@ export class PrismaPersonalLearningRequestRepository
         return project(previous);
       }
       const latest = await tx.personalLearningRequest.findFirst({
-        where: input.scope,
+        where: { ...input.scope, ...(input.topicId ? { topicId: input.topicId } : {}) },
         orderBy: { revision: 'desc' },
       });
       if (
@@ -108,6 +113,7 @@ export class PrismaPersonalLearningRequestRepository
         await tx.personalLearningRequest.create({
           data: {
             ...input.scope,
+            topicId: input.topicId ?? null,
             ...input.content,
             revision: input.expectedRevision + 1,
             idempotencyKey: input.idempotencyKey,

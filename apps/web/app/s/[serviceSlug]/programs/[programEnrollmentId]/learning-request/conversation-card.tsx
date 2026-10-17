@@ -8,6 +8,11 @@ import type {
   SavedPersonalLearningRequest,
 } from '@bunshin/application';
 
+const appendPath = (url: string, suffix: string) => {
+  const queryAt = url.indexOf('?');
+  return queryAt < 0 ? `${url}${suffix}` : `${url.slice(0, queryAt)}${suffix}${url.slice(queryAt)}`;
+};
+
 export function LearningConversationCard({
   endpoint,
   sharingEndpoint,
@@ -90,7 +95,7 @@ export function LearningConversationCard({
       if (supportOperation.current?.signature !== signature)
         supportOperation.current = { signature, id: crypto.randomUUID() };
       try {
-        const response = await fetch(`${practiceEndpoint}/support`, {
+        const response = await fetch(appendPath(practiceEndpoint, '/support'), {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ ...content, operationId: supportOperation.current.id }),
@@ -212,7 +217,7 @@ export function LearningConversationCard({
                 <p>{entry.item.text}</p>
                 {entry.item.image && (
                   <img
-                    src={`${practiceEndpoint}/support/${entry.item.id}/image`}
+                    src={appendPath(practiceEndpoint, `/support/${entry.item.id}/image`)}
                     alt="相談に添付したスクリーンショット"
                     width={240}
                   />

@@ -22,6 +22,8 @@ export async function resolvePersonalLearningRequestActor(
   enrollmentId: string,
   userId: string,
   requiredFeature?: PersonalLearningFeature,
+  selectedTopicId?: string | null,
+  options: { allowUnselectedTopic?: boolean } = {},
 ): Promise<PersonalLearningActor> {
   if (
     !personalLearningRequestEnabled() ||
@@ -97,8 +99,63 @@ export async function resolvePersonalLearningRequestActor(
     enrollmentId,
     userId,
   });
+  let topicId: string | undefined;
+  const multiTopicEnabled =
+    dynamic && personalLearningFeatureEnabled(program.settings, 'multiTopic');
+  if (multiTopicEnabled) {
+    const topics = await db.prisma.personalLearningTopic.findMany({
+      where: {
+        workspaceId: service.workspaceId,
+        groupId: service.serviceId,
+        programEnrollmentId: enrollment.id,
+        groupMembershipId: member.id,
+        userId,
+        status: 'ACTIVE',
+      },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      take: 4,
+      select: { id: true },
+    });
+    if (selectedTopicId !== undefined && selectedTopicId !== null) {
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(selectedTopicId))
+        throw new ApplicationError('NOT_FOUND', 'learning request unavailable');
+      const selected = topics.find((topic) => topic.id === selectedTopicId);
+      if (!selected) throw new ApplicationError('NOT_FOUND', 'learning request unavailable');
+      topicId = selected.id;
+    } else if (topics.length === 1) {
+      // A single migrated theme keeps the enrollment URL and one-theme experience unchanged.
+      topicId = topics[0]!.id;
+    } else if (!options.allowUnselectedTopic) {
+      // Zero or ambiguous themes must never authorize a wish, conversation, practice, or candidate.
+      // Theme selection/list/create surfaces opt in explicitly while doing no topic-scoped work.
+      throw new ApplicationError('NOT_FOUND', 'learning request unavailable');
+    }
+  } else {
+    // multiTopic OFF keeps the original single-theme route bound to its oldest migrated wish.
+    // This reads the existing request table only; the D-1 topic table stays untouched while OFF.
+    const initial = await db.prisma.personalLearningRequest.findFirst({
+      where: {
+        workspaceId: service.workspaceId,
+        groupId: service.serviceId,
+        programEnrollmentId: enrollment.id,
+        groupMembershipId: member.id,
+        userId,
+        topicId: { not: null },
+      },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      select: { topicId: true },
+    });
+    if (initial?.topicId) {
+      if (selectedTopicId && selectedTopicId !== initial.topicId)
+        throw new ApplicationError('NOT_FOUND', 'learning request unavailable');
+      topicId = initial.topicId;
+    } else if (selectedTopicId) {
+      throw new ApplicationError('NOT_FOUND', 'learning request unavailable');
+    }
+  }
   return {
     actorUserId: userId,
+    ...(topicId ? { topicId } : {}),
     scope: {
       workspaceId: service.workspaceId,
       groupId: service.serviceId,

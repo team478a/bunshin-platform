@@ -29,11 +29,22 @@ const object = (value: unknown): Record<string, unknown> =>
     : {};
 const digest = (input: PersonalLearningConversationCommand) =>
   createHash('sha256')
-    .update(JSON.stringify([input.requestId, input.requestRevision, input.text]))
+    .update(
+      JSON.stringify([
+        input.actor.topicId ?? null,
+        input.requestId,
+        input.requestRevision,
+        input.text,
+      ]),
+    )
     .digest('hex');
 const conflict = (): never => {
   throw new ApplicationError('CONFLICT', 'learning conversation changed');
 };
+const requestWhere = (actor: PersonalLearningActor) => ({
+  ...actor.scope,
+  ...(actor.topicId ? { topicId: actor.topicId } : {}),
+});
 
 export class PrismaPersonalLearningConversationRepository
   extends PrismaPersonalLearningPracticeRepository
@@ -78,6 +89,7 @@ export class PrismaPersonalLearningConversationRepository
         eventType: {
           in: [CONVERSATION_MESSAGE_EVENT, CONVERSATION_RESPONSE_EVENT, CONVERSATION_SHARE_EVENT],
         },
+        ...(actor.topicId ? { metadata: { path: ['topicId'], equals: actor.topicId } } : {}),
       },
       orderBy: [{ occurredAt: 'asc' }, { id: 'asc' }],
       take: 2001,
@@ -87,6 +99,7 @@ export class PrismaPersonalLearningConversationRepository
       const metadata = object(row.metadata);
       return (
         metadata.version === PERSONAL_LEARNING_CONVERSATION_VERSION &&
+        (!actor.topicId || metadata.topicId === actor.topicId) &&
         metadata.threadId === requestId &&
         metadata.requestRevision === requestRevision
       );
@@ -195,7 +208,7 @@ export class PrismaPersonalLearningConversationRepository
       await this.normalLearner(tx, actor);
       await this.assertEnabled(tx, actor);
       const request = await tx.personalLearningRequest.findFirst({
-        where: actor.scope,
+        where: requestWhere(actor),
         orderBy: { revision: 'desc' },
       });
       return request ? this.projectConversation(tx, actor, request.id, request.revision) : null;
@@ -223,10 +236,12 @@ export class PrismaPersonalLearningConversationRepository
       await this.normalLearner(tx, actor);
       await this.assertEnabled(tx, actor);
       const request = await tx.personalLearningRequest.findFirst({
-        where: { ...actor.scope, id: input.requestId, revision: input.requestRevision },
+        where: { ...requestWhere(actor), id: input.requestId, revision: input.requestRevision },
       });
       if (!request) return conflict();
-      const key = `learning-conversation-share:${input.operationId}`;
+      const key = input.actor.topicId
+        ? `learning-conversation-share:${input.actor.topicId}:${input.operationId}`
+        : `learning-conversation-share:${input.operationId}`;
       const prior = await tx.programActionEvent.findUnique({
         where: {
           workspaceId_groupId_idempotencyKey: {
@@ -244,6 +259,7 @@ export class PrismaPersonalLearningConversationRepository
           prior.eventType !== CONVERSATION_SHARE_EVENT ||
           metadata.threadId !== request.id ||
           metadata.requestRevision !== request.revision ||
+          (actor.topicId !== undefined && metadata.topicId !== actor.topicId) ||
           metadata.shared !== input.shared
         )
           return conflict();
@@ -265,7 +281,9 @@ export class PrismaPersonalLearningConversationRepository
           .map(({ metadata }) => object(metadata))
           .filter(
             (metadata) =>
-              metadata.threadId === request.id && metadata.requestRevision === request.revision,
+              metadata.threadId === request.id &&
+              metadata.requestRevision === request.revision &&
+              (!actor.topicId || metadata.topicId === actor.topicId),
           )
           .reduce(
             (maximum, metadata) => Math.max(maximum, Number(metadata.shareRevision ?? 0)),
@@ -282,6 +300,7 @@ export class PrismaPersonalLearningConversationRepository
           occurredAt: now,
           metadata: {
             version: PERSONAL_LEARNING_CONVERSATION_VERSION,
+            ...(actor.topicId ? { topicId: actor.topicId } : {}),
             threadId: request.id,
             requestRevision: request.revision,
             operationId: input.operationId,
@@ -390,6 +409,7 @@ export class PrismaPersonalLearningConversationRepository
         if (!latest || object(latest.metadata).shared !== true) return null;
         const actor: PersonalLearningActor = {
           actorUserId: request.userId,
+          ...(request.topicId ? { topicId: request.topicId } : {}),
           scope: {
             workspaceId: input.workspaceId,
             groupId: input.groupId,
@@ -424,11 +444,13 @@ export class PrismaPersonalLearningConversationRepository
       await this.normalLearner(tx, actor);
       await this.assertEnabled(tx, actor);
       const request = await tx.personalLearningRequest.findFirst({
-        where: { ...actor.scope, id: input.requestId, revision: input.requestRevision },
+        where: { ...requestWhere(actor), id: input.requestId, revision: input.requestRevision },
       });
       if (!request) return conflict();
       const state = await this.projectConversation(tx, actor, request.id, request.revision);
-      const key = `learning-conversation-request:${input.operationId}`;
+      const key = actor.topicId
+        ? `learning-conversation-request:${actor.topicId}:${input.operationId}`
+        : `learning-conversation-request:${input.operationId}`;
       const prior = await tx.programActionEvent.findUnique({
         where: {
           workspaceId_groupId_idempotencyKey: {
@@ -465,6 +487,7 @@ export class PrismaPersonalLearningConversationRepository
           occurredAt: now,
           metadata: {
             version: PERSONAL_LEARNING_CONVERSATION_VERSION,
+            ...(actor.topicId ? { topicId: actor.topicId } : {}),
             threadId: request.id,
             requestRevision: request.revision,
             operationId: input.operationId,
@@ -566,7 +589,7 @@ export class PrismaPersonalLearningConversationRepository
         const proposal = validateLearningLessonProposal(input.regeneratedCandidate.proposal);
         const requestRow = await tx.personalLearningRequest.findFirst({
           where: {
-            ...actor.scope,
+            ...requestWhere(actor),
             id: input.command.requestId,
             revision: input.command.requestRevision,
           },
@@ -615,7 +638,10 @@ export class PrismaPersonalLearningConversationRepository
           proposal,
         };
         await tx.personalLearningRequest.update({
-          where: { id: requestRow.id },
+          where: {
+            id: requestRow.id,
+            ...(actor.topicId ? { topicId: actor.topicId } : {}),
+          },
           data: {
             lessonCandidate: candidate as unknown as Prisma.InputJsonValue,
             candidateConfirmedAt: null,
@@ -634,6 +660,7 @@ export class PrismaPersonalLearningConversationRepository
           occurredAt: now,
           metadata: {
             version: PERSONAL_LEARNING_CONVERSATION_VERSION,
+            ...(actor.topicId ? { topicId: actor.topicId } : {}),
             threadId: input.command.requestId,
             requestRevision: input.command.requestRevision,
             requestId: request.id,
@@ -681,6 +708,7 @@ export class PrismaPersonalLearningConversationRepository
           occurredAt: now,
           metadata: {
             version: PERSONAL_LEARNING_CONVERSATION_VERSION,
+            ...(input.actor.topicId ? { topicId: input.actor.topicId } : {}),
             threadId: input.requestId,
             requestRevision: input.requestRevision,
             requestId: message.id,
