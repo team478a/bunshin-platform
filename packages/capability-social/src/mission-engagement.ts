@@ -153,10 +153,17 @@ export function normalizeMissionActivityMetadata(
   type: MissionActivityType,
   metadata: unknown,
 ): Record<string, unknown> | null {
-  if (type === 'COPIED_SLIDE') {
+  if (type === 'COPIED_SLIDE' || type === 'COPIED_IMAGE_INSTRUCTION') {
     if (metadata === null || metadata === undefined) return null;
     const value = strict(metadata, ['slideIndex'], 'activity metadata');
-    return { slideIndex: missionInteger(value['slideIndex'], 1, 7, 'slide index') };
+    return {
+      slideIndex: missionInteger(
+        value['slideIndex'],
+        type === 'COPIED_SLIDE' ? 1 : 0,
+        type === 'COPIED_SLIDE' ? 7 : 5,
+        'slide index',
+      ),
+    };
   }
   if (metadata !== null && metadata !== undefined)
     throw new ApplicationError('VALIDATION_ERROR', 'activity metadata is not allowed');

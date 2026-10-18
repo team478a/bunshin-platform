@@ -66,7 +66,7 @@ export async function readServiceManagementHomeRecords({
     trendProviderReadyCount,
     productMissions,
     linkedProductMissions,
-    copiedProductMissions,
+    copiedProductMissionRows,
     postedProductMissions,
     recentPostedForFeedback,
     recentFeedback,
@@ -74,7 +74,7 @@ export async function readServiceManagementHomeRecords({
     missionsCreated,
     acceptedMissions,
     rejectedMissions,
-    copiedMissions,
+    copiedMissionRows,
     postedMissions,
     trendMissions,
     successfulAiCalls,
@@ -149,7 +149,7 @@ export async function readServiceManagementHomeRecords({
         createdAt: { gte: sevenDaysAgo },
       },
     }),
-    db.prisma.missionActivity.count({
+    db.prisma.missionActivity.findMany({
       where: {
         ...missionScope,
         occurredAt: { gte: sevenDaysAgo },
@@ -164,6 +164,8 @@ export async function readServiceManagementHomeRecords({
         },
         dailyMission: { is: { contentLinkUsage: { isNot: null } } },
       },
+      select: { dailyMissionId: true },
+      distinct: ['dailyMissionId'],
     }),
     db.prisma.postRecord.count({
       where: {
@@ -208,7 +210,7 @@ export async function readServiceManagementHomeRecords({
         decidedAt: { gte: sevenDaysAgo },
       },
     }),
-    db.prisma.missionActivity.count({
+    db.prisma.missionActivity.findMany({
       where: {
         ...missionScope,
         occurredAt: { gte: sevenDaysAgo },
@@ -222,6 +224,8 @@ export async function readServiceManagementHomeRecords({
           ],
         },
       },
+      select: { dailyMissionId: true },
+      distinct: ['dailyMissionId'],
     }),
     db.prisma.postRecord.count({
       where: { ...missionScope, postedAt: { gte: sevenDaysAgo } },
@@ -341,7 +345,7 @@ export async function readServiceManagementHomeRecords({
     trendProviderReadyCount,
     productMissions,
     linkedProductMissions,
-    copiedProductMissions,
+    copiedProductMissions: copiedProductMissionRows.length,
     postedProductMissions,
     recentPostedForFeedback,
     recentFeedback,
@@ -349,7 +353,7 @@ export async function readServiceManagementHomeRecords({
     missionsCreated,
     acceptedMissions,
     rejectedMissions,
-    copiedMissions,
+    copiedMissions: copiedMissionRows.length,
     postedMissions,
     trendMissions,
     successfulAiCalls,

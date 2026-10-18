@@ -1,8 +1,9 @@
 'use client';
 
+import { useState } from 'react';
+
 import {
   copyOptions,
-  imagePostHeadline,
   missionWithSelectedVariant,
   type DailyMissionView,
 } from '../../../../(app)/bunshins/[bunshinId]/daily-mission-section';
@@ -19,61 +20,114 @@ export function ServiceDailyMissionImageGuide({
   imageCreationHref: string | null;
   controller: ServiceDailyMissionController;
 }) {
+  const [copiedSlides, setCopiedSlides] = useState<number[]>([]);
   const preparedCopyOptions = copyOptions(missionWithSelectedVariant(mission), serviceSlug);
-  const imageInstruction = preparedCopyOptions.find(
-    (option) => option.type === 'COPIED_IMAGE_INSTRUCTION',
+  const imageInstructions = preparedCopyOptions.filter(
+    (option) =>
+      option.type === 'COPIED_IMAGE_INSTRUCTION' &&
+      'metadata' in option &&
+      option.metadata.slideIndex >= 1 &&
+      option.metadata.slideIndex <= 5,
+  );
+  const bulkImageInstruction = preparedCopyOptions.find(
+    (option) =>
+      option.type === 'COPIED_IMAGE_INSTRUCTION' &&
+      'metadata' in option &&
+      option.metadata.slideIndex === 0,
   );
   const postCaption = preparedCopyOptions.find((option) => option.type === 'COPIED_TEXT');
-  const imageHeadline = imagePostHeadline(missionWithSelectedVariant(mission), serviceSlug);
-
-  if (imageCreationHref) {
-    return (
-      <a className="button mission-create-image" href={imageCreationHref}>
-        画像作成へ進む
-      </a>
-    );
-  }
+  const nextSlideIndex = [1, 2, 3, 4, 5].find((index) => !copiedSlides.includes(index)) ?? null;
 
   return (
     <div className="mission-manual-image-flow">
+      {imageCreationHref ? (
+        <a className="button mission-create-image" href={imageCreationHref}>
+          画像作成へ進む
+        </a>
+      ) : null}
       <section>
         <p className="mission-manual-image-flow__number">1</p>
         <div>
-          <h4>画像を作る文章をコピー</h4>
-          <p>投稿テーマが5枚で完結する、画像と文章を作るための指示です。</p>
+          <h4>画像を1枚ずつ作る</h4>
           <p>
-            <strong>1枚目の見出し：</strong>
-            <br />「{imageHeadline}」
+            ChatGPTなどの画像AIで、同じ会話の中に1枚目から順番に貼り付けてください。1回貼り付けると1枚できます
           </p>
-          <ol>
-            <li>表紙</li>
-            <li>読者の悩み・共感</li>
-            <li>理由・気づき</li>
-            <li>今日できる解決策</li>
-            <li>まとめ・次の行動</li>
-          </ol>
-          {imageInstruction ? (
-            <button
-              className="mission-copy-action"
-              type="button"
-              disabled={controller.pendingAction !== null}
-              onClick={() =>
-                void controller.copy(mission, imageInstruction.value, imageInstruction.type)
-              }
-            >
-              画像用の文章をコピー
-            </button>
+          {imageInstructions.length === 5 ? (
+            <ol className="mission-image-instruction-list">
+              {imageInstructions.map((option) => {
+                const slideIndex = 'metadata' in option ? option.metadata.slideIndex : 0;
+                const copied = copiedSlides.includes(slideIndex);
+                const isNext = nextSlideIndex === slideIndex;
+                const role = 'role' in option ? option.role : '';
+                const headline = 'headline' in option ? option.headline : '';
+                return (
+                  <li
+                    key={slideIndex}
+                    className={isNext ? 'mission-image-instruction-list__next' : undefined}
+                    aria-current={isNext ? 'step' : undefined}
+                  >
+                    <div>
+                      <strong>{option.label}</strong>
+                      {copied ? <span aria-label="コピー済み"> ✓ コピー済み</span> : null}
+                      {isNext ? <span> 次にコピー</span> : null}
+                    </div>
+                    <button
+                      className="mission-copy-action"
+                      type="button"
+                      disabled={controller.pendingAction !== null}
+                      onClick={() =>
+                        void controller
+                          .copy(
+                            mission,
+                            option.value,
+                            option.type,
+                            'metadata' in option ? option.metadata : undefined,
+                          )
+                          .then((recorded) => {
+                            if (recorded) {
+                              setCopiedSlides((current) =>
+                                current.includes(slideIndex) ? current : [...current, slideIndex],
+                              );
+                            }
+                          })
+                      }
+                    >
+                      {option.label}
+                      <small>
+                        {role} — 「{headline}」
+                      </small>
+                    </button>
+                  </li>
+                );
+              })}
+            </ol>
           ) : (
             <p>画像用の文章を準備できませんでした。</p>
           )}
+          {bulkImageInstruction && 'metadata' in bulkImageInstruction ? (
+            <button
+              className="mission-copy-action mission-copy-action--subtle"
+              type="button"
+              disabled={controller.pendingAction !== null}
+              onClick={() =>
+                void controller.copy(
+                  mission,
+                  bulkImageInstruction.value,
+                  bulkImageInstruction.type,
+                  bulkImageInstruction.metadata,
+                )
+              }
+            >
+              5枚まとめてコピー（慣れた方向け）
+            </button>
+          ) : null}
         </div>
       </section>
       <section>
         <p className="mission-manual-image-flow__number">2</p>
         <div>
           <h4>画像を作れるAIに貼り付ける</h4>
-          <p>ChatGPTなど普段使っている画像AIを開き、入力欄を長押しして「ペースト」を押します。</p>
-          <p>画像が1枚だけ出た場合は「次」と送ると、続きの画像を作れます。</p>
+          <p>コピーしたページを貼り付け、できた画像を確認してから次のページを貼り付けます。</p>
         </div>
       </section>
       <section>

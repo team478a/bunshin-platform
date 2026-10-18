@@ -81,6 +81,11 @@ export function ServiceDailyMissionAccepted({
           }
         >
           {option.label}
+          {'role' in option && 'headline' in option ? (
+            <small>
+              {option.role} — 「{option.headline}」
+            </small>
+          ) : null}
         </button>
       ))}
       {mission.postedAt === null ? (
