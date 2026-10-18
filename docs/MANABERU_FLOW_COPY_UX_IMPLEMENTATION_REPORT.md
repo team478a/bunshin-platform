@@ -44,16 +44,16 @@ AI利用同意は`AI_TRAINING_EXTERNAL_AI_V1`から`AI_TRAINING_EXTERNAL_AI_V2`�
 - 表示テストで、動的表示の判定が`DYNAMIC_V1`ベースであり、サービスslug条件を使わないこと、固定経路の表示が維持されることを確認。
 - 同意フローテストでV2の文言・版、旧版を削除せずupsertで版別記録を追加することを確認。
 - DB統合テストに、同じ受講者・受講のV1およびV2同意が共存することを確認するケースを追加。
-- 前回PR状態ではCI run `39153106744`の`verify`と`database`が成功していた。今回のレビュー修正をpushした後のCIは再実行・確認し、結果をここに更新する。
+- 修正を含むCI run `39156523591`（commit `a9384418`）：`verify`成功、`database`成功。database job内のDB統合テストも成功。
+- 先行run `39156094902`は`database`成功、`verify`が未使用変数で失敗したため、未使用の`service`束縛を除去して再実行した。最終runでは両job成功。
+- ローカル：対象Vitest 19件成功、`pnpm format:check`成功、`pnpm typecheck`成功（25/25 tasks）。DB統合テストは隔離DBの安全条件を満たさずローカル実行を拒否されたが、CIの隔離DBで成功。
 
 ## 5. 未解決事項
 
-- 今回の変更後のCI `verify` / `database`結果。
 - 本番環境での画面確認（このPRでは本番反映しない）。
 
 ## 6. 次へ進める条件
 
-1. 今回の変更を含むCI `verify`と`database`が成功する。
-2. 田中がDraft PRと本報告を確認する。
+1. 田中がDraft PRと本報告を確認する。
 
 この作業ではマージ、本番反映、migration適用、機能設定変更を行わない。
