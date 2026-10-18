@@ -18,7 +18,7 @@ const environment = {
 describe('read-only production migration history probe', () => {
   afterEach(() => vi.restoreAllMocks());
 
-  it('parses only known pending migration names and never needs raw output in logs', () => {
+  it('parses migration-shaped pending names and never needs raw output in logs', () => {
     expect(
       parseMigrationHistoryStatus(
         'The following migration(s) have not yet been applied:\n20261014090000_add_line_link_attempt_method\n',
@@ -27,6 +27,15 @@ describe('read-only production migration history probe', () => {
     ).toEqual({
       status: 'PENDING',
       pendingMigrations: ['20261014090000_add_line_link_attempt_method'],
+    });
+    expect(
+      parseMigrationHistoryStatus(
+        'The following migration(s) have not yet been applied:\n20261014999999_not_in_repository\n',
+        ['20261014090000_add_line_link_attempt_method'],
+      ),
+    ).toEqual({
+      status: 'PENDING',
+      pendingMigrations: ['20261014999999_not_in_repository'],
     });
     expect(parseMigrationHistoryStatus('Database schema is up to date!')).toEqual({
       status: 'UP_TO_DATE',

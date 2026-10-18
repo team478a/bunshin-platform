@@ -103,6 +103,8 @@ pending一覧に本書の6件以外があれば、名前・依存・互換性を
 
 現行Build Commandは `cd ../.. && pnpm db:migrate:vercel && pnpm db:assert-ready && pnpm turbo run build --filter=web`。この構成ではmigrationがbuildの先頭で走る。Buildが失敗したとき、migrationまで未適用だったと決めつけて再実行しない。履歴・schema・sessionをread-onlyで再確認し、復旧担当の判断を待つ。自動retry、migration resolve、migrationファイルの書き換えをしない。
 
+**2026-10-18の実際の失敗について:** Production deploymentは`migration-bounds-not-active`でmigration preflight中に停止し、ログ上`migrate deploy`は開始されていない。read-only Probeでは上記6件がpendingだった。本PRで6件完全一致だけを受け入れる直接適用スクリプト`packages/database/scripts/apply-manaberu-learning-migrations.ps1`を追加する。実行はこのPRの確認・反映後に、backupと直前の新しいProbeを確認した担当者が行う。集合が6件と完全一致しない場合は停止し、スクリプト実行後に成功/失敗を問わず新しいProbeで再照合する。詳細は[`DEPLOYMENT_GUIDE.md`](../DEPLOYMENT_GUIDE.md)の「Manaberu Dynamic Learning migration（6件限定）」を参照する。
+
 ### 4-2. Migration適用状態の再確認
 
 同じ **Production Migration History Probe** をもう一度実行し、未適用が0件、失敗・driftなしを確認する。`db:assert-ready`成功ログと併せて記録する。手動でDBに接続する場合も、read-onlyの認証済み手段だけを使い、結果に個人データや秘密を含めない。
