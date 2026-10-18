@@ -59,6 +59,18 @@ const stateCopy = {
     message: '参加枠とAI利用同意を確認しました。研修を続けられます。',
   },
 } as const;
+const manaberuStateCopy = {
+  ...stateCopy,
+  ENROLLMENT_WAITING: {
+    title: '研修参加の準備待ちです',
+    message: 'サービスへの参加は完了しています。運営が研修への参加手続きと参加枠を準備しています。',
+  },
+  SEAT_WAITING: {
+    title: '研修参加枠の準備待ちです',
+    message:
+      '参加枠が準備できるまで、AIを使った学習は始まりません。準備ができると、この画面に表示されます。',
+  },
+} as const;
 
 export default async function AiTrainingConfirmationPage({
   params,
@@ -70,7 +82,8 @@ export default async function AiTrainingConfirmationPage({
   if (!actor)
     redirect(`/login?returnTo=${encodeURIComponent(`/s/${serviceSlug}/training`)}` as Route);
   const participation = await readAiTrainingParticipation(serviceSlug, actor.userId);
-  const currentCopy = stateCopy[participation.state];
+  const isManaberu = serviceSlug === 'manaberu-style';
+  const currentCopy = (isManaberu ? manaberuStateCopy : stateCopy)[participation.state];
 
   return (
     <PublicShell showPlatformBrand={false}>
@@ -83,7 +96,7 @@ export default async function AiTrainingConfirmationPage({
           <h2 id="ai-training-confirmation-title">{currentCopy.title}</h2>
           <p>{currentCopy.message}</p>
           {participation.enrollments.map((enrollment) => {
-            const enrollmentCopy = stateCopy[enrollment.state];
+            const enrollmentCopy = (isManaberu ? manaberuStateCopy : stateCopy)[enrollment.state];
             return (
               <article className="settings-card" key={enrollment.enrollmentId}>
                 <h3>{enrollment.programName}</h3>
