@@ -81,6 +81,8 @@ Node 24 / lockfileどおりのPrisma 6.19.3を使用する。probeの対象は`p
 
 この専用手順は、承認済みのpending集合がrunnerのallowlistにあるいずれか1組と完全一致する場合だけ対象とする。集合間の混在・追加migration・未知のmigrationは停止する。リポジトリのNode依存をインストール済みのPCで、Node.js 24を使用してPowerShellから実行する:
 
+既存の限定migrationでは次の共通コマンドを使う。Manaberu Dynamic Learningの6件を適用するときは、下記の専用名を使う。
+
 ```powershell
 .\packages\database\scripts\apply-line-link-migrations.ps1
 ```
@@ -96,6 +98,31 @@ AI研修Enrollment Policyのpending集合は、以下の2件と完全一致す�
 
 - `20261016120000_ai_training_usage_consent`
 - `20261016150000_invitation_manual_service_registration`
+
+#### Manaberu Dynamic Learning migration（6件限定）
+
+2026-10-18のProduction deployment（commit `798ff4663135b3ae1f26ec955bb4c5a18e92011b`）は`db:migrate:vercel`のbounds preflightで失敗し、`prisma migrate deploy`開始前に停止した。したがってそのdeploymentは6件のmigrationを適用していない。直近のread-only Production Migration History Probeでは、次の6件がpendingと報告された。実行時には必ず新しいProbeで同じ6件だけがpendingであることを確認する。
+
+| 順序 | migration                                                  |
+| ---- | ---------------------------------------------------------- |
+| 1    | `20261017100000_personal_learning_topics_persona_examples` |
+| 2    | `20261017120000_personal_learning_topic_scope`             |
+| 3    | `20261017130000_personal_learning_goal_topic_scope`        |
+| 4    | `20261017140000_personal_learning_persona_suppressions`    |
+| 5    | `20261018100000_personal_learning_persona_opt_in`          |
+| 6    | `20261018120000_personal_learning_line_inbox`              |
+
+backupが完了し、上記のpending集合を新しいProbeで確認した後、リポジトリの依存をインストール済みのNode.js 24環境で次を実行する。
+
+```powershell
+.\packages\database\scripts\apply-manaberu-learning-migrations.ps1
+```
+
+パスワードは既存のSecureStringによる非表示入力を使う。対象projectと6件の一覧を確認してから、確認語`APPLY_MANABERU_DYNAMIC_LEARNING_MIGRATIONS_TO_vtkzinaudznwbsjoyszk`を入力する。runnerは直接DB identityとsession boundsをread-onlyで照合し、pending集合が上の6件と完全一致した場合だけ`prisma migrate deploy`を一度実行し、migration historyの最新状態を事後確認する。partial set、追加・未知のmigration、異なるproject、誤った確認語はdeploy前に拒否する。秘密値は引数・ファイル・ログへ出さない。
+
+実行開始後にtimeout、異常終了、postcheck失敗が起きた場合はスクリプトを再実行しない。新しいProduction Migration History Probeおよび承認済みread-only手段でmigration履歴・session・schemaを照合し、復旧判断を待つ。成功・事後確認後に、`db:assert-ready`と本番schema readinessがcurrentであることを確認する。その後に限り、Productionへマージ済みのmain commitをVercelで再デプロイする。migration未確認の状態でアプリコードだけを公開しない。
+
+この直接適用手順は6件を人の確認付きで処理するための限定経路であり、Vercel env、機能フラグ、cron、AI/LINE機能を変更しない。migrationを巻き戻さず、エラー時は追加型のforward repairをレビューする。
 
 期限到達時はLinuxで所有するCLI/engineのprocess groupへSIGKILLを送る。WindowsではCLIだけの停止であり、engine子孫の終了は保証しない。いずれも**DB session/SQLの終了・rollback・全writer drainは証明しない**。非0終了・signal・期限切れ・起動失敗はbuildを停止し、自動retry/resolve/rollbackしない。先行migrationや同migrationの先行statementが適用済みである可能性を残す。
 

@@ -35,6 +35,17 @@ const approvedPendingSets = [
     ],
     confirmation: 'APPLY_AI_TRAINING_ENROLLMENT_MIGRATIONS_TO_vtkzinaudznwbsjoyszk',
   },
+  {
+    migrations: [
+      '20261017100000_personal_learning_topics_persona_examples',
+      '20261017120000_personal_learning_topic_scope',
+      '20261017130000_personal_learning_goal_topic_scope',
+      '20261017140000_personal_learning_persona_suppressions',
+      '20261018100000_personal_learning_persona_opt_in',
+      '20261018120000_personal_learning_line_inbox',
+    ],
+    confirmation: 'APPLY_MANABERU_DYNAMIC_LEARNING_MIGRATIONS_TO_vtkzinaudznwbsjoyszk',
+  },
 ];
 const expectedProjectRef = 'vtkzinaudznwbsjoyszk';
 
