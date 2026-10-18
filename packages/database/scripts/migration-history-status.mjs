@@ -23,8 +23,9 @@ export function parseMigrationHistoryStatus(output, names = knownMigrations()) {
         if (pendingNames.length > 0) break;
         continue;
       }
-      if (known.has(line)) pendingNames.push(line);
+      if (known.has(line) || migrationNamePattern.test(line)) pendingNames.push(line);
       else if (pendingNames.length > 0) break;
+      else if (line) return { status: 'UNKNOWN', pendingMigrations: [] };
     }
   }
 

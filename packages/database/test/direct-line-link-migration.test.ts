@@ -19,6 +19,18 @@ const aiTrainingEnrollmentPendingOutput =
   'The following migration(s) have not yet been applied:\n' +
   '20261016120000_ai_training_usage_consent\n' +
   '20261016150000_invitation_manual_service_registration\n';
+const manaberuDynamicLearningMigrations = [
+  '20261017100000_personal_learning_topics_persona_examples',
+  '20261017120000_personal_learning_topic_scope',
+  '20261017130000_personal_learning_goal_topic_scope',
+  '20261017140000_personal_learning_persona_suppressions',
+  '20261018100000_personal_learning_persona_opt_in',
+  '20261018120000_personal_learning_line_inbox',
+];
+const manaberuDynamicLearningPendingOutput =
+  'The following migration(s) have not yet been applied:\n' +
+  manaberuDynamicLearningMigrations.join('\n') +
+  '\n';
 
 describe('direct, approval-gated production migration', () => {
   afterEach(() => vi.restoreAllMocks());
@@ -181,6 +193,83 @@ describe('direct, approval-gated production migration', () => {
     expect(confirm).not.toHaveBeenCalled();
     expect(execute.mock.calls.some(([, args]) => args.includes('deploy'))).toBe(false);
   });
+
+  it('approves only the exact six Manaberu dynamic-learning migrations with a dedicated confirmation', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    const execute = vi
+      .fn<typeof runMigrationProcess>()
+      .mockResolvedValueOnce({ reason: 'EXITED', status: 0 })
+      .mockResolvedValueOnce({
+        reason: 'EXITED',
+        status: 1,
+        capturedOutput: manaberuDynamicLearningPendingOutput,
+      })
+      .mockResolvedValueOnce({ reason: 'EXITED', status: 0 })
+      .mockResolvedValueOnce({
+        reason: 'EXITED',
+        status: 0,
+        capturedOutput: 'Database schema is up to date!',
+      });
+    const confirm = vi.fn((phrase: string) => Promise.resolve(phrase));
+
+    expect(await runDirectLineLinkMigration(execute, environment, confirm)).toBe(0);
+    expect(confirm).toHaveBeenCalledWith(
+      'APPLY_MANABERU_DYNAMIC_LEARNING_MIGRATIONS_TO_vtkzinaudznwbsjoyszk',
+    );
+    expect(execute).toHaveBeenCalledTimes(4);
+    expect(execute.mock.calls[2]![1]).toContain('migrate');
+    expect(execute.mock.calls[2]![1]).toContain('deploy');
+    expect(vi.mocked(console.log).mock.calls.flat().join(' ')).not.toContain('synthetic-secret');
+  });
+
+  it('does not deploy the Manaberu set when its dedicated confirmation is incorrect', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    const execute = vi
+      .fn<typeof runMigrationProcess>()
+      .mockResolvedValueOnce({ reason: 'EXITED', status: 0 })
+      .mockResolvedValueOnce({
+        reason: 'EXITED',
+        status: 1,
+        capturedOutput: manaberuDynamicLearningPendingOutput,
+      });
+    const confirm = vi.fn(() =>
+      Promise.resolve('APPLY_AI_TRAINING_ENROLLMENT_MIGRATIONS_TO_vtkzinaudznwbsjoyszk'),
+    );
+
+    expect(await runDirectLineLinkMigration(execute, environment, confirm)).toBe(1);
+    expect(confirm).toHaveBeenCalledWith(
+      'APPLY_MANABERU_DYNAMIC_LEARNING_MIGRATIONS_TO_vtkzinaudznwbsjoyszk',
+    );
+    expect(execute).toHaveBeenCalledTimes(2);
+    expect(execute.mock.calls.some(([, args]) => args.includes('deploy'))).toBe(false);
+  });
+
+  it.each([
+    ['partial set', manaberuDynamicLearningMigrations.slice(0, -1).join('\n') + '\n'],
+    [
+      'extra migration',
+      manaberuDynamicLearningMigrations.join('\n') + '\n20261018999999_unexpected\n',
+    ],
+  ])(
+    'rejects a %s in the Manaberu migration set without confirmation or deploy',
+    async (_label, names) => {
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      const execute = vi
+        .fn<typeof runMigrationProcess>()
+        .mockResolvedValueOnce({ reason: 'EXITED', status: 0 })
+        .mockResolvedValueOnce({
+          reason: 'EXITED',
+          status: 1,
+          capturedOutput: 'The following migration(s) have not yet been applied:\n' + names,
+        });
+      const confirm = vi.fn((phrase: string) => Promise.resolve(phrase));
+
+      expect(await runDirectLineLinkMigration(execute, environment, confirm)).toBe(1);
+      expect(execute).toHaveBeenCalledTimes(2);
+      expect(confirm).not.toHaveBeenCalled();
+      expect(execute.mock.calls.some(([, args]) => args.includes('deploy'))).toBe(false);
+    },
+  );
 
   it('rejects another target before connecting', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
