@@ -1,14 +1,20 @@
 # マナベルスタイル by ワタシワークス — Production Wave 0 Launch Runbook
 
+### 2026-10-18 招待受諾時の内部研修枠自動付与（実装中・本番未反映）
+
+ユーザー指示により、従来の「招待後に運営者がEnrollment作成・INTERNAL Seat付与」を、マナベルの招待受諾時に同一transactionで自動作成する方式へ変更する。対象は停止中のAI_TRAINING_V1 Pilot、設定済みWave 0内部上限（1〜3人）、有効な無料・招待限定・GUIDED Offeringに限る。上限未設定/不整合、複数Offering、3人上限到達等の場合は招待受諾全体を取り消す。ハッシーや他Serviceは対象外。
+
+自動付与は受講EnrollmentとINTERNAL Seatまでである。AI利用同意・Profile・Definition承認・Admission/費用設定・Pilot開始・通知・AI呼出しは引き続き別Gateで、招待を受けただけでAIは実行されない。CIのDB統合テスト後、PRレビュー・merge・Production deployが済んでから、実端末でLINE招待→LINE Login→招待同意→研修確認画面までの実運用フローを検証する。これは実AI呼出しの許可ではない。
+
 ### 2026-10-16 社内テスター3人・試験予算案（環境設定/開始は未実施）
 
 指示元ユーザーの指定により、Wave 0の社内テスター上限を3人へ拡張する。今回の人数候補は3人。席数上限の変更であり、参加者のEnrollment/Seat/Profile準備、Definition承認、Pilot開始、Provider呼出しの承認ではない。production開始は他のGate確認までNO-GO。
 
 費用設定候補はProgram全体で1日最大20 AI試行、同時実行1件、Program日次費用Hard Stop $1（`dailyCostLimitUsdMicros=1000000`）。20回は3人合計であり各人20回ではない。週累計$5は現行Admissionで強制されないため、実際の請求/利用額を運用担当が監視し、$5到達時に停止する運用上限とする。開始前に実モデル・価格・予約額・Provider側budget・費用確認方法を照合して人間が承認する。環境設定は未変更であり、有料呼出しは開始していない。
 
-### 2026-10-16 社内テスターの通常参加フロー（UI追加PR。production未反映）
+### 2026-10-16 社内テスターの通常参加フロー（2026-10-18更新前の履歴）
 
-内部テスターも招待URLから通常参加する。LINE上のFOLLOW自動返信 → 招待URL → LINE Login → 招待内容を確認して本人同意 → Service Membership → AI研修サービスなら研修参加確認画面へ移動（他サービスは従来どおりサービスホーム）→ 管理者が既存「実践プログラム」画面でAI研修Enrollment作成 → 管理者が「Personal Learning準備」の参加者欄で対象Enrollmentへ`INTERNAL` Seatを明示付与 → 本人が確認画面を再表示 → Seat確認後に外部AI利用の説明・明示同意 → Enrollmentごとの同意記録を保存 → 研修へ進む。サービス招待はMembershipのみを作り、Enrollment/Seat/AI同意/学習開始を自動化しない。
+更新前の順序は招待後に運営者がEnrollment/Seatを手動準備するものだった。現在の実装対象は上記2026-10-18節の自動付与方針である。
 
 参加者向けホームは通常のLINE内ブラウザ画面を使う。Wave 0の学習通知・リマインダーはOFFのままなので、Seat付与はLINEメッセージ送信を意味しない。内部枠付与画面は停止中Program・既存運用flag・固定authorityの条件内でのみ利用できる。PR merge / UI表示 / Seat付与 / Pilot START / production deployは別状態として記録し、未反映のコードを本番機能として案内しない。
 
