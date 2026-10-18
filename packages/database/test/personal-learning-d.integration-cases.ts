@@ -839,6 +839,14 @@ export function registerPersonalLearningDIntegrationCases(client: PrismaClient) 
         where: { id: f.enrollmentId },
         data: { status: 'COMPLETED', startsAt, endsAt: endedAt },
       });
+      await client.trainingDataRetentionState.create({
+        data: {
+          workspaceId: f.scope.workspaceId,
+          groupId: f.scope.groupId,
+          programEnrollmentId: f.enrollmentId,
+          endedAt,
+        },
+      });
       const configuration = await lineConfigurationFixture(f);
       const configurationId = configuration.id;
       const textEventId = `line-text-${randomUUID()}`;
