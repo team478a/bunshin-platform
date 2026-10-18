@@ -23,14 +23,14 @@ Productionへ書き込む操作は、田中さんが対象・時期・復旧担�
 
 現行mainに存在するD-1〜PR-Fの明示対象migrationは、以下の**6件**である。指示にある「7つ」と列挙されたmigration名は一致しない。列挙されていない第7件を推測して追加せず、Probeが返す全pending一覧を正本として照合する。PR-A〜PR-Cなど過去分や他の未適用migrationも一覧に出た場合、今回のreleaseに含める必要性・互換性をレビューし、説明できないものがあれば停止する。D-4には新規migrationはない。
 
-| 順序 | migration | 出所 |
-|---:|---|---|
-| 1 | `20261017100000_personal_learning_topics_persona_examples` | D-1 |
-| 2 | `20261017120000_personal_learning_topic_scope` | D-2 |
-| 3 | `20261017130000_personal_learning_goal_topic_scope` | D-2 |
-| 4 | `20261017140000_personal_learning_persona_suppressions` | D-3 |
-| 5 | `20261018100000_personal_learning_persona_opt_in` | D-3b |
-| 6 | `20261018120000_personal_learning_line_inbox` | PR-F |
+| 順序 | migration                                                  | 出所 |
+| ---: | ---------------------------------------------------------- | ---- |
+|    1 | `20261017100000_personal_learning_topics_persona_examples` | D-1  |
+|    2 | `20261017120000_personal_learning_topic_scope`             | D-2  |
+|    3 | `20261017130000_personal_learning_goal_topic_scope`        | D-2  |
+|    4 | `20261017140000_personal_learning_persona_suppressions`    | D-3  |
+|    5 | `20261018100000_personal_learning_persona_opt_in`          | D-3b |
+|    6 | `20261018120000_personal_learning_line_inbox`              | PR-F |
 
 この6件はリポジトリ内のmigration名であり、本番で未適用とは限らない。適用状況は必ず本番に対する読み取り専用Probeで確認する。Probe以外のmigration履歴・SQL直接照会やローカル設定から本番状態を推測しない。
 
@@ -38,12 +38,12 @@ Productionへ書き込む操作は、田中さんが対象・時期・復旧担�
 
 計画枠は**2〜4時間程度**を確保する。これは保証時間ではなく、追加pending、backup/restore rehearsal、lock待ち、Vercel build、利用者テストで延びる。例:
 
-| 作業 | 目安 |
-|---|---:|
-| backup・対象project確認・Migration History Probe | 30〜60分 |
-| migrationとreadiness/build/deploy | 20〜60分以上 |
-| 固定経路・LINE・マナベルホームsmoke | 30〜60分 |
-| 内部テスターの段階確認 | 30〜60分以上 |
+| 作業                                             |         目安 |
+| ------------------------------------------------ | -----------: |
+| backup・対象project確認・Migration History Probe |     30〜60分 |
+| migrationとreadiness/build/deploy                | 20〜60分以上 |
+| 固定経路・LINE・マナベルホームsmoke              |     30〜60分 |
+| 内部テスターの段階確認                           | 30〜60分以上 |
 
 pendingが多い、restore rehearsalが必要、Probeが失敗する、migration lockの影響が読めない場合は当日中の完了を優先せず延期する。
 
@@ -115,12 +115,12 @@ pending一覧に本書の6件以外があれば、名前・依存・互換性を
 
 新機能をONにする前に、既存ユーザーまたは専用の既存確認アカウントで次を確認する。実ユーザーへのLINE一斉送信・AI送信をテストに使わない。
 
-| 経路 | 確認項目 |
-|---|---|
-| 固定経路 | 従来の固定Definition研修のログイン、既存ホーム、教材/回答/進捗を表示できる。新しい動的研修の画面へ誤転送せず、既存データが見える。 |
-| LINE | 既存のLINEログイン、Webhook受信、既存リッチメニューと通知が維持される。既存イベントの二重処理がない。新しいLINE学習をONにする前は、通常Webhookが新機能へ誤って流れない。テストメッセージは対象内部アカウントだけへ送る。 |
-| マナベルのホーム | `https://www.watashi-works.com/s/manaberu-style/home` をLINE内ブラウザと通常ブラウザで開き、サービス名・本人表示・既存カード/導線が表示され、エラー画面にならない。 |
-| Health | `/api/health/live`、`/api/health/ready`成功。DB schema current。 |
+| 経路             | 確認項目                                                                                                                                                                                                                 |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 固定経路         | 従来の固定Definition研修のログイン、既存ホーム、教材/回答/進捗を表示できる。新しい動的研修の画面へ誤転送せず、既存データが見える。                                                                                       |
+| LINE             | 既存のLINEログイン、Webhook受信、既存リッチメニューと通知が維持される。既存イベントの二重処理がない。新しいLINE学習をONにする前は、通常Webhookが新機能へ誤って流れない。テストメッセージは対象内部アカウントだけへ送る。 |
+| マナベルのホーム | `https://www.watashi-works.com/s/manaberu-style/home` をLINE内ブラウザと通常ブラウザで開き、サービス名・本人表示・既存カード/導線が表示され、エラー画面にならない。                                                      |
+| Health           | `/api/health/live`、`/api/health/ready`成功。DB schema current。                                                                                                                                                         |
 
 失敗時は新機能を有効化せず、該当deploymentと時刻・テスト経路だけを記録して停止する。
 
