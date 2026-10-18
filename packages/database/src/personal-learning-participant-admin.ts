@@ -77,6 +77,34 @@ export class PrismaPersonalLearningParticipantAdminRepository {
       const settings = program.settings as {
         personalLearningPilot: { participantControl?: unknown };
       };
+      const enrollments = await tx.$queryRaw<
+        {
+          id: string;
+          name: string;
+          personaOptedIn: boolean;
+          inferredPersonaCount: bigint;
+          learnerEnteredPersonaCount: bigint;
+        }[]
+      >`
+          SELECT e.id, u.display_name AS name,
+            COALESCE(pp.opted_in, false) AS "personaOptedIn",
+            (SELECT COUNT(*)::bigint FROM personal_learning_persona_items pi
+             WHERE pi.workspace_id=e.workspace_id AND pi.group_id=e.group_id
+               AND pi.group_membership_id=m.id AND pi.user_id=m.user_id) AS "inferredPersonaCount",
+            ((pp.company_name IS NOT NULL)::int + (pp.age_band IS NOT NULL)::int + (pp.industry_job IS NOT NULL)::int)::bigint AS "learnerEnteredPersonaCount"
+          FROM program_enrollments e
+          JOIN group_memberships m ON m.id=e.group_membership_id
+            AND m.workspace_id=e.workspace_id AND m.group_id=e.group_id
+          JOIN users u ON u.id=m.user_id AND u.status::text='ACTIVE'
+          LEFT JOIN personal_learning_persona_profiles pp ON pp.workspace_id=e.workspace_id
+            AND pp.group_id=e.group_id AND pp.group_membership_id=m.id AND pp.user_id=m.user_id
+          WHERE e.workspace_id=${a.workspaceId}::uuid AND e.group_id=${a.groupId}::uuid
+            AND e.service_program_id=${a.serviceProgramId}::uuid
+            AND e.status::text='ACTIVE' AND e.starts_at IS NOT NULL AND e.starts_at<=now()
+            AND (e.ends_at IS NULL OR e.ends_at>now())
+            AND m.status::text='ACTIVE' AND m.service_role::text='PARTICIPANT'
+          ORDER BY e.created_at ASC, e.id ASC
+        `;
       return {
         policy: parsePilotParticipantPolicy(settings.personalLearningPilot.participantControl),
         seats: await tx.personalLearningPilotSeat.findMany({
@@ -90,19 +118,11 @@ export class PrismaPersonalLearningParticipantAdminRepository {
             revokedAt: true,
           },
         }),
-        enrollments: await tx.$queryRaw<{ id: string; name: string }[]>`
-          SELECT e.id, u.display_name AS name
-          FROM program_enrollments e
-          JOIN group_memberships m ON m.id=e.group_membership_id
-            AND m.workspace_id=e.workspace_id AND m.group_id=e.group_id
-          JOIN users u ON u.id=m.user_id AND u.status::text='ACTIVE'
-          WHERE e.workspace_id=${a.workspaceId}::uuid AND e.group_id=${a.groupId}::uuid
-            AND e.service_program_id=${a.serviceProgramId}::uuid
-            AND e.status::text='ACTIVE' AND e.starts_at IS NOT NULL AND e.starts_at<=now()
-            AND (e.ends_at IS NULL OR e.ends_at>now())
-            AND m.status::text='ACTIVE' AND m.service_role::text='PARTICIPANT'
-          ORDER BY e.created_at ASC, e.id ASC
-        `,
+        enrollments: enrollments.map((row) => ({
+          ...row,
+          inferredPersonaCount: Number(row.inferredPersonaCount),
+          learnerEnteredPersonaCount: Number(row.learnerEnteredPersonaCount),
+        })),
       };
     });
   }

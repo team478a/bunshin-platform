@@ -10,6 +10,8 @@ import { definePersonalLearningPlan, type PersonalLearningPlan } from './persona
 export interface PersonalLearningActor {
   readonly scope: LearnerScope;
   readonly actorUserId: string;
+  /** Required for every dynamic-learning operation while the multiTopic flag is ON. */
+  readonly topicId?: string;
 }
 export interface PersonalLearningWrite extends PersonalLearningActor {
   readonly idempotencyKey: string;
@@ -63,6 +65,11 @@ export function validatePersonalLearningActor(input: PersonalLearningActor): voi
     ].every((id) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id))
   )
     throw new ApplicationError('FORBIDDEN', 'personal learning scope denied');
+  if (
+    input.topicId !== undefined &&
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(input.topicId)
+  )
+    throw new ApplicationError('VALIDATION_ERROR', 'invalid personal learning topic');
 }
 export function validatePersonalLearningWrite(input: PersonalLearningWrite): void {
   validatePersonalLearningActor(input);

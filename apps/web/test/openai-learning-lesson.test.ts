@@ -46,6 +46,66 @@ describe('lesson Provider', () => {
       experienceDescription: null,
     });
   });
+  it('passes only bounded caller-selected persona context and preserves its confidence label', () => {
+    const v = JSON.parse(
+      learningLessonBody(
+        wish,
+        'gpt-5.2-2025-12-11',
+        { maxRequestBytes: 16000, maxOutputTokens: 2000 },
+        false,
+        [
+          {
+            attributeKey: 'explanation_style',
+            value: '短い例を先に見る',
+            epistemicStatus: 'LEARNER_CONFIRMED',
+            evidenceType: 'LEARNING_REQUEST',
+            evidenceCreatedAt: '2026-10-16T00:00:00.000Z',
+          },
+        ],
+      ),
+    ) as { input: { role: string; content: string }[] };
+    const learnerData = JSON.parse(v.input.find((item) => item.role === 'user')!.content);
+    expect(learnerData.personaContext).toEqual([
+      {
+        attributeKey: 'explanation_style',
+        value: '短い例を先に見る',
+        epistemicStatus: 'LEARNER_CONFIRMED',
+        evidenceType: 'LEARNING_REQUEST',
+        evidenceCreatedAt: '2026-10-16T00:00:00.000Z',
+      },
+    ]);
+    expect(v.input.find((item) => item.role === 'system')?.content).toContain('UNCONFIRMED_GUESS');
+  });
+  it('drops lowest-priority persona entries before exceeding the request-byte limit', () => {
+    const context = [
+      {
+        attributeKey: 'confirmed_priority',
+        value: 'confirmed fact',
+        epistemicStatus: 'LEARNER_CONFIRMED' as const,
+        evidenceType: 'LEARNING_REQUEST' as const,
+        evidenceCreatedAt: '2026-10-17T00:00:00.000Z',
+      },
+      ...Array.from({ length: 20 }, (_, index) => ({
+        attributeKey: `guess_${index}`,
+        value: 'x'.repeat(900),
+        epistemicStatus: 'UNCONFIRMED_GUESS' as const,
+        evidenceType: 'LEARNING_REQUEST' as const,
+        evidenceCreatedAt: '2026-10-17T00:00:00.000Z',
+      })),
+    ];
+    const encoded = learningLessonBody(
+      wish,
+      'gpt-5.2-2025-12-11',
+      { maxRequestBytes: 10_000, maxOutputTokens: 2000 },
+      false,
+      context,
+    );
+    expect(Buffer.byteLength(encoded, 'utf8')).toBeLessThanOrEqual(10_000);
+    const parsed = JSON.parse(encoded) as { input: { role: string; content: string }[] };
+    const data = JSON.parse(parsed.input.find((item) => item.role === 'user')!.content);
+    expect(data.personaContext[0].attributeKey).toBe('confirmed_priority');
+    expect(data.personaContext.length).toBeLessThan(context.length);
+  });
   it('rejects byte overflow and unsupported models before fetch', () => {
     expect(() =>
       learningLessonBody(wish, 'gpt-5.2', { maxRequestBytes: 1, maxOutputTokens: 2000 }),

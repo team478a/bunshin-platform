@@ -1,5 +1,61 @@
 const DAY_MS = 24 * 60 * 60 * 1000;
 export const TRAINING_RETENTION_POLICY_VERSION = 'TRAINING_RETENTION_V1';
+export const PERSONAL_LEARNING_DYNAMIC_RETENTION_POLICY_VERSION =
+  'PERSONAL_LEARNING_DYNAMIC_RETENTION_V1';
+const addCalendarYears = (date: Date, years: number): Date => {
+  const result = new Date(date);
+  const day = result.getUTCDate();
+  result.setUTCDate(1);
+  result.setUTCFullYear(result.getUTCFullYear() + years);
+  const lastDay = new Date(
+    Date.UTC(result.getUTCFullYear(), result.getUTCMonth() + 1, 0),
+  ).getUTCDate();
+  result.setUTCDate(Math.min(day, lastDay));
+  return result;
+};
+
+/** Dynamic Manaberu content is kept until the earlier of end+90d or one year of learner inactivity. */
+export function personalLearningDynamicContentDeletionDue(input: {
+  endedAt: Date | null;
+  lastLearnerUseAt: Date | null;
+  now: Date;
+}): boolean {
+  if (!Number.isFinite(input.now.getTime())) throw new Error('Invalid retention clock');
+  const endedDue =
+    input.endedAt !== null &&
+    Number.isFinite(input.endedAt.getTime()) &&
+    input.endedAt.getTime() + 90 * DAY_MS <= input.now.getTime();
+  const idleDue =
+    input.lastLearnerUseAt !== null &&
+    Number.isFinite(input.lastLearnerUseAt.getTime()) &&
+    addCalendarYears(input.lastLearnerUseAt, 1).getTime() <= input.now.getTime();
+  return endedDue || idleDue;
+}
+
+/** Dynamic support images expire independently of learner activity. */
+export function personalLearningDynamicImageDeletionDue(createdAt: Date, now: Date): boolean {
+  if (!Number.isFinite(createdAt.getTime()) || !Number.isFinite(now.getTime()))
+    throw new Error('Invalid retention clock');
+  return createdAt.getTime() + 90 * DAY_MS <= now.getTime();
+}
+
+/** Structured learner summaries/persona use the earlier of end+1y or two years idle. */
+export function personalLearningDynamicSummaryDeletionDue(input: {
+  endedAt: Date | null;
+  lastLearnerUseAt: Date | null;
+  now: Date;
+}): boolean {
+  if (!Number.isFinite(input.now.getTime())) throw new Error('Invalid retention clock');
+  const endedDue =
+    input.endedAt !== null &&
+    Number.isFinite(input.endedAt.getTime()) &&
+    addCalendarYears(input.endedAt, 1).getTime() <= input.now.getTime();
+  const idleDue =
+    input.lastLearnerUseAt !== null &&
+    Number.isFinite(input.lastLearnerUseAt.getTime()) &&
+    addCalendarYears(input.lastLearnerUseAt, 2).getTime() <= input.now.getTime();
+  return endedDue || idleDue;
+}
 export const TRAINING_RETENTION_MAX_ENROLLMENTS = 100;
 
 export function trainingAnswerRetentionCutoff(now: Date): Date {
@@ -41,6 +97,7 @@ export interface TrainingRetentionPreviewSummary {
   scoreProfilesDue: number;
   progressSnapshotsDue: number;
   retainedToolkit: number;
+  dynamicLearningDataDue?: number;
   endDateUnresolved: number;
   ownershipUnresolved: number;
 }
@@ -62,6 +119,9 @@ export interface TrainingRetentionExecutionScope {
   workspaceId: string;
   groupId: string;
   programEnrollmentId: string;
+  /** Optional exact Program boundary for scheduled execution. */
+  serviceProgramId?: string;
+  executionSource?: 'ADMIN' | 'CRON';
   operatorUserId: string;
   now: Date;
 }
@@ -77,6 +137,15 @@ export interface TrainingRetentionExecutionCounts {
   preferences: number;
   retainedToolkit: number;
   learningRequests?: number;
+  conversationEvents?: number;
+  practiceSupportImages?: number;
+  lineMessages?: number;
+  toolkitDue?: number;
+  dynamicTopicsDue?: number;
+  personaItemsDue?: number;
+  savedExamplesDue?: number;
+  personaSuppressionsDue?: number;
+  personaProfilesDue?: number;
 }
 export type TrainingRetentionExecutionPreview = {
   revision: string;

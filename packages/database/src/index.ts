@@ -83,6 +83,12 @@ export {
 } from './training-barrier';
 export { PrismaTrainingToolkitRepository } from './training-toolkit';
 export type { SaveTrainingToolkitItemResult, TrainingToolkitItemView } from './training-toolkit';
+export {
+  PrismaPersonalLearningPersonaRepository,
+  PrismaPersonalLearningSavedExamplesRepository,
+  PrismaPersonalLearningTopicRepository,
+} from './personal-learning-d';
+export type { DynamicLearningScope, PersonaItemInput } from './personal-learning-d';
 export { PrismaTrainingGrowthRepository } from './training-growth';
 export { PrismaAiTrainingRuntimeRepository } from './training-runtime';
 export { PrismaTrainingParticipantProfileRepository } from './training-profile';
@@ -271,6 +277,7 @@ export { PrismaTrainingPersonalDataDeletionRepository } from './training-persona
 export { PrismaTrainingRetentionPreviewRepository } from './training-retention-preview';
 export { PrismaTrainingRetentionAdminPreviewRepository } from './training-retention-preview';
 export { PrismaTrainingRetentionExecutionRepository } from './training-retention-execution';
+export { PrismaTrainingRetentionCronRepository } from './training-retention-cron';
 export {
   PrismaServiceFoundationRepository,
   PrismaServiceStaffRoleRepository,
@@ -333,4 +340,5 @@ export * from './personal-learning-text-operation';
 export * from './personal-learning-lesson-candidate';
 export * from './personal-learning-practice';
 export * from './personal-learning-practice-support';
+export * from './personal-learning-conversation';
 export { purgeExpiredSupportCases, SUPPORT_CASE_RETENTION_DAYS } from './support-case-retention';

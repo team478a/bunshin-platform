@@ -13,11 +13,9 @@ import {
   type AdmittedOpenAiRuntimeConfiguration,
 } from '../ai/runtime-provider-configuration';
 import { personalLearningPricingRegistry } from '../observability/personal-learning-ai-call';
-import {
-  generateLearningLesson,
-  learningLessonBody,
-  LEARNING_LESSON_PROMPT_VERSION,
-} from '../providers/openai-learning-lesson';
+import { generateLearningLesson, learningLessonBody } from '../providers/openai-learning-lesson';
+import { learningProposalPolicy } from '../providers/learning-proposal-policy';
+import { resolvePersonalLearningExtendedScope } from './personal-learning-extended-scope';
 
 export async function prepareLearningLesson(
   actor: PersonalLearningActor,
@@ -58,7 +56,12 @@ export async function prepareLearningLesson(
     occurredAt: new Date(),
   });
   if (!reservation) throw new ApplicationError('CONFIGURATION_ERROR', 'lesson price unavailable');
-  const body = learningLessonBody(request, policy.model, policy); // Validate byte limit before admission.
+  const extendedScope = await resolvePersonalLearningExtendedScope(actor);
+  const proposalPolicy = learningProposalPolicy(extendedScope);
+  const personaContext = await new db.PrismaPersonalLearningPersonaRepository(db.prisma).listForAi(
+    actor.scope,
+  );
+  const body = learningLessonBody(request, policy.model, policy, extendedScope, personaContext); // Validate byte limit before admission.
   let providerAdmission: AdmittedOpenAiRuntimeConfiguration | null = null;
   let usageKey = '';
   let permitId = '';
@@ -74,7 +77,7 @@ export async function prepareLearningLesson(
         operationKind: 'LESSON_GENERATION',
         attempt: 1,
         provider: 'openai',
-        promptVersion: LEARNING_LESSON_PROMPT_VERSION,
+        promptVersion: proposalPolicy.version,
         policy,
         pricingRegistry,
       },
@@ -124,6 +127,6 @@ export async function prepareLearningLesson(
     request,
     proposal,
     usageKey,
-    promptVersion: LEARNING_LESSON_PROMPT_VERSION,
+    promptVersion: proposalPolicy.version,
   });
 }

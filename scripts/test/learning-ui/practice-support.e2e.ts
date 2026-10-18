@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import { practiceFixture, supportedPracticeFixture } from './practice-fixture';
 const testImagePath = resolve(process.cwd(), '../../../apps/web/public/hassy-icon.jpg');
 
-test('smartphone consultation uses current task and note versions, not a new material', async ({
+test('practice consultation continues in the learning chat using current task and note versions', async ({
   app,
   browser,
   screen,
@@ -15,12 +15,13 @@ test('smartphone consultation uses current task and note versions, not a new mat
     await route.fulfill({ json: { data: supportedPracticeFixture } });
   });
   await app.open('/?practice&resume');
-  await screen.getByLabel('いま困っていること').selectOption({ value: 'ENVIRONMENT_MISMATCH' });
-  await screen.getByLabel('どこまで進めたか・何を聞きたいか（短く）').fill('画面が違う');
-  await screen.getByRole('button', 'この課題の続きを相談').tap();
+  await expect(screen.getByText('紹介文の見出しを一緒に考えましょう。')).toBeVisible();
+  await screen.getByLabel('相談内容').fill('画面が違う');
+  await screen.getByRole('button', 'チャットに送信').tap();
   await expect(
     screen.getByText('次の一歩：いま表示されている内容を一つ教えてください'),
   ).toBeVisible();
+  await expect(screen.getByText('画面が違う')).toBeVisible();
   await expect(screen.getByText('紹介ページの見出しを自分で直せる')).toBeVisible();
   await expect(screen.getByLabel('進めたこと・止まったこと（短く）')).toHaveValue(
     '見出しで止まった',
@@ -30,13 +31,13 @@ test('smartphone consultation uses current task and note versions, not a new mat
     assignmentId: practiceFixture.assignmentId,
     expectedNoteRevision: 1,
     expectedSupportRevision: 0,
-    reason: 'ENVIRONMENT_MISMATCH',
+    reason: 'UNKNOWN',
     text: '画面が違う',
   });
   expect(calls[0]).not.toHaveProperty('model');
   expect(calls[0]).not.toHaveProperty('evaluation');
 });
-test('revisit restores support with no provider call or write', async ({
+test('revisit restores the same learning chat and practice support without provider call or write', async ({
   app,
   browser,
   screen,
@@ -48,7 +49,8 @@ test('revisit restores support with no provider call or write', async ({
   });
   await app.open('/?practice&resume&support');
   await browser.reload();
-  await expect(screen.getByText('相談：画面が違う')).toBeVisible();
+  await expect(screen.getByText('画面が違う')).toBeVisible();
+  await expect(screen.getByText('紹介文の見出しを一緒に考えましょう。')).toBeVisible();
   await expect(
     screen.getByText('支援であり、達成・合格・独力再現の評価ではありません。'),
   ).toBeVisible();
@@ -78,16 +80,14 @@ test('one screenshot can be selected, previewed, removed, and attached to the sa
     });
   });
   await app.open('/?practice&resume');
-  const picker = screen.getByLabel('画面の画像（任意・1枚、3MBまで）');
+  const picker = screen.getByRole('button', '画面画像（任意・1枚、3MBまで）');
   await picker.setInputFiles([testImagePath]);
   await expect(screen.getByRole('img', '相談に添付する画像のプレビュー')).toBeVisible();
   await screen.getByRole('button', '画像を削除').tap();
   await expect(screen.getByRole('img', '相談に添付する画像のプレビュー')).not.toBeVisible();
   await picker.setInputFiles([testImagePath]);
-  await screen
-    .getByLabel('どこまで進めたか・何を聞きたいか（短く）')
-    .fill('ボタンが見つかりません');
-  await screen.getByRole('button', 'この課題の続きを相談').tap();
+  await screen.getByLabel('相談内容').fill('ボタンが見つかりません');
+  await screen.getByRole('button', 'チャットに送信').tap();
   await expect(screen.getByRole('img', '相談に添付したスクリーンショット')).toBeVisible();
   expect(posted[0]).toMatchObject({
     assignmentId: practiceFixture.assignmentId,
@@ -133,14 +133,10 @@ test('AI failure retains input, work note and original task then reads durable s
     });
   });
   await app.open('/?practice&resume');
-  await screen.getByLabel('どこまで進めたか・何を聞きたいか（短く）').fill('説明が分からない');
-  await screen.getByRole('button', 'この課題の続きを相談').tap();
-  await expect(
-    screen.getByText('支援を取得できませんでした。課題と作業記録は残っています。'),
-  ).toBeVisible();
-  await expect(screen.getByLabel('どこまで進めたか・何を聞きたいか（短く）')).toHaveValue(
-    '説明が分からない',
-  );
+  await screen.getByLabel('相談内容').fill('説明が分からない');
+  await screen.getByRole('button', 'チャットに送信').tap();
+  await expect(screen.getByText('支援を取得できませんでした。')).toBeVisible();
+  await expect(screen.getByLabel('相談内容')).toHaveValue('説明が分からない');
   await expect(screen.getByLabel('進めたこと・止まったこと（短く）')).toHaveValue(
     '見出しで止まった',
   );
@@ -172,14 +168,14 @@ test('pending consultation prevents duplicate send and stopped policy prevents n
     });
   });
   await app.open('/?practice&resume');
-  await screen.getByLabel('どこまで進めたか・何を聞きたいか（短く）').fill('少しヒントがほしい');
-  await screen.getByRole('button', 'この課題の続きを相談').tap();
-  await expect(screen.getByRole('button', 'この課題の続きを相談')).toBeDisabled();
-  await expect(screen.getByText('相談を保存済み・応答は未確認です。')).toBeVisible();
+  await screen.getByLabel('相談内容').fill('少しヒントがほしい');
+  await screen.getByRole('button', 'チャットに送信').tap();
+  await expect(screen.getByRole('button', 'チャットに送信')).toBeDisabled();
+  await expect(screen.getByText('返信を確認中です。')).toBeVisible();
   await app.open('/?practice&resume&support&stopped');
-  await screen.getByLabel('どこまで進めたか・何を聞きたいか（短く）').fill('続けたい');
-  await expect(screen.getByRole('button', 'この課題の続きを相談')).toBeDisabled();
-  await expect(screen.getByText('相談：画面が違う')).toBeVisible();
+  await screen.getByLabel('相談内容').fill('続けたい');
+  await expect(screen.getByRole('button', 'チャットに送信')).toBeDisabled();
+  await expect(screen.getByText('画面が違う')).toBeVisible();
 });
 test('unknown cause is a question and stale advice never becomes a current next step', async ({
   app,
@@ -214,10 +210,13 @@ test('unknown cause is a question and stale advice never becomes a current next 
     });
   });
   await app.open('/?practice&resume');
-  await screen.getByLabel('どこまで進めたか・何を聞きたいか（短く）').fill('止まった');
-  await screen.getByRole('button', 'この課題の続きを相談').tap();
+  await screen.getByLabel('相談内容').fill('止まった');
+  await screen.getByRole('button', 'チャットに送信').tap();
   await expect(screen.getByText('確認したいこと：どの作業で止まりましたか')).toBeVisible();
-  await screen.getByRole('button', 'この課題の続きを相談').tap();
-  await expect(screen.getByText('記録が変わったため、古い助言は適用していません。')).toBeVisible();
+  await screen.getByLabel('相談内容').fill('見出しの長さも悩んでいます');
+  await screen.getByRole('button', 'チャットに送信').tap();
+  await expect(
+    screen.getByText('作業記録が変わったため、この助言は適用していません。'),
+  ).toBeVisible();
   await expect(screen.getByText('確認したいこと：どの作業で止まりましたか')).not.toBeVisible();
 });

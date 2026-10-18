@@ -426,6 +426,7 @@ model ProgramEnrollment {
   aiUsageConsents AiTrainingUsageConsent[]
   personalLearningGoalConfirmations PersonalLearningGoalConfirmation[]
   personalLearningRequests PersonalLearningRequest[]
+  personalLearningTopics PersonalLearningTopic[]
   practiceSupportImages PersonalLearningPracticeSupportImage[]
 
   @@unique([groupMembershipId, serviceProgramId])
@@ -675,6 +676,122 @@ model TrainingToolkitItem {
   @@map("training_toolkit_items")
 }
 
+/// Dynamic learning data belongs to one learner and one service membership; it is never Bunshin Memory.
+model PersonalLearningTopic {
+  id                  String   @id @default(uuid()) @db.Uuid
+  workspaceId         String   @map("workspace_id") @db.Uuid
+  groupId             String   @map("group_id") @db.Uuid
+  programEnrollmentId String   @map("program_enrollment_id") @db.Uuid
+  groupMembershipId   String   @map("group_membership_id") @db.Uuid
+  userId              String   @map("user_id") @db.Uuid
+  title               String   @db.VarChar(160)
+  status              String   @default("ACTIVE") @db.VarChar(16)
+  sourceRequestId     String?  @map("source_request_id") @db.Uuid
+  goalSnapshot        Json?    @map("goal_snapshot")
+  planSnapshot        Json?    @map("plan_snapshot")
+  lastLearnerUseAt    DateTime? @map("last_learner_use_at") @db.Timestamptz(3)
+  endedAt             DateTime? @map("ended_at") @db.Timestamptz(3)
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  enrollment          ProgramEnrollment @relation(fields: [workspaceId, groupId, programEnrollmentId, groupMembershipId], references: [workspaceId, groupId, id, groupMembershipId], onDelete: Cascade)
+  membership          GroupMembership @relation(fields: [workspaceId, groupId, groupMembershipId, userId], references: [workspaceId, groupId, id, userId], onDelete: Cascade)
+  requests            PersonalLearningRequest[]
+  goalConfirmations   PersonalLearningGoalConfirmation[]
+  memberGoals         ProgramMemberGoal[]
+  planRevisions       PersonalLearningPlanRevision[]
+
+  @@unique([workspaceId, groupId, id])
+  @@unique([workspaceId, groupId, programEnrollmentId, id])
+  @@index([workspaceId, groupId, groupMembershipId, status, updatedAt])
+  @@map("personal_learning_topics")
+}
+
+/// Inferred learner profile facts are service-scoped and require learner review; evidence stores references only.
+model PersonalLearningPersonaItem {
+  id                String   @id @default(uuid()) @db.Uuid
+  workspaceId       String   @map("workspace_id") @db.Uuid
+  groupId           String   @map("group_id") @db.Uuid
+  groupMembershipId String   @map("group_membership_id") @db.Uuid
+  userId            String   @map("user_id") @db.Uuid
+  attributeKey      String   @map("attribute_key") @db.VarChar(80)
+  value             String   @db.VarChar(1000)
+  status            String   @default("UNCONFIRMED") @db.VarChar(16)
+  evidenceType      String   @map("evidence_type") @db.VarChar(40)
+  evidenceId        String   @map("evidence_id") @db.Uuid
+  evidenceCreatedAt DateTime @map("evidence_created_at") @db.Timestamptz(3)
+  lastLearnerUseAt  DateTime? @map("last_learner_use_at") @db.Timestamptz(3)
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  membership        GroupMembership @relation(fields: [workspaceId, groupId, groupMembershipId, userId], references: [workspaceId, groupId, id, userId], onDelete: Cascade)
+
+  @@unique([workspaceId, groupId, groupMembershipId, attributeKey])
+  @@index([workspaceId, groupId, groupMembershipId, status, updatedAt])
+  @@map("personal_learning_persona_items")
+}
+
+/// Opt-in state and learner-entered persona fields scoped to one User + Workspace + Service.
+model PersonalLearningPersonaProfile {
+  id                String   @id @default(uuid()) @db.Uuid
+  workspaceId       String   @map("workspace_id") @db.Uuid
+  groupId           String   @map("group_id") @db.Uuid
+  groupMembershipId String   @map("group_membership_id") @db.Uuid
+  userId            String   @map("user_id") @db.Uuid
+  optedIn           Boolean  @default(false) @map("opted_in")
+  consentVersion    String?  @map("consent_version") @db.VarChar(80)
+  optedInAt         DateTime? @map("opted_in_at") @db.Timestamptz(3)
+  optedOutAt        DateTime? @map("opted_out_at") @db.Timestamptz(3)
+  dismissedUntil    DateTime? @map("dismissed_until") @db.Timestamptz(3)
+  companyName       String?  @map("company_name") @db.VarChar(80)
+  ageBand           String?  @map("age_band") @db.VarChar(20)
+  industryJob       String?  @map("industry_job") @db.VarChar(80)
+  lastLearnerUseAt  DateTime? @map("last_learner_use_at") @db.Timestamptz(3)
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  membership        GroupMembership @relation(fields: [workspaceId, groupId, groupMembershipId, userId], references: [workspaceId, groupId, id, userId], onDelete: Cascade, onUpdate: Cascade)
+
+  @@unique([workspaceId, groupId, groupMembershipId], map: "personal_learning_persona_profiles_member_key")
+  @@unique([workspaceId, groupId, groupMembershipId, userId], map: "personal_learning_persona_profiles_member_user_key")
+  @@index([workspaceId, groupId, optedIn, updatedAt], map: "personal_learning_persona_profiles_opted_in_idx")
+  @@map("personal_learning_persona_profiles")
+}
+
+/// Learner-approved suppression marker only; intentionally stores no inferred value or evidence.
+model PersonalLearningPersonaSuppression {
+  id                String   @id @default(uuid()) @db.Uuid
+  workspaceId       String   @map("workspace_id") @db.Uuid
+  groupId           String   @map("group_id") @db.Uuid
+  groupMembershipId String   @map("group_membership_id") @db.Uuid
+  userId            String   @map("user_id") @db.Uuid
+  attributeKey      String   @map("attribute_key") @db.VarChar(80)
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  membership        GroupMembership @relation(fields: [workspaceId, groupId, groupMembershipId, userId], references: [workspaceId, groupId, id, userId], onDelete: Cascade, onUpdate: Cascade)
+
+  @@unique([workspaceId, groupId, groupMembershipId, attributeKey], map: "personal_learning_persona_suppressions_member_attribute_key")
+  @@index([workspaceId, groupId, groupMembershipId, createdAt], map: "personal_learning_persona_suppressions_member_created_idx")
+  @@map("personal_learning_persona_suppressions")
+}
+
+/// Learner-owned examples survive topic pause/completion; owner-facing APIs expose only counts.
+model PersonalLearningSavedExample {
+  id                String   @id @default(uuid()) @db.Uuid
+  workspaceId       String   @map("workspace_id") @db.Uuid
+  groupId           String   @map("group_id") @db.Uuid
+  groupMembershipId String   @map("group_membership_id") @db.Uuid
+  userId            String   @map("user_id") @db.Uuid
+  title             String   @db.VarChar(160)
+  content           String   @db.Text
+  sourceType        String   @map("source_type") @db.VarChar(40)
+  sourceId          String   @map("source_id") @db.Uuid
+  lastLearnerUseAt  DateTime? @map("last_learner_use_at") @db.Timestamptz(3)
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  membership        GroupMembership @relation(fields: [workspaceId, groupId, groupMembershipId, userId], references: [workspaceId, groupId, id, userId], onDelete: Cascade)
+
+  @@unique([workspaceId, groupId, groupMembershipId, id])
+  @@index([workspaceId, groupId, groupMembershipId, createdAt])
+  @@map("personal_learning_saved_examples")
+}
+
 /// AI研修Package専用。Serviceが人間承認した支援Skillの論理identity。
 model TrainingSupportSkill {
   id                       String                                @id @db.Uuid
@@ -856,6 +973,7 @@ model ProgramMemberGoal {
   groupId             String                  @map("group_id") @db.Uuid
   programEnrollmentId String                  @map("program_enrollment_id") @db.Uuid
   groupMembershipId   String                  @map("group_membership_id") @db.Uuid
+  topicId             String?                 @map("topic_id") @db.Uuid
   goalDefinitionId    String?                 @map("goal_definition_id") @db.Uuid
   title               String                  @db.VarChar(160)
   metricType          ProgramGoalMetricType   @map("metric_type")
@@ -869,6 +987,7 @@ model ProgramMemberGoal {
   updatedByUserId     String                  @map("updated_by_user_id") @db.Uuid
   createdAt           DateTime                @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt           DateTime                @updatedAt @map("updated_at") @db.Timestamptz(3)
+  topic               PersonalLearningTopic?  @relation(fields: [workspaceId, groupId, programEnrollmentId, topicId], references: [workspaceId, groupId, programEnrollmentId, id], onDelete: Cascade, map: "program_member_goals_topic_fkey")
   personalLearningConfirmations PersonalLearningGoalConfirmation[]
 
   @@unique([workspaceId, groupId, id])
@@ -885,6 +1004,7 @@ model PersonalLearningRequest {
   programEnrollmentId   String            @map("program_enrollment_id") @db.Uuid
   groupMembershipId     String            @map("group_membership_id") @db.Uuid
   userId                String            @map("user_id") @db.Uuid
+  topicId               String?           @map("topic_id") @db.Uuid
   revision              Int
   originalText          String            @map("original_text") @db.VarChar(2000)
   lessonCandidate       Json?             @map("lesson_candidate")
@@ -899,9 +1019,10 @@ model PersonalLearningRequest {
   updatedAt             DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
   enrollment            ProgramEnrollment @relation(fields: [workspaceId, groupId, programEnrollmentId, groupMembershipId], references: [workspaceId, groupId, id, groupMembershipId], onDelete: Cascade, map: "personal_learning_requests_workspace_id_group_id_program_e_fkey")
   membership            GroupMembership   @relation(fields: [workspaceId, groupId, groupMembershipId, userId], references: [workspaceId, groupId, id, userId], onDelete: Cascade, map: "personal_learning_requests_workspace_id_group_id_group_mem_fkey")
+  topic                 PersonalLearningTopic? @relation(fields: [workspaceId, groupId, programEnrollmentId, topicId], references: [workspaceId, groupId, programEnrollmentId, id], onDelete: Cascade, map: "personal_learning_requests_topic_fk")
 
-  @@unique([workspaceId, groupId, programEnrollmentId, revision], map: "personal_learning_request_revision_key")
-  @@unique([workspaceId, groupId, programEnrollmentId, idempotencyKey], map: "personal_learning_request_operation_key")
+  @@index([workspaceId, groupId, programEnrollmentId, topicId, revision], map: "personal_learning_request_topic_revision_idx")
+  @@index([workspaceId, groupId, programEnrollmentId, idempotencyKey], map: "personal_learning_request_operation_idx")
   @@map("personal_learning_requests")
 }
 
@@ -912,6 +1033,7 @@ model PersonalLearningGoalConfirmation {
   programEnrollmentId     String                         @map("program_enrollment_id") @db.Uuid
   groupMembershipId       String                         @map("group_membership_id") @db.Uuid
   userId                  String                         @map("user_id") @db.Uuid
+  topicId                 String?                        @map("topic_id") @db.Uuid
   packageKey              String                         @map("package_key") @db.VarChar(80)
   goalKey                 String                         @map("goal_key") @db.VarChar(80)
   semanticVersion         String                         @map("semantic_version") @db.VarChar(80)
@@ -921,9 +1043,11 @@ model PersonalLearningGoalConfirmation {
   goal                    ProgramMemberGoal              @relation(fields: [workspaceId, groupId, programEnrollmentId, groupMembershipId, programMemberGoalId], references: [workspaceId, groupId, programEnrollmentId, groupMembershipId, id], onDelete: Cascade, map: "learning_confirmation_goal_fk")
   enrollment              ProgramEnrollment              @relation(fields: [workspaceId, groupId, programEnrollmentId, groupMembershipId], references: [workspaceId, groupId, id, groupMembershipId], onDelete: Cascade, map: "learning_confirmation_enrollment_fk")
   membership              GroupMembership                @relation(fields: [workspaceId, groupId, groupMembershipId, userId], references: [workspaceId, groupId, id, userId], onDelete: Cascade, map: "learning_confirmation_membership_fk")
+  topic                   PersonalLearningTopic?         @relation(fields: [workspaceId, groupId, programEnrollmentId, topicId], references: [workspaceId, groupId, programEnrollmentId, id], onDelete: Cascade, map: "learning_confirmation_topic_fk")
   revisions               PersonalLearningPlanRevision[]
 
   @@unique([workspaceId, groupId, programEnrollmentId, groupMembershipId, userId, programMemberGoalId], map: "learning_confirmation_scope_key")
+  @@index([workspaceId, groupId, programEnrollmentId, topicId], map: "learning_confirmation_topic_idx")
   @@map("personal_learning_goal_confirmations")
 }
 
@@ -938,6 +1062,7 @@ model PersonalLearningPlanRevision {
   groupMembershipId   String                           @map("group_membership_id") @db.Uuid
   userId              String                           @map("user_id") @db.Uuid
   programMemberGoalId String                           @map("program_member_goal_id") @db.Uuid
+  topicId             String?                          @map("topic_id") @db.Uuid
   contractVersion     String                           @map("contract_version") @db.VarChar(80)
   ruleVersion         String                           @map("rule_version") @db.VarChar(80)
   status              String                           @db.VarChar(20)
@@ -946,9 +1071,10 @@ model PersonalLearningPlanRevision {
   createdAt           DateTime                         @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt           DateTime                         @updatedAt @map("updated_at") @db.Timestamptz(3)
   goalConfirmation    PersonalLearningGoalConfirmation @relation(fields: [workspaceId, groupId, programEnrollmentId, groupMembershipId, userId, programMemberGoalId], references: [workspaceId, groupId, programEnrollmentId, groupMembershipId, userId, programMemberGoalId], onDelete: Cascade, map: "learning_plan_confirmation_fk")
+  topic               PersonalLearningTopic?           @relation(fields: [workspaceId, groupId, programEnrollmentId, topicId], references: [workspaceId, groupId, programEnrollmentId, id], onDelete: Cascade, map: "learning_plan_topic_fk")
 
   @@id([planId, revision])
-  @@index([workspaceId, groupId, programEnrollmentId])
+  @@index([workspaceId, groupId, programEnrollmentId, topicId], map: "learning_plan_topic_idx")
   @@map("personal_learning_plan_revisions")
 }
 
@@ -3495,6 +3621,11 @@ model GroupMembership {
   id                           String                           @id @default(uuid()) @db.Uuid
   personalLearningGoalConfirmations PersonalLearningGoalConfirmation[]
   personalLearningRequests PersonalLearningRequest[]
+  personalLearningTopics PersonalLearningTopic[]
+  personalLearningPersonaItems PersonalLearningPersonaItem[]
+  personalLearningPersonaProfile PersonalLearningPersonaProfile?
+  personalLearningPersonaSuppressions PersonalLearningPersonaSuppression[]
+  personalLearningSavedExamples PersonalLearningSavedExample[]
   practiceSupportImages PersonalLearningPracticeSupportImage[]
   workspaceId                  String                           @map("workspace_id") @db.Uuid
   groupId                      String                           @map("group_id") @db.Uuid
@@ -6348,6 +6479,75 @@ model GroupLineWebhookEvent {
   @@index([workspaceId, groupId, processedAt])
   @@index([configurationId, processedAt])
   @@map("group_line_webhook_events")
+}
+
+/// LINE学習の受信本文。Webhookの200応答前にイベント・Inbox・Jobを同一transactionで保存する。
+model PersonalLearningLineInbox {
+  id                  String    @id @default(uuid()) @db.Uuid
+  workspaceId         String    @map("workspace_id") @db.Uuid
+  groupId             String    @map("group_id") @db.Uuid
+  programEnrollmentId String    @map("program_enrollment_id") @db.Uuid
+  groupMembershipId   String    @map("group_membership_id") @db.Uuid
+  userId              String    @map("user_id") @db.Uuid
+  configurationId     String    @map("configuration_id") @db.Uuid
+  providerEventId     String    @map("provider_event_id") @db.VarChar(255)
+  operationId         String    @default(uuid()) @map("operation_id") @db.Uuid
+  topicId             String?   @map("topic_id") @db.Uuid
+  messageType         String    @map("message_type") @db.VarChar(16)
+  text                String?   @db.Text
+  lineMessageId       String?   @map("line_message_id") @db.VarChar(255)
+  imageMimeType       String?   @map("image_mime_type") @db.VarChar(32)
+  imageSha256         String?   @map("image_sha256") @db.Char(64)
+  imageSizeBytes      Int?      @map("image_size_bytes")
+  imageBytes          Bytes?    @map("image_bytes") @db.ByteA
+  status              String    @default("PENDING") @db.VarChar(16)
+  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  processedAt         DateTime? @map("processed_at") @db.Timestamptz(3)
+
+  @@unique([configurationId, providerEventId], map: "personal_learning_line_inbox_event_key")
+  @@index([workspaceId, groupId, programEnrollmentId, userId, createdAt], map: "personal_learning_line_inbox_owner_created_idx")
+  @@index([status, createdAt], map: "personal_learning_line_inbox_status_created_idx")
+  @@map("personal_learning_line_inbox")
+}
+
+/// Durable LINE Push outbox. The retry key is created once and reused on retry.
+model PersonalLearningLinePush {
+  id                  String    @id @default(uuid()) @db.Uuid
+  workspaceId         String    @map("workspace_id") @db.Uuid
+  groupId             String    @map("group_id") @db.Uuid
+  programEnrollmentId String    @map("program_enrollment_id") @db.Uuid
+  groupMembershipId   String    @map("group_membership_id") @db.Uuid
+  userId              String    @map("user_id") @db.Uuid
+  configurationId     String    @map("configuration_id") @db.Uuid
+  providerEventId     String    @map("provider_event_id") @db.VarChar(255)
+  purpose             String    @default("RESPONSE") @db.VarChar(16)
+  retryKey            String    @unique @map("retry_key") @db.Uuid
+  text                String    @db.Text
+  status              String    @default("PENDING") @db.VarChar(16)
+  sentAt              DateTime? @map("sent_at") @db.Timestamptz(3)
+  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([configurationId, providerEventId, purpose], map: "personal_learning_line_push_inbound_purpose_key")
+  @@index([workspaceId, groupId, createdAt], map: "personal_learning_line_push_scope_created_idx")
+  @@map("personal_learning_line_pushes")
+}
+
+/// One idempotent operator alert per configuration/month/threshold; content is never copied here.
+model PersonalLearningLineQuotaNotice {
+  id               String                       @id @default(uuid()) @db.Uuid
+  workspaceId      String                       @map("workspace_id") @db.Uuid
+  groupId          String                       @map("group_id") @db.Uuid
+  configurationId  String                       @map("configuration_id") @db.Uuid
+  environment      LineConfigurationEnvironment
+  monthKey         String                       @map("month_key") @db.Char(7)
+  thresholdPercent Int                          @map("threshold_percent")
+  observedPercent  Int                          @map("observed_percent")
+  createdAt        DateTime                     @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@unique([configurationId, monthKey, thresholdPercent], map: "personal_learning_line_quota_notice_month_threshold_key")
+  @@index([workspaceId, groupId, createdAt], map: "personal_learning_line_quota_notice_scope_created_idx")
+  @@map("personal_learning_line_quota_notices")
 }
 
 model LineRichMenu {

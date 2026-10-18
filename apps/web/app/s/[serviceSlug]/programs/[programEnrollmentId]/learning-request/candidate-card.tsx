@@ -10,11 +10,13 @@ export function LearningCandidateCard({
   request,
   initial,
   onConfirmed,
+  onChange,
 }: {
   endpoint: string;
   request: SavedPersonalLearningRequest;
   initial: SavedLearningLessonCandidate | null;
   onConfirmed?: (value: SavedLearningLessonCandidate) => void;
+  onChange?: (value: SavedLearningLessonCandidate) => void;
 }) {
   const [candidate, setCandidate] = useState(initial);
   const [pending, setPending] = useState(false);
@@ -42,6 +44,7 @@ export function LearningCandidateCard({
       if (!response.ok || !result.data)
         throw new Error(result.error?.message ?? '教材候補を取得できませんでした。');
       setCandidate(result.data);
+      onChange?.(result.data);
       if (action === 'CONFIRM') onConfirmed?.(result.data);
       setMessage(
         action === 'CONFIRM'
@@ -119,7 +122,7 @@ export function LearningCandidateCard({
             <>
               <p>
                 {candidate.proposal.status === 'NEEDS_CONTEXT'
-                  ? '開始に必要な条件だけ確認します。上の希望・環境を更新して保存してください。'
+                  ? '開始に必要な条件だけ確認します。下の相談欄から回答すると、元の希望を保ったまま教材候補を作り直します。'
                   : '現在の提供範囲外です。本人が学ぶ希望として見直す場合は上の希望を更新してください。'}
               </p>
               <ul>

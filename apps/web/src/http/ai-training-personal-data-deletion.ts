@@ -10,6 +10,13 @@ import { resolveMemberServiceContext } from '../services/public-service';
 const target = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('ALL') }).strict(),
   z.object({ kind: z.literal('ANSWER'), answerId: z.string().uuid() }).strict(),
+  z
+    .object({
+      kind: z.literal('LEARNING_REQUEST'),
+      requestId: z.string().uuid(),
+      requestRevision: z.number().int().positive(),
+    })
+    .strict(),
 ]);
 const previewSchema = z.object({ target }).strict();
 const deleteSchema = z

@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import type { Prisma, PrismaClient } from '@prisma/client';
 import { ApplicationError } from '@bunshin/shared';
 import {
+  PERSONAL_LEARNING_CONVERSATION_VERSION,
   validatePersonalLearningTextOperation,
   validateAiCallMeasurement,
   estimateAiCallCost,
@@ -11,7 +12,9 @@ import {
   type AiCallMeasurement,
   type AiTokenPricing,
 } from '@bunshin/application';
+import { personalLearningFeatureEnabled } from '@bunshin/capability-training';
 import { PrismaPracticeSupportRepository } from './personal-learning-practice-support';
+import { CONVERSATION_MESSAGE_EVENT } from './personal-learning-conversation';
 import { reserveLearningProgramBudget } from './personal-learning-call-budget';
 import { personalLearningOperationHash as operationHash } from './personal-learning-operation-identity';
 
@@ -28,6 +31,7 @@ const digest = (v: unknown) =>
 const bodyHash = (input: PersonalLearningTextOperation) =>
   digest([
     input.requestId,
+    input.actor.topicId ?? null,
     input.expectedRequestRevision,
     input.operationKind,
     input.provider,
@@ -35,10 +39,14 @@ const bodyHash = (input: PersonalLearningTextOperation) =>
     input.promptVersion,
     ...(input.practice ? [input.practice] : []),
   ]);
+const metadataObject = (value: Prisma.JsonValue | null): Record<string, unknown> =>
+  value && typeof value === 'object' && !Array.isArray(value) ? value : {};
 interface Context {
   version: 'LEARNING_TEXT_OPERATION_V1';
   bodyHash: string;
   operationKind: PersonalLearningTextOperation['operationKind'];
+  actorKeyHash: string;
+  programEnrollmentId: string;
   provider: string;
   model: string;
   promptVersion: string;
@@ -71,6 +79,58 @@ export class PrismaPersonalLearningTextOperationRepository
   ) {
     super(operationClient, now);
   }
+  private async assertConversationAdmission(
+    tx: Prisma.TransactionClient,
+    input: PersonalLearningTextOperation,
+  ) {
+    const actor = input.actor;
+    const [request, enrollment] = await Promise.all([
+      tx.personalLearningRequest.findFirst({
+        where: {
+          ...actor.scope,
+          ...(actor.topicId ? { topicId: actor.topicId } : {}),
+          id: input.requestId,
+          revision: input.expectedRequestRevision,
+        },
+      }),
+      tx.programEnrollment.findUnique({ where: { id: actor.scope.programEnrollmentId } }),
+    ]);
+    if (!request || !enrollment || enrollment.serviceProgramId !== input.policy.serviceProgramId)
+      throw new ApplicationError('CONFLICT', 'learning conversation changed');
+    const program = await tx.serviceProgram.findFirst({
+      where: {
+        id: enrollment.serviceProgramId,
+        workspaceId: actor.scope.workspaceId,
+        groupId: actor.scope.groupId,
+      },
+      select: { settings: true },
+    });
+    if (!program || !personalLearningFeatureEnabled(program.settings, 'conversation'))
+      throw new ApplicationError('NOT_FOUND', 'learning conversation unavailable');
+    const row = await tx.programActionEvent.findUnique({
+      where: {
+        workspaceId_groupId_idempotencyKey: {
+          workspaceId: actor.scope.workspaceId,
+          groupId: actor.scope.groupId,
+          idempotencyKey: actor.topicId
+            ? `learning-conversation-request:${actor.topicId}:${input.operationId}`
+            : `learning-conversation-request:${input.operationId}`,
+        },
+      },
+    });
+    const metadata = metadataObject(row?.metadata ?? null);
+    if (
+      row?.actorUserId !== actor.scope.userId ||
+      row.programEnrollmentId !== actor.scope.programEnrollmentId ||
+      row.eventType !== CONVERSATION_MESSAGE_EVENT ||
+      metadata.version !== PERSONAL_LEARNING_CONVERSATION_VERSION ||
+      metadata.threadId !== input.requestId ||
+      metadata.requestRevision !== input.expectedRequestRevision ||
+      metadata.operationId !== input.operationId ||
+      (actor.topicId !== undefined && metadata.topicId !== actor.topicId)
+    )
+      throw new ApplicationError('CONFLICT', 'learning conversation changed');
+  }
   async admit(input: PersonalLearningTextOperation) {
     validatePersonalLearningTextOperation(input);
     return this.authorized(input.actor, true, async (tx) => {
@@ -83,13 +143,29 @@ export class PrismaPersonalLearningTextOperationRepository
         throw new ApplicationError('NOT_FOUND', 'learning program unavailable');
       if (input.operationKind === 'PRACTICE_SUPPORT') {
         await this.assertSupportAdmission(tx, input);
+      } else if (input.operationKind === 'CONVERSATION_TURN') {
+        await this.assertConversationAdmission(tx, input);
       } else {
         const wish = await tx.personalLearningRequest.findFirst({
-          where: s,
+          where: { ...s, ...(input.actor.topicId ? { topicId: input.actor.topicId } : {}) },
           orderBy: { revision: 'desc' },
         });
         if (wish?.id !== input.requestId || wish.revision !== input.expectedRequestRevision)
           throw new ApplicationError('CONFLICT', 'learning wish changed');
+        if (input.operationKind === 'PERSONA_INFERENCE') {
+          const profile = await tx.personalLearningPersonaProfile.findFirst({
+            where: {
+              workspaceId: s.workspaceId,
+              groupId: s.groupId,
+              groupMembershipId: s.groupMembershipId,
+              userId: s.userId,
+              optedIn: true,
+            },
+            select: { id: true },
+          });
+          if (!profile)
+            throw new ApplicationError('FORBIDDEN', 'persona inference is not opted in');
+        }
       }
       const scope = {
         workspaceId: s.workspaceId,
@@ -131,6 +207,26 @@ export class PrismaPersonalLearningTextOperationRepository
         pricingRegistry: input.pricingRegistry,
         occurredAt: clock.now,
       });
+      if (input.operationKind === 'PERSONA_INFERENCE') {
+        const monthStart = new Date(
+          Date.UTC(clock.now.getUTCFullYear(), clock.now.getUTCMonth(), 1),
+        );
+        const [monthly] = await tx.$queryRaw<{ serviceCost: bigint; learnerCost: bigint }[]>`SELECT
+            COALESCE(SUM(reserved_cost_usd_micros), 0)::bigint AS "serviceCost",
+            COALESCE(SUM(reserved_cost_usd_micros) FILTER (WHERE operation_context->>'actorKeyHash' = ${createHash('sha256').update(s.userId).digest('hex')}), 0)::bigint AS "learnerCost"
+          FROM personal_learning_call_admissions
+          WHERE workspace_id = ${scope.workspaceId}::uuid
+            AND group_id = ${scope.groupId}::uuid
+            AND service_program_id = ${scope.serviceProgramId}::uuid
+            AND admitted_at >= ${monthStart}
+            AND operation_context->>'operationKind' = 'PERSONA_INFERENCE'`;
+        if (
+          !monthly ||
+          monthly.serviceCost + BigInt(reservation.reservedCostUsdMicros) > 5_000_000n ||
+          monthly.learnerCost + BigInt(reservation.reservedCostUsdMicros) > 1_000_000n
+        )
+          throw new ApplicationError('FORBIDDEN', 'persona inference monthly budget reached');
+      }
       const pricing = parseAiTokenPricingRegistry(input.pricingRegistry)
         .filter(
           (p) =>
@@ -144,6 +240,8 @@ export class PrismaPersonalLearningTextOperationRepository
         version: 'LEARNING_TEXT_OPERATION_V1',
         bodyHash: bodyHash(input),
         operationKind: input.operationKind,
+        actorKeyHash: createHash('sha256').update(input.actor.scope.userId).digest('hex'),
+        programEnrollmentId: input.actor.scope.programEnrollmentId,
         provider: input.provider,
         model: input.policy.model,
         promptVersion: input.promptVersion,

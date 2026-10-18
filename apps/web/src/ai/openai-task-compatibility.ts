@@ -4,7 +4,12 @@ import { ApplicationError } from '@bunshin/shared';
 export const OPENAI_TASK_COMPATIBILITY_VERSION = 'OPENAI_TASK_COMPATIBILITY_V1';
 export const OPENAI_TASK_RESPONSES_ENDPOINT = 'https://api.openai.com/v1/responses';
 export type OpenAiCompatibilityTask =
-  'SOCIAL_PLANNER' | 'TRAINING_ASSESSMENT' | 'LEARNING_LESSON' | 'LEARNING_SUPPORT';
+  | 'SOCIAL_PLANNER'
+  | 'TRAINING_ASSESSMENT'
+  | 'LEARNING_LESSON'
+  | 'LEARNING_SUPPORT'
+  | 'LEARNING_CONVERSATION'
+  | 'PERSONAL_LEARNING_PERSONA_INFERENCE';
 
 // Local request compatibility, not a live quality/access/price approval or model router.
 const models = new Set(['gpt-5.2', 'gpt-5.2-2025-12-11', 'gpt-5-mini', 'gpt-5-mini-2025-08-07']);
@@ -19,6 +24,8 @@ const schemaNames: Record<OpenAiCompatibilityTask, readonly string[]> = {
   TRAINING_ASSESSMENT: ['training_evaluation', 'personal_learning_evidence_review'],
   LEARNING_LESSON: ['learning_lesson'],
   LEARNING_SUPPORT: ['learning_support'],
+  LEARNING_CONVERSATION: ['learning_conversation'],
+  PERSONAL_LEARNING_PERSONA_INFERENCE: ['personal_learning_persona_inference'],
 };
 
 function fail(task: OpenAiCompatibilityTask, reason: string): never {
@@ -68,7 +75,11 @@ export function assertOpenAiTaskRequest(
     )
       fail(task, 'INPUT_MODALITY_NOT_SUPPORTED');
     if (typeof item.content === 'string') continue;
-    if (task !== 'LEARNING_SUPPORT' || item.role !== 'user' || !Array.isArray(item.content))
+    if (
+      !['LEARNING_SUPPORT', 'LEARNING_CONVERSATION'].includes(task) ||
+      item.role !== 'user' ||
+      !Array.isArray(item.content)
+    )
       fail(task, 'INPUT_MODALITY_NOT_SUPPORTED');
     for (const part of item.content) {
       if (!object(part) || typeof part.type !== 'string')

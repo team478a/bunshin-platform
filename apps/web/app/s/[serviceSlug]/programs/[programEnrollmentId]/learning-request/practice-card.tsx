@@ -1,6 +1,5 @@
 'use client';
 import { useState } from 'react';
-import { LearningSupportCard } from './support-card';
 import type {
   PersonalLearningPractice,
   PersonalLearningPracticeState,
@@ -354,7 +353,6 @@ export function LearningPracticeCard({
       <p role="status" aria-label="実践の状態">
         {message}
       </p>
-      {current && <LearningSupportCard endpoint={endpoint} state={state} onChange={onChange} />}
     </section>
   );
 }

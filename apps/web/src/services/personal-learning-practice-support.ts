@@ -17,8 +17,9 @@ import { personalLearningPricingRegistry } from '../observability/personal-learn
 import {
   generateLearningSupport,
   learningSupportBody,
-  LEARNING_SUPPORT_PROMPT_VERSION,
+  learningSupportPromptVersion,
 } from '../providers/openai-learning-support';
+import { resolvePersonalLearningExtendedScope } from './personal-learning-extended-scope';
 
 export async function requestPracticeSupport(command: PracticeSupportCommand) {
   validatePracticeSupportCommand(command);
@@ -47,12 +48,15 @@ export async function requestPracticeSupport(command: PracticeSupportCommand) {
       policy.groupId !== command.actor.scope.groupId
     )
       throw new ApplicationError('CONFIGURATION_ERROR', 'support admission unavailable');
+    const extendedScope = await resolvePersonalLearningExtendedScope(command.actor);
+    const promptVersion = learningSupportPromptVersion(extendedScope);
     const body = learningSupportBody(
       prepared.practice,
       prepared.request,
       policy.model,
       { maxRequestBytes: policy.maxRequestBytes, maxOutputTokens: policy.maxOutputTokens },
       command.image,
+      extendedScope,
     );
     const runtime = await resolveOpenAiRuntimeConfiguration(undefined, 'LEARNING_SUPPORT');
     if (runtime.model !== policy.model)
@@ -77,7 +81,7 @@ export async function requestPracticeSupport(command: PracticeSupportCommand) {
         operationKind: 'PRACTICE_SUPPORT',
         attempt: 1,
         provider: 'openai',
-        promptVersion: LEARNING_SUPPORT_PROMPT_VERSION,
+        promptVersion,
         policy,
         pricingRegistry,
         practice: {
@@ -118,13 +122,21 @@ export async function requestPracticeSupport(command: PracticeSupportCommand) {
       },
     );
     if (!value) throw new ApplicationError('AI_PROVIDER_UNAVAILABLE', 'support unavailable');
-    return await repo.completeSupport({
+    const completed = await repo.completeSupport({
       command,
       requestId: prepared.request.id,
       advice: value,
       usageKey,
-      promptVersion: LEARNING_SUPPORT_PROMPT_VERSION,
+      promptVersion,
     });
+    await (
+      await import('./personal-learning-persona-inference')
+    ).inferPersonalLearningPersonaAfterSuccess({
+      actor: command.actor,
+      requestId: prepared.practice.candidate.requestId,
+      requestRevision: prepared.practice.candidate.requestRevision,
+    });
+    return completed;
   } catch (error) {
     // Reauthorization may deny failure-state writes after expiry/deletion. Do not mask that failure.
     await repo.failSupport({ command, requestId: prepared.request.id });

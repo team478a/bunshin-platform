@@ -193,6 +193,63 @@ export class PrismaTrainingPersonalDataExportRepository implements TrainingPerso
           orderBy: [{ occurredAt: 'asc' }, { id: 'asc' }],
           take,
         });
+        const conversationEvents = await tx.programActionEvent.findMany({
+          where: {
+            ...scope,
+            actorUserId: input.actorUserId,
+            eventType: {
+              in: [
+                'PERSONAL_LEARNING_CONVERSATION_MESSAGE',
+                'PERSONAL_LEARNING_CONVERSATION_RESPONSE',
+                'PERSONAL_LEARNING_CONVERSATION_SHARE',
+              ],
+            },
+          },
+          select: { id: true, eventType: true, occurredAt: true, metadata: true },
+          orderBy: [{ occurredAt: 'asc' }, { id: 'asc' }],
+          take,
+        });
+        const [lineLearningMessages, lineLearningResponses] = await Promise.all([
+          tx.personalLearningLineInbox.findMany({
+            where: {
+              workspaceId: input.workspaceId,
+              groupId: input.groupId,
+              programEnrollmentId: enrollment.id,
+              groupMembershipId: membership.id,
+              userId: input.actorUserId,
+            },
+            select: {
+              messageType: true,
+              text: true,
+              lineMessageId: true,
+              imageMimeType: true,
+              imageSha256: true,
+              imageSizeBytes: true,
+              imageBytes: true,
+              createdAt: true,
+            },
+            orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+            take,
+          }),
+          tx.personalLearningLinePush.findMany({
+            where: {
+              workspaceId: input.workspaceId,
+              groupId: input.groupId,
+              programEnrollmentId: enrollment.id,
+              groupMembershipId: membership.id,
+              userId: input.actorUserId,
+            },
+            select: {
+              providerEventId: true,
+              text: true,
+              status: true,
+              sentAt: true,
+              createdAt: true,
+            },
+            orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+            take,
+          }),
+        ]);
         const practiceSupportImages = practiceSupport.length
           ? await tx.personalLearningPracticeSupportImage.findMany({
               where: {
@@ -257,6 +314,59 @@ export class PrismaTrainingPersonalDataExportRepository implements TrainingPerso
             orderBy: { revision: 'asc' },
           }),
         ]);
+        const dynamicLearning = await Promise.all([
+          tx.personalLearningTopic.findMany({
+            where: {
+              workspaceId: input.workspaceId,
+              groupId: input.groupId,
+              programEnrollmentId: enrollment.id,
+              groupMembershipId: membership.id,
+              userId: input.actorUserId,
+            },
+            orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+            take,
+          }),
+          tx.personalLearningPersonaItem.findMany({
+            where: {
+              workspaceId: input.workspaceId,
+              groupId: input.groupId,
+              groupMembershipId: membership.id,
+              userId: input.actorUserId,
+            },
+            orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+            take,
+          }),
+          tx.personalLearningPersonaSuppression.findMany({
+            where: {
+              workspaceId: input.workspaceId,
+              groupId: input.groupId,
+              groupMembershipId: membership.id,
+              userId: input.actorUserId,
+            },
+            orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+            take,
+          }),
+          tx.personalLearningSavedExample.findMany({
+            where: {
+              workspaceId: input.workspaceId,
+              groupId: input.groupId,
+              groupMembershipId: membership.id,
+              userId: input.actorUserId,
+            },
+            orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+            take,
+          }),
+          tx.personalLearningPersonaProfile.findMany({
+            where: {
+              workspaceId: input.workspaceId,
+              groupId: input.groupId,
+              groupMembershipId: membership.id,
+              userId: input.actorUserId,
+            },
+            orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+            take,
+          }),
+        ]);
         if (
           [
             assignments,
@@ -270,6 +380,10 @@ export class PrismaTrainingPersonalDataExportRepository implements TrainingPerso
             practiceNotes,
             practiceSupport,
             practiceSupportImages,
+            conversationEvents,
+            lineLearningMessages,
+            lineLearningResponses,
+            ...dynamicLearning,
           ].some((rows) => rows.length > TRAINING_EXPORT_MAX_ROWS)
         )
           return { outcome: 'TOO_LARGE' };
@@ -281,6 +395,9 @@ export class PrismaTrainingPersonalDataExportRepository implements TrainingPerso
               pilotSeats.length +
               learningRequests.length +
               practiceSupport.length +
+              conversationEvents.length +
+              lineLearningMessages.length +
+              lineLearningResponses.length +
               practiceSupportImages.length +
               practiceNotes.length >
             0
@@ -290,6 +407,62 @@ export class PrismaTrainingPersonalDataExportRepository implements TrainingPerso
                       ...row,
                       kind: 'PRACTICE_SUPPORT',
                       occurredAt: iso(row.occurredAt),
+                    })),
+                    ...conversationEvents.map((row) => {
+                      const metadata =
+                        row.metadata &&
+                        typeof row.metadata === 'object' &&
+                        !Array.isArray(row.metadata)
+                          ? (row.metadata as Record<string, unknown>)
+                          : {};
+                      return {
+                        kind: 'CONVERSATION',
+                        event: row.eventType,
+                        threadId: typeof metadata.threadId === 'string' ? metadata.threadId : null,
+                        requestRevision:
+                          typeof metadata.requestRevision === 'number'
+                            ? metadata.requestRevision
+                            : null,
+                        role:
+                          row.eventType === 'PERSONAL_LEARNING_CONVERSATION_MESSAGE'
+                            ? 'USER'
+                            : row.eventType === 'PERSONAL_LEARNING_CONVERSATION_RESPONSE'
+                              ? 'ASSISTANT'
+                              : null,
+                        text: typeof metadata.text === 'string' ? metadata.text : null,
+                        status: typeof metadata.status === 'string' ? metadata.status : null,
+                        responseStatus:
+                          typeof metadata.responseStatus === 'string'
+                            ? metadata.responseStatus
+                            : null,
+                        shared: typeof metadata.shared === 'boolean' ? metadata.shared : null,
+                        promptVersion:
+                          typeof metadata.promptVersion === 'string'
+                            ? metadata.promptVersion
+                            : null,
+                        occurredAt: iso(row.occurredAt),
+                      };
+                    }),
+                    ...lineLearningMessages.map((row) => ({
+                      kind: 'LINE_INBOUND',
+                      messageType: row.messageType,
+                      text: row.text,
+                      lineMessageId: row.lineMessageId,
+                      imageMimeType: row.imageMimeType,
+                      imageSha256: row.imageSha256,
+                      imageSizeBytes: row.imageSizeBytes,
+                      imageBase64: row.imageBytes
+                        ? Buffer.from(row.imageBytes).toString('base64')
+                        : null,
+                      createdAt: iso(row.createdAt),
+                    })),
+                    ...lineLearningResponses.map((row) => ({
+                      kind: 'LINE_OUTBOUND',
+                      providerEventId: row.providerEventId,
+                      text: row.text,
+                      status: row.status,
+                      sentAt: iso(row.sentAt),
+                      createdAt: iso(row.createdAt),
                     })),
                     ...practiceNotes.map((row) => ({
                       ...row,
@@ -378,6 +551,46 @@ export class PrismaTrainingPersonalDataExportRepository implements TrainingPerso
               startsAt: iso(row.startsAt),
               dueAt: iso(row.dueAt),
             })),
+            dynamicLearning: [
+              ...dynamicLearning[0].map((row) => ({
+                kind: 'TOPIC',
+                ...row,
+                createdAt: iso(row.createdAt),
+                updatedAt: iso(row.updatedAt),
+                lastLearnerUseAt: iso(row.lastLearnerUseAt),
+                endedAt: iso(row.endedAt),
+              })),
+              ...dynamicLearning[1].map((row) => ({
+                kind: 'PERSONA_ITEM',
+                ...row,
+                createdAt: iso(row.createdAt),
+                updatedAt: iso(row.updatedAt),
+                lastLearnerUseAt: iso(row.lastLearnerUseAt),
+                evidenceCreatedAt: iso(row.evidenceCreatedAt),
+              })),
+              ...dynamicLearning[2].map((row) => ({
+                kind: 'PERSONA_REINFERENCE_SUPPRESSION',
+                ...row,
+                createdAt: iso(row.createdAt),
+              })),
+              ...dynamicLearning[3].map((row) => ({
+                kind: 'SAVED_EXAMPLE',
+                ...row,
+                createdAt: iso(row.createdAt),
+                updatedAt: iso(row.updatedAt),
+                lastLearnerUseAt: iso(row.lastLearnerUseAt),
+              })),
+              ...dynamicLearning[4].map((row) => ({
+                kind: 'PERSONA_PROFILE',
+                ...row,
+                createdAt: iso(row.createdAt),
+                updatedAt: iso(row.updatedAt),
+                optedInAt: iso(row.optedInAt),
+                optedOutAt: iso(row.optedOutAt),
+                dismissedUntil: iso(row.dismissedUntil),
+                lastLearnerUseAt: iso(row.lastLearnerUseAt),
+              })),
+            ],
           },
         };
       },
