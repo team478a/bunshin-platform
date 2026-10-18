@@ -1,4 +1,5 @@
 import { Prisma, type PrismaClient } from '@prisma/client';
+import { createHash } from 'node:crypto';
 import {
   personalLearningDynamicProgramAllows,
   personalLearningFeatureEnabled,
@@ -348,7 +349,12 @@ export class PrismaPersonalLearningPersonaRepository {
         serviceProgramId: enrollment.serviceProgramId,
         AND: [
           { operationContext: { path: ['operationKind'], equals: 'PERSONA_INFERENCE' } },
-          { operationContext: { path: ['actorUserId'], equals: scope.userId } },
+          {
+            operationContext: {
+              path: ['actorKeyHash'],
+              equals: createHash('sha256').update(scope.userId).digest('hex'),
+            },
+          },
           {
             operationContext: {
               path: ['programEnrollmentId'],
@@ -367,7 +373,7 @@ export class PrismaPersonalLearningPersonaRepository {
       const value = context as Record<string, unknown>;
       const measurement = value['measurement'];
       return (
-        value['actorUserId'] === scope.userId &&
+        value['actorKeyHash'] === createHash('sha256').update(scope.userId).digest('hex') &&
         value['programEnrollmentId'] === scope.programEnrollmentId &&
         value['requestFinished'] === true &&
         !!measurement &&

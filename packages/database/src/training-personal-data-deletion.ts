@@ -618,7 +618,8 @@ export class PrismaTrainingPersonalDataDeletionRepository implements TrainingPer
                   dynamicTopics.length +
                   dynamicPersonaItems.length +
                   dynamicPersonaSuppressions.length +
-                  dynamicSavedExamples.length,
+                  dynamicSavedExamples.length +
+                  dynamicPersonaProfiles.length,
               }
             : {}),
           ...(learningRequests.length > 0 ? { learningRequests: learningRequests.length } : {}),

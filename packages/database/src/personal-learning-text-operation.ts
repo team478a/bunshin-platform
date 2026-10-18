@@ -45,7 +45,7 @@ interface Context {
   version: 'LEARNING_TEXT_OPERATION_V1';
   bodyHash: string;
   operationKind: PersonalLearningTextOperation['operationKind'];
-  actorUserId: string;
+  actorKeyHash: string;
   programEnrollmentId: string;
   provider: string;
   model: string;
@@ -213,7 +213,7 @@ export class PrismaPersonalLearningTextOperationRepository
         );
         const [monthly] = await tx.$queryRaw<{ serviceCost: bigint; learnerCost: bigint }[]>`SELECT
             COALESCE(SUM(reserved_cost_usd_micros), 0)::bigint AS "serviceCost",
-            COALESCE(SUM(reserved_cost_usd_micros) FILTER (WHERE operation_context->>'actorUserId' = ${s.userId}), 0)::bigint AS "learnerCost"
+            COALESCE(SUM(reserved_cost_usd_micros) FILTER (WHERE operation_context->>'actorKeyHash' = ${createHash('sha256').update(s.userId).digest('hex')}), 0)::bigint AS "learnerCost"
           FROM personal_learning_call_admissions
           WHERE workspace_id = ${scope.workspaceId}::uuid
             AND group_id = ${scope.groupId}::uuid
@@ -240,7 +240,7 @@ export class PrismaPersonalLearningTextOperationRepository
         version: 'LEARNING_TEXT_OPERATION_V1',
         bodyHash: bodyHash(input),
         operationKind: input.operationKind,
-        actorUserId: input.actor.scope.userId,
+        actorKeyHash: createHash('sha256').update(input.actor.scope.userId).digest('hex'),
         programEnrollmentId: input.actor.scope.programEnrollmentId,
         provider: input.provider,
         model: input.policy.model,

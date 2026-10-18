@@ -463,7 +463,7 @@ export function registerPersonalLearningDIntegrationCases(client: PrismaClient) 
       const aiIntake = await persona.listForAi(first.scope);
       expect(aiIntake.length).toBeLessThanOrEqual(20);
       expect(aiIntake.some((item) => item.attributeKey === 'explanation_style')).toBe(false);
-      expect(aiIntake[0]?.attributeKey).toBe('stated_goal');
+      expect(aiIntake[0]?.attributeKey).toBe('company_name');
 
       const rejectedNext = await client.personalLearningPersonaItem.findUniqueOrThrow({
         where: {
