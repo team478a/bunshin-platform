@@ -71,9 +71,9 @@ export function ServiceManagementHomeView({ model }: { model: ServiceManagementH
               </dd>
             </div>
             <div className="settings-status-item">
-              <dt>コピー / 投稿完了</dt>
+              <dt>コピーした投稿 / 投稿完了</dt>
               <dd>
-                {copiedMissions}回 / {postedMissions}件
+                {copiedMissions}件 / {postedMissions}件
               </dd>
             </div>
             {!isBusinessDailyService ? (

@@ -26,7 +26,7 @@ export async function serviceOperationsReportExportResponse(request: Request, se
       missions,
       accepted,
       rejected,
-      copied,
+      copiedMissionRows,
       posted,
       trends,
       aiSuccessful,
@@ -42,7 +42,7 @@ export async function serviceOperationsReportExportResponse(request: Request, se
       db.prisma.missionDecision.count({
         where: { ...missionScope, decision: 'REJECTED', decidedAt: { gte: from } },
       }),
-      db.prisma.missionActivity.count({
+      db.prisma.missionActivity.findMany({
         where: {
           ...missionScope,
           occurredAt: { gte: from },
@@ -56,6 +56,8 @@ export async function serviceOperationsReportExportResponse(request: Request, se
             ],
           },
         },
+        select: { dailyMissionId: true },
+        distinct: ['dailyMissionId'],
       }),
       db.prisma.postRecord.count({ where: { ...missionScope, postedAt: { gte: from } } }),
       db.prisma.missionTrendContext.count({
@@ -150,7 +152,7 @@ export async function serviceOperationsReportExportResponse(request: Request, se
       missions,
       viewed,
       accepted,
-      copied,
+      copied: copiedMissionRows.length,
       posted,
       lineSent,
       lineOpened: opened,
@@ -164,7 +166,7 @@ export async function serviceOperationsReportExportResponse(request: Request, se
         '投稿案',
         '採用',
         '不採用',
-        'コピー',
+        'コピーした投稿',
         '投稿完了',
         '話題を使った投稿案',
         'AI成功',
@@ -192,7 +194,7 @@ export async function serviceOperationsReportExportResponse(request: Request, se
         missions,
         accepted,
         rejected,
-        copied,
+        copiedMissionRows.length,
         posted,
         trends,
         aiSuccessful,

@@ -108,6 +108,7 @@ export function WeeklyActivitySection({
   bunshinCount,
   isBusinessDailyService,
   isPersonalLearningService,
+  isDynamicLearning,
   isPersonalLearningReady,
   personalLearningPathHref,
   serviceSlug,
@@ -116,6 +117,7 @@ export function WeeklyActivitySection({
   bunshinCount: number;
   isBusinessDailyService: boolean;
   isPersonalLearningService: boolean;
+  isDynamicLearning: boolean;
   isPersonalLearningReady: boolean;
   personalLearningPathHref: Route | null;
   serviceSlug: string;
@@ -123,7 +125,29 @@ export function WeeklyActivitySection({
   return (
     <section className="service-entry__card">
       <h2>{isPersonalLearningService ? '今日の学習' : '今週の進み具合'}</h2>
-      {isPersonalLearningService ? (
+      {isPersonalLearningService && isDynamicLearning ? (
+        !isPersonalLearningReady ? (
+          <div className="empty-state">
+            <p>AI研修の準備中です。開始のご案内をお待ちください。</p>
+          </div>
+        ) : (
+          <div className="empty-state">
+            <p>希望・現在の実践・前回の続きから、今日の学習を進められます。</p>
+            {personalLearningPathHref ? (
+              <Link className="button button--primary button--full" href={personalLearningPathHref}>
+                今日の学習を続ける
+              </Link>
+            ) : (
+              <Link
+                className="button button--primary button--full"
+                href={`/s/${serviceSlug}/training` as Route}
+              >
+                同意して学習を始める
+              </Link>
+            )}
+          </div>
+        )
+      ) : isPersonalLearningService ? (
         !isPersonalLearningReady ? (
           <div className="empty-state">
             <p>AI研修の準備中です。開始のご案内をお待ちください。</p>

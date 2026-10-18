@@ -198,6 +198,48 @@ describe('Mission Decision / Activity HTTP contract', () => {
         await recordMissionActivityResponse(
           request('activities', {
             type: 'COPIED_IMAGE_INSTRUCTION',
+            idempotencyKey: 'copy-image-page-1',
+            metadata: { slideIndex: 1 },
+          }),
+          'workspace-1',
+          'bunshin-1',
+          missionId,
+        )
+      ).status,
+    ).toBe(200);
+    expect(
+      (
+        await recordMissionActivityResponse(
+          request('activities', {
+            type: 'COPIED_IMAGE_INSTRUCTION',
+            idempotencyKey: 'copy-image-all',
+            metadata: { slideIndex: 0 },
+          }),
+          'workspace-1',
+          'bunshin-1',
+          missionId,
+        )
+      ).status,
+    ).toBe(200);
+    expect(
+      (
+        await recordMissionActivityResponse(
+          request('activities', {
+            type: 'COPIED_IMAGE_INSTRUCTION',
+            idempotencyKey: 'copy-image-invalid',
+            metadata: { slideIndex: 6 },
+          }),
+          'workspace-1',
+          'bunshin-1',
+          missionId,
+        )
+      ).status,
+    ).toBe(400);
+    expect(
+      (
+        await recordMissionActivityResponse(
+          request('activities', {
+            type: 'COPIED_IMAGE_INSTRUCTION',
             idempotencyKey: 'copy-image-1',
           }),
           'workspace-1',

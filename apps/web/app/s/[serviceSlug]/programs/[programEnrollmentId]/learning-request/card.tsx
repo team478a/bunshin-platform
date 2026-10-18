@@ -56,6 +56,49 @@ export function PersonalLearningRequestCard({
     Object.entries(content).every(
       ([key, value]) => saved[key as keyof PersonalLearningRequestContent] === value,
     );
+  const additionalDetails = (
+    <>
+      <label>
+        使う端末（任意）
+        <select
+          value={content.deviceType ?? ''}
+          onChange={(event) =>
+            setContent({
+              ...content,
+              deviceType: (event.target.value ||
+                null) as PersonalLearningRequestContent['deviceType'],
+            })
+          }
+        >
+          <option value="">まだ分からない・未回答</option>
+          <option value="SMARTPHONE">スマートフォン</option>
+          <option value="PC">パソコン</option>
+          <option value="BOTH">両方</option>
+        </select>
+      </label>
+      {(
+        [
+          ['toolDescription', '使うAIツール（任意）', 240],
+          ['experienceDescription', 'これまでの経験（任意）', 300],
+          ['currentPosition', '今どこまでできていますか（任意）', 500],
+        ] as const
+      ).map(([key, label, max]) => (
+        <label key={key}>
+          {label}
+          <textarea
+            maxLength={max}
+            value={content[key] ?? ''}
+            onChange={(event) =>
+              setContent({
+                ...content,
+                [key]: event.target.value.trim() ? event.target.value : null,
+              })
+            }
+          />
+        </label>
+      ))}
+    </>
+  );
   async function save() {
     if (pending || !content.originalText.trim()) return;
     setPending(true);
@@ -92,6 +135,7 @@ export function PersonalLearningRequestCard({
           <LearningPracticeCard
             endpoint={practiceEndpoint}
             state={practice}
+            plainLanguage={dynamicMode}
             candidate={
               matchesSaved && confirmedCandidate?.requestId === saved?.id
                 ? confirmedCandidate
@@ -107,19 +151,24 @@ export function PersonalLearningRequestCard({
             ? 'AIでできるようになりたいこと'
             : 'AIを使って、何ができるようになりたいですか？'}
         </h1>
-        <p>あなたの希望を元のまま保存します。未回答の経験や能力は推測しません。</p>
         <p>
           {dynamicMode
-            ? '希望を保存し、内容に合う小さな実践課題へ進みます。今の実践は、新しい課題を確認して開始するまで切り替わりません。'
-            : practiceEndpoint
+            ? '書いてくれた希望をもとに、あなたに合った小さな練習を一緒に考えます。今進めている練習は、新しい練習を始めるまでそのまま残ります。'
+            : 'あなたの希望を元のまま保存します。未回答の経験や能力は推測しません。'}
+        </p>
+        {!dynamicMode && (
+          <p>
+            {practiceEndpoint
               ? '希望の下書き保存では現在の実践を切り替えません。教材の本人確認後、実践開始を別に確認します。'
               : candidateEndpoint
                 ? 'この検証画面では教材候補の確認までです。実践課題の開始は準備中で、現在の課題は切り替わりません。'
                 : 'この検証画面では希望の保存までです。教材の生成・確定はまだ行いません。現在の課題は切り替わりません。'}
-        </p>
+          </p>
+        )}
         {saved && (
           <p>
-            前回保存した希望（版 {saved.revision}）：{saved.originalText}
+            {dynamicMode ? '前回の希望：' : `前回保存した希望（版 ${saved.revision}）：`}
+            {saved.originalText}
           </p>
         )}
         <form
@@ -134,51 +183,25 @@ export function PersonalLearningRequestCard({
             <textarea
               required
               maxLength={2000}
+              placeholder={
+                dynamicMode
+                  ? '例：お店のチラシの文章をAIで作れるようになりたい／スマホでAIに写真の説明をさせたい'
+                  : undefined
+              }
               value={content.originalText}
               onChange={(event) => setContent({ ...content, originalText: event.target.value })}
             />
           </label>
-          <label>
-            使う端末（任意）
-            <select
-              value={content.deviceType ?? ''}
-              onChange={(event) =>
-                setContent({
-                  ...content,
-                  deviceType: (event.target.value ||
-                    null) as PersonalLearningRequestContent['deviceType'],
-                })
-              }
-            >
-              <option value="">まだ分からない・未回答</option>
-              <option value="SMARTPHONE">スマートフォン</option>
-              <option value="PC">パソコン</option>
-              <option value="BOTH">両方</option>
-            </select>
-          </label>
-          {(
-            [
-              ['toolDescription', '使うAIツール（任意）', 240],
-              ['experienceDescription', 'これまでの経験（任意）', 300],
-              ['currentPosition', '今どこまでできていますか（任意）', 500],
-            ] as const
-          ).map(([key, label, max]) => (
-            <label key={key}>
-              {label}
-              <textarea
-                maxLength={max}
-                value={content[key] ?? ''}
-                onChange={(event) =>
-                  setContent({
-                    ...content,
-                    [key]: event.target.value.trim() ? event.target.value : null,
-                  })
-                }
-              />
-            </label>
-          ))}
+          {dynamicMode ? (
+            <details>
+              <summary>くわしく伝える（任意）</summary>
+              {additionalDetails}
+            </details>
+          ) : (
+            additionalDetails
+          )}
           <button disabled={pending || !content.originalText.trim()} type="submit">
-            {pending ? '保存中…' : '希望を保存'}
+            {pending ? '保存中…' : dynamicMode ? 'この内容で始める' : '希望を保存'}
           </button>
         </form>
         <p role="status">{message}</p>
@@ -196,6 +219,7 @@ export function PersonalLearningRequestCard({
             practice={practice}
             onPracticeChange={setPractice}
             onCandidateChange={setCandidate}
+            plainLanguage={dynamicMode}
           />
         </div>
       )}
@@ -211,6 +235,7 @@ export function PersonalLearningRequestCard({
             request={saved}
             initial={candidate?.requestId === saved.id ? candidate : null}
             onChange={setCandidate}
+            plainLanguage={dynamicMode}
             {...(practiceEndpoint ? { onConfirmed: setConfirmedCandidate } : {})}
           />
         )}

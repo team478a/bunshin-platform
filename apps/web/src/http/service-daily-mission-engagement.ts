@@ -106,7 +106,9 @@ export function recordServiceMissionActivityResponse(
       dailyMissionId: uuidSchema.parse(dailyMissionId),
       type: parsed.data.type,
       idempotencyKey: parsed.data.idempotencyKey,
-      ...(parsed.data.type === 'COPIED_SLIDE' && parsed.data.metadata
+      ...((parsed.data.type === 'COPIED_SLIDE' ||
+        parsed.data.type === 'COPIED_IMAGE_INSTRUCTION') &&
+      parsed.data.metadata
         ? { metadata: parsed.data.metadata }
         : {}),
     });

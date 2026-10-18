@@ -183,10 +183,23 @@ describe('Mission Decision and Activity core', () => {
     ).toThrow();
     expect(() => normalizeMissionActivityMetadata('COPIED_TEXT', { body: 'full post' })).toThrow();
     expect(normalizeMissionActivityMetadata('COPIED_IMAGE_INSTRUCTION', null)).toBeNull();
+    expect(normalizeMissionActivityMetadata('COPIED_IMAGE_INSTRUCTION', { slideIndex: 1 })).toEqual(
+      {
+        slideIndex: 1,
+      },
+    );
+    expect(normalizeMissionActivityMetadata('COPIED_IMAGE_INSTRUCTION', { slideIndex: 0 })).toEqual(
+      {
+        slideIndex: 0,
+      },
+    );
     expect(normalizeMissionActivityMetadata('CONFIRMED', null)).toBeNull();
     expect(normalizeMissionActivityMetadata('RESTED', null)).toBeNull();
     expect(() =>
       normalizeMissionActivityMetadata('COPIED_IMAGE_INSTRUCTION', { prompt: 'secret' }),
+    ).toThrow();
+    expect(() =>
+      normalizeMissionActivityMetadata('COPIED_IMAGE_INSTRUCTION', { slideIndex: 6 }),
     ).toThrow();
     await expect(
       new RecordMissionActivity(missions, new Assignments(), new Engagement()).execute({
