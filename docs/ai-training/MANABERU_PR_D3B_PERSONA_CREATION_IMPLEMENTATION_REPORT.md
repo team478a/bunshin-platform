@@ -42,8 +42,9 @@
 - `pnpm --filter @bunshin/capability-training typecheck`: 成功。
 - `pnpm --filter @bunshin/database exec prisma validate`: 非秘密のローカル placeholder URLを設定して成功。実DBへの接続・migration適用はしていない。
 - `pnpm --filter @bunshin/database exec tsc --noEmit`: Prisma Client生成後に成功。非秘密のローカル placeholder URLのみ使用。
-- DB統合テストとGitHub Actions `verify` / `database`: 未実行。Draft作成後のCI結果を追記する。本番DBへは接続していない。
-- `git diff --check` と対象ファイルのPrettier整形：成功。Prettier checkは提出前に実行する。
+- GitHub Actions CI run `39084381337`：`verify` 成功（format/typecheck/lint/test/E2E/learning UI/build）、`database` 成功（Prisma validation、CI用DBへのmigration、schema readiness、DB統合テスト）。初回run `39083512243` ではDB統合テスト4件の不一致を検出し、削除件数・確認済み入力の優先順・台帳上のユーザー識別子を修正。次run `39083830420` ではDB統合テスト成功、lintで型アサーション1件を検出し修正。最終runで両checkが成功した。
+- ローカルDB統合テストは実行せず、CI専用DBで実行した。本番DBへは接続していない。
+- `git diff --check`、Prettier check、変更対象ESLint：成功。
 
 ## 5. 未解決事項・次の条件
 
