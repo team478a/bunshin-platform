@@ -22,7 +22,7 @@ export default async function Page({
   if (!personalLearningRequestEnabled()) notFound();
   const { serviceSlug, programEnrollmentId } = await params;
   const { topicId: selectedTopicId } = await searchParams;
-  const { actor, service } = await resolveAuthenticatedMemberServicePage(
+  const { actor } = await resolveAuthenticatedMemberServicePage(
     serviceSlug,
     `/s/${serviceSlug}/programs/${programEnrollmentId}/learning-request`,
   );
