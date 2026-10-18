@@ -288,50 +288,57 @@ async function dynamicTrainingRetentionSnapshot(
     ...owned.enrollment,
     recordedEnd: state?.endedAt ?? null,
   });
-  const [learnerEvents, latestRequest, latestAnswer, dueImages, dueImageCount] = await Promise.all([
-    tx.programActionEvent.findMany({
-      where: {
-        ...scope,
-        actorUserId: owned.membership.userId,
-        eventType: { in: [...DYNAMIC_LEARNER_ACTION_EVENTS] },
-      },
-      select: { id: true, occurredAt: true },
-      orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }],
-      take: 1,
-    }),
-    tx.personalLearningRequest.findFirst({
-      where: { ...personal, groupMembershipId: owned.membership.id },
-      select: { createdAt: true },
-      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-    }),
-    tx.trainingMissionAnswer.findFirst({
-      where: personal,
-      select: { createdAt: true },
-      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-    }),
-    tx.personalLearningPracticeSupportImage.findMany({
-      where: {
-        ...scope,
-        userId: owned.membership.userId,
-        createdAt: { lte: new Date(input.now.getTime() - 90 * 86_400_000) },
-      },
-      select: { id: true, requestEventId: true, createdAt: true },
-      orderBy: { id: 'asc' },
-      take: TRAINING_EXPORT_MAX_ROWS,
-    }),
-    tx.personalLearningPracticeSupportImage.count({
-      where: {
-        ...scope,
-        userId: owned.membership.userId,
-        createdAt: { lte: new Date(input.now.getTime() - 90 * 86_400_000) },
-      },
-    }),
-  ]);
+  const [learnerEvents, latestRequest, latestAnswer, latestLineText, dueImages, dueImageCount] =
+    await Promise.all([
+      tx.programActionEvent.findMany({
+        where: {
+          ...scope,
+          actorUserId: owned.membership.userId,
+          eventType: { in: [...DYNAMIC_LEARNER_ACTION_EVENTS] },
+        },
+        select: { id: true, occurredAt: true },
+        orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }],
+        take: 1,
+      }),
+      tx.personalLearningRequest.findFirst({
+        where: { ...personal, groupMembershipId: owned.membership.id },
+        select: { createdAt: true },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      }),
+      tx.trainingMissionAnswer.findFirst({
+        where: personal,
+        select: { createdAt: true },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      }),
+      tx.personalLearningLineInbox.findFirst({
+        where: { ...personal },
+        select: { createdAt: true },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      }),
+      tx.personalLearningPracticeSupportImage.findMany({
+        where: {
+          ...scope,
+          userId: owned.membership.userId,
+          createdAt: { lte: new Date(input.now.getTime() - 90 * 86_400_000) },
+        },
+        select: { id: true, requestEventId: true, createdAt: true },
+        orderBy: { id: 'asc' },
+        take: TRAINING_EXPORT_MAX_ROWS,
+      }),
+      tx.personalLearningPracticeSupportImage.count({
+        where: {
+          ...scope,
+          userId: owned.membership.userId,
+          createdAt: { lte: new Date(input.now.getTime() - 90 * 86_400_000) },
+        },
+      }),
+    ]);
   const lastLearnerUseAt =
     [
       ...learnerEvents.map(({ occurredAt }) => occurredAt),
       ...(latestRequest ? [latestRequest.createdAt] : []),
       ...(latestAnswer ? [latestAnswer.createdAt] : []),
+      ...(latestLineText ? [latestLineText.createdAt] : []),
     ].reduce<Date | null>((latest, date) => (!latest || date > latest ? date : latest), null) ??
     owned.enrollment.startsAt;
   const [serviceEnrollments, latestDynamicDataUse] = await Promise.all([
@@ -430,40 +437,52 @@ async function dynamicTrainingRetentionSnapshot(
         (latest, date) => (!latest || date > latest ? date : latest),
         null,
       );
-  const [latestServiceEvent, latestServiceRequest, latestServiceAnswer] = await Promise.all([
-    tx.programActionEvent.findFirst({
-      where: {
-        workspaceId: input.workspaceId,
-        groupId: input.groupId,
-        programEnrollmentId: { in: serviceEnrollmentIds },
-        actorUserId: owned.membership.userId,
-        eventType: { in: [...DYNAMIC_LEARNER_ACTION_EVENTS] },
-      },
-      select: { occurredAt: true },
-      orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }],
-    }),
-    tx.personalLearningRequest.findFirst({
-      where: {
-        workspaceId: input.workspaceId,
-        groupId: input.groupId,
-        programEnrollmentId: { in: serviceEnrollmentIds },
-        userId: owned.membership.userId,
-        groupMembershipId: owned.membership.id,
-      },
-      select: { createdAt: true },
-      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-    }),
-    tx.trainingMissionAnswer.findFirst({
-      where: {
-        workspaceId: input.workspaceId,
-        groupId: input.groupId,
-        programEnrollmentId: { in: serviceEnrollmentIds },
-        userId: owned.membership.userId,
-      },
-      select: { createdAt: true },
-      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-    }),
-  ]);
+  const [latestServiceEvent, latestServiceRequest, latestServiceAnswer, latestServiceLineText] =
+    await Promise.all([
+      tx.programActionEvent.findFirst({
+        where: {
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          programEnrollmentId: { in: serviceEnrollmentIds },
+          actorUserId: owned.membership.userId,
+          eventType: { in: [...DYNAMIC_LEARNER_ACTION_EVENTS] },
+        },
+        select: { occurredAt: true },
+        orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }],
+      }),
+      tx.personalLearningRequest.findFirst({
+        where: {
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          programEnrollmentId: { in: serviceEnrollmentIds },
+          userId: owned.membership.userId,
+          groupMembershipId: owned.membership.id,
+        },
+        select: { createdAt: true },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      }),
+      tx.trainingMissionAnswer.findFirst({
+        where: {
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          programEnrollmentId: { in: serviceEnrollmentIds },
+          userId: owned.membership.userId,
+        },
+        select: { createdAt: true },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      }),
+      tx.personalLearningLineInbox.findFirst({
+        where: {
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          programEnrollmentId: { in: serviceEnrollmentIds },
+          groupMembershipId: owned.membership.id,
+          userId: owned.membership.userId,
+        },
+        select: { createdAt: true },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      }),
+    ]);
   const serviceFallbackStart = serviceEnrollments
     .map(({ startsAt }) => startsAt)
     .filter((value): value is Date => value instanceof Date)
@@ -473,6 +492,7 @@ async function dynamicTrainingRetentionSnapshot(
       latestServiceEvent?.occurredAt,
       latestServiceRequest?.createdAt,
       latestServiceAnswer?.createdAt,
+      latestServiceLineText?.createdAt,
       ...latestDynamicDataUse.map((row) => row?.lastLearnerUseAt),
     ]
       .filter((value): value is Date => value instanceof Date)
@@ -528,6 +548,21 @@ async function dynamicTrainingRetentionSnapshot(
     : [[], []];
   if ([selectedRequests, selectedAnswers].some((rows) => rows.length > TRAINING_EXPORT_MAX_ROWS))
     return { outcome: 'TOO_LARGE' } as const;
+  const lineInbox = await tx.personalLearningLineInbox.findMany({
+    where: {
+      ...personal,
+      OR: [
+        ...(contentDue ? [{ messageType: 'TEXT', text: { not: null } }] : []),
+        {
+          messageType: 'IMAGE',
+          createdAt: { lte: new Date(input.now.getTime() - 90 * 86_400_000) },
+        },
+      ],
+    },
+    select: { id: true, createdAt: true, messageType: true, providerEventId: true },
+    orderBy: { id: 'asc' },
+    take: TRAINING_EXPORT_MAX_ROWS + 1,
+  });
   const contentEvents = contentDue
     ? await tx.programActionEvent.findMany({
         where: {
@@ -687,6 +722,7 @@ async function dynamicTrainingRetentionSnapshot(
     activities: contentEvents,
     learningRequests: selectedRequests,
     practiceSupportImages: dueImages,
+    lineInbox,
     toolkit,
     dynamicTopics,
     personaItems,
@@ -728,6 +764,7 @@ async function dynamicTrainingRetentionSnapshot(
       eventType.startsWith('PERSONAL_LEARNING_CONVERSATION_'),
     ).length,
     practiceSupportImages: dueImages.length,
+    lineMessages: lineInbox.length,
   };
   const revision = createHash('sha256')
     .update(

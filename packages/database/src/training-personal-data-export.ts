@@ -209,6 +209,47 @@ export class PrismaTrainingPersonalDataExportRepository implements TrainingPerso
           orderBy: [{ occurredAt: 'asc' }, { id: 'asc' }],
           take,
         });
+        const [lineLearningMessages, lineLearningResponses] = await Promise.all([
+          tx.personalLearningLineInbox.findMany({
+            where: {
+              workspaceId: input.workspaceId,
+              groupId: input.groupId,
+              programEnrollmentId: enrollment.id,
+              groupMembershipId: membership.id,
+              userId: input.actorUserId,
+            },
+            select: {
+              messageType: true,
+              text: true,
+              lineMessageId: true,
+              imageMimeType: true,
+              imageSha256: true,
+              imageSizeBytes: true,
+              imageBytes: true,
+              createdAt: true,
+            },
+            orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+            take,
+          }),
+          tx.personalLearningLinePush.findMany({
+            where: {
+              workspaceId: input.workspaceId,
+              groupId: input.groupId,
+              programEnrollmentId: enrollment.id,
+              groupMembershipId: membership.id,
+              userId: input.actorUserId,
+            },
+            select: {
+              providerEventId: true,
+              text: true,
+              status: true,
+              sentAt: true,
+              createdAt: true,
+            },
+            orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+            take,
+          }),
+        ]);
         const practiceSupportImages = practiceSupport.length
           ? await tx.personalLearningPracticeSupportImage.findMany({
               where: {
@@ -340,6 +381,8 @@ export class PrismaTrainingPersonalDataExportRepository implements TrainingPerso
             practiceSupport,
             practiceSupportImages,
             conversationEvents,
+            lineLearningMessages,
+            lineLearningResponses,
             ...dynamicLearning,
           ].some((rows) => rows.length > TRAINING_EXPORT_MAX_ROWS)
         )
@@ -353,6 +396,8 @@ export class PrismaTrainingPersonalDataExportRepository implements TrainingPerso
               learningRequests.length +
               practiceSupport.length +
               conversationEvents.length +
+              lineLearningMessages.length +
+              lineLearningResponses.length +
               practiceSupportImages.length +
               practiceNotes.length >
             0
@@ -398,6 +443,27 @@ export class PrismaTrainingPersonalDataExportRepository implements TrainingPerso
                         occurredAt: iso(row.occurredAt),
                       };
                     }),
+                    ...lineLearningMessages.map((row) => ({
+                      kind: 'LINE_INBOUND',
+                      messageType: row.messageType,
+                      text: row.text,
+                      lineMessageId: row.lineMessageId,
+                      imageMimeType: row.imageMimeType,
+                      imageSha256: row.imageSha256,
+                      imageSizeBytes: row.imageSizeBytes,
+                      imageBase64: row.imageBytes
+                        ? Buffer.from(row.imageBytes).toString('base64')
+                        : null,
+                      createdAt: iso(row.createdAt),
+                    })),
+                    ...lineLearningResponses.map((row) => ({
+                      kind: 'LINE_OUTBOUND',
+                      providerEventId: row.providerEventId,
+                      text: row.text,
+                      status: row.status,
+                      sentAt: iso(row.sentAt),
+                      createdAt: iso(row.createdAt),
+                    })),
                     ...practiceNotes.map((row) => ({
                       ...row,
                       kind: 'PRACTICE_NOTE',

@@ -199,6 +199,32 @@ describe('admin alert center', () => {
     );
   });
 
+  it('surfaces monthly personal-learning LINE quota warnings without learner data', () => {
+    const snapshot = healthy();
+    snapshot.personalLearningLineQuotaNotices = [
+      { thresholdPercent: 80 },
+      { thresholdPercent: 80 },
+      { thresholdPercent: 90 },
+    ];
+
+    expect(buildAdminAlerts(snapshot)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'PERSONAL_LEARNING_LINE_QUOTA_80',
+          severity: 'WARNING',
+          count: 2,
+          href: '/admin/line',
+        }),
+        expect.objectContaining({
+          code: 'PERSONAL_LEARNING_LINE_QUOTA_90',
+          severity: 'CRITICAL',
+          count: 1,
+          href: '/admin/line',
+        }),
+      ]),
+    );
+  });
+
   it('does not expose the center when the repository rejects the administrator', async () => {
     const repository: AdminAlertRepository = { snapshot: vi.fn().mockResolvedValue(null) };
     await expect(

@@ -6481,6 +6481,75 @@ model GroupLineWebhookEvent {
   @@map("group_line_webhook_events")
 }
 
+/// LINE学習の受信本文。Webhookの200応答前にイベント・Inbox・Jobを同一transactionで保存する。
+model PersonalLearningLineInbox {
+  id                  String    @id @default(uuid()) @db.Uuid
+  workspaceId         String    @map("workspace_id") @db.Uuid
+  groupId             String    @map("group_id") @db.Uuid
+  programEnrollmentId String    @map("program_enrollment_id") @db.Uuid
+  groupMembershipId   String    @map("group_membership_id") @db.Uuid
+  userId              String    @map("user_id") @db.Uuid
+  configurationId     String    @map("configuration_id") @db.Uuid
+  providerEventId     String    @map("provider_event_id") @db.VarChar(255)
+  operationId         String    @default(uuid()) @map("operation_id") @db.Uuid
+  topicId             String?   @map("topic_id") @db.Uuid
+  messageType         String    @map("message_type") @db.VarChar(16)
+  text                String?   @db.Text
+  lineMessageId       String?   @map("line_message_id") @db.VarChar(255)
+  imageMimeType       String?   @map("image_mime_type") @db.VarChar(32)
+  imageSha256         String?   @map("image_sha256") @db.Char(64)
+  imageSizeBytes      Int?      @map("image_size_bytes")
+  imageBytes          Bytes?    @map("image_bytes") @db.ByteA
+  status              String    @default("PENDING") @db.VarChar(16)
+  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  processedAt         DateTime? @map("processed_at") @db.Timestamptz(3)
+
+  @@unique([configurationId, providerEventId], map: "personal_learning_line_inbox_event_key")
+  @@index([workspaceId, groupId, programEnrollmentId, userId, createdAt], map: "personal_learning_line_inbox_owner_created_idx")
+  @@index([status, createdAt], map: "personal_learning_line_inbox_status_created_idx")
+  @@map("personal_learning_line_inbox")
+}
+
+/// Durable LINE Push outbox. The retry key is created once and reused on retry.
+model PersonalLearningLinePush {
+  id                  String    @id @default(uuid()) @db.Uuid
+  workspaceId         String    @map("workspace_id") @db.Uuid
+  groupId             String    @map("group_id") @db.Uuid
+  programEnrollmentId String    @map("program_enrollment_id") @db.Uuid
+  groupMembershipId   String    @map("group_membership_id") @db.Uuid
+  userId              String    @map("user_id") @db.Uuid
+  configurationId     String    @map("configuration_id") @db.Uuid
+  providerEventId     String    @map("provider_event_id") @db.VarChar(255)
+  purpose             String    @default("RESPONSE") @db.VarChar(16)
+  retryKey            String    @unique @map("retry_key") @db.Uuid
+  text                String    @db.Text
+  status              String    @default("PENDING") @db.VarChar(16)
+  sentAt              DateTime? @map("sent_at") @db.Timestamptz(3)
+  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([configurationId, providerEventId, purpose], map: "personal_learning_line_push_inbound_purpose_key")
+  @@index([workspaceId, groupId, createdAt], map: "personal_learning_line_push_scope_created_idx")
+  @@map("personal_learning_line_pushes")
+}
+
+/// One idempotent operator alert per configuration/month/threshold; content is never copied here.
+model PersonalLearningLineQuotaNotice {
+  id               String                       @id @default(uuid()) @db.Uuid
+  workspaceId      String                       @map("workspace_id") @db.Uuid
+  groupId          String                       @map("group_id") @db.Uuid
+  configurationId  String                       @map("configuration_id") @db.Uuid
+  environment      LineConfigurationEnvironment
+  monthKey         String                       @map("month_key") @db.Char(7)
+  thresholdPercent Int                          @map("threshold_percent")
+  observedPercent  Int                          @map("observed_percent")
+  createdAt        DateTime                     @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@unique([configurationId, monthKey, thresholdPercent], map: "personal_learning_line_quota_notice_month_threshold_key")
+  @@index([workspaceId, groupId, createdAt], map: "personal_learning_line_quota_notice_scope_created_idx")
+  @@map("personal_learning_line_quota_notices")
+}
+
 model LineRichMenu {
   id                String                       @id @default(uuid()) @db.Uuid
   environment       LineConfigurationEnvironment

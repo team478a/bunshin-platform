@@ -179,6 +179,30 @@ export class PrismaTrainingRetentionExecutionRepository implements TrainingReten
                   id: { in: rows.practiceSupportImages.map(({ id }) => id) },
                 },
               });
+            if (rows.lineInbox.length)
+              await tx.personalLearningLineInbox.deleteMany({
+                where: {
+                  workspaceId: input.workspaceId,
+                  groupId: input.groupId,
+                  programEnrollmentId: input.programEnrollmentId,
+                  groupMembershipId: owned.membership.id,
+                  userId: owned.membership.userId,
+                  id: { in: rows.lineInbox.map(({ id }) => id) },
+                },
+              });
+            if (rows.lineInbox.length)
+              await tx.personalLearningLinePush.deleteMany({
+                where: {
+                  workspaceId: input.workspaceId,
+                  groupId: input.groupId,
+                  programEnrollmentId: input.programEnrollmentId,
+                  groupMembershipId: owned.membership.id,
+                  userId: owned.membership.userId,
+                  providerEventId: {
+                    in: rows.lineInbox.map(({ providerEventId }) => providerEventId),
+                  },
+                },
+              });
             if (snapshot.progress) {
               await tx.trainingParticipantProfile.deleteMany({
                 where: { ...personal, groupMembershipId: owned.membership.id },
