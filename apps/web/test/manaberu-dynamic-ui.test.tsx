@@ -2,6 +2,10 @@ import { readFileSync } from 'node:fs';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
+import {
+  AI_TRAINING_AI_CONSENT_TEXT,
+  AI_TRAINING_AI_CONSENT_VERSION,
+} from '../src/services/ai-training-consent-policy';
 import { PersonalLearningRequestCard } from '../app/s/[serviceSlug]/programs/[programEnrollmentId]/learning-request/card';
 
 const programPage = readFileSync(
@@ -52,7 +56,7 @@ describe('Manaberu dynamic learning UI', () => {
       programPage.indexOf("personalLearningMode(program.settings) === 'DYNAMIC_V1'"),
     ).toBeLessThan(programPage.indexOf('<AiTrainingCard'));
     expect(programPage).toContain('自由な学習希望を保存（検証中）');
-    expect(learningRequestPage).toContain('内部テスト中');
+    expect(learningRequestPage).not.toContain('内部テスト中');
     expect(learningRequestPage).toContain(
       "personalLearningMode(program?.settings) === 'DYNAMIC_V1'",
     );
@@ -129,9 +133,15 @@ describe('Manaberu dynamic learning UI', () => {
     expect(fixed).toContain('前回保存した希望（版 12）：');
   });
 
-  it('uses plain Japanese in participant learning and training-state copy without changing consent records', () => {
-    expect(learningRequestPage).toContain("service.configuration.slug === 'manaberu-style'");
-    expect(trainingPage).toContain("serviceSlug === 'manaberu-style'");
+  it('uses dynamic-mode detection for learner-facing copy and leaves fixed-mode copy intact', () => {
+    expect(learningRequestPage).toContain(
+      "personalLearningMode(program?.settings) === 'DYNAMIC_V1'",
+    );
+    expect(learningRequestPage).not.toContain("service.configuration.slug === 'manaberu-style'");
+    expect(trainingPage).toContain('participation.isDynamicLearning');
+    expect(trainingPage).not.toContain("serviceSlug === 'manaberu-style'");
+    expect(programPage).toContain("personalLearningMode(program.settings) === 'DYNAMIC_V1'");
+    expect(programPage).not.toContain("service.configuration.slug === 'manaberu-style'");
     expect(trainingPage).toContain('研修への参加手続きと参加枠を準備しています');
     expect(trainingPage).toContain('参加枠が準備できるまで、AIを使った学習は始まりません');
     expect(practiceCard).toContain('あなたが報告してくれた内容です。');
@@ -140,6 +150,10 @@ describe('Manaberu dynamic learning UI', () => {
     );
     expect(candidateCard).toContain('この練習の内容を確認してください。');
     expect(candidateCard).toContain('教材版 ${candidate.materialVersion}');
-    expect(trainingPage).toContain('この研修Enrollmentでの外部AI利用に同意します');
+    expect(trainingPage).toContain('この研修で、外部のAIサービスを使うことに同意します');
+    expect(AI_TRAINING_AI_CONSENT_VERSION).toBe('AI_TRAINING_EXTERNAL_AI_V2');
+    expect(AI_TRAINING_AI_CONSENT_TEXT).toContain('この同意は、この研修への参加に対するものです');
+    expect(AI_TRAINING_AI_CONSENT_TEXT).not.toContain('Enrollment');
+    expect(trainingPage).toContain('enrollment.isDynamicLearning');
   });
 });

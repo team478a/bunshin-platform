@@ -108,7 +108,7 @@ export function WeeklyActivitySection({
   bunshinCount,
   isBusinessDailyService,
   isPersonalLearningService,
-  isManaberuDynamic,
+  isDynamicLearning,
   isPersonalLearningReady,
   personalLearningPathHref,
   serviceSlug,
@@ -117,7 +117,7 @@ export function WeeklyActivitySection({
   bunshinCount: number;
   isBusinessDailyService: boolean;
   isPersonalLearningService: boolean;
-  isManaberuDynamic: boolean;
+  isDynamicLearning: boolean;
   isPersonalLearningReady: boolean;
   personalLearningPathHref: Route | null;
   serviceSlug: string;
@@ -125,7 +125,7 @@ export function WeeklyActivitySection({
   return (
     <section className="service-entry__card">
       <h2>{isPersonalLearningService ? '今日の学習' : '今週の進み具合'}</h2>
-      {isPersonalLearningService && isManaberuDynamic ? (
+      {isPersonalLearningService && isDynamicLearning ? (
         !isPersonalLearningReady ? (
           <div className="empty-state">
             <p>AI研修の準備中です。開始のご案内をお待ちください。</p>

@@ -1,9 +1,15 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
+  AI_TRAINING_AI_CONSENT_TEXT,
+  AI_TRAINING_AI_CONSENT_VERSION,
   invitationAcceptedPath,
   resolveAiTrainingParticipationState,
 } from '../src/services/ai-training-consent-policy';
+const consentService = readFileSync(
+  new URL('../src/services/ai-training-consent.ts', import.meta.url),
+  'utf8',
+);
 
 const evaluationJob = readFileSync(
   new URL('../src/jobs/training-answer-evaluation-job-handler.ts', import.meta.url),
@@ -69,6 +75,15 @@ describe('Manaberu AI training consent flow', () => {
         hasCurrentConsent: true,
       }),
     ).toBe('READY');
+  });
+
+  it('requires the revised consent wording and appends its new version without deleting history', () => {
+    expect(AI_TRAINING_AI_CONSENT_VERSION).toBe('AI_TRAINING_EXTERNAL_AI_V2');
+    expect(AI_TRAINING_AI_CONSENT_TEXT).toContain('この同意は、この研修への参加に対するものです');
+    expect(AI_TRAINING_AI_CONSENT_TEXT).not.toContain('Enrollment');
+    expect(consentService).toContain('consentVersion: AI_TRAINING_AI_CONSENT_VERSION');
+    expect(consentService).toContain('aiTrainingUsageConsent.upsert');
+    expect(consentService).not.toContain('aiTrainingUsageConsent.delete');
   });
 
   it('rechecks current consent in the HTTP enqueue path and both AI worker paths', () => {

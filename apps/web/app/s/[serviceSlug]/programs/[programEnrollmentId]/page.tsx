@@ -89,7 +89,7 @@ export default async function ProgramParticipantPage({
     '--service-secondary': service.configuration.brand.secondaryColor,
     '--service-font': service.configuration.brand.fontFamily,
   } as CSSProperties;
-  const isManaberu = service.configuration.slug === 'manaberu-style';
+  const isDynamicLearning = personalLearningMode(program.settings) === 'DYNAMIC_V1';
 
   if (moduleKey === AI_TRAINING_V1_MODULE_KEY) {
     if (isPersonalLearningPilotProgram(program.settings)) {
@@ -126,7 +126,7 @@ export default async function ProgramParticipantPage({
             <main className="service-entry resale-action-page training-page" style={style}>
               <header className="service-entry__header">
                 <p className="eyebrow">
-                  {isManaberu ? 'マナベルスタイル 先行研修' : 'マナベルスタイル 限定Pilot'}
+                  {isDynamicLearning ? '先行研修' : 'マナベルスタイル 限定Pilot'}
                 </p>
                 <h1>あなたの学習準備</h1>
               </header>
@@ -166,7 +166,7 @@ export default async function ProgramParticipantPage({
         <PublicShell showPlatformBrand={false}>
           <main className="service-entry resale-action-page training-page" style={style}>
             <header className="service-entry__header">
-              <p className="eyebrow">{isManaberu ? '先行研修' : '限定学習Pilot'}</p>
+              <p className="eyebrow">{isDynamicLearning ? '先行研修' : '限定学習Pilot'}</p>
               <h1>あなたのAI学習</h1>
               <p>答えを代わりに作るのではなく、自分でAIを使えるようになるための研修です。</p>
             </header>
@@ -174,7 +174,7 @@ export default async function ProgramParticipantPage({
               serviceSlug={serviceSlug}
               enrollmentId={programEnrollmentId}
               initialSnapshot={initialSnapshot}
-              plainLanguage={isManaberu}
+              plainLanguage={isDynamicLearning}
             />
             <a
               className="button button--secondary button--full"
@@ -257,7 +257,7 @@ export default async function ProgramParticipantPage({
             <h1>今日のAIトレーニング</h1>
             {personalLearningRequestEnabled() && (
               <a href={`/s/${serviceSlug}/programs/${programEnrollmentId}/learning-request`}>
-                {isManaberu ? '学びたいことを伝える' : '自由な学習希望を保存（検証中）'}
+                {isDynamicLearning ? '学びたいことを伝える' : '自由な学習希望を保存（検証中）'}
               </a>
             )}
             <p>今の仕事と経験に合わせて、今日必要な課題を一つだけお届けします。</p>

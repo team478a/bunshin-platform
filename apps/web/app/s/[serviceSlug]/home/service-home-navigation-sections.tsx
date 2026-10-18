@@ -5,7 +5,7 @@ interface MemberFeatureLinksProps {
   imageAvailable: boolean;
   isBusinessDailyService: boolean;
   isPersonalLearningService: boolean;
-  isManaberuDynamic: boolean;
+  isDynamicLearning: boolean;
   isPersonalLearningReady: boolean;
   personalLearningPathHref: Route | null;
   isServiceOperator: boolean;
@@ -21,7 +21,7 @@ export function MemberFeatureLinks(props: MemberFeatureLinksProps) {
     imageAvailable,
     isBusinessDailyService,
     isPersonalLearningService,
-    isManaberuDynamic,
+    isDynamicLearning,
     isPersonalLearningReady,
     personalLearningPathHref,
     isServiceOperator,
@@ -31,14 +31,14 @@ export function MemberFeatureLinks(props: MemberFeatureLinksProps) {
     trackingLinkAvailable,
     videoAvailable,
   } = props;
-  if (isPersonalLearningService && isManaberuDynamic && !isPersonalLearningReady) {
+  if (isPersonalLearningService && isDynamicLearning && !isPersonalLearningReady) {
     return (
       <p>
         <Link href={`/s/${serviceSlug}/help` as Route}>使い方・困ったとき</Link>
       </p>
     );
   }
-  if (isPersonalLearningService && !isManaberuDynamic && !isPersonalLearningReady) {
+  if (isPersonalLearningService && !isDynamicLearning && !isPersonalLearningReady) {
     return (
       <section className="service-entry__card">
         <h2>学習の準備</h2>
@@ -71,7 +71,7 @@ export function MemberFeatureLinks(props: MemberFeatureLinksProps) {
         )}
       <div className="service-home-actions">
         {isPersonalLearningService &&
-          (isManaberuDynamic ? (
+          (isDynamicLearning ? (
             <div className="service-home-learning-links">
               {isPersonalLearningReady && personalLearningPathHref && (
                 <>

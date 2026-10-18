@@ -64,7 +64,7 @@ describe('service home module boundary', () => {
         bunshinCount: 0,
         isBusinessDailyService: false,
         isPersonalLearningService: true,
-        isManaberuDynamic: false,
+        isDynamicLearning: false,
         isPersonalLearningReady: true,
         personalLearningPathHref: null,
         serviceSlug: 'hassy',
@@ -75,7 +75,7 @@ describe('service home module boundary', () => {
         imageAvailable: false,
         isBusinessDailyService: false,
         isPersonalLearningService: true,
-        isManaberuDynamic: false,
+        isDynamicLearning: false,
         isPersonalLearningReady: true,
         personalLearningPathHref: null,
         isServiceOperator: false,
@@ -101,7 +101,7 @@ describe('service home module boundary', () => {
         bunshinCount: 2,
         isBusinessDailyService: false,
         isPersonalLearningService: true,
-        isManaberuDynamic: true,
+        isDynamicLearning: true,
         isPersonalLearningReady: true,
         personalLearningPathHref:
           // Next.js cannot infer this test's dynamic service route from generated route types.
@@ -124,7 +124,7 @@ describe('service home module boundary', () => {
         bunshinCount: 0,
         isBusinessDailyService: false,
         isPersonalLearningService: true,
-        isManaberuDynamic: true,
+        isDynamicLearning: true,
         isPersonalLearningReady: false,
         personalLearningPathHref: null,
         serviceSlug: 'manaberu-style',
@@ -135,7 +135,7 @@ describe('service home module boundary', () => {
         imageAvailable: true,
         isBusinessDailyService: false,
         isPersonalLearningService: true,
-        isManaberuDynamic: true,
+        isDynamicLearning: true,
         isPersonalLearningReady: false,
         personalLearningPathHref: null,
         isServiceOperator: false,
@@ -160,6 +160,8 @@ describe('service home module boundary', () => {
   });
 
   it('shows exactly one primary action for each Manaberu dynamic home state', () => {
+    expect(pageSource).toContain("personalLearningMode(program.settings) === 'DYNAMIC_V1'");
+    expect(pageSource).not.toContain("service.configuration.slug === 'manaberu-style'");
     const renderState = (input: { ready: boolean; path: Route | null }) => {
       const overview = renderToStaticMarkup(
         createElement(WeeklyActivitySection, {
@@ -167,7 +169,7 @@ describe('service home module boundary', () => {
           bunshinCount: 0,
           isBusinessDailyService: false,
           isPersonalLearningService: true,
-          isManaberuDynamic: true,
+          isDynamicLearning: true,
           isPersonalLearningReady: input.ready,
           personalLearningPathHref: input.path,
           serviceSlug: 'manaberu-style',
@@ -178,7 +180,7 @@ describe('service home module boundary', () => {
           imageAvailable: false,
           isBusinessDailyService: false,
           isPersonalLearningService: true,
-          isManaberuDynamic: true,
+          isDynamicLearning: true,
           isPersonalLearningReady: input.ready,
           personalLearningPathHref: input.path,
           isServiceOperator: false,

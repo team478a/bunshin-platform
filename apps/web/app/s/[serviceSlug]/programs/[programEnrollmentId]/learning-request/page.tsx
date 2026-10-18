@@ -55,7 +55,6 @@ export default async function Page({
         })
       : null;
     const dynamicProgram = personalLearningMode(program?.settings) === 'DYNAMIC_V1';
-    const manaberuDynamicMode = service.configuration.slug === 'manaberu-style' && dynamicProgram;
     const multiTopic = personalLearningFeatureEnabled(program?.settings, 'multiTopic');
     const pagePath = `/s/${serviceSlug}/programs/${programEnrollmentId}/learning-request`;
     const topicEndpoint = `/api/services/${serviceSlug}/ai-training/enrollments/${programEnrollmentId}/topics`;
@@ -113,7 +112,6 @@ export default async function Page({
     );
     return (
       <main style={{ maxWidth: 560, margin: '0 auto', padding: 20 }}>
-        {dynamicProgram && !manaberuDynamicMode && <p className="eyebrow">内部テスト中</p>}
         {personaInvitation}
         {multiTopic && (
           <LearningTopicSelector
@@ -139,7 +137,7 @@ export default async function Page({
           </p>
         )}
         <PersonalLearningRequestCard
-          dynamicMode={manaberuDynamicMode}
+          dynamicMode={dynamicProgram}
           endpoint={`/api/services/${serviceSlug}/ai-training/enrollments/${programEnrollmentId}/learning-request${topicQuery}`}
           initial={initial}
           practiceEndpoint={`/api/services/${serviceSlug}/ai-training/enrollments/${programEnrollmentId}/learning-request/practice${topicQuery}`}

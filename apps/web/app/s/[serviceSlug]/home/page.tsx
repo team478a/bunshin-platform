@@ -259,11 +259,9 @@ export default async function ServiceMemberHome({
   // The service identity survives a reserved Pilot being SUSPENDED before Wave 0.
   // Archived Programs are historical and must not change the current service UX.
   const isPersonalLearningService = personalLearningPrograms.length > 0;
-  const isManaberuDynamic =
-    service.configuration.slug === 'manaberu-style' &&
-    personalLearningPrograms.some(
-      (program) => personalLearningMode(program.settings) === 'DYNAMIC_V1',
-    );
+  const isDynamicLearning = personalLearningPrograms.some(
+    (program) => personalLearningMode(program.settings) === 'DYNAMIC_V1',
+  );
   const isPersonalLearningReady = personalLearningPrograms.some(
     (program) => program.status === 'ACTIVE',
   );
@@ -377,7 +375,7 @@ export default async function ServiceMemberHome({
           bunshinCount={bunshins.length}
           isBusinessDailyService={isBusinessDailyService}
           isPersonalLearningService={isPersonalLearningService}
-          isManaberuDynamic={isManaberuDynamic}
+          isDynamicLearning={isDynamicLearning}
           isPersonalLearningReady={isPersonalLearningReady}
           personalLearningPathHref={personalLearningPathHref}
           serviceSlug={service.configuration.slug}
@@ -386,7 +384,7 @@ export default async function ServiceMemberHome({
           imageAvailable={imageAvailable}
           isBusinessDailyService={isBusinessDailyService}
           isPersonalLearningService={isPersonalLearningService}
-          isManaberuDynamic={isManaberuDynamic}
+          isDynamicLearning={isDynamicLearning}
           isPersonalLearningReady={isPersonalLearningReady}
           personalLearningPathHref={personalLearningPathHref}
           isServiceOperator={isServiceOperator}
