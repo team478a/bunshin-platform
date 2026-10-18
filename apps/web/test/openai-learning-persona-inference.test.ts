@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   generatePersonaInference,
   personaInferenceBody,
+  screenPersonaInferenceSources,
   validatePersonaInferenceOutput,
 } from '../src/providers/openai-learning-persona-inference';
 
@@ -13,6 +14,29 @@ const source = {
 };
 
 describe('persona inference provider', () => {
+  it.each(['毎日がんばりたい', '取引先への提案資料を作りたい'])(
+    'keeps ordinary source wording in the AI request: %s',
+    (text) => {
+      const sources = screenPersonaInferenceSources([{ ...source, text }]);
+      expect(sources).toHaveLength(1);
+      const body = personaInferenceBody({
+        model: 'gpt-5.2-2025-12-11',
+        maxOutputTokens: 300,
+        maxRequestBytes: 6000,
+        maxSourceBytes: 1000,
+        sources,
+      });
+      expect(body).toContain(text);
+    },
+  );
+
+  it.each(['私は糖尿病と診断されました', '〒1234567', '取引先の株式会社サンプルへの相談'])(
+    'filters potentially sensitive source wording: %s',
+    (text) => {
+      expect(screenPersonaInferenceSources([{ ...source, text }])).toEqual([]);
+    },
+  );
+
   it('uses the allowlisted learning-only output contract and non-storage mode', () => {
     const body = personaInferenceBody({
       model: 'gpt-5.2-2025-12-11',

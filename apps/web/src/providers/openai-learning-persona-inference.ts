@@ -16,6 +16,15 @@ export type PersonaInferenceSource = {
 };
 export type PersonaInferenceResult = { attributeKey: string; value: string; sourceIndex: number }[];
 
+/** Screen source records while avoiding substring-only matches on ordinary Japanese wording. */
+export function screenPersonaInferenceSources(
+  sources: readonly PersonaInferenceSource[],
+): PersonaInferenceSource[] {
+  return sources.filter(
+    ({ text }) => !!text.trim() && !isPersonalLearningPersonaValueDisallowed(text),
+  );
+}
+
 export function validatePersonaInferenceOutput(value: unknown): PersonaInferenceResult {
   if (!value || typeof value !== 'object' || Array.isArray(value))
     throw new Error('invalid persona inference');

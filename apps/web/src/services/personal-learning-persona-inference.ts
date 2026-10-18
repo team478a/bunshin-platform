@@ -2,7 +2,6 @@ import 'server-only';
 import { createHash } from 'node:crypto';
 import type { PersonalLearningActor } from '@bunshin/application';
 import { ApplicationError } from '@bunshin/shared';
-import { isPersonalLearningPersonaValueDisallowed } from '@bunshin/capability-training';
 import {
   executePersonalLearningTextOperation,
   parsePersonalLearningCallAdmissionPolicy,
@@ -19,6 +18,7 @@ import {
   generatePersonaInference,
   personaInferenceBody,
   PERSONAL_LEARNING_PERSONA_INFERENCE_PROMPT_VERSION,
+  screenPersonaInferenceSources,
   type PersonaInferenceSource,
 } from '../providers/openai-learning-persona-inference';
 
@@ -67,25 +67,24 @@ export async function inferPersonalLearningPersonaAfterSuccess(input: {
       take: 50,
       select: { id: true, eventType: true, metadata: true, createdAt: true },
     });
-    const sources: PersonaInferenceSource[] = events
-      .flatMap((event) => {
-        const text = eventText(event.metadata);
-        // Avoid transmitting likely sensitive or third-party details to the inference provider.
-        if (!text || isPersonalLearningPersonaValueDisallowed(text)) return [];
-        const evidenceType: PersonaInferenceSource['evidenceType'] =
-          event.eventType === 'PERSONAL_LEARNING_SUPPORT_REQUEST'
-            ? 'PRACTICE_ANSWER'
-            : 'CONVERSATION_EVENT';
-        return [
-          {
-            evidenceType,
-            evidenceId: event.id,
-            occurredAt: event.createdAt,
-            text,
-          },
-        ];
-      })
-      .slice(-5);
+    const candidateSources: PersonaInferenceSource[] = events.flatMap((event) => {
+      const text = eventText(event.metadata);
+      if (!text) return [];
+      const evidenceType: PersonaInferenceSource['evidenceType'] =
+        event.eventType === 'PERSONAL_LEARNING_SUPPORT_REQUEST'
+          ? 'PRACTICE_ANSWER'
+          : 'CONVERSATION_EVENT';
+      return [
+        {
+          evidenceType,
+          evidenceId: event.id,
+          occurredAt: event.createdAt,
+          text,
+        },
+      ];
+    });
+    // Avoid transmitting likely sensitive or third-party details to the inference provider.
+    const sources = screenPersonaInferenceSources(candidateSources).slice(-5);
     if (sources.length === 0) return { outcome: 'NO_NEW_RECORDS' as const };
 
     let raw: unknown;

@@ -22,13 +22,22 @@ describe('personal learning persona policy', () => {
     '東京都渋谷区1丁目2番地',
     '090-1234-5678',
     'learner@example.com',
+    '〒1234567',
+    '123-4567',
+    '取引先の株式会社サンプルへの提案資料',
+    '取引先のサンプル工業への提案資料',
   ])('rejects sensitive or third-party-looking value: %s', (value) => {
     expect(isPersonalLearningPersonaValueDisallowed(value)).toBe(true);
   });
 
   it('keeps ordinary learning preferences', () => {
-    expect(isPersonalLearningPersonaValueDisallowed('短い手順を、平日の夜に少しずつ学びたい')).toBe(
-      false,
-    );
+    for (const value of [
+      '短い手順を、平日の夜に少しずつ学びたい',
+      '毎日がんばりたい',
+      '取引先への提案資料を作りたい',
+      '〒',
+      '1234567',
+    ])
+      expect(isPersonalLearningPersonaValueDisallowed(value)).toBe(false);
   });
 });

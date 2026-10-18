@@ -460,8 +460,31 @@ export function registerPersonalLearningDIntegrationCases(client: PrismaClient) 
         })),
       });
       expect(confirmed.count).toBe(1);
+      for (const [attributeKey, value] of [
+        ['learning_purpose', '毎日がんばりたい'],
+        ['ai_tool_familiarity', '取引先への提案資料を作りたい'],
+      ] as const) {
+        expect(
+          await persona.save(first.scope, {
+            attributeKey,
+            value,
+            evidenceType: 'LEARNING_REQUEST',
+            evidenceId: randomUUID(),
+            evidenceCreatedAt: now,
+          }),
+        ).toMatchObject({ outcome: 'SAVED' });
+      }
       const aiIntake = await persona.listForAi(first.scope);
       expect(aiIntake.length).toBeLessThanOrEqual(20);
+      expect(aiIntake).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ attributeKey: 'learning_purpose', value: '毎日がんばりたい' }),
+          expect.objectContaining({
+            attributeKey: 'ai_tool_familiarity',
+            value: '取引先への提案資料を作りたい',
+          }),
+        ]),
+      );
       expect(aiIntake.some((item) => item.attributeKey === 'explanation_style')).toBe(false);
       expect(aiIntake[0]?.attributeKey).toBe('company_name');
 
