@@ -839,13 +839,15 @@ export function registerPersonalLearningDIntegrationCases(client: PrismaClient) 
         where: { id: f.enrollmentId },
         data: { status: 'COMPLETED', startsAt, endsAt: endedAt },
       });
-      await client.trainingDataRetentionState.create({
-        data: {
+      await client.trainingDataRetentionState.upsert({
+        where: { programEnrollmentId: f.enrollmentId },
+        create: {
           workspaceId: f.scope.workspaceId,
           groupId: f.scope.groupId,
           programEnrollmentId: f.enrollmentId,
           endedAt,
         },
+        update: { endedAt },
       });
       const configuration = await lineConfigurationFixture(f);
       const configurationId = configuration.id;

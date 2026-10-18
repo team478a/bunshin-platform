@@ -39,7 +39,7 @@
 - `pnpm --filter @bunshin/application exec vitest run test/admin-alert-center.test.ts` — 10テスト成功。
 - `pnpm --filter @bunshin/database lint`、`pnpm --filter web lint`、変更したTypeScriptのPrettier検査 — 成功。
 - DB統合テストにはQuota/イベント重複、テナント境界、書き出し、本人削除、期限削除のケースを追加しました。ローカルでは本番DBへ接続しないため実行せず、Draft PRのCIにある隔離DBで実行します。
-- 初回のDraft PR CIで、保持期限統合テストfixtureに必要な `SUPER_ADMIN` と確定済み受講終了日（`TrainingDataRetentionState.endedAt`）が不足していることを検出しました。両方をfixtureへ追加し、更新後のheadでPR CIを再実行しています。
+- Draft PR CIで、保持期限統合テストfixtureに必要な `SUPER_ADMIN` と確定済み受講終了日（`TrainingDataRetentionState.endedAt`）の設定漏れを検出しました。受講終了トリガーが作成する保持状態をupsertでテスト用日時に調整するよう修正し、更新後のheadでPR CIを再実行しています。
 
 ## 5. 未解決事項
 
