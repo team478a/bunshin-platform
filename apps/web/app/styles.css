@@ -5364,6 +5364,14 @@ a {
   text-align: center;
 }
 
+.service-home-learning-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-top: 12px;
+  font-size: 0.9rem;
+}
+
 .service-help {
   max-width: 760px;
   margin: 0 auto;

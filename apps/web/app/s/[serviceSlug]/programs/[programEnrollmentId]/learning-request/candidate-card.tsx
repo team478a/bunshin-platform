@@ -10,12 +10,14 @@ export function LearningCandidateCard({
   request,
   initial,
   onConfirmed,
+  plainLanguage = false,
   onChange,
 }: {
   endpoint: string;
   request: SavedPersonalLearningRequest;
   initial: SavedLearningLessonCandidate | null;
   onConfirmed?: (value: SavedLearningLessonCandidate) => void;
+  plainLanguage?: boolean;
   onChange?: (value: SavedLearningLessonCandidate) => void;
 }) {
   const [candidate, setCandidate] = useState(initial);
@@ -103,8 +105,9 @@ export function LearningCandidateCard({
                 </div>
               ))}
               <p>
-                教材版 {candidate.materialVersion}
-                。この確認だけで学習目標全体の達成や受講終了にはしません。
+                {plainLanguage
+                  ? 'この練習の内容を確認してください。ここで目標全体の達成や受講終了が決まることはありません。'
+                  : `教材版 ${candidate.materialVersion}。この確認だけで学習目標全体の達成や受講終了にはしません。`}
               </p>
               {candidate.confirmedAt ? (
                 <p>

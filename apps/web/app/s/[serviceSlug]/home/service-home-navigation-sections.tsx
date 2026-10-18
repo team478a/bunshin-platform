@@ -5,7 +5,9 @@ interface MemberFeatureLinksProps {
   imageAvailable: boolean;
   isBusinessDailyService: boolean;
   isPersonalLearningService: boolean;
+  isDynamicLearning: boolean;
   isPersonalLearningReady: boolean;
+  personalLearningPathHref: Route | null;
   isServiceOperator: boolean;
   promptOnlyImages: boolean;
   rewardsAvailable: boolean;
@@ -19,7 +21,9 @@ export function MemberFeatureLinks(props: MemberFeatureLinksProps) {
     imageAvailable,
     isBusinessDailyService,
     isPersonalLearningService,
+    isDynamicLearning,
     isPersonalLearningReady,
+    personalLearningPathHref,
     isServiceOperator,
     promptOnlyImages,
     rewardsAvailable,
@@ -27,7 +31,14 @@ export function MemberFeatureLinks(props: MemberFeatureLinksProps) {
     trackingLinkAvailable,
     videoAvailable,
   } = props;
-  if (isPersonalLearningService && !isPersonalLearningReady) {
+  if (isPersonalLearningService && isDynamicLearning && !isPersonalLearningReady) {
+    return (
+      <p>
+        <Link href={`/s/${serviceSlug}/help` as Route}>使い方・困ったとき</Link>
+      </p>
+    );
+  }
+  if (isPersonalLearningService && !isDynamicLearning && !isPersonalLearningReady) {
     return (
       <section className="service-entry__card">
         <h2>学習の準備</h2>
@@ -59,16 +70,27 @@ export function MemberFeatureLinks(props: MemberFeatureLinksProps) {
           <p>現在、利用できる機能を準備しています。サービス運営者からの案内をお待ちください。</p>
         )}
       <div className="service-home-actions">
-        {isPersonalLearningService && (
-          <>
-            <Link className="button button--primary" href={`/s/${serviceSlug}/training` as Route}>
-              研修の参加状況・同意を確認する
-            </Link>
-            <Link className="button" href={`/s/${serviceSlug}/programs` as Route}>
-              学習プログラム・課題を見る
-            </Link>
-          </>
-        )}
+        {isPersonalLearningService &&
+          (isDynamicLearning ? (
+            <div className="service-home-learning-links">
+              {isPersonalLearningReady && personalLearningPathHref && (
+                <>
+                  <Link href={`/s/${serviceSlug}/training` as Route}>受講の状況を見る</Link>
+                  <Link href={`/s/${serviceSlug}/programs` as Route}>学習の記録</Link>
+                </>
+              )}
+              <Link href={`/s/${serviceSlug}/help` as Route}>使い方・困ったとき</Link>
+            </div>
+          ) : (
+            <>
+              <Link className="button button--primary" href={`/s/${serviceSlug}/training` as Route}>
+                研修の参加状況・同意を確認する
+              </Link>
+              <Link className="button" href={`/s/${serviceSlug}/programs` as Route}>
+                学習プログラム・課題を見る
+              </Link>
+            </>
+          ))}
         {promptOnlyImages && (
           <div className="notice">
             <strong>画像は、画像用の文章をコピーして作ります</strong>

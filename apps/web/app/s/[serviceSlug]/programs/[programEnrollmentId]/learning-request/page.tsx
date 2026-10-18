@@ -54,16 +54,16 @@ export default async function Page({
           select: { settings: true },
         })
       : null;
-    const dynamicMode = personalLearningMode(program?.settings) === 'DYNAMIC_V1';
+    const dynamicProgram = personalLearningMode(program?.settings) === 'DYNAMIC_V1';
     const multiTopic = personalLearningFeatureEnabled(program?.settings, 'multiTopic');
     const pagePath = `/s/${serviceSlug}/programs/${programEnrollmentId}/learning-request`;
     const topicEndpoint = `/api/services/${serviceSlug}/ai-training/enrollments/${programEnrollmentId}/topics`;
     const personaPath = `/s/${serviceSlug}/programs/${programEnrollmentId}/persona`;
     const examplesPath = `/s/${serviceSlug}/programs/${programEnrollmentId}/examples`;
-    const personaProfile = dynamicMode
+    const personaProfile = dynamicProgram
       ? await new db.PrismaPersonalLearningPersonaRepository(db.prisma).profile(input.scope)
       : null;
-    const practiceAnswerCount = dynamicMode
+    const practiceAnswerCount = dynamicProgram
       ? await db.prisma.trainingMissionAnswer.count({
           where: {
             workspaceId: input.scope.workspaceId,
@@ -74,7 +74,7 @@ export default async function Page({
         })
       : 0;
     const showPersonaInvitation =
-      dynamicMode &&
+      dynamicProgram &&
       practiceAnswerCount >= personalLearningPersonaInvitationAnswerCount() &&
       !personaProfile?.optedIn &&
       (!personaProfile?.dismissedUntil || personaProfile.dismissedUntil <= new Date());
@@ -112,7 +112,6 @@ export default async function Page({
     );
     return (
       <main style={{ maxWidth: 560, margin: '0 auto', padding: 20 }}>
-        {dynamicMode && <p className="eyebrow">内部テスト中</p>}
         {personaInvitation}
         {multiTopic && (
           <LearningTopicSelector
@@ -132,13 +131,13 @@ export default async function Page({
             </p>
           </>
         )}
-        {dynamicMode && !multiTopic && (
+        {dynamicProgram && !multiTopic && (
           <p>
             <a href={personaPath}>学び方に合わせたサポートを確認する</a>
           </p>
         )}
         <PersonalLearningRequestCard
-          dynamicMode={dynamicMode}
+          dynamicMode={dynamicProgram}
           endpoint={`/api/services/${serviceSlug}/ai-training/enrollments/${programEnrollmentId}/learning-request${topicQuery}`}
           initial={initial}
           practiceEndpoint={`/api/services/${serviceSlug}/ai-training/enrollments/${programEnrollmentId}/learning-request/practice${topicQuery}`}
@@ -150,12 +149,12 @@ export default async function Page({
             input,
           )}
           conversationEndpoint={
-            dynamicMode && personalLearningFeatureEnabled(program?.settings, 'conversation')
+            dynamicProgram && personalLearningFeatureEnabled(program?.settings, 'conversation')
               ? `/api/services/${serviceSlug}/ai-training/enrollments/${programEnrollmentId}/learning-request/conversation${topicQuery}`
               : undefined
           }
           initialConversation={
-            dynamicMode && personalLearningFeatureEnabled(program?.settings, 'conversation')
+            dynamicProgram && personalLearningFeatureEnabled(program?.settings, 'conversation')
               ? await new db.PrismaPersonalLearningConversationRepository(
                   db.prisma,
                 ).readConversation(
@@ -170,7 +169,7 @@ export default async function Page({
               : null
           }
         />
-        {dynamicMode && (
+        {dynamicProgram && (
           <div className="mt-8">
             <AiTrainingDataExportCard
               serviceSlug={serviceSlug}
