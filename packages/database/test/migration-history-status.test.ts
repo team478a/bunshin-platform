@@ -30,13 +30,16 @@ describe('migration history status parser', () => {
     });
   });
 
-  it('fails closed for unknown output or unrecognized pending names', () => {
+  it('fails closed for unknown output and reports valid pending migration names', () => {
     expect(parseMigrationHistoryStatus('connection succeeded', known).status).toBe('UNKNOWN');
     expect(
       parseMigrationHistoryStatus(
         'The following migration(s) have not yet been applied:\n20261014100000_unknown\n',
         known,
-      ).status,
-    ).toBe('UNKNOWN');
+      ),
+    ).toEqual({
+      status: 'PENDING',
+      pendingMigrations: ['20261014100000_unknown'],
+    });
   });
 });
