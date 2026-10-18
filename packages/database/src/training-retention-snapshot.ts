@@ -29,7 +29,11 @@ export async function trainingRetentionOwner(
   if (!admin) return { outcome: 'FORBIDDEN' } as const;
   const scope = { workspaceId: input.workspaceId, groupId: input.groupId };
   const enrollment = await tx.programEnrollment.findFirst({
-    where: { ...scope, id: input.programEnrollmentId },
+    where: {
+      ...scope,
+      id: input.programEnrollmentId,
+      ...(input.serviceProgramId ? { serviceProgramId: input.serviceProgramId } : {}),
+    },
     select: {
       id: true,
       groupMembershipId: true,

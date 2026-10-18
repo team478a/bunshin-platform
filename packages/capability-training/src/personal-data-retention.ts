@@ -119,6 +119,9 @@ export interface TrainingRetentionExecutionScope {
   workspaceId: string;
   groupId: string;
   programEnrollmentId: string;
+  /** Optional exact Program boundary for scheduled execution. */
+  serviceProgramId?: string;
+  executionSource?: 'ADMIN' | 'CRON';
   operatorUserId: string;
   now: Date;
 }

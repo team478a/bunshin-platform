@@ -17,6 +17,7 @@ import { PrismaPersonalLearningPersistenceRepository } from '../src/personal-lea
 import { PrismaTrainingPersonalDataExportRepository } from '../src/training-personal-data-export';
 import { PrismaTrainingPersonalDataDeletionRepository } from '../src/training-personal-data-deletion';
 import { PrismaTrainingRetentionExecutionRepository } from '../src/training-retention-execution';
+import { PrismaTrainingRetentionCronRepository } from '../src/training-retention-cron';
 import { pilotParticipantHash } from '../src/personal-learning-pilot-seat';
 import { cleanupProgramFixtures } from './program-fixture-cleanup';
 
@@ -921,6 +922,165 @@ export function registerPersonalLearningDIntegrationCases(client: PrismaClient) 
       expect(await client.personalLearningLinePush.count({ where: { groupId: f.group.id } })).toBe(
         0,
       );
+    });
+
+    it('cron retention is preview-only by default and deletes only due rows inside the configured Program', async () => {
+      const f = await serviceFixture('PR-F cron retention target', { multiTopic: false });
+      const other = await serviceFixture('PR-F cron retention other Program', {
+        multiTopic: false,
+        workspaceId: f.workspace.id,
+      });
+      await client.platformAdmin.create({
+        data: { userId: f.owner.id, role: 'SUPER_ADMIN', status: 'ACTIVE' },
+      });
+      cleanup.push(async () => {
+        await client.platformAdmin.deleteMany({ where: { userId: f.owner.id } });
+      });
+      const firstConfig = await lineConfigurationFixture(f);
+      const otherConfig = await lineConfigurationFixture(other);
+      const oldImage = `old-${randomUUID()}`;
+      const recentImage = `recent-${randomUUID()}`;
+      const otherImage = `other-${randomUUID()}`;
+      const imageRows = [
+        {
+          workspaceId: f.scope.workspaceId,
+          groupId: f.scope.groupId,
+          programEnrollmentId: f.enrollmentId,
+          groupMembershipId: f.scope.groupMembershipId,
+          userId: f.scope.userId,
+          configurationId: firstConfig.id,
+          providerEventId: oldImage,
+          messageType: 'IMAGE' as const,
+          lineMessageId: `line-${oldImage}`,
+          imageMimeType: 'image/jpeg',
+          imageSha256: 'a'.repeat(64),
+          imageSizeBytes: 1,
+          imageBytes: new Uint8Array([1]),
+          createdAt: new Date(now.getTime() - 91 * 86_400_000),
+        },
+        {
+          workspaceId: f.scope.workspaceId,
+          groupId: f.scope.groupId,
+          programEnrollmentId: f.enrollmentId,
+          groupMembershipId: f.scope.groupMembershipId,
+          userId: f.scope.userId,
+          configurationId: firstConfig.id,
+          providerEventId: recentImage,
+          messageType: 'IMAGE' as const,
+          lineMessageId: `line-${recentImage}`,
+          imageMimeType: 'image/jpeg',
+          imageSha256: 'c'.repeat(64),
+          imageSizeBytes: 1,
+          imageBytes: new Uint8Array([2]),
+          createdAt: new Date(now.getTime() - 10 * 86_400_000),
+        },
+        {
+          workspaceId: other.scope.workspaceId,
+          groupId: other.scope.groupId,
+          programEnrollmentId: other.enrollmentId,
+          groupMembershipId: other.scope.groupMembershipId,
+          userId: other.scope.userId,
+          configurationId: otherConfig.id,
+          providerEventId: otherImage,
+          messageType: 'IMAGE' as const,
+          lineMessageId: `line-${otherImage}`,
+          imageMimeType: 'image/jpeg',
+          imageSha256: 'd'.repeat(64),
+          imageSizeBytes: 1,
+          imageBytes: new Uint8Array([3]),
+          createdAt: new Date(now.getTime() - 91 * 86_400_000),
+        },
+      ];
+      await client.personalLearningLineInbox.createMany({ data: imageRows });
+      await client.personalLearningLineInbox.create({
+        data: {
+          workspaceId: f.scope.workspaceId,
+          groupId: f.scope.groupId,
+          programEnrollmentId: f.enrollmentId,
+          groupMembershipId: f.scope.groupMembershipId,
+          userId: f.scope.userId,
+          configurationId: firstConfig.id,
+          providerEventId: `text-${randomUUID()}`,
+          messageType: 'TEXT',
+          text: '保持対象の本文',
+          createdAt: now,
+        },
+      });
+
+      const runner = new PrismaTrainingRetentionCronRepository(client);
+      const input = {
+        scopes: [
+          {
+            workspaceId: f.scope.workspaceId,
+            groupId: f.scope.groupId,
+            serviceProgramId: f.program.id,
+          },
+        ],
+        operatorUserId: f.owner.id,
+        now,
+      };
+      expect(await runner.run({ ...input, executeEnabled: false })).toMatchObject({
+        outcome: 'PREVIEW',
+        counts: { practiceSupportImages: 0, lineMessages: 1 },
+      });
+      expect(await client.personalLearningLineInbox.count()).toBe(4);
+
+      expect(await runner.run({ ...input, executeEnabled: true })).toMatchObject({
+        outcome: 'APPLIED',
+        counts: { practiceSupportImages: 0, lineMessages: 1 },
+      });
+      expect(
+        await client.personalLearningLineInbox.findUnique({
+          where: {
+            configurationId_providerEventId: {
+              configurationId: firstConfig.id,
+              providerEventId: oldImage,
+            },
+          },
+        }),
+      ).toBeNull();
+      expect(
+        await client.personalLearningLineInbox.findUnique({
+          where: {
+            configurationId_providerEventId: {
+              configurationId: firstConfig.id,
+              providerEventId: recentImage,
+            },
+          },
+        }),
+      ).not.toBeNull();
+      expect(
+        await client.personalLearningLineInbox.findUnique({
+          where: {
+            configurationId_providerEventId: {
+              configurationId: otherConfig.id,
+              providerEventId: otherImage,
+            },
+          },
+        }),
+      ).not.toBeNull();
+      expect(await runner.run({ ...input, executeEnabled: true })).toMatchObject({
+        outcome: 'APPLIED',
+        counts: { lineMessages: 0 },
+      });
+      expect(await client.personalLearningLineInbox.count()).toBe(3);
+      expect(await client.personalLearningLineInbox.count({ where: { messageType: 'TEXT' } })).toBe(
+        1,
+      );
+      const audit = await client.programAuditLog.findFirst({
+        where: {
+          workspaceId: f.scope.workspaceId,
+          groupId: f.scope.groupId,
+          resourceId: f.enrollmentId,
+          action: 'TRAINING_RETENTION_APPLIED',
+        },
+        orderBy: { performedAt: 'desc' },
+      });
+      expect(audit?.afterData).toMatchObject({
+        executionSource: 'CRON',
+        serviceProgramId: f.program.id,
+      });
+      expect(JSON.stringify(audit?.afterData)).not.toContain('保持対象の本文');
     });
 
     it('keeps each wish and conversation on its selected topic and rejects a cross-topic update', async () => {

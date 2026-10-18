@@ -277,6 +277,7 @@ export { PrismaTrainingPersonalDataDeletionRepository } from './training-persona
 export { PrismaTrainingRetentionPreviewRepository } from './training-retention-preview';
 export { PrismaTrainingRetentionAdminPreviewRepository } from './training-retention-preview';
 export { PrismaTrainingRetentionExecutionRepository } from './training-retention-execution';
+export { PrismaTrainingRetentionCronRepository } from './training-retention-cron';
 export {
   PrismaServiceFoundationRepository,
   PrismaServiceStaffRoleRepository,
