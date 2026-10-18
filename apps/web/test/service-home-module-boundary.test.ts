@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import type { Route } from 'next';
 import { describe, expect, it } from 'vitest';
 import {
   ServiceHomeHeader,
@@ -103,7 +104,9 @@ describe('service home module boundary', () => {
         isManaberuDynamic: true,
         isPersonalLearningReady: true,
         personalLearningPathHref:
-          '/s/manaberu-style/programs/00000000-0000-4000-8000-000000000001/learning-request',
+          // Next.js cannot infer this test's dynamic service route from generated route types.
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
+          '/s/manaberu-style/programs/00000000-0000-4000-8000-000000000001/learning-request' as Route,
         serviceSlug: 'manaberu-style',
       }),
     );
@@ -157,7 +160,7 @@ describe('service home module boundary', () => {
   });
 
   it('shows exactly one primary action for each Manaberu dynamic home state', () => {
-    const renderState = (input: { ready: boolean; path: string | null }) => {
+    const renderState = (input: { ready: boolean; path: Route | null }) => {
       const overview = renderToStaticMarkup(
         createElement(WeeklyActivitySection, {
           activities: [],
@@ -192,7 +195,9 @@ describe('service home module boundary', () => {
     const consent = renderState({ ready: true, path: null });
     const learning = renderState({
       ready: true,
-      path: '/s/manaberu-style/programs/00000000-0000-4000-8000-000000000001/learning-request',
+      // This service path is generated from runtime data and is not statically discoverable.
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
+      path: '/s/manaberu-style/programs/00000000-0000-4000-8000-000000000001/learning-request' as Route,
     });
 
     expect(prepare.overview).toContain('AI研修の準備中です');
