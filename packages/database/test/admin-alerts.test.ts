@@ -31,6 +31,7 @@ describe('PrismaAdminAlertRepository', () => {
         }),
       },
       lineNotificationPreference: { findMany: vi.fn().mockResolvedValue([]) },
+      personalLearningLineQuotaNotice: { findMany: vi.fn().mockResolvedValue([]) },
       lineMessageDelivery: { count: vi.fn().mockResolvedValue(0) },
       job: {
         groupBy: vi.fn().mockResolvedValue([]),

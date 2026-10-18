@@ -19,6 +19,7 @@ export class PrismaAdminAlertRepository implements AdminAlertRepository {
       failedDeliveries,
       lineJobs,
       serviceLineBroadcasts,
+      personalLearningLineQuotaNotices,
       otherDeadJobs,
       failedPointProcessing,
       stalePointProcessing,
@@ -54,7 +55,9 @@ export class PrismaAdminAlertRepository implements AdminAlertRepository {
         by: ['status'],
         where: {
           environment: input.environment,
-          jobType: { in: ['LINE_MISSION_DELIVER', 'BADGE_LINE_DELIVER'] },
+          jobType: {
+            in: ['LINE_MISSION_DELIVER', 'BADGE_LINE_DELIVER', 'PERSONAL_LEARNING_LINE_PROCESS'],
+          },
           status: { in: ['RETRY_SCHEDULED', 'DEAD'] },
         },
         _count: { _all: true },
@@ -62,11 +65,25 @@ export class PrismaAdminAlertRepository implements AdminAlertRepository {
       listServiceLineBroadcastOperationalEvents(this.client, input.environment, input.now, {
         excludeNotified: false,
       }),
+      this.client.personalLearningLineQuotaNotice.findMany({
+        where: {
+          environment: input.environment,
+          monthKey: input.now.toISOString().slice(0, 7),
+        },
+        select: { thresholdPercent: true },
+        orderBy: [{ thresholdPercent: 'asc' }, { createdAt: 'asc' }],
+        take: 500,
+      }),
       this.client.job.count({
         where: {
           environment: input.environment,
           jobType: {
-            notIn: ['LINE_MISSION_DELIVER', 'BADGE_LINE_DELIVER', 'SERVICE_LINE_BROADCAST_DELIVER'],
+            notIn: [
+              'LINE_MISSION_DELIVER',
+              'BADGE_LINE_DELIVER',
+              'SERVICE_LINE_BROADCAST_DELIVER',
+              'PERSONAL_LEARNING_LINE_PROCESS',
+            ],
           },
           status: 'DEAD',
         },
@@ -271,6 +288,7 @@ export class PrismaAdminAlertRepository implements AdminAlertRepository {
         serviceSlug: event.serviceSlug ?? null,
         serviceDisplayName: event.serviceDisplayName ?? null,
       })),
+      personalLearningLineQuotaNotices,
       otherDeadJobs,
       rewards: {
         failedPointProcessing,

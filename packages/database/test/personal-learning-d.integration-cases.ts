@@ -16,6 +16,7 @@ import { PrismaPersonalLearningConversationRepository } from '../src/personal-le
 import { PrismaPersonalLearningPersistenceRepository } from '../src/personal-learning-persistence';
 import { PrismaTrainingPersonalDataExportRepository } from '../src/training-personal-data-export';
 import { PrismaTrainingPersonalDataDeletionRepository } from '../src/training-personal-data-deletion';
+import { PrismaTrainingRetentionExecutionRepository } from '../src/training-retention-execution';
 import { pilotParticipantHash } from '../src/personal-learning-pilot-seat';
 import { cleanupProgramFixtures } from './program-fixture-cleanup';
 
@@ -26,6 +27,9 @@ export function registerPersonalLearningDIntegrationCases(client: PrismaClient) 
   describe('PR-D-3 reviewed persona access and next-call AI projection', () => {
     const cleanup: Array<() => Promise<void>> = [];
     afterEach(async () => {
+      await client.personalLearningLinePush.deleteMany();
+      await client.personalLearningLineInbox.deleteMany();
+      await client.personalLearningLineQuotaNotice.deleteMany();
       await client.personalLearningSavedExample.deleteMany();
       await client.personalLearningPersonaSuppression.deleteMany();
       await client.personalLearningPersonaItem.deleteMany();
@@ -209,6 +213,27 @@ export function registerPersonalLearningDIntegrationCases(client: PrismaClient) 
           userId: user.id,
         },
       };
+    }
+
+    async function lineConfigurationFixture(f: Awaited<ReturnType<typeof serviceFixture>>) {
+      return client.groupLineChannelConfiguration.create({
+        data: {
+          workspaceId: f.scope.workspaceId,
+          groupId: f.scope.groupId,
+          environment: 'DEVELOPMENT',
+          version: 1,
+          loginChannelId: `login-${randomUUID()}`,
+          encryptedLoginSecret: 'integration-encrypted-secret',
+          loginSecretMask: '****',
+          messagingChannelId: `messaging-${randomUUID()}`,
+          encryptedMessagingSecret: 'integration-encrypted-secret',
+          messagingSecretMask: '****',
+          encryptedAccessToken: 'integration-encrypted-token',
+          accessTokenMask: '****',
+          createdByUserId: f.owner.id,
+        },
+        select: { id: true },
+      });
     }
 
     it('keeps rejected inferences rejected and prevents cross-service/workspace/user access', async () => {
@@ -650,6 +675,55 @@ export function registerPersonalLearningDIntegrationCases(client: PrismaClient) 
         },
       );
       if (example.outcome !== 'SAVED') throw new Error('saved example fixture creation failed');
+      const configuration = await lineConfigurationFixture(f);
+      const configurationId = configuration.id;
+      const textEventId = `line-text-${randomUUID()}`;
+      const imageEventId = `line-image-${randomUUID()}`;
+      await client.personalLearningLineInbox.createMany({
+        data: [
+          {
+            workspaceId: f.scope.workspaceId,
+            groupId: f.scope.groupId,
+            programEnrollmentId: f.scope.programEnrollmentId,
+            groupMembershipId: f.scope.groupMembershipId,
+            userId: f.scope.userId,
+            configurationId,
+            providerEventId: textEventId,
+            messageType: 'TEXT',
+            text: 'LINEで送った学習相談',
+            createdAt: now,
+          },
+          {
+            workspaceId: f.scope.workspaceId,
+            groupId: f.scope.groupId,
+            programEnrollmentId: f.scope.programEnrollmentId,
+            groupMembershipId: f.scope.groupMembershipId,
+            userId: f.scope.userId,
+            configurationId,
+            providerEventId: imageEventId,
+            messageType: 'IMAGE',
+            lineMessageId: `image-${randomUUID()}`,
+            imageMimeType: 'image/jpeg',
+            imageSha256: 'a'.repeat(64),
+            imageSizeBytes: 3,
+            imageBytes: new Uint8Array([1, 2, 3]),
+            createdAt: now,
+          },
+        ],
+      });
+      await client.personalLearningLinePush.create({
+        data: {
+          workspaceId: f.scope.workspaceId,
+          groupId: f.scope.groupId,
+          programEnrollmentId: f.scope.programEnrollmentId,
+          groupMembershipId: f.scope.groupMembershipId,
+          userId: f.scope.userId,
+          configurationId,
+          providerEventId: textEventId,
+          retryKey: randomUUID(),
+          text: 'Web画面で続けられます',
+        },
+      });
       const scope = {
         workspaceId: f.scope.workspaceId,
         groupId: f.scope.groupId,
@@ -671,11 +745,22 @@ export function registerPersonalLearningDIntegrationCases(client: PrismaClient) 
           expect.objectContaining({ kind: 'SAVED_EXAMPLE', content: '自分で保存した例文' }),
         ]),
       );
+      expect(exported.data.personalLearning).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ kind: 'LINE_INBOUND', text: 'LINEで送った学習相談' }),
+          expect.objectContaining({
+            kind: 'LINE_INBOUND',
+            messageType: 'IMAGE',
+            imageBase64: 'AQID',
+          }),
+          expect.objectContaining({ kind: 'LINE_OUTBOUND', text: 'Web画面で続けられます' }),
+        ]),
+      );
 
       const deletion = new PrismaTrainingPersonalDataDeletionRepository(client);
       const preview = await deletion.preview({ ...scope, target: { kind: 'ALL' } });
       if (preview.outcome !== 'PREVIEW') throw new Error('deletion preview missing');
-      expect(preview.preview.counts.dynamicLearningData).toBe(4);
+      expect(preview.preview.counts.dynamicLearningData).toBe(6);
       expect(
         await deletion.delete({
           ...scope,
@@ -697,6 +782,129 @@ export function registerPersonalLearningDIntegrationCases(client: PrismaClient) 
       expect(
         await client.personalLearningPersonaProfile.count({ where: { groupId: f.group.id } }),
       ).toBe(0);
+      expect(await client.personalLearningLineInbox.count({ where: { groupId: f.group.id } })).toBe(
+        0,
+      );
+      expect(await client.personalLearningLinePush.count({ where: { groupId: f.group.id } })).toBe(
+        0,
+      );
+    });
+
+    it('deduplicates each LINE event and rejects cross-workspace inbox ownership', async () => {
+      const first = await serviceFixture('PR-F LINE scope first');
+      const otherWorkspace = await serviceFixture('PR-F LINE scope other');
+      const configuration = await lineConfigurationFixture(first);
+      const providerEventId = `line-event-${randomUUID()}`;
+      const row = {
+        workspaceId: first.scope.workspaceId,
+        groupId: first.scope.groupId,
+        programEnrollmentId: first.scope.programEnrollmentId,
+        groupMembershipId: first.scope.groupMembershipId,
+        userId: first.scope.userId,
+        configurationId: configuration.id,
+        providerEventId,
+        messageType: 'TEXT',
+        text: 'スコープ検査用本文',
+      };
+      await client.personalLearningLineInbox.create({ data: row });
+      await expect(client.personalLearningLineInbox.create({ data: row })).rejects.toMatchObject({
+        code: 'P2002',
+      });
+      await expect(
+        client.personalLearningLineInbox.create({
+          data: {
+            ...row,
+            workspaceId: otherWorkspace.scope.workspaceId,
+            groupId: otherWorkspace.scope.groupId,
+            programEnrollmentId: otherWorkspace.scope.programEnrollmentId,
+            groupMembershipId: otherWorkspace.scope.groupMembershipId,
+            userId: otherWorkspace.scope.userId,
+            providerEventId: `cross-scope-${randomUUID()}`,
+          },
+        }),
+      ).rejects.toMatchObject({ code: 'P2003' });
+    });
+
+    it('retention expires LINE text at the enrollment deadline and images independently', async () => {
+      const f = await serviceFixture('PR-F retention', { multiTopic: false });
+      const endedAt = new Date(now.getTime() - 91 * 86_400_000);
+      const startsAt = new Date(endedAt.getTime() - 30 * 86_400_000);
+      await client.programEnrollment.update({
+        where: { id: f.enrollmentId },
+        data: { status: 'COMPLETED', startsAt, endsAt: endedAt },
+      });
+      const configuration = await lineConfigurationFixture(f);
+      const configurationId = configuration.id;
+      const textEventId = `line-text-${randomUUID()}`;
+      const imageEventId = `line-image-${randomUUID()}`;
+      await client.personalLearningLineInbox.createMany({
+        data: [
+          {
+            workspaceId: f.scope.workspaceId,
+            groupId: f.scope.groupId,
+            programEnrollmentId: f.scope.programEnrollmentId,
+            groupMembershipId: f.scope.groupMembershipId,
+            userId: f.scope.userId,
+            configurationId,
+            providerEventId: textEventId,
+            messageType: 'TEXT',
+            text: '期限後に削除する本文',
+            createdAt: startsAt,
+          },
+          {
+            workspaceId: f.scope.workspaceId,
+            groupId: f.scope.groupId,
+            programEnrollmentId: f.scope.programEnrollmentId,
+            groupMembershipId: f.scope.groupMembershipId,
+            userId: f.scope.userId,
+            configurationId,
+            providerEventId: imageEventId,
+            messageType: 'IMAGE',
+            lineMessageId: `image-${randomUUID()}`,
+            imageMimeType: 'image/jpeg',
+            imageSha256: 'b'.repeat(64),
+            imageSizeBytes: 3,
+            imageBytes: new Uint8Array([4, 5, 6]),
+            createdAt: new Date(now.getTime() - 91 * 86_400_000),
+          },
+        ],
+      });
+      await client.personalLearningLinePush.create({
+        data: {
+          workspaceId: f.scope.workspaceId,
+          groupId: f.scope.groupId,
+          programEnrollmentId: f.scope.programEnrollmentId,
+          groupMembershipId: f.scope.groupMembershipId,
+          userId: f.scope.userId,
+          configurationId,
+          providerEventId: textEventId,
+          retryKey: randomUUID(),
+          text: '本文への回答',
+        },
+      });
+      const retention = new PrismaTrainingRetentionExecutionRepository(client);
+      const input = {
+        workspaceId: f.scope.workspaceId,
+        groupId: f.scope.groupId,
+        programEnrollmentId: f.scope.programEnrollmentId,
+        operatorUserId: f.owner.id,
+        now,
+      };
+      const preview = await retention.preview(input);
+      if (preview.outcome !== 'PREVIEW') throw new Error('retention preview missing');
+      expect(preview.preview.counts.lineMessages).toBe(2);
+      expect(
+        await retention.execute({ ...input, revision: preview.preview.revision }),
+      ).toMatchObject({
+        outcome: 'APPLIED',
+        counts: { lineMessages: 2 },
+      });
+      expect(await client.personalLearningLineInbox.count({ where: { groupId: f.group.id } })).toBe(
+        0,
+      );
+      expect(await client.personalLearningLinePush.count({ where: { groupId: f.group.id } })).toBe(
+        0,
+      );
     });
 
     it('keeps each wish and conversation on its selected topic and rejects a cross-topic update', async () => {

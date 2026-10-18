@@ -52,7 +52,13 @@ export class PrismaLineAdminMetricsRepository implements LineAdminMetricsReposit
           this.client.job.count({
             where: {
               environment,
-              jobType: { in: ['LINE_MISSION_DELIVER', 'BADGE_LINE_DELIVER'] },
+              jobType: {
+                in: [
+                  'LINE_MISSION_DELIVER',
+                  'BADGE_LINE_DELIVER',
+                  'PERSONAL_LEARNING_LINE_PROCESS',
+                ],
+              },
               status,
             },
           }),
@@ -178,14 +184,18 @@ export class PrismaLineOperationalSnapshotRepository implements LineOperationalS
         this.client.job.count({
           where: {
             environment,
-            jobType: { in: ['LINE_MISSION_DELIVER', 'BADGE_LINE_DELIVER'] },
+            jobType: {
+              in: ['LINE_MISSION_DELIVER', 'BADGE_LINE_DELIVER', 'PERSONAL_LEARNING_LINE_PROCESS'],
+            },
             status: 'RETRY_SCHEDULED',
           },
         }),
         this.client.job.count({
           where: {
             environment,
-            jobType: { in: ['LINE_MISSION_DELIVER', 'BADGE_LINE_DELIVER'] },
+            jobType: {
+              in: ['LINE_MISSION_DELIVER', 'BADGE_LINE_DELIVER', 'PERSONAL_LEARNING_LINE_PROCESS'],
+            },
             status: 'DEAD',
           },
         }),

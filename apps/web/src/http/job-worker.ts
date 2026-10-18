@@ -18,6 +18,7 @@ import {
   MissionAutomationHandlerRegistry,
   RunJobWorkerBatch,
   type JobEnvironment,
+  type Job,
   type JobWorkerSummary,
   type ImprovementFeedbackRetentionSchedulingSummary,
 } from '@bunshin/application';
@@ -26,6 +27,10 @@ import { createLogger, requestIdFromHeader } from '@bunshin/observability';
 import { toApiError } from '@bunshin/shared';
 import { randomUUID } from 'node:crypto';
 import { authorizeCronRequest } from './cron-security';
+import {
+  executePersonalLearningLineJob,
+  sendPersonalLearningLineFailureFallback,
+} from '../jobs/personal-learning-line-job-handler';
 
 const logger = createLogger();
 const runtimeEnvironment = {
@@ -99,6 +104,47 @@ async function configuredWorker(): Promise<JobWorkerPort> {
   const jobs = new db.PrismaJobRepository();
   const complete = new CompleteJob(jobs);
   const fail = new FailJob(jobs);
+  const personalLearningLineExecutor = {
+    async execute(job: Job, workerId: string) {
+      try {
+        const result = await executePersonalLearningLineJob(job);
+        if (result.retryable) {
+          const failure = await fail.execute(job, workerId, {
+            errorCategory: result.category ?? 'PERSONAL_LEARNING_LINE_RETRY',
+            retryable: true,
+          });
+          if (failure.status === 'DEAD') {
+            try {
+              await sendPersonalLearningLineFailureFallback(job);
+            } catch {
+              logger.error('personal learning LINE failure fallback failed', {
+                requestId: job.correlationId,
+                errorCode: 'PERSONAL_LEARNING_LINE_FALLBACK_FAILED',
+              });
+            }
+          }
+          return failure;
+        }
+        return complete.execute(job.id, workerId);
+      } catch {
+        const failure = await fail.execute(job, workerId, {
+          errorCategory: 'PERSONAL_LEARNING_LINE_PROCESSING_FAILED',
+          retryable: true,
+        });
+        if (failure.status === 'DEAD') {
+          try {
+            await sendPersonalLearningLineFailureFallback(job);
+          } catch {
+            logger.error('personal learning LINE failure fallback failed', {
+              requestId: job.correlationId,
+              errorCode: 'PERSONAL_LEARNING_LINE_FALLBACK_FAILED',
+            });
+          }
+        }
+        return failure;
+      }
+    },
+  };
   const feedbackRetentionExecutor = new ExecuteImprovementFeedbackRetentionJob(
     new db.PrismaImprovementFeedbackRetentionJobRepository(),
     fail,
@@ -177,9 +223,11 @@ async function configuredWorker(): Promise<JobWorkerPort> {
                       ? serviceLineBroadcastExecutor.execute(job, workerId)
                       : job.jobType === 'TRAINING_ANSWER_EVALUATE'
                         ? trainingEvaluationExecutor.execute(job, workerId)
-                        : job.jobType === 'FORTUNE_READING_GENERATE'
-                          ? fortuneExecutor.execute(job, workerId)
-                          : missionExecutor.execute(job, workerId),
+                        : job.jobType === 'PERSONAL_LEARNING_LINE_PROCESS'
+                          ? personalLearningLineExecutor.execute(job, workerId)
+                          : job.jobType === 'FORTUNE_READING_GENERATE'
+                            ? fortuneExecutor.execute(job, workerId)
+                            : missionExecutor.execute(job, workerId),
   });
 }
 

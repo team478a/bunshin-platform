@@ -136,6 +136,7 @@ export interface TrainingRetentionExecutionCounts {
   learningRequests?: number;
   conversationEvents?: number;
   practiceSupportImages?: number;
+  lineMessages?: number;
   toolkitDue?: number;
   dynamicTopicsDue?: number;
   personaItemsDue?: number;

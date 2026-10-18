@@ -131,6 +131,26 @@ export class PrismaTrainingPersonalDataDeletionRepository implements TrainingPer
             });
             const dynamicLearningIds = snapshot.dynamicLearningIds;
             if (dynamicLearningIds) {
+              await tx.personalLearningLinePush.deleteMany({
+                where: {
+                  workspaceId: input.workspaceId,
+                  groupId: input.groupId,
+                  programEnrollmentId: input.programEnrollmentId,
+                  groupMembershipId: owned.membershipId,
+                  userId: input.actorUserId,
+                  providerEventId: { in: dynamicLearningIds.lineEventIds },
+                },
+              });
+              await tx.personalLearningLineInbox.deleteMany({
+                where: {
+                  workspaceId: input.workspaceId,
+                  groupId: input.groupId,
+                  programEnrollmentId: input.programEnrollmentId,
+                  groupMembershipId: owned.membershipId,
+                  userId: input.actorUserId,
+                  id: { in: dynamicLearningIds.lineInbox },
+                },
+              });
               await tx.personalLearningTopic.deleteMany({
                 where: {
                   workspaceId: input.workspaceId,
@@ -489,6 +509,20 @@ export class PrismaTrainingPersonalDataDeletionRepository implements TrainingPer
           }),
         ])
       : [[], [], [], [], []];
+    const lineLearningMessages = all
+      ? await tx.personalLearningLineInbox.findMany({
+          where: {
+            workspaceId: input.workspaceId,
+            groupId: input.groupId,
+            programEnrollmentId: input.programEnrollmentId,
+            groupMembershipId: owned.membershipId,
+            userId: input.actorUserId,
+          },
+          select: { id: true, providerEventId: true, createdAt: true },
+          orderBy,
+          take,
+        })
+      : [];
     const [
       dynamicTopics,
       dynamicPersonaItems,
@@ -572,6 +606,7 @@ export class PrismaTrainingPersonalDataDeletionRepository implements TrainingPer
       dynamicPersonaSuppressions,
       dynamicSavedExamples,
       dynamicPersonaProfiles,
+      lineLearningMessages,
     };
     if (Object.values(snapshotRows).some((list) => list.length > TRAINING_EXPORT_MAX_ROWS))
       return { outcome: 'TOO_LARGE' } as const;
@@ -599,6 +634,8 @@ export class PrismaTrainingPersonalDataDeletionRepository implements TrainingPer
             personaSuppressions: dynamicPersonaSuppressions.map(({ id }) => id),
             savedExamples: dynamicSavedExamples.map(({ id }) => id),
             personaProfiles: dynamicPersonaProfiles.map(({ id }) => id),
+            lineInbox: lineLearningMessages.map(({ id }) => id),
+            lineEventIds: lineLearningMessages.map(({ providerEventId }) => providerEventId),
           }
         : null,
       preview: {
@@ -619,11 +656,15 @@ export class PrismaTrainingPersonalDataDeletionRepository implements TrainingPer
                   dynamicPersonaItems.length +
                   dynamicPersonaSuppressions.length +
                   dynamicSavedExamples.length +
-                  dynamicPersonaProfiles.length,
+                  dynamicPersonaProfiles.length +
+                  lineLearningMessages.length,
               }
             : {}),
           ...(learningRequests.length > 0 ? { learningRequests: learningRequests.length } : {}),
           ...(learningRequestTarget ? { conversationEvents: conversationEventsCount } : {}),
+          ...(lineLearningMessages.length > 0
+            ? { lineLearningMessages: lineLearningMessages.length }
+            : {}),
         },
         answers: answers.map((row) => ({
           id: row.id,
