@@ -111,7 +111,8 @@ describe('service daily mission boundary', () => {
 
   it('guides free users through copying the prompt and caption themselves', () => {
     expect(experience).toContain("? '投稿画像を作りましょう'");
-    expect(experience).toContain('画像用の文章をコピー');
+    expect(experience).toContain('1枚ずつ作る');
+    expect(experience).toContain('1枚目から順番に貼り付けてください');
     expect(experience).toContain('画像を作れるAIに貼り付ける');
     expect(experience).toContain('5枚の画像をスマホへ保存');
     expect(experience).toContain('動画にする場合はCapCutへ');
