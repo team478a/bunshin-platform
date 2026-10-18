@@ -2391,6 +2391,19 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
           attributeKey: 'rejected_fact',
         },
       });
+      await client.personalLearningPersonaProfile.create({
+        data: {
+          workspaceId: f.scope.workspaceId,
+          groupId: f.scope.groupId,
+          groupMembershipId: f.scope.groupMembershipId,
+          userId: f.scope.userId,
+          optedIn: true,
+          consentVersion: 'test-v1',
+          optedInAt: now,
+          companyName: 'Example Works',
+          lastLearnerUseAt: now,
+        },
+      });
       await client.personalLearningSavedExample.create({
         data: {
           workspaceId: f.scope.workspaceId,
@@ -2415,13 +2428,22 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
       };
       const exported = await new PrismaTrainingPersonalDataExportRepository(client).read(input);
       if (exported.outcome !== 'FOUND') throw new Error('privacy export missing');
-      expect(exported.data.dynamicLearning).toHaveLength(4);
+      expect(exported.data.dynamicLearning).toHaveLength(5);
+      expect(exported.data.dynamicLearning).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            kind: 'PERSONA_PROFILE',
+            optedIn: true,
+            companyName: 'Example Works',
+          }),
+        ]),
+      );
 
       const deletion = new PrismaTrainingPersonalDataDeletionRepository(client);
       const target = { ...input, target: { kind: 'ALL' as const } };
       const preview = await deletion.preview(target);
       if (preview.outcome !== 'PREVIEW') throw new Error('ALL deletion preview missing');
-      expect(preview.preview.counts.dynamicLearningData).toBe(4);
+      expect(preview.preview.counts.dynamicLearningData).toBe(5);
       expect(
         await deletion.delete({ ...target, revision: preview.preview.revision, now }),
       ).toMatchObject({ outcome: 'DELETED' });
@@ -2438,6 +2460,9 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
       ).toBe(0);
       expect(
         await client.personalLearningSavedExample.count({ where: { groupId: f.scope.groupId } }),
+      ).toBe(0);
+      expect(
+        await client.personalLearningPersonaProfile.count({ where: { groupId: f.scope.groupId } }),
       ).toBe(0);
     });
 
@@ -2541,6 +2566,18 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
           lastLearnerUseAt: new Date(retentionNow.getTime() - 10 * 86_400_000),
         },
       });
+      await client.personalLearningPersonaProfile.create({
+        data: {
+          workspaceId: f.scope.workspaceId,
+          groupId: f.scope.groupId,
+          groupMembershipId: f.scope.groupMembershipId,
+          userId: f.scope.userId,
+          optedIn: true,
+          consentVersion: 'test-v1',
+          optedInAt: firstEnd,
+          lastLearnerUseAt: new Date(retentionNow.getTime() - 10 * 86_400_000),
+        },
+      });
       await client.personalLearningPersonaSuppression.create({
         data: {
           workspaceId: f.scope.workspaceId,
@@ -2587,6 +2624,7 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
         personaItemsDue: 0,
         personaSuppressionsDue: 0,
         savedExamplesDue: 0,
+        personaProfilesDue: 0,
       });
       await retention.execute({ ...input, revision: preview.preview.revision });
       expect(
@@ -2607,6 +2645,7 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
         personaItemsDue: 0,
         personaSuppressionsDue: 0,
         savedExamplesDue: 0,
+        personaProfilesDue: 0,
       });
       await retention.execute({ ...input, revision: preview.preview.revision });
       expect(
@@ -2621,6 +2660,10 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
         where: { groupMembershipId: f.scope.groupMembershipId },
         data: { lastLearnerUseAt: new Date(retentionNow.getTime() - 3 * 366 * 86_400_000) },
       });
+      await client.personalLearningPersonaProfile.updateMany({
+        where: { groupMembershipId: f.scope.groupMembershipId },
+        data: { lastLearnerUseAt: new Date(retentionNow.getTime() - 3 * 366 * 86_400_000) },
+      });
       preview = await retention.preview(input);
       if (preview.outcome !== 'PREVIEW')
         throw new Error('expired service retention preview missing');
@@ -2628,6 +2671,7 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
         personaItemsDue: 1,
         personaSuppressionsDue: 1,
         savedExamplesDue: 1,
+        personaProfilesDue: 1,
       });
       await retention.execute({ ...input, revision: preview.preview.revision });
       expect(
@@ -2640,6 +2684,9 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
       ).toBe(0);
       expect(
         await client.personalLearningSavedExample.count({ where: { groupId: f.scope.groupId } }),
+      ).toBe(0);
+      expect(
+        await client.personalLearningPersonaProfile.count({ where: { groupId: f.scope.groupId } }),
       ).toBe(0);
     });
 

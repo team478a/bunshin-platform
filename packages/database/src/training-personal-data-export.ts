@@ -315,6 +315,16 @@ export class PrismaTrainingPersonalDataExportRepository implements TrainingPerso
             orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
             take,
           }),
+          tx.personalLearningPersonaProfile.findMany({
+            where: {
+              workspaceId: input.workspaceId,
+              groupId: input.groupId,
+              groupMembershipId: membership.id,
+              userId: input.actorUserId,
+            },
+            orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+            take,
+          }),
         ]);
         if (
           [
@@ -502,6 +512,16 @@ export class PrismaTrainingPersonalDataExportRepository implements TrainingPerso
                 ...row,
                 createdAt: iso(row.createdAt),
                 updatedAt: iso(row.updatedAt),
+                lastLearnerUseAt: iso(row.lastLearnerUseAt),
+              })),
+              ...dynamicLearning[4].map((row) => ({
+                kind: 'PERSONA_PROFILE',
+                ...row,
+                createdAt: iso(row.createdAt),
+                updatedAt: iso(row.updatedAt),
+                optedInAt: iso(row.optedInAt),
+                optedOutAt: iso(row.optedOutAt),
+                dismissedUntil: iso(row.dismissedUntil),
                 lastLearnerUseAt: iso(row.lastLearnerUseAt),
               })),
             ],

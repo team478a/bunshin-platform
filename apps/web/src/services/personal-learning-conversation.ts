@@ -156,6 +156,13 @@ export async function sendPersonalLearningConversationTurn(
       promptVersion,
       usageKey,
     });
+    await (
+      await import('./personal-learning-persona-inference')
+    ).inferPersonalLearningPersonaAfterSuccess({
+      actor: command.actor,
+      requestId: command.requestId,
+      requestRevision: command.requestRevision,
+    });
     return { conversation, candidate: await candidates.readCandidate(command.actor) };
   } catch (error) {
     await repository.failTurn(command);

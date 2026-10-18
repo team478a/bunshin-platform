@@ -10,6 +10,7 @@ import { personalLearningMode } from '@bunshin/capability-training';
 import { personalLearningFeatureEnabled } from '@bunshin/capability-training';
 import { LearningTopicSelector } from './topic-selector';
 import { AiTrainingDataExportCard } from '../ai-training-data-export-card';
+import { personalLearningPersonaInvitationAnswerCount } from '../../../../../../src/services/personal-learning-persona-consent';
 export const dynamic = 'force-dynamic';
 export default async function Page({
   params,
@@ -59,6 +60,33 @@ export default async function Page({
     const topicEndpoint = `/api/services/${serviceSlug}/ai-training/enrollments/${programEnrollmentId}/topics`;
     const personaPath = `/s/${serviceSlug}/programs/${programEnrollmentId}/persona`;
     const examplesPath = `/s/${serviceSlug}/programs/${programEnrollmentId}/examples`;
+    const personaProfile = dynamicMode
+      ? await new db.PrismaPersonalLearningPersonaRepository(db.prisma).profile(input.scope)
+      : null;
+    const practiceAnswerCount = dynamicMode
+      ? await db.prisma.trainingMissionAnswer.count({
+          where: {
+            workspaceId: input.scope.workspaceId,
+            groupId: input.scope.groupId,
+            programEnrollmentId: input.scope.programEnrollmentId,
+            userId: input.scope.userId,
+          },
+        })
+      : 0;
+    const showPersonaInvitation =
+      dynamicMode &&
+      practiceAnswerCount >= personalLearningPersonaInvitationAnswerCount() &&
+      !personaProfile?.optedIn &&
+      (!personaProfile?.dismissedUntil || personaProfile.dismissedUntil <= new Date());
+    const personaInvitation = showPersonaInvitation ? (
+      <section className="service-entry__card" aria-labelledby="persona-invitation-title">
+        <h2 id="persona-invitation-title">学び方に合わせたサポートを使いますか？</h2>
+        <p>
+          実践記録から学び方の傾向を推測します。使うかどうかは自分で選べ、推測はいつでも確認・修正・削除できます。
+        </p>
+        <a href={personaPath}>内容を確認して選ぶ</a>
+      </section>
+    ) : null;
     const topics = multiTopic
       ? (
           (await new db.PrismaPersonalLearningTopicRepository(db.prisma).list(input.scope)) ?? []
@@ -68,6 +96,7 @@ export default async function Page({
       return (
         <main style={{ maxWidth: 560, margin: '0 auto', padding: 20 }}>
           <LearningTopicSelector endpoint={topicEndpoint} pagePath={pagePath} topics={topics} />
+          {personaInvitation}
           <p>
             <a href={personaPath}>AIが理解していることを確認・修正する</a>
           </p>
@@ -84,6 +113,7 @@ export default async function Page({
     return (
       <main style={{ maxWidth: 560, margin: '0 auto', padding: 20 }}>
         {dynamicMode && <p className="eyebrow">内部テスト中</p>}
+        {personaInvitation}
         {multiTopic && (
           <LearningTopicSelector
             endpoint={topicEndpoint}
@@ -101,6 +131,11 @@ export default async function Page({
               <a href={examplesPath}>保存した活用例・手本を見る</a>
             </p>
           </>
+        )}
+        {dynamicMode && !multiTopic && (
+          <p>
+            <a href={personaPath}>学び方に合わせたサポートを確認する</a>
+          </p>
         )}
         <PersonalLearningRequestCard
           dynamicMode={dynamicMode}

@@ -5,6 +5,7 @@ import { resolveAuthenticatedMemberServicePage } from '../../../../../../src/ser
 import { resolvePersonalLearningRequestActor } from '../../../../../../src/services/personal-learning-request-access';
 import { PrismaPersonalLearningPersonaRepository, prisma } from '@bunshin/database';
 import { PersonalLearningPersonaCard } from './persona-card';
+import { personalLearningPersonaInvitationAnswerCount } from '../../../../../../src/services/personal-learning-persona-consent';
 
 export const dynamic = 'force-dynamic';
 
@@ -101,14 +102,23 @@ export default async function PersonalLearningPersonaPage({
       serviceSlug,
       programEnrollmentId,
       actor.userId,
-      'multiTopic',
+      undefined,
       undefined,
       { allowUnselectedTopic: true },
     );
     const db = await import('@bunshin/database');
     const repository = new PrismaPersonalLearningPersonaRepository(prisma);
+    const profile = await repository.profile(scoped.scope);
     const items = await repository.list(scoped.scope);
     const suppressedAttributes = await repository.listSuppressedAttributes(scoped.scope);
+    const practiceAnswerCount = await prisma.trainingMissionAnswer.count({
+      where: {
+        workspaceId: scoped.scope.workspaceId,
+        groupId: scoped.scope.groupId,
+        programEnrollmentId: scoped.scope.programEnrollmentId,
+        userId: scoped.scope.userId,
+      },
+    });
     const viewItems = await Promise.all(
       items.map(async (item) => ({
         id: item.id,
@@ -131,6 +141,19 @@ export default async function PersonalLearningPersonaPage({
         <PersonalLearningPersonaCard
           serviceSlug={serviceSlug}
           enrollmentId={programEnrollmentId}
+          initialProfile={
+            profile
+              ? {
+                  optedIn: profile.optedIn,
+                  consentVersion: profile.consentVersion,
+                  dismissedUntil: profile.dismissedUntil?.toISOString() ?? null,
+                  companyName: profile.companyName,
+                  ageBand: profile.ageBand,
+                  industryJob: profile.industryJob,
+                }
+              : null
+          }
+          invitationReady={practiceAnswerCount >= personalLearningPersonaInvitationAnswerCount()}
           initialItems={viewItems}
           initialSuppressedAttributes={suppressedAttributes}
         />

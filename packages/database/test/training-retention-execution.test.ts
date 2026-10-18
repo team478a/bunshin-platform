@@ -67,6 +67,7 @@ function fixture() {
     personalLearningPersonaItem: table(),
     personalLearningPersonaSuppression: table(),
     personalLearningSavedExample: table(),
+    personalLearningPersonaProfile: table(),
     personalLearningPracticeSupportImage: table(),
     programActionEvent: table(),
     job: { updateMany: vi.fn() },

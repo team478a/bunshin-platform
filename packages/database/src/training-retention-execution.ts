@@ -153,6 +153,16 @@ export class PrismaTrainingRetentionExecutionRepository implements TrainingReten
                   id: { in: rows.savedExamples.map(({ id }) => id) },
                 },
               });
+            if (rows.personaProfiles.length)
+              await tx.personalLearningPersonaProfile.deleteMany({
+                where: {
+                  workspaceId: input.workspaceId,
+                  groupId: input.groupId,
+                  groupMembershipId: owned.membership.id,
+                  userId: owned.membership.userId,
+                  id: { in: rows.personaProfiles.map(({ id }) => id) },
+                },
+              });
             if (rows.learningRequests.length)
               await tx.personalLearningRequest.deleteMany({
                 where: {

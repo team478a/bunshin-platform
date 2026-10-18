@@ -19,6 +19,7 @@ function fixture() {
     personalLearningPersonaItem: { findMany: vi.fn().mockResolvedValue([]) },
     personalLearningPersonaSuppression: { findMany: vi.fn().mockResolvedValue([]) },
     personalLearningSavedExample: { findMany: vi.fn().mockResolvedValue([]) },
+    personalLearningPersonaProfile: { findMany: vi.fn().mockResolvedValue([]) },
     personalLearningGoalConfirmation: { findMany: vi.fn().mockResolvedValue([]) },
     personalLearningRequest: { findMany: vi.fn().mockResolvedValue([]) },
     personalLearningPlanRevision: { findMany: vi.fn().mockResolvedValue([]) },

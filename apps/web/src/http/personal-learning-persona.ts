@@ -38,12 +38,13 @@ export async function personalLearningPersonaResponse(
       serviceSlug,
       enrollmentId,
       user.userId,
-      'multiTopic',
+      undefined,
       undefined,
       { allowUnselectedTopic: true },
     );
     const repository = new PrismaPersonalLearningPersonaRepository(prisma);
     if (request.method === 'GET') {
+      const profile = await repository.profile(actor.scope);
       const items = await repository.list(actor.scope);
       const suppressedAttributes = await repository.listSuppressedAttributes(actor.scope);
       return Response.json(
@@ -58,6 +59,18 @@ export async function personalLearningPersonaResponse(
             evidenceCreatedAt: item.evidenceCreatedAt.toISOString(),
           })),
           suppressedAttributes,
+          profile: profile
+            ? {
+                optedIn: profile.optedIn,
+                consentVersion: profile.consentVersion,
+                optedInAt: profile.optedInAt?.toISOString() ?? null,
+                optedOutAt: profile.optedOutAt?.toISOString() ?? null,
+                dismissedUntil: profile.dismissedUntil?.toISOString() ?? null,
+                companyName: profile.companyName,
+                ageBand: profile.ageBand,
+                industryJob: profile.industryJob,
+              }
+            : null,
           requestId,
         },
         { headers },
@@ -65,6 +78,44 @@ export async function personalLearningPersonaResponse(
     }
     const json = await boundedLearningJson(request, 4096);
     if (request.method === 'POST') {
+      const action = z
+        .object({
+          action: z.literal('opt-in'),
+          enabled: z.boolean(),
+          consentVersion: z.string().trim().min(1).max(80).optional(),
+          deleteSavedData: z.boolean().optional(),
+        })
+        .strict()
+        .safeParse(json);
+      if (action.success) {
+        const updated = await repository.setOptIn(actor.scope, {
+          enabled: action.data.enabled,
+          ...(action.data.consentVersion ? { consentVersion: action.data.consentVersion } : {}),
+          ...(action.data.deleteSavedData !== undefined
+            ? { deleteSavedData: action.data.deleteSavedData }
+            : {}),
+        });
+        if (!updated) throw new ApplicationError('NOT_FOUND', 'persona preference unavailable');
+        return Response.json(
+          {
+            data: {
+              optedIn: updated.profile.optedIn,
+              deleted: action.data.deleteSavedData === true,
+            },
+            requestId,
+          },
+          { headers },
+        );
+      }
+      const dismiss = z
+        .object({ action: z.literal('dismiss') })
+        .strict()
+        .safeParse(json);
+      if (dismiss.success) {
+        const dismissed = await repository.dismissInvitation(actor.scope, 30);
+        if (!dismissed) throw new ApplicationError('NOT_FOUND', 'persona preference unavailable');
+        return Response.json({ data: { dismissed: true }, requestId }, { headers });
+      }
       const parsed = z
         .object({ allowReinferenceFor: z.string().trim().min(1).max(80) })
         .strict()
@@ -78,6 +129,33 @@ export async function personalLearningPersonaResponse(
       if (!allowed) throw new ApplicationError('NOT_FOUND', 'suppression unavailable');
       return Response.json(
         { data: { allowed: true, attributeKey: parsed.data.allowReinferenceFor }, requestId },
+        { headers },
+      );
+    }
+    const profileInput = z
+      .object({
+        action: z.literal('profile'),
+        companyName: z.string().trim().max(80).nullable(),
+        ageBand: z.string().max(20).nullable(),
+        industryJob: z.string().trim().max(80).nullable(),
+      })
+      .strict()
+      .safeParse(json);
+    if (profileInput.success) {
+      const saved = await repository.saveLearnerProfile(actor.scope, profileInput.data);
+      if (saved.outcome === 'NOT_FOUND')
+        throw new ApplicationError('NOT_FOUND', 'persona preference unavailable');
+      if (saved.outcome !== 'SAVED')
+        throw new ApplicationError('VALIDATION_ERROR', 'profile contains unavailable information');
+      return Response.json(
+        {
+          data: {
+            companyName: saved.profile.companyName,
+            ageBand: saved.profile.ageBand,
+            industryJob: saved.profile.industryJob,
+          },
+          requestId,
+        },
         { headers },
       );
     }

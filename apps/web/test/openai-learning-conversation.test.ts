@@ -45,7 +45,7 @@ describe('versioned learning conversation provider', () => {
       permit: { maxRequestBytes: 12000, maxOutputTokens: 400 },
       personaContext: [
         {
-          attributeKey: 'preferred_learning_style',
+          attributeKey: 'explanation_style',
           value: '短い例があると進めやすい',
           epistemicStatus: 'UNCONFIRMED_GUESS',
           evidenceType: 'CONVERSATION_EVENT',
@@ -56,7 +56,7 @@ describe('versioned learning conversation provider', () => {
     const parsed = JSON.parse(body) as { input: { role: string; content: string }[] };
     const learnerData = JSON.parse(parsed.input.find((item) => item.role === 'user')!.content);
     expect(learnerData.personaContext[0]).toMatchObject({
-      attributeKey: 'preferred_learning_style',
+      attributeKey: 'explanation_style',
       epistemicStatus: 'UNCONFIRMED_GUESS',
     });
   });
