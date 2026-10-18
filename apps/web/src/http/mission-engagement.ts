@@ -33,7 +33,14 @@ const activitySchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('RESTED'), idempotencyKey: idempotencyKeySchema }).strict(),
   z.object({ type: z.literal('COPIED_TEXT'), idempotencyKey: idempotencyKeySchema }).strict(),
   z
-    .object({ type: z.literal('COPIED_IMAGE_INSTRUCTION'), idempotencyKey: idempotencyKeySchema })
+    .object({
+      type: z.literal('COPIED_IMAGE_INSTRUCTION'),
+      idempotencyKey: idempotencyKeySchema,
+      metadata: z
+        .object({ slideIndex: z.number().int().min(0).max(5) })
+        .strict()
+        .optional(),
+    })
     .strict(),
   z
     .object({ type: z.literal('COPIED_VIDEO_PROMPT'), idempotencyKey: idempotencyKeySchema })
@@ -192,7 +199,8 @@ export function recordMissionActivityResponse(
         dailyMissionId: resourceId(dailyMissionId),
         type: input.type,
         idempotencyKey: input.idempotencyKey,
-        ...(input.type === 'COPIED_SLIDE' && input.metadata !== undefined
+        ...((input.type === 'COPIED_SLIDE' || input.type === 'COPIED_IMAGE_INSTRUCTION') &&
+        input.metadata !== undefined
           ? { metadata: input.metadata }
           : {}),
       }),

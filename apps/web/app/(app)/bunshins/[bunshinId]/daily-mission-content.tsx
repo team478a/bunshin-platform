@@ -339,67 +339,107 @@ export function imagePostHeadline(mission: DailyMissionView, serviceSlug?: strin
   );
 }
 
-export function imageCreationPrompt(mission: DailyMissionView, serviceSlug?: string) {
+const imageSlidePlan = [
+  {
+    role: '表紙',
+    headline: null,
+    body: '投稿テーマと切り口がすぐ伝わる短い導入文',
+    scene: 'テーマが一目で分かる完成イメージと主役を大きく見せる',
+  },
+  {
+    role: '悩み・共感',
+    headline: 'その悩み、あなただけではありません',
+    body: '読者の悩みを責めずに受け止める短い共感文',
+    scene: '対象読者が困っている具体的な場面を、表情や手元の動きで見せる',
+  },
+  {
+    role: '理由・気づき',
+    headline: '理由を知ると、見方が変わる',
+    body: '投稿文と切り口の範囲で理由や気づきを伝える短い説明',
+    scene: '原因や違いを比較・図解・小物の配置で分かりやすく見せる',
+  },
+  {
+    role: '今日できる解決策',
+    headline: '今日できる小さな一歩',
+    body: '読者が今日試せる具体的な行動を一つ伝える短い文',
+    scene: '解決策を実際に行っている手順や動作を近くから見せる',
+  },
+  {
+    role: 'まとめ・次の行動',
+    headline: 'まずは一つ、試してみましょう',
+    body: '要点を短くまとめ、無理のない次の行動を促す文',
+    scene: '実行後の良い状態と、保存・次の行動につながる余白を見せる',
+  },
+] as const;
+
+export type ImageInstructionSlide = {
+  slideIndex: number;
+  role: string;
+  headline: string;
+  prompt: string;
+};
+
+export function imageCreationSlidePrompts(
+  mission: DailyMissionView,
+  serviceSlug?: string,
+): ImageInstructionSlide[] {
   mission = serviceCopyMission(mission, serviceSlug);
   const instruction = text(mission.content['imageInstruction']);
   const headline = imagePostHeadline(mission);
   const caption = text(mission.content['caption']);
-  const fallbackScenes = [
-    '表紙としてテーマが一目で分かる完成イメージと主役を大きく見せる',
-    '対象読者が困っている具体的な場面を、表情や手元の動きで見せる',
-    '原因や違いを、比較・図解・小物の配置で分かりやすく見せる',
-    '解決策を実際に行っている手順や動作を近くから見せる',
-    '実行後の良い状態と、保存・次の行動につながる余白を見せる',
-  ];
-  const preparedSlides = records(mission.content['slides']).flatMap((slide, index) => {
-    const slideHeadline = text(slide['headline']);
-    const body = text(slide['body']);
-    const visualScene = text(slide['visualScene']) ?? fallbackScenes[index % fallbackScenes.length];
-    return slideHeadline && body
-      ? [
-          `${index + 1}枚目：見出し「${slideHeadline}」／本文「${body}」／このページの場面「${visualScene}」`,
-        ]
-      : [];
+  const slides = records(mission.content['slides']);
+  const captionSource = caption ? `投稿文：${caption}` : null;
+  const policyInstructions = serviceSlug
+    ? (serviceContentTerminologyPolicy(serviceSlug)?.participationInstructions ?? [])
+    : [];
+  return imageSlidePlan.map((page, index) => {
+    const saved = slides[index];
+    const pageHeadline =
+      text(saved?.['headline']) ?? (index === 0 ? headline : (page.headline ?? headline));
+    const pageBody = text(saved?.['body']) ?? page.body;
+    const pageScene =
+      text(saved?.['visualScene']) ?? (instruction ? `${instruction}。${page.scene}` : page.scene);
+    const lines = [
+      `縦長4:5（1080×1350ピクセル）のSNS投稿画像を1枚だけ作ってください。複数枚・コマ割り・一覧にはしないでください。`,
+      `この画像は5枚シリーズの${index + 1}枚目（${page.role}）です。`,
+      ...(index > 0
+        ? [
+            'この会話で作った前の画像と同じ人物・色・書体・レイアウトで、このページだけを1枚作ってください',
+          ]
+        : [
+            'この1枚目で人物・色・書体・レイアウトを決め、後続ページでも統一できるデザインにしてください。',
+          ]),
+      `投稿のテーマ：${mission.topic}`,
+      `このページの見出し：「${pageHeadline}」`,
+      `このページの本文：「${pageBody}」`,
+      `このページの場面・構図：${pageScene}`,
+      `本文が不足している場合は、${page.role}の役割に沿って投稿文・切り口の範囲で短く補ってください。新しい事実や根拠のない数字は加えないでください。`,
+      captionSource,
+      `投稿の切り口：${mission.angle}`,
+      '人物・色・書体・レイアウト・余白をシリーズ内で統一してください。',
+      '見出しは短く大きく、本文は読みやすい2〜4行にし、文字の周囲に十分な余白を取ってください。',
+      '背景と文字の色に十分な差をつけ、スマートフォンでも文字が読みやすいデザインにしてください。',
+      '日本語を一字一句正確に表示してください。ロゴ、透かし、意味不明な文字は入れないでください。',
+      ...policyInstructions,
+    ];
+    return {
+      slideIndex: index + 1,
+      role: page.role,
+      headline: pageHeadline,
+      prompt: lines.filter((line): line is string => line !== null).join('\n'),
+    };
   });
-  const contentPlan = preparedSlides.length
-    ? [
-        '5枚に入れる文章：',
-        ...preparedSlides,
-        ...(preparedSlides.length < 5
-          ? [
-              '不足するページは投稿テーマと投稿文だけを材料にして、5枚で完結するよう補ってください。',
-            ]
-          : []),
-      ]
-    : [
-        '次の流れで、5枚だけで内容が完結する短い文章を作り、各画像に入れてください。',
-        `1枚目（表紙）：見出し「${headline}」で興味を引く`,
-        '2枚目（共感）：読者が「自分のことだ」と思える悩みを示す',
-        '3枚目（気づき）：悩みが起きる理由や大切な考え方を伝える',
-        '4枚目（解決）：今日すぐできる具体的な行動を1つ伝える',
-        '5枚目（まとめ）：要点を短くまとめ、保存や実行をやさしく促す',
-        caption ? `内容を作る材料となる投稿文：${caption}` : null,
-        `内容を作る材料となる切り口：${mission.angle}`,
-      ];
-  const lines = [
-    'Instagramにそのまま投稿できる、5枚で完結する投稿画像を作ってください。',
-    '5枚はそれぞれ縦長4:5（1080×1350ピクセル）の別画像として作ってください。1枚の画像に5コマを並べないでください。',
-    `投稿のテーマ：${mission.topic}`,
-    '1枚目だけを見ても、何について誰に役立つ投稿か分かる表紙にしてください。',
-    instruction ? `写真・イラストの内容：${instruction}` : null,
-    ...contentPlan,
-    '見出しは短く大きく、本文は2〜4行にしてください。日本語は一字一句正確に表示してください。',
-    '5枚すべてで人物と色・書体・余白を統一し、連続したシリーズにしてください。',
-    '各ページは指定した場面に合わせて、構図・動作・小物・背景の見せ方を変えてください。同じ写真や、ほぼ同じ構図を繰り返さないでください。',
-    '背景と文字の色に十分な差をつけ、文字の周囲に余白を取ってください。',
-    '人物や写真だけで終わらせず、見出し・本文と写真やイラストを組み合わせたSNS投稿デザインに仕上げてください。',
-    'ロゴ、透かし、意味不明な文字は入れないでください。',
-    '一度に1枚しか生成できない場合は、まず1枚目を作り、私が「次」と送るたびに同じデザインで2枚目から順番に作ってください。',
-    ...(serviceSlug
-      ? (serviceContentTerminologyPolicy(serviceSlug)?.participationInstructions ?? [])
-      : []),
-  ];
-  return lines.filter((line): line is string => line !== null).join('\n');
+}
+
+export function imageCreationPrompt(
+  mission: DailyMissionView,
+  serviceSlug?: string,
+  slideIndex?: number,
+) {
+  const slides = imageCreationSlidePrompts(mission, serviceSlug);
+  if (slideIndex !== undefined)
+    return slides.find((slide) => slide.slideIndex === slideIndex)?.prompt ?? '';
+  return slides.map(({ prompt }) => prompt).join('\n\n--- 次の画像 ---\n\n');
 }
 
 export function copyOptions(mission: DailyMissionView, serviceSlug?: string) {
@@ -419,6 +459,7 @@ export function copyOptions(mission: DailyMissionView, serviceSlug?: string) {
     return value ? [{ label: '投稿文をコピー', value, type: 'COPIED_TEXT' as const }] : [];
   }
   if (mission.format === 'SLIDE') {
+    const imageSlides = imageCreationSlidePrompts(mission, serviceSlug);
     const slides = records(content['slides']).map((slide, index) => ({
       label: `${index + 1}枚目をコピー`,
       value: [text(slide['headline']), text(slide['body'])].filter(Boolean).join('\n'),
@@ -430,10 +471,20 @@ export function copyOptions(mission: DailyMissionView, serviceSlug?: string) {
       .filter(Boolean)
       .join('\n\n---\n\n');
     return [
+      ...imageSlides.map((slide) => ({
+        label: `${slide.slideIndex}枚目をコピー`,
+        role: slide.role,
+        headline: slide.headline,
+        value: slide.prompt,
+        type: 'COPIED_IMAGE_INSTRUCTION' as const,
+        metadata: { slideIndex: slide.slideIndex },
+      })),
       {
-        label: '5枚の画像を作る文章をコピー',
+        label: '5枚まとめてコピー',
         value: imageCreationPrompt(mission, serviceSlug),
         type: 'COPIED_IMAGE_INSTRUCTION' as const,
+        metadata: { slideIndex: 0 },
+        advanced: true,
       },
       ...(caption
         ? [{ label: '投稿文をコピー', value: caption, type: 'COPIED_TEXT' as const }]
@@ -462,10 +513,20 @@ export function copyOptions(mission: DailyMissionView, serviceSlug?: string) {
     ].filter((item): item is typeof item & { value: string } => item.value !== null);
   }
   return [
+    ...imageCreationSlidePrompts(mission, serviceSlug).map((slide) => ({
+      label: `${slide.slideIndex}枚目をコピー`,
+      role: slide.role,
+      headline: slide.headline,
+      value: slide.prompt,
+      type: 'COPIED_IMAGE_INSTRUCTION' as const,
+      metadata: { slideIndex: slide.slideIndex },
+    })),
     {
-      label: '画像を作るための説明をコピー',
+      label: '5枚まとめてコピー',
       value: imageCreationPrompt(mission, serviceSlug),
       type: 'COPIED_IMAGE_INSTRUCTION' as const,
+      metadata: { slideIndex: 0 },
+      advanced: true,
     },
     { label: '投稿文をコピー', value: caption, type: 'COPIED_TEXT' as const },
   ].filter((item): item is typeof item & { value: string } => item.value !== null);

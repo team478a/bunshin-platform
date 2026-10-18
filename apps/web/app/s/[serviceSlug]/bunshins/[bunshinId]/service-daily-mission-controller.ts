@@ -167,15 +167,15 @@ export function useServiceDailyMissionController({
     value: string,
     type: string,
     metadata?: { slideIndex: number },
-  ) {
-    if (pendingAction) return;
+  ): Promise<boolean> {
+    if (pendingAction) return false;
     const id = mission.id;
     setMessage(null);
     setManualCopy(null);
     const authorizationData = mission.copyAuthorization;
     if (!authorizationData) {
       setMessage('コピーの準備を確認できませんでした。画面を開き直してください。');
-      return;
+      return false;
     }
     if (!authorizationData?.allowed) {
       setMessage(
@@ -187,7 +187,7 @@ export function useServiceDailyMissionController({
               ? `この投稿案は見直しが必要です。${authorizationData.reviewNote ? `理由：${authorizationData.reviewNote}` : '運営者の案内を確認してください。'}`
               : 'この紹介URLは今は使えません。運営者へお問い合わせください。',
       );
-      return;
+      return false;
     }
     setPendingAction(`${id}:copy`);
     if (!(await writeToClipboard(value))) {
@@ -197,7 +197,7 @@ export function useServiceDailyMissionController({
       });
       setMessage('自動コピーができないため、下の文章を長押ししてコピーしてください。');
       setPendingAction(null);
-      return;
+      return false;
     }
     setPendingAction(null);
     const ok = await record(id, 'activities', {
@@ -214,6 +214,7 @@ export function useServiceDailyMissionController({
             : 'コピーしました。SNSへ貼り付けて使えます。'
         : null,
     );
+    return ok;
   }
 
   async function markPosted(mission: DailyMissionView) {

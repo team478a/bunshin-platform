@@ -11,6 +11,10 @@ const migration = readFileSync(
   ),
   'utf8',
 );
+const processor = readFileSync(
+  fileURLToPath(new URL('../src/point-activity.ts', import.meta.url)),
+  'utf8',
+);
 
 describe('initial point activity rules', () => {
   it('starts only the reviewed viewed, posted and weekly rules', () => {
@@ -22,5 +26,12 @@ describe('initial point activity rules', () => {
 
   it('uses stable identifiers so migration re-application cannot duplicate rules', () => {
     expect(migration).toContain('ON CONFLICT ("id") DO NOTHING');
+  });
+
+  it('does not award points per image prompt copy or per copied page', () => {
+    expect(processor).toContain('activity."type" = \'VIEWED\'');
+    expect(processor).toContain("'POSTED'::text");
+    expect(processor).not.toContain('activity."type" = \'COPIED_IMAGE_INSTRUCTION\'');
+    expect(processor).not.toContain("'COPIED_IMAGE_INSTRUCTION'::text");
   });
 });
