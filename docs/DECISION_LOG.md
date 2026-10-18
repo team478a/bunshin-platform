@@ -1,5 +1,13 @@
 # BUNSHIN Platform Decision Log
 
+## 2026-10-18: マナベル招待受諾時に内部研修枠を自動付与する
+
+- 状態: ユーザー指示に基づく実装中。Productionへの反映・招待発行・実機テストは未実施。
+- 2026-10-16の「サービス招待はMembershipのみ。Enrollment/INTERNAL Seatは運営者が個別作成・付与する」という運用決定を、本決定の範囲に限り置き換える。マナベルスタイルの有効な参加招待を本人が受諾した同一DB transactionで、AI_TRAINING_V1の停止中Pilot EnrollmentとINTERNAL Seatを自動作成する。Wave 0の既存内部上限（最大3人）・残枠・有効な無料GUIDED/招待制Offering・Enrollment/Seat projectionを毎回再検証し、未設定・複数候補・不整合・上限超過は招待受諾全体をrollbackする。
+- この例外はservice slug `manaberu-style`、有効な参加招待、自動承認時だけに適用する。ハッシーおよび他サービス、運営者招待、手動承認待ちは従来のMembership/機能割当の動きを保つ。
+- 自動化するのはEnrollmentとINTERNAL Seatまで。AI利用同意、Profile回答、Definition承認、Call Admission設定、Pilot有効化/開始、LINE通知、AI/Provider呼出しは自動化せず、既存Gateを維持する。失効済み席を再発行せず、使用済み招待の再送は既存の一回限り仕様を維持する。
+- 実運用テストは招待URL→LINE Login→同意→自動Enrollment/Seat→研修確認画面を実端末で確認する。AIへの実送信は、同意後かつ既存の準備・費用・開始Gateを別途通過した後に限る。
+
 ## 2026-10-16: OEM研修Enrollmentの限定production migration経路
 
 - 状態: 専用allowlistとテストを追加。Production migrationは未実行。

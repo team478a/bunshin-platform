@@ -6110,6 +6110,258 @@ describe('database ownership boundaries', () => {
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
 
+  it('automatically enrolls Manaberu invitation accepters with an internal seat, without starting AI', async () => {
+    const accounts = new CreateUserWithPersonalWorkspace(new PrismaAccountUnitOfWork(client));
+    const owner = await accounts.execute({ displayName: 'Manaberu invite owner' });
+    const invitees = await Promise.all(
+      Array.from({ length: 4 }, (_, index) =>
+        accounts.execute({ displayName: `Manaberu invitee ${index + 1}` }),
+      ),
+    );
+    const organization = await client.workspace.create({
+      data: {
+        type: 'ORGANIZATION',
+        name: `Manaberu invite organization ${randomUUID()}`,
+        memberships: { create: { userId: owner.user.id, role: 'OWNER' } },
+      },
+    });
+    const group = await client.group.create({
+      data: { workspaceId: organization.id, name: `Manaberu invite group ${randomUUID()}` },
+    });
+    const configuration = await client.serviceConfiguration.create({
+      data: {
+        workspaceId: organization.id,
+        groupId: group.id,
+        slug: 'manaberu-style',
+        displayName: 'マナベルスタイル',
+        description: 'Internal invitation admission integration test',
+        operatorName: 'Operator',
+        createdByUserId: owner.user.id,
+        updatedByUserId: owner.user.id,
+      },
+    });
+    await client.serviceRegistrationPolicy.create({
+      data: {
+        workspaceId: organization.id,
+        groupId: group.id,
+        configurationId: configuration.id,
+        mode: 'INVITATION_ONLY',
+        lineEnabled: true,
+      },
+    });
+    const template = await client.programTemplate.create({
+      data: {
+        workspaceId: organization.id,
+        ownerGroupId: group.id,
+        name: 'Manaberu pilot fixture',
+        description: 'Invitation admission fixture',
+        category: 'TRAINING',
+        targetAudience: 'Internal monitors',
+        createdByUserId: owner.user.id,
+      },
+    });
+    const version = await client.programTemplateVersion.create({
+      data: {
+        workspaceId: organization.id,
+        programTemplateId: template.id,
+        version: 1,
+        definition: {},
+        createdByUserId: owner.user.id,
+      },
+    });
+    const program = await client.serviceProgram.create({
+      data: {
+        workspaceId: organization.id,
+        groupId: group.id,
+        programTemplateVersionId: version.id,
+        displayName: 'Manaberu pilot fixture',
+        description: 'Invitation admission fixture',
+        status: 'SUSPENDED',
+        settings: {
+          moduleKey: 'AI_TRAINING_V1',
+          personalLearningPilot: {
+            enabled: false,
+            enrollmentIds: [],
+            participantControl: {
+              version: 'PILOT_PARTICIPANT_CAP_V1',
+              revision: 1,
+              externalParticipantCap: 0,
+              internalParticipantCap: 3,
+              currentWave: 0,
+              currentWaveCap: 0,
+            },
+          },
+        },
+        createdByUserId: owner.user.id,
+      },
+    });
+    const offering = await client.programOffering.create({
+      data: {
+        workspaceId: organization.id,
+        groupId: group.id,
+        serviceProgramId: program.id,
+        version: 1,
+        status: 'ACTIVE',
+        isFree: true,
+        seller: 'SERVICE',
+        priceOwner: 'SERVICE',
+        paymentOwner: 'SERVICE',
+        apiCostOwner: 'SERVICE',
+        supportOwner: 'SERVICE',
+        contentOwner: 'SERVICE',
+        characterOwner: 'SERVICE',
+        termsSnapshot: { participation: 'INVITATION_ONLY', supportModes: ['GUIDED'] },
+        createdByUserId: owner.user.id,
+      },
+    });
+    const service = new GroupParticipationService(new PrismaGroupParticipationRepository(client));
+
+    const inviteTokens = [] as string[];
+    for (const index of invitees.keys()) {
+      const tokenHash = randomUUID()
+        .replaceAll('-', '')
+        .padEnd(64, String(index + 1));
+      inviteTokens.push(tokenHash);
+      await service.createInvitation({
+        workspaceId: organization.id,
+        actorUserId: owner.user.id,
+        groupId: group.id,
+        tokenHash,
+        expiresAt: new Date(Date.now() + 60_000),
+      });
+    }
+
+    const outcomes = await Promise.allSettled(
+      invitees.map((invitee, index) =>
+        service.acceptInvitation({
+          workspaceId: organization.id,
+          actorUserId: invitee.user.id,
+          tokenHash: inviteTokens[index]!,
+        }),
+      ),
+    );
+    const joined = outcomes.flatMap((outcome) =>
+      outcome.status === 'fulfilled' && outcome.value ? [outcome.value] : [],
+    );
+    const rejected = outcomes.filter(
+      (outcome) => outcome.status === 'rejected' || outcome.value === null,
+    );
+    expect(joined).toHaveLength(3);
+    expect(rejected).toHaveLength(1);
+    for (const outcome of rejected) {
+      if (outcome.status === 'rejected') expect(outcome.reason).toMatchObject({ code: 'CONFLICT' });
+    }
+    for (const membership of joined) {
+      expect(membership.status).toBe('ACTIVE');
+      const enrollment = await client.programEnrollment.findFirstOrThrow({
+        where: {
+          workspaceId: organization.id,
+          groupId: group.id,
+          serviceProgramId: program.id,
+          groupMembershipId: membership.id,
+        },
+      });
+      expect(enrollment).toMatchObject({
+        status: 'ACTIVE',
+        supportMode: 'GUIDED',
+        programOfferingId: offering.id,
+        invitedByUserId: owner.user.id,
+      });
+    }
+    const nonMembers = invitees.filter(
+      (invitee) => !joined.some((membership) => membership.userId === invitee.user.id),
+    );
+    expect(nonMembers).toHaveLength(1);
+    await expect(
+      client.groupMembership.findUnique({
+        where: {
+          groupId_userId: { groupId: group.id, userId: nonMembers[0]!.user.id },
+        },
+      }),
+    ).resolves.toBeNull();
+
+    expect(
+      await client.personalLearningPilotSeat.count({ where: { serviceProgramId: program.id } }),
+    ).toBe(3);
+    expect(
+      await client.personalLearningPilotSeat.findMany({
+        where: { serviceProgramId: program.id },
+        orderBy: { seatNumber: 'asc' },
+        select: { kind: true, cohort: true, seatNumber: true },
+      }),
+    ).toEqual([
+      { kind: 'INTERNAL', cohort: 'INTERNAL', seatNumber: 1 },
+      { kind: 'INTERNAL', cohort: 'INTERNAL', seatNumber: 2 },
+      { kind: 'INTERNAL', cohort: 'INTERNAL', seatNumber: 3 },
+    ]);
+    expect(
+      await client.aiTrainingUsageConsent.count({
+        where: { workspaceId: organization.id, groupId: group.id },
+      }),
+    ).toBe(0);
+    expect(
+      await client.serviceProgram.findUniqueOrThrow({ where: { id: program.id } }),
+    ).toMatchObject({
+      status: 'SUSPENDED',
+      settings: { personalLearningPilot: { enabled: false } },
+    });
+    expect(
+      await client.programAuditLog.count({
+        where: {
+          groupId: group.id,
+          resourceId: program.id,
+          action: 'INVITATION_INTERNAL_ADMISSION',
+        },
+      }),
+    ).toBe(3);
+    const hassyGroup = await client.group.create({
+      data: { workspaceId: organization.id, name: `Hassy invite group ${randomUUID()}` },
+    });
+    const hassyConfiguration = await client.serviceConfiguration.create({
+      data: {
+        workspaceId: organization.id,
+        groupId: hassyGroup.id,
+        slug: 'hassy',
+        displayName: 'ハッシー',
+        description: 'Hassy invitation isolation fixture',
+        operatorName: 'Operator',
+        createdByUserId: owner.user.id,
+        updatedByUserId: owner.user.id,
+      },
+    });
+    await client.serviceRegistrationPolicy.create({
+      data: {
+        workspaceId: organization.id,
+        groupId: hassyGroup.id,
+        configurationId: hassyConfiguration.id,
+        mode: 'INVITATION_ONLY',
+        lineEnabled: true,
+      },
+    });
+    const hassyToken = randomUUID().replaceAll('-', '').padEnd(64, 'a');
+    await service.createInvitation({
+      workspaceId: organization.id,
+      actorUserId: owner.user.id,
+      groupId: hassyGroup.id,
+      tokenHash: hassyToken,
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+    const hassyMember = await service.acceptInvitation({
+      workspaceId: organization.id,
+      actorUserId: invitees[3]!.user.id,
+      tokenHash: hassyToken,
+    });
+    expect(hassyMember.status).toBe('ACTIVE');
+    expect(
+      await client.programEnrollment.count({
+        where: { groupId: hassyGroup.id, groupMembershipId: hassyMember.id },
+      }),
+    ).toBe(0);
+    expect(
+      await client.personalLearningPilotSeat.count({ where: { groupId: hassyGroup.id } }),
+    ).toBe(0);
+  });
+
   it('keeps invite-only manual-approval participants pending until an operator approves them', async () => {
     const accounts = new CreateUserWithPersonalWorkspace(new PrismaAccountUnitOfWork(client));
     const owner = await accounts.execute({ displayName: 'Manual invite owner' });

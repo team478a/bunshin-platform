@@ -2,6 +2,7 @@ import type { GroupParticipationRepository } from '@bunshin/application';
 import { type PrismaClient, prisma } from './client';
 import { groupInvitationRecord, groupMembershipRecord, groupRecord } from './service-records';
 import { recordOemRegistration, endOemRegistration } from './oem-billing-history';
+import { admitManaberuInviteeToInternalTraining } from './personal-learning-invitation-admission';
 export class PrismaGroupParticipationRepository implements GroupParticipationRepository {
   constructor(private readonly client: PrismaClient = prisma) {}
 
@@ -272,6 +273,20 @@ export class PrismaGroupParticipationRepository implements GroupParticipationRep
           revokedAt: null,
         },
       });
+      if (
+        invitation.role === 'PARTICIPANT' &&
+        !requiresManualApproval &&
+        serviceRegistration?.mode === 'INVITATION_ONLY'
+      )
+        await admitManaberuInviteeToInternalTraining(tx, {
+          workspaceId: input.workspaceId,
+          groupId: invitation.groupId,
+          groupMembershipId: membership.id,
+          userId: input.actorUserId,
+          invitedByUserId: invitation.createdByUserId,
+          now: input.now,
+          invitationId: invitation.id,
+        });
       if (invitation.role === 'PARTICIPANT' && !requiresManualApproval)
         await recordOemRegistration(
           tx,
