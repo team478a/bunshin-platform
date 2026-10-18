@@ -3,6 +3,11 @@ import {
   personalLearningDynamicProgramAllows,
   personalLearningFeatureEnabled,
 } from '@bunshin/capability-training';
+import {
+  isPersonalLearningPersonaInferredKey,
+  isPersonalLearningPersonaValueDisallowed,
+  PERSONAL_LEARNING_PERSONA_LEARNER_KEYS,
+} from '@bunshin/capability-training';
 import { prisma } from './index';
 import { lockTrainingEnrollmentData } from './training-data-lock';
 
@@ -33,6 +38,7 @@ async function ownsEnabledDynamicEnrollment(
   scope: MemberScope,
   client: PrismaClient | Prisma.TransactionClient,
   enrollmentId?: string,
+  requireMultiTopic = true,
 ) {
   const membership = await client.groupMembership.findFirst({
     where: {
@@ -70,7 +76,7 @@ async function ownsEnabledDynamicEnrollment(
     if (
       settings &&
       personalLearningDynamicProgramAllows(settings, enrollment.id) &&
-      personalLearningFeatureEnabled(settings, 'multiTopic')
+      (!requireMultiTopic || personalLearningFeatureEnabled(settings, 'multiTopic'))
     )
       return enrollment;
   }
@@ -311,12 +317,194 @@ function personaEvidenceType(value: string): PersonaItemInput['evidenceType'] | 
 export class PrismaPersonalLearningPersonaRepository {
   constructor(private readonly client: PrismaClient = prisma) {}
 
+  async profile(scope: MemberScope) {
+    if (!(await ownsEnabledDynamicEnrollment(scope, this.client, undefined, false))) return null;
+    return this.client.personalLearningPersonaProfile.findUnique({
+      where: {
+        workspaceId_groupId_groupMembershipId: {
+          workspaceId: scope.workspaceId,
+          groupId: scope.groupId,
+          groupMembershipId: scope.groupMembershipId,
+        },
+      },
+    });
+  }
+
+  async lastSuccessfulInferenceAt(scope: DynamicLearningScope) {
+    const enrollment = await this.client.programEnrollment.findFirst({
+      where: {
+        workspaceId: scope.workspaceId,
+        groupId: scope.groupId,
+        id: scope.programEnrollmentId,
+        groupMembershipId: scope.groupMembershipId,
+      },
+      select: { serviceProgramId: true },
+    });
+    if (!enrollment) return null;
+    const rows = await this.client.personalLearningCallAdmission.findMany({
+      where: {
+        workspaceId: scope.workspaceId,
+        groupId: scope.groupId,
+        serviceProgramId: enrollment.serviceProgramId,
+        AND: [
+          { operationContext: { path: ['operationKind'], equals: 'PERSONA_INFERENCE' } },
+          { operationContext: { path: ['actorUserId'], equals: scope.userId } },
+          {
+            operationContext: {
+              path: ['programEnrollmentId'],
+              equals: scope.programEnrollmentId,
+            },
+          },
+        ],
+      },
+      orderBy: { admittedAt: 'desc' },
+      take: 50,
+      select: { admittedAt: true, operationContext: true },
+    });
+    const matching = rows.find((row) => {
+      const context = row.operationContext;
+      if (!context || typeof context !== 'object' || Array.isArray(context)) return false;
+      const value = context as Record<string, unknown>;
+      const measurement = value['measurement'];
+      return (
+        value['actorUserId'] === scope.userId &&
+        value['programEnrollmentId'] === scope.programEnrollmentId &&
+        value['requestFinished'] === true &&
+        !!measurement &&
+        typeof measurement === 'object' &&
+        !Array.isArray(measurement) &&
+        (measurement as Record<string, unknown>)['success'] === true
+      );
+    });
+    return matching?.admittedAt ?? null;
+  }
+
+  async saveLearnerProfile(
+    scope: MemberScope,
+    input: { companyName: string | null; ageBand: string | null; industryJob: string | null },
+  ) {
+    const ageBands = ['20代', '30代', '40代', '50代', '60代', '70代以上'];
+    for (const key of PERSONAL_LEARNING_PERSONA_LEARNER_KEYS) {
+      const value =
+        input[
+          key === 'company_name' ? 'companyName' : key === 'age_band' ? 'ageBand' : 'industryJob'
+        ];
+      const max = key === 'age_band' ? 20 : 80;
+      if (
+        value !== null &&
+        (typeof value !== 'string' ||
+          value.trim().length > max ||
+          !value.trim() ||
+          (key === 'age_band' && !ageBands.includes(value)) ||
+          isPersonalLearningPersonaValueDisallowed(value))
+      )
+        return { outcome: 'INVALID' as const };
+    }
+    if (!(await ownsEnabledDynamicEnrollment(scope, this.client, undefined, false)))
+      return { outcome: 'NOT_FOUND' as const };
+    const key = {
+      workspaceId_groupId_groupMembershipId: {
+        workspaceId: scope.workspaceId,
+        groupId: scope.groupId,
+        groupMembershipId: scope.groupMembershipId,
+      },
+    };
+    const profile = await this.client.personalLearningPersonaProfile.upsert({
+      where: key,
+      create: {
+        ...memberScopeWhere(scope),
+        companyName: input.companyName?.trim() || null,
+        ageBand: input.ageBand,
+        industryJob: input.industryJob?.trim() || null,
+        lastLearnerUseAt: new Date(),
+      },
+      update: {
+        companyName: input.companyName?.trim() || null,
+        ageBand: input.ageBand,
+        industryJob: input.industryJob?.trim() || null,
+        lastLearnerUseAt: new Date(),
+      },
+    });
+    return { outcome: 'SAVED' as const, profile };
+  }
+
+  async setOptIn(
+    scope: MemberScope,
+    input: { enabled: boolean; consentVersion?: string; deleteSavedData?: boolean },
+    now = new Date(),
+  ) {
+    if (!(await ownsEnabledDynamicEnrollment(scope, this.client, undefined, false))) return null;
+    if (input.enabled && !input.consentVersion?.trim()) return null;
+    return this.client.$transaction(
+      async (tx) => {
+        const key = {
+          workspaceId_groupId_groupMembershipId: {
+            workspaceId: scope.workspaceId,
+            groupId: scope.groupId,
+            groupMembershipId: scope.groupMembershipId,
+          },
+        };
+        const existing = await tx.personalLearningPersonaProfile.findUnique({ where: key });
+        if (!input.enabled && input.deleteSavedData) {
+          await tx.personalLearningPersonaItem.deleteMany({ where: memberScopeWhere(scope) });
+          await tx.personalLearningPersonaSuppression.deleteMany({
+            where: memberScopeWhere(scope),
+          });
+        }
+        const profile = await tx.personalLearningPersonaProfile.upsert({
+          where: key,
+          create: {
+            ...memberScopeWhere(scope),
+            optedIn: input.enabled,
+            consentVersion: input.enabled ? input.consentVersion!.trim() : null,
+            optedInAt: input.enabled ? now : null,
+            optedOutAt: input.enabled ? null : now,
+            ...(input.deleteSavedData
+              ? { companyName: null, ageBand: null, industryJob: null }
+              : {}),
+            lastLearnerUseAt: now,
+          },
+          update: {
+            optedIn: input.enabled,
+            ...(input.enabled
+              ? { consentVersion: input.consentVersion!.trim(), optedInAt: now, optedOutAt: null }
+              : { optedOutAt: now }),
+            ...(input.deleteSavedData
+              ? { companyName: null, ageBand: null, industryJob: null }
+              : {}),
+            lastLearnerUseAt: now,
+          },
+        });
+        return { profile, previouslyOptedIn: existing?.optedIn ?? false };
+      },
+      { isolationLevel: 'Serializable' },
+    );
+  }
+
+  async dismissInvitation(scope: MemberScope, days = 30, now = new Date()) {
+    if (!(await ownsEnabledDynamicEnrollment(scope, this.client, undefined, false))) return false;
+    if (!Number.isInteger(days) || days < 1 || days > 90) return false;
+    const until = new Date(now.getTime() + days * 86_400_000);
+    await this.client.personalLearningPersonaProfile.upsert({
+      where: {
+        workspaceId_groupId_groupMembershipId: {
+          workspaceId: scope.workspaceId,
+          groupId: scope.groupId,
+          groupMembershipId: scope.groupMembershipId,
+        },
+      },
+      create: { ...memberScopeWhere(scope), dismissedUntil: until, lastLearnerUseAt: now },
+      update: { dismissedUntil: until, lastLearnerUseAt: now },
+    });
+    return true;
+  }
+
   async list(scope: MemberScope) {
     return this.listOwned(scope);
   }
 
   private async listOwned(scope: MemberScope) {
-    if (!(await ownsEnabledDynamicEnrollment(scope, this.client))) return [];
+    if (!(await ownsEnabledDynamicEnrollment(scope, this.client, undefined, false))) return [];
     await this.client.personalLearningPersonaItem.updateMany({
       where: memberScopeWhere(scope),
       data: { lastLearnerUseAt: new Date() },
@@ -330,7 +518,12 @@ export class PrismaPersonalLearningPersonaRepository {
   async save(scope: MemberScope, input: PersonaItemInput) {
     const attributeKey = input.attributeKey.trim();
     const value = input.value.trim();
-    if (!attributeKey || attributeKey.length > 80 || !value || value.length > 1000)
+    if (
+      !isPersonalLearningPersonaInferredKey(attributeKey) ||
+      !value ||
+      value.length > 1000 ||
+      isPersonalLearningPersonaValueDisallowed(value)
+    )
       return { outcome: 'INVALID' as const };
     const key = {
       workspaceId: scope.workspaceId,
@@ -341,8 +534,19 @@ export class PrismaPersonalLearningPersonaRepository {
     try {
       return await this.client.$transaction(
         async (tx) => {
-          if (!(await ownsEnabledDynamicEnrollment(scope, tx)))
-            return { outcome: 'NOT_FOUND' as const };
+          const enrollment = await ownsEnabledDynamicEnrollment(scope, tx, undefined, false);
+          if (!enrollment) return { outcome: 'NOT_FOUND' as const };
+          const profile = await tx.personalLearningPersonaProfile.findUnique({
+            where: {
+              workspaceId_groupId_groupMembershipId: {
+                workspaceId: scope.workspaceId,
+                groupId: scope.groupId,
+                groupMembershipId: scope.groupMembershipId,
+              },
+            },
+            select: { optedIn: true },
+          });
+          if (!profile?.optedIn) return { outcome: 'NOT_FOUND' as const };
           const suppression = await tx.personalLearningPersonaSuppression.findUnique({
             where: { workspaceId_groupId_groupMembershipId_attributeKey: key },
             select: { attributeKey: true },
@@ -432,8 +636,10 @@ export class PrismaPersonalLearningPersonaRepository {
   ) {
     if (input.value !== undefined && (!input.value.trim() || input.value.length > 1000))
       return { outcome: 'INVALID' as const };
-    if (!(await ownsEnabledDynamicEnrollment(scope, this.client)))
+    if (!(await ownsEnabledDynamicEnrollment(scope, this.client, undefined, false)))
       return { outcome: 'NOT_FOUND' as const };
+    if (input.value !== undefined && isPersonalLearningPersonaValueDisallowed(input.value))
+      return { outcome: 'INVALID' as const };
     const result = await this.client.personalLearningPersonaItem.updateMany({
       where: { ...memberScopeWhere(scope), id: itemId },
       data: {
@@ -454,7 +660,7 @@ export class PrismaPersonalLearningPersonaRepository {
   async delete(scope: MemberScope, itemId: string) {
     return this.client.$transaction(
       async (tx) => {
-        if (!(await ownsEnabledDynamicEnrollment(scope, tx))) return false;
+        if (!(await ownsEnabledDynamicEnrollment(scope, tx, undefined, false))) return false;
         const item = await tx.personalLearningPersonaItem.findFirst({
           where: { ...memberScopeWhere(scope), id: itemId },
           select: { attributeKey: true },
@@ -482,7 +688,7 @@ export class PrismaPersonalLearningPersonaRepository {
   }
 
   async listSuppressedAttributes(scope: MemberScope) {
-    if (!(await ownsEnabledDynamicEnrollment(scope, this.client))) return [];
+    if (!(await ownsEnabledDynamicEnrollment(scope, this.client, undefined, false))) return [];
     const suppressions = await this.client.personalLearningPersonaSuppression.findMany({
       where: memberScopeWhere(scope),
       select: { attributeKey: true },
@@ -492,7 +698,7 @@ export class PrismaPersonalLearningPersonaRepository {
   }
 
   async allowReinference(scope: MemberScope, attributeKey: string) {
-    if (!(await ownsEnabledDynamicEnrollment(scope, this.client))) return false;
+    if (!(await ownsEnabledDynamicEnrollment(scope, this.client, undefined, false))) return false;
     const result = await this.client.personalLearningPersonaSuppression.deleteMany({
       where: { ...memberScopeWhere(scope), attributeKey },
     });
@@ -500,7 +706,7 @@ export class PrismaPersonalLearningPersonaRepository {
   }
 
   async deleteAll(scope: MemberScope) {
-    if (!(await ownsEnabledDynamicEnrollment(scope, this.client))) return 0;
+    if (!(await ownsEnabledDynamicEnrollment(scope, this.client, undefined, false))) return 0;
     const result = await this.client.personalLearningPersonaItem.deleteMany({
       where: memberScopeWhere(scope),
     });
@@ -513,13 +719,40 @@ export class PrismaPersonalLearningPersonaRepository {
       attributeKey: string;
       value: string;
       status: 'UNCONFIRMED' | 'CONFIRMED';
-      evidenceType: PersonaItemInput['evidenceType'];
+      evidenceType: PersonaItemInput['evidenceType'] | 'LEARNER_INPUT';
       evidenceId: string;
       evidenceCreatedAt: Date;
       epistemicStatus: 'UNCONFIRMED_GUESS' | 'LEARNER_CONFIRMED';
     }>
   > {
-    if (!(await ownsEnabledDynamicEnrollment(scope, this.client))) return [];
+    if (!(await ownsEnabledDynamicEnrollment(scope, this.client, undefined, false))) return [];
+    const profile = await this.client.personalLearningPersonaProfile.findUnique({
+      where: {
+        workspaceId_groupId_groupMembershipId: {
+          workspaceId: scope.workspaceId,
+          groupId: scope.groupId,
+          groupMembershipId: scope.groupMembershipId,
+        },
+      },
+      select: {
+        optedIn: true,
+        companyName: true,
+        ageBand: true,
+        industryJob: true,
+        updatedAt: true,
+      },
+    });
+    if (!profile?.optedIn) return [];
+    await this.client.personalLearningPersonaProfile.updateMany({
+      where: {
+        workspaceId: scope.workspaceId,
+        groupId: scope.groupId,
+        groupMembershipId: scope.groupMembershipId,
+        userId: scope.userId,
+        optedIn: true,
+      },
+      data: { lastLearnerUseAt: new Date() },
+    });
     const items = await this.client.personalLearningPersonaItem.findMany({
       where: { ...memberScopeWhere(scope), status: { in: ['UNCONFIRMED', 'CONFIRMED'] } },
       select: {
@@ -537,16 +770,21 @@ export class PrismaPersonalLearningPersonaRepository {
         { evidenceCreatedAt: 'desc' },
         { id: 'asc' },
       ],
-      take: 20,
+      take: 17,
     });
-    return items.flatMap((item) => {
+    const inferred = items.flatMap((item) => {
+      if (
+        !isPersonalLearningPersonaInferredKey(item.attributeKey) ||
+        isPersonalLearningPersonaValueDisallowed(item.value)
+      )
+        return [];
       if (item.status !== 'CONFIRMED' && item.status !== 'UNCONFIRMED') return [];
       const evidenceType = personaEvidenceType(item.evidenceType);
       if (!evidenceType) return [];
       return [
         {
           ...item,
-          status: item.status,
+          status: item.status as 'CONFIRMED' | 'UNCONFIRMED',
           evidenceType,
           epistemicStatus:
             item.status === 'CONFIRMED'
@@ -555,6 +793,26 @@ export class PrismaPersonalLearningPersonaRepository {
         },
       ];
     });
+    const manual = [
+      ['company_name', profile.companyName],
+      ['age_band', profile.ageBand],
+      ['industry_job', profile.industryJob],
+    ].flatMap(([attributeKey, value]) =>
+      typeof value === 'string' && value && !isPersonalLearningPersonaValueDisallowed(value)
+        ? [
+            {
+              attributeKey: attributeKey as string,
+              value,
+              status: 'CONFIRMED' as const,
+              evidenceType: 'LEARNER_INPUT' as const,
+              evidenceId: '',
+              evidenceCreatedAt: profile.updatedAt,
+              epistemicStatus: 'LEARNER_CONFIRMED' as const,
+            },
+          ]
+        : [],
+    );
+    return [...manual, ...inferred].slice(0, 20);
   }
 }
 

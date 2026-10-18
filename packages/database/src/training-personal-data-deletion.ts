@@ -167,6 +167,15 @@ export class PrismaTrainingPersonalDataDeletionRepository implements TrainingPer
                   id: { in: dynamicLearningIds.savedExamples },
                 },
               });
+              await tx.personalLearningPersonaProfile.deleteMany({
+                where: {
+                  workspaceId: input.workspaceId,
+                  groupId: input.groupId,
+                  groupMembershipId: owned.membershipId,
+                  userId: input.actorUserId,
+                  id: { in: dynamicLearningIds.personaProfiles },
+                },
+              });
             }
             // Preserve cumulative capacity, but remove the Enrollment link and revoke access.
             await tx.personalLearningPilotSeat.updateMany({
@@ -480,55 +489,71 @@ export class PrismaTrainingPersonalDataDeletionRepository implements TrainingPer
           }),
         ])
       : [[], [], [], [], []];
-    const [dynamicTopics, dynamicPersonaItems, dynamicPersonaSuppressions, dynamicSavedExamples] =
-      all
-        ? await Promise.all([
-            tx.personalLearningTopic.findMany({
-              where: {
-                workspaceId: input.workspaceId,
-                groupId: input.groupId,
-                groupMembershipId: owned.membershipId,
-                userId: input.actorUserId,
-              },
-              select,
-              orderBy,
-              take,
-            }),
-            tx.personalLearningPersonaItem.findMany({
-              where: {
-                workspaceId: input.workspaceId,
-                groupId: input.groupId,
-                groupMembershipId: owned.membershipId,
-                userId: input.actorUserId,
-              },
-              select,
-              orderBy,
-              take,
-            }),
-            tx.personalLearningPersonaSuppression.findMany({
-              where: {
-                workspaceId: input.workspaceId,
-                groupId: input.groupId,
-                groupMembershipId: owned.membershipId,
-                userId: input.actorUserId,
-              },
-              select: { id: true, createdAt: true },
-              orderBy,
-              take,
-            }),
-            tx.personalLearningSavedExample.findMany({
-              where: {
-                workspaceId: input.workspaceId,
-                groupId: input.groupId,
-                groupMembershipId: owned.membershipId,
-                userId: input.actorUserId,
-              },
-              select,
-              orderBy,
-              take,
-            }),
-          ])
-        : [[], [], [], []];
+    const [
+      dynamicTopics,
+      dynamicPersonaItems,
+      dynamicPersonaSuppressions,
+      dynamicSavedExamples,
+      dynamicPersonaProfiles,
+    ] = all
+      ? await Promise.all([
+          tx.personalLearningTopic.findMany({
+            where: {
+              workspaceId: input.workspaceId,
+              groupId: input.groupId,
+              groupMembershipId: owned.membershipId,
+              userId: input.actorUserId,
+            },
+            select,
+            orderBy,
+            take,
+          }),
+          tx.personalLearningPersonaItem.findMany({
+            where: {
+              workspaceId: input.workspaceId,
+              groupId: input.groupId,
+              groupMembershipId: owned.membershipId,
+              userId: input.actorUserId,
+            },
+            select,
+            orderBy,
+            take,
+          }),
+          tx.personalLearningPersonaSuppression.findMany({
+            where: {
+              workspaceId: input.workspaceId,
+              groupId: input.groupId,
+              groupMembershipId: owned.membershipId,
+              userId: input.actorUserId,
+            },
+            select: { id: true, createdAt: true },
+            orderBy,
+            take,
+          }),
+          tx.personalLearningSavedExample.findMany({
+            where: {
+              workspaceId: input.workspaceId,
+              groupId: input.groupId,
+              groupMembershipId: owned.membershipId,
+              userId: input.actorUserId,
+            },
+            select,
+            orderBy,
+            take,
+          }),
+          tx.personalLearningPersonaProfile.findMany({
+            where: {
+              workspaceId: input.workspaceId,
+              groupId: input.groupId,
+              groupMembershipId: owned.membershipId,
+              userId: input.actorUserId,
+            },
+            select,
+            orderBy,
+            take,
+          }),
+        ])
+      : [[], [], [], [], []];
     const rows = {
       answers,
       toolkit,
@@ -546,6 +571,7 @@ export class PrismaTrainingPersonalDataDeletionRepository implements TrainingPer
       dynamicPersonaItems,
       dynamicPersonaSuppressions,
       dynamicSavedExamples,
+      dynamicPersonaProfiles,
     };
     if (Object.values(snapshotRows).some((list) => list.length > TRAINING_EXPORT_MAX_ROWS))
       return { outcome: 'TOO_LARGE' } as const;
@@ -572,6 +598,7 @@ export class PrismaTrainingPersonalDataDeletionRepository implements TrainingPer
             personaItems: dynamicPersonaItems.map(({ id }) => id),
             personaSuppressions: dynamicPersonaSuppressions.map(({ id }) => id),
             savedExamples: dynamicSavedExamples.map(({ id }) => id),
+            personaProfiles: dynamicPersonaProfiles.map(({ id }) => id),
           }
         : null,
       preview: {

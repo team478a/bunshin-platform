@@ -32,6 +32,7 @@ function fixture() {
     personalLearningPersonaItem: table(),
     personalLearningPersonaSuppression: table(),
     personalLearningSavedExample: table(),
+    personalLearningPersonaProfile: table(),
     groupMembership: {
       findFirst: vi.fn().mockResolvedValue({ id: 'membership-a', serviceRole: 'PARTICIPANT' }),
     },

@@ -20,7 +20,11 @@ export interface PersonalLearningTextOperation {
   expectedRequestRevision: number;
   operationId: string;
   operationKind:
-    'REQUEST_INTERPRETATION' | 'LESSON_GENERATION' | 'PRACTICE_SUPPORT' | 'CONVERSATION_TURN';
+    | 'REQUEST_INTERPRETATION'
+    | 'LESSON_GENERATION'
+    | 'PRACTICE_SUPPORT'
+    | 'CONVERSATION_TURN'
+    | 'PERSONA_INFERENCE';
   practice?: {
     assignmentId: string;
     noteRevision: number;
@@ -69,6 +73,7 @@ export function validatePersonalLearningTextOperation(input: PersonalLearningTex
       'LESSON_GENERATION',
       'PRACTICE_SUPPORT',
       'CONVERSATION_TURN',
+      'PERSONA_INFERENCE',
     ].includes(input.operationKind) ||
     (input.operationKind === 'PRACTICE_SUPPORT'
       ? !input.practice ||

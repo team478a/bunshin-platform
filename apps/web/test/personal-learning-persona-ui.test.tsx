@@ -8,10 +8,12 @@ describe('D-3 learner persona review UI', () => {
       <PersonalLearningPersonaCard
         serviceSlug="manaberu-style"
         enrollmentId="11111111-1111-4111-8111-111111111111"
+        initialProfile={null}
+        invitationReady={false}
         initialItems={[
           {
             id: '22222222-2222-4222-8222-222222222222',
-            attributeKey: 'preferred_learning_style',
+            attributeKey: 'explanation_style',
             value: '短い例を先に見る',
             status: 'UNCONFIRMED',
             evidenceType: 'LEARNING_REQUEST',
@@ -21,7 +23,7 @@ describe('D-3 learner persona review UI', () => {
               '/s/manaberu-style/programs/11111111-1111-4111-8111-111111111111/learning-request?topicId=44444444-4444-4444-8444-444444444444#learning-request-record',
           },
         ]}
-        initialSuppressedAttributes={['preferred_learning_style']}
+        initialSuppressedAttributes={['explanation_style']}
       />,
     );
     expect(html).toContain('AIによる推測');

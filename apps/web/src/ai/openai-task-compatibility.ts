@@ -8,7 +8,8 @@ export type OpenAiCompatibilityTask =
   | 'TRAINING_ASSESSMENT'
   | 'LEARNING_LESSON'
   | 'LEARNING_SUPPORT'
-  | 'LEARNING_CONVERSATION';
+  | 'LEARNING_CONVERSATION'
+  | 'PERSONAL_LEARNING_PERSONA_INFERENCE';
 
 // Local request compatibility, not a live quality/access/price approval or model router.
 const models = new Set(['gpt-5.2', 'gpt-5.2-2025-12-11', 'gpt-5-mini', 'gpt-5-mini-2025-08-07']);
@@ -24,6 +25,7 @@ const schemaNames: Record<OpenAiCompatibilityTask, readonly string[]> = {
   LEARNING_LESSON: ['learning_lesson'],
   LEARNING_SUPPORT: ['learning_support'],
   LEARNING_CONVERSATION: ['learning_conversation'],
+  PERSONAL_LEARNING_PERSONA_INFERENCE: ['personal_learning_persona_inference'],
 };
 
 function fail(task: OpenAiCompatibilityTask, reason: string): never {

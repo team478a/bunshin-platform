@@ -45,6 +45,8 @@ interface Context {
   version: 'LEARNING_TEXT_OPERATION_V1';
   bodyHash: string;
   operationKind: PersonalLearningTextOperation['operationKind'];
+  actorUserId: string;
+  programEnrollmentId: string;
   provider: string;
   model: string;
   promptVersion: string;
@@ -150,6 +152,20 @@ export class PrismaPersonalLearningTextOperationRepository
         });
         if (wish?.id !== input.requestId || wish.revision !== input.expectedRequestRevision)
           throw new ApplicationError('CONFLICT', 'learning wish changed');
+        if (input.operationKind === 'PERSONA_INFERENCE') {
+          const profile = await tx.personalLearningPersonaProfile.findFirst({
+            where: {
+              workspaceId: s.workspaceId,
+              groupId: s.groupId,
+              groupMembershipId: s.groupMembershipId,
+              userId: s.userId,
+              optedIn: true,
+            },
+            select: { id: true },
+          });
+          if (!profile)
+            throw new ApplicationError('FORBIDDEN', 'persona inference is not opted in');
+        }
       }
       const scope = {
         workspaceId: s.workspaceId,
@@ -191,6 +207,26 @@ export class PrismaPersonalLearningTextOperationRepository
         pricingRegistry: input.pricingRegistry,
         occurredAt: clock.now,
       });
+      if (input.operationKind === 'PERSONA_INFERENCE') {
+        const monthStart = new Date(
+          Date.UTC(clock.now.getUTCFullYear(), clock.now.getUTCMonth(), 1),
+        );
+        const [monthly] = await tx.$queryRaw<{ serviceCost: bigint; learnerCost: bigint }[]>`SELECT
+            COALESCE(SUM(reserved_cost_usd_micros), 0)::bigint AS "serviceCost",
+            COALESCE(SUM(reserved_cost_usd_micros) FILTER (WHERE operation_context->>'actorUserId' = ${s.userId}), 0)::bigint AS "learnerCost"
+          FROM personal_learning_call_admissions
+          WHERE workspace_id = ${scope.workspaceId}::uuid
+            AND group_id = ${scope.groupId}::uuid
+            AND service_program_id = ${scope.serviceProgramId}::uuid
+            AND admitted_at >= ${monthStart}
+            AND operation_context->>'operationKind' = 'PERSONA_INFERENCE'`;
+        if (
+          !monthly ||
+          monthly.serviceCost + BigInt(reservation.reservedCostUsdMicros) > 5_000_000n ||
+          monthly.learnerCost + BigInt(reservation.reservedCostUsdMicros) > 1_000_000n
+        )
+          throw new ApplicationError('FORBIDDEN', 'persona inference monthly budget reached');
+      }
       const pricing = parseAiTokenPricingRegistry(input.pricingRegistry)
         .filter(
           (p) =>
@@ -204,6 +240,8 @@ export class PrismaPersonalLearningTextOperationRepository
         version: 'LEARNING_TEXT_OPERATION_V1',
         bodyHash: bodyHash(input),
         operationKind: input.operationKind,
+        actorUserId: input.actor.scope.userId,
+        programEnrollmentId: input.actor.scope.programEnrollmentId,
         provider: input.provider,
         model: input.policy.model,
         promptVersion: input.promptVersion,

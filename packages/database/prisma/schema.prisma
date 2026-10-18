@@ -729,6 +729,32 @@ model PersonalLearningPersonaItem {
   @@map("personal_learning_persona_items")
 }
 
+/// Opt-in state and learner-entered persona fields scoped to one User + Workspace + Service.
+model PersonalLearningPersonaProfile {
+  id                String   @id @default(uuid()) @db.Uuid
+  workspaceId       String   @map("workspace_id") @db.Uuid
+  groupId           String   @map("group_id") @db.Uuid
+  groupMembershipId String   @map("group_membership_id") @db.Uuid
+  userId            String   @map("user_id") @db.Uuid
+  optedIn           Boolean  @default(false) @map("opted_in")
+  consentVersion    String?  @map("consent_version") @db.VarChar(80)
+  optedInAt         DateTime? @map("opted_in_at") @db.Timestamptz(3)
+  optedOutAt        DateTime? @map("opted_out_at") @db.Timestamptz(3)
+  dismissedUntil    DateTime? @map("dismissed_until") @db.Timestamptz(3)
+  companyName       String?  @map("company_name") @db.VarChar(80)
+  ageBand           String?  @map("age_band") @db.VarChar(20)
+  industryJob       String?  @map("industry_job") @db.VarChar(80)
+  lastLearnerUseAt  DateTime? @map("last_learner_use_at") @db.Timestamptz(3)
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  membership        GroupMembership @relation(fields: [workspaceId, groupId, groupMembershipId, userId], references: [workspaceId, groupId, id, userId], onDelete: Cascade, onUpdate: Cascade)
+
+  @@unique([workspaceId, groupId, groupMembershipId], map: "personal_learning_persona_profiles_member_key")
+  @@unique([workspaceId, groupId, groupMembershipId, userId], map: "personal_learning_persona_profiles_member_user_key")
+  @@index([workspaceId, groupId, optedIn, updatedAt], map: "personal_learning_persona_profiles_opted_in_idx")
+  @@map("personal_learning_persona_profiles")
+}
+
 /// Learner-approved suppression marker only; intentionally stores no inferred value or evidence.
 model PersonalLearningPersonaSuppression {
   id                String   @id @default(uuid()) @db.Uuid
@@ -3597,6 +3623,7 @@ model GroupMembership {
   personalLearningRequests PersonalLearningRequest[]
   personalLearningTopics PersonalLearningTopic[]
   personalLearningPersonaItems PersonalLearningPersonaItem[]
+  personalLearningPersonaProfile PersonalLearningPersonaProfile?
   personalLearningPersonaSuppressions PersonalLearningPersonaSuppression[]
   personalLearningSavedExamples PersonalLearningSavedExample[]
   practiceSupportImages PersonalLearningPracticeSupportImage[]

@@ -141,6 +141,7 @@ export interface TrainingRetentionExecutionCounts {
   personaItemsDue?: number;
   savedExamplesDue?: number;
   personaSuppressionsDue?: number;
+  personaProfilesDue?: number;
 }
 export type TrainingRetentionExecutionPreview = {
   revision: string;

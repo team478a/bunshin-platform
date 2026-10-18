@@ -55,7 +55,7 @@ describe('lesson Provider', () => {
         false,
         [
           {
-            attributeKey: 'preferred_learning_style',
+            attributeKey: 'explanation_style',
             value: '短い例を先に見る',
             epistemicStatus: 'LEARNER_CONFIRMED',
             evidenceType: 'LEARNING_REQUEST',
@@ -67,7 +67,7 @@ describe('lesson Provider', () => {
     const learnerData = JSON.parse(v.input.find((item) => item.role === 'user')!.content);
     expect(learnerData.personaContext).toEqual([
       {
-        attributeKey: 'preferred_learning_style',
+        attributeKey: 'explanation_style',
         value: '短い例を先に見る',
         epistemicStatus: 'LEARNER_CONFIRMED',
         evidenceType: 'LEARNING_REQUEST',

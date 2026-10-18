@@ -16,7 +16,7 @@ export type LearningPersonaContext = readonly {
   attributeKey: string;
   value: string;
   epistemicStatus: 'UNCONFIRMED_GUESS' | 'LEARNER_CONFIRMED';
-  evidenceType: 'CONVERSATION_EVENT' | 'PRACTICE_ANSWER' | 'LEARNING_REQUEST';
+  evidenceType: 'CONVERSATION_EVENT' | 'PRACTICE_ANSWER' | 'LEARNING_REQUEST' | 'LEARNER_INPUT';
   evidenceCreatedAt: Date | string;
 }[];
 export function learningLessonBody(

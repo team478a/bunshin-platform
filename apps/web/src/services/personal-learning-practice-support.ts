@@ -122,13 +122,21 @@ export async function requestPracticeSupport(command: PracticeSupportCommand) {
       },
     );
     if (!value) throw new ApplicationError('AI_PROVIDER_UNAVAILABLE', 'support unavailable');
-    return await repo.completeSupport({
+    const completed = await repo.completeSupport({
       command,
       requestId: prepared.request.id,
       advice: value,
       usageKey,
       promptVersion,
     });
+    await (
+      await import('./personal-learning-persona-inference')
+    ).inferPersonalLearningPersonaAfterSuccess({
+      actor: command.actor,
+      requestId: prepared.practice.candidate.requestId,
+      requestRevision: prepared.practice.candidate.requestRevision,
+    });
+    return completed;
   } catch (error) {
     // Reauthorization may deny failure-state writes after expiry/deletion. Do not mask that failure.
     await repo.failSupport({ command, requestId: prepared.request.id });

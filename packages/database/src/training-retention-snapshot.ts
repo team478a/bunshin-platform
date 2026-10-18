@@ -79,42 +79,51 @@ export async function trainingRetentionSnapshot(
   }
   // D tables can outlive the feature/mode which created them. Keep their cleanup path
   // reachable after an operator disables DYNAMIC_V1 or multiTopic.
-  const [dynamicTopics, personaItems, personaSuppressions, savedExamples] = await Promise.all([
-    tx.personalLearningTopic.count({
-      where: {
-        workspaceId: input.workspaceId,
-        groupId: input.groupId,
-        programEnrollmentId: input.programEnrollmentId,
-        groupMembershipId: owned.membership.id,
-        userId: owned.membership.userId,
-      },
-    }),
-    tx.personalLearningPersonaItem.count({
-      where: {
-        workspaceId: input.workspaceId,
-        groupId: input.groupId,
-        groupMembershipId: owned.membership.id,
-        userId: owned.membership.userId,
-      },
-    }),
-    tx.personalLearningPersonaSuppression.count({
-      where: {
-        workspaceId: input.workspaceId,
-        groupId: input.groupId,
-        groupMembershipId: owned.membership.id,
-        userId: owned.membership.userId,
-      },
-    }),
-    tx.personalLearningSavedExample.count({
-      where: {
-        workspaceId: input.workspaceId,
-        groupId: input.groupId,
-        groupMembershipId: owned.membership.id,
-        userId: owned.membership.userId,
-      },
-    }),
-  ]);
-  if (dynamicTopics + personaItems + personaSuppressions + savedExamples > 0) {
+  const [dynamicTopics, personaItems, personaSuppressions, savedExamples, personaProfiles] =
+    await Promise.all([
+      tx.personalLearningTopic.count({
+        where: {
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          programEnrollmentId: input.programEnrollmentId,
+          groupMembershipId: owned.membership.id,
+          userId: owned.membership.userId,
+        },
+      }),
+      tx.personalLearningPersonaItem.count({
+        where: {
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          groupMembershipId: owned.membership.id,
+          userId: owned.membership.userId,
+        },
+      }),
+      tx.personalLearningPersonaSuppression.count({
+        where: {
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          groupMembershipId: owned.membership.id,
+          userId: owned.membership.userId,
+        },
+      }),
+      tx.personalLearningSavedExample.count({
+        where: {
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          groupMembershipId: owned.membership.id,
+          userId: owned.membership.userId,
+        },
+      }),
+      tx.personalLearningPersonaProfile.count({
+        where: {
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          groupMembershipId: owned.membership.id,
+          userId: owned.membership.userId,
+        },
+      }),
+    ]);
+  if (dynamicTopics + personaItems + personaSuppressions + savedExamples + personaProfiles > 0) {
     return dynamicTrainingRetentionSnapshot(tx, input, owned, state);
   }
   const endedAt = trainingRetentionEndDate({
@@ -370,6 +379,17 @@ async function dynamicTrainingRetentionSnapshot(
         select: { lastLearnerUseAt: true },
         orderBy: [{ lastLearnerUseAt: 'desc' }, { id: 'desc' }],
       }),
+      tx.personalLearningPersonaProfile.findFirst({
+        where: {
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          groupMembershipId: owned.membership.id,
+          userId: owned.membership.userId,
+          lastLearnerUseAt: { not: null },
+        },
+        select: { lastLearnerUseAt: true },
+        orderBy: [{ lastLearnerUseAt: 'desc' }, { id: 'desc' }],
+      }),
     ]),
   ]);
   if (serviceEnrollments.length > TRAINING_EXPORT_MAX_ROWS)
@@ -539,6 +559,7 @@ async function dynamicTrainingRetentionSnapshot(
     personaItems,
     personaSuppressions,
     savedExamples,
+    personaProfiles,
   ] =
     summaryDue || serviceSummaryDue
       ? await Promise.all([
@@ -641,8 +662,21 @@ async function dynamicTrainingRetentionSnapshot(
                 take: TRAINING_EXPORT_MAX_ROWS + 1,
               })
             : [],
+          serviceSummaryDue
+            ? tx.personalLearningPersonaProfile.findMany({
+                where: {
+                  workspaceId: input.workspaceId,
+                  groupId: input.groupId,
+                  groupMembershipId: owned.membership.id,
+                  userId: owned.membership.userId,
+                },
+                select: { id: true, updatedAt: true, lastLearnerUseAt: true },
+                orderBy: { id: 'asc' },
+                take: TRAINING_EXPORT_MAX_ROWS + 1,
+              })
+            : [],
         ])
-      : [[], [], [], [], [], [], [], [], [], []];
+      : [[], [], [], [], [], [], [], [], [], [], []];
   const rows = {
     answers: selectedAnswers,
     profiles,
@@ -658,6 +692,7 @@ async function dynamicTrainingRetentionSnapshot(
     personaItems,
     personaSuppressions,
     savedExamples,
+    personaProfiles,
   };
   if (
     Object.entries(rows).some(
@@ -681,11 +716,13 @@ async function dynamicTrainingRetentionSnapshot(
     personaItemsDue: personaItems.length,
     personaSuppressionsDue: personaSuppressions.length,
     savedExamplesDue: savedExamples.length,
+    personaProfilesDue: personaProfiles.length,
     dynamicLearningDataDue:
       dynamicTopics.length +
       personaItems.length +
       personaSuppressions.length +
-      savedExamples.length,
+      savedExamples.length +
+      personaProfiles.length,
     learningRequests: selectedRequests.length,
     conversationEvents: contentEvents.filter(({ eventType }) =>
       eventType.startsWith('PERSONAL_LEARNING_CONVERSATION_'),
