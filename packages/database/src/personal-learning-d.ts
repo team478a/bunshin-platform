@@ -303,6 +303,16 @@ export type PersonaItemInput = {
   evidenceCreatedAt: Date;
 };
 
+type PersonaAiContextItem = {
+  attributeKey: string;
+  value: string;
+  status: 'UNCONFIRMED' | 'CONFIRMED';
+  evidenceType: PersonaItemInput['evidenceType'] | 'LEARNER_INPUT';
+  evidenceId: string;
+  evidenceCreatedAt: Date;
+  epistemicStatus: 'UNCONFIRMED_GUESS' | 'LEARNER_CONFIRMED';
+};
+
 function personaEvidenceType(value: string): PersonaItemInput['evidenceType'] | null {
   switch (value) {
     case 'CONVERSATION_EVENT':
@@ -720,17 +730,7 @@ export class PrismaPersonalLearningPersonaRepository {
   }
 
   /** Bounded D-3 intake source; it does not call or connect to an AI provider. */
-  async listForAi(scope: MemberScope): Promise<
-    Array<{
-      attributeKey: string;
-      value: string;
-      status: 'UNCONFIRMED' | 'CONFIRMED';
-      evidenceType: PersonaItemInput['evidenceType'] | 'LEARNER_INPUT';
-      evidenceId: string;
-      evidenceCreatedAt: Date;
-      epistemicStatus: 'UNCONFIRMED_GUESS' | 'LEARNER_CONFIRMED';
-    }>
-  > {
+  async listForAi(scope: MemberScope): Promise<PersonaAiContextItem[]> {
     if (!(await ownsEnabledDynamicEnrollment(scope, this.client, undefined, false))) return [];
     const profile = await this.client.personalLearningPersonaProfile.findUnique({
       where: {
@@ -778,7 +778,7 @@ export class PrismaPersonalLearningPersonaRepository {
       ],
       take: 17,
     });
-    const inferred = items.flatMap((item) => {
+    const inferred = items.flatMap((item): PersonaAiContextItem[] => {
       if (
         !isPersonalLearningPersonaInferredKey(item.attributeKey) ||
         isPersonalLearningPersonaValueDisallowed(item.value)
@@ -790,7 +790,7 @@ export class PrismaPersonalLearningPersonaRepository {
       return [
         {
           ...item,
-          status: item.status as 'CONFIRMED' | 'UNCONFIRMED',
+          status: item.status,
           evidenceType,
           epistemicStatus:
             item.status === 'CONFIRMED'
