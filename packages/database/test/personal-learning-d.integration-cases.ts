@@ -827,6 +827,12 @@ export function registerPersonalLearningDIntegrationCases(client: PrismaClient) 
 
     it('retention expires LINE text at the enrollment deadline and images independently', async () => {
       const f = await serviceFixture('PR-F retention', { multiTopic: false });
+      await client.platformAdmin.create({
+        data: { userId: f.owner.id, role: 'SUPER_ADMIN', status: 'ACTIVE' },
+      });
+      cleanup.push(async () => {
+        await client.platformAdmin.deleteMany({ where: { userId: f.owner.id } });
+      });
       const endedAt = new Date(now.getTime() - 91 * 86_400_000);
       const startsAt = new Date(endedAt.getTime() - 30 * 86_400_000);
       await client.programEnrollment.update({
