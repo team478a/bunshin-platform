@@ -60,7 +60,7 @@
 - `pnpm format:check`：成功（変更を含む全リポジトリ）。
 - `pnpm typecheck`：成功（25/25 tasks、4分27秒）。
 - 変更した画面・テストファイルのESLint：成功。
-- CI `verify` / `database`：Draft PR作成後に結果とrun番号を追記する。
+- CI初回 `database`：成功（run `39151742638`）。初回 `verify` はテスト内の未解決`Route`型で失敗したため修正し、ローカルweb typecheck成功を確認。修正版のCI再実行待ち。
 - 画面比較：利用者向け画面コンポーネントを`renderToStaticMarkup`で描画して受け入れ条件を検証。別途撮影した本番画面の画像はない。
 
 ## 5. 未解決事項
