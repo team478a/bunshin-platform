@@ -21,6 +21,7 @@ export function LearningConversationCard({
   candidate,
   practiceEndpoint,
   practice,
+  plainLanguage = false,
   onPracticeChange,
   onCandidateChange,
 }: {
@@ -31,6 +32,7 @@ export function LearningConversationCard({
   candidate: SavedLearningLessonCandidate | null;
   practiceEndpoint: string;
   practice: PersonalLearningPracticeState;
+  plainLanguage?: boolean;
   onPracticeChange: (value: PersonalLearningPracticeState) => void;
   onCandidateChange: (value: SavedLearningLessonCandidate | null) => void;
 }) {
@@ -232,7 +234,11 @@ export function LearningConversationCard({
                     {entry.item.advice.question && (
                       <p>確認したいこと：{entry.item.advice.question}</p>
                     )}
-                    <small>支援であり、達成・合格・独力再現の評価ではありません。</small>
+                    <small>
+                      {plainLanguage
+                        ? '学習を手伝うための返答です。達成や合格を決めるものではありません。'
+                        : '支援であり、達成・合格・独力再現の評価ではありません。'}
+                    </small>
                   </>
                 ) : (
                   <p>

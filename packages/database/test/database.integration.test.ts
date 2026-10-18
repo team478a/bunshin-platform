@@ -6299,6 +6299,41 @@ describe('database ownership boundaries', () => {
         where: { workspaceId: organization.id, groupId: group.id },
       }),
     ).toBe(0);
+    const consentMembership = joined[0]!;
+    const consentEnrollment = await client.programEnrollment.findFirstOrThrow({
+      where: {
+        workspaceId: organization.id,
+        groupId: group.id,
+        serviceProgramId: program.id,
+        groupMembershipId: consentMembership.id,
+      },
+      select: { id: true },
+    });
+    await client.aiTrainingUsageConsent.createMany({
+      data: ['AI_TRAINING_EXTERNAL_AI_V1', 'AI_TRAINING_EXTERNAL_AI_V2'].map((consentVersion) => ({
+        workspaceId: organization.id,
+        groupId: group.id,
+        programEnrollmentId: consentEnrollment.id,
+        groupMembershipId: consentMembership.id,
+        userId: consentMembership.userId,
+        consentVersion,
+        textDigest: 'a'.repeat(64),
+      })),
+    });
+    expect(
+      await client.aiTrainingUsageConsent.findMany({
+        where: {
+          workspaceId: organization.id,
+          groupId: group.id,
+          programEnrollmentId: consentEnrollment.id,
+        },
+        orderBy: { consentVersion: 'asc' },
+        select: { consentVersion: true },
+      }),
+    ).toEqual([
+      { consentVersion: 'AI_TRAINING_EXTERNAL_AI_V1' },
+      { consentVersion: 'AI_TRAINING_EXTERNAL_AI_V2' },
+    ]);
     expect(
       await client.serviceProgram.findUniqueOrThrow({ where: { id: program.id } }),
     ).toMatchObject({

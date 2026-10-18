@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import {
   AI_TRAINING_V1_MODULE_KEY,
   isPersonalLearningPilotProgram,
+  personalLearningMode,
 } from '@bunshin/capability-training';
 import { ApplicationError } from '@bunshin/shared';
 import {
@@ -115,6 +116,7 @@ export async function readAiTrainingParticipation(serviceSlug: string, userId: s
     return {
       enrollmentId: enrollment.id,
       programName: program.displayName,
+      isDynamicLearning: personalLearningMode(program.settings) === 'DYNAMIC_V1',
       state,
       consentedAt: state === 'READY' ? (consent?.consentedAt.toISOString() ?? null) : null,
     };
@@ -130,6 +132,7 @@ export async function readAiTrainingParticipation(serviceSlug: string, userId: s
   });
   return {
     serviceName: service.configuration.displayName,
+    isDynamicLearning: rows.some((row) => row.isDynamicLearning),
     state,
     enrollments: rows,
   };

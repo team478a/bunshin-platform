@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   copyOptions,
   imageCreationPrompt,
+  imageCreationSlidePrompts,
   imagePostHeadline,
   missionAssistanceOptions,
   missionGuide,
@@ -57,8 +58,8 @@ describe('Daily Mission copy UX', () => {
       const options = copyOptions(original, 'sennokuni-media');
       const prompt = options.find(({ type }) => type === 'COPIED_IMAGE_INSTRUCTION')?.value ?? '';
       expect(prompt).toContain('投稿のテーマ：公式LINEから参加の案内');
-      expect(prompt).toContain('見出し「公式LINEから参加」');
-      expect(prompt).toContain('このページの場面「公式LINEを開く」');
+      expect(prompt).toContain('公式LINEから参加');
+      expect(prompt).toContain('このページの場面・構図：公式LINEを開く');
       expect(prompt).toContain('参加窓口は公式LINE');
       expect(prompt).toContain('Discordのロゴ、画面、サーバー一覧、チャンネル一覧を画像に描かない');
       expect(prompt).not.toContain('https://discord');
@@ -67,7 +68,17 @@ describe('Daily Mission copy UX', () => {
         '公式LINEから参加 https://lin.ee/approved',
       );
       expect(imagePostHeadline(original, 'sennokuni-media')).toBe('加入：公式LINEから参加');
-      expect(imageCreationPrompt(original, 'sennokuni-media')).toBe(prompt);
+      expect(imageCreationPrompt(original, 'sennokuni-media', 1)).toBe(prompt);
+      expect(
+        imageCreationSlidePrompts(original, 'sennokuni-media').every((page) =>
+          page.prompt.includes('参加窓口は公式LINE'),
+        ),
+      ).toBe(true);
+      expect(
+        imageCreationSlidePrompts(original, 'sennokuni-media').every(
+          (page) => !page.prompt.includes('Discord参加'),
+        ),
+      ).toBe(true);
       expect(original.content['overlayText']).toBe('加入：Discord参加');
     },
   );
@@ -140,7 +151,7 @@ describe('Daily Mission copy UX', () => {
     ]);
   });
 
-  it('provides all-slides and per-slide actions without copying hidden data', () => {
+  it('provides five self-contained image prompts and an advanced combined copy without hidden data', () => {
     const options = copyOptions(
       mission('SLIDE', {
         slides: [
@@ -150,21 +161,67 @@ describe('Daily Mission copy UX', () => {
         internalNote: 'コピー禁止',
       }),
     );
-    expect(options.map(({ label }) => label)).toEqual([
-      '5枚の画像を作る文章をコピー',
-      '全部コピー',
+    expect(
+      options.filter(({ type }) => type === 'COPIED_IMAGE_INSTRUCTION').map(({ label }) => label),
+    ).toEqual([
       '1枚目をコピー',
       '2枚目をコピー',
+      '3枚目をコピー',
+      '4枚目をコピー',
+      '5枚目をコピー',
+      '5枚まとめてコピー',
     ]);
-    expect(options[0]?.value).not.toContain('コピー禁止');
-    expect(options[0]?.value).toContain('1枚目：見出し「1枚目」／本文「本文1」');
-    expect(options[0]?.value).toContain('このページの場面');
-    expect(options[0]?.value).toContain('お客様が商品を比べている場面');
-    expect(options[0]?.value).toContain('同じ写真や、ほぼ同じ構図を繰り返さない');
-    expect(options[2]).toMatchObject({
-      type: 'COPIED_SLIDE',
-      metadata: { slideIndex: 1 },
-    });
+    const pages = imageCreationSlidePrompts(
+      mission('SLIDE', {
+        slides: [
+          { headline: '1枚目', body: '本文1' },
+          { headline: '2枚目', body: '本文2', visualScene: 'お客様が商品を比べている場面' },
+        ],
+        internalNote: 'コピー禁止',
+      }),
+    );
+    expect(pages).toHaveLength(5);
+    const common = [
+      '縦長4:5（1080×1350ピクセル）',
+      '人物・色・書体・レイアウト・余白をシリーズ内で統一',
+      'スマートフォンでも文字が読みやすい',
+      '日本語を一字一句正確に表示',
+      'ロゴ、透かし',
+    ];
+    for (const page of pages) {
+      expect(page.prompt).not.toContain('コピー禁止');
+      for (const directive of common) expect(page.prompt).toContain(directive);
+      expect(page.prompt).toContain('このページの見出し');
+      expect(page.prompt).toContain('このページの本文');
+      expect(page.prompt).toContain('このページの場面・構図');
+      expect(page.prompt).toContain('1枚だけ');
+      expect(page.prompt).not.toContain('5枚はそれぞれ');
+    }
+    expect(pages[1]?.prompt).toContain(
+      'この会話で作った前の画像と同じ人物・色・書体・レイアウトで、このページだけを1枚作ってください',
+    );
+    expect(pages[2]?.prompt).toContain('理由を知ると、見方が変わる');
+    expect(pages[3]?.prompt).toContain('今日できる小さな一歩');
+    expect(pages[4]?.prompt).toContain('まずは一つ、試してみましょう');
+    expect(pages[1]?.prompt).toContain('お客様が商品を比べている場面');
+    expect(options.find(({ label }) => label === '5枚まとめてコピー')?.value).toContain('次の画像');
+  });
+
+  it('fills all five page prompts when saved slide details are missing', () => {
+    const pages = imageCreationSlidePrompts(
+      mission('SLIDE', { caption: '小さく始めることが大切です', angle: '今日できることから' }),
+    );
+    expect(pages).toHaveLength(5);
+    expect(pages.map((page) => page.role)).toEqual([
+      '表紙',
+      '悩み・共感',
+      '理由・気づき',
+      '今日できる解決策',
+      'まとめ・次の行動',
+    ]);
+    expect(pages.every((page) => page.prompt.includes('小さく始めることが大切です'))).toBe(true);
+    expect(pages.every((page) => page.prompt.includes('投稿の切り口：angle'))).toBe(true);
+    expect(imageCreationPrompt(mission('IMAGE', {}), undefined, 5)).toContain('まとめ・次の行動');
   });
 
   it.each([
@@ -181,7 +238,15 @@ describe('Daily Mission copy UX', () => {
     [
       'IMAGE',
       { imageInstruction: '制作指示', caption: '投稿文' },
-      ['画像を作るための説明をコピー', '投稿文をコピー'],
+      [
+        '1枚目をコピー',
+        '2枚目をコピー',
+        '3枚目をコピー',
+        '4枚目をコピー',
+        '5枚目をコピー',
+        '5枚まとめてコピー',
+        '投稿文をコピー',
+      ],
     ],
   ] as const)('provides the intended %s actions', (format, content, labels) => {
     expect(copyOptions(mission(format, content)).map(({ label }) => label)).toEqual(labels);
@@ -198,19 +263,16 @@ describe('Daily Mission copy UX', () => {
     );
 
     expect(options[0]).toMatchObject({
-      label: '画像を作るための説明をコピー',
+      label: '1枚目をコピー',
       type: 'COPIED_IMAGE_INSTRUCTION',
     });
-    expect(options[0]?.value).toContain('5枚で完結する投稿画像');
-    expect(options[0]?.value).toContain('別画像として作ってください');
-    expect(options[0]?.value).toContain('写真・イラストの内容：白い背景に青い円を置く');
-    expect(options[0]?.value).toContain('「画像内の文字」');
-    expect(options[0]?.value).toContain('2枚目（共感）');
-    expect(options[0]?.value).toContain('5枚目（まとめ）');
-    expect(options[0]?.value).toContain('内容を作る材料となる投稿文：投稿文');
-    expect(options[0]?.value).toContain('私が「次」と送るたびに');
+    expect(options[0]?.value).toContain('1枚だけ');
+    expect(options[0]?.value).toContain('このページの場面・構図：白い背景に青い円を置く');
+    expect(options[0]?.value).toContain('このページの見出し：「画像内の文字」');
+    expect(options[0]?.value).not.toContain('2枚目（悩み・共感）');
+    expect(options[0]?.value).not.toContain('次」と送る');
     expect(options[0]?.value).not.toContain('コピー禁止');
-    expect(options[1]).toEqual({
+    expect(options[6]).toEqual({
       label: '投稿文をコピー',
       value: '投稿文',
       type: 'COPIED_TEXT',

@@ -18,6 +18,7 @@ import {
   readPostPerformance,
   type PostPerformanceView,
 } from './post-performance';
+import { uniqueMissionCount } from './mission-activity-counts';
 
 type Window = {
   weekStart: string;
@@ -50,9 +51,6 @@ export type ServiceWeeklyProgressReport = ReturnType<typeof buildWeeklyProgressS
       })
     | null;
 };
-
-const uniqueMissionCount = (items: { dailyMissionId: string }[]) =>
-  new Set(items.map(({ dailyMissionId }) => dailyMissionId)).size;
 
 export async function loadServiceWeeklyProgressReports(input: {
   client: typeof prisma;

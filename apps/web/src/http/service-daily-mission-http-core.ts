@@ -40,7 +40,16 @@ export const activitySchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('EXECUTION_NOT_COMPLETED'), idempotencyKey: keySchema }).strict(),
   z.object({ type: z.literal('EXECUTION_HELP_NEEDED'), idempotencyKey: keySchema }).strict(),
   z.object({ type: z.literal('COPIED_TEXT'), idempotencyKey: keySchema }).strict(),
-  z.object({ type: z.literal('COPIED_IMAGE_INSTRUCTION'), idempotencyKey: keySchema }).strict(),
+  z
+    .object({
+      type: z.literal('COPIED_IMAGE_INSTRUCTION'),
+      idempotencyKey: keySchema,
+      metadata: z
+        .object({ slideIndex: z.number().int().min(0).max(5) })
+        .strict()
+        .optional(),
+    })
+    .strict(),
   z.object({ type: z.literal('COPIED_VIDEO_PROMPT'), idempotencyKey: keySchema }).strict(),
   z.object({ type: z.literal('COPIED_SCRIPT'), idempotencyKey: keySchema }).strict(),
   z

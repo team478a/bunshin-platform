@@ -9,11 +9,13 @@ export function LearningPracticeCard({
   endpoint,
   state,
   candidate,
+  plainLanguage = false,
   onChange,
 }: {
   endpoint: string;
   state: PersonalLearningPracticeState;
   candidate: SavedLearningLessonCandidate | null;
+  plainLanguage?: boolean;
   onChange: (value: PersonalLearningPracticeState) => void;
 }) {
   const [text, setText] = useState(state.current?.note?.text ?? '');
@@ -167,7 +169,11 @@ export function LearningPracticeCard({
             <div>
               <h3>前回の記録</h3>
               <p>{current.note.text}</p>
-              <p>本人の報告です。提出物による達成確認・独力再現の確認ではありません。</p>
+              <p>
+                {plainLanguage
+                  ? 'あなたが報告してくれた内容です。'
+                  : '本人の報告です。提出物による達成確認・独力再現の確認ではありません。'}
+              </p>
             </div>
           )}
           <label htmlFor="practice-note">進めたこと・止まったこと（短く）</label>
@@ -338,7 +344,9 @@ export function LearningPracticeCard({
             </section>
           )}
           <p>
-            一回の提出で今回の基準を確認します。本人の報告、提出文から確認したこと、独力で別の実践ができることは別に扱います。目標全体の達成や次の課題はこの確認では決まりません。
+            {plainLanguage
+              ? '今回の練習でできたことを確認します。あなたからの報告と、提出された文章から分かることは分けて記録します。目標全体の達成や次の練習は、この確認だけでは決まりません。'
+              : '一回の提出で今回の基準を確認します。本人の報告、提出文から確認したこと、独力で別の実践ができることは別に扱います。目標全体の達成や次の課題はこの確認では決まりません。'}
           </p>
         </>
       ) : (

@@ -75,10 +75,12 @@ export function PersonalLearningPilotCard({
   serviceSlug,
   enrollmentId,
   initialSnapshot,
+  plainLanguage = false,
 }: {
   serviceSlug: string;
   enrollmentId: string;
   initialSnapshot?: PersonalLearningPilotSnapshot;
+  plainLanguage?: boolean;
 }) {
   const base = `/api/services/${encodeURIComponent(serviceSlug)}/ai-training/enrollments/${encodeURIComponent(enrollmentId)}`;
   const [snapshot, setSnapshot] = useState<PersonalLearningPilotSnapshot | null>(
@@ -387,7 +389,9 @@ export function PersonalLearningPilotCard({
       ) : null}
       {snapshot && !snapshot.readiness.profileReady ? (
         <p className="notice" role="status">
-          Pilotの学習設定を準備中です。運営者へ確認してください。未回答の経験を初心者とは扱いません。
+          {plainLanguage
+            ? '学習の準備を進めています。まだ答えていないことを、できないこととして判断しません。'
+            : 'Pilotの学習設定を準備中です。運営者へ確認してください。未回答の経験を初心者とは扱いません。'}
         </p>
       ) : null}
       {snapshot?.readiness.profileReady && snapshot.assignment && !planCompleted ? (
