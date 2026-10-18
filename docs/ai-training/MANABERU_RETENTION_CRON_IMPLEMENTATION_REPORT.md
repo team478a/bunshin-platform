@@ -49,9 +49,9 @@
 ## テスト
 
 - HTTP: Cron認証、スコープ未設定時にDBを読まないこと、既定Preview、正確な本番Execution opt-in、環境外実行の無効化、重複/不正スコープ拒否を確認。
-- DB統合: Previewでは削除されないこと、90日超画像だけが削除されること、最近の画像・本文が残ること、許可外Programの期限超過画像が残ること、監査がCRON範囲・件数のみで本文を含まないことを確認。
+- DB統合: Previewでは削除されないこと、90日超画像だけが削除されること、最近の画像・本文が残ること、同じWorkspace内の許可外Programの期限超過画像が残ること、監査がCRON範囲・件数のみで本文を含まないことを追加確認。GitHub Actions run `39105655642` の`database` job（`db:validate` / migration deploy-preflight / `db:assert-ready` / `test:integration`）成功。
 - ローカル確認: HTTPテスト5件成功、Retention Preview/Execution既存ユニットテスト22件成功、Database/Web型検査を実行、対象ファイルPrettier検査成功、対象ESLintと`git diff --check`成功、Vercel JSON parse成功。
-- ローカルDB統合テストは安全な使い捨てDB接続が存在せず、preflightが0件実行で拒否した。Productionや別DBへ接続していない。統合テストの成功はDraft PRの専用Postgres CI結果で追記する。
+- ローカルDB統合テストは安全な使い捨てDB接続が存在せず、preflightが0件実行で拒否した。Productionや別DBへ接続していない。CI専用Postgresでの成功を上記runで確認した。
 
 ## 未解決・次の条件
 
