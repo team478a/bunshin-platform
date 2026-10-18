@@ -261,6 +261,7 @@ export * from './barrier';
 export * from './personal-data-export';
 export * from './personal-data-deletion';
 export * from './personal-data-retention';
+export * from './personal-learning-persona-policy';
 export * from './enrollment-lifecycle';
 export * from './end-date-confirmation';
 export * from './enrollment-expiry';
@@ -288,3 +289,9 @@ export {
   type PersonalLearningFeature,
   type PersonalLearningFeatures,
 } from './personal-learning-pilot';
+export {
+  PERSONAL_LEARNING_ACTIVE_TOPIC_LIMIT,
+  canCreatePersonalLearningTopic,
+  personalLearningTopicLimit,
+} from './personal-learning-topics';
+export type { PersonalLearningTopicStatus } from './personal-learning-topics';

@@ -1,6 +1,9 @@
 import type { TrainingPersonalDataScope } from './personal-data-export';
 
-export type TrainingDataDeletionTarget = { kind: 'ALL' } | { kind: 'ANSWER'; answerId: string };
+export type TrainingDataDeletionTarget =
+  | { kind: 'ALL' }
+  | { kind: 'ANSWER'; answerId: string }
+  | { kind: 'LEARNING_REQUEST'; requestId: string; requestRevision: number };
 export interface TrainingDataDeletionCounts {
   answers: number;
   toolkit: number;
@@ -10,12 +13,15 @@ export interface TrainingDataDeletionCounts {
   activities: number;
   goals: number;
   preferences: number;
+  dynamicLearningData?: number;
   learningRequests?: number;
+  conversationEvents?: number;
 }
 export interface TrainingDataDeletionPreview {
   revision: string;
   counts: TrainingDataDeletionCounts;
   answers: { id: string; createdAt: string; evaluationStatus: string }[];
+  learningRequests: { id: string; revision: number; createdAt: string }[];
 }
 export type TrainingDataDeletionInput = TrainingPersonalDataScope & {
   target: TrainingDataDeletionTarget;

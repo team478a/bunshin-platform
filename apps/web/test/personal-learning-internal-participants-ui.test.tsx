@@ -35,12 +35,28 @@ describe('internal pilot participant seat UI', () => {
             revokedAt: null,
           },
         ],
-        enrollments: [{ id: 'enrollment-b', name: 'Tester B' }],
+        enrollments: [
+          {
+            id: 'enrollment-b',
+            name: 'Tester B',
+            personaOptedIn: true,
+            inferredPersonaCount: 2,
+            learnerEnteredPersonaCount: 1,
+          },
+        ],
       }),
     ).toMatchObject({
       policy: { revision: 2, internalParticipantCap: 3, currentWave: 0 },
       seats: [{ programEnrollmentId: 'enrollment-a', kind: 'INTERNAL', revokedAt: null }],
-      enrollments: [{ id: 'enrollment-b', name: 'Tester B' }],
+      enrollments: [
+        {
+          id: 'enrollment-b',
+          name: 'Tester B',
+          personaOptedIn: true,
+          inferredPersonaCount: 2,
+          learnerEnteredPersonaCount: 1,
+        },
+      ],
     });
     expect(participantSnapshot({ policy: {}, seats: [], enrollments: [] })).toBeNull();
     expect(

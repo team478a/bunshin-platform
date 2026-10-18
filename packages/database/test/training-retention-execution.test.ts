@@ -12,6 +12,8 @@ const input = {
 function fixture() {
   const table = () => ({
     findMany: vi.fn().mockResolvedValue([]),
+    findFirst: vi.fn().mockResolvedValue(null),
+    count: vi.fn().mockResolvedValue(0),
     updateMany: vi.fn().mockResolvedValue({ count: 1 }),
     deleteMany: vi.fn().mockResolvedValue({ count: 1 }),
   });
@@ -27,14 +29,23 @@ function fixture() {
     $queryRaw: vi.fn(),
     $executeRaw: vi.fn(),
     platformAdmin: { findFirst: vi.fn().mockResolvedValue({ id: 'admin' }) },
-    programEnrollment: { findFirst: vi.fn().mockResolvedValue(enrollment), updateMany: vi.fn() },
+    programEnrollment: {
+      findFirst: vi.fn().mockResolvedValue(enrollment),
+      findMany: vi.fn().mockResolvedValue([enrollment]),
+      updateMany: vi.fn(),
+    },
     groupMembership: {
       findFirst: vi.fn().mockResolvedValue({ id: 'membership', userId: 'participant' }),
     },
     serviceProgram: { findFirst: vi.fn().mockResolvedValue({ id: 'program' }) },
-    trainingDataRetentionState: { findFirst: vi.fn().mockResolvedValue(null), upsert: vi.fn() },
+    trainingDataRetentionState: {
+      findFirst: vi.fn().mockResolvedValue(null),
+      findMany: vi.fn().mockResolvedValue([]),
+      upsert: vi.fn(),
+    },
     trainingMissionAnswer: {
       ...table(),
+      findFirst: vi.fn().mockResolvedValue(null),
       findMany: vi
         .fn()
         .mockResolvedValue([{ id: 'answer', missionAssignmentId: 'assignment', updatedAt: now }]),
@@ -52,6 +63,11 @@ function fixture() {
     programMemberGoal: table(),
     programMemberPreference: table(),
     personalLearningRequest: table(),
+    personalLearningTopic: table(),
+    personalLearningPersonaItem: table(),
+    personalLearningPersonaSuppression: table(),
+    personalLearningSavedExample: table(),
+    personalLearningPersonaProfile: table(),
     personalLearningPracticeSupportImage: table(),
     programActionEvent: table(),
     job: { updateMany: vi.fn() },

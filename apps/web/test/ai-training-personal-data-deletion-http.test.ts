@@ -44,7 +44,12 @@ describe('training deletion HTTP', () => {
     state.resolve.mockResolvedValue({ workspaceId: 'workspace-a', serviceId: 'group-a' });
     state.preview.mockResolvedValue({
       outcome: 'PREVIEW',
-      preview: { revision: 'a'.repeat(64), counts: { answers: 1 }, answers: [] },
+      preview: {
+        revision: 'a'.repeat(64),
+        counts: { answers: 1 },
+        answers: [],
+        learningRequests: [],
+      },
     });
     state.remove.mockResolvedValue({ outcome: 'DELETED', counts: { answers: 1 } });
   });
@@ -105,6 +110,37 @@ describe('training deletion HTTP', () => {
         ).status,
       ).toBe(400);
     expect(state.remove).not.toHaveBeenCalled();
+  });
+  it('accepts only an identified learning-request revision for individual thread deletion', async () => {
+    const target = {
+      kind: 'LEARNING_REQUEST',
+      requestId: enrollmentId,
+      requestRevision: 2,
+    };
+    const result = await trainingPersonalDataDeletionResponse(
+      request({ target }),
+      'training',
+      enrollmentId,
+      'preview',
+    );
+    expect(result.status).toBe(200);
+    expect(state.preview).toHaveBeenCalledWith({
+      workspaceId: 'workspace-a',
+      groupId: 'group-a',
+      actorUserId: 'user-a',
+      programEnrollmentId: enrollmentId,
+      target,
+    });
+    expect(
+      (
+        await trainingPersonalDataDeletionResponse(
+          request({ target: { ...target, requestRevision: 0 } }),
+          'training',
+          enrollmentId,
+          'preview',
+        )
+      ).status,
+    ).toBe(400);
   });
   it('denies unauthenticated/cross-origin/invalid paths before the repository', async () => {
     state.user = null;

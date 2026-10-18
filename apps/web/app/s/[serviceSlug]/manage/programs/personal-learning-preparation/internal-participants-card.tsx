@@ -13,7 +13,13 @@ type ParticipantSnapshot = {
     kind: 'INTERNAL' | 'EXTERNAL';
     revokedAt: string | null;
   }[];
-  enrollments: { id: string; name: string }[];
+  enrollments: {
+    id: string;
+    name: string;
+    personaOptedIn: boolean;
+    inferredPersonaCount: number;
+    learnerEnteredPersonaCount: number;
+  }[];
 };
 type AdmitCommand = {
   operationId: string;
@@ -57,8 +63,22 @@ export function participantSnapshot(value: unknown): ParticipantSnapshot | null 
   const enrollments = v.enrollments.flatMap((item) => {
     if (!item || typeof item !== 'object' || Array.isArray(item)) return [];
     const row = item as Record<string, unknown>;
-    return typeof row.id === 'string' && typeof row.name === 'string'
-      ? [{ id: row.id, name: row.name }]
+    return typeof row.id === 'string' &&
+      typeof row.name === 'string' &&
+      typeof row.personaOptedIn === 'boolean' &&
+      Number.isSafeInteger(row.inferredPersonaCount) &&
+      Number(row.inferredPersonaCount) >= 0 &&
+      Number.isSafeInteger(row.learnerEnteredPersonaCount) &&
+      Number(row.learnerEnteredPersonaCount) >= 0
+      ? [
+          {
+            id: row.id,
+            name: row.name,
+            personaOptedIn: row.personaOptedIn,
+            inferredPersonaCount: Number(row.inferredPersonaCount),
+            learnerEnteredPersonaCount: Number(row.learnerEnteredPersonaCount),
+          },
+        ]
       : [];
   });
   if (seats.length !== v.seats.length || enrollments.length !== v.enrollments.length) return null;
@@ -190,6 +210,18 @@ export function InternalParticipantsCard({ serviceSlug }: { serviceSlug: string 
             内部枠：{activeInternal}/{snapshot.policy.internalParticipantCap}人（Wave{' '}
             {snapshot.policy.currentWave}）
           </p>
+          <section aria-label="本人像の利用状態（本文は表示しません）">
+            <h3>本人像の状態（件数のみ）</h3>
+            <ul>
+              {snapshot.enrollments.map((enrollment) => (
+                <li key={enrollment.id}>
+                  {enrollment.name}：{enrollment.personaOptedIn ? '本人像を利用中' : '未同意'}、
+                  AI推測 {enrollment.inferredPersonaCount}件、本人入力{' '}
+                  {enrollment.learnerEnteredPersonaCount}件
+                </li>
+              ))}
+            </ul>
+          </section>
           {!eligible?.length ? (
             <p>
               枠を付与できる有効な研修Enrollmentがありません。先に通常のプログラム管理画面で参加登録してください。

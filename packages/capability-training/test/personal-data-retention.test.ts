@@ -1,11 +1,73 @@
 import { describe, expect, it } from 'vitest';
 import {
+  personalLearningDynamicContentDeletionDue,
+  personalLearningDynamicImageDeletionDue,
+  personalLearningDynamicSummaryDeletionDue,
   trainingAnswerRetentionCutoff,
   trainingEndRetentionEligibility,
   trainingRetentionEndDate,
 } from '../src';
 
 describe('training retention policy', () => {
+  it('keeps actively used dynamic learning content and deletes at the exact inactivity anniversary', () => {
+    const lastUse = new Date('2024-02-29T15:00:00Z');
+    expect(
+      personalLearningDynamicContentDeletionDue({
+        endedAt: null,
+        lastLearnerUseAt: lastUse,
+        now: new Date('2025-02-28T14:59:59.999Z'),
+      }),
+    ).toBe(false);
+    expect(
+      personalLearningDynamicContentDeletionDue({
+        endedAt: null,
+        lastLearnerUseAt: lastUse,
+        now: new Date('2025-02-28T15:00:00Z'),
+      }),
+    ).toBe(true);
+  });
+  it('uses whichever comes first: end+90d or one-year inactivity', () => {
+    const now = new Date('2026-10-17T00:00:00Z');
+    expect(
+      personalLearningDynamicContentDeletionDue({
+        endedAt: new Date('2026-07-19T00:00:00Z'),
+        lastLearnerUseAt: new Date('2026-10-01T00:00:00Z'),
+        now,
+      }),
+    ).toBe(true);
+    expect(
+      personalLearningDynamicContentDeletionDue({
+        endedAt: null,
+        lastLearnerUseAt: new Date('2026-10-01T00:00:00Z'),
+        now,
+      }),
+    ).toBe(false);
+  });
+  it('expires dynamic images at 90 days regardless of current activity', () => {
+    const createdAt = new Date('2026-07-19T00:00:00Z');
+    expect(
+      personalLearningDynamicImageDeletionDue(createdAt, new Date('2026-10-16T23:59:59.999Z')),
+    ).toBe(false);
+    expect(
+      personalLearningDynamicImageDeletionDue(createdAt, new Date('2026-10-17T00:00:00Z')),
+    ).toBe(true);
+  });
+  it('retains structured summaries until end+1y or two years of inactivity', () => {
+    expect(
+      personalLearningDynamicSummaryDeletionDue({
+        endedAt: null,
+        lastLearnerUseAt: new Date('2024-02-29T15:00:00Z'),
+        now: new Date('2026-02-28T15:00:00Z'),
+      }),
+    ).toBe(true);
+    expect(
+      personalLearningDynamicSummaryDeletionDue({
+        endedAt: new Date('2025-10-18T00:00:00Z'),
+        lastLearnerUseAt: new Date('2026-10-01T00:00:00Z'),
+        now: new Date('2026-10-17T00:00:00Z'),
+      }),
+    ).toBe(false);
+  });
   it('uses the recorded actual end for completed and cancelled training, never a planned date', () => {
     const endsAt = new Date('2027-01-01');
     const recordedEnd = new Date('2026-09-28');

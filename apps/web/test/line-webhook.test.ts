@@ -194,6 +194,109 @@ describe('group dedicated LINE webhook adapter', () => {
     });
   });
 
+  it('persists every text and image event as one inbox batch before acknowledging', async () => {
+    const body = JSON.stringify({
+      events: [
+        {
+          type: 'message',
+          timestamp: 1787378400000,
+          webhookEventId: 'evt-text',
+          source: { type: 'user', userId: 'ULearner' },
+          message: { type: 'text', id: 'message-text', text: '今日の練習を相談したい' },
+        },
+        {
+          type: 'message',
+          timestamp: 1787378400001,
+          webhookEventId: 'evt-image',
+          source: { type: 'user', userId: 'ULearner' },
+          message: { type: 'image', id: 'line-image-id' },
+        },
+        {
+          type: 'message',
+          timestamp: 1787378400002,
+          webhookEventId: 'evt-no-source',
+          message: { type: 'text', id: 'message-no-source', text: '参加者不明の受信記録' },
+        },
+      ],
+    });
+    const signature = createHmac('sha256', scope.secret).update(body).digest('base64');
+    let persisted = false;
+    const learningInbox = {
+      persist: vi.fn((input: unknown) => {
+        expect(persisted).toBe(false);
+        expect(input).toMatchObject({
+          configurationId: scope.configurationId,
+          events: [
+            {
+              providerEventId: 'evt-text',
+              message: { type: 'TEXT', text: '今日の練習を相談したい' },
+            },
+            {
+              providerEventId: 'evt-image',
+              message: { type: 'IMAGE', lineMessageId: 'line-image-id' },
+            },
+            {
+              providerEventId: 'evt-no-source',
+              providerUserId: null,
+              message: { type: 'TEXT', text: '参加者不明の受信記録' },
+            },
+          ],
+        });
+        persisted = true;
+        return Promise.resolve();
+      }),
+    };
+    const response = await handleGroupLineWebhook(
+      new Request(`https://example.com/api/line/groups/${routingKey}/webhook`, {
+        method: 'POST',
+        headers: { 'x-line-signature': signature },
+        body,
+      }),
+      routingKey,
+      {
+        environment: 'PRODUCTION',
+        configurations: { get: vi.fn().mockResolvedValue(scope) },
+        learningInbox,
+        processor: { execute: vi.fn() } as never,
+      },
+    );
+
+    expect(response.status).toBe(200);
+    expect(persisted).toBe(true);
+    expect(learningInbox.persist).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns 500 and does not acknowledge when inbox persistence fails', async () => {
+    const body = JSON.stringify({
+      events: [
+        {
+          type: 'message',
+          timestamp: 1787378400000,
+          webhookEventId: 'evt-failed-save',
+          source: { type: 'user', userId: 'ULearner' },
+          message: { type: 'text', id: 'message-text', text: '相談です' },
+        },
+      ],
+    });
+    const signature = createHmac('sha256', scope.secret).update(body).digest('base64');
+    const response = await handleGroupLineWebhook(
+      new Request(`https://example.com/api/line/groups/${routingKey}/webhook`, {
+        method: 'POST',
+        headers: { 'x-line-signature': signature },
+        body,
+      }),
+      routingKey,
+      {
+        environment: 'PRODUCTION',
+        configurations: { get: vi.fn().mockResolvedValue(scope) },
+        learningInbox: { persist: vi.fn().mockRejectedValue(new Error('database unavailable')) },
+        processor: { execute: vi.fn() } as never,
+      },
+    );
+
+    expect(response.status).toBe(500);
+  });
+
   it('replies with the service participation button only for a newly applied follow event', async () => {
     const body = JSON.stringify({
       events: [

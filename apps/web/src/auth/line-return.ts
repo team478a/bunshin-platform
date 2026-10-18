@@ -8,10 +8,10 @@ const MAX_STATE_LENGTH = 2048;
 const serviceSlugPattern = '[a-z0-9]+(?:-[a-z0-9]+)*';
 const uuidPattern = '[0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}';
 const servicePagePattern = new RegExp(
-  `^/s/${serviceSlugPattern}/(?:home|line|legal-consent|onboarding|training|bunshins(?:/new|/${uuidPattern}(?:/line)?)?|programs(?:/${uuidPattern}(?:/toolkit|/growth)?)?|today|activity|history|images|videos(?:/${uuidPattern})?|video-assets|settings|credits|commerce|roadmap|diagnosis|readings/${uuidPattern}|manual|help|tracking-link|90-day-report|manage(?:/(?:settings|members|legal|line|email|templates|campaigns|badges|points|credits|knowledge|characters|product-packs|external-tracking|referral-rewards|programs|program-goals|personalization|post-approvals|weekly-report|90-day-report|video-operations|video-deliveries|image-operations|improvement-feedback|training(?:/(?:expiry|retention|skills))?|fortune(?:/manual)?))?)$`,
+  `^/s/${serviceSlugPattern}/(?:home|line|legal-consent|onboarding|training|bunshins(?:/new|/${uuidPattern}(?:/line)?)?|programs(?:/${uuidPattern}(?:/toolkit|/growth|/persona|/examples)?)?|today|activity|history|images|videos(?:/${uuidPattern})?|video-assets|settings|credits|commerce|roadmap|diagnosis|readings/${uuidPattern}|manual|help|tracking-link|90-day-report|manage(?:/(?:settings|members|legal|line|email|templates|campaigns|badges|points|credits|knowledge|characters|product-packs|external-tracking|referral-rewards|programs|program-goals|personalization|post-approvals|weekly-report|90-day-report|video-operations|video-deliveries|image-operations|improvement-feedback|training(?:/(?:expiry|retention|skills))?|fortune(?:/manual)?))?)$`,
 );
 const learningProgramAdminPagePattern = new RegExp(
-  `^/s/${serviceSlugPattern}/manage/programs/(?:personal-learning-preparation|learning-definition-review)$`,
+  `^/s/${serviceSlugPattern}/manage/programs/(?:personal-learning-preparation|learning-definition-review|learning-conversations(?:/${uuidPattern})?)$`,
 );
 const learningRequestPagePattern = new RegExp(
   `^/s/${serviceSlugPattern}/programs/${uuidPattern}/learning-request$`,

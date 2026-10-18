@@ -6,11 +6,23 @@ import {
   type LineWebhookEventType,
 } from '@bunshin/application';
 import { getServerEnvironment } from '@bunshin/config';
-import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
+import { createHmac, randomBytes, timingSafeEqual, randomUUID } from 'node:crypto';
 import { z } from 'zod';
+import { createHash } from 'node:crypto';
+import { ApplicationError } from '@bunshin/shared';
+import {
+  personalLearningDynamicProgramAllows,
+  personalLearningFeatureEnabled,
+} from '@bunshin/capability-training';
 import { AesGcmLineSecretCrypto, currentLineEnvironment } from './secure-configuration';
 import { GroupParticipationService } from '@bunshin/application';
 import { groupInvitationTokenHash } from '../http/group-invitations';
+import {
+  AI_TRAINING_AI_CONSENT_VERSION,
+  AI_TRAINING_AI_CONSENT_TEXT,
+} from '../services/ai-training-consent';
+
+const aiConsentDigest = createHash('sha256').update(AI_TRAINING_AI_CONSENT_TEXT).digest('hex');
 
 const webhookBody = z
   .object({
@@ -24,6 +36,14 @@ const webhookBody = z
             replyToken: z.string().min(1).max(255).optional(),
             source: z
               .object({ userId: z.string().min(1).max(255).optional() })
+              .passthrough()
+              .optional(),
+            message: z
+              .object({
+                type: z.enum(['text', 'image']).optional(),
+                id: z.string().min(1).max(255).optional(),
+                text: z.string().max(5000).optional(),
+              })
               .passthrough()
               .optional(),
           })
@@ -65,6 +85,13 @@ export function parseLineWebhookEvents(rawBody: string) {
       providerEventId: event.webhookEventId,
       providerUserId: event.source?.userId ?? null,
       type,
+      ...(event.type === 'message' &&
+      event.message?.type === 'text' &&
+      event.message.text !== undefined
+        ? { message: { type: 'TEXT' as const, text: event.message.text } }
+        : event.type === 'message' && event.message?.type === 'image' && event.message.id
+          ? { message: { type: 'IMAGE' as const, lineMessageId: event.message.id } }
+          : {}),
       occurredAt: new Date(event.timestamp),
     };
   });
@@ -158,6 +185,211 @@ export interface GroupLineFollowInvitationPort {
     sourceEventId: string;
     expiresAt: Date;
   }): Promise<boolean>;
+}
+
+export interface GroupLineLearningInboxPort {
+  persist(input: {
+    environment: LineConfigurationEnvironment;
+    workspaceId: string;
+    groupId: string;
+    configurationId: string;
+    events: Array<{
+      providerEventId: string;
+      providerUserId: string | null;
+      occurredAt: Date;
+      message: { type: 'TEXT'; text: string } | { type: 'IMAGE'; lineMessageId: string };
+    }>;
+  }): Promise<void>;
+}
+
+export class PrismaGroupLineLearningInbox implements GroupLineLearningInboxPort {
+  async persist(input: Parameters<GroupLineLearningInboxPort['persist']>[0]) {
+    const { prisma } = await import('@bunshin/database');
+    await prisma.$transaction(async (tx) => {
+      const configuration = await tx.groupLineChannelConfiguration.findFirst({
+        where: {
+          id: input.configurationId,
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          environment: input.environment,
+          status: 'ACTIVE',
+          globallyPaused: false,
+          group: {
+            status: 'ACTIVE',
+            lineRoutingPolicies: {
+              some: { environment: input.environment, mode: 'DEDICATED', pilotEnabled: true },
+            },
+          },
+        },
+        select: { id: true },
+      });
+      if (!configuration) throw new Error('LINE learning configuration unavailable');
+      for (const event of input.events) {
+        const prior = await tx.groupLineWebhookEvent.findUnique({
+          where: {
+            configurationId_providerEventId: {
+              configurationId: input.configurationId,
+              providerEventId: event.providerEventId,
+            },
+          },
+          select: { id: true },
+        });
+        if (prior) continue;
+        const connection = event.providerUserId
+          ? await tx.groupLineConnection.findFirst({
+              where: {
+                configurationId: input.configurationId,
+                workspaceId: input.workspaceId,
+                groupId: input.groupId,
+                providerUserId: event.providerUserId,
+                status: 'ACTIVE',
+                friendshipStatus: 'FOLLOWING',
+                notificationConsentAt: { not: null },
+                user: { status: 'ACTIVE' },
+                groupMembership: { status: 'ACTIVE', consentedAt: { not: null } },
+              },
+              select: { id: true, userId: true, groupMembershipId: true },
+            })
+          : null;
+        const enrollment = connection
+          ? await tx.programEnrollment.findFirst({
+              where: {
+                workspaceId: input.workspaceId,
+                groupId: input.groupId,
+                groupMembershipId: connection.groupMembershipId,
+                status: 'ACTIVE',
+                startsAt: { lte: new Date() },
+                OR: [{ endsAt: null }, { endsAt: { gt: new Date() } }],
+              },
+              orderBy: [{ startsAt: 'desc' }, { id: 'asc' }],
+              select: { id: true, serviceProgramId: true },
+            })
+          : null;
+        const program = enrollment
+          ? await tx.serviceProgram.findFirst({
+              where: {
+                id: enrollment.serviceProgramId,
+                workspaceId: input.workspaceId,
+                groupId: input.groupId,
+                status: 'ACTIVE',
+                settings: { path: ['moduleKey'], equals: 'AI_TRAINING_V1' },
+              },
+              select: { settings: true },
+            })
+          : null;
+        const settings = program?.settings;
+        const lineLearning = personalLearningFeatureEnabled(settings, 'lineLearning');
+        const dynamicEnabled = enrollment
+          ? personalLearningDynamicProgramAllows(settings, enrollment.id)
+          : false;
+        const consent =
+          enrollment && connection
+            ? await tx.aiTrainingUsageConsent.findFirst({
+                where: {
+                  workspaceId: input.workspaceId,
+                  groupId: input.groupId,
+                  programEnrollmentId: enrollment.id,
+                  groupMembershipId: connection.groupMembershipId,
+                  userId: connection.userId,
+                  consentVersion: AI_TRAINING_AI_CONSENT_VERSION,
+                  textDigest: aiConsentDigest,
+                },
+                select: { id: true },
+              })
+            : null;
+        let outcome: 'APPLIED' | 'CONNECTION_NOT_FOUND' | 'IGNORED' = 'IGNORED';
+        if (connection) outcome = 'CONNECTION_NOT_FOUND';
+        let seat = false;
+        if (connection && enrollment && program) {
+          try {
+            const db = await import('@bunshin/database');
+            await db.requirePersonalLearningPilotSeat(
+              tx,
+              {
+                workspaceId: input.workspaceId,
+                groupId: input.groupId,
+                programEnrollmentId: enrollment.id,
+                userId: connection.userId,
+              },
+              true,
+            );
+            seat = true;
+          } catch (error) {
+            if (!(error instanceof ApplicationError) || error.code !== 'NOT_FOUND') throw error;
+            seat = false;
+          }
+        }
+        if (
+          connection &&
+          enrollment &&
+          program &&
+          lineLearning &&
+          dynamicEnabled &&
+          consent &&
+          seat
+        ) {
+          const multiTopic = personalLearningFeatureEnabled(settings, 'multiTopic');
+          const activeTopics = multiTopic
+            ? await tx.personalLearningTopic.findMany({
+                where: {
+                  workspaceId: input.workspaceId,
+                  groupId: input.groupId,
+                  programEnrollmentId: enrollment.id,
+                  groupMembershipId: connection.groupMembershipId,
+                  userId: connection.userId,
+                  status: 'ACTIVE',
+                },
+                orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+                take: 3,
+                select: { id: true },
+              })
+            : [];
+          const topicId = multiTopic && activeTopics.length === 1 ? activeTopics[0]!.id : null;
+          const inbox = await tx.personalLearningLineInbox.create({
+            data: {
+              workspaceId: input.workspaceId,
+              groupId: input.groupId,
+              programEnrollmentId: enrollment.id,
+              groupMembershipId: connection.groupMembershipId,
+              userId: connection.userId,
+              configurationId: input.configurationId,
+              providerEventId: event.providerEventId,
+              topicId,
+              messageType: event.message.type,
+              ...(event.message.type === 'TEXT'
+                ? { text: event.message.text }
+                : { lineMessageId: event.message.lineMessageId }),
+            },
+          });
+          await tx.job.create({
+            data: {
+              environment: input.environment,
+              workspaceId: input.workspaceId,
+              jobType: 'PERSONAL_LEARNING_LINE_PROCESS',
+              payloadReference: `personal-learning-line:${inbox.id}`,
+              idempotencyKey: `personal-learning-line:${input.configurationId}:${event.providerEventId}`,
+              correlationId: randomUUID(),
+              requestedBy: connection.userId,
+              priority: 70,
+              maxAttempts: 5,
+            },
+          });
+          outcome = 'APPLIED';
+        }
+        await tx.groupLineWebhookEvent.create({
+          data: {
+            workspaceId: input.workspaceId,
+            groupId: input.groupId,
+            configurationId: input.configurationId,
+            providerEventId: event.providerEventId,
+            type: 'OTHER',
+            outcome,
+            occurredAt: event.occurredAt,
+          },
+        });
+      }
+    });
+  }
 }
 
 class DatabaseGroupLineFollowInvitation implements GroupLineFollowInvitationPort {
@@ -278,6 +510,7 @@ export async function handleGroupLineWebhook(
     processor?: ProcessGroupLineWebhookEvents;
     followReply?: GroupLineFollowReplyPort;
     followInvitations?: GroupLineFollowInvitationPort;
+    learningInbox?: GroupLineLearningInboxPort;
   } = {},
 ) {
   if (!z.string().uuid().safeParse(routingKey).success)
@@ -298,12 +531,29 @@ export async function handleGroupLineWebhook(
   const replyTokens = parsedBody.success
     ? new Map(parsedBody.data.events.map((event) => [event.webhookEventId, event.replyToken]))
     : new Map<string, string | undefined>();
+  const learningEvents = events.filter((event) => 'message' in event);
+  if (learningEvents.length) {
+    try {
+      await (dependencies.learningInbox ?? new PrismaGroupLineLearningInbox()).persist({
+        environment,
+        workspaceId: scoped.workspaceId,
+        groupId: scoped.groupId,
+        configurationId: scoped.configurationId,
+        events: learningEvents.map(({ message, ...event }) => ({
+          ...event,
+          message,
+        })),
+      });
+    } catch {
+      return Response.json({ error: 'temporary persistence failure' }, { status: 500 });
+    }
+  }
   const processor =
     dependencies.processor ??
     new ProcessGroupLineWebhookEvents(
       new (await import('@bunshin/database')).PrismaGroupLineConnectionRepository(),
     );
-  for (const event of events) {
+  for (const event of events.filter((candidate) => !('message' in candidate))) {
     const result = await processor.execute({
       environment,
       workspaceId: scoped.workspaceId,

@@ -6,6 +6,7 @@ import { registerImprovementTriageIntegrationCases } from './improvement-triage.
 import { registerImprovementRetentionJobIntegrationCases } from './improvement-retention-jobs.integration-cases';
 import { registerTrainingSupportSkillLifecycleIntegrationCases } from './training-support-skill-lifecycle.integration-cases';
 import { registerPersonalLearningPersistenceIntegrationCases } from './personal-learning-persistence.integration-cases';
+import { registerPersonalLearningDIntegrationCases } from './personal-learning-d.integration-cases';
 import { registerAiProviderCallAdmissionIntegrationCases } from './provider-call-admission.integration-cases';
 import { registerServiceImprovementProgressIntegrationCases } from './service-improvement-progress.integration-cases';
 import { cleanupProgramFixtures } from './program-fixture-cleanup';
@@ -222,6 +223,7 @@ describe('database ownership boundaries', () => {
   registerImprovementRetentionJobIntegrationCases(client);
   registerTrainingSupportSkillLifecycleIntegrationCases(client);
   registerPersonalLearningPersistenceIntegrationCases(client);
+  registerPersonalLearningDIntegrationCases(client);
   registerOemBillingIntegrationCases(client);
   registerMigrationBoundsIntegrationCases(client);
   registerAiProviderCallAdmissionIntegrationCases(client);

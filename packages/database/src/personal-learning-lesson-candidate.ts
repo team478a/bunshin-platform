@@ -17,7 +17,7 @@ export class PrismaLearningCandidateRepository
     return this.authorized(actor, true, async (tx) => {
       await this.normalLearner(tx, actor);
       const row = await tx.personalLearningRequest.findFirst({
-        where: actor.scope,
+        where: { ...actor.scope, ...(actor.topicId ? { topicId: actor.topicId } : {}) },
         orderBy: { revision: 'desc' },
       });
       return row?.lessonCandidate
@@ -45,7 +45,10 @@ export class PrismaLearningCandidateRepository
     return this.authorized(input.actor, true, async (tx, now) => {
       await this.normalLearner(tx, input.actor);
       const row = await tx.personalLearningRequest.findFirst({
-        where: input.actor.scope,
+        where: {
+          ...input.actor.scope,
+          ...(input.actor.topicId ? { topicId: input.actor.topicId } : {}),
+        },
         orderBy: { revision: 'desc' },
       });
       if (row?.id !== input.request.id || row.revision !== input.request.revision)
@@ -80,7 +83,7 @@ export class PrismaLearningCandidateRepository
         proposal,
       };
       await tx.personalLearningRequest.update({
-        where: { id: row.id },
+        where: { id: row.id, ...(input.actor.topicId ? { topicId: input.actor.topicId } : {}) },
         data: { lessonCandidate: candidate as unknown as Prisma.InputJsonValue },
       });
       return candidate;
@@ -90,7 +93,10 @@ export class PrismaLearningCandidateRepository
     return this.authorized(input.actor, true, async (tx, now) => {
       await this.normalLearner(tx, input.actor);
       const row = await tx.personalLearningRequest.findFirst({
-        where: input.actor.scope,
+        where: {
+          ...input.actor.scope,
+          ...(input.actor.topicId ? { topicId: input.actor.topicId } : {}),
+        },
         orderBy: { revision: 'desc' },
       });
       if (
@@ -104,7 +110,7 @@ export class PrismaLearningCandidateRepository
         throw new ApplicationError('CONFLICT', 'candidate not confirmable');
       if (row.candidateConfirmedAt) return candidate;
       await tx.personalLearningRequest.update({
-        where: { id: row.id },
+        where: { id: row.id, ...(input.actor.topicId ? { topicId: input.actor.topicId } : {}) },
         data: { candidateConfirmedAt: now },
       });
       return { ...candidate, confirmedAt: now.toISOString() };

@@ -51,6 +51,7 @@ export interface AdminAlertSnapshot {
     serviceSlug: string | null;
     serviceDisplayName: string | null;
   }>;
+  personalLearningLineQuotaNotices?: Array<{ thresholdPercent: number }>;
   otherDeadJobs: number;
   rewards: {
     failedPointProcessing: number;
@@ -231,6 +232,28 @@ export function buildAdminAlerts(snapshot: AdminAlertSnapshot): AdminAlert[] {
       href: event.serviceSlug
         ? `/s/${encodeURIComponent(event.serviceSlug)}/manage/line`
         : '/admin/services',
+    });
+  }
+  const learningQuotaNotices = new Map<number, number>();
+  for (const notice of snapshot.personalLearningLineQuotaNotices ?? [])
+    learningQuotaNotices.set(
+      notice.thresholdPercent,
+      (learningQuotaNotices.get(notice.thresholdPercent) ?? 0) + 1,
+    );
+  for (const [thresholdPercent, count] of learningQuotaNotices) {
+    alerts.push({
+      code: `PERSONAL_LEARNING_LINE_QUOTA_${thresholdPercent}`,
+      severity: thresholdPercent >= 90 ? 'CRITICAL' : 'WARNING',
+      title:
+        thresholdPercent >= 90
+          ? '研修LINEの月間送信上限が近づきました'
+          : '研修LINEの月間送信数が警告水準に達しました',
+      guidance:
+        thresholdPercent >= 90
+          ? '研修のAI応答Pushは停止し、Web画面への案内に切り替えています。LINE設定と月間利用状況を確認してください。'
+          : '研修LINEの月間利用状況を確認してください。上限停止水準に達するとAI応答PushをWeb画面への案内に切り替えます。',
+      count,
+      href: '/admin/line',
     });
   }
   if (snapshot.otherDeadJobs > 0)

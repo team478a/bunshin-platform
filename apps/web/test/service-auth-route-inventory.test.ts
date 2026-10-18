@@ -53,6 +53,15 @@ describe('service authentication route inventory', () => {
   ])('rejects definition review route aliases and unapproved extensions: %s', (path) => {
     expect(safeLineAuthReturnPath(path)).toBeNull();
   });
+  it.each([
+    '/s/service-a/manage/programs/learning-conversations?shared=true',
+    '/s/service-a/manage/programs/learning-conversations/11111111-1111-4111-8111-111111111111/extra',
+    '/s/service-a/manage/programs/learning-conversations/not-a-request',
+    '/s/service-a/manage/programs/learning-conversations#details',
+    '//example.com/s/service-a/manage/programs/learning-conversations',
+  ])('rejects learning conversation route aliases and unapproved extensions: %s', (path) => {
+    expect(safeLineAuthReturnPath(path)).toBeNull();
+  });
   it.each(pages(root).filter((page) => !['terms/page.tsx', 'privacy/page.tsx'].includes(page)))(
     'preserves existing project page %s',
     (page) => {

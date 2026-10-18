@@ -11,6 +11,8 @@ const f = vi.hoisted(() => ({
   settle: vi.fn(),
   generate: vi.fn(),
   prices: vi.fn(),
+  extendedScope: vi.fn(),
+  persona: vi.fn(),
 }));
 vi.mock('@bunshin/database', () => ({
   prisma: { personalLearningCallAdmission: { findUnique: f.cost } },
@@ -20,6 +22,9 @@ vi.mock('@bunshin/database', () => ({
   },
   PrismaPersonalLearningRequestRepository: class {
     readRequest = f.request;
+  },
+  PrismaPersonalLearningPersonaRepository: class {
+    listForAi = f.persona;
   },
   PrismaPersonalLearningTextOperationRepository: class {
     admit = f.admit;
@@ -38,6 +43,9 @@ vi.mock('../src/providers/openai-learning-lesson', async () => {
   const actual = await vi.importActual<object>('../src/providers/openai-learning-lesson');
   return { ...actual, generateLearningLesson: f.generate };
 });
+vi.mock('../src/services/personal-learning-extended-scope', () => ({
+  resolvePersonalLearningExtendedScope: f.extendedScope,
+}));
 import { prepareLearningLesson } from '../src/services/personal-learning-lesson-candidate';
 const id = '11111111-1111-4111-8111-111111111111';
 const actor = {
@@ -90,6 +98,8 @@ describe('lesson generation composition', () => {
       createdAt: '2026-10-13T00:00:00Z',
     });
     f.prior.mockResolvedValue(null);
+    f.persona.mockResolvedValue([]);
+    f.extendedScope.mockResolvedValue(false);
     f.resolve.mockResolvedValue({ model });
     f.reserve.mockResolvedValue({ model, apiKey: 'synthetic', admission: { id: 'synthetic' } });
     f.admit.mockResolvedValue({
