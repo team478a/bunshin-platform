@@ -2840,6 +2840,43 @@ a {
   font-size: 1rem;
   font-weight: 800;
 }
+.mission-image-instruction-list {
+  display: grid;
+  gap: 12px;
+  padding-left: 24px;
+}
+.mission-image-instruction-list li {
+  padding: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+}
+.mission-image-instruction-list li.mission-image-instruction-list__next {
+  border: 2px solid var(--service-primary, var(--color-primary));
+  background: color-mix(in srgb, var(--service-primary, var(--color-primary)) 7%, white);
+}
+.mission-image-instruction-list li > div > span {
+  color: var(--service-primary, var(--color-primary));
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+.mission-manual-image-flow button.mission-copy-action--subtle {
+  width: auto;
+  min-height: 0;
+  padding: 4px 0;
+  border: 0;
+  color: var(--color-text-muted);
+  background: transparent;
+  font-size: 0.86rem;
+  font-weight: 500;
+  text-decoration: underline;
+}
+.mission-image-instruction-list button small {
+  display: block;
+  margin-top: 3px;
+  color: inherit;
+  font-size: 0.87rem;
+  font-weight: 500;
+}
 .mission-manual-copy {
   margin: 14px 0;
   padding: 16px;
