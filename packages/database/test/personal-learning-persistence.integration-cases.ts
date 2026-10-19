@@ -1617,6 +1617,13 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
       const f = await textOperationFixture();
       const settings = {
         moduleKey: 'AI_TRAINING_V1',
+        trainingOperations: {
+          notificationsEnabled: false,
+          notificationHour: 9,
+          postponedReminderEnabled: false,
+          postponedReminderHours: 24,
+          helpQueueEnabled: false,
+        },
         personalLearningPilot: {
           enabled: true,
           enrollmentIds: [f.enrollment.id],
@@ -1624,10 +1631,10 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
           participantControl: {
             version: 'PILOT_PARTICIPANT_CAP_V1',
             revision: 1,
-            externalParticipantCap: 0,
+            externalParticipantCap: 5,
             internalParticipantCap: 1,
             currentWave: 1,
-            currentWaveCap: 1,
+            currentWaveCap: 5,
           },
           learningFeatures: {
             conversation: false,
