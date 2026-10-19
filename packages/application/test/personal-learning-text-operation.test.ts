@@ -60,6 +60,30 @@ function repository() {
   } satisfies PersonalLearningTextOperationRepository;
 }
 describe('preassignment text operation', () => {
+  it('accepts only a bounded, non-topic nudge context and rejects learner-derived fields', () => {
+    const nudge = {
+      ...input,
+      operationKind: 'NUDGE_COPY' as const,
+      nudge: { situation: 'STUCK' as const, ordinal: 1 as const, judgmentDate: '2026-10-19' },
+    };
+    expect(() => validatePersonalLearningTextOperation(nudge)).not.toThrow();
+    expect(() =>
+      validatePersonalLearningTextOperation({ ...nudge, freeText: 'learner answer' } as never),
+    ).toThrow();
+    expect(() =>
+      validatePersonalLearningTextOperation({
+        ...nudge,
+        actor: { ...nudge.actor, topicId: id },
+      }),
+    ).toThrow();
+    expect(() =>
+      validatePersonalLearningTextOperation({
+        ...nudge,
+        nudge: { ...nudge.nudge, judgmentDate: '2026-02-30' },
+      }),
+    ).toThrow();
+  });
+
   it('passes real operation identity and limits without an Assignment/Answer', async () => {
     const repo = repository();
     const call = vi

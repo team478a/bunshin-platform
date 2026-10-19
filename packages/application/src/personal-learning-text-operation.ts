@@ -24,7 +24,20 @@ export interface PersonalLearningTextOperation {
     | 'LESSON_GENERATION'
     | 'PRACTICE_SUPPORT'
     | 'CONVERSATION_TURN'
-    | 'PERSONA_INFERENCE';
+    | 'PERSONA_INFERENCE'
+    | 'NUDGE_COPY';
+  /** Closed, non-identifying facts only. Never include learner text or profile data. */
+  nudge?: {
+    situation:
+      | 'REST_RESUME'
+      | 'STUCK'
+      | 'NEW_LEARNER_STALLED'
+      | 'PRACTICE_COMPLETE'
+      | 'RETURN_INACTIVE'
+      | 'NO_RESPONSE';
+    ordinal: 1 | 2;
+    judgmentDate: string;
+  };
   practice?: {
     assignmentId: string;
     noteRevision: number;
@@ -74,7 +87,41 @@ export function validatePersonalLearningTextOperation(input: PersonalLearningTex
       'PRACTICE_SUPPORT',
       'CONVERSATION_TURN',
       'PERSONA_INFERENCE',
+      'NUDGE_COPY',
     ].includes(input.operationKind) ||
+    (input.operationKind === 'NUDGE_COPY'
+      ? !input.nudge ||
+        input.actor.topicId !== undefined ||
+        ![
+          'REST_RESUME',
+          'STUCK',
+          'NEW_LEARNER_STALLED',
+          'PRACTICE_COMPLETE',
+          'RETURN_INACTIVE',
+          'NO_RESPONSE',
+        ].includes(input.nudge.situation) ||
+        ![1, 2].includes(input.nudge.ordinal) ||
+        !/^\d{4}-\d{2}-\d{2}$/.test(input.nudge.judgmentDate) ||
+        !Number.isFinite(Date.parse(`${input.nudge.judgmentDate}T00:00:00Z`)) ||
+        new Date(`${input.nudge.judgmentDate}T00:00:00Z`).toISOString().slice(0, 10) !==
+          input.nudge.judgmentDate ||
+        Object.keys(input).some(
+          (key) =>
+            ![
+              'actor',
+              'requestId',
+              'expectedRequestRevision',
+              'operationId',
+              'operationKind',
+              'nudge',
+              'attempt',
+              'provider',
+              'promptVersion',
+              'policy',
+              'pricingRegistry',
+            ].includes(key),
+        )
+      : input.nudge !== undefined) ||
     (input.operationKind === 'PRACTICE_SUPPORT'
       ? !input.practice ||
         !uuid(input.practice.assignmentId) ||

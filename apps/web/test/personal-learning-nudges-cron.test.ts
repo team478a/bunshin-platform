@@ -42,12 +42,11 @@ describe('N-1 fixed LINE learning nudges cron', () => {
     expect(await response.json()).toMatchObject({ outcome: 'COMPLETED', scanned: 0, sent: 0 });
   });
 
-  it('uses only the fixed N-1 copy map and makes no AI/provider-generation call', () => {
+  it('keeps N-1 fixed copy as the fallback when the N-2 AI attempt is unavailable', () => {
     expect(source).toContain('personalLearningNudgeCopy(decision.situation, decision.ordinal)');
     expect(source).toContain('personalLearningNudgeQuickReplies(enrollment.id)');
-    expect(source).not.toMatch(
-      /generateLearning|createResponse|chat\.completions|openai\.responses/i,
-    );
-    expect(source).toContain("copySource: 'FIXED_N1'");
+    expect(source).toContain('generatePersonalLearningNudgeCopy');
+    expect(source).toContain("let copySource: 'AI_N2' | 'FIXED_N1' = 'FIXED_N1'");
+    expect(source).toContain('let messageText = outbox.text');
   });
 });

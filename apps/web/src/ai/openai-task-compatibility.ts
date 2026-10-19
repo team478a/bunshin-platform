@@ -9,6 +9,7 @@ export type OpenAiCompatibilityTask =
   | 'LEARNING_LESSON'
   | 'LEARNING_SUPPORT'
   | 'LEARNING_CONVERSATION'
+  | 'LEARNING_NUDGE'
   | 'PERSONAL_LEARNING_PERSONA_INFERENCE';
 
 // Local request compatibility, not a live quality/access/price approval or model router.
@@ -25,6 +26,7 @@ const schemaNames: Record<OpenAiCompatibilityTask, readonly string[]> = {
   LEARNING_LESSON: ['learning_lesson'],
   LEARNING_SUPPORT: ['learning_support'],
   LEARNING_CONVERSATION: ['learning_conversation'],
+  LEARNING_NUDGE: ['learning_nudge'],
   PERSONAL_LEARNING_PERSONA_INFERENCE: ['personal_learning_persona_inference'],
 };
 
