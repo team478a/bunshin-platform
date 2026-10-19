@@ -42,6 +42,15 @@ describe('LINE webhook adapter', () => {
               replyToken: 'not-persisted',
             },
             { type: 'message', timestamp: 1787378400000, webhookEventId: 'evt-message' },
+            {
+              type: 'postback',
+              timestamp: 1787378400001,
+              webhookEventId: 'evt-nudge-pause',
+              source: { type: 'user', userId: 'U0123456789abcdef' },
+              postback: {
+                data: 'manaberu-nudge-v1:4d69b102-496d-4ce8-b275-3b4e959ee905:PAUSE:14',
+              },
+            },
           ],
         }),
       ),
@@ -57,6 +66,17 @@ describe('LINE webhook adapter', () => {
         providerUserId: null,
         type: 'OTHER',
         occurredAt: new Date(1787378400000),
+      },
+      {
+        providerEventId: 'evt-nudge-pause',
+        providerUserId: 'U0123456789abcdef',
+        type: 'OTHER',
+        nudgeAction: {
+          programEnrollmentId: '4d69b102-496d-4ce8-b275-3b4e959ee905',
+          action: 'PAUSE',
+          days: 14,
+        },
+        occurredAt: new Date(1787378400001),
       },
     ]);
   });
@@ -264,6 +284,63 @@ describe('group dedicated LINE webhook adapter', () => {
     expect(response.status).toBe(200);
     expect(persisted).toBe(true);
     expect(learningInbox.persist).toHaveBeenCalledTimes(1);
+  });
+
+  it('routes nudge quick replies to scoped preference handling, not learning input', async () => {
+    const body = JSON.stringify({
+      events: [
+        {
+          type: 'postback',
+          timestamp: 1787378400000,
+          webhookEventId: 'evt-nudge-stop',
+          replyToken: 'not-used',
+          source: { type: 'user', userId: 'ULearner' },
+          postback: {
+            data: 'manaberu-nudge-v1:4d69b102-496d-4ce8-b275-3b4e959ee905:STOP',
+          },
+        },
+      ],
+    });
+    const signature = createHmac('sha256', scope.secret).update(body).digest('base64');
+    const nudgeActions = { apply: vi.fn().mockResolvedValue(undefined) };
+    const learningInbox = { persist: vi.fn() };
+    const processor = { execute: vi.fn() };
+    const response = await handleGroupLineWebhook(
+      new Request(`https://example.com/api/line/groups/${routingKey}/webhook`, {
+        method: 'POST',
+        headers: { 'x-line-signature': signature },
+        body,
+      }),
+      routingKey,
+      {
+        environment: 'PRODUCTION',
+        configurations: { get: vi.fn().mockResolvedValue(scope) },
+        nudgeActions,
+        learningInbox,
+        processor: processor as never,
+      },
+    );
+
+    expect(response.status).toBe(200);
+    expect(nudgeActions.apply).toHaveBeenCalledWith({
+      environment: 'PRODUCTION',
+      workspaceId: scope.workspaceId,
+      groupId: scope.groupId,
+      configurationId: scope.configurationId,
+      events: [
+        {
+          providerEventId: 'evt-nudge-stop',
+          providerUserId: 'ULearner',
+          occurredAt: new Date(1787378400000),
+          nudgeAction: {
+            programEnrollmentId: '4d69b102-496d-4ce8-b275-3b4e959ee905',
+            action: 'STOP',
+          },
+        },
+      ],
+    });
+    expect(learningInbox.persist).not.toHaveBeenCalled();
+    expect(processor.execute).not.toHaveBeenCalled();
   });
 
   it('returns 500 and does not acknowledge when inbox persistence fails', async () => {

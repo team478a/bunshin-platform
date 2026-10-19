@@ -7,6 +7,7 @@ import {
   PERSONAL_LEARNING_NUDGE_FALLBACKS,
   decidePersonalLearningNudge,
   nudgeSendTimeJst,
+  personalLearningNudgeCopy,
   type NudgeHistory,
   type NudgeLearnerAction,
   type NudgePractice,
@@ -22,6 +23,7 @@ import {
 import { authorizeCronRequest } from './cron-security';
 import { AesGcmLineSecretCrypto, currentLineEnvironment } from '../line/secure-configuration';
 import { LineMessagingApiAdapter } from '../line/messaging-provider';
+import { personalLearningNudgeQuickReplies } from '../line/personal-learning-nudge-actions';
 
 const logger = createLogger();
 const digest = createHash('sha256').update(AI_TRAINING_AI_CONSENT_TEXT).digest('hex');
@@ -205,7 +207,13 @@ async function run(now: Date) {
             groupId: s.groupId,
             programEnrollmentId: s.programEnrollmentId,
             actorUserId: s.userId,
-            eventType: { in: [...learnerEventTypes, 'PERSONAL_LEARNING_PRACTICE_COMPLETED'] },
+            eventType: {
+              in: [
+                ...learnerEventTypes,
+                'PERSONAL_LEARNING_PRACTICE_COMPLETED',
+                'PERSONAL_LEARNING_NUDGE_PREFERENCE_UPDATED',
+              ],
+            },
           },
           orderBy: [{ occurredAt: 'asc' }, { id: 'asc' }],
           take: 500,
@@ -310,8 +318,12 @@ async function run(now: Date) {
       ...p,
     }));
     const latestResponse =
-      actions.map(({ occurredAt }) => occurredAt).sort((a, b) => b.getTime() - a.getTime())[0] ??
-      null;
+      [
+        ...actions.map(({ occurredAt }) => occurredAt),
+        ...events
+          .filter((event) => event.eventType === 'PERSONAL_LEARNING_NUDGE_PREFERENCE_UPDATED')
+          .map(({ occurredAt }) => occurredAt),
+      ].sort((a, b) => b.getTime() - a.getTime())[0] ?? null;
     const histories: NudgeHistory[] = pushes.flatMap((event) => {
       const metadata = object(event.metadata);
       const situation = metadata['situation'];
@@ -365,7 +377,7 @@ async function run(now: Date) {
         providerEventId,
         purpose: 'NUDGE',
         retryKey,
-        text: `${PERSONAL_LEARNING_NUDGE_FALLBACKS[decision.situation]}\n${new URL(`/s/${slug.slug}/programs/${enrollment.id}/learning-request${topics[0] ? `?topicId=${topics[0].id}` : ''}`, getServerEnvironment().APP_URL).toString()}`,
+        text: `${personalLearningNudgeCopy(decision.situation, decision.ordinal)}\n${new URL(`/s/${slug.slug}/programs/${enrollment.id}/learning-request${topics[0] ? `?topicId=${topics[0].id}` : ''}`, getServerEnvironment().APP_URL).toString()}`,
       },
       update: {},
     });
@@ -505,6 +517,7 @@ async function run(now: Date) {
       recipientId: stillConnected.providerUserId,
       text: outbox.text,
       retryKey: outbox.retryKey,
+      quickReplies: personalLearningNudgeQuickReplies(enrollment.id),
     });
     if (!result.ok) {
       await prisma.personalLearningLinePush.updateMany({

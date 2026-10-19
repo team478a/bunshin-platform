@@ -3,7 +3,9 @@ import {
   decidePersonalLearningNudge,
   nudgeSendTimeJst,
   PERSONAL_LEARNING_NUDGE_FALLBACKS,
+  PERSONAL_LEARNING_NUDGE_NO_RESPONSE_REMINDER,
   PERSONAL_LEARNING_NUDGE_PRIORITY,
+  personalLearningNudgeCopy,
 } from '../src';
 
 const d = (day: number, hour = 12) => new Date(Date.UTC(2026, 0, day, hour));
@@ -153,5 +155,122 @@ describe('Manaberu learning nudge rule engine', () => {
       '2026-01-03T00:00:00.000Z',
     );
     expect(Object.keys(PERSONAL_LEARNING_NUDGE_FALLBACKS)).toHaveLength(6);
+  });
+
+  it('sends one REST_RESUME per distinct pause expiry', () => {
+    const firstResumeAt = d(3);
+    const first = decidePersonalLearningNudge(
+      base({ now: firstResumeAt, resumeAt: firstResumeAt }),
+    );
+    expect(first).toMatchObject({
+      situation: 'REST_RESUME',
+      sourceKey: firstResumeAt.toISOString(),
+    });
+
+    const secondResumeAt = d(10);
+    const second = decidePersonalLearningNudge(
+      base({
+        now: secondResumeAt,
+        resumeAt: secondResumeAt,
+        histories: [
+          {
+            situation: 'REST_RESUME',
+            sentAt: firstResumeAt,
+            sourceKey: firstResumeAt.toISOString(),
+            respondedAt: null,
+          },
+        ],
+      }),
+    );
+    expect(second).toMatchObject({
+      situation: 'REST_RESUME',
+      sourceKey: secondResumeAt.toISOString(),
+    });
+    expect(
+      decidePersonalLearningNudge(
+        base({
+          now: secondResumeAt,
+          resumeAt: secondResumeAt,
+          histories: [
+            {
+              situation: 'REST_RESUME',
+              sentAt: firstResumeAt,
+              sourceKey: firstResumeAt.toISOString(),
+              respondedAt: null,
+            },
+            {
+              situation: 'REST_RESUME',
+              sentAt: secondResumeAt,
+              sourceKey: secondResumeAt.toISOString(),
+              respondedAt: null,
+            },
+          ],
+        }),
+      ),
+    ).toBeNull();
+  });
+
+  it('sends a gentle no-response message after 14 days and a final one 30 days later', () => {
+    const history = [
+      { situation: 'RETURN_INACTIVE' as const, sentAt: d(4), sourceKey: null, respondedAt: null },
+      { situation: 'STUCK' as const, sentAt: d(6), sourceKey: 'p1', respondedAt: null },
+    ];
+    const activePractice = {
+      id: 'p1',
+      title: 'active',
+      startedAt: d(1),
+      reportedAt: null,
+      outcome: null,
+    };
+    const first = decidePersonalLearningNudge(
+      base({ now: d(20), histories: history, practices: [activePractice] }),
+    );
+    expect(first).toMatchObject({ situation: 'NO_RESPONSE', ordinal: 1 });
+    expect(personalLearningNudgeCopy(first!.situation, first!.ordinal)).toBe(
+      PERSONAL_LEARNING_NUDGE_NO_RESPONSE_REMINDER,
+    );
+    expect(PERSONAL_LEARNING_NUDGE_NO_RESPONSE_REMINDER).not.toContain('いったん声かけを終えます');
+
+    const firstNoResponse = {
+      situation: 'NO_RESPONSE' as const,
+      sentAt: d(20),
+      sourceKey: null,
+      respondedAt: null,
+    };
+    const second = decidePersonalLearningNudge(
+      base({ now: d(50), histories: [...history, firstNoResponse], practices: [activePractice] }),
+    );
+    expect(second).toMatchObject({ situation: 'NO_RESPONSE', ordinal: 2 });
+    expect(personalLearningNudgeCopy(second!.situation, second!.ordinal)).toBe(
+      PERSONAL_LEARNING_NUDGE_FALLBACKS.NO_RESPONSE,
+    );
+
+    const finalNoResponse = { ...firstNoResponse, sentAt: d(50) };
+    const completedPractice = {
+      id: 'completed-practice',
+      title: 'completed',
+      startedAt: d(1),
+      reportedAt: d(2),
+      outcome: 'CAN_DO' as const,
+    };
+    expect(
+      decidePersonalLearningNudge(
+        base({
+          now: d(54),
+          histories: [...history, firstNoResponse, finalNoResponse],
+          practices: [completedPractice],
+        }),
+      ),
+    ).toBeNull();
+    expect(
+      decidePersonalLearningNudge(
+        base({
+          now: d(54),
+          histories: [...history, firstNoResponse, finalNoResponse],
+          practices: [completedPractice],
+          actions: [{ occurredAt: d(53), kind: 'CONVERSATION' }],
+        }),
+      )?.situation,
+    ).toBe('PRACTICE_COMPLETE');
   });
 });

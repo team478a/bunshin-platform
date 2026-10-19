@@ -18,7 +18,10 @@ import { PrismaTrainingPersonalDataExportRepository } from '../src/training-pers
 import { PrismaTrainingPersonalDataDeletionRepository } from '../src/training-personal-data-deletion';
 import { PrismaTrainingRetentionExecutionRepository } from '../src/training-retention-execution';
 import { PrismaTrainingRetentionCronRepository } from '../src/training-retention-cron';
-import { PrismaPersonalLearningNudgePreferenceRepository } from '../src/personal-learning-nudge-preference';
+import {
+  PrismaPersonalLearningNudgePreferenceRepository,
+  updatePersonalLearningNudgePreferenceInTransaction,
+} from '../src/personal-learning-nudge-preference';
 import { pilotParticipantHash } from '../src/personal-learning-pilot-seat';
 import { cleanupProgramFixtures } from './program-fixture-cleanup';
 
@@ -914,6 +917,22 @@ export function registerPersonalLearningDIntegrationCases(client: PrismaClient) 
         consentVersion: 'AI_TRAINING_EXTERNAL_AI_V3',
       });
       expect(await repo.read(actor)).toMatchObject({ enabled: false, consentedAt: now, stoppedAt });
+      const lineResumeAt = new Date(stoppedAt.getTime() + 1_000);
+      await client.$transaction((tx) =>
+        updatePersonalLearningNudgePreferenceInTransaction(tx, actor, {
+          action: 'RESUME',
+          now: lineResumeAt,
+          consentedAt: now,
+          consentVersion: 'AI_TRAINING_EXTERNAL_AI_V3',
+          idempotencyKey: `learning-nudge-line:${randomUUID()}`,
+          channel: 'LINE',
+        }),
+      );
+      expect(await repo.read(actor)).toMatchObject({
+        enabled: true,
+        consentedAt: now,
+        stoppedAt: null,
+      });
       const operations = await client.programActionEvent.findMany({
         where: {
           workspaceId: f.scope.workspaceId,
@@ -928,7 +947,10 @@ export function registerPersonalLearningDIntegrationCases(client: PrismaClient) 
         operations
           .map(({ metadata }) => metadata)
           .map((metadata) => (metadata as { action: string }).action),
-      ).toEqual(['ENABLE', 'PAUSE', 'STOP']);
+      ).toEqual(['ENABLE', 'PAUSE', 'STOP', 'RESUME']);
+      expect(operations.map(({ metadata }) => metadata)).toEqual(
+        expect.arrayContaining([expect.objectContaining({ action: 'RESUME', channel: 'LINE' })]),
+      );
       expect(JSON.stringify(operations)).not.toContain('text');
       expect(
         await repo.read({ ...actor, scope: { ...f.scope, workspaceId: randomUUID() } }),

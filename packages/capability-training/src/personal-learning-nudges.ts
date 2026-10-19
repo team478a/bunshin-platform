@@ -14,7 +14,7 @@ export const PERSONAL_LEARNING_NUDGE_RULES = Object.freeze({
   inactiveMinimumActionDays: 3,
   inactiveNudgeDays: [4, 10] as const,
   completedFollowupDays: 2,
-  silentFollowupDays: [14, 44] as const,
+  silentFollowupDays: [14, 30] as const,
   perLearnerMonthlyUsdMicros: 500_000,
   perServiceMonthlyUsdMicros: 5_000_000,
   maxInputTokens: 1_000,
@@ -47,6 +47,18 @@ export const PERSONAL_LEARNING_NUDGE_FALLBACKS: Readonly<
   NO_RESPONSE:
     'このメッセージでいったん声かけを終えます。学びたいと思ったときは、いつでも戻ってこられます。',
 });
+
+export const PERSONAL_LEARNING_NUDGE_NO_RESPONSE_REMINDER =
+  'お元気ですか？気が向いたときに、続きの一歩を一緒に考えましょう。';
+
+export function personalLearningNudgeCopy(
+  situation: PersonalLearningNudgeSituation,
+  ordinal: number,
+): string {
+  if (situation === 'NO_RESPONSE' && ordinal === 1)
+    return PERSONAL_LEARNING_NUDGE_NO_RESPONSE_REMINDER;
+  return PERSONAL_LEARNING_NUDGE_FALLBACKS[situation];
+}
 
 export const PERSONAL_LEARNING_NUDGE_PROMPT_VERSION = 'manaberu-learning-nudge-v1';
 
@@ -216,14 +228,24 @@ export function decidePersonalLearningNudge(input: NudgeContext): NudgeDecision 
         ordinal: count + 1,
       });
   }
-  if (input.resumeAt && now >= input.resumeAt && sentFor('REST_RESUME').length === 0)
+  const resumeSourceKey = input.resumeAt?.toISOString() ?? null;
+  if (
+    input.resumeAt &&
+    now >= input.resumeAt &&
+    sentFor('REST_RESUME', resumeSourceKey).length === 0
+  )
     candidates.push({
       situation: 'REST_RESUME',
-      sourceKey: null,
+      sourceKey: resumeSourceKey,
       triggerAt: input.resumeAt,
       ordinal: 1,
     });
   const orderedHistory = [...histories].sort((a, b) => a.sentAt.getTime() - b.sentAt.getTime());
+  const noResponseHistory = sentFor('NO_RESPONSE').sort(
+    (a, b) => a.sentAt.getTime() - b.sentAt.getTime(),
+  );
+  const finalNoResponse = noResponseHistory[1];
+  if (finalNoResponse && (!latestActionAt || latestActionAt <= finalNoResponse.sentAt)) return null;
   const lastTwo = orderedHistory.slice(-2);
   if (
     lastTwo.length === 2 &&
@@ -233,7 +255,6 @@ export function decidePersonalLearningNudge(input: NudgeContext): NudgeDecision 
           PERSONAL_LEARNING_NUDGE_RULES.responseWindowHours * 3_600_000 && !responded(h, now),
     )
   ) {
-    const noResponseHistory = sentFor('NO_RESPONSE');
     const count = noResponseHistory.length;
     const dueDay = PERSONAL_LEARNING_NUDGE_RULES.silentFollowupDays[count];
     const triggerAt = count === 0 ? lastTwo.at(-1)!.sentAt : noResponseHistory.at(-1)!.sentAt;

@@ -43,7 +43,8 @@ describe('N-1 fixed LINE learning nudges cron', () => {
   });
 
   it('uses only the fixed N-1 copy map and makes no AI/provider-generation call', () => {
-    expect(source).toContain('PERSONAL_LEARNING_NUDGE_FALLBACKS[decision.situation]');
+    expect(source).toContain('personalLearningNudgeCopy(decision.situation, decision.ordinal)');
+    expect(source).toContain('personalLearningNudgeQuickReplies(enrollment.id)');
     expect(source).not.toMatch(
       /generateLearning|createResponse|chat\.completions|openai\.responses/i,
     );
