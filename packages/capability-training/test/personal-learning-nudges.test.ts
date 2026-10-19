@@ -278,11 +278,7 @@ describe('Manaberu learning nudge rule engine', () => {
       decidePersonalLearningNudge(
         base({
           now: d(54),
-          histories: [
-            ...history,
-            firstNoResponse,
-            { ...finalNoResponse, respondedAt: d(53) },
-          ],
+          histories: [...history, firstNoResponse, { ...finalNoResponse, respondedAt: d(53) }],
           practices: [completedPractice],
         }),
       )?.situation,
