@@ -25,6 +25,7 @@ import { AesGcmLineSecretCrypto, currentLineEnvironment } from '../line/secure-c
 import { LineMessagingApiAdapter } from '../line/messaging-provider';
 import { personalLearningNudgeQuickReplies } from '../line/personal-learning-nudge-actions';
 import { generatePersonalLearningNudgeCopy } from '../services/personal-learning-nudge-ai';
+import { personalLearningNudgeDeliveryMessage } from '../services/personal-learning-nudge-message';
 
 const logger = createLogger();
 const digest = createHash('sha256').update(AI_TRAINING_AI_CONSENT_TEXT).digest('hex');
@@ -523,17 +524,22 @@ async function run(now: Date) {
       `/s/${slug.slug}/programs/${enrollment.id}/learning-request${topics[0] ? `?topicId=${topics[0].id}` : ''}`,
       getServerEnvironment().APP_URL,
     ).toString();
-    let messageText = outbox.text;
-    let copySource: 'AI_N2' | 'FIXED_N1' = 'FIXED_N1';
+    let { text: messageText, copySource } = personalLearningNudgeDeliveryMessage({
+      generatedCopy,
+      fixedCopy: outbox.text,
+      learningUrl: nudgeUrl,
+    });
     if (generatedCopy) {
       const update = await prisma.personalLearningLinePush.updateMany({
         where: { id: outbox.id, status: 'SENDING' },
-        data: { text: `${generatedCopy}\n${nudgeUrl}` },
+        data: { text: messageText },
       });
-      if (update.count === 1) {
-        messageText = `${generatedCopy}\n${nudgeUrl}`;
-        copySource = 'AI_N2';
-      }
+      if (update.count !== 1)
+        ({ text: messageText, copySource } = personalLearningNudgeDeliveryMessage({
+          generatedCopy: null,
+          fixedCopy: outbox.text,
+          learningUrl: nudgeUrl,
+        }));
     }
     const result = await line.pushText({
       accessToken: token,

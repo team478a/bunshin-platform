@@ -14,6 +14,8 @@
   - 固定された状況・回数・N-1文面だけを使う短文生成、JSON Schema、URL/宛先・長さ制限を追加。
 - `apps/web/src/services/personal-learning-nudge-ai.ts`
   - 受講V3同意を再確認し、既存Provider設定・Admission・価格表・共通費用台帳で1回分を予約し、結果を精算する。
+- `apps/web/src/services/personal-learning-nudge-message.ts`
+  - AI文面がない場合は保存済みN-1固定文面をそのまま使い、AI文面がある場合だけ研修リンクを付ける。
 - `apps/web/src/http/personal-learning-nudges-cron.ts`
   - N-1の最終eligibility確認後にN-2生成を試し、利用不可・失敗時は保存済み固定文面を送る。送信記録には `AI_N2` / `FIXED_N1` の出所だけを残し、本文を操作ログへ複製しない。
 - `packages/application/src/personal-learning-text-operation.ts`
@@ -22,7 +24,7 @@
   - 有効受講・内部席・声かけ同意/有効状態・`learningNudges` を確認してから予約する。既存のAdmission台帳に保存し、既知の実費で精算する。
 - `packages/database/src/personal-learning-operation-identity.ts`、`packages/database/src/personal-learning-persistence.ts`
   - 声かけ予約キーを受講・状況・判定日由来のIDに結び付け、複数テーマ設定でもテーマ非依存に一意化する。声かけ以外のテーマ別ID挙動は維持する。
-- `apps/web/test/openai-learning-nudge.test.ts`、`apps/web/test/personal-learning-nudges-cron.test.ts`
+- `apps/web/test/openai-learning-nudge.test.ts`、`apps/web/test/personal-learning-nudges-cron.test.ts`、`apps/web/test/personal-learning-nudge-message.test.ts`
 - `packages/application/test/personal-learning-text-operation.test.ts`
 - `packages/database/test/personal-learning-operation-identity.test.ts`、`packages/database/test/personal-learning-persistence.integration-cases.ts`
 - 本報告書。
@@ -39,7 +41,7 @@
 ## 4. 実行した検証
 
 - `pnpm --filter @bunshin/application exec vitest run test/personal-learning-text-operation.test.ts` — 10 tests passed。
-- `pnpm --filter web exec vitest run test/openai-learning-nudge.test.ts test/personal-learning-nudges-cron.test.ts` — 2 files / 6 tests passed。
+- `pnpm --filter web exec vitest run test/openai-learning-nudge.test.ts test/personal-learning-nudges-cron.test.ts test/personal-learning-nudge-message.test.ts` — 3 files / 8 tests passed。
 - `pnpm --filter @bunshin/database typecheck` — 成功。
 - `pnpm --filter web typecheck` — 成功。
 - DB統合ケースを追加した。ローカルの隔離Disposable PostgreSQLは利用できないため、統合テストはこの実行では開始していない。Draft PRの `CI / database` 成功を確認後、ここを実際のRun番号付きで更新する。

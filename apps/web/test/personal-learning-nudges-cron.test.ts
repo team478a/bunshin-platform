@@ -46,7 +46,7 @@ describe('N-1 fixed LINE learning nudges cron', () => {
     expect(source).toContain('personalLearningNudgeCopy(decision.situation, decision.ordinal)');
     expect(source).toContain('personalLearningNudgeQuickReplies(enrollment.id)');
     expect(source).toContain('generatePersonalLearningNudgeCopy');
-    expect(source).toContain("let copySource: 'AI_N2' | 'FIXED_N1' = 'FIXED_N1'");
-    expect(source).toContain('let messageText = outbox.text');
+    expect(source).toContain('personalLearningNudgeDeliveryMessage');
+    expect(source).toContain('fixedCopy: outbox.text');
   });
 });
