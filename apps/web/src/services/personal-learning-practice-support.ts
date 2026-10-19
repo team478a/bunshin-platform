@@ -7,12 +7,12 @@ import {
   validatePracticeSupportCommand,
   type PracticeSupportCommand,
 } from '@bunshin/application';
+import { settleProviderRuntimeAdmission } from '../ai/runtime-provider-configuration';
 import {
-  resolveOpenAiRuntimeConfiguration,
-  reserveOpenAiRuntimeConfiguration,
-  settleProviderRuntimeAdmission,
-  type AdmittedOpenAiRuntimeConfiguration,
-} from '../ai/runtime-provider-configuration';
+  resolveLearningProviderRuntimeConfiguration,
+  reserveLearningProviderRuntimeConfiguration,
+  type LearningAiRuntimeConfiguration,
+} from '../ai/learning-provider-runtime';
 import { personalLearningPricingRegistry } from '../observability/personal-learning-ai-call';
 import {
   generateLearningSupport,
@@ -30,7 +30,7 @@ export async function requestPracticeSupport(command: PracticeSupportCommand) {
     if (prepared.request.status === 'READY') return prepared.practice;
     throw new ApplicationError('CONFLICT', 'support attempt already processed or pending');
   }
-  let providerAdmission: AdmittedOpenAiRuntimeConfiguration | null = null;
+  let providerAdmission: LearningAiRuntimeConfiguration | null = null;
   let permitId = '';
   let usageKey = '';
   try {
@@ -58,14 +58,15 @@ export async function requestPracticeSupport(command: PracticeSupportCommand) {
       command.image,
       extendedScope,
     );
-    const runtime = await resolveOpenAiRuntimeConfiguration(undefined, 'LEARNING_SUPPORT');
+    const provider = policy.provider ?? 'openai';
+    const runtime = await resolveLearningProviderRuntimeConfiguration(provider, 'LEARNING_SUPPORT');
     if (runtime.model !== policy.model)
       throw new ApplicationError('CONFIGURATION_ERROR', 'support model mismatch');
     const pricingRegistry = personalLearningPricingRegistry();
     if (
       !reservePersonalLearningCallCost({
         policy,
-        provider: 'openai',
+        provider,
         pricingRegistry,
         occurredAt: new Date(),
       })
@@ -80,7 +81,7 @@ export async function requestPracticeSupport(command: PracticeSupportCommand) {
         operationId: command.operationId,
         operationKind: 'PRACTICE_SUPPORT',
         attempt: 1,
-        provider: 'openai',
+        provider,
         promptVersion,
         policy,
         pricingRegistry,
@@ -105,9 +106,9 @@ export async function requestPracticeSupport(command: PracticeSupportCommand) {
           frozen.reservedCostUsdMicros > BigInt(Number.MAX_SAFE_INTEGER)
         )
           throw new ApplicationError('CONFIGURATION_ERROR', 'support reservation unavailable');
-        providerAdmission = await reserveOpenAiRuntimeConfiguration(
+        providerAdmission = await reserveLearningProviderRuntimeConfiguration(
           usageKey,
-          undefined,
+          provider,
           'LEARNING_SUPPORT',
           Number(frozen.reservedCostUsdMicros),
           1,
@@ -117,6 +118,8 @@ export async function requestPracticeSupport(command: PracticeSupportCommand) {
         return generateLearningSupport({
           apiKey: providerAdmission.apiKey,
           model: providerAdmission.model,
+          provider: providerAdmission.provider,
+          modelCapabilities: providerAdmission.modelCapabilities,
           body,
         });
       },
@@ -142,7 +145,7 @@ export async function requestPracticeSupport(command: PracticeSupportCommand) {
     await repo.failSupport({ command, requestId: prepared.request.id });
     throw error;
   } finally {
-    const admission = providerAdmission as AdmittedOpenAiRuntimeConfiguration | null;
+    const admission = providerAdmission as LearningAiRuntimeConfiguration | null;
     if (admission?.admission && permitId) {
       const cost = await db.prisma.personalLearningCallAdmission.findUnique({
         where: { id: permitId },

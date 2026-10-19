@@ -16,6 +16,39 @@ describe('外部サービス接続確認', () => {
     ).resolves.toEqual({ success: false, errorCategory: 'CREDENTIAL_INVALID' });
   });
 
+  it('Googleのモデル情報だけをGETして接続確認し、生成APIは呼ばない', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(Response.json({ name: 'models/gemini-eval-model' }));
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(
+      new AiProviderConnectionTestAdapter().validate({
+        provider: 'GOOGLE',
+        apiKey: 'google-test-key',
+        model: 'gemini-eval-model',
+      }),
+    ).resolves.toEqual({ success: true, errorCategory: null });
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-eval-model',
+      expect.objectContaining({ headers: { 'x-goog-api-key': 'google-test-key' } }),
+    );
+    expect(fetchMock.mock.calls[0]?.[1]).not.toHaveProperty('method');
+    expect(fetchMock.mock.calls[0]?.[1]).not.toHaveProperty('body');
+  });
+
+  it('Googleのモデル名をURLへ渡す前に検証する', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(
+      new AiProviderConnectionTestAdapter().validate({
+        provider: 'GOOGLE',
+        apiKey: 'google-test-key',
+        model: 'bad/model?secret',
+      }),
+    ).resolves.toEqual({ success: false, errorCategory: 'MODEL_UNAVAILABLE' });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('Creatomateは動画を生成せずテンプレート一覧で接続確認する', async () => {
     const fetchMock = vi.fn().mockResolvedValue(Response.json([]));
     vi.stubGlobal('fetch', fetchMock);

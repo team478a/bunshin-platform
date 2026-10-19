@@ -8,6 +8,7 @@ export type PersonalLearningCallAdmissionPolicy = Readonly<{
   dailyAttemptLimit: number;
   maxConcurrent: number;
   model: string;
+  provider?: 'openai' | 'google';
   maxRequestBytes: number;
   maxOutputTokens: number;
   dailyCostLimitUsdMicros: number;
@@ -29,7 +30,12 @@ export function parsePersonalLearningCallAdmissionPolicy(
     'maxOutputTokens',
     'dailyCostLimitUsdMicros',
   ];
-  if (Object.keys(v).length !== keys.length || keys.some((key) => !Object.hasOwn(v, key)))
+  const extendedKeys = [...keys, 'provider'];
+  if (
+    (Object.keys(v).length !== keys.length && Object.keys(v).length !== extendedKeys.length) ||
+    keys.some((key) => !Object.hasOwn(v, key)) ||
+    Object.keys(v).some((key) => !extendedKeys.includes(key))
+  )
     return null;
   for (const key of ['workspaceId', 'groupId', 'serviceProgramId']) {
     if (
@@ -59,7 +65,9 @@ export function parsePersonalLearningCallAdmissionPolicy(
     !/^[A-Za-z0-9][A-Za-z0-9._:/-]{0,119}$/.test(v.model)
   )
     return null;
-  return Object.freeze({ ...v }) as PersonalLearningCallAdmissionPolicy;
+  const provider = v.provider ?? 'openai';
+  if (provider !== 'openai' && provider !== 'google') return null;
+  return Object.freeze({ ...v, provider }) as PersonalLearningCallAdmissionPolicy;
 }
 
 export type PersonalLearningCallCostReservation = Readonly<{

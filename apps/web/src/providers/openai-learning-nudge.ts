@@ -5,7 +5,7 @@ import {
   PERSONAL_LEARNING_NUDGE_PROMPT_VERSION,
   type PersonalLearningNudgeSituation,
 } from '@bunshin/capability-training';
-import type { PersonalLearningTextPermit } from '@bunshin/application';
+import type { AiModelCapability, PersonalLearningTextPermit } from '@bunshin/application';
 import { serializeOpenAiTaskRequest } from '../ai/openai-task-compatibility';
 import { generateLearningStructured } from './openai-learning-lesson';
 
@@ -68,6 +68,8 @@ export function generateLearningNudge(options: {
   apiKey: string;
   model: string;
   body: string;
+  provider?: 'openai' | 'google';
+  modelCapabilities: readonly AiModelCapability[];
   fetch?: typeof fetch;
 }) {
   return generateLearningStructured({

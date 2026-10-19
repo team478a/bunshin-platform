@@ -41,6 +41,7 @@ describe('N-2 bounded learning nudge provider', () => {
     const result = await generateLearningNudge({
       apiKey: 'synthetic-test-key',
       model: 'gpt-5.2',
+      modelCapabilities: ['STRUCTURED_OUTPUT'],
       body: learningNudgeBody({ situation: 'STUCK', ordinal: 1, model: 'gpt-5.2', permit }),
       fetch,
     });
@@ -70,6 +71,7 @@ describe('N-2 bounded learning nudge provider', () => {
     const result = await generateLearningNudge({
       apiKey: 'synthetic-test-key',
       model: 'gpt-5.2',
+      modelCapabilities: ['STRUCTURED_OUTPUT'],
       body: learningNudgeBody({ situation: 'STUCK', ordinal: 1, model: 'gpt-5.2', permit }),
       fetch,
     });

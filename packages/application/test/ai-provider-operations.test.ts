@@ -15,6 +15,7 @@ const configuration: AiProviderConfiguration = {
   apiKeyConfigured: true,
   apiKeyMask: '••••1234',
   model: 'gpt-5-mini',
+  modelCapabilities: ['STRUCTURED_OUTPUT'],
   dailyBudgetUsdMicros: 1,
   monthlyBudgetUsdMicros: 1,
   globallyPaused: true,

@@ -7,12 +7,12 @@ import {
   parsePersonalLearningCallAdmissionPolicy,
 } from '@bunshin/application';
 import { createLogger } from '@bunshin/observability';
+import { settleProviderRuntimeAdmission } from '../ai/runtime-provider-configuration';
 import {
-  resolveOpenAiRuntimeConfiguration,
-  reserveOpenAiRuntimeConfiguration,
-  settleProviderRuntimeAdmission,
-  type AdmittedOpenAiRuntimeConfiguration,
-} from '../ai/runtime-provider-configuration';
+  resolveLearningProviderRuntimeConfiguration,
+  reserveLearningProviderRuntimeConfiguration,
+  type LearningAiRuntimeConfiguration,
+} from '../ai/learning-provider-runtime';
 import { personalLearningPricingRegistry } from '../observability/personal-learning-ai-call';
 import {
   generatePersonaInference,
@@ -107,7 +107,8 @@ export async function inferPersonalLearningPersonaAfterSuccess(input: {
     };
     if (policy.maxOutputTokens < 16)
       throw new ApplicationError('CONFIGURATION_ERROR', 'persona output limit unavailable');
-    const runtime = await resolveOpenAiRuntimeConfiguration(undefined, 'LEARNING_LESSON');
+    const provider = policy.provider ?? 'openai';
+    const runtime = await resolveLearningProviderRuntimeConfiguration(provider, 'LEARNING_LESSON');
     if (runtime.model !== policy.model)
       throw new ApplicationError('CONFIGURATION_ERROR', 'persona model mismatch');
     const body = personaInferenceBody({
@@ -125,7 +126,7 @@ export async function inferPersonalLearningPersonaAfterSuccess(input: {
     );
     if (!request || request.id !== input.requestId || request.revision !== input.requestRevision)
       throw new ApplicationError('CONFLICT', 'learning request changed');
-    let admitted: AdmittedOpenAiRuntimeConfiguration | null = null;
+    let admitted: LearningAiRuntimeConfiguration | null = null;
     let permitId = '';
     let usageKey = '';
     try {
@@ -138,7 +139,7 @@ export async function inferPersonalLearningPersonaAfterSuccess(input: {
           operationId: dailyOperationId(scope.programEnrollmentId, now),
           operationKind: 'PERSONA_INFERENCE',
           attempt: 1,
-          provider: 'openai',
+          provider,
           promptVersion: PERSONAL_LEARNING_PERSONA_INFERENCE_PROMPT_VERSION,
           policy,
           pricingRegistry: personalLearningPricingRegistry(),
@@ -154,16 +155,22 @@ export async function inferPersonalLearningPersonaAfterSuccess(input: {
             throw new ApplicationError('CONFIGURATION_ERROR', 'persona reservation unavailable');
           if (frozen.reservedCostUsdMicros > BigInt(Number.MAX_SAFE_INTEGER))
             throw new ApplicationError('CONFIGURATION_ERROR', 'persona reservation unavailable');
-          admitted = await reserveOpenAiRuntimeConfiguration(
+          admitted = await reserveLearningProviderRuntimeConfiguration(
             usageKey,
-            undefined,
+            provider,
             'LEARNING_LESSON',
             Number(frozen.reservedCostUsdMicros),
             1,
           );
           if (admitted.model !== policy.model)
             throw new ApplicationError('CONFIGURATION_ERROR', 'persona model changed');
-          return generatePersonaInference({ apiKey: admitted.apiKey, model: admitted.model, body });
+          return generatePersonaInference({
+            apiKey: admitted.apiKey,
+            model: admitted.model,
+            provider: admitted.provider,
+            modelCapabilities: admitted.modelCapabilities,
+            body,
+          });
         },
       );
       for (const item of result) {
@@ -179,7 +186,7 @@ export async function inferPersonalLearningPersonaAfterSuccess(input: {
       }
       return { outcome: 'INFERRED' as const };
     } finally {
-      const admission = admitted as AdmittedOpenAiRuntimeConfiguration | null;
+      const admission = admitted as LearningAiRuntimeConfiguration | null;
       if (admission?.admission && permitId) {
         const cost = await db.prisma.personalLearningCallAdmission.findUnique({
           where: { id: permitId },

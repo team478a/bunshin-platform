@@ -7,7 +7,12 @@ import {
 } from '@bunshin/application';
 import type { PersonalLearningNudgeSituation } from '@bunshin/capability-training';
 import { createLogger } from '@bunshin/observability';
-import { resolveOpenAiRuntimeConfiguration } from '../ai/runtime-provider-configuration';
+import { settleProviderRuntimeAdmission } from '../ai/runtime-provider-configuration';
+import {
+  resolveLearningProviderRuntimeConfiguration,
+  reserveLearningProviderRuntimeConfiguration,
+  type LearningAiRuntimeConfiguration,
+} from '../ai/learning-provider-runtime';
 import { personalLearningPricingRegistry } from '../observability/personal-learning-ai-call';
 import {
   generateLearningNudge,
@@ -66,7 +71,8 @@ export async function generatePersonalLearningNudgeCopy(input: {
       enrollmentId: input.actor.scope.programEnrollmentId,
       userId: input.actor.scope.userId,
     });
-    const runtime = await resolveOpenAiRuntimeConfiguration(undefined, 'LEARNING_NUDGE');
+    const provider = policy.provider ?? 'openai';
+    const runtime = await resolveLearningProviderRuntimeConfiguration(provider, 'LEARNING_NUDGE');
     if (runtime.model !== policy.model) return null;
     const pricingRegistry = personalLearningPricingRegistry();
     const db = await import('@bunshin/database');
@@ -92,26 +98,59 @@ export async function generatePersonalLearningNudgeCopy(input: {
         judgmentDate: input.judgmentDate,
       },
       attempt: 1,
-      provider: 'openai',
+      provider,
       promptVersion: LEARNING_NUDGE_PROMPT_VERSION,
       policy,
       pricingRegistry,
     };
-    return await executePersonalLearningTextOperation(
-      new db.PrismaPersonalLearningTextOperationRepository(db.prisma),
-      operation,
-      async (permit) =>
-        generateLearningNudge({
-          apiKey: runtime.apiKey,
-          model: runtime.model,
-          body: learningNudgeBody({
-            situation: input.situation,
-            ordinal: input.ordinal,
-            model: policy.model,
-            permit,
-          }),
-        }),
-    );
+    let admission: LearningAiRuntimeConfiguration | null = null;
+    let permitId = '';
+    try {
+      return await executePersonalLearningTextOperation(
+        new db.PrismaPersonalLearningTextOperationRepository(db.prisma),
+        operation,
+        async (permit) => {
+          permitId = permit.id;
+          const frozen = await db.prisma.personalLearningCallAdmission.findUnique({
+            where: { id: permit.id },
+            select: { reservedCostUsdMicros: true },
+          });
+          if (
+            frozen?.reservedCostUsdMicros == null ||
+            frozen.reservedCostUsdMicros < 1n ||
+            frozen.reservedCostUsdMicros > BigInt(Number.MAX_SAFE_INTEGER)
+          )
+            throw new Error('nudge reservation unavailable');
+          admission = await reserveLearningProviderRuntimeConfiguration(
+            `personal-learning-operation:${permit.operationHash}`,
+            provider,
+            'LEARNING_NUDGE',
+            Number(frozen.reservedCostUsdMicros),
+          );
+          return generateLearningNudge({
+            apiKey: admission.apiKey,
+            model: admission.model,
+            provider: admission.provider,
+            modelCapabilities: admission.modelCapabilities,
+            body: learningNudgeBody({
+              situation: input.situation,
+              ordinal: input.ordinal,
+              model: policy.model,
+              permit,
+            }),
+          });
+        },
+      );
+    } finally {
+      const currentAdmission = admission as LearningAiRuntimeConfiguration | null;
+      if (currentAdmission?.admission && permitId) {
+        const stored = await db.prisma.personalLearningCallAdmission.findUnique({
+          where: { id: permitId },
+          select: { settledAt: true },
+        });
+        if (stored?.settledAt) await settleProviderRuntimeAdmission(currentAdmission.admission);
+      }
+    }
   } catch {
     // Admission/provider/output errors are deliberately opaque; the caller uses the fixed copy.
     logger.error('personal learning nudge AI unavailable; fixed copy will be used', {

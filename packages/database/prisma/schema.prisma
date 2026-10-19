@@ -1851,6 +1851,7 @@ enum LineRichMenuAction {
 
 enum AiProviderKey {
   OPENAI
+  GOOGLE
   GROK
   EXA
   FIRECRAWL
@@ -6646,6 +6647,7 @@ model AiProviderConfiguration {
   encryptedApiKey        String?                        @map("encrypted_api_key") @db.Text
   apiKeyMask             String?                        @map("api_key_mask") @db.VarChar(16)
   model                  String?                        @db.VarChar(120)
+  modelCapabilities      String[]                       @default([]) @map("model_capabilities")
   dailyBudgetUsdMicros   Int                            @default(1000000) @map("daily_budget_usd_micros")
   monthlyBudgetUsdMicros Int                            @default(5000000) @map("monthly_budget_usd_micros")
   requestCostUsdMicros   Int                            @default(0) @map("request_cost_usd_micros")
