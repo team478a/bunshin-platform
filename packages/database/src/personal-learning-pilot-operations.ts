@@ -47,6 +47,7 @@ const defaultLearningFeatures: Prisma.JsonObject = {
   multiTopic: false,
   lineLearning: false,
   extendedScope: false,
+  learningNudges: false,
 };
 
 /** No env mutation, Provider calls, Definition approval or automatic Seat admission. */
@@ -152,6 +153,7 @@ export class PrismaPersonalLearningPilotOperations {
           multiTopic: false,
           lineLearning: false,
           extendedScope: false,
+          learningNudges: false,
         }),
         started: false,
         openCallCount: 0,
@@ -415,7 +417,7 @@ export class PrismaPersonalLearningPilotOperations {
             ...pilot,
             ...(c.action === 'SET_LEARNING_MODE' ? { learningMode: c.learningMode } : {}),
             ...(c.action === 'SET_LEARNING_FEATURES'
-              ? { learningFeatures: { ...c.learningFeatures } }
+              ? { learningFeatures: { ...defaultLearningFeatures, ...c.learningFeatures } }
               : {}),
           };
         } else {

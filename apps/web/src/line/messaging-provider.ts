@@ -6,6 +6,7 @@ import {
   type LineMissionNotificationSummary,
   type LineProviderFailure,
 } from '@bunshin/application';
+import type { PersonalLearningNudgeQuickReply } from './personal-learning-nudge-actions';
 
 const endpoint = 'https://api.line.me';
 
@@ -173,6 +174,7 @@ export class LineMessagingApiAdapter implements LineMessagingProviderPort {
     recipientId: string;
     text: string;
     retryKey?: string;
+    quickReplies?: readonly PersonalLearningNudgeQuickReply[];
   }) {
     if (!input.accessToken.trim()) return httpFailure(401);
     if (!input.recipientId.trim() || !input.text.trim()) return httpFailure(400);
@@ -191,7 +193,13 @@ export class LineMessagingApiAdapter implements LineMessagingProviderPort {
         },
         body: JSON.stringify({
           to: input.recipientId,
-          messages: [{ type: 'text', text: input.text.slice(0, 5000) }],
+          messages: [
+            {
+              type: 'text',
+              text: input.text.slice(0, 5000),
+              ...(input.quickReplies?.length ? { quickReply: { items: input.quickReplies } } : {}),
+            },
+          ],
         }),
         signal: AbortSignal.timeout(10_000),
       });

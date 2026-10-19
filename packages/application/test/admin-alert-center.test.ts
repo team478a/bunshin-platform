@@ -40,6 +40,7 @@ const healthy = (): AdminAlertSnapshot => ({
     stoppedServices: 0,
   },
   blockedDeletions: 0,
+  personalLearningStaleOpenAdmissions: 0,
   openSupportCases: 0,
   urgentSupportCases: 0,
   commercialBillingRefundReviews: 0,
@@ -94,6 +95,21 @@ describe('admin alert center', () => {
           code: 'AI_OPENAI_OPEN_ADMISSIONS',
           severity: 'WARNING',
           count: 2,
+          href: '/admin/ai',
+        }),
+      ]),
+    );
+  });
+
+  it('shows stale Personal Learning reservations in the operations center', () => {
+    const snapshot = healthy();
+    snapshot.personalLearningStaleOpenAdmissions = 3;
+    expect(buildAdminAlerts(snapshot)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'AI_PERSONAL_LEARNING_OPEN_ADMISSIONS',
+          severity: 'WARNING',
+          count: 3,
           href: '/admin/ai',
         }),
       ]),

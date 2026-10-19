@@ -74,14 +74,15 @@ Launch RunbookのProduction E2Eは、自由希望をその場で教材化する�
 
 ## まだ未解決で、別途の承認・検証が必要なもの
 
-| 項目                                                   | 必要な確認・承認                                                                                                                                               | 担当/時期     |
-| ------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- |
-| Phase 1完了とPhase 2以降への移行                       | PR #1の正式レビュー記録がない事実を踏まえ、田中がPR-0上で明示承認。承認前にPR-Aへ着手しない                                                                    | PR-0          |
-| 機能完成・教育品質                                     | 動的経路の希望→実践→支援→提出→次実践を、実AI・実受講者または承認済み評価で通し確認する。学習効果は別途評価し、未検証を効果として表示しない                     | PR-G          |
-| Admission・費用・テーマ数・範囲外リスト・LINE Push上限 | PR-C〜Fで具体案を提出し、田中が運用値を決める                                                                                                                  | 該当PR        |
-| Release/DB/本番Gate                                    | mainとproduction差分、migration/checksum/drift、Backup/restore、role/RLS、rollback、同意、停止/drainを人間レビュー                                             | 各本番release |
-| 自動削除                                               | `TRAINING_RETENTION_V1`の対象拡張、Export/削除全経路、AI研修retention cronの本番登録・動作確認と別途承認。現状の`apps/web/vercel.json`にはretention cronがない | 外部公開前    |
-| 運用開始・外部公開                                     | 本番release、内部Enrollment/Seat/Profile、費用・監視、停止手順、Wave 0開始、外部公開を別々に承認                                                               | Runbook/PR-G  |
+| 項目                                                   | 必要な確認・承認                                                                                                                                               | 担当/時期        |
+| ------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------- |
+| Phase 1完了とPhase 2以降への移行                       | PR #1の正式レビュー記録がない事実を踏まえ、田中がPR-0上で明示承認。承認前にPR-Aへ着手しない                                                                    | PR-0             |
+| 機能完成・教育品質                                     | 動的経路の希望→実践→支援→提出→次実践を、実AI・実受講者または承認済み評価で通し確認する。学習効果は別途評価し、未検証を効果として表示しない                     | PR-G             |
+| Admission・費用・テーマ数・範囲外リスト・LINE Push上限 | PR-C〜Fで具体案を提出し、田中が運用値を決める                                                                                                                  | 該当PR           |
+| Release/DB/本番Gate                                    | mainとproduction差分、migration/checksum/drift、Backup/restore、role/RLS、rollback、同意、停止/drainを人間レビュー                                             | 各本番release    |
+| 復元元Backupの証明                                     | 復元に使った元Backupの識別子・取得時刻・復元先との来歴を、信頼できる既存記録で確認する。件数比較や推測でPASSにせず、証拠が得られるまでUNKNOWN/未完了として扱う | PR-G・外部公開前 |
+| 自動削除                                               | `TRAINING_RETENTION_V1`の対象拡張、Export/削除全経路、AI研修retention cronの本番登録・動作確認と別途承認。現状の`apps/web/vercel.json`にはretention cronがない | 外部公開前       |
+| 運用開始・外部公開                                     | 本番release、内部Enrollment/Seat/Profile、費用・監視、停止手順、Wave 0開始、外部公開を別々に承認                                                               | Runbook/PR-G     |
 
 現在もProduction request intakeは拒否される設計であり、この文書更新では変更しない。Launch RunbookとExecution Checklistの実環境NO-GO/UNKNOWNは保持する。
 
