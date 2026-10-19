@@ -36,7 +36,8 @@
 - `packages/application` のalert-centerテスト: 11 tests PASS。
 - `packages/database` のadmin-alerts単体テスト: 1 test PASS。
 - `@bunshin/application` と `@bunshin/database` のtypecheck、変更対象のESLint、Prettier、`git diff --check`: PASS。
-- Database統合テスト `surfaces stale learning and nudge-specific reservations in the operations center` は隔離CI DBで実行する。GitHub Actionsの `CI / verify` と `CI / database` の結果はPRの最終CI後にここへ追記する。
+- 隔離PostgreSQL上の `pnpm test:integration` が成功し、統合テスト `surfaces stale learning and nudge-specific reservations in the operations center` を含むdatabase jobがPASS（GitHub Actions run #39188562375）。同jobの `db:validate` と `db:assert-ready` もPASS。
+- GitHub Actions run #39188562375: `CI / verify` 成功（format、typecheck、lint、test、learning UI、buildすべて成功）、`CI / database` 成功（migration readinessと統合テスト成功）。
 
 ## 5. 未解決事項
 
