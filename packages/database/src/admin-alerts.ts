@@ -30,6 +30,7 @@ export class PrismaAdminAlertRepository implements AdminAlertRepository {
       commercialBillingRefundReviews,
       openSupportCases,
       urgentSupportCases,
+      personalLearningStaleOpenAdmissions,
     ] = await Promise.all([
       this.client.aiProviderConfiguration.findMany({
         where: { environment: input.environment, status: 'ACTIVE' },
@@ -135,6 +136,12 @@ export class PrismaAdminAlertRepository implements AdminAlertRepository {
       }),
       this.client.supportCase.count({ where: { status: 'OPEN' } }),
       this.client.supportCase.count({ where: { status: 'OPEN', priority: 'URGENT' } }),
+      this.client.personalLearningCallAdmission.count({
+        where: {
+          settledAt: null,
+          admittedAt: { lt: new Date(input.now.getTime() - 15 * 60 * 1000) },
+        },
+      }),
     ]);
     const targetGroupIds = [
       ...new Set(
@@ -298,6 +305,7 @@ export class PrismaAdminAlertRepository implements AdminAlertRepository {
         stoppedServices: stoppedPointServices,
       },
       blockedDeletions,
+      personalLearningStaleOpenAdmissions,
       commercialBillingRefundReviews: commercialBillingRefundReviews.length,
       openSupportCases,
       urgentSupportCases,

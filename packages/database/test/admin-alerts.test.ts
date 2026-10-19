@@ -46,6 +46,7 @@ describe('PrismaAdminAlertRepository', () => {
         findMany: vi.fn().mockResolvedValue([{ invoiceId: 'invoice-a' }]),
       },
       supportCase: { count: vi.fn().mockResolvedValue(0) },
+      personalLearningCallAdmission: { count: vi.fn().mockResolvedValue(4) },
       aiUsageEvent: {
         aggregate: vi.fn().mockResolvedValue({ _sum: { estimatedCostUsdMicros: 0n } }),
         count: aiUsageCount,
@@ -74,6 +75,13 @@ describe('PrismaAdminAlertRepository', () => {
       monthlySpentUsdMicros: 25,
     });
     expect(snapshot?.commercialBillingRefundReviews).toBe(1);
+    expect(snapshot?.personalLearningStaleOpenAdmissions).toBe(4);
+    expect(client.personalLearningCallAdmission.count).toHaveBeenCalledWith({
+      where: {
+        settledAt: null,
+        admittedAt: { lt: new Date('2026-10-10T01:45:00.000Z') },
+      },
+    });
     expect(client.commercialBillingWebhookEvent.findMany).toHaveBeenCalledWith({
       where: {
         status: 'PROCESSED',

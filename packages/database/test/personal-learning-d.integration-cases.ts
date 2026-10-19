@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Prisma, PrismaClient } from '@prisma/client';
 import { afterEach, describe, expect, it } from 'vitest';
+import { GetAdminAlerts } from '@bunshin/application';
 import {
   personalLearningDynamicProgramAllows,
   personalLearningFeatureEnabled,
@@ -22,6 +23,7 @@ import {
   PrismaPersonalLearningNudgePreferenceRepository,
   updatePersonalLearningNudgePreferenceInTransaction,
 } from '../src/personal-learning-nudge-preference';
+import { PrismaAdminAlertRepository } from '../src/admin-alerts';
 import { pilotParticipantHash } from '../src/personal-learning-pilot-seat';
 import { cleanupProgramFixtures } from './program-fixture-cleanup';
 
@@ -240,6 +242,80 @@ export function registerPersonalLearningDIntegrationCases(client: PrismaClient) 
         select: { id: true },
       });
     }
+
+    it('surfaces stale learning and nudge-specific reservations in the operations center', async () => {
+      const f = await serviceFixture('PR-1230 stale admission alert');
+      const admin = await client.user.create({ data: { displayName: 'PR-1230 operator' } });
+      await client.platformAdmin.create({ data: { userId: admin.id, role: 'SUPER_ADMIN' } });
+      const staleAt = new Date(now.getTime() - 16 * 60 * 1000);
+      const freshAt = new Date(now.getTime() - 14 * 60 * 1000);
+      const hashes = ['a', 'b', 'c', 'd'].map((letter) => letter.repeat(64));
+      cleanup.push(async () => {
+        await client.personalLearningCallAdmission.deleteMany({
+          where: { operationHash: { in: hashes } },
+        });
+        await client.platformAdmin.deleteMany({ where: { userId: admin.id } });
+        await client.user.deleteMany({ where: { id: admin.id } });
+      });
+      await client.personalLearningCallAdmission.createMany({
+        data: [
+          {
+            workspaceId: f.scope.workspaceId,
+            groupId: f.scope.groupId,
+            serviceProgramId: f.program.id,
+            operationHash: hashes[0]!,
+            reservedCostUsdMicros: 50_000,
+            admittedAt: staleAt,
+            operationContext: { kind: 'LESSON_CANDIDATE' },
+          },
+          {
+            workspaceId: f.scope.workspaceId,
+            groupId: f.scope.groupId,
+            serviceProgramId: f.program.id,
+            operationHash: hashes[1]!,
+            reservedCostUsdMicros: 50_000,
+            admittedAt: staleAt,
+            settledAt: new Date(now.getTime() - 15 * 60 * 1000),
+            operationContext: { kind: 'CONVERSATION' },
+          },
+          {
+            workspaceId: f.scope.workspaceId,
+            groupId: f.scope.groupId,
+            serviceProgramId: f.program.id,
+            operationHash: hashes[2]!,
+            reservedCostUsdMicros: 50_000,
+            admittedAt: freshAt,
+            operationContext: { kind: 'NUDGE' },
+          },
+          {
+            workspaceId: f.scope.workspaceId,
+            groupId: f.scope.groupId,
+            serviceProgramId: f.program.id,
+            operationHash: hashes[3]!,
+            reservedCostUsdMicros: 50_000,
+            admittedAt: staleAt,
+            operationContext: { kind: 'NUDGE' },
+          },
+        ],
+      });
+      const center = await new GetAdminAlerts(new PrismaAdminAlertRepository(client)).execute({
+        actorUserId: admin.id,
+        environment: 'DEVELOPMENT',
+        now,
+      });
+      expect(center.alerts).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            code: 'AI_PERSONAL_LEARNING_OPEN_ADMISSIONS',
+            count: 2,
+            severity: 'WARNING',
+          }),
+        ]),
+      );
+      const serialized = JSON.stringify(center.alerts);
+      expect(serialized).not.toContain(hashes[0]);
+      expect(serialized).not.toContain(f.program.id);
+    });
 
     it('keeps rejected inferences rejected and prevents cross-service/workspace/user access', async () => {
       const first = await serviceFixture('PR-D-1 first service');

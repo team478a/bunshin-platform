@@ -61,6 +61,7 @@ export interface AdminAlertSnapshot {
     stoppedServices: number;
   };
   blockedDeletions: number;
+  personalLearningStaleOpenAdmissions: number;
   openSupportCases: number;
   urgentSupportCases: number;
   commercialBillingRefundReviews: number;
@@ -145,6 +146,16 @@ export function buildAdminAlerts(snapshot: AdminAlertSnapshot): AdminAlert[] {
         href: '/admin/ai',
       });
   }
+  if (snapshot.personalLearningStaleOpenAdmissions > 0)
+    alerts.push({
+      code: 'AI_PERSONAL_LEARNING_OPEN_ADMISSIONS',
+      severity: 'WARNING',
+      title: 'AI研修の費用予約に未精算があります',
+      guidance:
+        'AI設定画面で利用実績と照合してください。予約は時間経過だけで解放せず、実行記録と照合できない場合は調査が終わるまで保持してください。',
+      count: snapshot.personalLearningStaleOpenAdmissions,
+      href: '/admin/ai',
+    });
   if (snapshot.line.required && (!snapshot.line.active || !snapshot.line.verified))
     alerts.push({
       code: 'LINE_CONFIGURATION_UNAVAILABLE',
