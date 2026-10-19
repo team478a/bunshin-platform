@@ -13,6 +13,7 @@ export type PilotOperationsSnapshot = {
     multiTopic: boolean;
     lineLearning: boolean;
     extendedScope: boolean;
+    learningNudges: boolean;
   };
   openCallCount: number;
 };
@@ -35,6 +36,8 @@ export function pilotOperationsSnapshot(value: unknown): PilotOperationsSnapshot
     ['conversation', 'multiTopic', 'lineLearning', 'extendedScope'].some(
       (key) => typeof (v.learningFeatures as Record<string, unknown>)[key] !== 'boolean',
     ) ||
+    (Object.hasOwn(v.learningFeatures, 'learningNudges') &&
+      typeof (v.learningFeatures as Record<string, unknown>).learningNudges !== 'boolean') ||
     typeof v.openCallCount !== 'number' ||
     !Number.isSafeInteger(v.openCallCount) ||
     v.openCallCount < 0
@@ -48,7 +51,14 @@ export function pilotOperationsSnapshot(value: unknown): PilotOperationsSnapshot
     started: v.started,
     stateToken: v.stateToken,
     learningMode: v.learningMode as PilotOperationsSnapshot['learningMode'],
-    learningFeatures: v.learningFeatures as PilotOperationsSnapshot['learningFeatures'],
+    learningFeatures: {
+      ...(v.learningFeatures as Omit<
+        PilotOperationsSnapshot['learningFeatures'],
+        'learningNudges'
+      >),
+      // Older stored Program settings omit this newer feature; it remains opt-in.
+      learningNudges: (v.learningFeatures as Record<string, unknown>).learningNudges === true,
+    },
     openCallCount: v.openCallCount,
   };
 }
