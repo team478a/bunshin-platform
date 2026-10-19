@@ -245,7 +245,16 @@ export function decidePersonalLearningNudge(input: NudgeContext): NudgeDecision 
     (a, b) => a.sentAt.getTime() - b.sentAt.getTime(),
   );
   const finalNoResponse = noResponseHistory[1];
-  if (finalNoResponse && (!latestActionAt || latestActionAt <= finalNoResponse.sentAt)) return null;
+  const finalNoResponseWasAnswered =
+    finalNoResponse?.respondedAt !== null &&
+    finalNoResponse?.respondedAt !== undefined &&
+    finalNoResponse.respondedAt > finalNoResponse.sentAt;
+  if (
+    finalNoResponse &&
+    (!latestActionAt || latestActionAt <= finalNoResponse.sentAt) &&
+    !finalNoResponseWasAnswered
+  )
+    return null;
   const lastTwo = orderedHistory.slice(-2);
   if (
     lastTwo.length === 2 &&

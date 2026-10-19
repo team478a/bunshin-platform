@@ -272,5 +272,20 @@ describe('Manaberu learning nudge rule engine', () => {
         }),
       )?.situation,
     ).toBe('PRACTICE_COMPLETE');
+
+    // A direct reply is an explicit response, not a learning action, and can reopen nudges.
+    expect(
+      decidePersonalLearningNudge(
+        base({
+          now: d(54),
+          histories: [
+            ...history,
+            firstNoResponse,
+            { ...finalNoResponse, respondedAt: d(53) },
+          ],
+          practices: [completedPractice],
+        }),
+      )?.situation,
+    ).toBe('PRACTICE_COMPLETE');
   });
 });
