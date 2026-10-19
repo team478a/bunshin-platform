@@ -124,6 +124,22 @@ backupが完了し、上記のpending集合を新しいProbeで確認した後�
 
 この直接適用手順は6件を人の確認付きで処理するための限定経路であり、Vercel env、機能フラグ、cron、AI/LINE機能を変更しない。migrationを巻き戻さず、エラー時は追加型のforward repairをレビューする。
 
+#### Manaberu Learning Nudge migration（1件限定）
+
+2026-10-19のProduction deployment（commit `4e95aabc`）は`migration-bounds-not-active`でpreflight停止し、`prisma migrate deploy`は開始されていない。直後の読み取り専用Production Migration History Probe run `39193056050`では、次の1件だけがpending、migration変更なしと確認された。実行直前にも新しいProbeを取り、同じ1件だけがpendingであることを確認する。
+
+- `20261019100000_personal_learning_nudges`
+
+backup確認後、上記のpending集合と一致した場合だけ、Node.js 24環境で次を実行する。
+
+```powershell
+.\packages\database\scripts\apply-manaberu-learning-nudges.ps1
+```
+
+SecureStringの非表示入力でDB passwordを入力し、対象project・pending migrationを確認したうえで、確認語`APPLY_MANABERU_LEARNING_NUDGE_MIGRATION_TO_vtkzinaudznwbsjoyszk`を入力する。このentrypointは共通runnerを1件のallowlistに固定する。target identity・session boundsを読み取り専用で照合し、pending集合がこの1件と完全一致するときだけ一度`prisma migrate deploy`を実行し、直後にmigration historyが最新かを確認する。別のmigration、追加/partial set、別project、誤った確認語では適用を開始しない。
+
+実行結果にかかわらず再実行せず、新しいMigration History Probeで再照合する。`UP_TO_DATE`、`db:assert-ready`成功、Production health readinessの`databaseSchema: current`を確認してから、productionコードの再デプロイに進む。失敗・timeout・postcheck不明の場合は停止し、migration history・session・実schemaをread-onlyで照合してから復旧を判断する。機能フラグは変更しない。
+
 期限到達時はLinuxで所有するCLI/engineのprocess groupへSIGKILLを送る。WindowsではCLIだけの停止であり、engine子孫の終了は保証しない。いずれも**DB session/SQLの終了・rollback・全writer drainは証明しない**。非0終了・signal・期限切れ・起動失敗はbuildを停止し、自動retry/resolve/rollbackしない。先行migrationや同migrationの先行statementが適用済みである可能性を残す。
 
 エラー後は次の順で人間が確認する:
