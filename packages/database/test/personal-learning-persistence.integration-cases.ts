@@ -1613,6 +1613,122 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
         f.repo.record({ ...record, measurement: { ...f.measurement, outputTokens: 99 } }),
       ).rejects.toMatchObject({ code: 'CONFLICT' });
     });
+    it('N-2 nudge: reserves once by enrollment/situation/day, stays topic-independent, and settles actual cost', async () => {
+      const f = await textOperationFixture();
+      const settings = {
+        moduleKey: 'AI_TRAINING_V1',
+        trainingOperations: {
+          notificationsEnabled: false,
+          notificationHour: 9,
+          postponedReminderEnabled: false,
+          postponedReminderHours: 24,
+          helpQueueEnabled: false,
+        },
+        personalLearningPilot: {
+          enabled: true,
+          enrollmentIds: [f.enrollment.id],
+          learningMode: 'DYNAMIC_V1',
+          participantControl: {
+            version: 'PILOT_PARTICIPANT_CAP_V1',
+            revision: 1,
+            externalParticipantCap: 5,
+            internalParticipantCap: 1,
+            currentWave: 1,
+            currentWaveCap: 5,
+          },
+          learningFeatures: {
+            conversation: false,
+            multiTopic: true,
+            lineLearning: false,
+            extendedScope: false,
+            learningNudges: true,
+          },
+        },
+      };
+      await client.serviceProgram.update({
+        where: { id: f.enrollment.serviceProgramId },
+        data: { settings },
+      });
+      await client.personalLearningPilotSeat.create({
+        data: {
+          workspaceId: f.scope.workspaceId,
+          groupId: f.scope.groupId,
+          serviceProgramId: f.enrollment.serviceProgramId,
+          participantHash: pilotParticipantHash(f.enrollment.serviceProgramId, f.scope.userId),
+          programEnrollmentId: f.enrollment.id,
+          kind: 'INTERNAL',
+          cohort: 'INTERNAL',
+          seatNumber: 1,
+        },
+      });
+      await client.personalLearningNudgePreference.create({
+        data: {
+          workspaceId: f.scope.workspaceId,
+          groupId: f.scope.groupId,
+          programEnrollmentId: f.enrollment.id,
+          groupMembershipId: f.scope.groupMembershipId,
+          userId: f.scope.userId,
+          enabled: true,
+          consentVersion: 'AI_TRAINING_NUDGE_V3',
+          consentedAt: now,
+        },
+      });
+      const operationId = randomUUID();
+      const operation: PersonalLearningTextOperation = {
+        ...f.input,
+        actor: f.actor,
+        requestId: operationId,
+        expectedRequestRevision: 1,
+        operationId,
+        operationKind: 'NUDGE_COPY',
+        nudge: { situation: 'STUCK', ordinal: 1, judgmentDate: '2026-10-06' },
+        promptVersion: 'manaberu-learning-nudge-v1',
+      };
+      await client.serviceProgram.update({
+        where: { id: f.enrollment.serviceProgramId },
+        data: {
+          settings: {
+            ...settings,
+            personalLearningPilot: {
+              ...settings.personalLearningPilot,
+              learningFeatures: {
+                ...settings.personalLearningPilot.learningFeatures,
+                learningNudges: false,
+              },
+            },
+          },
+        },
+      });
+      await expect(f.repo.admit(operation)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+      expect(await client.personalLearningCallAdmission.count()).toBe(0);
+      await client.serviceProgram.update({
+        where: { id: f.enrollment.serviceProgramId },
+        data: { settings },
+      });
+      const permit = await f.repo.admit(operation);
+      expect(permit.maxOutputTokens).toBe(operation.policy.maxOutputTokens);
+      await expect(f.repo.admit(operation)).rejects.toMatchObject({ code: 'CONFLICT' });
+      await f.repo.record({
+        operation,
+        permit,
+        measurement: f.measurement,
+        requestFinished: true,
+      });
+      const admission = await client.personalLearningCallAdmission.findUniqueOrThrow({
+        where: { id: permit.id },
+      });
+      expect(admission.settledAt).toBeInstanceOf(Date);
+      expect(admission.reservedCostUsdMicros).toBe(60n);
+      const usage = await client.aiUsageEvent.findFirstOrThrow({
+        where: { workspaceId: f.scope.workspaceId },
+      });
+      expect(usage).toMatchObject({
+        taskType: 'PERSONAL_LEARNING_NUDGE_COPY',
+        estimatedCostUsdMicros: 60n,
+      });
+      expect(JSON.stringify(admission.operationContext)).not.toContain(requestContent.originalText);
+      expect(JSON.stringify(admission.operationContext)).not.toContain('profile');
+    });
     it('text operation: checks user/service/enrollment and current wish version before reserving', async () => {
       const f = await textOperationFixture();
       for (const key of ['userId', 'groupId', 'programEnrollmentId'] as const) {

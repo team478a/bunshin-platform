@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
 import type { PersonalLearningTextOperation } from '@bunshin/application';
 export function personalLearningOperationHash(
-  input: Pick<PersonalLearningTextOperation, 'actor' | 'operationId' | 'attempt'>,
+  input: Pick<PersonalLearningTextOperation, 'actor' | 'operationId' | 'attempt'> &
+    Partial<Pick<PersonalLearningTextOperation, 'operationKind'>>,
   attempt = input.attempt,
 ) {
   const s = input.actor.scope;
@@ -14,7 +15,7 @@ export function personalLearningOperationHash(
         s.programEnrollmentId,
         s.groupMembershipId,
         s.userId,
-        input.actor.topicId ?? null,
+        input.operationKind === 'NUDGE_COPY' ? null : (input.actor.topicId ?? null),
         input.operationId,
         attempt,
       ]),
