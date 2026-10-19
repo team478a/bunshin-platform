@@ -24,9 +24,9 @@ PR-N-1として、AIを呼び出さない決まった文面のLINE声かけを�
 
 ## 判定・頻度・利用者操作
 
-判定ルールは `packages/capability-training/src/personal-learning-nudges.ts` にまとめ、東京時間9:00〜20:00、送信間隔48時間以上、7日間で最大2回に制限します。休止明けの声かけは休止期限ごとに一度だけ送ります。声かけ後72時間の反応を確認し、反応がなければ最終声かけから14日後に穏やかな確認文、そこから30日後に終了文を一度だけ送ります。2回目の後は、本人が学習上の行動をするまで全状況の声かけを止めます。声かけボタンの操作だけではこの停止を解除せず、学習利用にも数えません。
+判定ルールは `packages/capability-training/src/personal-learning-nudges.ts` にまとめ、東京時間9:00〜20:00、送信間隔48時間以上、7日間で最大2回に制限します。休止明けの声かけは休止期限ごとに一度だけ送ります。声かけ後72時間の反応を確認し、反応がなければ最後の声かけから14日後に穏やかな確認文、そこから30日後に終了文を一度だけ送ります。2回目の後は、本人が学習上の行動をするか、最終メッセージに明示的に応答するまで全状況の声かけを止めます。LINEのクイックリプライ等の応答は停止解除の意思として扱いますが、学習利用・最終利用日には数えません。
 
-受講者は研修画面、またはLINEメッセージのクイックリプライから「続きをする」「1週間休む」「2週間休む」「1か月休む」「声かけを止める」を選べます。LINEの選択はWebと同じ受講者設定・`PERSONAL_LEARNING_NUDGE_PREFERENCE_UPDATED` 操作記録へ保存します。postbackは学習本文の受信箱へ入れず、学習上の行動・最終利用日にも数えません。操作記録は受講・ユーザー・ワークスペース・サービスにスコープし、操作種別・日時・経路だけを保持します。
+受講者は研修画面、またはLINEメッセージのクイックリプライから「続きをする」「1週間休む」「2週間休む」「1か月休む」「声かけを止める」を選べます。LINEの選択はWebと同じ受講者設定・`PERSONAL_LEARNING_NUDGE_PREFERENCE_UPDATED` 操作記録へ保存します。postbackは学習本文の受信箱へ入れず、学習上の行動・最終利用日にも数えません。最終メッセージへの明示応答は声かけ停止解除の応答としてのみ扱います。操作記録は受講・ユーザー・ワークスペース・サービスにスコープし、操作種別・日時・経路だけを保持します。
 
 ## N-1で使う固定文面
 
@@ -57,7 +57,7 @@ Migration `20261019100000_personal_learning_nudges` は、受講単位の停止/
 - `pnpm --filter @bunshin/database test -- training-personal-data-deletion.test.ts training-personal-data-export.test.ts training-retention-execution.test.ts` — 3ファイル、23テスト成功
 - DB統合テストには、操作スコープ、書き出し・一括削除、保存期間削除にN-1の記録を含めるケースを追加しました。実データベース統合実行は本番DBへ接続せず、Draft PRのCIで確認します。
 - 追加テスト: LINEクイックリプライ経路とpostbackの非学習入力化、REST_RESUMEの複数回休止、無反応の14日／30日2段階と2回目後の全状況停止を確認します。
-- 修正後CI: `verify` run番号と `database` run番号は最新コミットのGitHub Actions完了後に記載します。
+- 修正後CI: GitHub Actions [run #3068](https://github.com/team478a/bunshin-platform/actions/runs/39185077404) — `verify` 成功（全体テスト3,657件成功・2件skip、typecheck/lint/format/build等成功）、`database` 成功（統合テスト成功）。
 
 ## 未対応・次の段階
 
