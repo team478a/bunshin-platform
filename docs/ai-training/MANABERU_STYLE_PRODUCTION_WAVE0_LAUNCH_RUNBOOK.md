@@ -1,5 +1,7 @@
 # マナベルスタイル by ワタシワークス — Production Wave 0 Launch Runbook
 
+PR-G評価用の固定シナリオ・採点基準・記録テンプレートは[PR-G評価パケット](MANABERU_PR_G_EVALUATION_PACKET.md)、外部公開の判定条件は[外部公開準備判定表](MANABERU_EXTERNAL_RELEASE_READINESS.md)を参照する。これらの文書は本番開始・外部公開を承認せず、実施証跡がない項目はUNKNOWNのまま扱う。
+
 ### 2026-10-18 招待受諾時の内部研修枠自動付与（実装中・本番未反映）
 
 ユーザー指示により、従来の「招待後に運営者がEnrollment作成・INTERNAL Seat付与」を、マナベルの招待受諾時に同一transactionで自動作成する方式へ変更する。対象は停止中のAI_TRAINING_V1 Pilot、設定済みWave 0内部上限（1〜3人）、有効な無料・招待限定・GUIDED Offeringに限る。上限未設定/不整合、複数Offering、3人上限到達等の場合は招待受諾全体を取り消す。ハッシーや他Serviceは対象外。
@@ -337,6 +339,15 @@ E2E、再Login復元、First Success/Capability Evidence、停止/drain確認が
 まず冒頭Emergency Stop、Pilotだけ停止して既存V1を維持。Application rollbackは既知正常SHAと最新DB互換性を確認し、全instanceの実行flag OFFを保つ。旧版はSeat/Admissionを迂回し得るためenabledで戻さない。
 
 DBは原則rollbackせず履歴を保全しforward-fix。逆DROP/適用済みfile編集/枠再利用/Goal上書きで障害を隠さない。restoreが必要なら環境ownerと障害責任者の別承認、全writer影響/停止、復元timestamp、以後の本人削除・退会・保持期限の再適用を確認するまで公開再開しない。
+
+## PR-G — 実AIの通し評価と外部公開準備
+
+- 実AI評価はProductionではなく、実行承認を得た検証環境で行う。Provider/model/価格版、Admission、Provider側予算、監視担当、実費承認のいずれかがUNKNOWNなら呼び出さない。
+- 評価は固定10シナリオ（Web 5件、LINE 5件）を使い、各セッションで人間の受講者役が10回以上発言する。各会話を2人以上が採点し、少なくとも1人はその会話の受講者役と別人であること。詳細は評価パケットに従う。
+- 生会話・実費・所要時間の原証跡はアクセス制御された非公開場所に保存し、PRには会話本文を置かない。公開する報告は集計と非公開証跡キーに限る。
+- 評価完了後に[外部公開準備判定表](MANABERU_EXTERNAL_RELEASE_READINESS.md)を更新する。各Gateは根拠付きPASS/FAIL/UNKNOWNとし、UNKNOWNまたはFAILが一つでもあればNO-GO。
+- Backup復元元の識別子・取得日時・復元先との来歴は信頼できる記録で照合する。件数比較で推測せず、証拠がない間はUNKNOWN/NO-GO。
+- 評価結果のPASSは固定シナリオ内の品質確認だけを意味し、学習効果や外部公開の自動許可ではない。最終的な外部公開は田中の別承認が必要。
 
 ## 残作業 / Blocker / 安全な支援
 
