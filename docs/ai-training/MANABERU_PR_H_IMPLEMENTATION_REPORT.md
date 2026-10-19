@@ -34,7 +34,8 @@
 - `pnpm lint`: 全25タスク成功（architecture boundary、learning UI lintを含む）。
 - `pnpm format:check`: 成功。
 - `pnpm db:validate`: 成功。Prisma Client生成を実施した。DB URLはローカルdummy値であり、DBへの接続・操作には使っていない。
-- migration readinessとDatabase integration testはDraft PRのCIで確認する。実DB・本番DBには接続していない。
+- GitHub Actions [run 39249674274](https://github.com/team478a/bunshin-platform/actions/runs/39249674274): `verify` と `database` が成功。`database` はPrisma validation、隔離DBへのmigration/readiness、Database integration testまで成功した。本番DBではない。
+- 実DB・本番DBには接続していない。
 - 実AI比較、LINE送信、人手採点、費用発生を伴うAPI呼び出しは未実施。
 
 ## 5. 未解決事項
@@ -42,7 +43,6 @@
 - 実際に有効なOpenAI/Google Provider設定、接続可否、現行単価・上限の人間による確認。秘密値は閲覧・記録せず、保存済み設定を使う。
 - 評価パケットに従う実AIの比較・独立採点と結果レビュー。PR-H評価バッチは初回教材提案の合成ケース比較であり、PR-GのWeb/LINE通し会話、人間による実会話評価、学習効果の検証を代替しない。
 - Googleを通常利用に拡張する場合の本番Provider審査、秘密設定、費用承認、モデル機能の再確認。現状は本番ブロックを維持する。
-- GitHub Actionsの `verify` / `database` 実行結果はPR作成後に追記する。
 
 ## 6. 次Phaseへ進める条件
 
@@ -54,6 +54,6 @@
 ## 7. 実装済み／検証済み／本番反映済み
 
 - 実装済み: Provider共通ポート、評価用Googleアダプター、Provider能力設定、既存Admission/予約台帳との接続、明示実行の盲検比較バッチ。
-- 検証済み: 合成ユニットテスト、web全体テスト、型チェック、書式チェック、architecture boundary check。
+- 検証済み: 合成ユニットテスト、web全体テスト、型チェック、Lint、書式チェック、Prisma validation、architecture boundary check、GitHub Actions `verify` / `database` 成功。
 - 未検証: 実Provider疎通、実AI品質比較、人手採点、実際の費用・時間、LINEの通し評価。
 - 本番反映済み: なし。
