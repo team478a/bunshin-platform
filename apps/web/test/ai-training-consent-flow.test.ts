@@ -27,6 +27,14 @@ const participantPage = readFileSync(
   new URL('../app/s/[serviceSlug]/programs/[programEnrollmentId]/page.tsx', import.meta.url),
   'utf8',
 );
+const trainingPage = readFileSync(
+  new URL('../app/s/[serviceSlug]/training/page.tsx', import.meta.url),
+  'utf8',
+);
+const consentReader = readFileSync(
+  new URL('../src/services/ai-training-consent.ts', import.meta.url),
+  'utf8',
+);
 
 describe('Manaberu AI training consent flow', () => {
   it('keeps invitation behavior unchanged for other services and routes training invites to confirmation', () => {
@@ -78,12 +86,23 @@ describe('Manaberu AI training consent flow', () => {
   });
 
   it('requires the revised consent wording and appends its new version without deleting history', () => {
-    expect(AI_TRAINING_AI_CONSENT_VERSION).toBe('AI_TRAINING_EXTERNAL_AI_V2');
+    expect(AI_TRAINING_AI_CONSENT_VERSION).toBe('AI_TRAINING_EXTERNAL_AI_V3');
     expect(AI_TRAINING_AI_CONSENT_TEXT).toContain('この同意は、この研修への参加に対するものです');
+    expect(AI_TRAINING_AI_CONSENT_TEXT).toContain('AIがLINEで声をかける場合があります');
+    expect(AI_TRAINING_AI_CONSENT_TEXT).toContain('声かけはいつでも停止でき');
     expect(AI_TRAINING_AI_CONSENT_TEXT).not.toContain('Enrollment');
     expect(consentService).toContain('consentVersion: AI_TRAINING_AI_CONSENT_VERSION');
     expect(consentService).toContain('aiTrainingUsageConsent.upsert');
     expect(consentService).not.toContain('aiTrainingUsageConsent.delete');
+  });
+
+  it('asks for exactly one current V3 consent instead of an intermediate V2 prompt', () => {
+    expect(AI_TRAINING_AI_CONSENT_VERSION).toBe('AI_TRAINING_EXTERNAL_AI_V3');
+    expect(consentReader).toContain('consentVersion: AI_TRAINING_AI_CONSENT_VERSION');
+    expect(consentReader).toContain('textDigest: consentTextDigest');
+    expect(consentReader).not.toContain('AI_TRAINING_EXTERNAL_AI_V2');
+    expect(trainingPage.match(/同意して研修へ進む/g)?.length).toBe(1);
+    expect(trainingPage).not.toContain('AI_TRAINING_EXTERNAL_AI_V2');
   });
 
   it('rechecks current consent in the HTTP enqueue path and both AI worker paths', () => {

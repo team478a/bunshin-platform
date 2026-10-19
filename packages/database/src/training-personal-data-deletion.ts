@@ -151,6 +151,27 @@ export class PrismaTrainingPersonalDataDeletionRepository implements TrainingPer
                   id: { in: dynamicLearningIds.lineInbox },
                 },
               });
+              await tx.personalLearningLinePush.deleteMany({
+                where: {
+                  workspaceId: input.workspaceId,
+                  groupId: input.groupId,
+                  programEnrollmentId: input.programEnrollmentId,
+                  groupMembershipId: owned.membershipId,
+                  userId: input.actorUserId,
+                  purpose: 'NUDGE',
+                  id: { in: dynamicLearningIds.lineNudgePushes },
+                },
+              });
+              await tx.personalLearningNudgePreference.deleteMany({
+                where: {
+                  workspaceId: input.workspaceId,
+                  groupId: input.groupId,
+                  programEnrollmentId: input.programEnrollmentId,
+                  groupMembershipId: owned.membershipId,
+                  userId: input.actorUserId,
+                  id: { in: dynamicLearningIds.nudgePreferences },
+                },
+              });
               await tx.personalLearningTopic.deleteMany({
                 where: {
                   workspaceId: input.workspaceId,
@@ -523,6 +544,35 @@ export class PrismaTrainingPersonalDataDeletionRepository implements TrainingPer
           take,
         })
       : [];
+    const [lineNudgePushes, nudgePreferences] = all
+      ? await Promise.all([
+          tx.personalLearningLinePush.findMany({
+            where: {
+              workspaceId: input.workspaceId,
+              groupId: input.groupId,
+              programEnrollmentId: input.programEnrollmentId,
+              groupMembershipId: owned.membershipId,
+              userId: input.actorUserId,
+              purpose: 'NUDGE',
+            },
+            select: { id: true, createdAt: true },
+            orderBy,
+            take,
+          }),
+          tx.personalLearningNudgePreference.findMany({
+            where: {
+              workspaceId: input.workspaceId,
+              groupId: input.groupId,
+              programEnrollmentId: input.programEnrollmentId,
+              groupMembershipId: owned.membershipId,
+              userId: input.actorUserId,
+            },
+            select: { id: true, updatedAt: true },
+            orderBy,
+            take,
+          }),
+        ])
+      : [[], []];
     const [
       dynamicTopics,
       dynamicPersonaItems,
@@ -607,6 +657,8 @@ export class PrismaTrainingPersonalDataDeletionRepository implements TrainingPer
       dynamicSavedExamples,
       dynamicPersonaProfiles,
       lineLearningMessages,
+      lineNudgePushes,
+      nudgePreferences,
     };
     if (Object.values(snapshotRows).some((list) => list.length > TRAINING_EXPORT_MAX_ROWS))
       return { outcome: 'TOO_LARGE' } as const;
@@ -636,6 +688,8 @@ export class PrismaTrainingPersonalDataDeletionRepository implements TrainingPer
             personaProfiles: dynamicPersonaProfiles.map(({ id }) => id),
             lineInbox: lineLearningMessages.map(({ id }) => id),
             lineEventIds: lineLearningMessages.map(({ providerEventId }) => providerEventId),
+            lineNudgePushes: lineNudgePushes.map(({ id }) => id),
+            nudgePreferences: nudgePreferences.map(({ id }) => id),
           }
         : null,
       preview: {
@@ -657,7 +711,9 @@ export class PrismaTrainingPersonalDataDeletionRepository implements TrainingPer
                   dynamicPersonaSuppressions.length +
                   dynamicSavedExamples.length +
                   dynamicPersonaProfiles.length +
-                  lineLearningMessages.length,
+                  lineLearningMessages.length +
+                  lineNudgePushes.length +
+                  nudgePreferences.length,
               }
             : {}),
           ...(learningRequests.length > 0 ? { learningRequests: learningRequests.length } : {}),

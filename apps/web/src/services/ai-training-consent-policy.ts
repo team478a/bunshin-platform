@@ -1,9 +1,10 @@
-export const AI_TRAINING_AI_CONSENT_VERSION = 'AI_TRAINING_EXTERNAL_AI_V2';
+export const AI_TRAINING_AI_CONSENT_VERSION = 'AI_TRAINING_EXTERNAL_AI_V3';
 
 export const AI_TRAINING_AI_CONSENT_TEXT = [
   '研修の回答や学習内容は、課題の提案・評価・支援のため外部AIサービスへ送信されます。',
   '氏名、顧客情報、パスワード、社外秘など、送信してはいけない情報は入力しないでください。',
   'AIの回答は誤る場合があります。内容を確認し、ご自身の判断で利用してください。',
+  '学習の状況に合わせてAIがLINEで声をかける場合があります。声かけはいつでも停止でき、学習そのものは続けられます。',
   'この同意は、この研修への参加に対するものです。同意しない場合、または参加枠がない場合は、AIを使った処理は行いません。',
 ].join('\n');
 

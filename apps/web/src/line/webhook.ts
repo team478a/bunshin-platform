@@ -21,6 +21,10 @@ import {
   AI_TRAINING_AI_CONSENT_VERSION,
   AI_TRAINING_AI_CONSENT_TEXT,
 } from '../services/ai-training-consent';
+import {
+  parsePersonalLearningNudgeLineAction,
+  type PersonalLearningNudgeLineAction,
+} from './personal-learning-nudge-actions';
 
 const aiConsentDigest = createHash('sha256').update(AI_TRAINING_AI_CONSENT_TEXT).digest('hex');
 
@@ -44,6 +48,10 @@ const webhookBody = z
                 id: z.string().min(1).max(255).optional(),
                 text: z.string().max(5000).optional(),
               })
+              .passthrough()
+              .optional(),
+            postback: z
+              .object({ data: z.string().max(300) })
               .passthrough()
               .optional(),
           })
@@ -81,6 +89,8 @@ export function parseLineWebhookEvents(rawBody: string) {
   return parsed.data.events.map((event) => {
     const type: LineWebhookEventType =
       event.type === 'follow' ? 'FOLLOW' : event.type === 'unfollow' ? 'UNFOLLOW' : 'OTHER';
+    const nudgeAction =
+      event.type === 'postback' ? parsePersonalLearningNudgeLineAction(event.postback?.data) : null;
     return {
       providerEventId: event.webhookEventId,
       providerUserId: event.source?.userId ?? null,
@@ -92,6 +102,7 @@ export function parseLineWebhookEvents(rawBody: string) {
         : event.type === 'message' && event.message?.type === 'image' && event.message.id
           ? { message: { type: 'IMAGE' as const, lineMessageId: event.message.id } }
           : {}),
+      ...(nudgeAction ? { nudgeAction } : {}),
       occurredAt: new Date(event.timestamp),
     };
   });
@@ -392,6 +403,161 @@ export class PrismaGroupLineLearningInbox implements GroupLineLearningInboxPort 
   }
 }
 
+export interface GroupLineNudgeActionPort {
+  apply(input: {
+    environment: LineConfigurationEnvironment;
+    workspaceId: string;
+    groupId: string;
+    configurationId: string;
+    events: Array<{
+      providerEventId: string;
+      providerUserId: string | null;
+      occurredAt: Date;
+      nudgeAction: PersonalLearningNudgeLineAction;
+    }>;
+  }): Promise<void>;
+}
+
+/** Applies quick replies through the same scoped preference repository as the Web controls. */
+export class PrismaGroupLineNudgeAction implements GroupLineNudgeActionPort {
+  async apply(input: Parameters<GroupLineNudgeActionPort['apply']>[0]) {
+    const { prisma, updatePersonalLearningNudgePreferenceInTransaction } =
+      await import('@bunshin/database');
+    for (const event of input.events) {
+      await prisma.$transaction(async (tx) => {
+        const prior = await tx.groupLineWebhookEvent.findUnique({
+          where: {
+            configurationId_providerEventId: {
+              configurationId: input.configurationId,
+              providerEventId: event.providerEventId,
+            },
+          },
+          select: { id: true },
+        });
+        if (prior) return;
+        const now = new Date();
+        const connection = event.providerUserId
+          ? await tx.groupLineConnection.findFirst({
+              where: {
+                configurationId: input.configurationId,
+                workspaceId: input.workspaceId,
+                groupId: input.groupId,
+                providerUserId: event.providerUserId,
+                status: 'ACTIVE',
+                friendshipStatus: 'FOLLOWING',
+                notificationConsentAt: { not: null },
+                user: { status: 'ACTIVE' },
+                groupMembership: { status: 'ACTIVE', consentedAt: { not: null } },
+              },
+              select: { userId: true, groupMembershipId: true },
+            })
+          : null;
+        let outcome: 'APPLIED' | 'CONNECTION_NOT_FOUND' | 'IGNORED' = connection
+          ? 'IGNORED'
+          : 'CONNECTION_NOT_FOUND';
+        const enrollment = connection
+          ? await tx.programEnrollment.findFirst({
+              where: {
+                id: event.nudgeAction.programEnrollmentId,
+                workspaceId: input.workspaceId,
+                groupId: input.groupId,
+                groupMembershipId: connection.groupMembershipId,
+                status: 'ACTIVE',
+                startsAt: { lte: now },
+                OR: [{ endsAt: null }, { endsAt: { gt: now } }],
+              },
+              select: { id: true, serviceProgramId: true },
+            })
+          : null;
+        const program = enrollment
+          ? await tx.serviceProgram.findFirst({
+              where: {
+                id: enrollment.serviceProgramId,
+                workspaceId: input.workspaceId,
+                groupId: input.groupId,
+                status: 'ACTIVE',
+                settings: { path: ['moduleKey'], equals: 'AI_TRAINING_V1' },
+              },
+              select: { settings: true },
+            })
+          : null;
+        const consent =
+          connection && enrollment
+            ? await tx.aiTrainingUsageConsent.findFirst({
+                where: {
+                  workspaceId: input.workspaceId,
+                  groupId: input.groupId,
+                  programEnrollmentId: enrollment.id,
+                  groupMembershipId: connection.groupMembershipId,
+                  userId: connection.userId,
+                  consentVersion: AI_TRAINING_AI_CONSENT_VERSION,
+                  textDigest: aiConsentDigest,
+                },
+                select: { consentedAt: true },
+              })
+            : null;
+        if (
+          connection &&
+          enrollment &&
+          program &&
+          consent &&
+          personalLearningDynamicProgramAllows(program.settings, enrollment.id)
+        ) {
+          try {
+            const db = await import('@bunshin/database');
+            await db.requirePersonalLearningPilotSeat(
+              tx,
+              {
+                workspaceId: input.workspaceId,
+                groupId: input.groupId,
+                programEnrollmentId: enrollment.id,
+                userId: connection.userId,
+              },
+              true,
+            );
+            const actor = {
+              scope: {
+                workspaceId: input.workspaceId,
+                groupId: input.groupId,
+                programEnrollmentId: enrollment.id,
+                groupMembershipId: connection.groupMembershipId,
+                userId: connection.userId,
+              },
+              actorUserId: connection.userId,
+            };
+            const action = event.nudgeAction.action;
+            await updatePersonalLearningNudgePreferenceInTransaction(tx, actor, {
+              action,
+              now,
+              consentVersion: AI_TRAINING_AI_CONSENT_VERSION,
+              consentedAt: consent.consentedAt,
+              idempotencyKey: `learning-nudge-line:${input.configurationId}:${event.providerEventId}`,
+              channel: 'LINE',
+              ...(action === 'PAUSE'
+                ? { pauseUntil: new Date(now.getTime() + event.nudgeAction.days * 86_400_000) }
+                : {}),
+            });
+            outcome = 'APPLIED';
+          } catch (error) {
+            if (!(error instanceof ApplicationError) || error.code !== 'NOT_FOUND') throw error;
+          }
+        }
+        await tx.groupLineWebhookEvent.create({
+          data: {
+            workspaceId: input.workspaceId,
+            groupId: input.groupId,
+            configurationId: input.configurationId,
+            providerEventId: event.providerEventId,
+            type: 'OTHER',
+            outcome,
+            occurredAt: event.occurredAt,
+          },
+        });
+      });
+    }
+  }
+}
+
 class DatabaseGroupLineFollowInvitation implements GroupLineFollowInvitationPort {
   async create(input: Parameters<GroupLineFollowInvitationPort['create']>[0]) {
     const db = await import('@bunshin/database');
@@ -511,6 +677,7 @@ export async function handleGroupLineWebhook(
     followReply?: GroupLineFollowReplyPort;
     followInvitations?: GroupLineFollowInvitationPort;
     learningInbox?: GroupLineLearningInboxPort;
+    nudgeActions?: GroupLineNudgeActionPort;
   } = {},
 ) {
   if (!z.string().uuid().safeParse(routingKey).success)
@@ -531,6 +698,31 @@ export async function handleGroupLineWebhook(
   const replyTokens = parsedBody.success
     ? new Map(parsedBody.data.events.map((event) => [event.webhookEventId, event.replyToken]))
     : new Map<string, string | undefined>();
+  const nudgeEvents = events.filter((event) => 'nudgeAction' in event);
+  if (nudgeEvents.length) {
+    try {
+      await (dependencies.nudgeActions ?? new PrismaGroupLineNudgeAction()).apply({
+        environment,
+        workspaceId: scoped.workspaceId,
+        groupId: scoped.groupId,
+        configurationId: scoped.configurationId,
+        events: nudgeEvents.flatMap((event) =>
+          event.nudgeAction
+            ? [
+                {
+                  providerEventId: event.providerEventId,
+                  providerUserId: event.providerUserId,
+                  occurredAt: event.occurredAt,
+                  nudgeAction: event.nudgeAction,
+                },
+              ]
+            : [],
+        ),
+      });
+    } catch {
+      return Response.json({ error: 'temporary nudge action failure' }, { status: 500 });
+    }
+  }
   const learningEvents = events.filter((event) => 'message' in event);
   if (learningEvents.length) {
     try {
@@ -553,7 +745,9 @@ export async function handleGroupLineWebhook(
     new ProcessGroupLineWebhookEvents(
       new (await import('@bunshin/database')).PrismaGroupLineConnectionRepository(),
     );
-  for (const event of events.filter((candidate) => !('message' in candidate))) {
+  for (const event of events.filter(
+    (candidate) => !('message' in candidate) && !('nudgeAction' in candidate),
+  )) {
     const result = await processor.execute({
       environment,
       workspaceId: scoped.workspaceId,
