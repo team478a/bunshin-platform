@@ -32,6 +32,14 @@ const featureLabels = {
   multiTopic: '複数テーマ学習',
   lineLearning: 'LINE学習',
   extendedScope: '拡張範囲',
+  learningNudges: '学習の声かけ',
+} as const;
+const featureDescriptions = {
+  conversation: '受講者が同じスレッドで追加相談できます。AI利用上限・費用設定が別途必要です。',
+  multiTopic: '目標・計画・会話をテーマごとに分けます。',
+  lineLearning: 'LINEで届いた本文・画像を使った学習を有効にします。',
+  extendedScope: 'AIの実践支援で扱う範囲を広げます。',
+  learningNudges: '受講状況に応じた学習の声かけを有効にします。',
 } as const;
 
 export function PilotOperationsCard({ serviceSlug }: { serviceSlug: string }) {
@@ -48,6 +56,7 @@ export function PilotOperationsCard({ serviceSlug }: { serviceSlug: string }) {
     multiTopic: false,
     lineLearning: false,
     extendedScope: false,
+    learningNudges: false,
   });
   const [confirmed, setConfirmed] = useState(false);
   const [message, setMessage] = useState('まず現在の状態を確認してください。');
@@ -152,9 +161,28 @@ export function PilotOperationsCard({ serviceSlug }: { serviceSlug: string }) {
           {snapshot.openCallCount}
         </p>
       )}
+      {snapshot && (
+        <section aria-label="対象Programの機能状態" className="stack">
+          <h3>対象Programの機能</h3>
+          <p>このサービス専用Programの状態です。他のサービス・Programには反映されません。</p>
+          <ul className="stack" style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+            {Object.entries(featureLabels).map(([key, label]) => (
+              <li key={key}>
+                {label}:{' '}
+                {snapshot.learningFeatures[key as keyof typeof snapshot.learningFeatures]
+                  ? 'ON'
+                  : 'OFF'}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       {snapshot?.initialized && snapshot.status === 'SUSPENDED' && !snapshot.enabled && (
         <fieldset className="stack">
-          <legend>停止中の学習モード・機能設定</legend>
+          <legend>停止中のProgram機能設定</legend>
+          <p>
+            スイッチを切り替えたあと、内容を確認して保存してください。稼働中は誤操作防止のため変更できません。
+          </p>
           <label>
             学習モード
             <select
@@ -167,20 +195,63 @@ export function PilotOperationsCard({ serviceSlug }: { serviceSlug: string }) {
             </select>
           </label>
           {Object.entries(featureLabels).map(([key, label]) => (
-            <label key={key}>
-              <input
-                type="checkbox"
-                checked={learningFeatures[key as keyof typeof learningFeatures]}
+            <div
+              key={key}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '1rem',
+              }}
+            >
+              <div>
+                <strong>{label}</strong>
+                <p style={{ margin: '0.25rem 0' }}>
+                  {featureDescriptions[key as keyof typeof featureDescriptions]}
+                </p>
+                <span>{learningFeatures[key as keyof typeof learningFeatures] ? 'ON' : 'OFF'}</span>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-label={label}
+                aria-checked={learningFeatures[key as keyof typeof learningFeatures]}
                 disabled={busy || retry}
-                onChange={(event) =>
+                onClick={() =>
                   setLearningFeatures((current) => ({
                     ...current,
-                    [key]: event.target.checked,
+                    [key]: !current[key as keyof typeof current],
                   }))
                 }
-              />
-              {label}（初期値OFF）
-            </label>
+                style={{
+                  flex: '0 0 auto',
+                  width: '3.25rem',
+                  height: '1.875rem',
+                  padding: '0.1875rem',
+                  border: 0,
+                  borderRadius: '999px',
+                  background: learningFeatures[key as keyof typeof learningFeatures]
+                    ? '#4f46e5'
+                    : '#a3a3a3',
+                  cursor: busy || retry ? 'not-allowed' : 'pointer',
+                }}
+              >
+                <span
+                  aria-hidden="true"
+                  style={{
+                    display: 'block',
+                    width: '1.5rem',
+                    height: '1.5rem',
+                    borderRadius: '50%',
+                    background: 'white',
+                    transform: learningFeatures[key as keyof typeof learningFeatures]
+                      ? 'translateX(1.375rem)'
+                      : 'translateX(0)',
+                    transition: 'transform 120ms ease',
+                  }}
+                />
+              </button>
+            </div>
           ))}
           <label>
             設定変更のレビュー記録ID
