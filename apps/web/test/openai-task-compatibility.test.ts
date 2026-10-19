@@ -54,8 +54,8 @@ describe('versioned local OpenAI task compatibility', () => {
       expect(() => serializeOpenAiTaskRequest(task, { ...value, model })).not.toThrow();
     }
   });
-  it.each(['', ' gpt-5.2', 'GPT-5.2', 'gpt-5-mini-2099-01-01', 'gpt-5.2-chat-latest', 'new-model'])(
-    'does not infer compatibility for %s',
+  it.each(['', ' gpt-5.2', 'bad model', 'gpt;drop', 'gpt\\n5'])(
+    'rejects an invalid model identifier %s without inspecting its capabilities',
     (model) => {
       for (const task of tasks) {
         expect(() => assertOpenAiTaskModel(task, model)).toThrow(
@@ -64,6 +64,9 @@ describe('versioned local OpenAI task compatibility', () => {
       }
     },
   );
+  it('accepts newly configured model ids and defers behavior checks to capability configuration', () => {
+    expect(() => assertOpenAiTaskModel('LEARNING_LESSON', 'new-provider-model-v1')).not.toThrow();
+  });
   it('rejects an unsupported task even with a known model', () => {
     expect(() => assertOpenAiTaskModel('OTHER' as OpenAiCompatibilityTask, 'gpt-5.2')).toThrow();
   });
@@ -177,7 +180,7 @@ describe('versioned local OpenAI task compatibility', () => {
     await expect(
       new OpenAiTrainingAnswerEvaluator({
         apiKey: 'synthetic-secret',
-        model: 'private-unregistered-model',
+        model: 'private unregistered model',
         requestCostUsdMicros: 0,
         fetch: fetcher,
         observe,

@@ -26,7 +26,13 @@ export async function admitPersonalLearningCall(input: {
     throw denied();
   }
   const policy = parsePersonalLearningCallAdmissionPolicy(value);
-  if (!policy || policy.model !== input.model || !personalLearningPilotEnabled()) throw denied();
+  if (
+    !policy ||
+    policy.model !== input.model ||
+    input.provider !== (policy.provider ?? 'openai') ||
+    !personalLearningPilotEnabled()
+  )
+    throw denied();
   const db = await import('@bunshin/database');
   const repo = new db.PrismaPersonalLearningCallAdmission(db.prisma);
   const environment = {

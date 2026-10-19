@@ -12,9 +12,10 @@ export type OpenAiCompatibilityTask =
   | 'LEARNING_NUDGE'
   | 'PERSONAL_LEARNING_PERSONA_INFERENCE';
 
-// Local request compatibility, not a live quality/access/price approval or model router.
-const models = new Set(['gpt-5.2', 'gpt-5.2-2025-12-11', 'gpt-5-mini', 'gpt-5-mini-2025-08-07']);
-const imageModels = new Set([
+// Learning models are selected from active admin configuration and validated by capability.
+// Keep the previously reviewed model set for non-learning callers: PR-H must not alter
+// SOCIAL_PLANNER or TRAINING_ASSESSMENT routing behavior.
+const reviewedNonLearningModels = new Set([
   'gpt-5.2',
   'gpt-5.2-2025-12-11',
   'gpt-5-mini',
@@ -41,7 +42,13 @@ function fail(task: OpenAiCompatibilityTask, reason: string): never {
 
 export function assertOpenAiTaskModel(task: OpenAiCompatibilityTask, model: string) {
   if (!Object.hasOwn(schemaNames, task)) fail(task, 'TASK_NOT_SUPPORTED');
-  if (!models.has(model)) fail(task, 'MODEL_NOT_REGISTERED');
+  if (!/^[A-Za-z0-9][A-Za-z0-9._:/-]{0,119}$/.test(model)) fail(task, 'MODEL_NOT_REGISTERED');
+  if (
+    !task.startsWith('LEARNING_') &&
+    task !== 'PERSONAL_LEARNING_PERSONA_INFERENCE' &&
+    !reviewedNonLearningModels.has(model)
+  )
+    fail(task, 'MODEL_NOT_REGISTERED');
 }
 
 function object(value: unknown): value is Record<string, unknown> {
@@ -68,7 +75,6 @@ export function assertOpenAiTaskRequest(
     fail(task, 'INVALID_OUTPUT_LIMIT');
   if (!Array.isArray(value.input) || value.input.length === 0)
     fail(task, 'INPUT_MODALITY_NOT_SUPPORTED');
-  let hasImage = false;
   for (const item of value.input) {
     if (
       !object(item) ||
@@ -99,13 +105,11 @@ export function assertOpenAiTaskRequest(
         part.detail === 'low' &&
         Object.keys(part).every((key) => ['type', 'image_url', 'detail'].includes(key))
       ) {
-        hasImage = true;
         continue;
       }
       fail(task, 'INPUT_MODALITY_NOT_SUPPORTED');
     }
   }
-  if (hasImage && !imageModels.has(String(value.model))) fail(task, 'IMAGE_MODEL_NOT_SUPPORTED');
   const format = object(value.text) ? value.text.format : undefined;
   if (
     !object(value.text) ||

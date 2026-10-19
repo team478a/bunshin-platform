@@ -4,12 +4,17 @@ import {
   type SavedPersonalLearningRequest,
   type AiCallMeasurement,
   type PersonalLearningTextPermit,
+  type AiModelCapability,
+  type LearningAiGenerationPort,
+  type LearningAiRequest,
 } from '@bunshin/application';
 import {
   OPENAI_TASK_RESPONSES_ENDPOINT,
   serializeOpenAiTaskRequest,
 } from '../ai/openai-task-compatibility';
 import { learningProposalPolicy } from './learning-proposal-policy';
+import { GoogleLearningGenerationAdapter } from './google-learning-generation';
+import { assertLearningProviderCapabilities } from './learning-provider-capabilities';
 
 export const LEARNING_LESSON_PROMPT_VERSION = 'learning-lesson-tool-independent-v3-persona-context';
 export type LearningPersonaContext = readonly {
@@ -91,8 +96,79 @@ export function learningLessonBody(
     throw new Error('learning request limit exceeded');
   return body;
 }
-/** One bounded request. Raw errors/responses never become logs or learner permissions. */
+function learningTask(body: string): LearningAiRequest['task'] {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    throw new Error('learning request unavailable');
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed))
+    throw new Error('learning request unavailable');
+  const text = (parsed as Record<string, unknown>)['text'];
+  const format =
+    text && typeof text === 'object' ? (text as Record<string, unknown>)['format'] : null;
+  const name =
+    format && typeof format === 'object' ? (format as Record<string, unknown>)['name'] : null;
+  const tasks: Record<string, LearningAiRequest['task']> = {
+    learning_lesson: 'LESSON',
+    learning_conversation: 'CONVERSATION',
+    learning_support: 'PRACTICE_SUPPORT',
+    learning_nudge: 'NUDGE_COPY',
+    personal_learning_evidence_review: 'EVIDENCE_REVIEW',
+    personal_learning_persona_inference: 'PERSONA_INFERENCE',
+  };
+  if (typeof name !== 'string' || !tasks[name]) throw new Error('learning request unavailable');
+  return tasks[name];
+}
+
+class OpenAiLearningGenerationAdapter implements LearningAiGenerationPort {
+  constructor(private readonly fetcher: typeof fetch = fetch) {}
+
+  generate<T>(
+    input: LearningAiRequest,
+    validate: (value: unknown) => T,
+    credentials: { apiKey: string },
+  ) {
+    if (input.provider !== 'openai') throw new Error('learning provider mismatch');
+    assertLearningProviderCapabilities(input);
+    return generateOpenAiLearningStructured({
+      apiKey: credentials.apiKey,
+      model: input.model,
+      body: input.serializedPrompt,
+      fetch: this.fetcher,
+      validate,
+    });
+  }
+}
+
+/** Purpose-level port with provider adapters; provider wire formats remain in this layer. */
 export async function generateLearningStructured<T>(options: {
+  apiKey: string;
+  model: string;
+  body: string;
+  provider?: 'openai' | 'google';
+  modelCapabilities: readonly AiModelCapability[];
+  fetch?: typeof fetch;
+  validate: (value: unknown) => T;
+}) {
+  const provider = options.provider ?? 'openai';
+  const request: LearningAiRequest = {
+    task: learningTask(options.body),
+    provider,
+    model: options.model,
+    modelCapabilities: options.modelCapabilities,
+    serializedPrompt: options.body,
+  };
+  const port: LearningAiGenerationPort =
+    provider === 'google'
+      ? new GoogleLearningGenerationAdapter(options.fetch)
+      : new OpenAiLearningGenerationAdapter(options.fetch);
+  return port.generate(request, options.validate, { apiKey: options.apiKey });
+}
+
+/** One bounded OpenAI request. Raw errors/responses never become logs or learner permissions. */
+async function generateOpenAiLearningStructured<T>(options: {
   apiKey: string;
   model: string;
   body: string;
@@ -179,6 +255,8 @@ export function generateLearningLesson(options: {
   apiKey: string;
   model: string;
   body: string;
+  provider?: 'openai' | 'google';
+  modelCapabilities: readonly AiModelCapability[];
   fetch?: typeof fetch;
 }) {
   return generateLearningStructured({ ...options, validate: validateLearningLessonProposal });

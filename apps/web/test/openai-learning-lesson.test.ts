@@ -106,19 +106,20 @@ describe('lesson Provider', () => {
     expect(data.personaContext[0].attributeKey).toBe('confirmed_priority');
     expect(data.personaContext.length).toBeLessThan(context.length);
   });
-  it('rejects byte overflow and unsupported models before fetch', () => {
+  it('rejects byte overflow and accepts a syntactically valid new model id', () => {
     expect(() =>
       learningLessonBody(wish, 'gpt-5.2', { maxRequestBytes: 1, maxOutputTokens: 2000 }),
     ).toThrow();
     expect(() =>
-      learningLessonBody(wish, 'unknown', { maxRequestBytes: 16000, maxOutputTokens: 2000 }),
-    ).toThrow();
+      learningLessonBody(wish, 'new-model-id', { maxRequestBytes: 16000, maxOutputTokens: 2000 }),
+    ).not.toThrow();
   });
   it('records successful structured generation usage', async () => {
     const fetcher = vi.fn().mockResolvedValue(Response.json(raw()));
     const r = await generateLearningLesson({
       apiKey: 'synthetic',
       model: 'gpt-5.2-2025-12-11',
+      modelCapabilities: ['STRUCTURED_OUTPUT'],
       body: body(),
       fetch: fetcher,
     });
@@ -135,6 +136,7 @@ describe('lesson Provider', () => {
     const r = await generateLearningLesson({
       apiKey: 'synthetic',
       model: 'gpt-5.2-2025-12-11',
+      modelCapabilities: ['STRUCTURED_OUTPUT'],
       body: body(),
       fetch: vi.fn().mockResolvedValue(Response.json(raw({ ...proposal, skills: {} }))),
     });
@@ -149,6 +151,7 @@ describe('lesson Provider', () => {
     const r = await generateLearningLesson({
       apiKey: 'synthetic',
       model: 'gpt-5.2-2025-12-11',
+      modelCapabilities: ['STRUCTURED_OUTPUT'],
       body: body(),
       fetch: vi.fn().mockResolvedValue(Response.json({ ...raw(), usage: null })),
     });
@@ -158,6 +161,7 @@ describe('lesson Provider', () => {
     const r = await generateLearningLesson({
       apiKey: 'synthetic',
       model: 'gpt-5.2-2025-12-11',
+      modelCapabilities: ['STRUCTURED_OUTPUT'],
       body: body(),
       fetch: vi.fn().mockResolvedValue(Response.json({ ...raw(), status: 'incomplete' })),
     });
@@ -167,6 +171,7 @@ describe('lesson Provider', () => {
     const r = await generateLearningLesson({
       apiKey: 'synthetic',
       model: 'gpt-5.2-2025-12-11',
+      modelCapabilities: ['STRUCTURED_OUTPUT'],
       body: body(),
       fetch: vi.fn().mockResolvedValue(Response.json({ ...raw(), status: 'in_progress' })),
     });

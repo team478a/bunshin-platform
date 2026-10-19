@@ -88,7 +88,7 @@ export class AesGcmAiProviderSecretCrypto implements AiProviderSecretCryptoPort 
 
 export class AiProviderConnectionTestAdapter {
   async validate(input: {
-    provider: 'OPENAI' | 'GROK' | 'EXA' | 'FIRECRAWL' | 'CREATOMATE' | 'FAL' | 'RUNWAY';
+    provider: 'OPENAI' | 'GOOGLE' | 'GROK' | 'EXA' | 'FIRECRAWL' | 'CREATOMATE' | 'FAL' | 'RUNWAY';
     apiKey: string;
     model: string | null;
   }) {
@@ -130,6 +130,24 @@ export class AiProviderConnectionTestAdapter {
       if (response.status === 404) return { success: true, errorCategory: null };
       if (response.status === 401 || response.status === 403)
         return { success: false, errorCategory: 'CREDENTIAL_INVALID' };
+      if (response.status === 429) return { success: false, errorCategory: 'QUOTA_OR_RATE_LIMIT' };
+      return { success: false, errorCategory: 'PROVIDER_CONFIGURATION_INVALID' };
+    }
+    if (input.provider === 'GOOGLE') {
+      const model = input.model?.trim();
+      if (!model || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,119}$/.test(model.replace(/^models\//, '')))
+        return { success: false, errorCategory: 'MODEL_UNAVAILABLE' };
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model.replace(/^models\//, ''))}`,
+        {
+          headers: { 'x-goog-api-key': input.apiKey },
+          signal: AbortSignal.timeout(10_000),
+        },
+      );
+      if (response.ok) return { success: true, errorCategory: null };
+      if (response.status === 401 || response.status === 403)
+        return { success: false, errorCategory: 'CREDENTIAL_INVALID' };
+      if (response.status === 404) return { success: false, errorCategory: 'MODEL_UNAVAILABLE' };
       if (response.status === 429) return { success: false, errorCategory: 'QUOTA_OR_RATE_LIMIT' };
       return { success: false, errorCategory: 'PROVIDER_CONFIGURATION_INVALID' };
     }

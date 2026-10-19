@@ -194,7 +194,7 @@ describe('practice support Provider', () => {
     expect(data).not.toHaveProperty('actor');
     expect(data).not.toHaveProperty('goalId');
   });
-  it('rejects byte overflow and incompatible models before any send', () => {
+  it('rejects byte overflow and accepts a syntactically valid new model id', () => {
     expect(() =>
       learningSupportBody(practice, request, 'gpt-5.2', {
         maxRequestBytes: 1,
@@ -206,12 +206,13 @@ describe('practice support Provider', () => {
         maxRequestBytes: 16000,
         maxOutputTokens: 1000,
       }),
-    ).toThrow();
+    ).not.toThrow();
   });
   it('measures structured support without scoring or completing the task', async () => {
     const result = await generateLearningSupport({
       apiKey: 'synthetic',
       model: 'gpt-5.2-2025-12-11',
+      modelCapabilities: ['STRUCTURED_OUTPUT'],
       body: body(),
       fetch: vi.fn().mockResolvedValue(Response.json(raw())),
     });
@@ -222,6 +223,7 @@ describe('practice support Provider', () => {
     const result = await generateLearningSupport({
       apiKey: 'synthetic',
       model: 'gpt-5.2-2025-12-11',
+      modelCapabilities: ['STRUCTURED_OUTPUT'],
       body: body(),
       fetch: vi.fn().mockResolvedValue(Response.json(raw({ ...advice, score: 100 }))),
     });
@@ -236,6 +238,7 @@ describe('practice support Provider', () => {
     const result = await generateLearningSupport({
       apiKey: 'synthetic',
       model: 'gpt-5.2-2025-12-11',
+      modelCapabilities: ['STRUCTURED_OUTPUT'],
       body: body(),
       fetch: vi
         .fn()

@@ -17,6 +17,7 @@ const ai = {
   apiKeyConfigured: true,
   apiKeyMask: '••••1234',
   model: 'gpt-5.2',
+  modelCapabilities: ['STRUCTURED_OUTPUT'],
   dailyBudgetUsdMicros: 1_000_000,
   monthlyBudgetUsdMicros: 5_000_000,
   globallyPaused: false,

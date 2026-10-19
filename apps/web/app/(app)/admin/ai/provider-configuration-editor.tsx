@@ -1,7 +1,10 @@
 'use client';
 import { useState, type FormEvent } from 'react';
 
-type Provider = 'OPENAI' | 'GROK' | 'EXA' | 'FIRECRAWL' | 'CREATOMATE' | 'FAL' | 'RUNWAY';
+type Provider =
+  'OPENAI' | 'GOOGLE' | 'GROK' | 'EXA' | 'FIRECRAWL' | 'CREATOMATE' | 'FAL' | 'RUNWAY';
+type ModelCapability =
+  'STRUCTURED_OUTPUT' | 'IMAGE_INPUT' | 'LONG_CONTEXT' | 'WEB_SEARCH' | 'AUDIO_INPUT' | 'TOOL_USE';
 type Configuration = {
   id: string;
   provider: Provider;
@@ -10,6 +13,7 @@ type Configuration = {
   apiKeyConfigured: boolean;
   apiKeyMask: string | null;
   model: string | null;
+  modelCapabilities: readonly ModelCapability[];
   dailyBudgetUsdMicros: number;
   monthlyBudgetUsdMicros: number;
   requestCostUsdMicros?: number;
@@ -19,6 +23,7 @@ type Configuration = {
 };
 const labels: Record<Provider, string> = {
   OPENAI: '文章を作るAI（OpenAI）',
+  GOOGLE: '学習評価用AI（Google Gemini・本番使用不可）',
   GROK: 'Xの話題を調べるAI（Grok）',
   EXA: '話題を調べる検索（Exa）',
   FIRECRAWL: 'ウェブページを読む検索（Firecrawl）',
@@ -58,7 +63,21 @@ export function AiProviderConfigurationEditor(props: {
         body: JSON.stringify({
           provider,
           reason: form.get('reason'),
-          model: ['OPENAI', 'GROK', 'FAL', 'RUNWAY'].includes(provider) ? form.get('model') : null,
+          model: ['OPENAI', 'GOOGLE', 'GROK', 'FAL', 'RUNWAY'].includes(provider)
+            ? form.get('model')
+            : null,
+          modelCapabilities: form
+            .getAll('modelCapabilities')
+            .filter((value): value is ModelCapability =>
+              [
+                'STRUCTURED_OUTPUT',
+                'IMAGE_INPUT',
+                'LONG_CONTEXT',
+                'WEB_SEARCH',
+                'AUDIO_INPUT',
+                'TOOL_USE',
+              ].includes(typeof value === 'string' ? value : ''),
+            ),
           dailyBudgetUsd: Number(form.get('dailyBudgetUsd')),
           monthlyBudgetUsd: Number(form.get('monthlyBudgetUsd')),
           requestCostUsd: Number(form.get('requestCostUsd')),
@@ -289,7 +308,7 @@ export function AiProviderConfigurationEditor(props: {
               ))}
             </select>
           </label>
-          {['OPENAI', 'GROK', 'FAL', 'RUNWAY'].includes(provider) ? (
+          {['OPENAI', 'GOOGLE', 'GROK', 'FAL', 'RUNWAY'].includes(provider) ? (
             <label>
               使うAIモデル
               <input
@@ -298,16 +317,46 @@ export function AiProviderConfigurationEditor(props: {
                 defaultValue={
                   provider === 'GROK'
                     ? 'grok-4.6'
-                    : provider === 'FAL'
-                      ? 'kling-o1-reference-to-video'
-                      : provider === 'RUNWAY'
-                        ? 'gen4_turbo'
-                        : 'gpt-5-mini'
+                    : provider === 'GOOGLE'
+                      ? ''
+                      : provider === 'FAL'
+                        ? 'kling-o1-reference-to-video'
+                        : provider === 'RUNWAY'
+                          ? 'gen4_turbo'
+                          : 'gpt-5-mini'
                 }
                 required
                 maxLength={120}
               />
             </label>
+          ) : null}
+          {['OPENAI', 'GOOGLE'].includes(provider) ? (
+            <fieldset>
+              <legend>このモデルで確認済みの能力</legend>
+              <p>
+                評価に使うモデルの能力だけを選んでください。機能はモデル名ではなく、この設定で判定します。
+              </p>
+              {(
+                [
+                  ['STRUCTURED_OUTPUT', '構造化出力'],
+                  ['IMAGE_INPUT', '画像入力'],
+                  ['LONG_CONTEXT', '長い文脈'],
+                  ['WEB_SEARCH', 'ウェブ検索'],
+                  ['AUDIO_INPUT', '音声入力'],
+                  ['TOOL_USE', 'ツール操作'],
+                ] as const
+              ).map(([value, label]) => (
+                <label key={value}>
+                  <input
+                    type="checkbox"
+                    name="modelCapabilities"
+                    value={value}
+                    defaultChecked={value === 'STRUCTURED_OUTPUT' || value === 'IMAGE_INPUT'}
+                  />
+                  {label}
+                </label>
+              ))}
+            </fieldset>
           ) : null}
           <label>
             APIキー

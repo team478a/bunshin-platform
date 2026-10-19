@@ -72,6 +72,14 @@ describe('server Pilot call admission', () => {
     });
     expect(fake.admit).not.toHaveBeenCalled();
   });
+  it('rejects a provider mismatch before creating a personal-learning admission', async () => {
+    vi.stubEnv(
+      'PERSONAL_LEARNING_CALL_ADMISSION',
+      JSON.stringify({ ...policy, provider: 'google' }),
+    );
+    await expect(admitPersonalLearningCall(input)).rejects.toMatchObject({ retryable: false });
+    expect(fake.admit).not.toHaveBeenCalled();
+  });
   it('database errors fail closed and do not expose raw errors', async () => {
     fake.admit.mockRejectedValue(new Error('private error'));
     await expect(admitPersonalLearningCall(input)).rejects.toMatchObject({
@@ -83,7 +91,7 @@ describe('server Pilot call admission', () => {
     const permit = await admitPersonalLearningCall(input);
     expect(fake.admit).toHaveBeenCalledWith({
       ...input,
-      policy,
+      policy: { ...policy, provider: 'openai' },
       pricingRegistry: ['pricing'],
       environment: 'STAGING',
     });

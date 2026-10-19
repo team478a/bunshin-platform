@@ -19,6 +19,15 @@ const response = (review: unknown) =>
     }),
     { status: 200 },
   );
+const body = (kind: 'TEXT' | 'SELF_REPORT', content: string) =>
+  learningEvidenceReviewBody({
+    material,
+    kind,
+    content,
+    model: 'gpt-5-mini',
+    maxRequestBytes: 20_000,
+    maxOutputTokens: 400,
+  });
 
 describe('personal learning evidence review', () => {
   it('pins the original criteria, evidence kind and submission as data in a bounded request', () => {
@@ -54,10 +63,11 @@ describe('personal learning evidence review', () => {
     const result = await generateLearningEvidenceReview({
       apiKey: 'test',
       model: 'gpt-5-mini',
+      modelCapabilities: ['STRUCTURED_OUTPUT'],
       material,
       kind: 'TEXT',
       content: '文章がある',
-      body: '{}',
+      body: body('TEXT', '文章がある'),
       fetch: () =>
         Promise.resolve(
           response({
@@ -79,10 +89,11 @@ describe('personal learning evidence review', () => {
     const result = await generateLearningEvidenceReview({
       apiKey: 'test',
       model: 'gpt-5-mini',
+      modelCapabilities: ['STRUCTURED_OUTPUT'],
       material,
       kind: 'SELF_REPORT',
       content: '本人が報告した',
-      body: '{}',
+      body: body('SELF_REPORT', '本人が報告した'),
       fetch: () =>
         Promise.resolve(
           response({
@@ -109,10 +120,11 @@ describe('personal learning evidence review', () => {
     const result = await generateLearningEvidenceReview({
       apiKey: 'test',
       model: 'gpt-5-mini',
+      modelCapabilities: ['STRUCTURED_OUTPUT'],
       material,
       kind: 'TEXT',
       content: '本文には基準の抜粋がありません',
-      body: '{}',
+      body: body('TEXT', '本文には基準の抜粋がありません'),
       fetch: () =>
         Promise.resolve(
           response({
@@ -133,10 +145,11 @@ describe('personal learning evidence review', () => {
     const result = await generateLearningEvidenceReview({
       apiKey: 'test',
       model: 'gpt-5-mini',
+      modelCapabilities: ['STRUCTURED_OUTPUT'],
       material,
       kind: 'TEXT',
       content: '外部の基準',
-      body: '{}',
+      body: body('TEXT', '外部の基準'),
       fetch: () =>
         Promise.resolve(
           response({

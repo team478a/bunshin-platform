@@ -1,5 +1,6 @@
 import 'server-only';
 import type {
+  AiModelCapability,
   PersonalLearningTextPermit,
   SavedPersonalLearningRequest,
   SavedLearningLessonCandidate,
@@ -238,6 +239,8 @@ export function generateLearningConversation(options: {
   apiKey: string;
   model: string;
   body: string;
+  provider?: 'openai' | 'google';
+  modelCapabilities: readonly AiModelCapability[];
   fetch?: typeof fetch;
 }) {
   return generateLearningStructured({ ...options, validate: validateLearningConversationReply });

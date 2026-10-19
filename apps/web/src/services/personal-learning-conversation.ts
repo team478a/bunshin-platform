@@ -5,12 +5,12 @@ import {
   parsePersonalLearningCallAdmissionPolicy,
   type PersonalLearningConversationCommand,
 } from '@bunshin/application';
+import { settleProviderRuntimeAdmission } from '../ai/runtime-provider-configuration';
 import {
-  resolveOpenAiRuntimeConfiguration,
-  reserveOpenAiRuntimeConfiguration,
-  settleProviderRuntimeAdmission,
-  type AdmittedOpenAiRuntimeConfiguration,
-} from '../ai/runtime-provider-configuration';
+  resolveLearningProviderRuntimeConfiguration,
+  reserveLearningProviderRuntimeConfiguration,
+  type LearningAiRuntimeConfiguration,
+} from '../ai/learning-provider-runtime';
 import { personalLearningPricingRegistry } from '../observability/personal-learning-ai-call';
 import {
   generateLearningConversation,
@@ -53,7 +53,7 @@ export async function sendPersonalLearningConversationTurn(
     return { conversation: state, candidate: await candidates.readCandidate(command.actor) };
   }
 
-  let runtimeAdmission: AdmittedOpenAiRuntimeConfiguration | null = null;
+  let runtimeAdmission: LearningAiRuntimeConfiguration | null = null;
   let permitId = '';
   let usageKey = '';
   try {
@@ -79,8 +79,9 @@ export async function sendPersonalLearningConversationTurn(
       request.revision !== command.requestRevision
     )
       throw new ApplicationError('CONFLICT', 'learning wish changed');
-    const initialRuntime = await resolveOpenAiRuntimeConfiguration(
-      undefined,
+    const provider = policy.provider ?? 'openai';
+    const initialRuntime = await resolveLearningProviderRuntimeConfiguration(
+      provider,
       'LEARNING_CONVERSATION',
     );
     if (initialRuntime.model !== policy.model)
@@ -105,7 +106,7 @@ export async function sendPersonalLearningConversationTurn(
         operationId: command.operationId,
         operationKind: 'CONVERSATION_TURN',
         attempt: 1,
-        provider: 'openai',
+        provider,
         promptVersion,
         policy,
         pricingRegistry: personalLearningPricingRegistry(),
@@ -123,9 +124,9 @@ export async function sendPersonalLearningConversationTurn(
           frozen.reservedCostUsdMicros > BigInt(Number.MAX_SAFE_INTEGER)
         )
           throw new ApplicationError('CONFIGURATION_ERROR', 'conversation reservation unavailable');
-        runtimeAdmission = await reserveOpenAiRuntimeConfiguration(
+        runtimeAdmission = await reserveLearningProviderRuntimeConfiguration(
           usageKey,
-          undefined,
+          provider,
           'LEARNING_CONVERSATION',
           Number(frozen.reservedCostUsdMicros),
           1,
@@ -135,6 +136,8 @@ export async function sendPersonalLearningConversationTurn(
         return generateLearningConversation({
           apiKey: runtimeAdmission.apiKey,
           model: runtimeAdmission.model,
+          provider: runtimeAdmission.provider,
+          modelCapabilities: runtimeAdmission.modelCapabilities,
           body,
         });
       },
@@ -168,7 +171,7 @@ export async function sendPersonalLearningConversationTurn(
     await repository.failTurn(command);
     throw error;
   } finally {
-    const admission = runtimeAdmission as AdmittedOpenAiRuntimeConfiguration | null;
+    const admission = runtimeAdmission as LearningAiRuntimeConfiguration | null;
     if (admission?.admission && permitId) {
       const cost = await db.prisma.personalLearningCallAdmission.findUnique({
         where: { id: permitId },
