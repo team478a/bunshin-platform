@@ -241,6 +241,7 @@ export class PrismaTrainingPersonalDataExportRepository implements TrainingPerso
             },
             select: {
               providerEventId: true,
+              purpose: true,
               text: true,
               status: true,
               sentAt: true,
@@ -285,7 +286,23 @@ export class PrismaTrainingPersonalDataExportRepository implements TrainingPerso
           take,
         });
         const learningScope = { ...personal, groupMembershipId: membership.id };
-        const [learningGoals, learningPlans, pilotSeats, learningRequests] = await Promise.all([
+        const learningNudgePreference = await tx.personalLearningNudgePreference.findFirst({
+          where: learningScope,
+          select: {
+            enabled: true,
+            consentVersion: true,
+            consentedAt: true,
+            pausedUntil: true,
+            stoppedAt: true,
+          },
+        });
+        const [
+          learningGoals,
+          learningPlans,
+          pilotSeats,
+          learningRequests,
+          learningNudgeOperations,
+        ] = await Promise.all([
           tx.personalLearningGoalConfirmation.findMany({ where: learningScope, take }),
           tx.personalLearningPlanRevision.findMany({
             where: learningScope,
@@ -312,6 +329,18 @@ export class PrismaTrainingPersonalDataExportRepository implements TrainingPerso
             where: learningScope,
             take,
             orderBy: { revision: 'asc' },
+          }),
+          tx.programActionEvent.findMany({
+            where: {
+              ...scope,
+              actorUserId: input.actorUserId,
+              eventType: {
+                in: ['PERSONAL_LEARNING_NUDGE_SENT', 'PERSONAL_LEARNING_NUDGE_PREFERENCE_UPDATED'],
+              },
+            },
+            select: { eventType: true, occurredAt: true, metadata: true },
+            orderBy: [{ occurredAt: 'asc' }, { id: 'asc' }],
+            take,
           }),
         ]);
         const dynamicLearning = await Promise.all([
@@ -399,6 +428,7 @@ export class PrismaTrainingPersonalDataExportRepository implements TrainingPerso
               lineLearningMessages.length +
               lineLearningResponses.length +
               practiceSupportImages.length +
+              (learningNudgePreference ? 1 : 0) +
               practiceNotes.length >
             0
               ? {
@@ -458,11 +488,18 @@ export class PrismaTrainingPersonalDataExportRepository implements TrainingPerso
                     })),
                     ...lineLearningResponses.map((row) => ({
                       kind: 'LINE_OUTBOUND',
+                      purpose: row.purpose,
                       providerEventId: row.providerEventId,
                       text: row.text,
                       status: row.status,
                       sentAt: iso(row.sentAt),
                       createdAt: iso(row.createdAt),
+                    })),
+                    ...learningNudgeOperations.map((row) => ({
+                      kind: 'LINE_NUDGE_OPERATION',
+                      action: row.eventType,
+                      metadata: row.metadata,
+                      occurredAt: iso(row.occurredAt),
                     })),
                     ...practiceNotes.map((row) => ({
                       ...row,
@@ -485,6 +522,18 @@ export class PrismaTrainingPersonalDataExportRepository implements TrainingPerso
                       createdAt: iso(row.createdAt),
                       updatedAt: iso(row.updatedAt),
                     })),
+                    ...(learningNudgePreference
+                      ? [
+                          {
+                            kind: 'LINE_NUDGE_PREFERENCE',
+                            enabled: learningNudgePreference.enabled,
+                            consentVersion: learningNudgePreference.consentVersion,
+                            consentedAt: iso(learningNudgePreference.consentedAt),
+                            pausedUntil: iso(learningNudgePreference.pausedUntil),
+                            stoppedAt: iso(learningNudgePreference.stoppedAt),
+                          },
+                        ]
+                      : []),
                     ...pilotSeats.map((row) => ({
                       ...row,
                       kind: 'PILOT_SEAT',

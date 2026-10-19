@@ -15,6 +15,7 @@ export type PilotOperation = Readonly<{
           multiTopic: boolean;
           lineLearning: boolean;
           extendedScope: boolean;
+          learningNudges?: boolean;
         }>;
       }
   );
@@ -56,9 +57,24 @@ export function parsePilotOperation(value: unknown): PilotOperation | null {
       (!v.learningFeatures ||
         typeof v.learningFeatures !== 'object' ||
         Array.isArray(v.learningFeatures) ||
-        Object.keys(v.learningFeatures).length !== 4 ||
+        !(
+          Object.keys(v.learningFeatures).length === 4 ||
+          Object.keys(v.learningFeatures).length === 5
+        ) ||
         ['conversation', 'multiTopic', 'lineLearning', 'extendedScope'].some(
           (key) => typeof (v.learningFeatures as Record<string, unknown>)[key] !== 'boolean',
+        ) ||
+        (Object.hasOwn(v.learningFeatures, 'learningNudges') &&
+          typeof (v.learningFeatures as Record<string, unknown>).learningNudges !== 'boolean') ||
+        Object.keys(v.learningFeatures).some(
+          (key) =>
+            ![
+              'conversation',
+              'multiTopic',
+              'lineLearning',
+              'extendedScope',
+              'learningNudges',
+            ].includes(key),
         )))
   )
     return null;

@@ -151,7 +151,7 @@ describe('Manaberu dynamic learning UI', () => {
     expect(candidateCard).toContain('この練習の内容を確認してください。');
     expect(candidateCard).toContain('教材版 ${candidate.materialVersion}');
     expect(trainingPage).toContain('この研修で、外部のAIサービスを使うことに同意します');
-    expect(AI_TRAINING_AI_CONSENT_VERSION).toBe('AI_TRAINING_EXTERNAL_AI_V2');
+    expect(AI_TRAINING_AI_CONSENT_VERSION).toBe('AI_TRAINING_EXTERNAL_AI_V3');
     expect(AI_TRAINING_AI_CONSENT_TEXT).toContain('この同意は、この研修への参加に対するものです');
     expect(AI_TRAINING_AI_CONSENT_TEXT).not.toContain('Enrollment');
     expect(trainingPage).toContain('enrollment.isDynamicLearning');

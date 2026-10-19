@@ -60,6 +60,7 @@ function fixture() {
     personalLearningPracticeSupportImage: table(),
     personalLearningLineInbox: table(),
     personalLearningLinePush: table(),
+    personalLearningNudgePreference: table(),
     job: { updateMany: vi.fn() },
     programAuditLog: {
       findFirst: vi.fn().mockResolvedValue(null),

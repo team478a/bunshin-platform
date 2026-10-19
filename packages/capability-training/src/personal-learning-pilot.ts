@@ -12,6 +12,7 @@ export const PERSONAL_LEARNING_FEATURE_KEYS = [
   'multiTopic',
   'lineLearning',
   'extendedScope',
+  'learningNudges',
 ] as const;
 export type PersonalLearningFeature = (typeof PERSONAL_LEARNING_FEATURE_KEYS)[number];
 export type PersonalLearningFeatures = Readonly<Record<PersonalLearningFeature, boolean>>;
@@ -20,7 +21,9 @@ const defaultFeatures: PersonalLearningFeatures = Object.freeze({
   multiTopic: false,
   lineLearning: false,
   extendedScope: false,
+  learningNudges: false,
 });
+const legacyFeatureKeys = PERSONAL_LEARNING_FEATURE_KEYS.filter((key) => key !== 'learningNudges');
 
 /** Missing mode is the legacy contract; malformed explicit values fail closed. */
 export function personalLearningMode(settings: unknown): PersonalLearningMode | null {
@@ -38,8 +41,16 @@ export function personalLearningFeatures(settings: unknown): PersonalLearningFea
   const features = object(raw);
   if (
     !features ||
-    Object.keys(features).length !== PERSONAL_LEARNING_FEATURE_KEYS.length ||
-    PERSONAL_LEARNING_FEATURE_KEYS.some((key) => typeof features[key] !== 'boolean')
+    !(
+      Object.keys(features).length === PERSONAL_LEARNING_FEATURE_KEYS.length ||
+      Object.keys(features).length === legacyFeatureKeys.length
+    ) ||
+    legacyFeatureKeys.some((key) => typeof features[key] !== 'boolean') ||
+    (Object.hasOwn(features, 'learningNudges') &&
+      typeof features['learningNudges'] !== 'boolean') ||
+    Object.keys(features).some(
+      (key) => !PERSONAL_LEARNING_FEATURE_KEYS.includes(key as PersonalLearningFeature),
+    )
   )
     return null;
   return Object.freeze({
@@ -47,6 +58,7 @@ export function personalLearningFeatures(settings: unknown): PersonalLearningFea
     multiTopic: features['multiTopic'] as boolean,
     lineLearning: features['lineLearning'] as boolean,
     extendedScope: features['extendedScope'] as boolean,
+    learningNudges: features['learningNudges'] === true,
   });
 }
 

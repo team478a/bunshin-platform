@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Prisma, PrismaClient } from '@prisma/client';
 import { afterEach, describe, expect, it } from 'vitest';
+import { GetAdminAlerts } from '@bunshin/application';
 import {
   personalLearningDynamicProgramAllows,
   personalLearningFeatureEnabled,
@@ -18,6 +19,11 @@ import { PrismaTrainingPersonalDataExportRepository } from '../src/training-pers
 import { PrismaTrainingPersonalDataDeletionRepository } from '../src/training-personal-data-deletion';
 import { PrismaTrainingRetentionExecutionRepository } from '../src/training-retention-execution';
 import { PrismaTrainingRetentionCronRepository } from '../src/training-retention-cron';
+import {
+  PrismaPersonalLearningNudgePreferenceRepository,
+  updatePersonalLearningNudgePreferenceInTransaction,
+} from '../src/personal-learning-nudge-preference';
+import { PrismaAdminAlertRepository } from '../src/admin-alerts';
 import { pilotParticipantHash } from '../src/personal-learning-pilot-seat';
 import { cleanupProgramFixtures } from './program-fixture-cleanup';
 
@@ -236,6 +242,80 @@ export function registerPersonalLearningDIntegrationCases(client: PrismaClient) 
         select: { id: true },
       });
     }
+
+    it('surfaces stale learning and nudge-specific reservations in the operations center', async () => {
+      const f = await serviceFixture('PR-1230 stale admission alert');
+      const admin = await client.user.create({ data: { displayName: 'PR-1230 operator' } });
+      await client.platformAdmin.create({ data: { userId: admin.id, role: 'SUPER_ADMIN' } });
+      const staleAt = new Date(now.getTime() - 16 * 60 * 1000);
+      const freshAt = new Date(now.getTime() - 14 * 60 * 1000);
+      const hashes = ['a', 'b', 'c', 'd'].map((letter) => letter.repeat(64));
+      cleanup.push(async () => {
+        await client.personalLearningCallAdmission.deleteMany({
+          where: { operationHash: { in: hashes } },
+        });
+        await client.platformAdmin.deleteMany({ where: { userId: admin.id } });
+        await client.user.deleteMany({ where: { id: admin.id } });
+      });
+      await client.personalLearningCallAdmission.createMany({
+        data: [
+          {
+            workspaceId: f.scope.workspaceId,
+            groupId: f.scope.groupId,
+            serviceProgramId: f.program.id,
+            operationHash: hashes[0]!,
+            reservedCostUsdMicros: 50_000,
+            admittedAt: staleAt,
+            operationContext: { kind: 'LESSON_CANDIDATE' },
+          },
+          {
+            workspaceId: f.scope.workspaceId,
+            groupId: f.scope.groupId,
+            serviceProgramId: f.program.id,
+            operationHash: hashes[1]!,
+            reservedCostUsdMicros: 50_000,
+            admittedAt: staleAt,
+            settledAt: new Date(now.getTime() - 15 * 60 * 1000),
+            operationContext: { kind: 'CONVERSATION' },
+          },
+          {
+            workspaceId: f.scope.workspaceId,
+            groupId: f.scope.groupId,
+            serviceProgramId: f.program.id,
+            operationHash: hashes[2]!,
+            reservedCostUsdMicros: 50_000,
+            admittedAt: freshAt,
+            operationContext: { kind: 'NUDGE' },
+          },
+          {
+            workspaceId: f.scope.workspaceId,
+            groupId: f.scope.groupId,
+            serviceProgramId: f.program.id,
+            operationHash: hashes[3]!,
+            reservedCostUsdMicros: 50_000,
+            admittedAt: staleAt,
+            operationContext: { kind: 'NUDGE' },
+          },
+        ],
+      });
+      const center = await new GetAdminAlerts(new PrismaAdminAlertRepository(client)).execute({
+        actorUserId: admin.id,
+        environment: 'DEVELOPMENT',
+        now,
+      });
+      expect(center.alerts).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            code: 'AI_PERSONAL_LEARNING_OPEN_ADMISSIONS',
+            count: 2,
+            severity: 'WARNING',
+          }),
+        ]),
+      );
+      const serialized = JSON.stringify(center.alerts);
+      expect(serialized).not.toContain(hashes[0]);
+      expect(serialized).not.toContain(f.program.id);
+    });
 
     it('keeps rejected inferences rejected and prevents cross-service/workspace/user access', async () => {
       const first = await serviceFixture('PR-D-1 first service');
@@ -725,6 +805,49 @@ export function registerPersonalLearningDIntegrationCases(client: PrismaClient) 
           text: 'Web画面で続けられます',
         },
       });
+      await client.personalLearningLinePush.create({
+        data: {
+          workspaceId: f.scope.workspaceId,
+          groupId: f.scope.groupId,
+          programEnrollmentId: f.scope.programEnrollmentId,
+          groupMembershipId: f.scope.groupMembershipId,
+          userId: f.scope.userId,
+          configurationId,
+          providerEventId: `nudge:${f.enrollmentId}:2026-07-18:NEW_LEARNER_STALLED`,
+          purpose: 'NUDGE',
+          retryKey: randomUUID(),
+          text: '期限後に削除する固定声かけ',
+          createdAt: now,
+        },
+      });
+      await client.personalLearningNudgePreference.create({
+        data: {
+          ...f.scope,
+          enabled: false,
+          consentVersion: 'AI_TRAINING_EXTERNAL_AI_V3',
+          consentedAt: now,
+          stoppedAt: now,
+          createdAt: now,
+          updatedAt: now,
+        },
+      });
+      const nudgeAuditKey = `nudge-audit-${randomUUID()}`;
+      await client.programActionEvent.create({
+        data: {
+          workspaceId: f.scope.workspaceId,
+          groupId: f.scope.groupId,
+          programEnrollmentId: f.scope.programEnrollmentId,
+          eventType: 'PERSONAL_LEARNING_NUDGE_SENT',
+          idempotencyKey: nudgeAuditKey,
+          metadata: {
+            situation: 'NEW_LEARNER_STALLED',
+            judgmentDate: '2026-07-18',
+            channel: 'LINE',
+          },
+          actorUserId: f.scope.userId,
+          occurredAt: now,
+        },
+      });
       const scope = {
         workspaceId: f.scope.workspaceId,
         groupId: f.scope.groupId,
@@ -755,13 +878,18 @@ export function registerPersonalLearningDIntegrationCases(client: PrismaClient) 
             imageBase64: 'AQID',
           }),
           expect.objectContaining({ kind: 'LINE_OUTBOUND', text: 'Web画面で続けられます' }),
+          expect.objectContaining({ kind: 'LINE_OUTBOUND', text: '期限後に削除する固定声かけ' }),
+          expect.objectContaining({
+            kind: 'LINE_NUDGE_PREFERENCE',
+            consentVersion: 'AI_TRAINING_EXTERNAL_AI_V3',
+          }),
         ]),
       );
 
       const deletion = new PrismaTrainingPersonalDataDeletionRepository(client);
       const preview = await deletion.preview({ ...scope, target: { kind: 'ALL' } });
       if (preview.outcome !== 'PREVIEW') throw new Error('deletion preview missing');
-      expect(preview.preview.counts.dynamicLearningData).toBe(6);
+      expect(preview.preview.counts.dynamicLearningData).toBe(8);
       expect(
         await deletion.delete({
           ...scope,
@@ -789,6 +917,11 @@ export function registerPersonalLearningDIntegrationCases(client: PrismaClient) 
       expect(await client.personalLearningLinePush.count({ where: { groupId: f.group.id } })).toBe(
         0,
       );
+      expect(
+        await client.programActionEvent.count({
+          where: { groupId: f.group.id, idempotencyKey: nudgeAuditKey },
+        }),
+      ).toBe(0);
     });
 
     it('deduplicates each LINE event and rejects cross-workspace inbox ownership', async () => {
@@ -826,7 +959,81 @@ export function registerPersonalLearningDIntegrationCases(client: PrismaClient) 
       ).rejects.toMatchObject({ code: 'P2003' });
     });
 
-    it('retention expires LINE text at the enrollment deadline and images independently', async () => {
+    it('records learner nudge stop/pause controls in the exact enrollment scope without message content', async () => {
+      const f = await serviceFixture('PR-N-1 nudge preferences');
+      const repo = new PrismaPersonalLearningNudgePreferenceRepository(client);
+      const actor = { scope: f.scope, actorUserId: f.scope.userId };
+      const enabled = await repo.update(actor, {
+        action: 'ENABLE',
+        now,
+        consentVersion: 'AI_TRAINING_EXTERNAL_AI_V3',
+      });
+      expect(enabled).toMatchObject({
+        enabled: true,
+        consentVersion: 'AI_TRAINING_EXTERNAL_AI_V3',
+      });
+      const pausedAt = new Date(now.getTime() + 1_000);
+      await repo.update(actor, {
+        action: 'PAUSE',
+        now: pausedAt,
+        consentedAt: now,
+        pauseUntil: new Date(pausedAt.getTime() + 7 * 86_400_000),
+        consentVersion: 'AI_TRAINING_EXTERNAL_AI_V3',
+      });
+      expect(await repo.read(actor)).toMatchObject({
+        enabled: true,
+        consentedAt: now,
+        pausedUntil: new Date(pausedAt.getTime() + 7 * 86_400_000),
+      });
+      const stoppedAt = new Date(pausedAt.getTime() + 1_000);
+      await repo.update(actor, {
+        action: 'STOP',
+        now: stoppedAt,
+        consentedAt: now,
+        consentVersion: 'AI_TRAINING_EXTERNAL_AI_V3',
+      });
+      expect(await repo.read(actor)).toMatchObject({ enabled: false, consentedAt: now, stoppedAt });
+      const lineResumeAt = new Date(stoppedAt.getTime() + 1_000);
+      await client.$transaction((tx) =>
+        updatePersonalLearningNudgePreferenceInTransaction(tx, actor, {
+          action: 'RESUME',
+          now: lineResumeAt,
+          consentedAt: now,
+          consentVersion: 'AI_TRAINING_EXTERNAL_AI_V3',
+          idempotencyKey: `learning-nudge-line:${randomUUID()}`,
+          channel: 'LINE',
+        }),
+      );
+      expect(await repo.read(actor)).toMatchObject({
+        enabled: true,
+        consentedAt: now,
+        stoppedAt: null,
+      });
+      const operations = await client.programActionEvent.findMany({
+        where: {
+          workspaceId: f.scope.workspaceId,
+          groupId: f.scope.groupId,
+          programEnrollmentId: f.enrollmentId,
+          eventType: 'PERSONAL_LEARNING_NUDGE_PREFERENCE_UPDATED',
+        },
+        select: { metadata: true },
+        orderBy: { occurredAt: 'asc' },
+      });
+      expect(
+        operations
+          .map(({ metadata }) => metadata)
+          .map((metadata) => (metadata as { action: string }).action),
+      ).toEqual(['ENABLE', 'PAUSE', 'STOP', 'RESUME']);
+      expect(operations.map(({ metadata }) => metadata)).toEqual(
+        expect.arrayContaining([expect.objectContaining({ action: 'RESUME', channel: 'LINE' })]),
+      );
+      expect(JSON.stringify(operations)).not.toContain('text');
+      expect(
+        await repo.read({ ...actor, scope: { ...f.scope, workspaceId: randomUUID() } }),
+      ).toBeNull();
+    });
+
+    it('retains nudge preferences through content expiry, then removes them at the summary deadline', async () => {
       const f = await serviceFixture('PR-F retention', { multiTopic: false });
       await client.platformAdmin.create({
         data: { userId: f.owner.id, role: 'SUPER_ADMIN', status: 'ACTIVE' },
@@ -899,6 +1106,32 @@ export function registerPersonalLearningDIntegrationCases(client: PrismaClient) 
           text: '本文への回答',
         },
       });
+      await client.personalLearningLinePush.create({
+        data: {
+          workspaceId: f.scope.workspaceId,
+          groupId: f.scope.groupId,
+          programEnrollmentId: f.scope.programEnrollmentId,
+          groupMembershipId: f.scope.groupMembershipId,
+          userId: f.scope.userId,
+          configurationId,
+          providerEventId: `nudge:${f.enrollmentId}:2026-07-18:NEW_LEARNER_STALLED`,
+          purpose: 'NUDGE',
+          retryKey: randomUUID(),
+          text: '期限後に削除する固定声かけ',
+          createdAt: startsAt,
+        },
+      });
+      await client.personalLearningNudgePreference.create({
+        data: {
+          ...f.scope,
+          enabled: false,
+          consentVersion: 'AI_TRAINING_EXTERNAL_AI_V3',
+          consentedAt: startsAt,
+          stoppedAt: startsAt,
+          createdAt: startsAt,
+          updatedAt: startsAt,
+        },
+      });
       const retention = new PrismaTrainingRetentionExecutionRepository(client);
       const input = {
         workspaceId: f.scope.workspaceId,
@@ -910,11 +1143,13 @@ export function registerPersonalLearningDIntegrationCases(client: PrismaClient) 
       const preview = await retention.preview(input);
       if (preview.outcome !== 'PREVIEW') throw new Error('retention preview missing');
       expect(preview.preview.counts.lineMessages).toBe(2);
+      expect(preview.preview.counts.lineNudgeMessages).toBe(1);
+      expect(preview.preview.counts.learningNudgePreferences).toBe(0);
       expect(
         await retention.execute({ ...input, revision: preview.preview.revision }),
       ).toMatchObject({
         outcome: 'APPLIED',
-        counts: { lineMessages: 2 },
+        counts: { lineMessages: 2, lineNudgeMessages: 1, learningNudgePreferences: 0 },
       });
       expect(await client.personalLearningLineInbox.count({ where: { groupId: f.group.id } })).toBe(
         0,
@@ -922,6 +1157,24 @@ export function registerPersonalLearningDIntegrationCases(client: PrismaClient) 
       expect(await client.personalLearningLinePush.count({ where: { groupId: f.group.id } })).toBe(
         0,
       );
+      expect(
+        await client.personalLearningNudgePreference.count({ where: { groupId: f.group.id } }),
+      ).toBe(1);
+
+      const summaryInput = { ...input, now: new Date(now.getTime() + 275 * 86_400_000) };
+      const summaryPreview = await retention.preview(summaryInput);
+      if (summaryPreview.outcome !== 'PREVIEW')
+        throw new Error('summary retention preview missing');
+      expect(summaryPreview.preview.counts.learningNudgePreferences).toBe(1);
+      expect(
+        await retention.execute({ ...summaryInput, revision: summaryPreview.preview.revision }),
+      ).toMatchObject({
+        outcome: 'APPLIED',
+        counts: { learningNudgePreferences: 1 },
+      });
+      expect(
+        await client.personalLearningNudgePreference.count({ where: { groupId: f.group.id } }),
+      ).toBe(0);
     });
 
     it('cron retention is preview-only by default and deletes only due rows inside the configured Program', async () => {

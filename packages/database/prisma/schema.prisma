@@ -424,6 +424,7 @@ model ProgramEnrollment {
   paidPurchase      ProgramPurchase?            @relation("ProgramPurchasePaidEnrollment")
   trainingRetention TrainingDataRetentionState?
   aiUsageConsents AiTrainingUsageConsent[]
+  learningNudgePreference PersonalLearningNudgePreference?
   personalLearningGoalConfirmations PersonalLearningGoalConfirmation[]
   personalLearningRequests PersonalLearningRequest[]
   personalLearningTopics PersonalLearningTopic[]
@@ -469,6 +470,30 @@ model AiTrainingUsageConsent {
   @@unique([workspaceId, groupId, programEnrollmentId, consentVersion], map: "ai_training_usage_consent_enrollment_version_key")
   @@index([workspaceId, groupId, userId, consentedAt], map: "ai_training_usage_consent_user_idx")
   @@map("ai_training_usage_consents")
+}
+
+/// Per-enrollment nudge consent and learner-controlled pause/stop state. No message content is stored here.
+model PersonalLearningNudgePreference {
+  id                  String            @id @default(uuid()) @db.Uuid
+  workspaceId         String            @map("workspace_id") @db.Uuid
+  groupId             String            @map("group_id") @db.Uuid
+  programEnrollmentId String            @unique(map: "personal_learning_nudge_preferences_enrollment_key") @map("program_enrollment_id") @db.Uuid
+  groupMembershipId   String            @map("group_membership_id") @db.Uuid
+  userId              String            @map("user_id") @db.Uuid
+  enabled             Boolean           @default(true)
+  consentVersion      String?           @map("consent_version") @db.VarChar(80)
+  consentedAt         DateTime?         @map("consented_at") @db.Timestamptz(3)
+  pausedUntil         DateTime?         @map("paused_until") @db.Timestamptz(3)
+  stoppedAt           DateTime?         @map("stopped_at") @db.Timestamptz(3)
+  createdAt           DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+  enrollment          ProgramEnrollment @relation(fields: [workspaceId, groupId, programEnrollmentId, groupMembershipId], references: [workspaceId, groupId, id, groupMembershipId], onDelete: Cascade, onUpdate: Cascade, map: "personal_learning_nudge_preferences_enrollment_fk")
+  membership          GroupMembership   @relation(fields: [workspaceId, groupId, groupMembershipId, userId], references: [workspaceId, groupId, id, userId], onDelete: Cascade, onUpdate: Cascade, map: "personal_learning_nudge_preferences_membership_fk")
+
+  @@unique([workspaceId, groupId, programEnrollmentId, groupMembershipId, userId], map: "personal_learning_nudge_preference_scope_key")
+  @@unique([workspaceId, groupId, programEnrollmentId, groupMembershipId], map: "personal_learning_nudge_preference_enrollment_scope_key")
+  @@index([workspaceId, groupId, enabled, updatedAt], map: "personal_learning_nudge_preference_active_idx")
+  @@map("personal_learning_nudge_preferences")
 }
 
 model ProgramMissionAssignment {
@@ -3666,6 +3691,7 @@ model GroupMembership {
   serviceUsageEvents              ServiceUsageEvent[]
   socialActivityBarrierCases      SocialActivityBarrierCase[]
   aiTrainingUsageConsents         AiTrainingUsageConsent[]
+  learningNudgePreferences        PersonalLearningNudgePreference[]
 
   @@unique([groupId, userId])
   @@unique([workspaceId, groupId, id])
@@ -6530,6 +6556,7 @@ model PersonalLearningLinePush {
 
   @@unique([configurationId, providerEventId, purpose], map: "personal_learning_line_push_inbound_purpose_key")
   @@index([workspaceId, groupId, createdAt], map: "personal_learning_line_push_scope_created_idx")
+  @@index([workspaceId, groupId, programEnrollmentId, groupMembershipId, userId, purpose, createdAt], map: "personal_learning_line_push_nudge_retention_idx")
   @@map("personal_learning_line_pushes")
 }
 

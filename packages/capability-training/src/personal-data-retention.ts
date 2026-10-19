@@ -140,6 +140,8 @@ export interface TrainingRetentionExecutionCounts {
   conversationEvents?: number;
   practiceSupportImages?: number;
   lineMessages?: number;
+  lineNudgeMessages?: number;
+  learningNudgePreferences?: number;
   toolkitDue?: number;
   dynamicTopicsDue?: number;
   personaItemsDue?: number;

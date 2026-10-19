@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 vi.mock('server-only', () => ({}));
 import { LineMessagingApiAdapter } from '../src/line/messaging-provider';
+import { personalLearningNudgeQuickReplies } from '../src/line/personal-learning-nudge-actions';
 
 describe('LINE Messaging API adapter', () => {
   it('sends a Japanese badge award message without exposing secrets', async () => {
@@ -253,5 +254,34 @@ describe('LINE Messaging API adapter', () => {
     expect(request.mock.calls[0]?.[1]?.headers).toEqual(
       expect.objectContaining({ 'X-Line-Retry-Key': retryKey }),
     );
+  });
+
+  it('attaches five scoped postback quick replies to nudge text', async () => {
+    const request = vi.fn<typeof fetch>().mockResolvedValue(new Response(null, { status: 200 }));
+    const programEnrollmentId = '4d69b102-496d-4ce8-b275-3b4e959ee905';
+    const quickReplies = personalLearningNudgeQuickReplies(programEnrollmentId);
+    await new LineMessagingApiAdapter(request).pushText({
+      accessToken: 'access-token',
+      recipientId: 'provider-user-a',
+      text: '声かけ本文',
+      retryKey: '11111111-1111-4111-8111-111111111111',
+      quickReplies,
+    });
+    const requestBody = request.mock.calls[0]?.[1]?.body;
+    expect(typeof requestBody).toBe('string');
+    const body = JSON.parse(requestBody as string) as {
+      messages: Array<{
+        quickReply?: { items: Array<{ action: { label: string; data: string } }> };
+      }>;
+    };
+    const items = body.messages[0]?.quickReply?.items ?? [];
+    expect(items.map(({ action }) => action.label)).toEqual([
+      '続きをする',
+      '1週間休む',
+      '2週間休む',
+      '1か月休む',
+      '声かけを止める',
+    ]);
+    expect(items.every(({ action }) => action.data.includes(programEnrollmentId))).toBe(true);
   });
 });

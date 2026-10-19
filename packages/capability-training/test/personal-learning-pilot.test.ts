@@ -77,8 +77,36 @@ describe('restricted Personal Learning pilot', () => {
       multiTopic: false,
       lineLearning: false,
       extendedScope: false,
+      learningNudges: false,
     });
     expect(personalLearningDynamicProgramAllows(settings, id)).toBe(false);
+  });
+  it('keeps the new nudge feature explicitly OFF for existing feature settings', () => {
+    expect(
+      personalLearningFeatures({
+        personalLearningPilot: {
+          learningFeatures: {
+            conversation: true,
+            multiTopic: false,
+            lineLearning: true,
+            extendedScope: false,
+          },
+        },
+      })?.learningNudges,
+    ).toBe(false);
+    expect(
+      personalLearningFeatures({
+        personalLearningPilot: {
+          learningFeatures: {
+            conversation: true,
+            multiTopic: false,
+            lineLearning: true,
+            extendedScope: false,
+            learningNudges: true,
+          },
+        },
+      })?.learningNudges,
+    ).toBe(true);
   });
   it('allows only an enabled, allowlisted dynamic Program and fails closed on malformed feature settings', () => {
     const dynamic = {

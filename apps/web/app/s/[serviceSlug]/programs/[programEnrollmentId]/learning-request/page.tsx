@@ -11,6 +11,7 @@ import { personalLearningFeatureEnabled } from '@bunshin/capability-training';
 import { LearningTopicSelector } from './topic-selector';
 import { AiTrainingDataExportCard } from '../ai-training-data-export-card';
 import { personalLearningPersonaInvitationAnswerCount } from '../../../../../../src/services/personal-learning-persona-consent';
+import { LearningNudgePreferenceCard } from './nudge-preference-card';
 export const dynamic = 'force-dynamic';
 export default async function Page({
   params,
@@ -63,6 +64,10 @@ export default async function Page({
     const personaProfile = dynamicProgram
       ? await new db.PrismaPersonalLearningPersonaRepository(db.prisma).profile(input.scope)
       : null;
+    const nudgePreference = dynamicProgram
+      ? await new db.PrismaPersonalLearningNudgePreferenceRepository(db.prisma).read(input)
+      : null;
+    const nudgeFeatureEnabled = personalLearningFeatureEnabled(program?.settings, 'learningNudges');
     const practiceAnswerCount = dynamicProgram
       ? await db.prisma.trainingMissionAnswer.count({
           where: {
@@ -96,6 +101,18 @@ export default async function Page({
       return (
         <main style={{ maxWidth: 560, margin: '0 auto', padding: 20 }}>
           <LearningTopicSelector endpoint={topicEndpoint} pagePath={pagePath} topics={topics} />
+          {dynamicProgram && (
+            <LearningNudgePreferenceCard
+              endpoint={`/api/services/${serviceSlug}/ai-training/enrollments/${programEnrollmentId}/personal-learning/nudge-preference`}
+              initial={{
+                enabled: nudgePreference?.enabled ?? true,
+                consented: true,
+                pausedUntil: nudgePreference?.pausedUntil?.toISOString() ?? null,
+                stoppedAt: nudgePreference?.stoppedAt?.toISOString() ?? null,
+                featureEnabled: nudgeFeatureEnabled,
+              }}
+            />
+          )}
           {personaInvitation}
           <p>
             <a href={personaPath}>AIが理解していることを確認・修正する</a>
@@ -113,6 +130,18 @@ export default async function Page({
     return (
       <main style={{ maxWidth: 560, margin: '0 auto', padding: 20 }}>
         {personaInvitation}
+        {dynamicProgram && (
+          <LearningNudgePreferenceCard
+            endpoint={`/api/services/${serviceSlug}/ai-training/enrollments/${programEnrollmentId}/personal-learning/nudge-preference`}
+            initial={{
+              enabled: nudgePreference?.enabled ?? true,
+              consented: true,
+              pausedUntil: nudgePreference?.pausedUntil?.toISOString() ?? null,
+              stoppedAt: nudgePreference?.stoppedAt?.toISOString() ?? null,
+              featureEnabled: nudgeFeatureEnabled,
+            }}
+          />
+        )}
         {multiTopic && (
           <LearningTopicSelector
             endpoint={topicEndpoint}
