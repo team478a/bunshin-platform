@@ -935,7 +935,7 @@ export function registerPersonalLearningDIntegrationCases(client: PrismaClient) 
       ).toBeNull();
     });
 
-    it('retention expires LINE text at the enrollment deadline and images independently', async () => {
+    it('retains nudge preferences through content expiry, then removes them at the summary deadline', async () => {
       const f = await serviceFixture('PR-F retention', { multiTopic: false });
       await client.platformAdmin.create({
         data: { userId: f.owner.id, role: 'SUPER_ADMIN', status: 'ACTIVE' },
@@ -1046,12 +1046,12 @@ export function registerPersonalLearningDIntegrationCases(client: PrismaClient) 
       if (preview.outcome !== 'PREVIEW') throw new Error('retention preview missing');
       expect(preview.preview.counts.lineMessages).toBe(2);
       expect(preview.preview.counts.lineNudgeMessages).toBe(1);
-      expect(preview.preview.counts.learningNudgePreferences).toBe(1);
+      expect(preview.preview.counts.learningNudgePreferences).toBe(0);
       expect(
         await retention.execute({ ...input, revision: preview.preview.revision }),
       ).toMatchObject({
         outcome: 'APPLIED',
-        counts: { lineMessages: 2, lineNudgeMessages: 1, learningNudgePreferences: 1 },
+        counts: { lineMessages: 2, lineNudgeMessages: 1, learningNudgePreferences: 0 },
       });
       expect(await client.personalLearningLineInbox.count({ where: { groupId: f.group.id } })).toBe(
         0,
@@ -1059,6 +1059,24 @@ export function registerPersonalLearningDIntegrationCases(client: PrismaClient) 
       expect(await client.personalLearningLinePush.count({ where: { groupId: f.group.id } })).toBe(
         0,
       );
+      expect(
+        await client.personalLearningNudgePreference.count({ where: { groupId: f.group.id } }),
+      ).toBe(1);
+
+      const summaryInput = { ...input, now: new Date(now.getTime() + 275 * 86_400_000) };
+      const summaryPreview = await retention.preview(summaryInput);
+      if (summaryPreview.outcome !== 'PREVIEW')
+        throw new Error('summary retention preview missing');
+      expect(summaryPreview.preview.counts.learningNudgePreferences).toBe(1);
+      expect(
+        await retention.execute({ ...summaryInput, revision: summaryPreview.preview.revision }),
+      ).toMatchObject({
+        outcome: 'APPLIED',
+        counts: { learningNudgePreferences: 1 },
+      });
+      expect(
+        await client.personalLearningNudgePreference.count({ where: { groupId: f.group.id } }),
+      ).toBe(0);
     });
 
     it('cron retention is preview-only by default and deletes only due rows inside the configured Program', async () => {
