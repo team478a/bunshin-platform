@@ -14,6 +14,7 @@ import {
 const requireModule = createRequire(import.meta.url);
 const approvedPendingSets = [
   {
+    id: 'line-link-attempt-method',
     migrations: [
       '20261014090000_add_line_link_attempt_method',
       '20261014091000_allow_line_link_attempt_method',
@@ -21,14 +22,17 @@ const approvedPendingSets = [
     confirmation: 'APPLY_TWO_LINE_LINK_MIGRATIONS_TO_vtkzinaudznwbsjoyszk',
   },
   {
+    id: 'personal-learning-rich-menu',
     migrations: ['20261015090000_personal_learning_rich_menu_pending'],
     confirmation: 'APPLY_PERSONAL_LEARNING_RICH_MENU_MIGRATION_TO_vtkzinaudznwbsjoyszk',
   },
   {
+    id: 'line-follow-invitations',
     migrations: ['20261015170000_add_line_follow_invitations'],
     confirmation: 'APPLY_LINE_FOLLOW_INVITATIONS_MIGRATION_TO_vtkzinaudznwbsjoyszk',
   },
   {
+    id: 'ai-training-enrollment',
     migrations: [
       '20261016120000_ai_training_usage_consent',
       '20261016150000_invitation_manual_service_registration',
@@ -36,6 +40,7 @@ const approvedPendingSets = [
     confirmation: 'APPLY_AI_TRAINING_ENROLLMENT_MIGRATIONS_TO_vtkzinaudznwbsjoyszk',
   },
   {
+    id: 'manaberu-dynamic-learning',
     migrations: [
       '20261017100000_personal_learning_topics_persona_examples',
       '20261017120000_personal_learning_topic_scope',
@@ -45,6 +50,11 @@ const approvedPendingSets = [
       '20261018120000_personal_learning_line_inbox',
     ],
     confirmation: 'APPLY_MANABERU_DYNAMIC_LEARNING_MIGRATIONS_TO_vtkzinaudznwbsjoyszk',
+  },
+  {
+    id: 'manaberu-learning-nudges',
+    migrations: ['20261019100000_personal_learning_nudges'],
+    confirmation: 'APPLY_MANABERU_LEARNING_NUDGE_MIGRATION_TO_vtkzinaudznwbsjoyszk',
   },
 ];
 const expectedProjectRef = 'vtkzinaudznwbsjoyszk';
@@ -158,7 +168,9 @@ async function run(
     return 0;
   }
   const approvedSet = approvedPendingSets.find(
-    ({ migrations }) =>
+    ({ id, migrations }) =>
+      (!environment.DIRECT_MIGRATION_ALLOWED_SET_ID ||
+        id === environment.DIRECT_MIGRATION_ALLOWED_SET_ID) &&
       status.status === 'PENDING' &&
       status.pendingMigrations.length === migrations.length &&
       migrations.every((migration, index) => status.pendingMigrations[index] === migration),

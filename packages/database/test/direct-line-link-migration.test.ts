@@ -31,6 +31,9 @@ const manaberuDynamicLearningPendingOutput =
   'The following migration(s) have not yet been applied:\n' +
   manaberuDynamicLearningMigrations.join('\n') +
   '\n';
+const manaberuLearningNudgePendingOutput =
+  'The following migration(s) have not yet been applied:\n' +
+  '20261019100000_personal_learning_nudges\n';
 
 describe('direct, approval-gated production migration', () => {
   afterEach(() => vi.restoreAllMocks());
@@ -194,6 +197,30 @@ describe('direct, approval-gated production migration', () => {
     expect(execute.mock.calls.some(([, args]) => args.includes('deploy'))).toBe(false);
   });
 
+  it('does not allow another approved migration set through the nudge-only entrypoint', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const execute = vi
+      .fn<typeof runMigrationProcess>()
+      .mockResolvedValueOnce({ reason: 'EXITED', status: 0 })
+      .mockResolvedValueOnce({
+        reason: 'EXITED',
+        status: 1,
+        capturedOutput: richMenuPendingOutput,
+      });
+    const confirm = vi.fn((phrase: string) => Promise.resolve(phrase));
+
+    expect(
+      await runDirectLineLinkMigration(
+        execute,
+        { ...environment, DIRECT_MIGRATION_ALLOWED_SET_ID: 'manaberu-learning-nudges' },
+        confirm,
+      ),
+    ).toBe(1);
+    expect(execute).toHaveBeenCalledTimes(2);
+    expect(confirm).not.toHaveBeenCalled();
+    expect(execute.mock.calls.some(([, args]) => args.includes('deploy'))).toBe(false);
+  });
+
   it('approves only the exact six Manaberu dynamic-learning migrations with a dedicated confirmation', async () => {
     vi.spyOn(console, 'log').mockImplementation(() => {});
     const execute = vi
@@ -221,6 +248,70 @@ describe('direct, approval-gated production migration', () => {
     expect(execute.mock.calls[2]![1]).toContain('deploy');
     expect(vi.mocked(console.log).mock.calls.flat().join(' ')).not.toContain('synthetic-secret');
   });
+
+  it('approves only the exact Manaberu learning-nudge migration with a dedicated confirmation', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    const execute = vi
+      .fn<typeof runMigrationProcess>()
+      .mockResolvedValueOnce({ reason: 'EXITED', status: 0 })
+      .mockResolvedValueOnce({
+        reason: 'EXITED',
+        status: 1,
+        capturedOutput: manaberuLearningNudgePendingOutput,
+      })
+      .mockResolvedValueOnce({ reason: 'EXITED', status: 0 })
+      .mockResolvedValueOnce({
+        reason: 'EXITED',
+        status: 0,
+        capturedOutput: 'Database schema is up to date!',
+      });
+    const confirm = vi.fn((phrase: string) => Promise.resolve(phrase));
+
+    expect(
+      await runDirectLineLinkMigration(
+        execute,
+        { ...environment, DIRECT_MIGRATION_ALLOWED_SET_ID: 'manaberu-learning-nudges' },
+        confirm,
+      ),
+    ).toBe(0);
+    expect(confirm).toHaveBeenCalledWith(
+      'APPLY_MANABERU_LEARNING_NUDGE_MIGRATION_TO_vtkzinaudznwbsjoyszk',
+    );
+    expect(execute).toHaveBeenCalledTimes(4);
+    expect(execute.mock.calls[2]![1]).toContain('migrate');
+    expect(execute.mock.calls[2]![1]).toContain('deploy');
+    expect(vi.mocked(console.log).mock.calls.flat().join(' ')).not.toContain('synthetic-secret');
+  });
+
+  it.each([
+    ['partial set', ''],
+    ['extra migration', manaberuLearningNudgePendingOutput + '20261018999999_unexpected\n'],
+  ])(
+    'rejects a %s in the Manaberu nudge migration set without confirmation or deploy',
+    async (_label, names) => {
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      const execute = vi
+        .fn<typeof runMigrationProcess>()
+        .mockResolvedValueOnce({ reason: 'EXITED', status: 0 })
+        .mockResolvedValueOnce({
+          reason: 'EXITED',
+          status: 1,
+          capturedOutput: 'The following migration(s) have not yet been applied:\n' + names,
+        });
+      const confirm = vi.fn((phrase: string) => Promise.resolve(phrase));
+
+      expect(
+        await runDirectLineLinkMigration(
+          execute,
+          { ...environment, DIRECT_MIGRATION_ALLOWED_SET_ID: 'manaberu-learning-nudges' },
+          confirm,
+        ),
+      ).toBe(1);
+      expect(execute).toHaveBeenCalledTimes(2);
+      expect(confirm).not.toHaveBeenCalled();
+      expect(execute.mock.calls.some(([, args]) => args.includes('deploy'))).toBe(false);
+    },
+  );
 
   it('does not deploy the Manaberu set when its dedicated confirmation is incorrect', async () => {
     vi.spyOn(console, 'log').mockImplementation(() => {});
