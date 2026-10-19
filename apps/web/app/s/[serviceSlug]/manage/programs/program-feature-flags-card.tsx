@@ -189,18 +189,22 @@ export function ProgramFeatureFlagsCard({
   }
 
   return (
-    <section className="card stack" aria-labelledby="program-feature-flags-title">
+    <section
+      className="card stack program-feature-flags"
+      aria-labelledby="program-feature-flags-title"
+    >
       <h2 id="program-feature-flags-title">AI研修Programごとの機能設定</h2>
-      <p>
+      <p className="program-feature-flags__intro">
         サービス内のAI研修Programを選び、機能を個別に設定します。変更は選択したProgramだけに保存され、他のProgramには影響しません。システム全体の停止設定がOFFの場合、ここをONにしても機能は実行されません。
       </p>
       {programs.length === 0 ? (
-        <p>このサービスにはAI研修Programがありません。</p>
+        <p className="program-feature-flags__empty">このサービスにはAI研修Programがありません。</p>
       ) : (
         <>
-          <label>
+          <label className="program-feature-flags__field">
             対象Program
             <select
+              className="program-feature-flags__control"
               value={selectedId}
               disabled={busy}
               onChange={(event) => chooseProgram(event.target.value)}
@@ -212,24 +216,42 @@ export function ProgramFeatureFlagsCard({
               ))}
             </select>
           </label>
-          <button type="button" disabled={busy} onClick={() => void reload()}>
+          <button
+            className="program-feature-flags__button program-feature-flags__button--secondary"
+            type="button"
+            disabled={busy}
+            onClick={() => void reload()}
+          >
             最新状態を再読み込み
           </button>
-          <p role="status">{message}</p>
+          <p className="program-feature-flags__status" role="status">
+            {message}
+          </p>
           {selected && (
             <>
-              <p>
-                Program状態: {selected.status} / 全体実行: {selected.enabled ? 'ON' : 'OFF'} /
-                学習モード: {selected.learningMode ?? '設定不正'}
-              </p>
+              <div className="program-feature-flags__summary" aria-label="選択したProgramの状態">
+                <span>
+                  Program状態 <strong>{selected.status}</strong>
+                </span>
+                <span>
+                  全体実行 <strong>{selected.enabled ? 'ON' : 'OFF'}</strong>
+                </span>
+                <span>
+                  学習モード <strong>{selected.learningMode ?? '設定不正'}</strong>
+                </span>
+              </div>
               {!selected.configurationValid && (
                 <p role="alert">設定形式を確認できないため、このProgramは変更できません。</p>
               )}
               <fieldset className="stack" disabled={!canEdit || busy}>
                 <legend>機能スイッチ（下書き・停止中のみ変更可能）</legend>
-                <label>
+                <p className="program-feature-flags__hint">
+                  スイッチを変更しただけでは反映されません。内容を確認し、下の保存ボタンを押してください。
+                </p>
+                <label className="program-feature-flags__field">
                   学習モード
                   <select
+                    className="program-feature-flags__control"
                     value={learningMode}
                     onChange={(event) => setLearningMode(event.target.value as LearningMode)}
                   >
@@ -238,78 +260,66 @@ export function ProgramFeatureFlagsCard({
                   </select>
                 </label>
                 {featureRows.map(({ key, label, description }) => (
-                  <div
-                    key={key}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      gap: '1rem',
-                    }}
-                  >
-                    <div>
-                      <strong>{label}</strong>
-                      <p style={{ margin: '0.25rem 0' }}>{description}</p>
-                      <span>{features[key] ? 'ON' : 'OFF'}</span>
-                    </div>
-                    <button
-                      type="button"
+                  <div key={key} className="program-feature-flags__row">
+                    <label
+                      className="program-feature-flags__toggle-label"
+                      htmlFor={`feature-${key}`}
+                    >
+                      <span className="program-feature-flags__toggle-copy">
+                        <strong>{label}</strong>
+                        <span>{description}</span>
+                      </span>
+                      <span
+                        className={`program-feature-flags__state${features[key] ? ' is-on' : ''}`}
+                      >
+                        {features[key] ? 'ON' : 'OFF'}
+                      </span>
+                    </label>
+                    <input
+                      id={`feature-${key}`}
+                      className="program-feature-flags__switch"
+                      type="checkbox"
                       role="switch"
-                      aria-label={label}
-                      aria-checked={features[key]}
+                      checked={features[key]}
                       disabled={!canEdit || busy}
-                      onClick={() =>
+                      onChange={() =>
                         setFeatures((current) => ({ ...current, [key]: !current[key] }))
                       }
-                      style={{
-                        flex: '0 0 auto',
-                        width: '3.25rem',
-                        height: '1.875rem',
-                        padding: '0.1875rem',
-                        border: 0,
-                        borderRadius: '999px',
-                        background: features[key] ? '#4f46e5' : '#737373',
-                        cursor: !canEdit || busy ? 'not-allowed' : 'pointer',
-                      }}
-                    >
-                      <span
-                        aria-hidden="true"
-                        style={{
-                          display: 'block',
-                          width: '1.5rem',
-                          height: '1.5rem',
-                          borderRadius: '50%',
-                          background: 'white',
-                          transform: features[key] ? 'translateX(1.375rem)' : 'translateX(0)',
-                          transition: 'transform 120ms ease',
-                        }}
-                      />
-                    </button>
+                      aria-label={`${label}を${features[key] ? 'OFF' : 'ON'}にする`}
+                    />
                   </div>
                 ))}
               </fieldset>
               {!canEdit && selected.configurationValid && (
                 <p>設定の変更には、対象Programを下書きまたは停止状態にしてください。</p>
               )}
-              <label>
+              <label className="program-feature-flags__field">
                 設定変更のレビュー記録ID（本文や秘密情報は入力しない）
                 <input
+                  type="text"
+                  className="program-feature-flags__control"
                   value={evidence}
                   maxLength={100}
                   disabled={busy}
                   onChange={(event) => setEvidence(event.target.value)}
+                  placeholder="例：review-2026-001"
+                  autoComplete="off"
                 />
+                <span className="program-feature-flags__hint">
+                  半角英数字と _ . : - が使えます。変更理由の文章や秘密情報は入力しないでください。
+                </span>
               </label>
-              <label>
+              <label className="program-feature-flags__confirmation">
                 <input
                   type="checkbox"
                   checked={confirmed}
                   disabled={busy}
                   onChange={(event) => setConfirmed(event.target.checked)}
                 />
-                対象Programと変更内容を確認しました
+                <span>対象Programと変更内容を確認しました</span>
               </label>
               <button
+                className="program-feature-flags__button program-feature-flags__button--primary"
                 type="button"
                 disabled={!canEdit || !changed || !confirmed || !evidenceValid || busy}
                 onClick={() => void save()}
