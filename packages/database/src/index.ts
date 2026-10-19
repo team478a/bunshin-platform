@@ -91,6 +91,7 @@ export {
 export type { DynamicLearningScope, PersonaItemInput } from './personal-learning-d';
 export { PrismaTrainingGrowthRepository } from './training-growth';
 export { PrismaAiTrainingRuntimeRepository } from './training-runtime';
+export { PrismaPersonalLearningNudgePreferenceRepository } from './personal-learning-nudge-preference';
 export { PrismaTrainingParticipantProfileRepository } from './training-profile';
 export { PrismaAiResaleOfferRepository } from './resale-offer';
 export { PrismaServiceNotificationPreferenceRepository } from './service-notification-preference';

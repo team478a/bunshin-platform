@@ -269,6 +269,8 @@ const DYNAMIC_CONTENT_EVENTS = [
 const DYNAMIC_CONTENT_EVENT_TYPES = [
   ...DYNAMIC_CONTENT_EVENTS,
   'PERSONAL_LEARNING_NEXT_TASK_PROPOSED',
+  'PERSONAL_LEARNING_NUDGE_SENT',
+  'PERSONAL_LEARNING_NUDGE_PREFERENCE_UPDATED',
 ] as const;
 
 async function dynamicTrainingRetentionSnapshot(
@@ -567,6 +569,22 @@ async function dynamicTrainingRetentionSnapshot(
     orderBy: { id: 'asc' },
     take: TRAINING_EXPORT_MAX_ROWS + 1,
   });
+  const lineNudgePushes = contentDue
+    ? await tx.personalLearningLinePush.findMany({
+        where: { ...personal, groupMembershipId: owned.membership.id, purpose: 'NUDGE' },
+        select: { id: true, createdAt: true },
+        orderBy: { id: 'asc' },
+        take: TRAINING_EXPORT_MAX_ROWS + 1,
+      })
+    : [];
+  const learningNudgePreferences = summaryDue
+    ? await tx.personalLearningNudgePreference.findMany({
+        where: { ...personal, groupMembershipId: owned.membership.id },
+        select: { id: true, updatedAt: true },
+        orderBy: { id: 'asc' },
+        take: TRAINING_EXPORT_MAX_ROWS + 1,
+      })
+    : [];
   const contentEvents = contentDue
     ? await tx.programActionEvent.findMany({
         where: {
@@ -727,6 +745,8 @@ async function dynamicTrainingRetentionSnapshot(
     learningRequests: selectedRequests,
     practiceSupportImages: dueImages,
     lineInbox,
+    lineNudgePushes,
+    learningNudgePreferences,
     toolkit,
     dynamicTopics,
     personaItems,
@@ -769,6 +789,8 @@ async function dynamicTrainingRetentionSnapshot(
     ).length,
     practiceSupportImages: dueImages.length,
     lineMessages: lineInbox.length,
+    lineNudgeMessages: lineNudgePushes.length,
+    learningNudgePreferences: learningNudgePreferences.length,
   };
   const revision = createHash('sha256')
     .update(
