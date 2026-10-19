@@ -33,7 +33,9 @@
 - ドキュメント差分のリンク/参照整合、CSVのヘッダーと20採点行、10セッション・Web 5/LINE 5配分を機械的に確認する。
 - `git diff --check` およびドキュメント内リンク確認を実行する。
 - 実AI、LINE送信、実ユーザー会話、人手評価、Productionのread/write操作は本PRで実行しない。したがって実運用品質評価の結果は未取得である。
-- CI結果はDraft PR上で報告を更新する。文書PRのためDB migration/DB操作はない。
+- Node.js 24.19.0 / pnpm 10.10.0で`pnpm install --frozen-lockfile`と`pnpm format:check`が成功。
+- CI run [39236872312](https://github.com/team478a/bunshin-platform/actions/runs/39236872312): `verify` と `database` が成功。verifyのformat / typecheck / lint / 全test / learning UI / build、databaseのvalidate / CI用migration / readiness / integration testが完了。CI databaseは隔離環境でありProduction DBではない。
+- 文書PRのため、アプリケーションコード・DB schema/migrationに変更なし。Production DB migration/DB操作は行っていない。
 
 ## 5. 未解決事項
 
@@ -55,6 +57,6 @@
 ## 7. 実装済み／検証済み／本番反映済み
 
 - 実装済み: PR-Gの文書手順、採点テンプレート、外部公開準備判定表。
-- 検証済み: 文書/CSVの構造・リンク整合とDraft PR CI（実施後にrun URLを追記）。
+- 検証済み: 文書/CSVの構造・リンク整合、`git diff --check`、`pnpm format:check`、GitHub Actions run `39236872312`のverify/database成功。
 - 未検証: 実AI会話、LINE配送を伴う通し評価、人手採点、実費・時間の判定、ProductionのDB/Backup/Retention/停止条件。
 - 本番反映済み: なし（本PRでは本番に触れていない）。
