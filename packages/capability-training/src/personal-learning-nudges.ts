@@ -106,7 +106,6 @@ function responded(history: NudgeHistory, now: Date) {
 /** Select at most one deterministic situation. Callers must recheck consent, scope and LINE eligibility before delivery. */
 export function decidePersonalLearningNudge(input: NudgeContext): NudgeDecision | null {
   const { now, histories } = input;
-  const unresolved = histories.filter((h) => !responded(h, now));
   const actions = [...input.actions]
     .filter((a) => a.occurredAt <= now)
     .sort((a, b) => b.occurredAt.getTime() - a.occurredAt.getTime());
