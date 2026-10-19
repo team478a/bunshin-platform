@@ -9,6 +9,8 @@ import { PublicShell } from '../../../../ui/public-shell';
 import { ProgramManagementEditor } from './program-management-editor';
 import { ProgramProductAdmin } from './program-product-admin';
 import { AiResaleOfferAdmin } from './ai-resale-offer-admin';
+import { ProgramFeatureFlagsCard } from './program-feature-flags-card';
+import { personalLearningFeatures, personalLearningMode } from '@bunshin/capability-training';
 import {
   isTrainingProgram,
   selectableTrainingModes,
@@ -187,6 +189,28 @@ export default async function ServiceProgramsPage({
     }
   });
   const aiProgramIds = new Set(aiPrograms.map(({ program }) => program.id));
+  const programFeatureFlagPrograms = servicePrograms
+    .filter((program) => isTrainingProgram(program.settings))
+    .map((program) => {
+      const settings = program.settings as Record<string, unknown>;
+      const pilot =
+        settings['personalLearningPilot'] &&
+        typeof settings['personalLearningPilot'] === 'object' &&
+        !Array.isArray(settings['personalLearningPilot'])
+          ? (settings['personalLearningPilot'] as Record<string, unknown>)
+          : {};
+      return {
+        id: program.id,
+        name: program.displayName,
+        status: program.status,
+        updatedAt: program.updatedAt.toISOString(),
+        learningMode: personalLearningMode(settings),
+        learningFeatures: personalLearningFeatures(settings),
+        enabled: pilot['enabled'] === true,
+        configurationValid:
+          personalLearningMode(settings) !== null && personalLearningFeatures(settings) !== null,
+      };
+    });
   const productPrograms = servicePrograms
     .filter((program) => program.status === 'ACTIVE' && !aiProgramIds.has(program.id))
     .map((program) => {
@@ -361,6 +385,10 @@ export default async function ServiceProgramsPage({
             name: membership.user.displayName,
             email: membership.user.email,
           }))}
+        />
+        <ProgramFeatureFlagsCard
+          serviceSlug={serviceSlug}
+          initialPrograms={programFeatureFlagPrograms}
         />
         <ProgramProductAdmin
           serviceSlug={serviceSlug}

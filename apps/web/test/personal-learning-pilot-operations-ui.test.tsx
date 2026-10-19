@@ -23,6 +23,7 @@ const snapshot: PilotOperationsSnapshot = {
     multiTopic: false,
     lineLearning: false,
     extendedScope: false,
+    learningNudges: false,
   },
   openCallCount: 0,
 };
@@ -84,6 +85,31 @@ describe('Wave 0 operations UI boundaries', () => {
     expect(pilotOperationsSnapshot({ ...snapshot, enabled: true, started: false })?.started).toBe(
       false,
     );
+  });
+
+  it('reads the per-Program nudge flag and keeps older snapshots safely OFF', () => {
+    const current = pilotOperationsSnapshot({
+      ...snapshot,
+      learningFeatures: { ...snapshot.learningFeatures, learningNudges: true },
+    });
+    expect(current?.learningFeatures.learningNudges).toBe(true);
+
+    const legacy = { ...snapshot, learningFeatures: { ...snapshot.learningFeatures } };
+    delete (legacy.learningFeatures as Partial<typeof legacy.learningFeatures>).learningNudges;
+    expect(pilotOperationsSnapshot(legacy)?.learningFeatures.learningNudges).toBe(false);
+  });
+
+  it('includes all five per-Program switches in the reviewed settings command', () => {
+    const features = {
+      conversation: true,
+      multiTopic: false,
+      lineLearning: true,
+      extendedScope: false,
+      learningNudges: true,
+    };
+    expect(
+      createPilotOperationCommand(snapshot, 'SET_LEARNING_FEATURES', evidence, true, features),
+    ).toMatchObject({ action: 'SET_LEARNING_FEATURES', learningFeatures: features });
   });
 
   it('shows Japanese guidance and does not reveal raw internal error strings', () => {
