@@ -44,8 +44,8 @@
 - `pnpm --filter web exec vitest run test/openai-learning-nudge.test.ts test/personal-learning-nudges-cron.test.ts test/personal-learning-nudge-message.test.ts` — 3 files / 8 tests passed。
 - `pnpm --filter @bunshin/database typecheck` — 成功。
 - `pnpm --filter web typecheck` — 成功。
-- DB統合ケースを追加した。ローカルの隔離Disposable PostgreSQLは利用できないため、統合テストはこの実行では開始していない。Draft PRの `CI / database` 成功を確認後、ここを実際のRun番号付きで更新する。
-- GitHub Actions `CI / verify` / `CI / database` — Draft PR作成後に確認し、結果を追記する。
+- DB統合ケースを追加した。ローカルの隔離Disposable PostgreSQLは利用できないため、CIの専用PostgreSQLサービスで確認した。
+- GitHub Actions [run #39226687395](https://github.com/team478a/bunshin-platform/actions/runs/39226687395) — `CI / verify` 成功（format、typecheck、lint、全体test、learning UI、build）。`CI / database` 成功（`db:validate`、migration deploy、`db:assert-ready`、統合テスト252件成功）。
 - 実Provider/API呼び出しなし。合成APIキーとモックfetchのみをテストで使用。
 
 ## 5. 未解決事項
