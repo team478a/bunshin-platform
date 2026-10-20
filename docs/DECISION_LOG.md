@@ -4416,3 +4416,12 @@
 - CronとPreviewの集計・文面作成を共通関数にまとめ、運用通知センターはCronでは従来選択方式、Previewではログイン中の有効な管理者をactorとして読む。
 - Previewは最新データの読み取り専用とし、Resend送信・送信台帳のclaim/完了/失敗書込み・利用者データ/設定/Job変更をしない。本文・件名は既存のbuilder出力を使い、認証秘密・送信元・宛先アドレスは表示せず宛先数だけを許す。
 - Cronの認証・有効化条件・claim・送信・失敗時記録は維持する。本番migration適用、環境変更、送信開始は行わない。
+
+## 2026-10-20: PR-H〜I2・運用まとめメールの本番反映準備
+
+- 状態: Draft PRで確認待ち。#1369のmainマージ後に、田中の依頼に基づき本番反映手順と3 migration専用の直接適用entrypointを準備した。本番DBへの接続・Probe・適用、Production設定変更、コード反映は行わない。
+- Git上のproduction/main migration追加差分は`20261019120000_learning_provider_abstraction`、`20261020100000_personal_learning_tool_feature_updates`、`20261020120000_ops_morning_digest_runs`の3件。実DBのpending集合はProbe前のため未確認とし、runnerはこの完全一致以外を拒否する。
+- 本番反映はMigration History Probe → backup/復元担当確認 → 3件限定runner → Probe再確認 → `db:assert-ready` → mainコードのProduction反映・health確認の順とする。失敗/timeout/不明状態でrunnerを再実行しない。
+- mainにはproduction branchにある既存16 migration SQLのtransaction/timeout wrapperの差分もある。適用済みchecksumは未確認であり、pending一覧だけで安全と判断しない。差分不整合や不明点があれば適用を停止する。
+- コード反映だけで運用まとめ送信は始めない。`OPS_DIGEST_ENABLED`の既定値はfalse。マナベル機能flagはProgram単位の明示opt-inで、既定OFF。PR-HのProvider経路変更がすでに有効なDYNAMIC_V1利用者の次回操作へ影響する可能性があるため、現行Program/Provider状態は反映前に田中が確認する。
+- 外部公開GateにはPR-Gの未実施評価とバックアップ復元元の証明を残す。PRマージやCIを本番反映・外部公開の承認とみなさない。

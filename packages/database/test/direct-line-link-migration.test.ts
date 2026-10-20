@@ -34,6 +34,13 @@ const manaberuDynamicLearningPendingOutput =
 const manaberuLearningNudgePendingOutput =
   'The following migration(s) have not yet been applied:\n' +
   '20261019100000_personal_learning_nudges\n';
+const releaseMigrations = [
+  '20261019120000_learning_provider_abstraction',
+  '20261020100000_personal_learning_tool_feature_updates',
+  '20261020120000_ops_morning_digest_runs',
+];
+const releasePendingOutput =
+  'The following migration(s) have not yet been applied:\n' + releaseMigrations.join('\n') + '\n';
 
 describe('direct, approval-gated production migration', () => {
   afterEach(() => vi.restoreAllMocks());
@@ -395,5 +402,63 @@ describe('direct, approval-gated production migration', () => {
     expect(await runDirectLineLinkMigration(execute, environment, confirm)).toBe(1);
     expect(execute).toHaveBeenCalledTimes(2);
     expect(confirm).not.toHaveBeenCalled();
+  });
+
+  it('approves only the exact three migrations in the 2026-10-20 release set', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    const execute = vi
+      .fn<typeof runMigrationProcess>()
+      .mockResolvedValueOnce({ reason: 'EXITED', status: 0 })
+      .mockResolvedValueOnce({ reason: 'EXITED', status: 1, capturedOutput: releasePendingOutput })
+      .mockResolvedValueOnce({ reason: 'EXITED', status: 0 })
+      .mockResolvedValueOnce({
+        reason: 'EXITED',
+        status: 0,
+        capturedOutput: 'Database schema is up to date!',
+      });
+    const confirm = vi.fn((phrase: string) => Promise.resolve(phrase));
+
+    expect(
+      await runDirectLineLinkMigration(
+        execute,
+        { ...environment, DIRECT_MIGRATION_ALLOWED_SET_ID: 'release-20261020' },
+        confirm,
+      ),
+    ).toBe(0);
+    expect(confirm).toHaveBeenCalledWith(
+      'APPLY_RELEASE_20261020_MIGRATIONS_TO_vtkzinaudznwbsjoyszk',
+    );
+    expect(execute.mock.calls[2]![1]).toContain('deploy');
+  });
+
+  it.each([
+    ['two pending migrations', releaseMigrations.slice(0, 2).join('\n') + '\n'],
+    [
+      'four pending migrations',
+      [...releaseMigrations, '20261020130000_unexpected'].join('\n') + '\n',
+    ],
+    ['an unrelated migration', '20261020130000_unexpected\n'],
+  ])('rejects %s for the release set without confirmation or deploy', async (_label, names) => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const execute = vi
+      .fn<typeof runMigrationProcess>()
+      .mockResolvedValueOnce({ reason: 'EXITED', status: 0 })
+      .mockResolvedValueOnce({
+        reason: 'EXITED',
+        status: 1,
+        capturedOutput: 'The following migration(s) have not yet been applied:\n' + names,
+      });
+    const confirm = vi.fn((phrase: string) => Promise.resolve(phrase));
+
+    expect(
+      await runDirectLineLinkMigration(
+        execute,
+        { ...environment, DIRECT_MIGRATION_ALLOWED_SET_ID: 'release-20261020' },
+        confirm,
+      ),
+    ).toBe(1);
+    expect(execute).toHaveBeenCalledTimes(2);
+    expect(confirm).not.toHaveBeenCalled();
+    expect(execute.mock.calls.some(([, args]) => args.includes('deploy'))).toBe(false);
   });
 });

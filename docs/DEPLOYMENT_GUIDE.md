@@ -153,6 +153,26 @@ SecureStringの非表示入力でDB passwordを入力し、対象project・pendi
 
 このrunnerは引き続き全pendingを対象とする。allowlist、backup、drain、OEM履歴/cutover、Pilot enableの承認は自動化しない。`db:migrate:deploy`の直接実行には本runnerの上限は付かない。
 
+#### 2026-10-20 release migration（3件限定）
+
+このrelease用entrypointは`release-20261020`許可セットに固定され、次の3件がpendingである場合に限り実行確認へ進む。実行前にProduction Migration History Probeで同じ集合を確認する。Probe結果に追加/欠落/未知migration、failed history、checksum不整合または不明点があれば停止し、entrypointを実行しない。branch間では既存16 migration SQLからtransaction/timeout wrapperが削除されているが、本番適用checksumは未確認のため、pending一覧だけで安全と判断しない。
+
+| 順序 | migration                                               |
+| ---- | ------------------------------------------------------- |
+| 1    | `20261019120000_learning_provider_abstraction`          |
+| 2    | `20261020100000_personal_learning_tool_feature_updates` |
+| 3    | `20261020120000_ops_morning_digest_runs`                |
+
+最新のProduction backup/PITR、復元担当、対象projectを人間が確認した後に限り、Node.js 24環境で次を実行する。
+
+```powershell
+.\packages\database\scripts\apply-release-20261020.ps1
+```
+
+SecureStringの非表示入力でDB passwordを入力する。対象projectとpending一覧が新しいProbeおよびbackup確認記録と一致することを確認し、確認語`APPLY_RELEASE_20261020_MIGRATIONS_TO_vtkzinaudznwbsjoyszk`を入力する。このentrypointは上記3件と完全一致しない場合、確認も`prisma migrate deploy`も開始しない。成功後は新しいProbeで`UP_TO_DATE`/pendingなしを確認し、`pnpm db:assert-ready`を実行して`databaseSchema: current`を確認してからコードをProductionへ反映する。
+
+timeout、異常終了、postcheck不明時は**再実行しない**。新しいProduction Migration History Probeと承認済みread-only手段でhistory、適用状態、実schema、sessionを照合し、復旧担当の判断を待つ。migrationをrollback/deleteしない。release詳細・旧アプリ互換性・受講者確認項目は[`PRODUCTION_RELEASE_PREFLIGHT_2026-10-20.md`](PRODUCTION_RELEASE_PREFLIGHT_2026-10-20.md)を参照する。
+
 根拠: `packages/database/scripts/deploy-migrations-for-vercel.mjs`、`migration-process.mjs`、`test/vercel-production-migrations.test.ts`、`test/migration-bounds.integration-cases.ts`。[Prisma v6 startup options](https://docs.prisma.io/docs/orm/v6/overview/databases/postgresql)、[PostgreSQL 17 timeout semantics](https://www.postgresql.org/docs/17/runtime-config-client.html)。設定probeとmigrationは別sessionだが同じCLI/URL/startup設定を使う。migration SQLが自らtimeoutを変更する場合まで防ぐ仕組みではない。
 
 OEM Registration Billing V2を含むリリースは[本番Migration安全監査](OEM_REGISTRATION_BILLING_V2_MIGRATION_SAFETY_AUDIT.md)の復元検証、実DBの全pending/既存データ適合、lock、旧Application互換Gateを先に満たす。Production buildは全pending Migrationを公開前に実行するため、Deployだけを先行しない。schema配備、初期履歴準備、料金公開/cutover、請求開始は別承認とする。
