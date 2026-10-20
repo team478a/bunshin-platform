@@ -52,7 +52,8 @@
 - 受講者の更新候補取得、最初の提案、会話、Program設定画面のWebテスト: 成功（47件）。
 - `@bunshin/database` とWebのTypeScript型検査: 成功。
 - `git diff --check`: 成功。
-- `verify` / `database` GitHub ActionsとDB統合テストの最終結果: Draft PR作成後に確認して追記する。DB統合テストをローカル実行するためのDB接続は行っていない。
+- GitHub Actions run `39356045903`（head `f93acd68`）: `verify` 成功、`database` 成功。DB統合テストを含む。
+- DB統合テストをローカル実行するためのDB接続は行っていない。
 - 実Providerを呼び出すテスト、外部検索、評価セット実行はしていない。
 
 ## 5. 未解決事項・運用上の注意
@@ -64,5 +65,5 @@
 
 ## 6. 次の条件
 
-- `verify` / `database` CIと関連テスト成功後、Draft PRとして田中の確認を依頼する。
+- CIと関連テスト成功済み。Draft PRとして田中の確認を依頼する。
 - 田中の確認・マージ承認前にマージ、本番反映、migration適用、機能フラグ有効化を行わない。
