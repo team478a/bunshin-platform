@@ -14,6 +14,7 @@ export type PilotOperationsSnapshot = {
     lineLearning: boolean;
     extendedScope: boolean;
     learningNudges: boolean;
+    toolUpdates: boolean;
   };
   openCallCount: number;
 };
@@ -38,6 +39,8 @@ export function pilotOperationsSnapshot(value: unknown): PilotOperationsSnapshot
     ) ||
     (Object.hasOwn(v.learningFeatures, 'learningNudges') &&
       typeof (v.learningFeatures as Record<string, unknown>).learningNudges !== 'boolean') ||
+    (Object.hasOwn(v.learningFeatures, 'toolUpdates') &&
+      typeof (v.learningFeatures as Record<string, unknown>).toolUpdates !== 'boolean') ||
     typeof v.openCallCount !== 'number' ||
     !Number.isSafeInteger(v.openCallCount) ||
     v.openCallCount < 0
@@ -54,10 +57,11 @@ export function pilotOperationsSnapshot(value: unknown): PilotOperationsSnapshot
     learningFeatures: {
       ...(v.learningFeatures as Omit<
         PilotOperationsSnapshot['learningFeatures'],
-        'learningNudges'
+        'learningNudges' | 'toolUpdates'
       >),
       // Older stored Program settings omit this newer feature; it remains opt-in.
       learningNudges: (v.learningFeatures as Record<string, unknown>).learningNudges === true,
+      toolUpdates: (v.learningFeatures as Record<string, unknown>).toolUpdates === true,
     },
     openCallCount: v.openCallCount,
   };

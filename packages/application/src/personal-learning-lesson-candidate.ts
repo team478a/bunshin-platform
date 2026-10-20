@@ -25,6 +25,11 @@ export interface SavedLearningLessonCandidate {
   usageKey: string;
   createdAt: string;
   confirmedAt: string | null;
+  toolFeatureSources?: readonly {
+    title: string;
+    sourceTitle: string;
+    sourceUrl: string;
+  }[];
   proposal: LearningLessonProposal;
 }
 /** Format checks are NOT proof of educational quality, factual accuracy or learner ability. */
@@ -88,6 +93,7 @@ export interface LearningCandidateRepository {
     proposal: LearningLessonProposal;
     usageKey: string;
     promptVersion: string;
+    toolFeatureSources?: SavedLearningLessonCandidate['toolFeatureSources'];
   }): Promise<SavedLearningLessonCandidate>;
   confirm(input: {
     actor: PersonalLearningActor;

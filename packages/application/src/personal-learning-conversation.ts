@@ -2,7 +2,10 @@ import { ApplicationError } from '@bunshin/shared';
 import type { PersonalLearningActor } from './personal-learning-persistence';
 import { validatePersonalLearningActor } from './personal-learning-persistence';
 import type { SavedPersonalLearningRequest } from './personal-learning-request';
-import type { LearningLessonProposal } from './personal-learning-lesson-candidate';
+import type {
+  LearningLessonProposal,
+  SavedLearningLessonCandidate,
+} from './personal-learning-lesson-candidate';
 
 export const PERSONAL_LEARNING_CONVERSATION_VERSION = 'PERSONAL_LEARNING_CONVERSATION_V1';
 export const PERSONAL_LEARNING_CONVERSATION_MAX_MESSAGE_LENGTH = 1200;
@@ -88,6 +91,7 @@ export interface PersonalLearningConversationRepository {
       expectedCandidateId: string;
       proposal: LearningLessonProposal;
       environmentCapture: PersonalLearningConversationEnvironmentCapture | null;
+      toolFeatureSources?: SavedLearningLessonCandidate['toolFeatureSources'];
     };
     promptVersion: string;
     usageKey: string;
