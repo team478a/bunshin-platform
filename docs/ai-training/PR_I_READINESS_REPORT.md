@@ -59,7 +59,7 @@
 - `pnpm --filter web typecheck`: 成功。
 - 変更TypeScriptファイルのESLint: 成功。
 - `git diff --check`: 成功。
-- 初回GitHub Actionsでは`database`が成功した一方、`verify`で最新migration名とRLS適用の既存規則チェックが失敗したため修正した。修正後の`verify` / `database`再実行結果は確認中。
+- 初回GitHub Actionsでは`database`が成功した一方、`verify`で最新migration名とRLS適用の既存規則チェックが失敗したため修正した。修正後のRun `39349355560`で`verify`と`database`が成功した（`database`統合テストを含む）。
 
 ## 7. 未解決事項・本番への影響
 
