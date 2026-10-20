@@ -125,3 +125,12 @@ git diff --check
 通常の多機能SaaS画面を作らず、スマートフォンとLINE起点で「今日やること」が明確なUXを優先してください。
 
 ユーザーに機能を選ばせるのではなく、Bunshinが目的・時間・顔出し可否・履歴を基に実行可能なDaily Missionを決める設計です。
+
+## 10. Parallel Work
+
+複数のエージェントが同時に作業する場合は、`docs/CODEX_PARALLEL_WORK_RULES.md` に従ってください。特に次を守ります。
+
+- 1タスク＝1ブランチ＝1PR。指示書の「触ってよい範囲」以外を変更しない
+- 共有ファイル（DECISION_LOG、IMPLEMENTATION_ROADMAP、各packageの`src/index.ts`、`vercel.json`の`crons`、環境変数定義など）は追加のみとし、変更した場合は報告に「共有ファイルの変更」として明記する
+- migrationは指示書で許可されたタスクだけが作る。許可なく必要になったら作らずに報告して止まる
+- 先に別のPRがmainへマージされたら、rebaseして標準検証をやり直してから報告を更新する
