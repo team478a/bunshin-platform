@@ -152,7 +152,7 @@ describe('PrismaOpsMorningDigestCollector', () => {
     );
   });
 
-  it('marks status rows with missing event timestamps unavailable instead of silently counting zero', async () => {
+  it('counts records with missing event timestamps separately without making the collector unavailable', async () => {
     const db = client();
     db.serviceLineBroadcast.groupBy
       .mockResolvedValueOnce([])
@@ -165,10 +165,8 @@ describe('PrismaOpsMorningDigestCollector', () => {
       window,
     );
 
-    expect(result.serviceBroadcasts).toEqual({
-      status: 'UNAVAILABLE',
-      errorCategory: 'SOURCE_DATA_INCOMPLETE',
-    });
+    expect(result.serviceBroadcasts).toEqual({ status: 'OK', value: [] });
+    expect(result.missingBroadcastDateCount).toEqual({ status: 'OK', value: 1 });
   });
 
   it('returns a fixed unavailable category instead of a raw database exception', async () => {

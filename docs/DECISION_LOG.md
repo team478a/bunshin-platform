@@ -4400,3 +4400,12 @@
 - 未対応Collectorは固定一覧として示し、「異常なし」の判定を妨げない。Collector失敗を0件に置き換えず固定エラー分類だけを出す。
 - 既存Jobは必須workspaceId、汎用workerのdispatch、retry・retentionの挙動から、全体向けメール送信台帳にそのまま使うのは不適合と判断した。PR-2で専用台帳migration案を提示するが、本PRではmigrationを作らず別途承認を待つ。
 - この決定はメール送信、Cron、HTTP/API、管理画面、migration、環境設定、本番反映を承認しない。
+
+## 2026-10-20: 毎朝の運用まとめPR-2送信記録とCron
+
+- 状態: PR-2 Draftで確認待ち。田中のPR-2指示により送信記録用migration 1件を許可した。migrationの本番適用、コードのマージ、送信設定は未承認。
+- 既存Jobは必須`workspaceId`の意味付けができず、汎用workerが別executorへ配送するため送信台帳に使わない。専用`ops_morning_digest_runs`を追加し、環境・対象日一意制約、期限付きclaim、attempt数、固定エラー分類、成功時刻だけを保持する。本文・件名・宛先・個人情報・生エラーは保存しない。
+- Cronは毎日22:30 UTC（7:30 JST）。`OPS_DIGEST_ENABLED`未設定・false、およびproduction以外では集計・送信しない。Resendは既存の管理用設定と宛先を共用する。DB管理設定が存在する場合は既存の優先・fail-closed規則に従い、環境変数へ復帰しない。
+- 同じ対象日の同時実行はDBの一意制約とatomic claimで1件にする。lease期限切れだけは同じ環境・日付のResend idempotency-keyで再claimし、FAILEDは同日自動再送しない。
+- PR-1の修正として、メールリンクは`APP_URL`基準の絶対URLにする。状態日時のないbroadcastは前日集計から外し、全期間件数を取得状況へ数値のみ表示してseverity判定を変えない。導入前日は「履歴開始前」とし未送信扱いにしない。
+- 本番で開始する場合は田中がmigration適用・`db:assert-ready`・コード反映・PR-3プレビュー確認を順に実行し、その後に`OPS_DIGEST_ENABLED=true`を設定する。PR-2作業者は本番DB、環境変数、Cron送信状態を変更しない。

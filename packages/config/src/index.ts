@@ -19,6 +19,7 @@ const serverSchema = z
     DIRECT_URL: z.string().min(1),
     SESSION_SECRET: z.string().min(32),
     CRON_SECRET: z.string().min(32).optional(),
+    OPS_DIGEST_ENABLED: z.enum(['true', 'false']).default('false'),
     ENCRYPTION_KEY: z.string().min(32).optional(),
     SUPABASE_AUTH_ADMIN_URL: z.url().optional(),
     SUPABASE_SERVICE_ROLE_KEY: z.string().min(32).optional(),

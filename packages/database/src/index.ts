@@ -347,3 +347,9 @@ export * from './personal-learning-practice-support';
 export * from './personal-learning-conversation';
 export { purgeExpiredSupportCases, SUPPORT_CASE_RETENTION_DAYS } from './support-case-retention';
 export { PrismaOpsMorningDigestCollector } from './ops-morning-digest';
+export { PrismaOpsMorningDigestRunRepository } from './ops-morning-digest-runs';
+export type {
+  OpsMorningDigestClaim,
+  OpsMorningDigestEnvironment,
+  OpsMorningDigestRunStatus,
+} from './ops-morning-digest-runs';

@@ -28,7 +28,8 @@
     { "path": "/api/internal/oem-support-candidate-lines/run", "schedule": "*/5 * * * *" },
     { "path": "/api/internal/commercial-usage/finalize", "schedule": "15 16 1 * *" },
     { "path": "/api/internal/ai-training/retention-cron", "schedule": "0 18 * * *" },
-    { "path": "/api/internal/ai-training/learning-nudges", "schedule": "0 0 * * *" }
+    { "path": "/api/internal/ai-training/learning-nudges", "schedule": "0 0 * * *" },
+    { "path": "/api/internal/ops/morning-digest", "schedule": "30 22 * * *" }
   ],
   "functions": {
     "app/api/workspaces/[workspaceId]/bunshins/[bunshinId]/daily-missions/generate/route.ts": {

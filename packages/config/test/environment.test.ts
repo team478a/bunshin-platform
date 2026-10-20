@@ -74,6 +74,16 @@ describe('environment validation', () => {
     );
   });
 
+  it('keeps morning digest sending disabled unless explicitly enabled', () => {
+    expect(parseServerEnvironment(valid).OPS_DIGEST_ENABLED).toBe('false');
+    expect(
+      parseServerEnvironment({ ...valid, OPS_DIGEST_ENABLED: 'true' }).OPS_DIGEST_ENABLED,
+    ).toBe('true');
+    expect(() => parseServerEnvironment({ ...valid, OPS_DIGEST_ENABLED: 'yes' })).toThrow(
+      'OPS_DIGEST_ENABLED',
+    );
+  });
+
   it('requires complete, environment-matched Supabase Auth administration configuration', () => {
     expect(() =>
       parseServerEnvironment({ ...valid, SUPABASE_SERVICE_ROLE_KEY: 's'.repeat(40) }),

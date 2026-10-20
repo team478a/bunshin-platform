@@ -73,11 +73,6 @@ const missingEventDateFilter = {
   ],
 };
 
-const incompleteSource = {
-  status: 'UNAVAILABLE',
-  errorCategory: 'SOURCE_DATA_INCOMPLETE',
-} as const satisfies OpsMorningDigestCollectorResult<never>;
-
 function serviceCounts(
   rows: BroadcastGroup[],
   serviceByGroup: Map<string, { displayName: string }>,
@@ -101,6 +96,7 @@ export class PrismaOpsMorningDigestCollector {
   async serviceLineBroadcasts(input: OpsMorningDigestDateWindow): Promise<{
     serviceBroadcasts: OpsMorningDigestCollectorResult<OpsMorningDigestBroadcastCount[]>;
     fortuneWeeklyBroadcasts: OpsMorningDigestCollectorResult<OpsMorningDigestBroadcastCount[]>;
+    missingBroadcastDateCount: OpsMorningDigestCollectorResult<number>;
   }> {
     try {
       const [
@@ -203,6 +199,13 @@ export class PrismaOpsMorningDigestCollector {
             status: 'UNAVAILABLE',
             errorCategory: 'INVALID_SOURCE_CONFIGURATION',
           },
+          missingBroadcastDateCount: {
+            status: 'OK',
+            value: [...incompleteServiceRows, ...incompleteFortuneRows].reduce(
+              (total, row) => total + row._count._all,
+              0,
+            ),
+          },
         };
       }
       const fortuneWeeklyBroadcasts: OpsMorningDigestCollectorResult<
@@ -212,12 +215,22 @@ export class PrismaOpsMorningDigestCollector {
           ? { status: 'OK', value: serviceCounts(fortuneRows as BroadcastGroup[], serviceByGroup) }
           : { status: 'NOT_APPLICABLE', reason: 'NO_SCHEDULED_FORTUNE_DELIVERY' };
       return {
-        serviceBroadcasts: incompleteServiceRows.length > 0 ? incompleteSource : serviceBroadcasts,
-        fortuneWeeklyBroadcasts:
-          incompleteFortuneRows.length > 0 ? incompleteSource : fortuneWeeklyBroadcasts,
+        serviceBroadcasts,
+        fortuneWeeklyBroadcasts,
+        missingBroadcastDateCount: {
+          status: 'OK',
+          value: [...incompleteServiceRows, ...incompleteFortuneRows].reduce(
+            (total, row) => total + row._count._all,
+            0,
+          ),
+        },
       };
     } catch {
-      return { serviceBroadcasts: unavailable, fortuneWeeklyBroadcasts: unavailable };
+      return {
+        serviceBroadcasts: unavailable,
+        fortuneWeeklyBroadcasts: unavailable,
+        missingBroadcastDateCount: unavailable,
+      };
     }
   }
 

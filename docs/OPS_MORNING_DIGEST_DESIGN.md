@@ -18,8 +18,8 @@
 
 | 項目       | 現行実装                                                                                                                                                                                                                                                                                        | 設計への反映                                                                                                                                                                                                                                                                            |
 | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| メール送信 | `apps/web/src/line/operational-alert-resend.ts` の `LineOperationalAlertResend` がResend APIを使う。運用設定は `RESEND_ADMIN_ALERT_API_KEY` / `RESEND_ADMIN_ALERT_FROM` / `RESEND_ADMIN_ALERT_TO`。管理画面DB設定がある環境では暗号化された管理設定を優先し、legacy環境変数への復帰を制限する。 | 新しいメール事業者・宛先設定を加えず、既存Resend送信と `RESEND_ADMIN_ALERT_TO`（現行設定取得の優先順位を含む）を共用する。宛先は追加しない。送信設定がない場合は有効化せず、無送信を明示する。                                                                                          |
-| 二重送信   | LINE運用通知は `idempotency-key` にfingerprintを入れる。Resend側のキーだけでは日次の送信済み状態をアプリ側から確実に照会できない。                                                                                                                                                              | 日付・環境ごとの送信状態を永続化し、送信前に一意にclaimする。既存Jobを再利用できるかを段階2で検証する。                                                                                                                                                                                 |
+| メール送信 | `apps/web/src/line/operational-alert-resend.ts` の `LineOperationalAlertResend` がResend APIを使う。運用設定は `RESEND_ADMIN_ALERT_API_KEY` / `RESEND_ADMIN_ALERT_FROM` / `RESEND_ADMIN_ALERT_TO`。管理画面DB設定がある環境では暗号化された管理設定を優先し、legacy環境変数への復帰を制限する。 | 新しいメール事業者・宛先設定を加えず、既存Resend送信と管理画面のDB設定優先順位を共用する。宛先は既存 `RESEND_ADMIN_ALERT_TO` と同じ。送信設定がない場合は失敗記録を残し、無送信を明示する。                                                                                             |
+| 二重送信   | LINE運用通知は `idempotency-key` にfingerprintを入れる。Resend側のキーだけでは日次の送信済み状態をアプリ側から確実に照会できない。                                                                                                                                                              | `ops_morning_digest_runs` の環境・日付一意制約と期限付きclaimに加え、Resend側でも環境・対象日固定のidempotency-keyを使う。                                                                                                                                                              |
 | Cron       | `apps/web/vercel.json` のUTC cronから `/api/internal/...` を起動し、`CRON_SECRET` で認証する。LINE監視は毎時、他の処理は日次・分次など既存スケジュールを持つ。                                                                                                                                  | Cron受け口は既存の内部API・cron認証方式を踏襲し、他のcronの時刻・動作を変更しない。毎朝7:30 JST（前日22:30 UTC）の固定scheduleとする。時刻変更が必要になった場合は `vercel.json` を変更して再デプロイする。                                                                             |
 | 通知判定   | `GetAdminAlerts` と `buildAdminAlerts`（`packages/application/src/admin-alert-center.ts`）、`PrismaAdminAlertRepository`（`packages/database/src/admin-alerts.ts`）が、正本データを読み画面表示時に判定する。通知専用の複製状態は持たない。                                                     | `GetAdminAlerts` の判定結果をそのまま利用し、しきい値や同じカテゴリの判定をメール用に複製しない。既存カテゴリには `/admin/ai`、`/admin/line`、`/admin/guide`、`/admin/rewards`、`/admin/deletions`、`/admin/support`、`/admin/commercial-billing?status=REFUND_REVIEW` のリンクがある。 |
 | プレビュー | 管理者専用の確認画面・読み取りAPIは未実装。                                                                                                                                                                                                                                                     | 送信処理を呼ばないドライランを実装し、同じ集計・文面生成を使ってプレビューする。                                                                                                                                                                                                        |
@@ -63,7 +63,7 @@
 - 運用通知センターは既存 `GetAdminAlerts` の返すalertをそのまま使用する。重大度を複製判定せず、CRITICAL/WARNING/INFOをそれぞれ異常/注意/一覧だけへ振り分ける。
 - サービスLINE一斉配信は `ServiceLineBroadcast` をサービス（`groupId`に対応する既存 `ServiceConfiguration.displayName`）と状態で集計する。`SCHEDULED` は `scheduledAt`、`COMPLETED` は `completedAt`、`CANCELLED` は `cancelledAt` が前日JSTの半開区間に入る記録を1 broadcastとして数える。`DRAFT` は含めない。
 - `automationKey` が `fortune-weekly:` で始まるbroadcastは通常配信と分ける。該当日が週次配信日でなく、対象日のbroadcastもない場合は `NOT_APPLICABLE` とする。
-- `SCHEDULED` / `COMPLETED` / `CANCELLED` なのに対応する状態日時が未設定の記録は対象日を確定できないため、その区分の集計を取得失敗（`SOURCE_DATA_INCOMPLETE`）として示し、0件に含めない。
+- `SCHEDULED` / `COMPLETED` / `CANCELLED` なのに対応する状態日時が未設定の記録は、前日件数から除外し、取得状況へ「日時未設定の配信記録：N件（全期間）」として件数のみを示す。これはseverityを持たず、「異常なし」の判定も妨げない。
 - OEM請求は `TenantInvoice.status` の送信時点のgroup count（`DRAFT` / `ISSUED` / `PAID` / `VOID`）のみ。金額・請求書番号・契約名・連絡先・Workspace列は取得しない。
 - DBの配信集計はbroadcastの `groupId` / `status` と状態に応じた日時列をgroup-byし、サービス表示名を別 query で付与する。本文 `title` / `message`、recipient、個人識別子はselectしない。
 
@@ -77,13 +77,13 @@
 
 ### 二重実行・永続記録の設計候補
 
-| 候補                          | 長所                                                                                                                                          | 制約・確認点                                                                                                                                                                                                                                                                                                 |
-| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 既存Jobを送信台帳として再利用 | `Job` は `environment + idempotencyKey` 一意制約、lease、retry、terminal status、`lastErrorCategory` を持つ。新規テーブルを避けられる可能性。 | `Job.workspaceId` は必須。全体向けメールをどのworkspaceに結び付けるかが未解決なので、段階2の最初に全体Jobとしての適合性を確認する。任意のworkspaceへ紐づけて解決したことにしない。worker再試行との整合、Job保持期間・掃除も調べる。適合しなければ候補を整理してmigration案を田中へ提示し、許可前に作らない。 |
-| 専用送信記録テーブル          | 状態遷移、日付一意性、集計結果の件数、エラー分類、送信時刻を小さく明確に保持できる。                                                          | migrationが必要になり得る。今回migrationは許可されず、別途許可が必要。個人情報・本文を記録しない。                                                                                                                                                                                                           |
-| Resend idempotency-keyのみ    | DB変更不要でprovider呼び出しに重複キーを付けられる。                                                                                          | アプリが送信済み/失敗を照会できず、Cron再実行時の1日1通保証・前日未送信検出・運用通知センターでの失敗確認には不足。単独採用しない。                                                                                                                                                                          |
+| 候補                          | 長所                                                                                                          | 制約・確認点                                                                                                                                           |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 既存Jobを送信台帳として再利用 | `Job` は `environment + idempotencyKey` 一意制約、lease、retry、terminal status、`lastErrorCategory` を持つ。 | 必須 `workspaceId` の意味付けが困難で、汎用workerがdigest以外のexecutorへ渡すため流用しない。PR-1の追加調査で不適合を確認した。                        |
+| 専用送信記録テーブル          | 状態遷移、日付一意性、期限付きlease、attempt数、固定エラー分類、送信時刻を小さく明確に保持できる。            | PR-2指示により追加型migration 1件が許可された。本文、件名、宛先、個人情報、生エラーは記録しない。RLSを有効にし、アプリからはserver-side Prismaで扱う。 |
+| Resend idempotency-keyのみ    | DB変更不要でprovider呼び出しに重複キーを付けられる。                                                          | アプリが送信済み/失敗を照会できず、Cron再実行時の1日1通保証・前日未送信検出・運用通知センターでの失敗確認には不足。単独採用しない。                    |
 
-段階2の最初に必須workspaceIdを含めて既存Jobの適合性を調査する。全体向け送信記録に安全で意味のあるworkspace scopeを割り当てられない場合はJobを流用せず、migration案と代替案を田中に提示する。migrationは別途許可を得るまで作らない。
+PR-1で必須 `Job.workspaceId`・汎用worker・retryの調査を完了した。安全な全体向けworkspace scopeを割り当てられず汎用workerとの混同も避けられないため、Jobを流用せず専用台帳を使う。PR-2指示はこの送信台帳用migrationの作成を許可するが、本番適用は田中の別承認が必要。
 
 ## 4. 送信時刻・判定・文面
 
@@ -146,8 +146,8 @@
 ### 4.5 集計失敗・送信失敗・前日未送信
 
 - Collectorまたはメール送信の失敗は、例外内容を保存せず、固定されたerror category、日時、対象日、環境、処理段階だけを運用記録へ残す。
-- Alert Centerは正本を表示時に読むため、それだけではdigest処理自身の失敗履歴を記録できない。既存Jobの `DEAD` / `lastErrorCategory` にdigest失敗を残せるかを段階2で確認し、不適合なら小さな専用運用記録の必要性を田中へ提示する。
-- 送信失敗が発生した日は「送信済み」にしない。安全な再試行か、運用者が再実行するかを送信台帳の状態遷移と合わせて決める。一定時間以上の同時実行claimは期限付きleaseで回復可能にする。
+- Alert Centerは正本を表示時に読むため、それだけではdigest処理自身の失敗履歴を記録できない。専用台帳に固定エラー分類だけを残し、運用通知センターへの新規統合はこのPRでは行わない。
+- 送信失敗が発生した日は `FAILED` と固定エラー分類を記録し、同日の自動再送はしない。lease切れの `CLAIMED` だけは同じResend idempotency-keyで再claimできるため、provider応答が不明のクラッシュでも重複送信を抑える。
 - 当日のメールで前日のJST日付に送信済みrecordがなければ「前日のまとめが送信されていません」と表示する。初回導入前の履歴がない期間は「履歴開始前」とし、未送信異常と誤判定しない。
 - 外部死活監視サービスは追加しない。毎朝の定期メールが届かないことを田中が検知する前提とする。
 
@@ -157,10 +157,10 @@
 
 ## 5. 段階2の実装範囲とPR分割案
 
-段階2もmigration作成は禁止。既存の正本とJob/監査記録だけで要件を満たせない場合は、migrationを作らず、理由と追加型migrationの案を別途提出して許可を待つ。
+PR-2では送信記録テーブルを追加するmigration 1件だけを許可する。既存テーブル・列・制約は変更しない。本番へのmigration適用はPRマージ後も田中の別承認を要する。
 
 1. **PR-1 読み取り集計**: applicationにJST対象日の契約・Collector結果型・重大度だけを使う判定・件名/本文の純粋関数と未対応項目一覧の定数を追加し、databaseに通知センター連携用入力に加えてLINE broadcast/OEM invoiceの読み取りadapterを追加。個人情報・本文・金額をCollector出力へ出さない。
-2. **PR-2 送信・Cron・記録**: `apps/web/src/email/` に既存Resend設定を使うdigest送信adapter、`apps/web/app/api/internal/` にCRON_SECRET保護route、`vercel.json`にCron追加。既存Jobによる日次claim/状態記録が安全かを先に証明し、不適合なら別途migration許可を得る。`OPS_DIGEST_ENABLED` の未設定/falseは送信しない。
+2. **PR-2 送信・Cron・記録**: `apps/web/src/email/` に既存Resend設定を使うdigest送信adapter、`apps/web/app/api/internal/` にCRON_SECRET保護route、`vercel.json`にCron追加。Jobではなく専用台帳の追加型migrationを1件作る。`OPS_DIGEST_ENABLED` の未設定/falseおよびproduction以外では集計も送信もしない。
 3. **PR-3 管理者Preview**: 管理者権限のPreview画面とAPIを追加し、送信・状態書込なしで件名と判定済み文面を表示する。
 
 PRは個別Draftと日本語報告で提出し、前PRのマージ・田中確認後に次へ進む。Secretsや本番の宛先値はコード・報告へ記載しない。
@@ -182,7 +182,7 @@ PRは個別Draftと日本語報告で提出し、前PRのマージ・田中確�
 1. 本PRで決定済み: 宛先は既存 `RESEND_ADMIN_ALERT_TO` と共用し、`OPS_DIGEST_TO` は作らない。
 2. 本PRで決定済み: 毎朝7:30 JST / 22:30 UTCの固定Cron。時刻変更は `vercel.json` の変更・再デプロイで行う。
 3. 本PRで決定済み: Alert Center重大度をそのまま集計し、CRITICAL=異常、WARNING=注意、INFOは件数に加えず一覧表示のみ。
-4. 送信記録は段階2の最初に必須 `Job.workspaceId` の問題を含めて再評価する。不適合ならmigration案を提出し、許可前に作らない。
+4. 送信記録には専用の追加型migrationを使用する。本番適用は田中の確認・承認後に行う。
 5. 本PRで決定済み: 外部死活監視は追加しない。毎朝メールの未着を田中が検知する。
 6. 本PRで決定済み: LINE配信はbroadcast単位、OEMは請求書状態別の件数で数える。
 7. `OPS_DIGEST_ENABLED` は未設定/falseを安全側とし、送信有効化は田中がproductionで行う。
@@ -200,16 +200,20 @@ PRは個別Draftと日本語報告で提出し、前PRのマージ・田中確�
 - Alert Centerは既存 `GetAdminAlerts` の結果を呼出し側から受け取る設計とし、閾値やseverity判定を複製しない。PR-2の送信実装が既存 `GetAdminAlerts` を直接利用する。
 - DB読み取り例外は固定カテゴリ `DATABASE_READ_FAILED` にし、生の例外内容を出力しない。
 
-### 9.2 Job送信台帳の調査（PR-2準備）
+### 9.2 Job送信台帳の調査（PR-2準備、調査時点）
 
 - `Job.workspaceId` は必須で、全体向けdigestに意味のあるWorkspaceを割り当てる既存の専用system workspaceを確認できなかった。任意のWorkspaceに紐付ける設計にはしない。
 - Jobは `(environment, idempotencyKey)` で一意化されるが、汎用workerは未知の `jobType` をMission Automation executorへ渡す。digest送信記録を新しいJob種別として単純追加すると、送信workerではなく既存の汎用workerがclaimする危険があるため、そのままでは適合しない。
 - Jobは自動claim、lease失効後の再claim、`FailJob` によるretry/DEAD遷移を持つ。汎用workerが自動再試行するため、digest送信を独立した日次台帳として安全に扱うには明示的な専用経路が必要。
 - 一般Job全体を消すretention処理は見つからなかった。実装されているJob掃除は改善フィードバック保持処理自身の終端Jobを180日後に削除する限定処理。
-- PR-2で使えるmigration案（作成は未承認）: `ops_morning_digest_runs` に `id`、`environment`、`target_date`、`status`、`lease_expires_at`、`attempt_count`、`error_category`、`sent_at`、`created_at`、`updated_at` を持たせ、`UNIQUE(environment, target_date)` を設定する。本文・個人情報は保持しない。状態enumを避けるならstatusは制約付きvarcharでもよい。PR-2前に別途承認を受ける。
+- PR-1作成時点ではmigrationは未承認としていた。その後、田中のPR-2指示により送信記録の追加型migration 1件が許可された。実装と検証の報告は次のPR-2節を参照する。
 
 ### 9.3 検証・未実施事項
 
 - 自動テストで正常時短文、CRITICAL/WARNING/INFOの分類と順序、取得失敗、前日送信状態、占い対象外、JST境界、秘匿情報を含めないことを確認する。
 - database unit testでgroup-by条件・状態日時・サービス別分離・請求書statusだけの問い合わせ形を確認する。隔離DBのintegration caseで別サービスが混ざらず、配信本文・請求額・契約名/連絡先列をSELECTしないことを確認する。
 - PR-1は集計・判定・文面生成のみ。送信、Cron、HTTP route、管理画面、環境変数、schema、migration、本番変更は行わない。
+
+## 10. PR-2 実装報告
+
+PR-2の変更範囲・設計判断・検証、本番適用前に田中が実行する手順は、PR本文の日本語報告に記載する。PR-2はDraftのまま確認待ちとし、マージ・本番migration適用・環境変数設定・送信有効化は行わない。
