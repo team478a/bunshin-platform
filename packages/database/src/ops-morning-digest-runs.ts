@@ -12,6 +12,7 @@ export interface OpsMorningDigestClaim {
 export interface OpsMorningDigestRunState {
   status: OpsMorningDigestRunStatus;
   leaseExpiresAt: Date | null;
+  errorCategory: string | null;
 }
 
 const targetDateValue = (targetDate: string) => {
@@ -118,7 +119,7 @@ export class PrismaOpsMorningDigestRunRepository {
     const targetDate = targetDateValue(input.targetDate);
     return this.client.opsMorningDigestRun.findUnique({
       where: { environment_targetDate: { environment: input.environment, targetDate } },
-      select: { status: true, leaseExpiresAt: true },
+      select: { status: true, leaseExpiresAt: true, errorCategory: true },
     }) as Promise<OpsMorningDigestRunState | null>;
   }
 }

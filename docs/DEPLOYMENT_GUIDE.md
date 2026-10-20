@@ -35,7 +35,7 @@ OEM月額利用料をStripe Checkoutで回収する場合は、ワタシワー�
 
 Mission Automationを有効にするProductionには32文字以上の`CRON_SECRET`を登録する。Vercel Cronは毎分`/api/internal/jobs/schedule`と`/api/internal/jobs/run`をGETし、Vercelが付与する`Authorization: Bearer <CRON_SECRET>`をserver側で検証する。Cron時刻はUTC基準だが、対象判定は各BunshinのIANA timezoneとlocal notification timeを使用する。PreviewへProductionの`CRON_SECRET`を設定せず、手動実行時もsecretをURL、log、PRへ記録しない。
 
-毎朝の運用まとめメールを開始する場合は、田中の個別承認後に専用台帳migrationを先にProductionへ適用し、`pnpm db:assert-ready`の成功を確認してからコードをProductionへ反映する。PR-3の管理者Previewで件名・本文・リンクを確認してから、ProductionのVercel環境変数`OPS_DIGEST_ENABLED=true`を設定する。未設定または`false`では集計・送信を行わない。宛先・Resend認証は既存の管理メール設定（DB設定がある場合は既存の優先順位）を使い、新しい宛先変数は設けない。送信は毎日22:30 UTC（7:30 JST）。このPRでは本番migration、環境変数、送信を変更しない。
+毎朝の運用まとめメールを開始する場合は、田中の個別承認後に専用台帳migrationを先にProductionへ適用し、`pnpm db:assert-ready`の成功を確認してからコードをProductionへ反映する。管理者で`/admin/alerts/morning-digest`を開き、件名・本文・リンク・準備状況・今日と前日の送信記録を確認する。プレビューでは送信も記録変更も行わない。確認後、田中の判断でProductionのVercel環境変数`OPS_DIGEST_ENABLED=true`を設定する。未設定または`false`ではCronは集計・送信を行わない。宛先・Resend認証は既存の管理メール設定（DB設定がある場合は既存の優先順位）を使い、新しい宛先変数は設けない。送信は毎日22:30 UTC（7:30 JST）。PR-3作業では本番migration、環境変数、送信を変更しない。
 
 SOCIAL Intelligenceを有効にする場合、ProductionのOpenAI認証は暗号化DBのactive Provider設定を使用する。旧`OPENAI_API_KEY`環境変数はproduction Runtimeで使用されない。必要な場合は`OPENAI_STRATEGY_MODEL`、`OPENAI_WEEKLY_PLANNER_MODEL`、`OPENAI_DAILY_MISSION_PLANNER_MODEL`、`OPENAI_CONTENT_GENERATOR_MODEL`、`OPENAI_MISSION_QUALITY_MODEL`も登録する。Content GeneratorとQuality CheckerのProvider timeoutは45秒、Vercel生成Functionの上限は60秒とする。PreviewへProductionのOpenAI credentialを設定しない。詳細は`docs/STRATEGY_GENERATOR_REPORT.md`、`docs/PHASE4_SLICE_4_1_IMPLEMENTATION_REPORT.md`、`docs/PHASE4_SLICE_4_2_IMPLEMENTATION_REPORT.md`、`docs/PHASE4_INTELLIGENCE_COMPLETION_REPORT.md`を参照する。
 

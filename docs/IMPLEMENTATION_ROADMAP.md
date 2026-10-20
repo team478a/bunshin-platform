@@ -850,5 +850,6 @@ Registration
 
 成功条件はSNSの完全自動化ではなく、BUNSHINの指示によってユーザーが継続的に行動することである。
 
-- **2026-10-20 毎朝の運用まとめメール（段階2・PR-1）**: `docs/OPS_MORNING_DIGEST_DESIGN.md` にJST日次集計契約、Alert Center重大度への準拠、LINE broadcast/週次占い/OEM請求書statusの読み取りCollector、Job送信台帳の適合性調査を記録。PR-1は読み取り集計・判定・メール文面生成のみDraftレビュー待ち。送信・Cron・migration・本番反映は未実施。
-- **2026-10-20 毎朝の運用まとめメール（段階2・PR-2）**: 専用送信台帳migration、既存Resend連携、production限定・初期OFFのCron routeを実装。Draft確認待ち。本番migration・設定・送信開始は未実施。
+- **2026-10-20 毎朝の運用まとめメール（段階2・PR-1）**: `docs/OPS_MORNING_DIGEST_DESIGN.md` にJST日次集計契約、Alert Center重大度への準拠、LINE broadcast/週次占い/OEM請求書statusの読み取りCollector、Job送信台帳の適合性調査を記録。PR-1はmainへマージ済み。本番反映は未確認。
+- **2026-10-20 毎朝の運用まとめメール（段階2・PR-2）**: 専用送信台帳migration、既存Resend連携、production限定・初期OFFのCron routeを実装し、#1368でmainへマージ済み。本番migration・設定・送信開始は未実施。
+- **2026-10-20 毎朝の運用まとめメール（段階2・PR-3）**: Cronと共通の読み取り・文面生成関数を使う管理者専用プレビューを実装し、件名/本文・送信準備状態・台帳状態を表示。Draft確認待ち。プレビューからの送信・台帳書込み、本番反映は行わない。
