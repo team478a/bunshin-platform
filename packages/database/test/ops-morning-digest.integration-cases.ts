@@ -79,10 +79,22 @@ export function registerOpsMorningDigestIntegrationCases() {
             updatedByUserId: actor.id,
           },
         });
+        const monthlyUsage = await queryClient.tenantMonthlyUsage.create({
+          data: {
+            workspaceId: workspace.id,
+            periodStart: new Date('2026-10-01T00:00:00.000Z'),
+            periodEnd: new Date('2026-10-31T00:00:00.000Z'),
+            mau: 1,
+            pricingTierKey: 'SYNTHETIC',
+            pricingVersion: 'test-v1',
+          },
+        });
         await queryClient.tenantInvoice.create({
           data: {
             workspaceId: workspace.id,
             contractId: contract.id,
+            kind: 'MONTHLY_USAGE',
+            monthlyUsageId: monthlyUsage.id,
             invoiceNumber: `DIGEST-${randomUUID()}`,
             status: 'ISSUED',
             periodStart: new Date('2026-10-01T00:00:00.000Z'),
@@ -175,6 +187,7 @@ export function registerOpsMorningDigestIntegrationCases() {
       } finally {
         if (workspaceId) {
           await queryClient.tenantInvoice.deleteMany({ where: { workspaceId } });
+          await queryClient.tenantMonthlyUsage.deleteMany({ where: { workspaceId } });
           await queryClient.organizationCommercialContract.deleteMany({
             where: { workspaceId },
           });
