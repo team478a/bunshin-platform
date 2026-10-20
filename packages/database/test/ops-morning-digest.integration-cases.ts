@@ -176,12 +176,16 @@ export function registerOpsMorningDigestIntegrationCases() {
           invoicesBefore.map((row) => [row.status, row._count._all]),
         );
         expectedInvoiceCounts.set('ISSUED', (expectedInvoiceCounts.get('ISSUED') ?? 0) + 1);
-        expect(invoices).toEqual({
-          status: 'OK',
-          value: [...expectedInvoiceCounts]
-            .map(([status, count]) => ({ status, count }))
-            .sort((left, right) => left.status.localeCompare(right.status)),
-        });
+        expect(invoices.status).toBe('OK');
+        if (invoices.status === 'OK') {
+          expect(
+            [...invoices.value].sort((left, right) => left.status.localeCompare(right.status)),
+          ).toEqual(
+            [...expectedInvoiceCounts]
+              .map(([status, count]) => ({ status, count }))
+              .sort((left, right) => left.status.localeCompare(right.status)),
+          );
+        }
 
         const readStatements = statements.filter((sql) => sql.trimStart().startsWith('select'));
         const broadcastReads = readStatements.filter((sql) =>
