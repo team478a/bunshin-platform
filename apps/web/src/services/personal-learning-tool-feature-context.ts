@@ -1,4 +1,5 @@
 import 'server-only';
+import type * as Database from '@bunshin/database';
 import type { PersonalLearningActor } from '@bunshin/application';
 import {
   personalLearningDynamicProgramAllows,
@@ -56,7 +57,7 @@ const isOfficialHttpsSource = (value: string, toolKey: keyof typeof approvedHost
  * and an explicitly declared supported tool.
  */
 export async function loadPersonalLearningToolFeatureContext(
-  db: typeof import('@bunshin/database'),
+  db: typeof Database,
   actor: PersonalLearningActor,
   request: SavedPersonalLearningRequest,
 ): Promise<PersonalLearningToolFeatureContext> {

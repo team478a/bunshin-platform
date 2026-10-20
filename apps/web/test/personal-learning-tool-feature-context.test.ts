@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type * as Database from '@bunshin/database';
 import type { PersonalLearningActor, SavedPersonalLearningRequest } from '@bunshin/application';
 import { loadPersonalLearningToolFeatureContext } from '../src/services/personal-learning-tool-feature-context';
 import { personalLearningDynamicProgramAllows } from '@bunshin/capability-training';
@@ -62,7 +63,7 @@ const db = {
     personalLearningTopic: { findFirst: mocks.topic },
     personalLearningToolFeatureUpdate: { findMany: mocks.updates },
   },
-} as unknown as typeof import('@bunshin/database');
+} as unknown as typeof Database;
 
 beforeEach(() => {
   vi.resetAllMocks();
