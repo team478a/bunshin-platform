@@ -849,3 +849,5 @@ Registration
 - 1 Active User当たりAI原価
 
 成功条件はSNSの完全自動化ではなく、BUNSHINの指示によってユーザーが継続的に行動することである。
+
+- **2026-10-20 毎朝の運用まとめメール（段階1・設計中）**: `docs/OPS_MORNING_DIGEST_DESIGN.md` に現行データソース、取得元不足、送信済み記録・Cron時刻の選択肢、初期しきい値を記録。Draft PRで田中確認待ち。実装・migration・本番送信は未承認。
