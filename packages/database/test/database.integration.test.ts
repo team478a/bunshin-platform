@@ -1,6 +1,7 @@
 import { reserveVideoMedia, finishVideoMedia } from '../src/video-media-quota';
 import { registerOemBillingIntegrationCases } from './oem-billing.integration-cases';
 import { registerOpsMorningDigestIntegrationCases } from './ops-morning-digest.integration-cases';
+import { registerOpsMorningDigestRunIntegrationCases } from './ops-morning-digest-runs.integration-cases';
 import { registerMigrationBoundsIntegrationCases } from './migration-bounds.integration-cases';
 import { randomUUID } from 'node:crypto';
 import { registerImprovementTriageIntegrationCases } from './improvement-triage.integration-cases';
@@ -227,6 +228,7 @@ describe('database ownership boundaries', () => {
   registerPersonalLearningDIntegrationCases(client);
   registerOemBillingIntegrationCases(client);
   registerOpsMorningDigestIntegrationCases();
+  registerOpsMorningDigestRunIntegrationCases();
   registerMigrationBoundsIntegrationCases(client);
   registerAiProviderCallAdmissionIntegrationCases(client);
   registerServiceImprovementProgressIntegrationCases(client);

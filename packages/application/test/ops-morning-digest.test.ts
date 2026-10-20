@@ -15,7 +15,9 @@ const healthyInput = (): BuildOpsMorningDigestInput => ({
     reason: 'NO_SCHEDULED_FORTUNE_DELIVERY',
   },
   invoices: { status: 'OK', value: [] },
+  missingBroadcastDateCount: { status: 'OK', value: 0 },
   previousDelivery: 'SENT',
+  appUrl: 'https://example.test/',
 });
 
 describe('morning operations digest', () => {
@@ -29,7 +31,7 @@ describe('morning operations digest', () => {
       subject: '【ワタシワークス運用】10/19 異常なし',
     });
     expect(report.body.split('\n')).toEqual([
-      '前日の定期処理・配信・通知はすべて正常でした。管理画面：/admin/alerts',
+      '前日の定期処理・配信・通知はすべて正常でした。管理画面：https://example.test/admin/alerts',
       expect.stringContaining('この版で未対応の項目：'),
     ]);
     expect(report.body).toContain(`（${OPS_MORNING_DIGEST_UNIMPLEMENTED_ITEMS.length}項目）`);
@@ -114,7 +116,7 @@ describe('morning operations digest', () => {
     expect(report.status).toBe('NO_ISSUES');
     expect(report.subject).toContain('異常なし');
     expect(report.warningCount).toBe(0);
-    expect(report.body).toContain('INFO（参考）：再送待ち /admin/line');
+    expect(report.body).toContain('INFO（参考）：再送待ち https://example.test/admin/line');
     expect(report.body.split('\n')).toHaveLength(2);
   });
 
@@ -127,6 +129,45 @@ describe('morning operations digest', () => {
     expect(notSent.body).toContain('前日のまとめ：未送信');
     expect(unknown.status).toBe('DELIVERY_UNCONFIRMED');
     expect(unknown.subject).toContain('送信状況未確認');
+  });
+
+  it('labels the days before the first send record as before history', () => {
+    const report = buildOpsMorningDigest({ ...healthyInput(), previousDelivery: 'BEFORE_HISTORY' });
+    expect(report.status).toBe('NO_ISSUES');
+    expect(report.subject).toContain('異常なし');
+    expect(report.body).toContain('前日のまとめ：履歴開始前');
+  });
+
+  it('builds absolute links without double slashes and preserves existing absolute links', () => {
+    const withTrailingSlash = buildOpsMorningDigest({
+      ...healthyInput(),
+      appUrl: 'https://example.test///',
+      alerts: {
+        status: 'OK',
+        value: [
+          {
+            code: 'external',
+            severity: 'INFO',
+            title: '参考',
+            count: null,
+            href: 'https://docs.example.test/help',
+          },
+        ],
+      },
+    });
+    expect(withTrailingSlash.body).toContain('https://example.test/admin/alerts');
+    expect(withTrailingSlash.body).toContain('https://docs.example.test/help');
+    expect(withTrailingSlash.body).not.toContain('https://example.test///admin');
+    expect(withTrailingSlash.body).not.toContain('https://example.test/https://docs');
+  });
+
+  it('reports incomplete-date broadcast records without changing the issue severity', () => {
+    const report = buildOpsMorningDigest({
+      ...healthyInput(),
+      missingBroadcastDateCount: { status: 'OK', value: 3 },
+    });
+    expect(report.status).toBe('NO_ISSUES');
+    expect(report.body).toContain('日時未設定の配信記録：3件（全期間）');
   });
 
   it('uses the JST previous-day half-open UTC interval at both midnight boundaries', () => {

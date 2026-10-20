@@ -51,7 +51,7 @@ export interface OpsMorningDigestInvoiceCount {
   count: number;
 }
 
-export type OpsMorningDigestPreviousDelivery = 'SENT' | 'NOT_SENT' | 'UNKNOWN';
+export type OpsMorningDigestPreviousDelivery = 'SENT' | 'NOT_SENT' | 'UNKNOWN' | 'BEFORE_HISTORY';
 
 export interface BuildOpsMorningDigestInput {
   targetDate: string;
@@ -59,7 +59,9 @@ export interface BuildOpsMorningDigestInput {
   serviceBroadcasts: OpsMorningDigestCollectorResult<OpsMorningDigestBroadcastCount[]>;
   fortuneWeeklyBroadcasts: OpsMorningDigestCollectorResult<OpsMorningDigestBroadcastCount[]>;
   invoices: OpsMorningDigestCollectorResult<OpsMorningDigestInvoiceCount[]>;
+  missingBroadcastDateCount: OpsMorningDigestCollectorResult<number>;
   previousDelivery: OpsMorningDigestPreviousDelivery;
+  appUrl: string;
 }
 
 export interface OpsMorningDigestReport {
@@ -117,7 +119,7 @@ function collectorStatusLine<T>(
 }
 
 function collectionStatusLines(input: BuildOpsMorningDigestInput): string[] {
-  return [
+  const lines = [
     collectorStatusLine('運用通知センター', input.alerts, (value) => value.length),
     collectorStatusLine('LINE配信', input.serviceBroadcasts, (value) =>
       value.reduce((sum, row) => sum + row.count, 0),
@@ -129,11 +131,18 @@ function collectionStatusLines(input: BuildOpsMorningDigestInput): string[] {
       value.reduce((sum, row) => sum + row.count, 0),
     ),
   ];
+  if (input.missingBroadcastDateCount.status === 'OK')
+    lines.push(`日時未設定の配信記録：${input.missingBroadcastDateCount.value}件（全期間）`);
+  else if (input.missingBroadcastDateCount.status === 'UNAVAILABLE')
+    lines.push(
+      `日時未設定の配信記録：取得失敗（${input.missingBroadcastDateCount.errorCategory}）`,
+    );
+  return lines;
 }
 
-function formatAlert(alert: OpsMorningDigestAlert) {
+function formatAlert(alert: OpsMorningDigestAlert, appUrl: string) {
   const quantity = alert.count === null ? '' : `（${alert.count}件）`;
-  return `- ${alert.title}${quantity} ${alert.href}`;
+  return `- ${alert.title}${quantity} ${absoluteAdminUrl(alert.href, appUrl)}`;
 }
 
 function formatBroadcasts(rows: OpsMorningDigestBroadcastCount[]) {
@@ -152,8 +161,16 @@ function formatShortDate(targetDate: string) {
   return `${Number(match[2])}/${Number(match[3])}`;
 }
 
+function absoluteAdminUrl(href: string, appUrl: string) {
+  const base = new URL(appUrl);
+  if (base.protocol !== 'https:' && !['localhost', '127.0.0.1'].includes(base.hostname))
+    throw new RangeError('invalid digest base URL');
+  return new URL(href, base).toString();
+}
+
 export function buildOpsMorningDigest(input: BuildOpsMorningDigestInput): OpsMorningDigestReport {
   const date = formatShortDate(input.targetDate);
+  const adminAlertsUrl = absoluteAdminUrl('/admin/alerts', input.appUrl);
   const alerts = input.alerts.status === 'OK' ? input.alerts.value : [];
   const criticalCount = count(alerts, 'CRITICAL');
   const warningCount = count(alerts, 'WARNING');
@@ -164,7 +181,8 @@ export function buildOpsMorningDigest(input: BuildOpsMorningDigestInput): OpsMor
     input.fortuneWeeklyBroadcasts,
     input.invoices,
   ].filter((result) => isUnavailable(result)).length;
-  const noPreviousDelivery = input.previousDelivery !== 'SENT';
+  const noPreviousDelivery =
+    input.previousDelivery === 'NOT_SENT' || input.previousDelivery === 'UNKNOWN';
   const noIssues =
     criticalCount === 0 && warningCount === 0 && unavailableCount === 0 && !noPreviousDelivery;
 
@@ -192,17 +210,27 @@ export function buildOpsMorningDigest(input: BuildOpsMorningDigestInput): OpsMor
   const unimplementedLine = `この版で未対応の項目：${OPS_MORNING_DIGEST_UNIMPLEMENTED_ITEMS.join('、')}（${OPS_MORNING_DIGEST_UNIMPLEMENTED_ITEMS.length}項目）`;
   const infoLine =
     infoAlerts.length > 0
-      ? `INFO（参考）：${infoAlerts.map((alert) => `${alert.title} ${alert.href}`).join(' / ')}`
+      ? `INFO（参考）：${infoAlerts.map((alert) => `${alert.title} ${absoluteAdminUrl(alert.href, input.appUrl)}`).join(' / ')}`
       : '';
   let body: string;
   if (noIssues) {
-    const normalLine = `前日の定期処理・配信・通知はすべて正常でした。管理画面：/admin/alerts${infoLine ? `。${infoLine}` : ''}`;
+    const historyLabel =
+      input.previousDelivery === 'BEFORE_HISTORY' ? '（前日のまとめ：履歴開始前）' : '';
+    const missingBroadcastLine =
+      input.missingBroadcastDateCount.status === 'OK' && input.missingBroadcastDateCount.value > 0
+        ? `。日時未設定の配信記録：${input.missingBroadcastDateCount.value}件（全期間）`
+        : '';
+    const normalLine = `前日の定期処理・配信・通知はすべて正常でした。管理画面：${adminAlertsUrl}${historyLabel}${missingBroadcastLine}${infoLine ? `。${infoLine}` : ''}`;
     body = `${normalLine}\n${unimplementedLine}`;
   } else {
     const lines = [
-      ...alerts.filter((alert) => alert.severity === 'CRITICAL').map(formatAlert),
-      ...alerts.filter((alert) => alert.severity === 'WARNING').map(formatAlert),
-      ...infoAlerts.map((alert) => `- INFO（参考）${formatAlert(alert).slice(2)}`),
+      ...alerts
+        .filter((alert) => alert.severity === 'CRITICAL')
+        .map((alert) => formatAlert(alert, input.appUrl)),
+      ...alerts
+        .filter((alert) => alert.severity === 'WARNING')
+        .map((alert) => formatAlert(alert, input.appUrl)),
+      ...infoAlerts.map((alert) => `- INFO（参考）${formatAlert(alert, input.appUrl).slice(2)}`),
       ...(input.serviceBroadcasts.status === 'OK'
         ? formatBroadcasts(input.serviceBroadcasts.value)
         : []),
@@ -214,6 +242,7 @@ export function buildOpsMorningDigest(input: BuildOpsMorningDigestInput): OpsMor
     ];
     if (input.previousDelivery === 'NOT_SENT') lines.push('- 前日のまとめ：未送信');
     if (input.previousDelivery === 'UNKNOWN') lines.push('- 前日のまとめ：送信状況未確認');
+    if (input.previousDelivery === 'BEFORE_HISTORY') lines.push('- 前日のまとめ：履歴開始前');
     body = [...lines, unimplementedLine].join('\n');
   }
 

@@ -8689,3 +8689,20 @@ model PersonalLearningPilotSeat {
   @@unique([serviceProgramId, programEnrollmentId])
   @@map("personal_learning_pilot_seats")
 }
+
+model OpsMorningDigestRun {
+  id             String   @id @default(uuid()) @db.Uuid
+  environment    String   @db.VarChar(16)
+  targetDate     DateTime @map("target_date") @db.Date
+  status         String   @db.VarChar(16)
+  leaseExpiresAt DateTime? @map("lease_expires_at") @db.Timestamptz(6)
+  attemptCount   Int      @default(1) @map("attempt_count")
+  errorCategory  String?  @map("error_category") @db.VarChar(80)
+  sentAt         DateTime? @map("sent_at") @db.Timestamptz(6)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([environment, targetDate], map: "ops_morning_digest_runs_environment_target_date_key")
+  @@index([environment, createdAt])
+  @@map("ops_morning_digest_runs")
+}
