@@ -15,6 +15,7 @@ const value: AiProviderConfiguration = {
   apiKeyConfigured: false,
   apiKeyMask: null,
   model: 'gpt-5-mini',
+  modelCapabilities: ['STRUCTURED_OUTPUT'],
   dailyBudgetUsdMicros: 1_000_000,
   monthlyBudgetUsdMicros: 5_000_000,
   globallyPaused: true,
@@ -139,5 +140,51 @@ describe('CreateAiProviderConfigurationVersion', () => {
     expect(createVersion).toHaveBeenCalledWith(
       expect.objectContaining({ provider: 'CREATOMATE', model: null }),
     );
+  });
+
+  it('stores model capabilities on a Google evaluation configuration', async () => {
+    const createVersion = vi.fn(() =>
+      Promise.resolve({ ...value, provider: 'GOOGLE' as const, model: 'gemini-eval-model' }),
+    );
+    await new CreateAiProviderConfigurationVersion(repository(createVersion), crypto).execute({
+      actorUserId: 'actor',
+      environment: 'DEVELOPMENT',
+      provider: 'GOOGLE',
+      reason: '合成評価用モデルを準備',
+      model: 'gemini-eval-model',
+      modelCapabilities: ['STRUCTURED_OUTPUT', 'IMAGE_INPUT'],
+      dailyBudgetUsdMicros: 1_000_000,
+      monthlyBudgetUsdMicros: 5_000_000,
+    });
+    expect(createVersion).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: 'GOOGLE',
+        modelCapabilities: ['STRUCTURED_OUTPUT', 'IMAGE_INPUT'],
+      }),
+    );
+  });
+});
+
+describe('ActivateAiProviderConfiguration', () => {
+  it('keeps the Google adapter unavailable for production activation', async () => {
+    const google = { ...value, provider: 'GOOGLE' as const, id: 'google-config' };
+    const repositoryValue = repository();
+    // Accessing Vitest mocks by property preserves the repository receiver expected by lint.
+    // eslint-disable-next-line @typescript-eslint/unbound-method
+    const listForAdmin = repositoryValue.listForAdmin as unknown as ReturnType<typeof vi.fn>;
+    listForAdmin.mockResolvedValue([google]);
+    await expect(
+      new (await import('../src/ai-provider-configuration')).ActivateAiProviderConfiguration(
+        repositoryValue,
+      ).execute({
+        actorUserId: 'actor',
+        configurationId: google.id,
+        environment: 'PRODUCTION',
+        reason: '外部公開前の評価のみ',
+      }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    // eslint-disable-next-line @typescript-eslint/unbound-method
+    const activate = repositoryValue.activate as unknown as ReturnType<typeof vi.fn>;
+    expect(activate).not.toHaveBeenCalled();
   });
 });

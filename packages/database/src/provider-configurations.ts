@@ -25,6 +25,17 @@ function aiProviderConfiguration(
     apiKeyConfigured: row.encryptedApiKey !== null,
     apiKeyMask: exposeMask ? row.apiKeyMask : row.encryptedApiKey === null ? null : '登録済み',
     model: row.model,
+    modelCapabilities: (row.modelCapabilities ?? []).filter(
+      (value): value is NonNullable<typeof value> =>
+        [
+          'STRUCTURED_OUTPUT',
+          'IMAGE_INPUT',
+          'LONG_CONTEXT',
+          'WEB_SEARCH',
+          'AUDIO_INPUT',
+          'TOOL_USE',
+        ].includes(value),
+    ) as AiProviderConfiguration['modelCapabilities'],
     dailyBudgetUsdMicros: row.dailyBudgetUsdMicros,
     monthlyBudgetUsdMicros: row.monthlyBudgetUsdMicros,
     requestCostUsdMicros: row.requestCostUsdMicros,
@@ -219,6 +230,7 @@ export class PrismaAiProviderConfigurationRepository
           apiKeyMask: input.apiKey?.mask ?? null,
           keyVersion: input.apiKey?.keyVersion ?? 1,
           model: input.model,
+          modelCapabilities: [...(input.modelCapabilities ?? [])],
           dailyBudgetUsdMicros: input.dailyBudgetUsdMicros,
           monthlyBudgetUsdMicros: input.monthlyBudgetUsdMicros,
           requestCostUsdMicros: input.requestCostUsdMicros ?? 0,
@@ -236,6 +248,7 @@ export class PrismaAiProviderConfigurationRepository
           changedFields: [
             ...(input.apiKey === null ? [] : ['credentials']),
             'model',
+            'modelCapabilities',
             'budgetPolicy',
             'globallyPaused',
           ],

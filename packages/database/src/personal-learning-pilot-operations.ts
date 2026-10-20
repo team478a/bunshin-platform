@@ -48,6 +48,7 @@ const defaultLearningFeatures: Prisma.JsonObject = {
   lineLearning: false,
   extendedScope: false,
   learningNudges: false,
+  toolUpdates: false,
 };
 
 /** No env mutation, Provider calls, Definition approval or automatic Seat admission. */
@@ -154,6 +155,7 @@ export class PrismaPersonalLearningPilotOperations {
           lineLearning: false,
           extendedScope: false,
           learningNudges: false,
+          toolUpdates: false,
         }),
         started: false,
         openCallCount: 0,

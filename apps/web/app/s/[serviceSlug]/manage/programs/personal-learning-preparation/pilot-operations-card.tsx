@@ -57,6 +57,7 @@ export function PilotOperationsCard({ serviceSlug }: { serviceSlug: string }) {
     lineLearning: false,
     extendedScope: false,
     learningNudges: false,
+    toolUpdates: false,
   });
   const [confirmed, setConfirmed] = useState(false);
   const [message, setMessage] = useState('まず現在の状態を確認してください。');

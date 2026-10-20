@@ -8,6 +8,7 @@ type Features = {
   lineLearning: boolean;
   extendedScope: boolean;
   learningNudges: boolean;
+  toolUpdates: boolean;
 };
 type LearningMode = 'DYNAMIC_V1' | 'FIXED_DEFINITIONS_V1';
 type ProgramOption = {
@@ -27,6 +28,7 @@ const defaults: Features = {
   lineLearning: false,
   extendedScope: false,
   learningNudges: false,
+  toolUpdates: false,
 };
 const featureRows: { key: keyof Features; label: string; description: string }[] = [
   {
@@ -53,6 +55,11 @@ const featureRows: { key: keyof Features; label: string; description: string }[]
     key: 'learningNudges',
     label: '学習の声かけ',
     description: '受講状況に応じた学習の声かけを有効にします。',
+  },
+  {
+    key: 'toolUpdates',
+    label: 'AIツールの公式更新情報',
+    description: '承認済みの公式更新情報を、申告ツールと学習テーマに沿う提案の参考にします。',
   },
 ];
 const isFeatures = (value: unknown): value is Features =>

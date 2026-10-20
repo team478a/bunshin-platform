@@ -41,6 +41,7 @@ const oldFeatures = {
   lineLearning: false,
   extendedScope: false,
   learningNudges: false,
+  toolUpdates: false,
 };
 const program = {
   id: programId,

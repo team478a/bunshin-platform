@@ -79,6 +79,21 @@ export function LearningCandidateCard({
       {candidate && (
         <>
           <p>元の希望：{candidate.originalText}</p>
+          {candidate.toolFeatureSources?.length ? (
+            <aside aria-label="教材候補に渡した公式情報">
+              <h3>提案時にAIへ渡した公式情報</h3>
+              <ul>
+                {candidate.toolFeatureSources.map((source) => (
+                  <li key={`${source.sourceUrl}-${source.title}`}>
+                    {source.title}：
+                    <a href={source.sourceUrl} target="_blank" rel="noreferrer">
+                      {source.sourceTitle}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </aside>
+          ) : null}
           <p>{candidate.proposal.reason}</p>
           {candidate.proposal.status === 'READY' ? (
             <>

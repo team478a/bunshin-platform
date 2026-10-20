@@ -3,6 +3,7 @@ import {
   validatePersonalLearningEvidenceReview,
   type PersonalLearningEvidenceReview,
   type PersonalLearningEvidenceKind,
+  type AiModelCapability,
 } from '@bunshin/application';
 import { serializeOpenAiTaskRequest } from '../ai/openai-task-compatibility';
 import { generateLearningStructured } from './openai-learning-lesson';
@@ -168,6 +169,8 @@ export function generateLearningEvidenceReview(options: {
   material: LessonMaterial;
   kind: PersonalLearningEvidenceKind;
   content: string;
+  provider?: 'openai' | 'google';
+  modelCapabilities: readonly AiModelCapability[];
   fetch?: typeof fetch;
 }) {
   return generateLearningStructured<PersonalLearningEvidenceReview>({

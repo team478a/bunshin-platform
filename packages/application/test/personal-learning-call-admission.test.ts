@@ -17,7 +17,7 @@ const policy = {
 describe('Pilot admission policy', () => {
   it('accepts only an explicit immutable policy', () => {
     const parsed = parsePersonalLearningCallAdmissionPolicy(policy);
-    expect(parsed).toEqual(policy);
+    expect(parsed).toEqual({ ...policy, provider: 'openai' });
     expect(Object.isFrozen(parsed)).toBe(true);
   });
   it.each([
@@ -32,8 +32,17 @@ describe('Pilot admission policy', () => {
     { ...policy, dailyCostLimitUsdMicros: 0 },
     { ...policy, model: ' secret ' },
     { ...policy, workspaceId: 'other' },
+    { ...policy, provider: 'unknown' },
   ])('fails closed for invalid configuration', (input) => {
     expect(parsePersonalLearningCallAdmissionPolicy(input)).toBeNull();
+  });
+  it('accepts a provider selected explicitly for a learning program', () => {
+    expect(
+      parsePersonalLearningCallAdmissionPolicy({ ...policy, provider: 'google' }),
+    ).toMatchObject({
+      provider: 'google',
+      model: policy.model,
+    });
   });
   it('reserves the conservative request ceiling with the current exact price', () => {
     expect(

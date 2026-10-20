@@ -55,6 +55,13 @@ export default async function AiProviderConfigurationPage() {
           canRecover={admissions.canRecover}
         />
         <section className="settings-card">
+          <h2>AIツールの公式更新情報</h2>
+          <p>公式の更新情報を登録し、学習テーマ候補として使う前に運営者が確認できます。</p>
+          <Link href="/admin/ai/tool-features" className="button button--secondary">
+            更新情報の確認へ
+          </Link>
+        </section>
+        <section className="settings-card">
           <h2>トレンド調査サービスをくらべる</h2>
           <p>同じ質問の結果と費用を記録し、Grok・Exa・Firecrawlを公平に比較します。</p>
           <Link href="/admin/ai/benchmark" className="button button--secondary">

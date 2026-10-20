@@ -14,6 +14,7 @@ const featureSchema = z
     lineLearning: z.boolean(),
     extendedScope: z.boolean(),
     learningNudges: z.boolean(),
+    toolUpdates: z.boolean(),
   })
   .strict();
 const inputSchema = z

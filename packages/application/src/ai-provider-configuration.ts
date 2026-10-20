@@ -8,6 +8,7 @@ import {
 
 export const AI_PROVIDER_KEYS = [
   'OPENAI',
+  'GOOGLE',
   'GROK',
   'EXA',
   'FIRECRAWL',
@@ -16,6 +17,15 @@ export const AI_PROVIDER_KEYS = [
   'RUNWAY',
 ] as const;
 export type AiProviderKey = (typeof AI_PROVIDER_KEYS)[number];
+export const AI_MODEL_CAPABILITIES = [
+  'STRUCTURED_OUTPUT',
+  'IMAGE_INPUT',
+  'LONG_CONTEXT',
+  'WEB_SEARCH',
+  'AUDIO_INPUT',
+  'TOOL_USE',
+] as const;
+export type AiModelCapability = (typeof AI_MODEL_CAPABILITIES)[number];
 export type AiProviderConfigurationStatus = 'DRAFT' | 'ACTIVE' | 'DISABLED' | 'ERROR';
 export interface AiProviderConfiguration {
   id: string;
@@ -26,6 +36,7 @@ export interface AiProviderConfiguration {
   apiKeyConfigured: boolean;
   apiKeyMask: string | null;
   model: string | null;
+  modelCapabilities: readonly AiModelCapability[];
   dailyBudgetUsdMicros: number;
   monthlyBudgetUsdMicros: number;
   requestCostUsdMicros?: number;
@@ -62,6 +73,7 @@ export interface AiProviderConfigurationRepository {
     provider: AiProviderKey;
     reason: string;
     model: string | null;
+    modelCapabilities?: readonly AiModelCapability[];
     dailyBudgetUsdMicros: number;
     monthlyBudgetUsdMicros: number;
     requestCostUsdMicros?: number;
@@ -213,6 +225,7 @@ export class CreateAiProviderConfigurationVersion {
     provider: AiProviderKey;
     reason: string;
     model?: string | null;
+    modelCapabilities?: readonly AiModelCapability[];
     dailyBudgetUsdMicros: number;
     monthlyBudgetUsdMicros: number;
     requestCostUsdMicros?: number;
@@ -226,10 +239,16 @@ export class CreateAiProviderConfigurationVersion {
     if (reason.length < 3 || reason.length > 500)
       throw new ApplicationError('VALIDATION_ERROR', 'invalid reason');
     const model = input.model?.trim() || null;
-    if (['OPENAI', 'GROK', 'FAL', 'RUNWAY'].includes(input.provider) && model === null)
+    if (['OPENAI', 'GOOGLE', 'GROK', 'FAL', 'RUNWAY'].includes(input.provider) && model === null)
       throw new ApplicationError('VALIDATION_ERROR', 'AI model is required');
-    if (!['OPENAI', 'GROK', 'FAL', 'RUNWAY'].includes(input.provider) && model !== null)
+    if (!['OPENAI', 'GOOGLE', 'GROK', 'FAL', 'RUNWAY'].includes(input.provider) && model !== null)
       throw new ApplicationError('VALIDATION_ERROR', 'model is not supported for this provider');
+    const modelCapabilities = input.modelCapabilities ?? [];
+    if (
+      modelCapabilities.some((capability) => !AI_MODEL_CAPABILITIES.includes(capability)) ||
+      new Set(modelCapabilities).size !== modelCapabilities.length
+    )
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid model capabilities');
     if (
       !Number.isSafeInteger(input.dailyBudgetUsdMicros) ||
       !Number.isSafeInteger(input.monthlyBudgetUsdMicros) ||
@@ -246,6 +265,7 @@ export class CreateAiProviderConfigurationVersion {
       provider: input.provider,
       reason,
       model,
+      modelCapabilities,
       dailyBudgetUsdMicros: input.dailyBudgetUsdMicros,
       monthlyBudgetUsdMicros: input.monthlyBudgetUsdMicros,
       requestCostUsdMicros: input.requestCostUsdMicros ?? 0,
@@ -292,6 +312,14 @@ export class ActivateAiProviderConfiguration {
     environment: LineConfigurationEnvironment;
     reason: string;
   }) {
+    if (input.environment === 'PRODUCTION') {
+      const current = await this.repository.listForAdmin({
+        actorUserId: input.actorUserId,
+        environment: input.environment,
+      });
+      if (current?.some((item) => item.id === input.configurationId && item.provider === 'GOOGLE'))
+        throw new ApplicationError('FORBIDDEN', 'Google learning provider is evaluation-only');
+    }
     const value = await this.repository.activate({
       ...input,
       reason: validateAdminReason(input.reason),

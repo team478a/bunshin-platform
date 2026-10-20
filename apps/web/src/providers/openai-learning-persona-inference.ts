@@ -3,7 +3,7 @@ import {
   isPersonalLearningPersonaInferredKey,
   isPersonalLearningPersonaValueDisallowed,
 } from '@bunshin/capability-training';
-import type { AiCallMeasurement } from '@bunshin/application';
+import type { AiCallMeasurement, AiModelCapability } from '@bunshin/application';
 import { serializeOpenAiTaskRequest } from '../ai/openai-task-compatibility';
 import { generateLearningStructured } from './openai-learning-lesson';
 
@@ -154,6 +154,8 @@ export async function generatePersonaInference(options: {
   apiKey: string;
   model: string;
   body: string;
+  provider?: 'openai' | 'google';
+  modelCapabilities: readonly AiModelCapability[];
   fetch?: typeof fetch;
 }): Promise<{
   value: PersonaInferenceResult;

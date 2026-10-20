@@ -78,6 +78,7 @@ describe('restricted Personal Learning pilot', () => {
       lineLearning: false,
       extendedScope: false,
       learningNudges: false,
+      toolUpdates: false,
     });
     expect(personalLearningDynamicProgramAllows(settings, id)).toBe(false);
   });
@@ -106,6 +107,35 @@ describe('restricted Personal Learning pilot', () => {
           },
         },
       })?.learningNudges,
+    ).toBe(true);
+  });
+  it('keeps official tool updates OFF unless explicitly enabled', () => {
+    expect(
+      personalLearningFeatures({
+        personalLearningPilot: {
+          learningFeatures: {
+            conversation: false,
+            multiTopic: false,
+            lineLearning: false,
+            extendedScope: false,
+            learningNudges: false,
+          },
+        },
+      })?.toolUpdates,
+    ).toBe(false);
+    expect(
+      personalLearningFeatures({
+        personalLearningPilot: {
+          learningFeatures: {
+            conversation: false,
+            multiTopic: false,
+            lineLearning: false,
+            extendedScope: false,
+            learningNudges: false,
+            toolUpdates: true,
+          },
+        },
+      })?.toolUpdates,
     ).toBe(true);
   });
   it('allows only an enabled, allowlisted dynamic Program and fails closed on malformed feature settings', () => {

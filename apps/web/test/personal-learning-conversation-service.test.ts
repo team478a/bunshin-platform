@@ -45,9 +45,11 @@ vi.mock('@bunshin/application', async (importOriginal) => {
   const real = await importOriginal<typeof ApplicationModule>();
   return { ...real, executePersonalLearningTextOperation: f.execute };
 });
+vi.mock('../src/ai/learning-provider-runtime', () => ({
+  resolveLearningProviderRuntimeConfiguration: f.runtime,
+  reserveLearningProviderRuntimeConfiguration: f.reserve,
+}));
 vi.mock('../src/ai/runtime-provider-configuration', () => ({
-  resolveOpenAiRuntimeConfiguration: f.runtime,
-  reserveOpenAiRuntimeConfiguration: f.reserve,
   settleProviderRuntimeAdmission: f.settle,
 }));
 vi.mock('../src/observability/personal-learning-ai-call', () => ({
@@ -118,10 +120,22 @@ describe('personal learning conversation orchestration', () => {
     f.practice.mockResolvedValue({ allowed: true, current: null });
     f.complete.mockResolvedValue(state);
     f.fail.mockResolvedValue(undefined);
-    f.runtime.mockResolvedValue({ model: 'synthetic' });
-    f.reserve.mockResolvedValue({
+    f.runtime.mockResolvedValue({
+      provider: 'openai',
       model: 'synthetic',
+      modelCapabilities: ['STRUCTURED_OUTPUT', 'IMAGE_INPUT'],
       apiKey: 'test',
+      requestCostUsdMicros: 250,
+      source: 'ADMIN_CONFIGURATION',
+      admission: null,
+    });
+    f.reserve.mockResolvedValue({
+      provider: 'openai',
+      model: 'synthetic',
+      modelCapabilities: ['STRUCTURED_OUTPUT', 'IMAGE_INPUT'],
+      apiKey: 'test',
+      requestCostUsdMicros: 250,
+      source: 'ADMIN_CONFIGURATION',
       admission: { id: 'global' },
     });
     f.pricing.mockReturnValue([
@@ -201,7 +215,7 @@ describe('personal learning conversation orchestration', () => {
     );
     expect(f.reserve).toHaveBeenCalledWith(
       `personal-learning-operation:${'a'.repeat(64)}`,
-      undefined,
+      'openai',
       'LEARNING_CONVERSATION',
       100,
       1,
