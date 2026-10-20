@@ -11,6 +11,7 @@ const provider: AiProviderConfiguration = {
   apiKeyConfigured: true,
   apiKeyMask: '••••1234',
   model: null,
+  modelCapabilities: [],
   dailyBudgetUsdMicros: 1_000_000,
   monthlyBudgetUsdMicros: 10_000_000,
   globallyPaused: false,

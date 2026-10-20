@@ -817,6 +817,48 @@ model PersonalLearningSavedExample {
   @@map("personal_learning_saved_examples")
 }
 
+/// Platform-wide official tool update candidates; never learner content or Bunshin Memory.
+model PersonalLearningToolFeatureUpdate {
+  id               String                             @id @default(uuid()) @db.Uuid
+  toolKey          String                             @map("tool_key") @db.VarChar(32)
+  title            String                             @db.VarChar(160)
+  summary          String                             @db.VarChar(2000)
+  sourceUrl        String                             @map("source_url") @db.VarChar(2000)
+  sourceTitle      String                             @map("source_title") @db.VarChar(500)
+  publishedAt      DateTime?                          @map("published_at") @db.Timestamptz(3)
+  status           String                             @default("PENDING") @db.VarChar(16)
+  createdByUserId  String                             @map("created_by_user_id") @db.Uuid
+  reviewedByUserId String?                            @map("reviewed_by_user_id") @db.Uuid
+  reviewedAt       DateTime?                          @map("reviewed_at") @db.Timestamptz(3)
+  expiresAt        DateTime?                          @map("expires_at") @db.Timestamptz(3)
+  createdAt        DateTime                           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime                           @updatedAt @map("updated_at") @db.Timestamptz(3)
+  creator          User                               @relation("PersonalLearningToolFeatureCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  reviewer         User?                              @relation("PersonalLearningToolFeatureReviewer", fields: [reviewedByUserId], references: [id], onDelete: Restrict)
+  audits           PersonalLearningToolFeatureAudit[]
+
+  @@unique([toolKey, sourceUrl])
+  @@index([status, createdAt])
+  @@index([toolKey, status, expiresAt])
+  @@map("personal_learning_tool_feature_updates")
+}
+
+/// Append-only operator actions for traceable review decisions.
+model PersonalLearningToolFeatureAudit {
+  id          String                            @id @default(uuid()) @db.Uuid
+  featureId   String                            @map("feature_id") @db.Uuid
+  actorUserId String                            @map("actor_user_id") @db.Uuid
+  action      String                            @db.VarChar(16)
+  reason      String?                           @db.VarChar(1000)
+  occurredAt  DateTime                          @default(now()) @map("occurred_at") @db.Timestamptz(3)
+  feature     PersonalLearningToolFeatureUpdate @relation(fields: [featureId], references: [id], onDelete: Cascade)
+  actor       User                              @relation("PersonalLearningToolFeatureAuditActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@index([featureId, occurredAt])
+  @@index([actorUserId, occurredAt])
+  @@map("personal_learning_tool_feature_audits")
+}
+
 /// AI研修Package専用。Serviceが人間承認した支援Skillの論理identity。
 model TrainingSupportSkill {
   id                       String                                @id @db.Uuid
@@ -1851,6 +1893,7 @@ enum LineRichMenuAction {
 
 enum AiProviderKey {
   OPENAI
+  GOOGLE
   GROK
   EXA
   FIRECRAWL
@@ -2557,6 +2600,9 @@ model User {
   videoDisclosurePoliciesActivated  VideoDisclosurePolicy[]             @relation("VideoDisclosurePolicyActivator")
   trendBenchmarkCases               TrendProviderBenchmarkCase[]        @relation("TrendBenchmarkCaseAuthor")
   trendBenchmarkObservations        TrendProviderBenchmarkObservation[] @relation("TrendBenchmarkObservationEditor")
+  personalLearningToolFeaturesCreated PersonalLearningToolFeatureUpdate[] @relation("PersonalLearningToolFeatureCreator")
+  personalLearningToolFeaturesReviewed PersonalLearningToolFeatureUpdate[] @relation("PersonalLearningToolFeatureReviewer")
+  personalLearningToolFeatureAudits PersonalLearningToolFeatureAudit[] @relation("PersonalLearningToolFeatureAuditActor")
   productionGateEvidence            ProductionGateEvidence[]            @relation("ProductionGateEvidenceActor")
   socialImagePilotEvidence          SocialImagePilotEvidence[]          @relation("SocialImagePilotEvidenceActor")
   userOperationAuditsAsTarget       UserOperationAudit[]                @relation("UserOperationAuditTarget")
@@ -6646,6 +6692,7 @@ model AiProviderConfiguration {
   encryptedApiKey        String?                        @map("encrypted_api_key") @db.Text
   apiKeyMask             String?                        @map("api_key_mask") @db.VarChar(16)
   model                  String?                        @db.VarChar(120)
+  modelCapabilities      String[]                       @default([]) @map("model_capabilities")
   dailyBudgetUsdMicros   Int                            @default(1000000) @map("daily_budget_usd_micros")
   monthlyBudgetUsdMicros Int                            @default(5000000) @map("monthly_budget_usd_micros")
   requestCostUsdMicros   Int                            @default(0) @map("request_cost_usd_micros")
@@ -8641,4 +8688,21 @@ model PersonalLearningPilotSeat {
   @@unique([serviceProgramId, kind, seatNumber])
   @@unique([serviceProgramId, programEnrollmentId])
   @@map("personal_learning_pilot_seats")
+}
+
+model OpsMorningDigestRun {
+  id             String   @id @default(uuid()) @db.Uuid
+  environment    String   @db.VarChar(16)
+  targetDate     DateTime @map("target_date") @db.Date
+  status         String   @db.VarChar(16)
+  leaseExpiresAt DateTime? @map("lease_expires_at") @db.Timestamptz(6)
+  attemptCount   Int      @default(1) @map("attempt_count")
+  errorCategory  String?  @map("error_category") @db.VarChar(80)
+  sentAt         DateTime? @map("sent_at") @db.Timestamptz(6)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([environment, targetDate], map: "ops_morning_digest_runs_environment_target_date_key")
+  @@index([environment, createdAt])
+  @@map("ops_morning_digest_runs")
 }

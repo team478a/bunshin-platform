@@ -54,6 +54,9 @@ export default async function AdminAlertsPage() {
         <p>
           <small>最終確認：{center.generatedAt.toLocaleString('ja-JP')}（画面を開いた時点）</small>
         </p>
+        <Link className="button button--secondary" href="/admin/alerts/morning-digest">
+          毎朝のまとめメールをプレビュー
+        </Link>
       </section>
       {center.alerts.map((alert) => (
         <article className="settings-card" key={alert.code}>

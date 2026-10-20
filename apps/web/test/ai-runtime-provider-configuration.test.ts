@@ -21,6 +21,7 @@ const active: AiProviderConfiguration = {
   apiKeyConfigured: true,
   apiKeyMask: '••••1234',
   model: 'gpt-5-mini',
+  modelCapabilities: ['STRUCTURED_OUTPUT', 'IMAGE_INPUT'],
   dailyBudgetUsdMicros: 1_000_000,
   monthlyBudgetUsdMicros: 10_000_000,
   requestCostUsdMicros: 250,

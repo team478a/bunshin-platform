@@ -31,9 +31,11 @@ vi.mock('@bunshin/database', () => ({
     record = f.record;
   },
 }));
+vi.mock('../src/ai/learning-provider-runtime', () => ({
+  resolveLearningProviderRuntimeConfiguration: f.resolve,
+  reserveLearningProviderRuntimeConfiguration: f.reserve,
+}));
 vi.mock('../src/ai/runtime-provider-configuration', () => ({
-  resolveOpenAiRuntimeConfiguration: f.resolve,
-  reserveOpenAiRuntimeConfiguration: f.reserve,
   settleProviderRuntimeAdmission: f.settle,
 }));
 vi.mock('../src/observability/personal-learning-ai-call', () => ({
@@ -100,8 +102,24 @@ describe('lesson generation composition', () => {
     f.prior.mockResolvedValue(null);
     f.persona.mockResolvedValue([]);
     f.extendedScope.mockResolvedValue(false);
-    f.resolve.mockResolvedValue({ model });
-    f.reserve.mockResolvedValue({ model, apiKey: 'synthetic', admission: { id: 'synthetic' } });
+    f.resolve.mockResolvedValue({
+      provider: 'openai',
+      model,
+      modelCapabilities: ['STRUCTURED_OUTPUT', 'IMAGE_INPUT'],
+      apiKey: 'synthetic',
+      requestCostUsdMicros: 250,
+      source: 'ADMIN_CONFIGURATION',
+      admission: null,
+    });
+    f.reserve.mockResolvedValue({
+      provider: 'openai',
+      model,
+      modelCapabilities: ['STRUCTURED_OUTPUT', 'IMAGE_INPUT'],
+      apiKey: 'synthetic',
+      requestCostUsdMicros: 250,
+      source: 'ADMIN_CONFIGURATION',
+      admission: { id: 'synthetic' },
+    });
     f.admit.mockResolvedValue({
       id,
       operationHash: 'a'.repeat(64),

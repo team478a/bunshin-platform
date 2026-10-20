@@ -6,16 +6,17 @@ import {
   reservePersonalLearningCallCost,
   type PersonalLearningActor,
 } from '@bunshin/application';
+import { settleProviderRuntimeAdmission } from '../ai/runtime-provider-configuration';
 import {
-  resolveOpenAiRuntimeConfiguration,
-  reserveOpenAiRuntimeConfiguration,
-  settleProviderRuntimeAdmission,
-  type AdmittedOpenAiRuntimeConfiguration,
-} from '../ai/runtime-provider-configuration';
+  reserveLearningProviderRuntimeConfiguration,
+  resolveLearningProviderRuntimeConfiguration,
+  type LearningAiRuntimeConfiguration,
+} from '../ai/learning-provider-runtime';
 import { personalLearningPricingRegistry } from '../observability/personal-learning-ai-call';
 import { generateLearningLesson, learningLessonBody } from '../providers/openai-learning-lesson';
 import { learningProposalPolicy } from '../providers/learning-proposal-policy';
 import { resolvePersonalLearningExtendedScope } from './personal-learning-extended-scope';
+import { loadPersonalLearningToolFeatureContext } from './personal-learning-tool-feature-context';
 
 export async function prepareLearningLesson(
   actor: PersonalLearningActor,
@@ -45,13 +46,14 @@ export async function prepareLearningLesson(
     policy.groupId !== actor.scope.groupId
   )
     throw new ApplicationError('CONFIGURATION_ERROR', 'lesson admission unavailable');
-  const runtime = await resolveOpenAiRuntimeConfiguration(undefined, 'LEARNING_LESSON');
+  const provider = policy.provider ?? 'openai';
+  const runtime = await resolveLearningProviderRuntimeConfiguration(provider, 'LEARNING_LESSON');
   if (runtime.model !== policy.model)
     throw new ApplicationError('CONFIGURATION_ERROR', 'lesson model mismatch');
   const pricingRegistry = personalLearningPricingRegistry();
   const reservation = reservePersonalLearningCallCost({
     policy,
-    provider: 'openai',
+    provider,
     pricingRegistry,
     occurredAt: new Date(),
   });
@@ -61,8 +63,16 @@ export async function prepareLearningLesson(
   const personaContext = await new db.PrismaPersonalLearningPersonaRepository(db.prisma).listForAi(
     actor.scope,
   );
-  const body = learningLessonBody(request, policy.model, policy, extendedScope, personaContext); // Validate byte limit before admission.
-  let providerAdmission: AdmittedOpenAiRuntimeConfiguration | null = null;
+  const toolFeatureContext = await loadPersonalLearningToolFeatureContext(db, actor, request);
+  const body = learningLessonBody(
+    request,
+    policy.model,
+    policy,
+    extendedScope,
+    personaContext,
+    toolFeatureContext,
+  ); // Validate byte limit before admission.
+  let providerAdmission: LearningAiRuntimeConfiguration | null = null;
   let usageKey = '';
   let permitId = '';
   let proposal;
@@ -76,7 +86,7 @@ export async function prepareLearningLesson(
         operationId,
         operationKind: 'LESSON_GENERATION',
         attempt: 1,
-        provider: 'openai',
+        provider,
         promptVersion: proposalPolicy.version,
         policy,
         pricingRegistry,
@@ -94,9 +104,9 @@ export async function prepareLearningLesson(
           frozen.reservedCostUsdMicros > BigInt(Number.MAX_SAFE_INTEGER)
         )
           throw new ApplicationError('CONFIGURATION_ERROR', 'lesson reservation unavailable');
-        providerAdmission = await reserveOpenAiRuntimeConfiguration(
+        providerAdmission = await reserveLearningProviderRuntimeConfiguration(
           usageKey,
-          undefined,
+          provider,
           'LEARNING_LESSON',
           Number(frozen.reservedCostUsdMicros),
           1,
@@ -106,13 +116,15 @@ export async function prepareLearningLesson(
         return generateLearningLesson({
           apiKey: providerAdmission.apiKey,
           model: providerAdmission.model,
+          provider: providerAdmission.provider,
+          modelCapabilities: providerAdmission.modelCapabilities,
           body,
         });
       },
     );
   } finally {
     // Close the global Provider reservation only after durable known cost + complete response.
-    const admission = providerAdmission as AdmittedOpenAiRuntimeConfiguration | null;
+    const admission = providerAdmission as LearningAiRuntimeConfiguration | null;
     if (admission?.admission && permitId) {
       const cost = await db.prisma.personalLearningCallAdmission.findUnique({
         where: { id: permitId },
@@ -128,5 +140,10 @@ export async function prepareLearningLesson(
     proposal,
     usageKey,
     promptVersion: proposalPolicy.version,
+    toolFeatureSources: toolFeatureContext.sources.map(({ title, sourceTitle, sourceUrl }) => ({
+      title,
+      sourceTitle,
+      sourceUrl,
+    })),
   });
 }

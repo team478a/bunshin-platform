@@ -35,6 +35,8 @@ OEM月額利用料をStripe Checkoutで回収する場合は、ワタシワー�
 
 Mission Automationを有効にするProductionには32文字以上の`CRON_SECRET`を登録する。Vercel Cronは毎分`/api/internal/jobs/schedule`と`/api/internal/jobs/run`をGETし、Vercelが付与する`Authorization: Bearer <CRON_SECRET>`をserver側で検証する。Cron時刻はUTC基準だが、対象判定は各BunshinのIANA timezoneとlocal notification timeを使用する。PreviewへProductionの`CRON_SECRET`を設定せず、手動実行時もsecretをURL、log、PRへ記録しない。
 
+毎朝の運用まとめメールを開始する場合は、田中の個別承認後に専用台帳migrationを先にProductionへ適用し、`pnpm db:assert-ready`の成功を確認してからコードをProductionへ反映する。管理者で`/admin/alerts/morning-digest`を開き、件名・本文・リンク・準備状況・今日と前日の送信記録を確認する。プレビューでは送信も記録変更も行わない。確認後、田中の判断でProductionのVercel環境変数`OPS_DIGEST_ENABLED=true`を設定する。未設定または`false`ではCronは集計・送信を行わない。宛先・Resend認証は既存の管理メール設定（DB設定がある場合は既存の優先順位）を使い、新しい宛先変数は設けない。送信は毎日22:30 UTC（7:30 JST）。PR-3作業では本番migration、環境変数、送信を変更しない。
+
 SOCIAL Intelligenceを有効にする場合、ProductionのOpenAI認証は暗号化DBのactive Provider設定を使用する。旧`OPENAI_API_KEY`環境変数はproduction Runtimeで使用されない。必要な場合は`OPENAI_STRATEGY_MODEL`、`OPENAI_WEEKLY_PLANNER_MODEL`、`OPENAI_DAILY_MISSION_PLANNER_MODEL`、`OPENAI_CONTENT_GENERATOR_MODEL`、`OPENAI_MISSION_QUALITY_MODEL`も登録する。Content GeneratorとQuality CheckerのProvider timeoutは45秒、Vercel生成Functionの上限は60秒とする。PreviewへProductionのOpenAI credentialを設定しない。詳細は`docs/STRATEGY_GENERATOR_REPORT.md`、`docs/PHASE4_SLICE_4_1_IMPLEMENTATION_REPORT.md`、`docs/PHASE4_SLICE_4_2_IMPLEMENTATION_REPORT.md`、`docs/PHASE4_INTELLIGENCE_COMPLETION_REPORT.md`を参照する。
 
 ## Deployment Order
@@ -150,6 +152,26 @@ SecureStringの非表示入力でDB passwordを入力し、対象project・pendi
 4. 人間による復旧・再実行承認後に進める。原エラーやSQLを表示しない固定reasonログは診断の代わりではなく、DB状態確認が必要。
 
 このrunnerは引き続き全pendingを対象とする。allowlist、backup、drain、OEM履歴/cutover、Pilot enableの承認は自動化しない。`db:migrate:deploy`の直接実行には本runnerの上限は付かない。
+
+#### 2026-10-20 release migration（3件限定）
+
+このrelease用entrypointは`release-20261020`許可セットに固定され、次の3件がpendingである場合に限り実行確認へ進む。実行前にProduction Migration History Probeで同じ集合を確認する。Probe結果に追加/欠落/未知migration、failed history、checksum不整合または不明点があれば停止し、entrypointを実行しない。branch間では既存16 migration SQLからtransaction/timeout wrapperが削除されているが、本番適用checksumは未確認のため、pending一覧だけで安全と判断しない。
+
+| 順序 | migration                                               |
+| ---- | ------------------------------------------------------- |
+| 1    | `20261019120000_learning_provider_abstraction`          |
+| 2    | `20261020100000_personal_learning_tool_feature_updates` |
+| 3    | `20261020120000_ops_morning_digest_runs`                |
+
+最新のProduction backup/PITR、復元担当、対象projectを人間が確認した後に限り、Node.js 24環境で次を実行する。
+
+```powershell
+.\packages\database\scripts\apply-release-20261020.ps1
+```
+
+SecureStringの非表示入力でDB passwordを入力する。対象projectとpending一覧が新しいProbeおよびbackup確認記録と一致することを確認し、確認語`APPLY_RELEASE_20261020_MIGRATIONS_TO_vtkzinaudznwbsjoyszk`を入力する。このentrypointは上記3件と完全一致しない場合、確認も`prisma migrate deploy`も開始しない。成功後は新しいProbeで`UP_TO_DATE`/pendingなしを確認し、`pnpm db:assert-ready`を実行して`databaseSchema: current`を確認してからコードをProductionへ反映する。
+
+timeout、異常終了、postcheck不明時は**再実行しない**。新しいProduction Migration History Probeと承認済みread-only手段でhistory、適用状態、実schema、sessionを照合し、復旧担当の判断を待つ。migrationをrollback/deleteしない。release詳細・旧アプリ互換性・受講者確認項目は[`PRODUCTION_RELEASE_PREFLIGHT_2026-10-20.md`](PRODUCTION_RELEASE_PREFLIGHT_2026-10-20.md)を参照する。
 
 根拠: `packages/database/scripts/deploy-migrations-for-vercel.mjs`、`migration-process.mjs`、`test/vercel-production-migrations.test.ts`、`test/migration-bounds.integration-cases.ts`。[Prisma v6 startup options](https://docs.prisma.io/docs/orm/v6/overview/databases/postgresql)、[PostgreSQL 17 timeout semantics](https://www.postgresql.org/docs/17/runtime-config-client.html)。設定probeとmigrationは別sessionだが同じCLI/URL/startup設定を使う。migration SQLが自らtimeoutを変更する場合まで防ぐ仕組みではない。
 

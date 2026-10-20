@@ -106,6 +106,7 @@ describe('persona inference provider', () => {
     const result = await generatePersonaInference({
       apiKey: 'test-only',
       model: 'gpt-5.2-2025-12-11',
+      modelCapabilities: ['STRUCTURED_OUTPUT'],
       body,
       fetch: fetcher,
     });

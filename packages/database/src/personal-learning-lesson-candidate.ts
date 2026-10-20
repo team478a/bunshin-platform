@@ -29,9 +29,27 @@ export class PrismaLearningCandidateRepository
     const c = value as unknown as SavedLearningLessonCandidate;
     if (!c || c.policyVersion !== LEARNING_CANDIDATE_POLICY || c.materialVersion !== 1)
       throw new ApplicationError('CONFLICT', 'lesson version unavailable');
+    const toolFeatureSources = Array.isArray(c.toolFeatureSources)
+      ? c.toolFeatureSources.filter(
+          (
+            source: unknown,
+          ): source is NonNullable<SavedLearningLessonCandidate['toolFeatureSources']>[number] => {
+            if (typeof source !== 'object' || source === null || Array.isArray(source))
+              return false;
+            const record = source as Record<string, unknown>;
+            return (
+              typeof record['title'] === 'string' &&
+              typeof record['sourceTitle'] === 'string' &&
+              typeof record['sourceUrl'] === 'string' &&
+              record['sourceUrl'].startsWith('https://')
+            );
+          },
+        )
+      : [];
     return {
       ...c,
       proposal: validateLearningLessonProposal(c.proposal),
+      toolFeatureSources,
       confirmedAt: confirmed?.toISOString() ?? null,
     };
   }
@@ -80,6 +98,7 @@ export class PrismaLearningCandidateRepository
         usageKey: input.usageKey,
         createdAt: now.toISOString(),
         confirmedAt: null,
+        toolFeatureSources: input.toolFeatureSources ?? [],
         proposal,
       };
       await tx.personalLearningRequest.update({

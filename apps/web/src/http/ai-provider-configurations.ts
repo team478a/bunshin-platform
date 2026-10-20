@@ -8,6 +8,7 @@ import {
   TestAiProviderConfigurationConnection,
   type AiProviderConfiguration,
 } from '@bunshin/application';
+import { AI_MODEL_CAPABILITIES } from '@bunshin/application';
 import { requestIdFromHeader } from '@bunshin/observability';
 import { ApplicationError, toApiError } from '@bunshin/shared';
 import { z } from 'zod';
@@ -21,9 +22,22 @@ import { requireSameOrigin } from '../auth/request-security';
 
 const createSchema = z
   .object({
-    provider: z.enum(['OPENAI', 'GROK', 'EXA', 'FIRECRAWL', 'CREATOMATE', 'FAL', 'RUNWAY']),
+    provider: z.enum([
+      'OPENAI',
+      'GOOGLE',
+      'GROK',
+      'EXA',
+      'FIRECRAWL',
+      'CREATOMATE',
+      'FAL',
+      'RUNWAY',
+    ]),
     reason: z.string().min(3).max(500),
     model: z.string().max(120).nullable().optional(),
+    modelCapabilities: z
+      .array(z.enum(AI_MODEL_CAPABILITIES))
+      .max(AI_MODEL_CAPABILITIES.length)
+      .optional(),
     dailyBudgetUsd: z.number().min(0).max(10_000),
     monthlyBudgetUsd: z.number().min(0).max(100_000),
     requestCostUsd: z.number().min(0).max(1_000).optional(),
@@ -103,6 +117,9 @@ export function createAiProviderConfigurationResponse(request: Request) {
           provider: parsed.data.provider,
           reason: parsed.data.reason,
           model: parsed.data.model ?? null,
+          ...(parsed.data.modelCapabilities
+            ? { modelCapabilities: parsed.data.modelCapabilities }
+            : {}),
           dailyBudgetUsdMicros: micros(parsed.data.dailyBudgetUsd),
           monthlyBudgetUsdMicros: micros(parsed.data.monthlyBudgetUsd),
           requestCostUsdMicros: micros(parsed.data.requestCostUsd ?? 0),

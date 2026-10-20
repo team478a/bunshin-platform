@@ -74,6 +74,7 @@ export class PrismaPersonalLearningPersistenceRepository implements PersonalLear
     input: PersonalLearningActor,
     write: boolean,
     work: (tx: Tx, now: Date) => Promise<T>,
+    allowUnscopedMultiTopic = false,
   ): Promise<T> {
     validatePersonalLearningActor(input);
     const s = input.scope;
@@ -112,20 +113,23 @@ export class PrismaPersonalLearningPersistenceRepository implements PersonalLear
             if (!personalLearningDynamicProgramAllows(programs[0]?.settings, enrollment.id))
               denied();
             if (personalLearningFeatureEnabled(programs[0]?.settings, 'multiTopic')) {
-              if (!input.topicId) denied();
-              const topic = await tx.personalLearningTopic.findFirst({
-                where: {
-                  id: input.topicId,
-                  workspaceId: s.workspaceId,
-                  groupId: s.groupId,
-                  programEnrollmentId: s.programEnrollmentId,
-                  groupMembershipId: s.groupMembershipId,
-                  userId: s.userId,
-                  status: 'ACTIVE',
-                },
-                select: { id: true },
-              });
-              if (!topic) denied();
+              if (!input.topicId && !allowUnscopedMultiTopic) denied();
+              if (allowUnscopedMultiTopic && input.topicId) denied();
+              const topic = input.topicId
+                ? await tx.personalLearningTopic.findFirst({
+                    where: {
+                      id: input.topicId,
+                      workspaceId: s.workspaceId,
+                      groupId: s.groupId,
+                      programEnrollmentId: s.programEnrollmentId,
+                      groupMembershipId: s.groupMembershipId,
+                      userId: s.userId,
+                      status: 'ACTIVE',
+                    },
+                    select: { id: true },
+                  })
+                : null;
+              if (input.topicId && !topic) denied();
             }
             await requirePersonalLearningPilotSeat(
               tx,

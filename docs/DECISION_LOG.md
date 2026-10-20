@@ -4369,3 +4369,59 @@
 - PR-Eで範囲外とする依頼は、(1)本人に代わる外部サービスへのログイン・投稿・公開・送信、(2)医療・法律・税務等の専門的判断、(3)他人の個人情報・権利侵害を伴う作業、(4)研修と無関係な依頼。安全で学習に沿う代替案を提示する。Draftレビューで田中の最終確認を受ける。
 - 評価fixtureは架空20シナリオ・各10発言を用意し、初回提案／再提案のスキーマ・分岐・共有ポリシーのモック確認に使う。実AI会話、人手採点、費用・応答時間、学習効果の検証はPR-Gの承認された検証環境で行う。
 - この決定はPRのマージ、productionリリース、migration適用、feature flag変更、AI実呼出しを許可しない。
+
+## 2026-10-20: 複数エージェントの並行作業ルールを定める
+
+- 状態: Draft PRで確認待ち。田中が並行作業ルールの文書化を指示した。
+- 複数のCodexタスクを並行して進めるため、並行作業ルールを`docs/CODEX_PARALLEL_WORK_RULES.md`に定め、`AGENTS.md` 10章から参照する。
+- 理由: `LATEST_DATABASE_MIGRATION`が単一の定数であり、migrationを並行して作ると衝突するため。また、DECISION_LOG、各packageの公開入口、`vercel.json`のcronなど、複数タスクが同時に変更しやすい共有ファイルがあるため。
+- 文書のみの変更であり、コード、DB、migration、設定、本番環境への影響はない。
+
+## 2026-10-20: 毎朝の運用まとめメールを設計する
+
+- 状態: 段階1のDraft PRで確認待ち。田中が既存実装の調査と設計書作成を指示した。
+- 毎朝の運用まとめは、既存のResend運用メール・Cron認証・運用通知センターの判定を再利用し、前日JSTの状況を読み取り専用で集計する。メールに個人情報・本文・金額・取引先名・生エラーを含めず、送信は初期状態OFFとする。
+- 取得元・件数定義・二重送信記録・Cron時刻の可変性など未確定の実装判断は`docs/OPS_MORNING_DIGEST_DESIGN.md`に候補と不足を記載し、段階2実装の前に田中の確認を受ける。
+- 本決定は設計開始のみを記録し、実装、migration、環境変数の追加・設定、メール送信有効化、新しい外部サービス、本番変更、マージを承認しない。
+
+## 2026-10-20: 運用まとめメールの宛先・時刻・判定・件数単位
+
+- 状態: 段階1設計への田中の回答を反映。フォローアップDraft PRで確認待ち。
+- 宛先は既存の`RESEND_ADMIN_ALERT_TO`と共用し、`OPS_DIGEST_TO`は追加しない。送信時刻は毎朝7:30 JST（前日22:30 UTC）の固定Cronとし、変更時は`vercel.json`を変更して再デプロイする。
+- Alert Centerの重大度をそのまま使い、CRITICALを異常、WARNINGを注意に数える。INFO（再送待ち・通常の問い合わせなど）は注意件数に加えず、状況一覧だけに載せる。urgent問い合わせは既存重大度WARNINGのため「注意」とする。
+- LINE配信はrecipientではなくbroadcast単位で数える。OEMは金額・取引先名を含めず、請求書の状態ごとの件数を表示する。
+- 外部死活監視サービスは追加しない。毎朝の運用まとめメールが届かないことを田中が確認する。既存Jobの必須`workspaceId`は段階2の最初に全体向け送信記録としての適合性を確認し、適合しない場合はmigration案を提示する。許可前にmigrationを作らない。
+- この回答は設計内容の更新であり、実装、本番設定・送信開始、migration、PRマージを承認しない。
+
+## 2026-10-20: 毎朝の運用まとめPR-1読み取り集計
+
+- 状態: 段階2 PR-1 Draftで確認待ち。田中のPR-1指示書に基づき、読み取り集計・判定・文面生成を実装した。
+- 初版Collectorは既存運用通知センター、サービスLINE一斉配信（配信日時と状態に基づくbroadcast単位、週次占いを分離）、OEM請求書状態件数に限定する。Alert Center重大度を再判定せず、INFOを注意件数に含めない。
+- 未対応Collectorは固定一覧として示し、「異常なし」の判定を妨げない。Collector失敗を0件に置き換えず固定エラー分類だけを出す。
+- 既存Jobは必須workspaceId、汎用workerのdispatch、retry・retentionの挙動から、全体向けメール送信台帳にそのまま使うのは不適合と判断した。PR-2で専用台帳migration案を提示するが、本PRではmigrationを作らず別途承認を待つ。
+- この決定はメール送信、Cron、HTTP/API、管理画面、migration、環境設定、本番反映を承認しない。
+
+## 2026-10-20: 毎朝の運用まとめPR-2送信記録とCron
+
+- 状態: PR-2 Draftで確認待ち。田中のPR-2指示により送信記録用migration 1件を許可した。migrationの本番適用、コードのマージ、送信設定は未承認。
+- 既存Jobは必須`workspaceId`の意味付けができず、汎用workerが別executorへ配送するため送信台帳に使わない。専用`ops_morning_digest_runs`を追加し、環境・対象日一意制約、期限付きclaim、attempt数、固定エラー分類、成功時刻だけを保持する。本文・件名・宛先・個人情報・生エラーは保存しない。
+- Cronは毎日22:30 UTC（7:30 JST）。`OPS_DIGEST_ENABLED`未設定・false、およびproduction以外では集計・送信しない。Resendは既存の管理用設定と宛先を共用する。DB管理設定が存在する場合は既存の優先・fail-closed規則に従い、環境変数へ復帰しない。
+- 同じ対象日の同時実行はDBの一意制約とatomic claimで1件にする。lease期限切れだけは同じ環境・日付のResend idempotency-keyで再claimし、FAILEDは同日自動再送しない。
+- PR-1の修正として、メールリンクは`APP_URL`基準の絶対URLにする。状態日時のないbroadcastは前日集計から外し、全期間件数を取得状況へ数値のみ表示してseverity判定を変えない。導入前日は「履歴開始前」とし未送信扱いにしない。
+- 本番で開始する場合は田中がmigration適用・`db:assert-ready`・コード反映・PR-3プレビュー確認を順に実行し、その後に`OPS_DIGEST_ENABLED=true`を設定する。PR-2作業者は本番DB、環境変数、Cron送信状態を変更しない。
+
+## 2026-10-20: 毎朝の運用まとめPR-3管理者プレビュー
+
+- 状態: Draft PRで確認待ち。田中のPR-3指示に基づき、#1368（PR-2）マージ後のmainから管理者専用プレビューを実装している。
+- CronとPreviewの集計・文面作成を共通関数にまとめ、運用通知センターはCronでは従来選択方式、Previewではログイン中の有効な管理者をactorとして読む。
+- Previewは最新データの読み取り専用とし、Resend送信・送信台帳のclaim/完了/失敗書込み・利用者データ/設定/Job変更をしない。本文・件名は既存のbuilder出力を使い、認証秘密・送信元・宛先アドレスは表示せず宛先数だけを許す。
+- Cronの認証・有効化条件・claim・送信・失敗時記録は維持する。本番migration適用、環境変更、送信開始は行わない。
+
+## 2026-10-20: PR-H〜I2・運用まとめメールの本番反映準備
+
+- 状態: Draft PRで確認待ち。#1369のmainマージ後に、田中の依頼に基づき本番反映手順と3 migration専用の直接適用entrypointを準備した。本番DBへの接続・Probe・適用、Production設定変更、コード反映は行わない。
+- Git上のproduction/main migration追加差分は`20261019120000_learning_provider_abstraction`、`20261020100000_personal_learning_tool_feature_updates`、`20261020120000_ops_morning_digest_runs`の3件。実DBのpending集合はProbe前のため未確認とし、runnerはこの完全一致以外を拒否する。
+- 本番反映はMigration History Probe → backup/復元担当確認 → 3件限定runner → Probe再確認 → `db:assert-ready` → mainコードのProduction反映・health確認の順とする。失敗/timeout/不明状態でrunnerを再実行しない。
+- mainにはproduction branchにある既存16 migration SQLのtransaction/timeout wrapperの差分もある。適用済みchecksumは未確認であり、pending一覧だけで安全と判断しない。差分不整合や不明点があれば適用を停止する。
+- コード反映だけで運用まとめ送信は始めない。`OPS_DIGEST_ENABLED`の既定値はfalse。マナベル機能flagはProgram単位の明示opt-inで、既定OFF。PR-HのProvider経路変更がすでに有効なDYNAMIC_V1利用者の次回操作へ影響する可能性があるため、現行Program/Provider状態は反映前に田中が確認する。
+- 外部公開GateにはPR-Gの未実施評価とバックアップ復元元の証明を残す。PRマージやCIを本番反映・外部公開の承認とみなさない。

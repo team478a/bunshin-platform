@@ -24,6 +24,7 @@ const snapshot: PilotOperationsSnapshot = {
     lineLearning: false,
     extendedScope: false,
     learningNudges: false,
+    toolUpdates: false,
   },
   openCallCount: 0,
 };
@@ -99,13 +100,14 @@ describe('Wave 0 operations UI boundaries', () => {
     expect(pilotOperationsSnapshot(legacy)?.learningFeatures.learningNudges).toBe(false);
   });
 
-  it('includes all five per-Program switches in the reviewed settings command', () => {
+  it('includes all six per-Program switches in the reviewed settings command', () => {
     const features = {
       conversation: true,
       multiTopic: false,
       lineLearning: true,
       extendedScope: false,
       learningNudges: true,
+      toolUpdates: true,
     };
     expect(
       createPilotOperationCommand(snapshot, 'SET_LEARNING_FEATURES', evidence, true, features),

@@ -3,6 +3,7 @@ import type { Prisma } from '@bunshin/database';
 import {
   PERSONAL_LEARNING_PRACTICE_MISSION,
   parseStoredPersonalLearningEvidenceSubmission,
+  parsePersonalLearningCallAdmissionPolicy,
   validateLearningLessonProposal,
   type AiCallMeasurement,
 } from '@bunshin/application';
@@ -10,7 +11,11 @@ import { ApplicationError } from '@bunshin/shared';
 import { personalLearningPilotExecutionAllowed } from '../services/personal-learning-pilot-access';
 import { requireAiTrainingUsageConsent } from '../services/ai-training-consent';
 import { admitPersonalLearningCall } from '../services/personal-learning-call-admission';
-import { reserveOpenAiRuntimeConfiguration } from '../ai/runtime-provider-configuration';
+import {
+  resolveLearningProviderRuntimeConfiguration,
+  reserveLearningProviderRuntimeConfiguration,
+  type LearningAiProvider,
+} from '../ai/learning-provider-runtime';
 import { recordOpenAiUsageAndSettle } from '../ai/openai-cost-admission';
 import { preparePersonalLearningAiCall } from '../observability/personal-learning-ai-call';
 import { withOrganizationAiGenerationQuota } from '../organization-ai-generation-quota';
@@ -117,11 +122,30 @@ export async function executePersonalLearningEvidenceReview(input: {
     throw new ApplicationError('CONFLICT', 'practice evidence context changed');
 
   const operationKey = `training-evaluation:${answer.id}:${input.jobId}:attempt:${input.attemptCount}`;
-  const runtime = await reserveOpenAiRuntimeConfiguration(
-    operationKey,
-    undefined,
+  let rawAdmission: unknown;
+  try {
+    rawAdmission = JSON.parse(process.env['PERSONAL_LEARNING_CALL_ADMISSION'] ?? 'null');
+  } catch {
+    throw new ApplicationError('CONFIGURATION_ERROR', 'practice review admission unavailable');
+  }
+  const admissionPolicy = parsePersonalLearningCallAdmissionPolicy(rawAdmission);
+  if (!admissionPolicy)
+    throw new ApplicationError('CONFIGURATION_ERROR', 'practice review admission unavailable');
+  const provider: LearningAiProvider = admissionPolicy.provider ?? 'openai';
+  const configuredRuntime = await resolveLearningProviderRuntimeConfiguration(
+    provider,
     'TRAINING_ASSESSMENT',
   );
+  if (configuredRuntime.model !== admissionPolicy.model)
+    throw new ApplicationError('CONFIGURATION_ERROR', 'practice review model mismatch');
+  const runtime = await reserveLearningProviderRuntimeConfiguration(
+    operationKey,
+    provider,
+    'TRAINING_ASSESSMENT',
+    configuredRuntime.requestCostUsdMicros,
+  );
+  if (runtime.model !== admissionPolicy.model)
+    throw new ApplicationError('CONFIGURATION_ERROR', 'practice review model mismatch');
   const actor = {
     actorUserId: input.actorUserId,
     scope: {
@@ -158,7 +182,7 @@ export async function executePersonalLearningEvidenceReview(input: {
           answerId: answer.id,
           jobId: input.jobId,
           attemptCount: input.attemptCount,
-          provider: 'openai',
+          provider,
           model: runtime.model,
         });
         let requestStarted = false;
@@ -169,6 +193,8 @@ export async function executePersonalLearningEvidenceReview(input: {
           const result = await generateLearningEvidenceReview({
             apiKey: runtime.apiKey,
             model: runtime.model,
+            provider: runtime.provider,
+            modelCapabilities: runtime.modelCapabilities,
             material: { originalWish, outcome: proposal.outcome, criteria: proposal.criteria },
             kind: submission.kind,
             content: submission.content,
@@ -194,7 +220,7 @@ export async function executePersonalLearningEvidenceReview(input: {
     });
     const cost = pilot.cost(
       observed.measurement ?? {
-        provider: 'openai',
+        provider: runtime.provider,
         model: runtime.model,
         inputTokens: null,
         outputTokens: null,
@@ -212,7 +238,7 @@ export async function executePersonalLearningEvidenceReview(input: {
       bunshinId: null,
       actorUserId: input.actorUserId,
       taskType: 'AI_TRAINING_ANSWER_EVALUATION',
-      provider: 'openai',
+      provider: runtime.provider,
       model: observed.measurement?.model ?? runtime.model,
       promptVersion: LEARNING_EVIDENCE_REVIEW_PROMPT_VERSION,
       status: 'SUCCESS',
@@ -305,7 +331,7 @@ export async function executePersonalLearningEvidenceReview(input: {
             revision: submission.revision,
             kind: answerValue.kind,
             review: reviewValue,
-            provider: 'openai',
+            provider: runtime.provider,
             model: observed.measurement?.model ?? runtime.model,
             promptVersion: LEARNING_EVIDENCE_REVIEW_PROMPT_VERSION,
             inputTokens: observed.measurement?.inputTokens ?? null,
@@ -347,7 +373,7 @@ export async function executePersonalLearningEvidenceReview(input: {
         bunshinId: null,
         actorUserId: input.actorUserId,
         taskType: 'AI_TRAINING_ANSWER_EVALUATION',
-        provider: 'openai',
+        provider: runtime.provider,
         model: measurement?.model ?? runtime.model,
         promptVersion: LEARNING_EVIDENCE_REVIEW_PROMPT_VERSION,
         status: 'FAILED',
@@ -365,7 +391,7 @@ export async function executePersonalLearningEvidenceReview(input: {
     await pilot.record(
       operationKey,
       observed.measurement ?? {
-        provider: 'openai',
+        provider: runtime.provider,
         model: /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,119}$/.test(runtime.model)
           ? runtime.model
           : 'unknown',

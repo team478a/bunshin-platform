@@ -12,7 +12,10 @@ import {
   type AiCallMeasurement,
   type AiTokenPricing,
 } from '@bunshin/application';
-import { personalLearningFeatureEnabled } from '@bunshin/capability-training';
+import {
+  personalLearningDynamicProgramAllows,
+  personalLearningFeatureEnabled,
+} from '@bunshin/capability-training';
 import { PrismaPracticeSupportRepository } from './personal-learning-practice-support';
 import { CONVERSATION_MESSAGE_EVENT } from './personal-learning-conversation';
 import { reserveLearningProgramBudget } from './personal-learning-call-budget';
@@ -37,6 +40,7 @@ const bodyHash = (input: PersonalLearningTextOperation) =>
     input.provider,
     input.policy.model,
     input.promptVersion,
+    ...(input.nudge ? [input.nudge] : []),
     ...(input.practice ? [input.practice] : []),
   ]);
 const metadataObject = (value: Prisma.JsonValue | null): Record<string, unknown> =>
@@ -131,87 +135,166 @@ export class PrismaPersonalLearningTextOperationRepository
     )
       throw new ApplicationError('CONFLICT', 'learning conversation changed');
   }
-  async admit(input: PersonalLearningTextOperation) {
-    validatePersonalLearningTextOperation(input);
-    return this.authorized(input.actor, true, async (tx) => {
-      await this.normalLearner(tx, input.actor);
-      const s = input.actor.scope;
-      const enrollment = await tx.programEnrollment.findUniqueOrThrow({
-        where: { id: s.programEnrollmentId },
-      });
-      if (enrollment.serviceProgramId !== input.policy.serviceProgramId)
-        throw new ApplicationError('NOT_FOUND', 'learning program unavailable');
-      if (input.operationKind === 'PRACTICE_SUPPORT') {
-        await this.assertSupportAdmission(tx, input);
-      } else if (input.operationKind === 'CONVERSATION_TURN') {
-        await this.assertConversationAdmission(tx, input);
-      } else {
-        const wish = await tx.personalLearningRequest.findFirst({
-          where: { ...s, ...(input.actor.topicId ? { topicId: input.actor.topicId } : {}) },
-          orderBy: { revision: 'desc' },
-        });
-        if (wish?.id !== input.requestId || wish.revision !== input.expectedRequestRevision)
-          throw new ApplicationError('CONFLICT', 'learning wish changed');
-        if (input.operationKind === 'PERSONA_INFERENCE') {
-          const profile = await tx.personalLearningPersonaProfile.findFirst({
-            where: {
-              workspaceId: s.workspaceId,
-              groupId: s.groupId,
-              groupMembershipId: s.groupMembershipId,
-              userId: s.userId,
-              optedIn: true,
-            },
-            select: { id: true },
-          });
-          if (!profile)
-            throw new ApplicationError('FORBIDDEN', 'persona inference is not opted in');
-        }
-      }
-      const scope = {
+  private async assertNudgeAdmission(
+    tx: Prisma.TransactionClient,
+    input: PersonalLearningTextOperation,
+    now: Date,
+  ) {
+    const s = input.actor.scope;
+    const enrollment = await tx.programEnrollment.findFirst({
+      where: {
+        id: s.programEnrollmentId,
         workspaceId: s.workspaceId,
         groupId: s.groupId,
-        serviceProgramId: input.policy.serviceProgramId,
-      };
-      // Same lock and ledger as the existing evaluation admission, not a separate budget.
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`personal-learning-call:${scope.serviceProgramId}`}, 0))`;
-      if (
-        await tx.personalLearningCallAdmission.findFirst({
-          where: { ...scope, operationHash: operationHash(input) },
+        groupMembershipId: s.groupMembershipId,
+        status: 'ACTIVE',
+        startsAt: { lte: now },
+        OR: [{ endsAt: null }, { endsAt: { gt: now } }],
+      },
+      select: { id: true, serviceProgramId: true },
+    });
+    const program = enrollment
+      ? await tx.serviceProgram.findFirst({
+          where: {
+            id: enrollment.serviceProgramId,
+            workspaceId: s.workspaceId,
+            groupId: s.groupId,
+            status: 'ACTIVE',
+            settings: { path: ['moduleKey'], equals: 'AI_TRAINING_V1' },
+          },
+          select: { settings: true },
         })
-      )
-        throw new ApplicationError('CONFLICT', 'learning attempt already admitted');
-      if (input.attempt > 1) {
-        const prior = await tx.personalLearningCallAdmission.findFirst({
-          where: { ...scope, operationHash: operationHash(input, input.attempt - 1) },
+      : null;
+    const [seat, preference] = await Promise.all([
+      tx.personalLearningPilotSeat.findFirst({
+        where: {
+          workspaceId: s.workspaceId,
+          groupId: s.groupId,
+          serviceProgramId: input.policy.serviceProgramId,
+          programEnrollmentId: s.programEnrollmentId,
+          kind: 'INTERNAL',
+          cohort: 'INTERNAL',
+          revokedAt: null,
+        },
+        select: { id: true },
+      }),
+      tx.personalLearningNudgePreference.findFirst({
+        where: {
+          workspaceId: s.workspaceId,
+          groupId: s.groupId,
+          programEnrollmentId: s.programEnrollmentId,
+          groupMembershipId: s.groupMembershipId,
+          userId: s.userId,
+          enabled: true,
+          stoppedAt: null,
+          OR: [{ pausedUntil: null }, { pausedUntil: { lte: now } }],
+        },
+        select: { id: true, consentVersion: true, consentedAt: true },
+      }),
+    ]);
+    if (
+      !input.nudge ||
+      !enrollment ||
+      enrollment.serviceProgramId !== input.policy.serviceProgramId ||
+      !program ||
+      !personalLearningDynamicProgramAllows(program.settings, enrollment.id) ||
+      !personalLearningFeatureEnabled(program.settings, 'learningNudges') ||
+      !seat ||
+      !preference ||
+      !preference.consentVersion ||
+      !preference.consentedAt
+    )
+      throw new ApplicationError('NOT_FOUND', 'learning nudge unavailable');
+  }
+  async admit(input: PersonalLearningTextOperation) {
+    validatePersonalLearningTextOperation(input);
+    return this.authorized(
+      input.actor,
+      true,
+      async (tx, now) => {
+        if (input.operationKind !== 'NUDGE_COPY') await this.normalLearner(tx, input.actor);
+        const s = input.actor.scope;
+        const enrollment = await tx.programEnrollment.findUniqueOrThrow({
+          where: { id: s.programEnrollmentId },
         });
-        const c = prior?.operationContext ? context(prior.operationContext) : null;
+        if (enrollment.serviceProgramId !== input.policy.serviceProgramId)
+          throw new ApplicationError('NOT_FOUND', 'learning program unavailable');
+        if (input.operationKind === 'PRACTICE_SUPPORT') {
+          await this.assertSupportAdmission(tx, input);
+        } else if (input.operationKind === 'CONVERSATION_TURN') {
+          await this.assertConversationAdmission(tx, input);
+        } else if (input.operationKind === 'NUDGE_COPY') {
+          await this.assertNudgeAdmission(tx, input, now);
+        } else {
+          const wish = await tx.personalLearningRequest.findFirst({
+            where: { ...s, ...(input.actor.topicId ? { topicId: input.actor.topicId } : {}) },
+            orderBy: { revision: 'desc' },
+          });
+          if (wish?.id !== input.requestId || wish.revision !== input.expectedRequestRevision)
+            throw new ApplicationError('CONFLICT', 'learning wish changed');
+          if (input.operationKind === 'PERSONA_INFERENCE') {
+            const profile = await tx.personalLearningPersonaProfile.findFirst({
+              where: {
+                workspaceId: s.workspaceId,
+                groupId: s.groupId,
+                groupMembershipId: s.groupMembershipId,
+                userId: s.userId,
+                optedIn: true,
+              },
+              select: { id: true },
+            });
+            if (!profile)
+              throw new ApplicationError('FORBIDDEN', 'persona inference is not opted in');
+          }
+        }
+        const scope = {
+          workspaceId: s.workspaceId,
+          groupId: s.groupId,
+          serviceProgramId: input.policy.serviceProgramId,
+        };
+        // Same lock and ledger as the existing evaluation admission, not a separate budget.
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`personal-learning-call:${scope.serviceProgramId}`}, 0))`;
         if (
-          !prior?.settledAt ||
-          c?.bodyHash !== bodyHash(input) ||
-          c.measurement?.success !== false
+          await tx.personalLearningCallAdmission.findFirst({
+            where: { ...scope, operationHash: operationHash(input) },
+          })
         )
-          throw new ApplicationError('CONFLICT', 'learning attempt is not retryable');
-      }
-      // Unpriced/uncertain new-operation calls remain blocking, including across UTC days.
-      if (
-        await tx.personalLearningCallAdmission.count({
-          where: { ...scope, operationContext: { path: ['costStatus'], equals: 'UNKNOWN' } },
-        })
-      )
-        throw new ApplicationError('FORBIDDEN', 'learning operation cost unresolved');
-      const [clock] = await tx.$queryRaw<{ now: Date }[]>`SELECT clock_timestamp() AS now`;
-      if (!clock) throw new ApplicationError('DATABASE_UNAVAILABLE', 'learning clock unavailable');
-      const reservation = await reserveLearningProgramBudget(tx, {
-        policy: input.policy,
-        provider: input.provider,
-        pricingRegistry: input.pricingRegistry,
-        occurredAt: clock.now,
-      });
-      if (input.operationKind === 'PERSONA_INFERENCE') {
-        const monthStart = new Date(
-          Date.UTC(clock.now.getUTCFullYear(), clock.now.getUTCMonth(), 1),
-        );
-        const [monthly] = await tx.$queryRaw<{ serviceCost: bigint; learnerCost: bigint }[]>`SELECT
+          throw new ApplicationError('CONFLICT', 'learning attempt already admitted');
+        if (input.attempt > 1) {
+          const prior = await tx.personalLearningCallAdmission.findFirst({
+            where: { ...scope, operationHash: operationHash(input, input.attempt - 1) },
+          });
+          const c = prior?.operationContext ? context(prior.operationContext) : null;
+          if (
+            !prior?.settledAt ||
+            c?.bodyHash !== bodyHash(input) ||
+            c.measurement?.success !== false
+          )
+            throw new ApplicationError('CONFLICT', 'learning attempt is not retryable');
+        }
+        // Unpriced/uncertain new-operation calls remain blocking, including across UTC days.
+        if (
+          await tx.personalLearningCallAdmission.count({
+            where: { ...scope, operationContext: { path: ['costStatus'], equals: 'UNKNOWN' } },
+          })
+        )
+          throw new ApplicationError('FORBIDDEN', 'learning operation cost unresolved');
+        const [clock] = await tx.$queryRaw<{ now: Date }[]>`SELECT clock_timestamp() AS now`;
+        if (!clock)
+          throw new ApplicationError('DATABASE_UNAVAILABLE', 'learning clock unavailable');
+        const reservation = await reserveLearningProgramBudget(tx, {
+          policy: input.policy,
+          provider: input.provider,
+          pricingRegistry: input.pricingRegistry,
+          occurredAt: clock.now,
+        });
+        if (input.operationKind === 'PERSONA_INFERENCE') {
+          const monthStart = new Date(
+            Date.UTC(clock.now.getUTCFullYear(), clock.now.getUTCMonth(), 1),
+          );
+          const [monthly] = await tx.$queryRaw<
+            { serviceCost: bigint; learnerCost: bigint }[]
+          >`SELECT
             COALESCE(SUM(reserved_cost_usd_micros), 0)::bigint AS "serviceCost",
             COALESCE(SUM(reserved_cost_usd_micros) FILTER (WHERE operation_context->>'actorKeyHash' = ${createHash('sha256').update(s.userId).digest('hex')}), 0)::bigint AS "learnerCost"
           FROM personal_learning_call_admissions
@@ -220,56 +303,58 @@ export class PrismaPersonalLearningTextOperationRepository
             AND service_program_id = ${scope.serviceProgramId}::uuid
             AND admitted_at >= ${monthStart}
             AND operation_context->>'operationKind' = 'PERSONA_INFERENCE'`;
-        if (
-          !monthly ||
-          monthly.serviceCost + BigInt(reservation.reservedCostUsdMicros) > 5_000_000n ||
-          monthly.learnerCost + BigInt(reservation.reservedCostUsdMicros) > 1_000_000n
-        )
-          throw new ApplicationError('FORBIDDEN', 'persona inference monthly budget reached');
-      }
-      const pricing = parseAiTokenPricingRegistry(input.pricingRegistry)
-        .filter(
-          (p) =>
-            p.provider === input.provider &&
-            p.model === input.policy.model &&
-            Date.parse(p.effectiveFrom) <= clock.now.getTime(),
-        )
-        .sort((a, b) => Date.parse(b.effectiveFrom) - Date.parse(a.effectiveFrom))[0];
-      if (!pricing) throw new ApplicationError('FORBIDDEN', 'learning price unavailable');
-      const c: Context = {
-        version: 'LEARNING_TEXT_OPERATION_V1',
-        bodyHash: bodyHash(input),
-        operationKind: input.operationKind,
-        actorKeyHash: createHash('sha256').update(input.actor.scope.userId).digest('hex'),
-        programEnrollmentId: input.actor.scope.programEnrollmentId,
-        provider: input.provider,
-        model: input.policy.model,
-        promptVersion: input.promptVersion,
-        pricing,
-        reservedAtAdmission: reservation.reservedCostUsdMicros,
-        maxRequestBytes: input.policy.maxRequestBytes,
-        maxOutputTokens: input.policy.maxOutputTokens,
-        measurement: null,
-        requestFinished: null,
-        costStatus: null,
-      };
-      const row = await tx.personalLearningCallAdmission.create({
-        data: {
-          ...scope,
-          operationHash: operationHash(input),
-          admittedAt: clock.now,
-          reservedCostUsdMicros: BigInt(reservation.reservedCostUsdMicros),
-          pricingVersion: reservation.pricingVersion,
-          operationContext: c as unknown as Prisma.InputJsonValue,
-        },
-      });
-      return {
-        id: row.id,
-        operationHash: row.operationHash,
-        maxRequestBytes: c.maxRequestBytes,
-        maxOutputTokens: c.maxOutputTokens,
-      };
-    });
+          if (
+            !monthly ||
+            monthly.serviceCost + BigInt(reservation.reservedCostUsdMicros) > 5_000_000n ||
+            monthly.learnerCost + BigInt(reservation.reservedCostUsdMicros) > 1_000_000n
+          )
+            throw new ApplicationError('FORBIDDEN', 'persona inference monthly budget reached');
+        }
+        const pricing = parseAiTokenPricingRegistry(input.pricingRegistry)
+          .filter(
+            (p) =>
+              p.provider === input.provider &&
+              p.model === input.policy.model &&
+              Date.parse(p.effectiveFrom) <= clock.now.getTime(),
+          )
+          .sort((a, b) => Date.parse(b.effectiveFrom) - Date.parse(a.effectiveFrom))[0];
+        if (!pricing) throw new ApplicationError('FORBIDDEN', 'learning price unavailable');
+        const c: Context = {
+          version: 'LEARNING_TEXT_OPERATION_V1',
+          bodyHash: bodyHash(input),
+          operationKind: input.operationKind,
+          actorKeyHash: createHash('sha256').update(input.actor.scope.userId).digest('hex'),
+          programEnrollmentId: input.actor.scope.programEnrollmentId,
+          provider: input.provider,
+          model: input.policy.model,
+          promptVersion: input.promptVersion,
+          pricing,
+          reservedAtAdmission: reservation.reservedCostUsdMicros,
+          maxRequestBytes: input.policy.maxRequestBytes,
+          maxOutputTokens: input.policy.maxOutputTokens,
+          measurement: null,
+          requestFinished: null,
+          costStatus: null,
+        };
+        const row = await tx.personalLearningCallAdmission.create({
+          data: {
+            ...scope,
+            operationHash: operationHash(input),
+            admittedAt: clock.now,
+            reservedCostUsdMicros: BigInt(reservation.reservedCostUsdMicros),
+            pricingVersion: reservation.pricingVersion,
+            operationContext: c as unknown as Prisma.InputJsonValue,
+          },
+        });
+        return {
+          id: row.id,
+          operationHash: row.operationHash,
+          maxRequestBytes: c.maxRequestBytes,
+          maxOutputTokens: c.maxOutputTokens,
+        };
+      },
+      input.operationKind === 'NUDGE_COPY',
+    );
   }
   async record(input: Parameters<PersonalLearningTextOperationRepository['record']>[0]) {
     const op = input.operation;
@@ -347,7 +432,11 @@ export class PrismaPersonalLearningTextOperationRepository
             reservedCostUsdMicros:
               cost.totalCostUsdMicros === null
                 ? null
-                : BigInt(Math.max(c.reservedAtAdmission, cost.totalCostUsdMicros)),
+                : BigInt(
+                    op.operationKind === 'NUDGE_COPY'
+                      ? cost.totalCostUsdMicros
+                      : Math.max(c.reservedAtAdmission, cost.totalCostUsdMicros),
+                  ),
             ...(input.requestFinished && cost.costStatus === 'ESTIMATED'
               ? { settledAt: new Date() }
               : {}),
