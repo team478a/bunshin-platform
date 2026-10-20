@@ -183,9 +183,14 @@ export function registerOpsMorningDigestIntegrationCases() {
             .sort((left, right) => left.status.localeCompare(right.status)),
         });
 
-        const broadcastReads = statements.filter((sql) => sql.includes('service_line_broadcasts'));
-        const invoiceReads = statements.filter((sql) => sql.includes('tenant_invoices'));
-        const serviceNameReads = statements.filter((sql) => sql.includes('service_configurations'));
+        const readStatements = statements.filter((sql) => sql.trimStart().startsWith('select'));
+        const broadcastReads = readStatements.filter((sql) =>
+          sql.includes('service_line_broadcasts'),
+        );
+        const invoiceReads = readStatements.filter((sql) => sql.includes('tenant_invoices'));
+        const serviceNameReads = readStatements.filter((sql) =>
+          sql.includes('service_configurations'),
+        );
         expect(broadcastReads.length).toBeGreaterThan(0);
         expect(invoiceReads.length).toBeGreaterThan(0);
         expect(serviceNameReads.length).toBeGreaterThan(0);
