@@ -13,6 +13,7 @@ export const PERSONAL_LEARNING_FEATURE_KEYS = [
   'lineLearning',
   'extendedScope',
   'learningNudges',
+  'toolUpdates',
 ] as const;
 export type PersonalLearningFeature = (typeof PERSONAL_LEARNING_FEATURE_KEYS)[number];
 export type PersonalLearningFeatures = Readonly<Record<PersonalLearningFeature, boolean>>;
@@ -22,8 +23,12 @@ const defaultFeatures: PersonalLearningFeatures = Object.freeze({
   lineLearning: false,
   extendedScope: false,
   learningNudges: false,
+  toolUpdates: false,
 });
-const legacyFeatureKeys = PERSONAL_LEARNING_FEATURE_KEYS.filter((key) => key !== 'learningNudges');
+const legacyFeatureKeys = PERSONAL_LEARNING_FEATURE_KEYS.filter(
+  (key) => key !== 'learningNudges' && key !== 'toolUpdates',
+);
+const nudgesFeatureKeys = PERSONAL_LEARNING_FEATURE_KEYS.filter((key) => key !== 'toolUpdates');
 
 /** Missing mode is the legacy contract; malformed explicit values fail closed. */
 export function personalLearningMode(settings: unknown): PersonalLearningMode | null {
@@ -43,11 +48,13 @@ export function personalLearningFeatures(settings: unknown): PersonalLearningFea
     !features ||
     !(
       Object.keys(features).length === PERSONAL_LEARNING_FEATURE_KEYS.length ||
+      Object.keys(features).length === nudgesFeatureKeys.length ||
       Object.keys(features).length === legacyFeatureKeys.length
     ) ||
     legacyFeatureKeys.some((key) => typeof features[key] !== 'boolean') ||
     (Object.hasOwn(features, 'learningNudges') &&
       typeof features['learningNudges'] !== 'boolean') ||
+    (Object.hasOwn(features, 'toolUpdates') && typeof features['toolUpdates'] !== 'boolean') ||
     Object.keys(features).some(
       (key) => !PERSONAL_LEARNING_FEATURE_KEYS.includes(key as PersonalLearningFeature),
     )
@@ -59,6 +66,7 @@ export function personalLearningFeatures(settings: unknown): PersonalLearningFea
     lineLearning: features['lineLearning'] as boolean,
     extendedScope: features['extendedScope'] as boolean,
     learningNudges: features['learningNudges'] === true,
+    toolUpdates: features['toolUpdates'] === true,
   });
 }
 

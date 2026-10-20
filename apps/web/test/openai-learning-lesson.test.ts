@@ -76,6 +76,45 @@ describe('lesson Provider', () => {
     ]);
     expect(v.input.find((item) => item.role === 'system')?.content).toContain('UNCONFIRMED_GUESS');
   });
+  it('passes only the bounded approved tool updates with the selected topic and source attribution', () => {
+    const v = JSON.parse(
+      learningLessonBody(
+        wish,
+        'gpt-5.2-2025-12-11',
+        { maxRequestBytes: 16000, maxOutputTokens: 2000 },
+        false,
+        [],
+        {
+          topicTitle: '案内文を読みやすくする',
+          topicGoal: '{"goal":"短く伝える"}',
+          sources: [
+            {
+              title: 'ChatGPTの新機能',
+              summary: '文章の推敲を補助する更新です。',
+              sourceTitle: 'OpenAI公式',
+              sourceUrl: 'https://openai.com/index/example',
+            },
+          ],
+        },
+      ),
+    ) as { input: { role: string; content: string }[] };
+    const learnerData = JSON.parse(v.input.find((item) => item.role === 'user')!.content);
+    expect(learnerData.currentTopic).toEqual({
+      title: '案内文を読みやすくする',
+      goal: '{"goal":"短く伝える"}',
+    });
+    expect(learnerData.toolFeatureUpdates).toEqual([
+      {
+        title: 'ChatGPTの新機能',
+        summary: '文章の推敲を補助する更新です。',
+        sourceTitle: 'OpenAI公式',
+        sourceUrl: 'https://openai.com/index/example',
+      },
+    ]);
+    expect(v.input.find((item) => item.role === 'system')?.content).toContain(
+      '関係が明確でない場合は無視',
+    );
+  });
   it('drops lowest-priority persona entries before exceeding the request-byte limit', () => {
     const context = [
       {

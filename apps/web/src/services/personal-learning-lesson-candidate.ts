@@ -16,6 +16,7 @@ import { personalLearningPricingRegistry } from '../observability/personal-learn
 import { generateLearningLesson, learningLessonBody } from '../providers/openai-learning-lesson';
 import { learningProposalPolicy } from '../providers/learning-proposal-policy';
 import { resolvePersonalLearningExtendedScope } from './personal-learning-extended-scope';
+import { loadPersonalLearningToolFeatureContext } from './personal-learning-tool-feature-context';
 
 export async function prepareLearningLesson(
   actor: PersonalLearningActor,
@@ -62,7 +63,15 @@ export async function prepareLearningLesson(
   const personaContext = await new db.PrismaPersonalLearningPersonaRepository(db.prisma).listForAi(
     actor.scope,
   );
-  const body = learningLessonBody(request, policy.model, policy, extendedScope, personaContext); // Validate byte limit before admission.
+  const toolFeatureContext = await loadPersonalLearningToolFeatureContext(db, actor, request);
+  const body = learningLessonBody(
+    request,
+    policy.model,
+    policy,
+    extendedScope,
+    personaContext,
+    toolFeatureContext,
+  ); // Validate byte limit before admission.
   let providerAdmission: LearningAiRuntimeConfiguration | null = null;
   let usageKey = '';
   let permitId = '';
@@ -131,5 +140,10 @@ export async function prepareLearningLesson(
     proposal,
     usageKey,
     promptVersion: proposalPolicy.version,
+    toolFeatureSources: toolFeatureContext.sources.map(({ title, sourceTitle, sourceUrl }) => ({
+      title,
+      sourceTitle,
+      sourceUrl,
+    })),
   });
 }

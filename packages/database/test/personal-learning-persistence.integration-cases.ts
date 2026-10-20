@@ -320,6 +320,13 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
         proposal,
         usageKey: `personal-learning-operation:${permit.operationHash}`,
         promptVersion: operation.promptVersion,
+        toolFeatureSources: [
+          {
+            title: 'ChatGPT公式の更新',
+            sourceTitle: 'OpenAI公式',
+            sourceUrl: 'https://openai.com/index/example',
+          },
+        ],
       };
       return { ...f, request, candidates, input, operation };
     }
@@ -583,6 +590,13 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
       const f = await lessonFixture();
       const first = await f.candidates.save(f.input);
       expect(await f.candidates.save(f.input)).toEqual(first);
+      expect(first.toolFeatureSources).toEqual([
+        {
+          title: 'ChatGPT公式の更新',
+          sourceTitle: 'OpenAI公式',
+          sourceUrl: 'https://openai.com/index/example',
+        },
+      ]);
       const confirmation = {
         actor: f.actor,
         requestId: f.request.id,
@@ -653,7 +667,15 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
           expect.objectContaining({
             id: f.request.id,
             candidateConfirmedAt: confirmed.confirmedAt,
-            lessonCandidate: candidate,
+            lessonCandidate: expect.objectContaining({
+              toolFeatureSources: [
+                {
+                  title: 'ChatGPT公式の更新',
+                  sourceTitle: 'OpenAI公式',
+                  sourceUrl: 'https://openai.com/index/example',
+                },
+              ],
+            }),
           }),
         ]),
       );

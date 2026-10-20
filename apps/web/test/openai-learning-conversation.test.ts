@@ -60,6 +60,46 @@ describe('versioned learning conversation provider', () => {
       epistemicStatus: 'UNCONFIRMED_GUESS',
     });
   });
+  it('passes bounded approved tool updates and selected topic only as reference data', () => {
+    const body = learningConversationBody({
+      request,
+      history: [],
+      currentMessage: 'さっきの案内文を改善したい',
+      candidate: null,
+      practice: null,
+      model: 'gpt-5.2',
+      permit: { maxRequestBytes: 12000, maxOutputTokens: 400 },
+      toolFeatureContext: {
+        topicTitle: '社内向けのお知らせ',
+        topicGoal: '{"goal":"読みやすさを改善する"}',
+        sources: [
+          {
+            title: 'ChatGPTの更新',
+            summary: '文章の推敲を補助する機能です。',
+            sourceTitle: 'OpenAI公式',
+            sourceUrl: 'https://openai.com/index/example',
+          },
+        ],
+      },
+    });
+    const parsed = JSON.parse(body) as { input: { role: string; content: string }[] };
+    const learnerData = JSON.parse(parsed.input.find((item) => item.role === 'user')!.content);
+    expect(learnerData.currentTopic.title).toBe('社内向けのお知らせ');
+    expect(learnerData.toolFeatureUpdates).toEqual([
+      {
+        title: 'ChatGPTの更新',
+        summary: '文章の推敲を補助する機能です。',
+        sourceTitle: 'OpenAI公式',
+        sourceUrl: 'https://openai.com/index/example',
+      },
+    ]);
+    expect(
+      parsed.input
+        .filter((item) => item.role === 'system')
+        .map((item) => item.content)
+        .join('\n'),
+    ).toContain('関係が明確でなければ無視');
+  });
   it('keeps higher-priority persona context when fitting the conversation request byte limit', () => {
     const body = learningConversationBody({
       request,

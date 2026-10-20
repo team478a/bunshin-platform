@@ -32,6 +32,16 @@ export class PrismaLearningCandidateRepository
     return {
       ...c,
       proposal: validateLearningLessonProposal(c.proposal),
+      toolFeatureSources: Array.isArray(c.toolFeatureSources)
+        ? c.toolFeatureSources.filter(
+            (source) =>
+              source &&
+              typeof source.title === 'string' &&
+              typeof source.sourceTitle === 'string' &&
+              typeof source.sourceUrl === 'string' &&
+              source.sourceUrl.startsWith('https://'),
+          )
+        : [],
       confirmedAt: confirmed?.toISOString() ?? null,
     };
   }
@@ -80,6 +90,7 @@ export class PrismaLearningCandidateRepository
         usageKey: input.usageKey,
         createdAt: now.toISOString(),
         confirmedAt: null,
+        toolFeatureSources: input.toolFeatureSources ?? [],
         proposal,
       };
       await tx.personalLearningRequest.update({

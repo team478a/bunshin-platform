@@ -18,6 +18,7 @@ import {
   learningConversationPromptVersion,
 } from '../providers/openai-learning-conversation';
 import { resolvePersonalLearningExtendedScope } from './personal-learning-extended-scope';
+import { loadPersonalLearningToolFeatureContext } from './personal-learning-tool-feature-context';
 
 export async function sendPersonalLearningConversationTurn(
   command: PersonalLearningConversationCommand,
@@ -79,6 +80,11 @@ export async function sendPersonalLearningConversationTurn(
       request.revision !== command.requestRevision
     )
       throw new ApplicationError('CONFLICT', 'learning wish changed');
+    const toolFeatureContext = await loadPersonalLearningToolFeatureContext(
+      db,
+      command.actor,
+      request,
+    );
     const provider = policy.provider ?? 'openai';
     const initialRuntime = await resolveLearningProviderRuntimeConfiguration(
       provider,
@@ -96,6 +102,7 @@ export async function sendPersonalLearningConversationTurn(
       permit: policy,
       extendedScope,
       personaContext,
+      toolFeatureContext,
     });
     const value = await executePersonalLearningTextOperation(
       new db.PrismaPersonalLearningTextOperationRepository(db.prisma),
@@ -153,6 +160,9 @@ export async function sendPersonalLearningConversationTurn(
               expectedCandidateId: candidate.id,
               proposal: value.regeneratedProposal,
               environmentCapture: value.environmentCapture,
+              toolFeatureSources: toolFeatureContext.sources.map(
+                ({ title, sourceTitle, sourceUrl }) => ({ title, sourceTitle, sourceUrl }),
+              ),
             },
           }
         : {}),

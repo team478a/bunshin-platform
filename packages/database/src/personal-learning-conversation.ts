@@ -635,6 +635,7 @@ export class PrismaPersonalLearningConversationRepository
           usageKey: operationKey,
           createdAt: now.toISOString(),
           confirmedAt: null,
+          toolFeatureSources: input.regeneratedCandidate.toolFeatureSources ?? [],
           proposal,
         };
         await tx.personalLearningRequest.update({
