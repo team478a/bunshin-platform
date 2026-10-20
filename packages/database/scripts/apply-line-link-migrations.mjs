@@ -56,6 +56,15 @@ const approvedPendingSets = [
     migrations: ['20261019100000_personal_learning_nudges'],
     confirmation: 'APPLY_MANABERU_LEARNING_NUDGE_MIGRATION_TO_vtkzinaudznwbsjoyszk',
   },
+  {
+    id: 'release-20261020',
+    migrations: [
+      '20261019120000_learning_provider_abstraction',
+      '20261020100000_personal_learning_tool_feature_updates',
+      '20261020120000_ops_morning_digest_runs',
+    ],
+    confirmation: 'APPLY_RELEASE_20261020_MIGRATIONS_TO_vtkzinaudznwbsjoyszk',
+  },
 ];
 const expectedProjectRef = 'vtkzinaudznwbsjoyszk';
 
