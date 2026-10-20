@@ -97,6 +97,7 @@ export function registerOpsMorningDigestIntegrationCases() {
             monthlyUsageId: monthlyUsage.id,
             invoiceNumber: `DIGEST-${randomUUID()}`,
             status: 'ISSUED',
+            issuedAt: new Date('2026-10-19T01:00:00.000Z'),
             periodStart: new Date('2026-10-01T00:00:00.000Z'),
             periodEnd: new Date('2026-10-31T00:00:00.000Z'),
             mau: 1,
