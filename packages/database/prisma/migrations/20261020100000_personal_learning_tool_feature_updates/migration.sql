@@ -48,3 +48,7 @@ CREATE INDEX "personal_learning_tool_feature_audit_feature_time_idx"
   ON "personal_learning_tool_feature_audits"("feature_id", "occurred_at");
 CREATE INDEX "personal_learning_tool_feature_audit_actor_time_idx"
   ON "personal_learning_tool_feature_audits"("actor_user_id", "occurred_at");
+
+ALTER TABLE "personal_learning_tool_feature_updates" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "personal_learning_tool_feature_audits" ENABLE ROW LEVEL SECURITY;
+-- Server-side admin repository only; no direct anonymous/authenticated table policies.

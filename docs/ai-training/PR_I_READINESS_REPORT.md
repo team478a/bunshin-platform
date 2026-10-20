@@ -41,6 +41,7 @@
 ## 5. 変更ファイル
 
 - `packages/database/prisma/schema.prisma`
+- `packages/database/src/schema-readiness.ts`
 - `packages/database/prisma/migrations/20261020100000_personal_learning_tool_feature_updates/migration.sql`
 - `apps/web/src/http/personal-learning-tool-features-admin.ts`
 - `apps/web/app/api/admin/personal-learning-tool-features/route.ts`
@@ -58,13 +59,14 @@
 - `pnpm --filter web typecheck`: 成功。
 - 変更TypeScriptファイルのESLint: 成功。
 - `git diff --check`: 成功。
-- DB統合テストは未実施。今回の変更を含むGitHub Actionsの`verify` / `database` 成功結果も未確認であり、Draft提出前または提出後に確認する。
+- 初回GitHub Actionsでは`database`が成功した一方、`verify`で最新migration名とRLS適用の既存規則チェックが失敗したため修正した。修正後の`verify` / `database`再実行結果は確認中。
 
 ## 7. 未解決事項・本番への影響
 
 - 定期収集・費用上限・受講者への提案接続は後続PRであり、未実装。
 - 本番DB migration適用、Vercel反映、環境変数・Program設定・Feature Flagの変更、LINE送信、Provider呼出しは行っていない。
 - スキーマ/migration追加を含むため、本番適用はレビュー承認後にmigrationを先行し、その後プログラムを反映する必要がある。今回は適用しない。
+- migrationは両テーブルにRLSを有効化し、既存のサーバー側Repository専用方針に合わせて直接アクセスpolicyを設けない。
 
 ## 8. 次へ進む条件
 
