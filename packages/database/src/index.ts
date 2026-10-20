@@ -346,3 +346,4 @@ export * from './personal-learning-practice';
 export * from './personal-learning-practice-support';
 export * from './personal-learning-conversation';
 export { purgeExpiredSupportCases, SUPPORT_CASE_RETENTION_DAYS } from './support-case-retention';
+export { PrismaOpsMorningDigestCollector } from './ops-morning-digest';

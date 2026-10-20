@@ -4,7 +4,7 @@
 
 対象: ワタシワークス全体の運用状況
 
-状態: 段階1設計。田中の確認待ち。実装・本番送信は未実施。
+状態: 段階2 PR-1をDraftで確認待ち。読み取り集計・文面生成は実装済み。本番送信・Cron・HTTP・管理画面は未実施。
 
 ## 1. 目的と境界
 
@@ -58,6 +58,15 @@
 
 以上は無理に0件へ置き換えない。段階2で専用の読み取り集計がない場合は「取得元なし」、既存情報を読めなかった場合は「取得失敗」と出す。別の台帳へ複製するのではなく、元記録から読み取れる場合はその場で集計する。
 
+### 2.3 PR-1で確定した初版Collectorの意味
+
+- 運用通知センターは既存 `GetAdminAlerts` の返すalertをそのまま使用する。重大度を複製判定せず、CRITICAL/WARNING/INFOをそれぞれ異常/注意/一覧だけへ振り分ける。
+- サービスLINE一斉配信は `ServiceLineBroadcast` をサービス（`groupId`に対応する既存 `ServiceConfiguration.displayName`）と状態で集計する。`SCHEDULED` は `scheduledAt`、`COMPLETED` は `completedAt`、`CANCELLED` は `cancelledAt` が前日JSTの半開区間に入る記録を1 broadcastとして数える。`DRAFT` は含めない。
+- `automationKey` が `fortune-weekly:` で始まるbroadcastは通常配信と分ける。該当日が週次配信日でなく、対象日のbroadcastもない場合は `NOT_APPLICABLE` とする。
+- `SCHEDULED` / `COMPLETED` / `CANCELLED` なのに対応する状態日時が未設定の記録は対象日を確定できないため、その区分の集計を取得失敗（`SOURCE_DATA_INCOMPLETE`）として示し、0件に含めない。
+- OEM請求は `TenantInvoice.status` の送信時点のgroup count（`DRAFT` / `ISSUED` / `PAID` / `VOID`）のみ。金額・請求書番号・契約名・連絡先・Workspace列は取得しない。
+- DBの配信集計はbroadcastの `groupId` / `status` と状態に応じた日時列をgroup-byし、サービス表示名を別 query で付与する。本文 `title` / `message`、recipient、個人識別子はselectしない。
+
 ## 3. 提案する基本フロー
 
 1. Vercel Cronが内部routeを呼び、`CRON_SECRET` を検証する。環境はproductionだけを対象にし、環境変数 `OPS_DIGEST_ENABLED` が文字列 `true` でなければ集計・送信せず、機能OFFとして安全に終了する。
@@ -85,24 +94,17 @@
 - 対象期間は前日JST 00:00:00以上、当日JST 00:00:00未満。境界はUTCに変換してqueryする。毎時LINE監視などは前日件数と送信時点の状態を分ける。
 - weekly/monthly等の実行日でない集計は0件扱いにせず「本日対象外」とする。実行予定日の記録を確認できない場合は実行状況一覧に記載し、独自重大度を付けず、既存Alert Centerが返した重大度がある場合だけその分類に数える。
 
-### 4.2 3段階判定と暫定しきい値
+### 4.2 判定基準
 
-productionの実績データを参照していないため、既存コードの判定値だけを流用できる項目以外は運用傾向に基づく確定値ではない。以下はDraft用の初期案で、田中の承認前に本番適用しない。設定値は一か所に集約する。
+判定基準は運用通知センターの既存重大度だけを使い、独自のしきい値や別判定表を設けない。
 
-| 指標             | 正常                       | 注意                          | 異常                             | 根拠・注意                                                                                       |
-| ---------------- | -------------------------- | ----------------------------- | -------------------------------- | ------------------------------------------------------------------------------------------------ |
-| Alert Center     | alertなし                  | WARNING以上のalertあり        | CRITICAL alertあり               | 既存 `GetAdminAlerts` の重大度に完全準拠。INFOは注意件数に含めず、本文の状況一覧へ掲載するだけ。 |
-| AI予算           | 80%未満、停止なし          | 80%以上100%未満               | 100%以上または自動停止あり       | 既存Alert Centerはdaily/monthlyの大きい方を採用し、80%でWARNING、100%でCRITICAL。                |
-| AI Provider失敗  | 直近24時間3件未満          | 同3件以上                     | CRITICAL alertがある場合         | 3件以上の失敗は既存Alert CenterでWARNING。日次期間と24h期間を混ぜない。                          |
-| LINE送信         | 失敗・DEADなし             | —                             | CRITICAL alert                   | retry中は既存重大度INFOのため件数に数えず、状況一覧だけに載せる。                                |
-| 定期処理         | 該当Alert Center alertなし | WARNING alertあり             | DEAD等のCRITICAL alertあり       | 実行結果・対象外は一覧表示。独自の重大度ルールを追加しない。                                     |
-| 退会処理         | blockedなし                | —                             | blockedが1件以上                 | Alert Center既存判定を再利用。                                                                   |
-| 問い合わせ       | 未対応なし                 | urgentを含むWARNING alertあり | CRITICAL alertあり               | urgent問い合わせは既存重大度WARNINGなので注意。通常openのINFOは一覧だけに載せる。                |
-| 期限切れ削除     | 削除対象0件以上            | —                             | Alert CenterがCRITICALを出す失敗 | 対象件数・実行結果は一覧に載せ、独自の重大度を加えない。                                         |
-| OEM請求書状態    | 件数のみ表示               | —                             | 対応するalertの重大度に従う      | 請求書状態別に数え、金額・取引先を含めない。                                                     |
-| 欠損・個別取得元 | collector成功              | —                             | —                                | 取得失敗/取得元なしは取得状況一覧に明記し、0件と区別。重大度件数へ独自加算しない。               |
+| 既存重大度 | まとめメールでの扱い                                 |
+| ---------- | ---------------------------------------------------- |
+| `CRITICAL` | 「異常」として先に表示し、異常件数へ加える           |
+| `WARNING`  | 「注意」として異常の次に表示し、注意件数へ加える     |
+| `INFO`     | 異常・注意件数には加えず、参考項目として一覧に載せる |
 
-異常・注意の件数は、運用通知センターが返した `CRITICAL` / `WARNING` のalert数をそのまま数える。`INFO`は注意件数に加えず、項目一覧に掲載する。個別collectorの成功/失敗、対象外、未実装は取得状況欄で区別し、Alert Centerの重大度へ変換して二重判定しない。Alert Centerにalertがなく、未送信/集計失敗もなく、全collectorが正常または対象外なら「異常なし」とする。digest自身の送信・集計障害は運用記録で確認できるようにし、失敗した日の送信を成功扱いにしない。
+`GetAdminAlerts` の返却値を使い、しきい値やseverity判定を複製しない。個別collectorの成功/失敗、対象外、未実装は取得状況欄で区別し、Alert Centerの重大度へ変換しない。Alert Centerに `CRITICAL` / `WARNING` がなく、取得失敗もなく、実装済みcollectorがすべて正常または対象外で、前日のまとめが未送信でなければ「異常なし」とする。digest自身の送信・集計障害は運用記録で確認できるようにし、失敗した日の送信を成功扱いにしない。
 
 ### 4.3 メール文面
 
@@ -111,7 +113,7 @@ productionの実績データを参照していないため、既存コードの�
 **異常なし**
 
 - 件名例: `【ワタシワークス運用】10/19 異常なし`
-- 本文: `前日の定期処理・配信・通知はすべて正常でした。管理画面：<管理画面URL>`
+- 本文の先頭行: `前日の定期処理・配信・通知はすべて正常でした。管理画面：<管理画面URL>`。末尾に、この版で未対応の項目を示す固定の1行を付ける。
 
 **注意・異常あり**
 
@@ -157,7 +159,7 @@ productionの実績データを参照していないため、既存コードの�
 
 段階2もmigration作成は禁止。既存の正本とJob/監査記録だけで要件を満たせない場合は、migrationを作らず、理由と追加型migrationの案を別途提出して許可を待つ。
 
-1. **PR-1 読み取り集計**: applicationに日次のCollector契約・3段階判定・設定値1か所を追加し、databaseに各正本から読む読み取りadapterを追加。`GetAdminAlerts`は再利用。個人情報・本文をCollector境界へ出さない。
+1. **PR-1 読み取り集計**: applicationにJST対象日の契約・Collector結果型・重大度だけを使う判定・件名/本文の純粋関数と未対応項目一覧の定数を追加し、databaseに通知センター連携用入力に加えてLINE broadcast/OEM invoiceの読み取りadapterを追加。個人情報・本文・金額をCollector出力へ出さない。
 2. **PR-2 送信・Cron・記録**: `apps/web/src/email/` に既存Resend設定を使うdigest送信adapter、`apps/web/app/api/internal/` にCRON_SECRET保護route、`vercel.json`にCron追加。既存Jobによる日次claim/状態記録が安全かを先に証明し、不適合なら別途migration許可を得る。`OPS_DIGEST_ENABLED` の未設定/falseは送信しない。
 3. **PR-3 管理者Preview**: 管理者権限のPreview画面とAPIを追加し、送信・状態書込なしで件名と判定済み文面を表示する。
 
@@ -185,6 +187,29 @@ PRは個別Draftと日本語報告で提出し、前PRのマージ・田中確�
 6. 本PRで決定済み: LINE配信はbroadcast単位、OEMは請求書状態別の件数で数える。
 7. `OPS_DIGEST_ENABLED` は未設定/falseを安全側とし、送信有効化は田中がproductionで行う。
 
-## 8. 段階1の変更範囲と影響
+## 8. 段階1の変更範囲と影響（当時の記録）
 
-変更対象は本設計書、Decision Log末尾の設計開始記録、Roadmapの本タスク1行だけ。コード、テスト、schema、migration、`vercel.json`、環境変数、Provider設定、本番設定は変更していない。したがって、段階1は既存の画面・メール・LINE・cronの動作へ影響しない。PRはDraftで提出し、田中の確認までマージも本番反映もしない。
+段階1当時の変更対象は本設計書、Decision Log末尾の設計開始記録、Roadmapの本タスク1行だけだった。コード、テスト、schema、migration、`vercel.json`、環境変数、Provider設定、本番設定は変更しておらず、既存の画面・メール・LINE・cronの動作へ影響しなかった。段階2 PR-1の実装対象と影響は次章に記録する。
+
+## 9. PR-1 実装報告
+
+### 9.1 実装済み
+
+- `packages/application/src/ops-morning-digest.ts` にJST前日の日付窓（UTC半開区間）、`OK` / `UNAVAILABLE` / `NOT_APPLICABLE` の結果型、Alert Center重大度集計、件名・本文生成、未対応項目の単一定数を追加した。送信関数は含まない。
+- `packages/database/src/ops-morning-digest.ts` に読み取り専用Collectorを追加した。配信は状態に対応する日時と `groupId` / `status` で集計し、サービス表示名だけを別取得する。占い週次配信は `automationKey` で分離する。請求はstatusだけをgroup-byする。
+- Alert Centerは既存 `GetAdminAlerts` の結果を呼出し側から受け取る設計とし、閾値やseverity判定を複製しない。PR-2の送信実装が既存 `GetAdminAlerts` を直接利用する。
+- DB読み取り例外は固定カテゴリ `DATABASE_READ_FAILED` にし、生の例外内容を出力しない。
+
+### 9.2 Job送信台帳の調査（PR-2準備）
+
+- `Job.workspaceId` は必須で、全体向けdigestに意味のあるWorkspaceを割り当てる既存の専用system workspaceを確認できなかった。任意のWorkspaceに紐付ける設計にはしない。
+- Jobは `(environment, idempotencyKey)` で一意化されるが、汎用workerは未知の `jobType` をMission Automation executorへ渡す。digest送信記録を新しいJob種別として単純追加すると、送信workerではなく既存の汎用workerがclaimする危険があるため、そのままでは適合しない。
+- Jobは自動claim、lease失効後の再claim、`FailJob` によるretry/DEAD遷移を持つ。汎用workerが自動再試行するため、digest送信を独立した日次台帳として安全に扱うには明示的な専用経路が必要。
+- 一般Job全体を消すretention処理は見つからなかった。実装されているJob掃除は改善フィードバック保持処理自身の終端Jobを180日後に削除する限定処理。
+- PR-2で使えるmigration案（作成は未承認）: `ops_morning_digest_runs` に `id`、`environment`、`target_date`、`status`、`lease_expires_at`、`attempt_count`、`error_category`、`sent_at`、`created_at`、`updated_at` を持たせ、`UNIQUE(environment, target_date)` を設定する。本文・個人情報は保持しない。状態enumを避けるならstatusは制約付きvarcharでもよい。PR-2前に別途承認を受ける。
+
+### 9.3 検証・未実施事項
+
+- 自動テストで正常時短文、CRITICAL/WARNING/INFOの分類と順序、取得失敗、前日送信状態、占い対象外、JST境界、秘匿情報を含めないことを確認する。
+- database unit testでgroup-by条件・状態日時・サービス別分離・請求書statusだけの問い合わせ形を確認する。隔離DBのintegration caseで別サービスが混ざらず、配信本文・請求額・契約名/連絡先列をSELECTしないことを確認する。
+- PR-1は集計・判定・文面生成のみ。送信、Cron、HTTP route、管理画面、環境変数、schema、migration、本番変更は行わない。
