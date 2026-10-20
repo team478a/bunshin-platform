@@ -850,4 +850,4 @@ Registration
 
 成功条件はSNSの完全自動化ではなく、BUNSHINの指示によってユーザーが継続的に行動することである。
 
-- **2026-10-20 毎朝の運用まとめメール（段階1・設計中）**: `docs/OPS_MORNING_DIGEST_DESIGN.md` に現行データソース、取得元不足、送信済み記録候補、固定7:30 JST Cron、Alert Center重大度への準拠、broadcast/請求書状態別の集計単位を記録。Draft PRで田中確認待ち。実装・migration・本番送信は未承認。
+- **2026-10-20 毎朝の運用まとめメール（段階2・PR-1）**: `docs/OPS_MORNING_DIGEST_DESIGN.md` にJST日次集計契約、Alert Center重大度への準拠、LINE broadcast/週次占い/OEM請求書statusの読み取りCollector、Job送信台帳の適合性調査を記録。PR-1は読み取り集計・判定・メール文面生成のみDraftレビュー待ち。送信・Cron・migration・本番反映は未実施。
