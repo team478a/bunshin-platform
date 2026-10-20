@@ -667,15 +667,7 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
           expect.objectContaining({
             id: f.request.id,
             candidateConfirmedAt: confirmed.confirmedAt,
-            lessonCandidate: expect.objectContaining({
-              toolFeatureSources: [
-                {
-                  title: 'ChatGPT公式の更新',
-                  sourceTitle: 'OpenAI公式',
-                  sourceUrl: 'https://openai.com/index/example',
-                },
-              ],
-            }),
+            lessonCandidate: candidate,
           }),
         ]),
       );
