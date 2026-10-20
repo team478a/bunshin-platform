@@ -17,6 +17,7 @@ const state = vi.hoisted(() => ({
   markFailed: vi.fn(),
   deliveryStatus: vi.fn(),
   platformAdminFindFirst: vi.fn(),
+  alerts: vi.fn(),
   broadcasts: vi.fn(),
   invoices: vi.fn(),
   activeEmail: vi.fn(),
@@ -31,9 +32,7 @@ vi.mock('@bunshin/observability', () => ({
 }));
 vi.mock('@bunshin/application', () => ({
   GetAdminAlerts: class {
-    execute() {
-      return { alerts: [], generatedAt: new Date() };
-    }
+    execute = state.alerts;
   },
   buildOpsMorningDigest: () => ({
     status: 'NO_ISSUES',
@@ -107,6 +106,7 @@ describe('morning digest cron HTTP boundary', () => {
     state.markFailed.mockResolvedValue(true);
     state.deliveryStatus.mockResolvedValue('BEFORE_HISTORY');
     state.platformAdminFindFirst.mockResolvedValue({ userId: 'admin-1' });
+    state.alerts.mockResolvedValue({ alerts: [], generatedAt: new Date() });
     state.broadcasts.mockResolvedValue({
       serviceBroadcasts: { status: 'OK', value: [] },
       fortuneWeeklyBroadcasts: {
@@ -167,6 +167,19 @@ describe('morning digest cron HTTP boundary', () => {
     const second = await opsMorningDigestCronResponse(request());
     expect(await second.json()).toMatchObject({ outcome: 'ALREADY_SENT' });
     expect(state.send).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the alert-center collection unavailable when no active admin exists', async () => {
+    state.environment.OPS_DIGEST_ENABLED = 'true';
+    state.environment.RESEND_ADMIN_ALERT_API_KEY = 'legacy-key';
+    state.environment.RESEND_ADMIN_ALERT_FROM = 'ops@example.test';
+    state.environment.RESEND_ADMIN_ALERT_TO = 'admin@example.test';
+    state.platformAdminFindFirst.mockResolvedValue(null);
+
+    const result = await opsMorningDigestCronResponse(request());
+
+    expect(await result.json()).toMatchObject({ outcome: 'SENT' });
+    expect(state.alerts).not.toHaveBeenCalled();
   });
 
   it('fails closed when database-managed email settings exist but are unavailable', async () => {

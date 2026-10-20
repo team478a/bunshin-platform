@@ -67,4 +67,30 @@ describe('PrismaOpsMorningDigestRunRepository', () => {
       await repository.deliveryStatus({ environment: 'PRODUCTION', targetDate: '2026-10-19' }),
     ).toBe('NOT_SENT');
   });
+
+  it('reads only the current run status metadata needed by the admin preview', async () => {
+    const db = fakeClient();
+    const expected = {
+      status: 'FAILED',
+      leaseExpiresAt: null,
+      errorCategory: 'EMAIL_PROVIDER_FAILED',
+    };
+    db.opsMorningDigestRun.findUnique.mockResolvedValue(expected);
+
+    const result = await new PrismaOpsMorningDigestRunRepository(db.value).runState({
+      environment: 'PRODUCTION',
+      targetDate: '2026-10-19',
+    });
+
+    expect(result).toBe(expected);
+    expect(db.opsMorningDigestRun.findUnique).toHaveBeenCalledWith({
+      where: {
+        environment_targetDate: {
+          environment: 'PRODUCTION',
+          targetDate: new Date('2026-10-19T00:00:00.000Z'),
+        },
+      },
+      select: { status: true, leaseExpiresAt: true, errorCategory: true },
+    });
+  });
 });

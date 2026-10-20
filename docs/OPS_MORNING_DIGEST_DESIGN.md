@@ -4,7 +4,7 @@
 
 対象: ワタシワークス全体の運用状況
 
-状態: 段階2 PR-1をDraftで確認待ち。読み取り集計・文面生成は実装済み。本番送信・Cron・HTTP・管理画面は未実施。
+状態: 段階2 PR-1・PR-2はmainへマージ済み。PR-3の管理者プレビューをDraftで確認待ち。本番migration適用・送信開始は未実施。
 
 ## 1. 目的と境界
 
@@ -153,7 +153,7 @@ PR-1で必須 `Job.workspaceId`・汎用worker・retryの調査を完了した�
 
 ### 4.6 ドライラン
 
-管理者限定の「今日のまとめをプレビュー」を用意する。Cronと同じcollector・判定・テンプレートを使い、メール送信・送信台帳の状態変更は行わず、本文・件名・状態・数値・リンクだけを画面へ返す。プレビュー時刻とJST対象日を明示する。個人情報が返らないテストを通し、本番での送信開始前に田中が内容を確認できるようにする。
+管理者限定の `/admin/alerts/morning-digest` で「毎朝のまとめメールをプレビュー」する。`/admin/alerts` からリンクする。Cronと同じ共通集計・文面作成関数を使い、画面を開いた管理者本人のIDで運用通知センターを読む。プレビューはメール送信・送信台帳の状態変更を行わず、本文・件名・送信準備状況・今日と前日の送信記録だけを表示する。プレビュー時刻とJST対象日を明示し、画面は毎回最新情報を読み直す。APIキー、送信元、宛先アドレスは出さず、宛先数のみを表示できる。取得に失敗した項目は0件にせず「取得失敗」とし、送信記録を読めないときは「確認できない」とする。個人情報・秘匿情報が返らないテストを通し、本番での送信開始前に田中が内容を確認できるようにする。
 
 ## 5. 段階2の実装範囲とPR分割案
 
@@ -161,7 +161,7 @@ PR-2では送信記録テーブルを追加するmigration 1件だけを許可�
 
 1. **PR-1 読み取り集計**: applicationにJST対象日の契約・Collector結果型・重大度だけを使う判定・件名/本文の純粋関数と未対応項目一覧の定数を追加し、databaseに通知センター連携用入力に加えてLINE broadcast/OEM invoiceの読み取りadapterを追加。個人情報・本文・金額をCollector出力へ出さない。
 2. **PR-2 送信・Cron・記録**: `apps/web/src/email/` に既存Resend設定を使うdigest送信adapter、`apps/web/app/api/internal/` にCRON_SECRET保護route、`vercel.json`にCron追加。Jobではなく専用台帳の追加型migrationを1件作る。`OPS_DIGEST_ENABLED` の未設定/falseおよびproduction以外では集計も送信もしない。
-3. **PR-3 管理者Preview**: 管理者権限のPreview画面とAPIを追加し、送信・状態書込なしで件名と判定済み文面を表示する。
+3. **PR-3 管理者Preview**: CronとPreviewが同じ `apps/web/src/admin/ops-morning-digest.ts` の集計・文面作成関数を使う。`/admin/alerts/morning-digest` に管理者権限の最新プレビューを追加し、送信・状態書込なしで件名・本文・準備状況・記録状態を表示する。
 
 PRは個別Draftと日本語報告で提出し、前PRのマージ・田中確認後に次へ進む。Secretsや本番の宛先値はコード・報告へ記載しない。
 
@@ -175,6 +175,8 @@ PRは個別Draftと日本語報告で提出し、前PRのマージ・田中確�
 - 件名/本文にemail、LINE ID、UUID等の利用者ID形式、投稿・会話・問い合わせ本文、生エラー文字列を含めない。
 - `OPS_DIGEST_ENABLED` 未設定/falseではメールproviderを呼ばず、集計対象の利用者データ・設定・Job状態を変えない。
 - Previewは同じ結果を使うがメール送信・送信済みrecord更新を行わない。
+- Previewで未ログイン・非管理者を拒否し、Resendとledgerのclaim/markSent/markFailedが呼ばれず、キー・送信元・宛先アドレスをHTMLへ出さない。
+- PreviewにOPS_DIGEST_ENABLED・production環境・メール設定・ledger読み取りの準備状況、今日の記録（なし/SENT/FAILED/CLAIMED）と前日の送信状態を表示する。ledger読取不能は「確認できない」とする。
 - 既存Alert Centerの判定・画面、既存メール/LINE通知、cronの実行・送信動作に回帰がない。
 
 ## 7. 田中に確認してほしい点
@@ -216,4 +218,13 @@ PRは個別Draftと日本語報告で提出し、前PRのマージ・田中確�
 
 ## 10. PR-2 実装報告
 
-PR-2の変更範囲・設計判断・検証、本番適用前に田中が実行する手順は、PR本文の日本語報告に記載する。PR-2はDraftのまま確認待ちとし、マージ・本番migration適用・環境変数設定・送信有効化は行わない。
+PR-2は#1368でmainへマージ済み。変更範囲・設計判断・検証はPR本文の日本語報告を参照。本番migration適用・環境変数設定・送信有効化は未実施で、田中の別承認を待つ。
+
+## 11. PR-3 管理者プレビュー実装報告
+
+- 実装範囲: Cronと管理者プレビューが共通の集計・文面作成関数を利用する。`/admin/alerts/morning-digest` を追加し、`/admin/alerts` から遷移可能にする。画面は毎回最新のJST対象日・本文・件名・準備状況・送信記録を読み取り専用で表示する。
+- アクセス: ログイン中の有効なPlatform Adminのみ。Cronでは従来どおり有効な管理者を1人選び、Previewでは現在ログインしている管理者を通知センター読取Actorとして使う。
+- 秘密情報: DB管理設定の優先・legacy環境変数fallbackという既存ルールで準備状況を判定する。APIキー、送信元、宛先アドレスは表示せず、宛先件数のみを出す。本文は `buildOpsMorningDigest` の戻り値をそのまま表示する。
+- 読み取り失敗: Previewのcollectorで例外が起きた項目は固定カテゴリの「取得失敗」として文面を作る。送信記録の読取不能は「確認できない」。例外文字列は画面へ出さない。
+- Cronへの影響: 読み取り・文面生成の場所だけを切り出す。production限定、feature flag、認証、claim、Resend送信、成功/失敗記録の制御は変更しない。PR-3のテストでCronとPreviewが共通関数を使い、Previewでは送信および台帳書込みをしないことを確認する。
+- 本番: Preview実装はコード上の状態であり、本番反映・migration適用・`OPS_DIGEST_ENABLED`変更・送信開始を意味しない。

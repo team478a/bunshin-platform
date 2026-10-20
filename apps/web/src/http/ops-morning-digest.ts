@@ -1,11 +1,5 @@
 import 'server-only';
-import {
-  GetAdminAlerts,
-  buildOpsMorningDigest,
-  opsMorningDigestDateWindow,
-  type OpsMorningDigestAlert,
-  type OpsMorningDigestCollectorResult,
-} from '@bunshin/application';
+import { opsMorningDigestDateWindow } from '@bunshin/application';
 import { getServerEnvironment } from '@bunshin/config';
 import { createLogger, requestIdFromHeader } from '@bunshin/observability';
 import { toApiError } from '@bunshin/shared';
@@ -18,17 +12,10 @@ import {
   OpsMorningDigestSendError,
 } from '../email/ops-morning-digest-resend';
 import { authorizeCronRequest } from './cron-security';
+import { buildOpsMorningDigestContent } from '../admin/ops-morning-digest';
 
 const logger = createLogger();
 const headers = { 'cache-control': 'private, no-store', 'x-content-type-options': 'nosniff' };
-const unavailable = { status: 'UNAVAILABLE', errorCategory: 'ALERT_CENTER_UNAVAILABLE' } as const;
-
-function previousDate(targetDate: string) {
-  const date = new Date(`${targetDate}T00:00:00.000Z`);
-  date.setUTCDate(date.getUTCDate() - 1);
-  return date.toISOString().slice(0, 10);
-}
-
 function response(outcome: string, requestId: string, status = 200) {
   return Response.json({ outcome, requestId }, { status, headers });
 }
@@ -68,44 +55,9 @@ export async function opsMorningDigestCronResponse(request: Request): Promise<Re
         where: { status: 'ACTIVE' },
         select: { userId: true },
       });
-      let alerts: OpsMorningDigestCollectorResult<OpsMorningDigestAlert[]> = unavailable;
-      if (admin) {
-        try {
-          const center = await new GetAdminAlerts(new db.PrismaAdminAlertRepository()).execute({
-            actorUserId: admin.userId,
-            environment,
-            now,
-          });
-          alerts = {
-            status: 'OK',
-            value: center.alerts.map(({ code, severity, title, count, href }) => ({
-              code,
-              severity,
-              title,
-              count,
-              href,
-            })),
-          };
-        } catch {
-          alerts = unavailable;
-        }
-      }
-
-      const collector = new db.PrismaOpsMorningDigestCollector();
-      const [broadcasts, invoices, previousDelivery] = await Promise.all([
-        collector.serviceLineBroadcasts(dateWindow),
-        collector.tenantInvoiceStatuses(),
-        runs.deliveryStatus({ environment, targetDate: previousDate(dateWindow.targetDate) }),
-      ]);
-      const report = buildOpsMorningDigest({
-        targetDate: dateWindow.targetDate,
-        alerts,
-        serviceBroadcasts: broadcasts.serviceBroadcasts,
-        fortuneWeeklyBroadcasts: broadcasts.fortuneWeeklyBroadcasts,
-        missingBroadcastDateCount: broadcasts.missingBroadcastDateCount,
-        invoices,
-        previousDelivery,
-        appUrl: configuration.APP_URL,
+      const { report } = await buildOpsMorningDigestContent({
+        actorUserId: admin?.userId ?? '',
+        now,
       });
 
       const adminEmail = new db.PrismaAdminEmailConfigurationRepository();
