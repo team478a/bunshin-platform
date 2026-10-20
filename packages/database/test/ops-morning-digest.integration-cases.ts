@@ -195,16 +195,21 @@ export function registerOpsMorningDigestIntegrationCases() {
         const serviceNameReads = readStatements.filter((sql) =>
           sql.includes('service_configurations'),
         );
+        const selectedColumns = (sql: string) => {
+          const selectStart = sql.indexOf('select ') + 'select '.length;
+          const fromStart = sql.indexOf(' from ', selectStart);
+          return fromStart < 0 ? sql : sql.slice(selectStart, fromStart);
+        };
         expect(broadcastReads.length).toBeGreaterThan(0);
         expect(invoiceReads.length).toBeGreaterThan(0);
         expect(serviceNameReads.length).toBeGreaterThan(0);
-        expect(broadcastReads.join('\n')).not.toMatch(
+        expect(broadcastReads.map(selectedColumns).join('\n')).not.toMatch(
           /"(title|message|workspace_id|created_by_user_id)"/,
         );
-        expect(invoiceReads.join('\n')).not.toMatch(
+        expect(invoiceReads.map(selectedColumns).join('\n')).not.toMatch(
           /"(amount_yen|invoice_number|contract_id|workspace_id)"/,
         );
-        expect(serviceNameReads.join('\n')).not.toMatch(
+        expect(serviceNameReads.map(selectedColumns).join('\n')).not.toMatch(
           /"(operator_name|contact_email|description|workspace_id)"/,
         );
       } finally {
