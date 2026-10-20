@@ -79,6 +79,10 @@ export function registerOpsMorningDigestIntegrationCases() {
             updatedByUserId: actor.id,
           },
         });
+        const invoicesBefore = await queryClient.tenantInvoice.groupBy({
+          by: ['status'],
+          _count: { _all: true },
+        });
         const monthlyUsage = await queryClient.tenantMonthlyUsage.create({
           data: {
             workspaceId: workspace.id,
@@ -168,7 +172,16 @@ export function registerOpsMorningDigestIntegrationCases() {
           ],
         });
         expect(broadcasts.fortuneWeeklyBroadcasts.status).toBe('NOT_APPLICABLE');
-        expect(invoices).toEqual({ status: 'OK', value: [{ status: 'ISSUED', count: 1 }] });
+        const expectedInvoiceCounts = new Map(
+          invoicesBefore.map((row) => [row.status, row._count._all]),
+        );
+        expectedInvoiceCounts.set('ISSUED', (expectedInvoiceCounts.get('ISSUED') ?? 0) + 1);
+        expect(invoices).toEqual({
+          status: 'OK',
+          value: [...expectedInvoiceCounts]
+            .map(([status, count]) => ({ status, count }))
+            .sort((left, right) => left.status.localeCompare(right.status)),
+        });
 
         const broadcastReads = statements.filter((sql) => sql.includes('service_line_broadcasts'));
         const invoiceReads = statements.filter((sql) => sql.includes('tenant_invoices'));
