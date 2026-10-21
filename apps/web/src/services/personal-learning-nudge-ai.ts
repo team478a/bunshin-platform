@@ -49,7 +49,7 @@ export async function generatePersonalLearningNudgeCopy(input: {
   situation: PersonalLearningNudgeSituation;
   ordinal: 1 | 2;
   judgmentDate: string;
-  offerPolicy?: PersonalLearningOfferPolicy;
+  offerPolicy: PersonalLearningOfferPolicy;
 }): Promise<string | null> {
   let policy;
   try {
@@ -141,7 +141,7 @@ export async function generatePersonalLearningNudgeCopy(input: {
               ordinal: input.ordinal,
               model: policy.model,
               permit,
-              offerPolicy: input.offerPolicy ?? 'AI_SKILL_V1',
+              offerPolicy: input.offerPolicy,
             }),
           });
         },

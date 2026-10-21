@@ -63,6 +63,10 @@ vi.mock('../src/providers/openai-learning-conversation', () => ({
 }));
 vi.mock('../src/services/personal-learning-extended-scope', () => ({
   resolvePersonalLearningExtendedScope: f.extendedScope,
+  resolvePersonalLearningOfferContext: async (...args: unknown[]) => ({
+    offerPolicy: 'AI_SKILL_V1',
+    extendedScope: await f.extendedScope(...args),
+  }),
 }));
 
 import { sendPersonalLearningConversationTurn } from '../src/services/personal-learning-conversation';

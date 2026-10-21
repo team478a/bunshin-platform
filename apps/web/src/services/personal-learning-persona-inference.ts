@@ -40,7 +40,7 @@ export async function inferPersonalLearningPersonaAfterSuccess(input: {
   actor: PersonalLearningActor;
   requestId: string;
   requestRevision: number;
-  offerPolicy?: PersonalLearningOfferPolicy;
+  offerPolicy: PersonalLearningOfferPolicy;
 }) {
   const scope = input.actor.scope;
   const now = new Date();
@@ -120,7 +120,7 @@ export async function inferPersonalLearningPersonaAfterSuccess(input: {
       // The source material itself is limited to 1,000 UTF-8 bytes; this is intentionally stricter than 1,000 tokens.
       maxSourceBytes: 1000,
       sources,
-      offerPolicy: input.offerPolicy ?? 'AI_SKILL_V1',
+      offerPolicy: input.offerPolicy,
     });
     if (Buffer.byteLength(body, 'utf8') > policy.maxRequestBytes)
       throw new ApplicationError('VALIDATION_ERROR', 'persona request limit exceeded');

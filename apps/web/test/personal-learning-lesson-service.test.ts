@@ -47,6 +47,10 @@ vi.mock('../src/providers/openai-learning-lesson', async () => {
 });
 vi.mock('../src/services/personal-learning-extended-scope', () => ({
   resolvePersonalLearningExtendedScope: f.extendedScope,
+  resolvePersonalLearningOfferContext: async (...args: unknown[]) => ({
+    offerPolicy: 'AI_SKILL_V1',
+    extendedScope: await f.extendedScope(...args),
+  }),
 }));
 import { prepareLearningLesson } from '../src/services/personal-learning-lesson-candidate';
 const id = '11111111-1111-4111-8111-111111111111';

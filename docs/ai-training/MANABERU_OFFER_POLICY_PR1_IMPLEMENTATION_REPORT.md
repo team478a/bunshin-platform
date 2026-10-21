@@ -1,6 +1,6 @@
 # マナベル提供方針 PR-1 実装報告
 
-状態: 実装済み・ローカル標準検証済み。Draft PRレビュー待ち。本番反映、DB migration、Program設定変更、副業用方針の追加は未実施。
+状態: 実装済み・PR #1376レビュー指摘修正済み・ローカル標準検証済み。本番反映、DB migration、Program設定変更、副業用方針の追加は未実施。
 
 作業開始時の基準: `origin/main` `86e5417ad602bfe451f21fa000a33be2d8e0ab43`。既存のrebase途中の作業ディレクトリには触れず、専用worktreeと`codex/manaberu-offer-policy-pr1`ブランチで作業した。
 
@@ -33,6 +33,20 @@
 - AI利用同意サービス・声かけ設定・Cron・LINE webhook・研修同意画面: 方針に対応する同意版・本文・SHA-256を使用。不正方針では表示・保存・照合・LINE操作を拒否。
 - `apps/web/test/personal-learning-offer-policy-access.test.ts`、`personal-learning-offer-policy-provider.test.ts`: 受講者境界の拒否と既存版・文面・ハッシュの固定テストを追加。
 
+### PR #1376レビュー指摘による追加修正
+
+- `personal-learning-request-access.ts`、`personal-learning-conversation.ts`、`personal-learning-lesson-candidate.ts`、`personal-learning-practice-support.ts`: `Object.hasOwn(...)`の互換分岐と`AI_SKILL_V1`フォールバックを削除し、方針解決関数を直接呼び出すように変更。
+- `ai-training-consent.ts`: 参加状態読取り時の同意照合を、各Enrollmentが紐づくProgramの提供方針から解決した版と本文SHA-256の対で行うように変更。
+- `training/page.tsx`: 固定同意文への`??` fallbackを削除し、`consentText`が無い場合は同意フォームを表示しないように変更。
+- `personal-learning-nudge-ai.ts`と`personal-learning-persona-inference.ts`: サービス層の`offerPolicy`を必須化し、サービス層の既定値を削除。Provider層の互換用既定値は維持。
+- 指示書5-2の5項目と8項目を実動テストで追加。画面の教材候補・会話・途中支援、LINE job、ペルソナ推測、証拠確認Job、声かけCronでProvider相当呼出しが0回であることと、同意表示・保存・必須照合・声かけ設定・LINE照合の拒否を確認。
+
+レビュー修正で変更したテストファイル:
+
+- 既存mockへの公開関数追加のみ: `personal-learning-conversation-service.test.ts`、`personal-learning-lesson-service.test.ts`、`personal-learning-practice-support-service.test.ts`、`personal-learning-unselected-topic-http.integration.test.ts`
+- 指示書5-2の追加検証: `personal-learning-nudges-cron.test.ts`
+- 新規: `personal-learning-offer-policy-consent.test.ts`、`personal-learning-offer-policy-screen-routes.test.ts`、`personal-learning-offer-policy-line.test.ts`、`personal-learning-offer-policy-line-job.test.ts`、`personal-learning-offer-policy-nudge-preference.test.ts`、`personal-learning-offer-policy-persona.test.ts`、`personal-learning-offer-policy-workers.test.ts`
+
 ### 文書
 
 - `docs/DECISION_LOG.md`: Program最上位の提供方針と、Pilot許可キーを変更しない判断を追記。
@@ -51,17 +65,17 @@
 - `pnpm format:check`: 成功。
 - `pnpm typecheck`: 25 tasks成功。
 - `pnpm lint`: architecture checkを含む25 tasks成功。
-- 指示書5-1の既存Webテスト: 14 files / 103 tests passed。既存テストファイルは変更していない。
+- 指示書5-1の既存Webテストは維持。レビュー指示により、既存テストのうち上記4ファイルはmock exportの追加のみ、声かけCronは新規ケースの追加のみ実施し、既存期待値とテスト内容は変更していない。
 - 追加のProvider互換テストを含む関連Webテスト: 成功。
 - `pnpm --filter @bunshin/capability-training test`: 33 files / 503 tests passed。
-- `pnpm test`: 25 tasks成功。Webは521 files / 3,708 tests passed、live test 3件skip。初回は並列負荷による無関係な5秒timeout 2件と、既存テストmockに新しい公開関数がない互換性失敗2件が出た。mock互換分岐を追加し、該当4件の単独再実行成功後、全体再実行で成功した。
+- `pnpm test`: 25 tasks成功。Webは528 files / 3,721 tests passed、live test 3件skip。
 - `pnpm build`: 13 tasks成功。Next.js production build成功。
 - `git diff --check`: 成功。
 - Providerはモックまたは純粋なbody生成テストであり、外部AI、LINE、本番DBは呼び出していない。
 
 ## 5. 未解決事項
 
-- Draft PRのレビューとCI確認は未実施。
+- PR #1376の再レビューと更新後CI確認は未実施。
 - 副業用の方針・指示文・同意文、方針を設定する管理操作は後続PR。
 - 本番反映、Program設定変更、Pilot開始、実AI・LINE実機確認は未実施。
 

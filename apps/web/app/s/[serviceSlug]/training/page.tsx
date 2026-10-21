@@ -4,7 +4,6 @@ import { redirect } from 'next/navigation';
 import { z } from 'zod';
 import { currentUserProvider } from '../../../../src/auth/current-user';
 import {
-  AI_TRAINING_AI_CONSENT_TEXT,
   readAiTrainingParticipation,
   recordAiTrainingUsageConsent,
 } from '../../../../src/services/ai-training-consent';
@@ -103,15 +102,13 @@ export default async function AiTrainingConfirmationPage({
             return (
               <article className="settings-card" key={enrollment.enrollmentId}>
                 <h3>{enrollment.programName}</h3>
-                {enrollment.state === 'CONSENT_REQUIRED' ? (
+                {enrollment.state === 'CONSENT_REQUIRED' && enrollment.consentText ? (
                   <>
                     <p>AI利用について</p>
                     <ul>
-                      {(enrollment.consentText ?? AI_TRAINING_AI_CONSENT_TEXT)
-                        .split('\n')
-                        .map((line) => (
-                          <li key={line}>{line}</li>
-                        ))}
+                      {enrollment.consentText.split('\n').map((line) => (
+                        <li key={line}>{line}</li>
+                      ))}
                     </ul>
                     <form action={acceptAiTrainingConsent} className="form-stack">
                       <input type="hidden" name="serviceSlug" value={serviceSlug} />

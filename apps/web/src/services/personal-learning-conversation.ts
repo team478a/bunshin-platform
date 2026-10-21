@@ -17,7 +17,7 @@ import {
   learningConversationBody,
   learningConversationPromptVersion,
 } from '../providers/openai-learning-conversation';
-import * as learningOfferContext from './personal-learning-extended-scope';
+import { resolvePersonalLearningOfferContext } from './personal-learning-extended-scope';
 import { loadPersonalLearningToolFeatureContext } from './personal-learning-tool-feature-context';
 
 export async function sendPersonalLearningConversationTurn(
@@ -27,17 +27,7 @@ export async function sendPersonalLearningConversationTurn(
   const repository = new db.PrismaPersonalLearningConversationRepository(db.prisma);
   const candidates = new db.PrismaLearningCandidateRepository(db.prisma);
   const candidate = await candidates.readCandidate(command.actor);
-  const { offerPolicy, extendedScope } = Object.hasOwn(
-    learningOfferContext,
-    'resolvePersonalLearningOfferContext',
-  )
-    ? await learningOfferContext.resolvePersonalLearningOfferContext(command.actor)
-    : {
-        offerPolicy: 'AI_SKILL_V1' as const,
-        extendedScope: await learningOfferContext.resolvePersonalLearningExtendedScope(
-          command.actor,
-        ),
-      };
+  const { offerPolicy, extendedScope } = await resolvePersonalLearningOfferContext(command.actor);
   const promptVersion = learningConversationPromptVersion(extendedScope, offerPolicy);
   const currentPractice = (await repository.readPractice(command.actor)).current;
   const personaContext = await new db.PrismaPersonalLearningPersonaRepository(db.prisma).listForAi(

@@ -23,7 +23,22 @@ export {
 export const aiTrainingConsentTextDigest = (text: string) =>
   createHash('sha256').update(text).digest('hex');
 
+// Keep the existing AI_SKILL_V1 identity explicit while participation matching below resolves
+// the applicable identity from each Program's offer policy.
 const consentTextDigest = aiTrainingConsentTextDigest(AI_TRAINING_AI_CONSENT_TEXT);
+const aiSkillV1ConsentIdentity = {
+  consentVersion: AI_TRAINING_AI_CONSENT_VERSION,
+  textDigest: consentTextDigest,
+} as const;
+
+function aiTrainingConsentIdentity(offerPolicy: Parameters<typeof aiTrainingConsentPolicy>[0]) {
+  const policy = aiTrainingConsentPolicy(offerPolicy);
+  if (offerPolicy === 'AI_SKILL_V1') return aiSkillV1ConsentIdentity;
+  return {
+    consentVersion: policy.version,
+    textDigest: aiTrainingConsentTextDigest(policy.text),
+  };
+}
 
 export async function readAiTrainingParticipation(serviceSlug: string, userId: string) {
   const service = await resolveMemberServiceContext(serviceSlug, userId);
@@ -95,10 +110,13 @@ export async function readAiTrainingParticipation(serviceSlug: string, userId: s
             groupId: service.serviceId,
             userId,
             programEnrollmentId: { in: enrollmentIds },
-            consentVersion: AI_TRAINING_AI_CONSENT_VERSION,
-            textDigest: consentTextDigest,
           },
-          select: { programEnrollmentId: true, consentedAt: true },
+          select: {
+            programEnrollmentId: true,
+            consentVersion: true,
+            textDigest: true,
+            consentedAt: true,
+          },
         }),
       ])
     : [[], []];
@@ -111,11 +129,15 @@ export async function readAiTrainingParticipation(serviceSlug: string, userId: s
     const program = pilotPrograms.find(({ id }) => id === enrollment.serviceProgramId)!;
     const offerPolicy = personalLearningOfferPolicy(program.settings)!;
     const consentPolicy = aiTrainingConsentPolicy(offerPolicy);
+    const consentIdentity = aiTrainingConsentIdentity(offerPolicy);
     const hasInternalSeat = seats.some(
       (seat) => seat.serviceProgramId === program.id && seat.programEnrollmentId === enrollment.id,
     );
     const consent = consents.find(
-      ({ programEnrollmentId }) => programEnrollmentId === enrollment.id,
+      ({ programEnrollmentId, consentVersion, textDigest }) =>
+        programEnrollmentId === enrollment.id &&
+        consentVersion === consentIdentity.consentVersion &&
+        textDigest === consentIdentity.textDigest,
     );
     const state = resolveAiTrainingParticipationState({
       hasProgram: true,
