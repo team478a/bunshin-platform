@@ -58,7 +58,9 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
           SUPABASE_SESSION_POOLER_HOST: ${{ vars.SUPABASE_SESSION_POOLER_HOST || secrets.SUPABASE_SESSION_POOLER_HOST }}
-        run: pnpm db:migration:apply:release-20261020 | tee -a "$GITHUB_STEP_SUMMARY"
+        run: |
+          set -euo pipefail
+          pnpm db:migration:apply:release-20261020 | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Record outcome
         if: success()

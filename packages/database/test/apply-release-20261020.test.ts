@@ -92,4 +92,15 @@ describe('approval-gated 2026-10-20 release migrations', () => {
     ).toBe(1);
     expect(execute).not.toHaveBeenCalled();
   });
+
+  it('fails closed when DIRECT_URL is missing before connecting', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const execute = vi.fn<typeof runMigrationProcess>();
+    expect(await runRelease20261020Migration(execute, { ...env, DIRECT_URL: '' })).toBe(1);
+    expect(execute).not.toHaveBeenCalled();
+    expect(vi.mocked(console.error).mock.calls.flat().join(' ')).toContain(
+      'connection-url-missing',
+    );
+    expect(vi.mocked(console.error).mock.calls.flat().join(' ')).not.toContain('synthetic-secret');
+  });
 });
