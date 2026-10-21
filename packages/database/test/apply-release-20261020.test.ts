@@ -41,6 +41,8 @@ describe('approval-gated 2026-10-20 release migrations', () => {
     expect(await runRelease20261020Migration(execute, env)).toBe(0);
     expect(execute).toHaveBeenCalledTimes(4);
     expect(execute.mock.calls[0]![2].input).toContain('BEGIN READ ONLY');
+    expect(execute.mock.calls[0]![2].input).toContain('FROM pg_stat_ssl');
+    expect(execute.mock.calls[0]![2].input).toContain('pg_backend_pid() AND ssl');
     expect(execute.mock.calls[0]![2].input).toContain('statement_timeout');
     expect(new URL(execute.mock.calls[0]![2].env.DIRECT_URL!).hostname).toBe(host);
     expect(
@@ -81,16 +83,34 @@ describe('approval-gated 2026-10-20 release migrations', () => {
     expect(execute.mock.calls.some(([, args]) => args.includes('deploy'))).toBe(false);
   });
 
-  it('rejects an incorrect project or pooler endpoint before connecting', async () => {
+  it.each([
+    [
+      'pooler host mismatch',
+      {
+        DIRECT_URL: direct
+          .replace(`db.${projectRef}.supabase.co`, 'other.pooler.supabase.com')
+          .replace('postgres:', `postgres.${projectRef}:`),
+      },
+      'session-pooler-host-mismatch',
+    ],
+    [
+      'TLS disabled',
+      { DIRECT_URL: direct.replace('sslmode=require', 'sslmode=disable') },
+      'tls-mode-invalid',
+    ],
+    [
+      'missing password',
+      { DIRECT_URL: direct.replace('postgres:synthetic-secret@', 'postgres:@') },
+      'password-missing',
+    ],
+  ])('reports only the safe reason for %s before connecting', async (_label, overrides, reason) => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     const execute = vi.fn<typeof runMigrationProcess>();
-    expect(
-      await runRelease20261020Migration(execute, {
-        ...env,
-        SUPABASE_SESSION_POOLER_HOST: 'wrong.example.com',
-      }),
-    ).toBe(1);
+    expect(await runRelease20261020Migration(execute, { ...env, ...overrides })).toBe(1);
     expect(execute).not.toHaveBeenCalled();
+    const diagnostic = vi.mocked(console.error).mock.calls.flat().join(' ');
+    expect(diagnostic).toContain(`session-pooler-target-invalid:${reason}`);
+    expect(diagnostic).not.toContain('synthetic-secret');
   });
 
   it('accepts a session pooler URL using verify-full TLS', async () => {
@@ -115,16 +135,24 @@ describe('approval-gated 2026-10-20 release migrations', () => {
     expect(execute).toHaveBeenCalledTimes(4);
   });
 
-  it('rejects a pooler URL without TLS before connecting', async () => {
+  it('accepts an omitted sslmode and requires the live PostgreSQL session to use TLS', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
-    const execute = vi.fn<typeof runMigrationProcess>();
+    const execute = vi.fn<typeof runMigrationProcess>().mockResolvedValueOnce({
+      reason: 'EXITED',
+      status: 1,
+      diagnostic: 'preflight rejected non-TLS backend session',
+    });
+
     expect(
       await runRelease20261020Migration(execute, {
         ...env,
-        DIRECT_URL: direct.replace('sslmode=require', 'sslmode=disable'),
+        DIRECT_URL: direct.replace('?sslmode=require', ''),
       }),
     ).toBe(1);
-    expect(execute).not.toHaveBeenCalled();
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(execute.mock.calls[0]![2].input).toContain('pg_stat_ssl');
+    expect(execute.mock.calls[0]![2].input).toContain('pg_backend_pid() AND ssl');
+    expect(execute.mock.calls.some(([, args]) => args.includes('deploy'))).toBe(false);
   });
 
   it('fails closed when DIRECT_URL is missing before connecting', async () => {
