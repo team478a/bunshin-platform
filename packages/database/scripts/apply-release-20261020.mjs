@@ -23,13 +23,16 @@ const approvedMigrations = [
 function validSessionTarget(connection, sessionPoolerHost) {
   try {
     const url = new URL(connection);
+    // Supabase/PG clients may use any of these TLS-enforcing modes. Requiring
+    // only `require` rejected valid production pooler URLs using verify-full.
+    const sslMode = url.searchParams.get('sslmode');
     return (
       matchesExpectedProject(connection, expectedProjectRef) &&
       url.hostname === sessionPoolerHost &&
       url.hostname.endsWith('.pooler.supabase.com') &&
       url.port === '5432' &&
       url.pathname === '/postgres' &&
-      url.searchParams.get('sslmode') === 'require' &&
+      ['require', 'verify-ca', 'verify-full'].includes(sslMode) &&
       decodeURIComponent(url.username) === `postgres.${expectedProjectRef}` &&
       Boolean(decodeURIComponent(url.password))
     );
