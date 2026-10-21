@@ -65,7 +65,6 @@ export async function runRelease20261020Migration(
       projectRef !== expectedProjectRef ||
       !/^[a-z0-9]{20}$/.test(projectRef ?? '') ||
       !environment.DATABASE_URL ||
-      environment.DATABASE_URL !== environment.DIRECT_URL ||
       !matchesExpectedProject(environment.DATABASE_URL, expectedProjectRef) ||
       !sessionPoolerHost ||
       !/^[a-z0-9.-]+\.pooler\.supabase\.com$/.test(sessionPoolerHost)
