@@ -41,6 +41,8 @@ describe('approval-gated 2026-10-20 release migrations', () => {
     expect(await runRelease20261020Migration(execute, env)).toBe(0);
     expect(execute).toHaveBeenCalledTimes(4);
     expect(execute.mock.calls[0]![2].input).toContain('BEGIN READ ONLY');
+    expect(execute.mock.calls[0]![2].input).toContain('FROM pg_stat_ssl');
+    expect(execute.mock.calls[0]![2].input).toContain('pg_backend_pid() AND ssl');
     expect(execute.mock.calls[0]![2].input).toContain('statement_timeout');
     expect(new URL(execute.mock.calls[0]![2].env.DIRECT_URL!).hostname).toBe(host);
     expect(
@@ -131,6 +133,26 @@ describe('approval-gated 2026-10-20 release migrations', () => {
       }),
     ).toBe(0);
     expect(execute).toHaveBeenCalledTimes(4);
+  });
+
+  it('accepts an omitted sslmode and requires the live PostgreSQL session to use TLS', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const execute = vi.fn<typeof runMigrationProcess>().mockResolvedValueOnce({
+      reason: 'EXITED',
+      status: 1,
+      diagnostic: 'preflight rejected non-TLS backend session',
+    });
+
+    expect(
+      await runRelease20261020Migration(execute, {
+        ...env,
+        DIRECT_URL: direct.replace('?sslmode=require', ''),
+      }),
+    ).toBe(1);
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(execute.mock.calls[0]![2].input).toContain('pg_stat_ssl');
+    expect(execute.mock.calls[0]![2].input).toContain('pg_backend_pid() AND ssl');
+    expect(execute.mock.calls.some(([, args]) => args.includes('deploy'))).toBe(false);
   });
 
   it('fails closed when DIRECT_URL is missing before connecting', async () => {
