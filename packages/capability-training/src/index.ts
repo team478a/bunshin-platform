@@ -12,6 +12,9 @@ export * from './reproduction-challenge-review';
 export * from './reproduction-history';
 export * from './personal-learning-nudges';
 export * from './personal-learning-offer-policy';
+export * from './side-hustle-catalog';
+export * from './side-hustle-catalog-data';
+export * from './side-hustle-screening';
 import { AI_TRAINING_MISSION_QUALITY } from './mission-quality';
 import type { TrainingGoalKey } from './learning-catalog';
 
