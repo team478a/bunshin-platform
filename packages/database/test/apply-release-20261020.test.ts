@@ -93,6 +93,40 @@ describe('approval-gated 2026-10-20 release migrations', () => {
     expect(execute).not.toHaveBeenCalled();
   });
 
+  it('accepts a session pooler URL using verify-full TLS', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    const execute = vi
+      .fn<typeof runMigrationProcess>()
+      .mockResolvedValueOnce({ reason: 'EXITED', status: 0 })
+      .mockResolvedValueOnce({ reason: 'EXITED', status: 1, capturedOutput: pending })
+      .mockResolvedValueOnce({ reason: 'EXITED', status: 0 })
+      .mockResolvedValueOnce({
+        reason: 'EXITED',
+        status: 0,
+        capturedOutput: 'Database schema is up to date!',
+      });
+
+    expect(
+      await runRelease20261020Migration(execute, {
+        ...env,
+        DIRECT_URL: direct.replace('sslmode=require', 'sslmode=verify-full'),
+      }),
+    ).toBe(0);
+    expect(execute).toHaveBeenCalledTimes(4);
+  });
+
+  it('rejects a pooler URL without TLS before connecting', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const execute = vi.fn<typeof runMigrationProcess>();
+    expect(
+      await runRelease20261020Migration(execute, {
+        ...env,
+        DIRECT_URL: direct.replace('sslmode=require', 'sslmode=disable'),
+      }),
+    ).toBe(1);
+    expect(execute).not.toHaveBeenCalled();
+  });
+
   it('fails closed when DIRECT_URL is missing before connecting', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     const execute = vi.fn<typeof runMigrationProcess>();
