@@ -20,25 +20,28 @@ const approvedMigrations = [
   '20261020120000_ops_morning_digest_runs',
 ];
 
-function validSessionTarget(connection, sessionPoolerHost) {
+function sessionTargetIssue(connection, sessionPoolerHost) {
+  let url;
   try {
-    const url = new URL(connection);
-    // Supabase/PG clients may use any of these TLS-enforcing modes. Requiring
-    // only `require` rejected valid production pooler URLs using verify-full.
-    const sslMode = url.searchParams.get('sslmode');
-    return (
-      matchesExpectedProject(connection, expectedProjectRef) &&
-      url.hostname === sessionPoolerHost &&
-      url.hostname.endsWith('.pooler.supabase.com') &&
-      url.port === '5432' &&
-      url.pathname === '/postgres' &&
-      ['require', 'verify-ca', 'verify-full'].includes(sslMode) &&
-      decodeURIComponent(url.username) === `postgres.${expectedProjectRef}` &&
-      Boolean(decodeURIComponent(url.password))
-    );
+    url = new URL(connection);
   } catch {
-    return false;
+    return 'url-invalid';
   }
+  if (!matchesExpectedProject(connection, expectedProjectRef))
+    return 'project-role-or-path-invalid';
+  if (url.hostname !== sessionPoolerHost) return 'session-pooler-host-mismatch';
+  if (!url.hostname.endsWith('.pooler.supabase.com')) return 'not-a-supabase-pooler-host';
+  if (url.port !== '5432') return 'session-pooler-port-invalid';
+  if (!['require', 'verify-ca', 'verify-full'].includes(url.searchParams.get('sslmode')))
+    return 'tls-mode-invalid';
+  if (!url.password) return 'password-missing';
+  try {
+    if (decodeURIComponent(url.username) !== `postgres.${expectedProjectRef}`)
+      return 'pooler-role-invalid';
+  } catch {
+    return 'pooler-role-invalid';
+  }
+  return null;
 }
 
 function historyStatus(output, exitStatus) {
@@ -83,7 +86,11 @@ export async function runRelease20261020Migration(
     configurationDiagnostic = 'session-pooler-resolution-failed';
     const sessionUrl = resolveMigrationDirectUrl(environment.DIRECT_URL, sessionPoolerHost);
     configurationDiagnostic = 'session-pooler-target-invalid';
-    if (!validSessionTarget(sessionUrl, sessionPoolerHost)) throw new Error('POOLER_INVALID');
+    const sessionIssue = sessionTargetIssue(sessionUrl, sessionPoolerHost);
+    if (sessionIssue) {
+      configurationDiagnostic = `session-pooler-target-invalid:${sessionIssue}`;
+      throw new Error('POOLER_INVALID');
+    }
     configurationDiagnostic = 'migration-timeout-settings-invalid';
     bounds = resolveMigrationBounds(environment);
     configurationDiagnostic = 'bounded-session-url-invalid';
