@@ -1,0 +1,203 @@
+import { createRequire } from 'node:module';
+import { pathToFileURL } from 'node:url';
+import { performance } from 'node:perf_hooks';
+import { runMigrationProcess } from './migration-process.mjs';
+import { parseMigrationHistoryStatus } from './migration-history-status.mjs';
+import {
+  matchesExpectedProject,
+  resolveMigrationBounds,
+  resolveMigrationDirectUrl,
+  withMigrationBounds,
+  withMigrationConnectionMetadata,
+} from './deploy-migrations-for-vercel.mjs';
+
+const requireModule = createRequire(import.meta.url);
+const expectedProjectRef = 'vtkzinaudznwbsjoyszk';
+const expectedConfirmation = `APPLY_RELEASE_20261020_MIGRATIONS_TO_${expectedProjectRef}`;
+const approvedMigrations = [
+  '20261019120000_learning_provider_abstraction',
+  '20261020100000_personal_learning_tool_feature_updates',
+  '20261020120000_ops_morning_digest_runs',
+];
+
+function validSessionTarget(connection, sessionPoolerHost) {
+  try {
+    const url = new URL(connection);
+    return (
+      matchesExpectedProject(connection, expectedProjectRef) &&
+      url.hostname === sessionPoolerHost &&
+      url.hostname.endsWith('.pooler.supabase.com') &&
+      url.port === '5432' &&
+      url.pathname === '/postgres' &&
+      url.searchParams.get('sslmode') === 'require' &&
+      decodeURIComponent(url.username) === `postgres.${expectedProjectRef}` &&
+      Boolean(decodeURIComponent(url.password))
+    );
+  } catch {
+    return false;
+  }
+}
+
+function historyStatus(output, exitStatus) {
+  const parsed = parseMigrationHistoryStatus(output);
+  if (parsed.status === 'UP_TO_DATE' && exitStatus === 0) return parsed;
+  if (parsed.status === 'PENDING' && (exitStatus === 0 || exitStatus === 1)) return parsed;
+  return { status: 'UNKNOWN', pendingMigrations: [] };
+}
+
+export async function runRelease20261020Migration(
+  execute = runMigrationProcess,
+  environment = process.env,
+) {
+  if (environment.VERCEL_ENV !== 'production') {
+    console.error('[database] RELEASE_MIGRATION_ENVIRONMENT_INVALID: production context required.');
+    return 1;
+  }
+
+  let bounds;
+  let boundedUrl;
+  let historyUrl;
+  let prismaCli;
+  try {
+    const projectRef = environment.MIGRATION_APPLY_EXPECTED_PROJECT_REF;
+    const sessionPoolerHost = environment.SUPABASE_SESSION_POOLER_HOST;
+    if (
+      projectRef !== expectedProjectRef ||
+      !/^[a-z0-9]{20}$/.test(projectRef ?? '') ||
+      !environment.DATABASE_URL ||
+      environment.DATABASE_URL !== environment.DIRECT_URL ||
+      !matchesExpectedProject(environment.DATABASE_URL, expectedProjectRef) ||
+      !sessionPoolerHost ||
+      !/^[a-z0-9.-]+\.pooler\.supabase\.com$/.test(sessionPoolerHost)
+    ) {
+      throw new Error('TARGET_INVALID');
+    }
+    const sessionUrl = resolveMigrationDirectUrl(environment.DIRECT_URL, sessionPoolerHost);
+    if (!validSessionTarget(sessionUrl, sessionPoolerHost)) throw new Error('POOLER_INVALID');
+    bounds = resolveMigrationBounds(environment);
+    boundedUrl = withMigrationBounds(sessionUrl, bounds);
+    historyUrl = withMigrationConnectionMetadata(sessionUrl, 'bunshin_release_migration_history');
+    prismaCli = requireModule.resolve('prisma/build/index.js');
+  } catch {
+    console.error(
+      '[database] RELEASE_MIGRATION_CONFIGURATION_INVALID: target or connection settings rejected; values are not logged.',
+    );
+    return 1;
+  }
+
+  const confirmation = environment.MIGRATION_APPLY_CONFIRMATION;
+  if (confirmation !== expectedConfirmation) {
+    console.error('[database] RELEASE_MIGRATION_CONFIRMATION_INVALID: no migration started.');
+    return 1;
+  }
+
+  const childEnvironment = { ...environment, DATABASE_URL: boundedUrl, DIRECT_URL: boundedUrl };
+  delete childEnvironment.PGOPTIONS;
+  const historyEnvironment = {
+    ...childEnvironment,
+    DATABASE_URL: historyUrl,
+    DIRECT_URL: historyUrl,
+  };
+  const cwd = new URL('../', import.meta.url);
+  const startedAt = performance.now();
+  const identity = await execute(
+    process.execPath,
+    [prismaCli, 'db', 'execute', '--stdin', '--schema', 'prisma/schema.prisma'],
+    {
+      cwd,
+      env: childEnvironment,
+      timeoutMs: Math.min(bounds.processTimeoutMs, 30000),
+      input: `BEGIN READ ONLY;
+      DO $$ BEGIN
+        IF current_database() <> 'postgres' OR current_user <> 'postgres'
+           OR current_setting('lock_timeout')::interval <> interval '${bounds.lockTimeoutMs} milliseconds'
+           OR current_setting('statement_timeout')::interval <> interval '${bounds.statementTimeoutMs} milliseconds'
+           OR current_setting('idle_in_transaction_session_timeout')::interval <> interval '${bounds.statementTimeoutMs} milliseconds'
+        THEN RAISE EXCEPTION 'RELEASE_MIGRATION_BOUNDS_NOT_ACTIVE'; END IF;
+      END $$;
+      COMMIT;`,
+    },
+  );
+  if (identity.reason !== 'EXITED' || identity.status !== 0) {
+    console.error(
+      `[database] RELEASE_MIGRATION_PREFLIGHT_FAILED (${identity.diagnostic ?? identity.reason.toLowerCase()}): no migration started.`,
+    );
+    return 1;
+  }
+
+  const readHistory = () =>
+    execute(
+      process.execPath,
+      [prismaCli, 'migrate', 'status', '--schema', 'prisma/schema.prisma'],
+      {
+        cwd,
+        env: historyEnvironment,
+        timeoutMs: Math.min(bounds.processTimeoutMs, 60000),
+        captureOutput: true,
+      },
+    );
+  const before = await readHistory();
+  if (before.reason !== 'EXITED') {
+    console.error('[database] RELEASE_MIGRATION_HISTORY_UNCONFIRMED: no migration started.');
+    return 1;
+  }
+  const status = historyStatus(before.capturedOutput ?? '', before.status);
+  if (status.status === 'UP_TO_DATE') {
+    console.log('[database] Release migrations already applied; no database changes made.');
+    return 0;
+  }
+  if (
+    status.status !== 'PENDING' ||
+    status.pendingMigrations.length !== approvedMigrations.length ||
+    approvedMigrations.some((migration, index) => status.pendingMigrations[index] !== migration)
+  ) {
+    console.error(
+      '[database] RELEASE_MIGRATION_PENDING_SET_MISMATCH: no migration started; review migration history.',
+    );
+    return 1;
+  }
+  if (performance.now() - startedAt >= bounds.processTimeoutMs) {
+    console.error('[database] RELEASE_MIGRATION_DEADLINE_EXCEEDED: no migration started.');
+    return 1;
+  }
+
+  console.log(
+    `[database] Approved target: ${expectedProjectRef}; database/role: postgres/postgres.`,
+  );
+  console.log('[database] Exact pending migration set:');
+  for (const migration of status.pendingMigrations) console.log(`- ${migration}`);
+  const remainingMs = Math.floor(bounds.processTimeoutMs - (performance.now() - startedAt));
+  if (remainingMs <= 0) {
+    console.error('[database] RELEASE_MIGRATION_DEADLINE_EXCEEDED: migration not started.');
+    return 1;
+  }
+
+  const applied = await execute(
+    process.execPath,
+    [prismaCli, 'migrate', 'deploy', '--schema', 'prisma/schema.prisma'],
+    { cwd, env: childEnvironment, timeoutMs: remainingMs },
+  );
+  if (applied.reason !== 'EXITED' || applied.status !== 0) {
+    console.error(
+      '[database] RELEASE_MIGRATION_FAILED_OR_UNCONFIRMED: stop; do not retry. Check migration history first.',
+    );
+    return 1;
+  }
+
+  const after = await readHistory();
+  if (
+    after.reason !== 'EXITED' ||
+    historyStatus(after.capturedOutput ?? '', after.status).status !== 'UP_TO_DATE'
+  ) {
+    console.error(
+      '[database] RELEASE_MIGRATION_POSTCHECK_FAILED: result is unconfirmed; do not retry.',
+    );
+    return 1;
+  }
+  console.log('[database] RELEASE_MIGRATIONS_APPLIED_AND_VERIFIED: schema is up to date.');
+  return 0;
+}
+
+const isEntrypoint =
+  process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href;
+if (isEntrypoint) process.exitCode = await runRelease20261020Migration();

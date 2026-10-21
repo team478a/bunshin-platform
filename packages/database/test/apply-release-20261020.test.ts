@@ -1,0 +1,94 @@
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { runRelease20261020Migration } from '../scripts/apply-release-20261020.mjs';
+import type { runMigrationProcess } from '../scripts/migration-process.mjs';
+
+const projectRef = 'vtkzinaudznwbsjoyszk';
+const host = 'aws-0-ap-northeast-1.pooler.supabase.com';
+const direct = `postgresql://postgres:synthetic-secret@db.${projectRef}.supabase.co:5432/postgres?sslmode=require`;
+const env = {
+  VERCEL_ENV: 'production',
+  MIGRATION_APPLY_EXPECTED_PROJECT_REF: projectRef,
+  MIGRATION_APPLY_CONFIRMATION: `APPLY_RELEASE_20261020_MIGRATIONS_TO_${projectRef}`,
+  DATABASE_URL: direct,
+  DIRECT_URL: direct,
+  SUPABASE_SESSION_POOLER_HOST: host,
+};
+const migrations = [
+  '20261019120000_learning_provider_abstraction',
+  '20261020100000_personal_learning_tool_feature_updates',
+  '20261020120000_ops_morning_digest_runs',
+];
+const pending =
+  'The following migration(s) have not yet been applied:\n' + migrations.join('\n') + '\n';
+
+describe('approval-gated 2026-10-20 release migrations', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it('requires active bounded session-pooler connection, exact pending set, and verifies after deploy', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    const execute = vi
+      .fn<typeof runMigrationProcess>()
+      .mockResolvedValueOnce({ reason: 'EXITED', status: 0 })
+      .mockResolvedValueOnce({ reason: 'EXITED', status: 1, capturedOutput: pending })
+      .mockResolvedValueOnce({ reason: 'EXITED', status: 0 })
+      .mockResolvedValueOnce({
+        reason: 'EXITED',
+        status: 0,
+        capturedOutput: 'Database schema is up to date!',
+      });
+
+    expect(await runRelease20261020Migration(execute, env)).toBe(0);
+    expect(execute).toHaveBeenCalledTimes(4);
+    expect(execute.mock.calls[0]![2].input).toContain('BEGIN READ ONLY');
+    expect(execute.mock.calls[0]![2].input).toContain('statement_timeout');
+    expect(new URL(execute.mock.calls[0]![2].env.DIRECT_URL!).hostname).toBe(host);
+    expect(
+      new URL(execute.mock.calls[0]![2].env.DIRECT_URL!).searchParams.get('options'),
+    ).toContain('lock_timeout=5000');
+    expect(execute.mock.calls[2]![1]).toContain('deploy');
+    expect(vi.mocked(console.log).mock.calls.flat().join(' ')).not.toContain('synthetic-secret');
+  });
+
+  it('rejects an unconfirmed action before connecting', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const execute = vi.fn<typeof runMigrationProcess>();
+    expect(
+      await runRelease20261020Migration(execute, {
+        ...env,
+        MIGRATION_APPLY_CONFIRMATION: 'wrong',
+      }),
+    ).toBe(1);
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['partial set', migrations.slice(0, 2)],
+    ['unexpected set', [...migrations, '20261020130000_unexpected']],
+  ])('rejects a %s without running migrate deploy', async (_label, names) => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const execute = vi
+      .fn<typeof runMigrationProcess>()
+      .mockResolvedValueOnce({ reason: 'EXITED', status: 0 })
+      .mockResolvedValueOnce({
+        reason: 'EXITED',
+        status: 1,
+        capturedOutput:
+          'The following migration(s) have not yet been applied:\n' + names.join('\n'),
+      });
+    expect(await runRelease20261020Migration(execute, env)).toBe(1);
+    expect(execute).toHaveBeenCalledTimes(2);
+    expect(execute.mock.calls.some(([, args]) => args.includes('deploy'))).toBe(false);
+  });
+
+  it('rejects an incorrect project or pooler endpoint before connecting', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const execute = vi.fn<typeof runMigrationProcess>();
+    expect(
+      await runRelease20261020Migration(execute, {
+        ...env,
+        SUPABASE_SESSION_POOLER_HOST: 'wrong.example.com',
+      }),
+    ).toBe(1);
+    expect(execute).not.toHaveBeenCalled();
+  });
+});
