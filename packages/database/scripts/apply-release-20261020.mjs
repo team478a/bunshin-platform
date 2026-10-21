@@ -58,28 +58,39 @@ export async function runRelease20261020Migration(
   let boundedUrl;
   let historyUrl;
   let prismaCli;
+  let configurationDiagnostic = 'unclassified';
   try {
     const projectRef = environment.MIGRATION_APPLY_EXPECTED_PROJECT_REF;
     const sessionPoolerHost = environment.SUPABASE_SESSION_POOLER_HOST;
-    if (
-      projectRef !== expectedProjectRef ||
-      !/^[a-z0-9]{20}$/.test(projectRef ?? '') ||
-      !environment.DATABASE_URL ||
-      !matchesExpectedProject(environment.DATABASE_URL, expectedProjectRef) ||
-      !sessionPoolerHost ||
-      !/^[a-z0-9.-]+\.pooler\.supabase\.com$/.test(sessionPoolerHost)
-    ) {
-      throw new Error('TARGET_INVALID');
-    }
+    configurationDiagnostic = 'project-ref-invalid';
+    if (projectRef !== expectedProjectRef || !/^[a-z0-9]{20}$/.test(projectRef ?? ''))
+      throw new Error('INVALID_PROJECT_REF');
+    configurationDiagnostic = 'connection-url-missing';
+    if (!environment.DATABASE_URL || !environment.DIRECT_URL)
+      throw new Error('MISSING_CONNECTION_URL');
+    configurationDiagnostic = 'database-url-target-invalid';
+    if (!matchesExpectedProject(environment.DATABASE_URL, expectedProjectRef))
+      throw new Error('DATABASE_URL_TARGET_INVALID');
+    configurationDiagnostic = 'direct-url-target-invalid';
+    if (!matchesExpectedProject(environment.DIRECT_URL, expectedProjectRef))
+      throw new Error('DIRECT_URL_TARGET_INVALID');
+    configurationDiagnostic = 'session-pooler-host-invalid';
+    if (!sessionPoolerHost || !/^[a-z0-9.-]+\.pooler\.supabase\.com$/.test(sessionPoolerHost))
+      throw new Error('SESSION_POOLER_HOST_INVALID');
+    configurationDiagnostic = 'session-pooler-resolution-failed';
     const sessionUrl = resolveMigrationDirectUrl(environment.DIRECT_URL, sessionPoolerHost);
+    configurationDiagnostic = 'session-pooler-target-invalid';
     if (!validSessionTarget(sessionUrl, sessionPoolerHost)) throw new Error('POOLER_INVALID');
+    configurationDiagnostic = 'migration-timeout-settings-invalid';
     bounds = resolveMigrationBounds(environment);
+    configurationDiagnostic = 'bounded-session-url-invalid';
     boundedUrl = withMigrationBounds(sessionUrl, bounds);
     historyUrl = withMigrationConnectionMetadata(sessionUrl, 'bunshin_release_migration_history');
+    configurationDiagnostic = 'prisma-cli-unavailable';
     prismaCli = requireModule.resolve('prisma/build/index.js');
   } catch {
     console.error(
-      '[database] RELEASE_MIGRATION_CONFIGURATION_INVALID: target or connection settings rejected; values are not logged.',
+      `[database] RELEASE_MIGRATION_CONFIGURATION_INVALID (${configurationDiagnostic}): target or connection settings rejected; values are not logged.`,
     );
     return 1;
   }
