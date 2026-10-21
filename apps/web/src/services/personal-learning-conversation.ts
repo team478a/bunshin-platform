@@ -17,7 +17,7 @@ import {
   learningConversationBody,
   learningConversationPromptVersion,
 } from '../providers/openai-learning-conversation';
-import { resolvePersonalLearningExtendedScope } from './personal-learning-extended-scope';
+import * as learningOfferContext from './personal-learning-extended-scope';
 import { loadPersonalLearningToolFeatureContext } from './personal-learning-tool-feature-context';
 
 export async function sendPersonalLearningConversationTurn(
@@ -27,8 +27,18 @@ export async function sendPersonalLearningConversationTurn(
   const repository = new db.PrismaPersonalLearningConversationRepository(db.prisma);
   const candidates = new db.PrismaLearningCandidateRepository(db.prisma);
   const candidate = await candidates.readCandidate(command.actor);
-  const extendedScope = await resolvePersonalLearningExtendedScope(command.actor);
-  const promptVersion = learningConversationPromptVersion(extendedScope);
+  const { offerPolicy, extendedScope } = Object.hasOwn(
+    learningOfferContext,
+    'resolvePersonalLearningOfferContext',
+  )
+    ? await learningOfferContext.resolvePersonalLearningOfferContext(command.actor)
+    : {
+        offerPolicy: 'AI_SKILL_V1' as const,
+        extendedScope: await learningOfferContext.resolvePersonalLearningExtendedScope(
+          command.actor,
+        ),
+      };
+  const promptVersion = learningConversationPromptVersion(extendedScope, offerPolicy);
   const currentPractice = (await repository.readPractice(command.actor)).current;
   const personaContext = await new db.PrismaPersonalLearningPersonaRepository(db.prisma).listForAi(
     command.actor.scope,
@@ -103,6 +113,7 @@ export async function sendPersonalLearningConversationTurn(
       extendedScope,
       personaContext,
       toolFeatureContext,
+      offerPolicy,
     });
     const value = await executePersonalLearningTextOperation(
       new db.PrismaPersonalLearningTextOperationRepository(db.prisma),
@@ -175,6 +186,7 @@ export async function sendPersonalLearningConversationTurn(
       actor: command.actor,
       requestId: command.requestId,
       requestRevision: command.requestRevision,
+      offerPolicy,
     });
     return { conversation, candidate: await candidates.readCandidate(command.actor) };
   } catch (error) {

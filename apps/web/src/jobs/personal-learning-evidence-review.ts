@@ -8,6 +8,7 @@ import {
   type AiCallMeasurement,
 } from '@bunshin/application';
 import { ApplicationError } from '@bunshin/shared';
+import { personalLearningOfferPolicy } from '@bunshin/capability-training';
 import { personalLearningPilotExecutionAllowed } from '../services/personal-learning-pilot-access';
 import { requireAiTrainingUsageConsent } from '../services/ai-training-consent';
 import { admitPersonalLearningCall } from '../services/personal-learning-call-admission';
@@ -75,6 +76,8 @@ export async function executePersonalLearningEvidenceReview(input: {
   });
   if (!program || !personalLearningPilotExecutionAllowed(program.settings, enrollment.id, true))
     throw new ApplicationError('NOT_FOUND', 'practice evaluator unavailable');
+  const offerPolicy = personalLearningOfferPolicy(program.settings);
+  if (!offerPolicy) throw new ApplicationError('NOT_FOUND', 'practice evaluator unavailable');
   await requireAiTrainingUsageConsent({
     workspaceId: input.workspaceId,
     groupId: input.groupId,
@@ -205,6 +208,7 @@ export async function executePersonalLearningEvidenceReview(input: {
               model: runtime.model,
               maxRequestBytes: admission.requestLimits.maxRequestBytes,
               maxOutputTokens: admission.requestLimits.maxOutputTokens,
+              offerPolicy,
             }),
           });
           observed.measurement = result.measurement;

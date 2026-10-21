@@ -19,7 +19,7 @@ import {
   learningSupportBody,
   learningSupportPromptVersion,
 } from '../providers/openai-learning-support';
-import { resolvePersonalLearningExtendedScope } from './personal-learning-extended-scope';
+import * as learningOfferContext from './personal-learning-extended-scope';
 
 export async function requestPracticeSupport(command: PracticeSupportCommand) {
   validatePracticeSupportCommand(command);
@@ -48,8 +48,18 @@ export async function requestPracticeSupport(command: PracticeSupportCommand) {
       policy.groupId !== command.actor.scope.groupId
     )
       throw new ApplicationError('CONFIGURATION_ERROR', 'support admission unavailable');
-    const extendedScope = await resolvePersonalLearningExtendedScope(command.actor);
-    const promptVersion = learningSupportPromptVersion(extendedScope);
+    const { offerPolicy, extendedScope } = Object.hasOwn(
+      learningOfferContext,
+      'resolvePersonalLearningOfferContext',
+    )
+      ? await learningOfferContext.resolvePersonalLearningOfferContext(command.actor)
+      : {
+          offerPolicy: 'AI_SKILL_V1' as const,
+          extendedScope: await learningOfferContext.resolvePersonalLearningExtendedScope(
+            command.actor,
+          ),
+        };
+    const promptVersion = learningSupportPromptVersion(extendedScope, offerPolicy);
     const body = learningSupportBody(
       prepared.practice,
       prepared.request,
@@ -57,6 +67,7 @@ export async function requestPracticeSupport(command: PracticeSupportCommand) {
       { maxRequestBytes: policy.maxRequestBytes, maxOutputTokens: policy.maxOutputTokens },
       command.image,
       extendedScope,
+      offerPolicy,
     );
     const provider = policy.provider ?? 'openai';
     const runtime = await resolveLearningProviderRuntimeConfiguration(provider, 'LEARNING_SUPPORT');
@@ -138,6 +149,7 @@ export async function requestPracticeSupport(command: PracticeSupportCommand) {
       actor: command.actor,
       requestId: prepared.practice.candidate.requestId,
       requestRevision: prepared.practice.candidate.requestRevision,
+      offerPolicy,
     });
     return completed;
   } catch (error) {

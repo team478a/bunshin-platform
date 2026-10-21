@@ -7,6 +7,7 @@ import {
   personalLearningFeatureEnabled,
   type PersonalLearningFeature,
 } from '@bunshin/capability-training';
+import * as capabilityTraining from '@bunshin/capability-training';
 import { resolveMemberServiceContext } from './public-service';
 import { requireAiTrainingUsageConsent } from './ai-training-consent';
 
@@ -70,6 +71,10 @@ export async function resolvePersonalLearningRequestActor(
     : null;
   if (!enrollment || !program)
     throw new ApplicationError('NOT_FOUND', 'learning request unavailable');
+  const offerPolicy = Object.hasOwn(capabilityTraining, 'personalLearningOfferPolicy')
+    ? capabilityTraining.personalLearningOfferPolicy(program.settings)
+    : 'AI_SKILL_V1';
+  if (!offerPolicy) throw new ApplicationError('NOT_FOUND', 'learning request unavailable');
   const dynamic = personalLearningDynamicProgramAllows(program.settings, enrollment.id);
   if (getServerEnvironment().APP_ENV === 'production' && !dynamic)
     throw new ApplicationError('NOT_FOUND', 'learning request unavailable');

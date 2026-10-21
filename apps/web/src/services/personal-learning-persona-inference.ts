@@ -21,6 +21,7 @@ import {
   screenPersonaInferenceSources,
   type PersonaInferenceSource,
 } from '../providers/openai-learning-persona-inference';
+import type { PersonalLearningOfferPolicy } from '@bunshin/capability-training';
 
 const logger = createLogger();
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
@@ -39,6 +40,7 @@ export async function inferPersonalLearningPersonaAfterSuccess(input: {
   actor: PersonalLearningActor;
   requestId: string;
   requestRevision: number;
+  offerPolicy?: PersonalLearningOfferPolicy;
 }) {
   const scope = input.actor.scope;
   const now = new Date();
@@ -118,6 +120,7 @@ export async function inferPersonalLearningPersonaAfterSuccess(input: {
       // The source material itself is limited to 1,000 UTF-8 bytes; this is intentionally stricter than 1,000 tokens.
       maxSourceBytes: 1000,
       sources,
+      offerPolicy: input.offerPolicy ?? 'AI_SKILL_V1',
     });
     if (Buffer.byteLength(body, 'utf8') > policy.maxRequestBytes)
       throw new ApplicationError('VALIDATION_ERROR', 'persona request limit exceeded');

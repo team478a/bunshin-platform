@@ -107,9 +107,11 @@ export default async function AiTrainingConfirmationPage({
                   <>
                     <p>AI利用について</p>
                     <ul>
-                      {AI_TRAINING_AI_CONSENT_TEXT.split('\n').map((line) => (
-                        <li key={line}>{line}</li>
-                      ))}
+                      {(enrollment.consentText ?? AI_TRAINING_AI_CONSENT_TEXT)
+                        .split('\n')
+                        .map((line) => (
+                          <li key={line}>{line}</li>
+                        ))}
                     </ul>
                     <form action={acceptAiTrainingConsent} className="form-stack">
                       <input type="hidden" name="serviceSlug" value={serviceSlug} />

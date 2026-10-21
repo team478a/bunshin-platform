@@ -4425,3 +4425,11 @@
 - mainにはproduction branchにある既存16 migration SQLのtransaction/timeout wrapperの差分もある。適用済みchecksumは未確認であり、pending一覧だけで安全と判断しない。差分不整合や不明点があれば適用を停止する。
 - コード反映だけで運用まとめ送信は始めない。`OPS_DIGEST_ENABLED`の既定値はfalse。マナベル機能flagはProgram単位の明示opt-inで、既定OFF。PR-HのProvider経路変更がすでに有効なDYNAMIC_V1利用者の次回操作へ影響する可能性があるため、現行Program/Provider状態は反映前に田中が確認する。
 - 外部公開GateにはPR-Gの未実施評価とバックアップ復元元の証明を残す。PRマージやCIを本番反映・外部公開の承認とみなさない。
+
+## 2026-10-21: マナベル動的学習の提供方針をProgram設定で切り替える
+
+- 状態: PR-1 Draftで確認待ち。既存マナベルの動作・プロンプト・同意文を変えず、後続PRで別の提供方針を追加できる境界を設ける。
+- マナベル動的学習は`AI_TRAINING_V1`モジュールのまま、Service Programの最上位設定`settings.learningOfferPolicy`で提供方針を切り替える。キーがない既存Programは`AI_SKILL_V1`として扱い、副業版は後続PRで別の方針として追加する。
+- `personalLearningPilot`および`learningFeatures`の許可キーは変更しない。既存の厳格な許可リストとfail-closedを維持し、提供方針をその配下へ混在させない。
+- 未登録値・文字列以外・空文字の提供方針はfail-closedとし、受講者画面・LINE・Job・CronのAI処理、および同意の表示・保存・照合を拒否する。
+- 本決定は副業用方針、管理API・管理画面、DB migration、Program設定変更、本番反映、Pilot開始を承認しない。

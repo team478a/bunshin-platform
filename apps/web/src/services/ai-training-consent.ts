@@ -4,12 +4,14 @@ import {
   AI_TRAINING_V1_MODULE_KEY,
   isPersonalLearningPilotProgram,
   personalLearningMode,
+  personalLearningOfferPolicy,
 } from '@bunshin/capability-training';
 import { ApplicationError } from '@bunshin/shared';
 import {
   AI_TRAINING_AI_CONSENT_TEXT,
   AI_TRAINING_AI_CONSENT_VERSION,
   resolveAiTrainingParticipationState,
+  aiTrainingConsentPolicy,
 } from './ai-training-consent-policy';
 import { resolveMemberServiceContext } from './public-service';
 
@@ -18,7 +20,10 @@ export {
   AI_TRAINING_AI_CONSENT_VERSION,
 } from './ai-training-consent-policy';
 
-const consentTextDigest = createHash('sha256').update(AI_TRAINING_AI_CONSENT_TEXT).digest('hex');
+export const aiTrainingConsentTextDigest = (text: string) =>
+  createHash('sha256').update(text).digest('hex');
+
+const consentTextDigest = aiTrainingConsentTextDigest(AI_TRAINING_AI_CONSENT_TEXT);
 
 export async function readAiTrainingParticipation(serviceSlug: string, userId: string) {
   const service = await resolveMemberServiceContext(serviceSlug, userId);
@@ -47,7 +52,10 @@ export async function readAiTrainingParticipation(serviceSlug: string, userId: s
   });
   // This confirmation page is specifically for the manually seated closed Pilot. Legacy
   // AI-training programs keep their existing UX and authorization boundary.
-  const pilotPrograms = programs.filter(({ settings }) => isPersonalLearningPilotProgram(settings));
+  const pilotPrograms = programs.filter(
+    ({ settings }) =>
+      isPersonalLearningPilotProgram(settings) && personalLearningOfferPolicy(settings) !== null,
+  );
   const enrollments = pilotPrograms.length
     ? await db.prisma.programEnrollment.findMany({
         where: {
@@ -101,6 +109,8 @@ export async function readAiTrainingParticipation(serviceSlug: string, userId: s
   );
   const rows = availableEnrollments.map((enrollment) => {
     const program = pilotPrograms.find(({ id }) => id === enrollment.serviceProgramId)!;
+    const offerPolicy = personalLearningOfferPolicy(program.settings)!;
+    const consentPolicy = aiTrainingConsentPolicy(offerPolicy);
     const hasInternalSeat = seats.some(
       (seat) => seat.serviceProgramId === program.id && seat.programEnrollmentId === enrollment.id,
     );
@@ -119,6 +129,7 @@ export async function readAiTrainingParticipation(serviceSlug: string, userId: s
       isDynamicLearning: personalLearningMode(program.settings) === 'DYNAMIC_V1',
       state,
       consentedAt: state === 'READY' ? (consent?.consentedAt.toISOString() ?? null) : null,
+      consentText: state === 'CONSENT_REQUIRED' ? consentPolicy.text : null,
     };
   });
 
@@ -182,6 +193,9 @@ export async function recordAiTrainingUsageConsent(input: {
     });
     if (!program || !isPersonalLearningPilotProgram(program.settings))
       throw new ApplicationError('NOT_FOUND', 'training participation unavailable');
+    const offerPolicy = personalLearningOfferPolicy(program.settings);
+    if (!offerPolicy) throw new ApplicationError('NOT_FOUND', 'training participation unavailable');
+    const consentPolicy = aiTrainingConsentPolicy(offerPolicy);
     const seat = await tx.personalLearningPilotSeat.findFirst({
       where: {
         workspaceId: service.workspaceId,
@@ -201,7 +215,7 @@ export async function recordAiTrainingUsageConsent(input: {
           workspaceId: service.workspaceId,
           groupId: service.serviceId,
           programEnrollmentId: enrollment.id,
-          consentVersion: AI_TRAINING_AI_CONSENT_VERSION,
+          consentVersion: consentPolicy.version,
         },
       },
       create: {
@@ -210,8 +224,8 @@ export async function recordAiTrainingUsageConsent(input: {
         programEnrollmentId: enrollment.id,
         groupMembershipId: membership.id,
         userId: input.userId,
-        consentVersion: AI_TRAINING_AI_CONSENT_VERSION,
-        textDigest: consentTextDigest,
+        consentVersion: consentPolicy.version,
+        textDigest: aiTrainingConsentTextDigest(consentPolicy.text),
         consentedAt: now,
       },
       update: {},
@@ -263,6 +277,9 @@ export async function requireAiTrainingUsageConsent(input: {
   ]);
   if (!membership || !program || !isPersonalLearningPilotProgram(program.settings))
     throw new ApplicationError('NOT_FOUND', 'AI training consent required');
+  const offerPolicy = personalLearningOfferPolicy(program.settings);
+  if (!offerPolicy) throw new ApplicationError('NOT_FOUND', 'AI training consent required');
+  const consentPolicy = aiTrainingConsentPolicy(offerPolicy);
   const seat = await db.prisma.personalLearningPilotSeat.findFirst({
     where: {
       workspaceId: input.workspaceId,
@@ -283,8 +300,8 @@ export async function requireAiTrainingUsageConsent(input: {
       programEnrollmentId: input.enrollmentId,
       groupMembershipId: membership.id,
       userId: input.userId,
-      consentVersion: AI_TRAINING_AI_CONSENT_VERSION,
-      textDigest: consentTextDigest,
+      consentVersion: consentPolicy.version,
+      textDigest: aiTrainingConsentTextDigest(consentPolicy.text),
     },
     select: { id: true },
   });

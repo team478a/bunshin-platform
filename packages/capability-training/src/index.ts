@@ -11,6 +11,7 @@ export * from './reproduction-challenge-fixtures';
 export * from './reproduction-challenge-review';
 export * from './reproduction-history';
 export * from './personal-learning-nudges';
+export * from './personal-learning-offer-policy';
 import { AI_TRAINING_MISSION_QUALITY } from './mission-quality';
 import type { TrainingGoalKey } from './learning-catalog';
 

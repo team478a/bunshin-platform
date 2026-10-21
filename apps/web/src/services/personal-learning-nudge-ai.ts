@@ -5,7 +5,10 @@ import {
   parsePersonalLearningCallAdmissionPolicy,
   type PersonalLearningActor,
 } from '@bunshin/application';
-import type { PersonalLearningNudgeSituation } from '@bunshin/capability-training';
+import type {
+  PersonalLearningNudgeSituation,
+  PersonalLearningOfferPolicy,
+} from '@bunshin/capability-training';
 import { createLogger } from '@bunshin/observability';
 import { settleProviderRuntimeAdmission } from '../ai/runtime-provider-configuration';
 import {
@@ -46,6 +49,7 @@ export async function generatePersonalLearningNudgeCopy(input: {
   situation: PersonalLearningNudgeSituation;
   ordinal: 1 | 2;
   judgmentDate: string;
+  offerPolicy?: PersonalLearningOfferPolicy;
 }): Promise<string | null> {
   let policy;
   try {
@@ -137,6 +141,7 @@ export async function generatePersonalLearningNudgeCopy(input: {
               ordinal: input.ordinal,
               model: policy.model,
               permit,
+              offerPolicy: input.offerPolicy ?? 'AI_SKILL_V1',
             }),
           });
         },
