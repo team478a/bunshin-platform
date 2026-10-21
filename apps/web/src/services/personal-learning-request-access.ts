@@ -5,6 +5,7 @@ import type { PersonalLearningActor } from '@bunshin/application';
 import {
   personalLearningDynamicProgramAllows,
   personalLearningFeatureEnabled,
+  personalLearningOfferPolicy,
   type PersonalLearningFeature,
 } from '@bunshin/capability-training';
 import { resolveMemberServiceContext } from './public-service';
@@ -70,6 +71,8 @@ export async function resolvePersonalLearningRequestActor(
     : null;
   if (!enrollment || !program)
     throw new ApplicationError('NOT_FOUND', 'learning request unavailable');
+  const offerPolicy = personalLearningOfferPolicy(program.settings);
+  if (!offerPolicy) throw new ApplicationError('NOT_FOUND', 'learning request unavailable');
   const dynamic = personalLearningDynamicProgramAllows(program.settings, enrollment.id);
   if (getServerEnvironment().APP_ENV === 'production' && !dynamic)
     throw new ApplicationError('NOT_FOUND', 'learning request unavailable');

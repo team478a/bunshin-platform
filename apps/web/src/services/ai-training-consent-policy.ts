@@ -1,3 +1,5 @@
+import type { PersonalLearningOfferPolicy } from '@bunshin/capability-training';
+
 export const AI_TRAINING_AI_CONSENT_VERSION = 'AI_TRAINING_EXTERNAL_AI_V3';
 
 export const AI_TRAINING_AI_CONSENT_TEXT = [
@@ -7,6 +9,16 @@ export const AI_TRAINING_AI_CONSENT_TEXT = [
   '学習の状況に合わせてAIがLINEで声をかける場合があります。声かけはいつでも停止でき、学習そのものは続けられます。',
   'この同意は、この研修への参加に対するものです。同意しない場合、または参加枠がない場合は、AIを使った処理は行いません。',
 ].join('\n');
+
+export function aiTrainingConsentPolicy(offerPolicy: PersonalLearningOfferPolicy = 'AI_SKILL_V1') {
+  switch (offerPolicy) {
+    case 'AI_SKILL_V1':
+      return {
+        version: AI_TRAINING_AI_CONSENT_VERSION,
+        text: AI_TRAINING_AI_CONSENT_TEXT,
+      } as const;
+  }
+}
 
 export type AiTrainingParticipationState =
   'PROGRAM_WAITING' | 'ENROLLMENT_WAITING' | 'SEAT_WAITING' | 'CONSENT_REQUIRED' | 'READY';
