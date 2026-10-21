@@ -1,0 +1,72 @@
+name: Apply approved production migrations (2026-10-20 release)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type APPLY_RELEASE_20261020_MIGRATIONS_TO_vtkzinaudznwbsjoyszk to proceed
+        required: true
+        type: string
+      project_ref:
+        description: Approved 20-character Supabase project reference
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-migration-apply
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    steps:
+      - name: Require main and exact target confirmation
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+          EXPECTED_PROJECT_REF: ${{ inputs.project_ref }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$CONFIRMATION" = "APPLY_RELEASE_20261020_MIGRATIONS_TO_vtkzinaudznwbsjoyszk"
+          test "$EXPECTED_PROJECT_REF" = "vtkzinaudznwbsjoyszk"
+
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.10.0
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Apply only the approved migration set through the session pooler
+        env:
+          VERCEL_ENV: production
+          MIGRATION_APPLY_EXPECTED_PROJECT_REF: ${{ inputs.project_ref }}
+          MIGRATION_APPLY_CONFIRMATION: ${{ inputs.confirmation }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+          SUPABASE_SESSION_POOLER_HOST: ${{ vars.SUPABASE_SESSION_POOLER_HOST || secrets.SUPABASE_SESSION_POOLER_HOST }}
+        run: pnpm db:migration:apply:release-20261020 | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Record outcome
+        if: success()
+        run: |
+          {
+            echo "## Production migration release 2026-10-20"
+            echo ""
+            echo "- Result: applied and verified (or already up to date)"
+            echo "- Scope: exactly the three approved migrations"
+            echo "- Database credentials: not recorded"
+          } >> "$GITHUB_STEP_SUMMARY"
