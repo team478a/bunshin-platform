@@ -5,11 +5,12 @@ import type { runMigrationProcess } from '../scripts/migration-process.mjs';
 const projectRef = 'vtkzinaudznwbsjoyszk';
 const host = 'aws-0-ap-northeast-1.pooler.supabase.com';
 const direct = `postgresql://postgres:synthetic-secret@db.${projectRef}.supabase.co:5432/postgres?sslmode=require`;
+const pooledDatabase = `postgresql://postgres.${projectRef}:synthetic-secret@${host}:6543/postgres?sslmode=require`;
 const env = {
   VERCEL_ENV: 'production',
   MIGRATION_APPLY_EXPECTED_PROJECT_REF: projectRef,
   MIGRATION_APPLY_CONFIRMATION: `APPLY_RELEASE_20261020_MIGRATIONS_TO_${projectRef}`,
-  DATABASE_URL: direct,
+  DATABASE_URL: pooledDatabase,
   DIRECT_URL: direct,
   SUPABASE_SESSION_POOLER_HOST: host,
 };
