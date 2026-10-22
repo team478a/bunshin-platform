@@ -175,6 +175,7 @@ describe('read-only Prisma Client authentication probe', () => {
     vi.spyOn(console, 'log').mockImplementation(() => {});
     const tx = transaction();
     const client: ProbeClient = {
+      $connect: vi.fn().mockResolvedValue(undefined),
       $transaction: vi
         .fn<ProbeClient['$transaction']>()
         .mockImplementation(async (work) => work(tx)),
@@ -195,6 +196,7 @@ describe('read-only Prisma Client authentication probe', () => {
     const tx = transaction();
     tx.$queryRawUnsafe.mockResolvedValue([{ verified: false }]);
     const client: ProbeClient = {
+      $connect: vi.fn().mockResolvedValue(undefined),
       $transaction: async (work) => work(tx),
       $disconnect: vi.fn().mockResolvedValue(undefined),
     };
@@ -208,16 +210,16 @@ describe('read-only Prisma Client authentication probe', () => {
   it('redacts Prisma errors and disconnects after authentication failure', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     const client: ProbeClient = {
-      $transaction: vi
-        .fn()
-        .mockRejectedValue({
-          errorCode: 'P1000',
-          message: 'postgresql://owner:synthetic-secret@host/db',
-        }),
+      $connect: vi.fn().mockRejectedValue({
+        errorCode: 'P1000',
+        message: 'postgresql://owner:synthetic-secret@host/db',
+      }),
+      $transaction: vi.fn(),
       $disconnect: vi.fn().mockResolvedValue(undefined),
     };
     expect(await probeReleaseAuth(env, () => client)).toBe(1);
     expect(client.$disconnect).toHaveBeenCalledTimes(1);
+    expect(client.$transaction).not.toHaveBeenCalled();
     expect(vi.mocked(console.error).mock.calls.flat().join(' ')).toBe(
       'RELEASE_PRISMA_PROBE_FAILED:database-authentication-failed',
     );
@@ -228,6 +230,7 @@ describe('read-only Prisma Client authentication probe', () => {
     const tx = transaction();
     expect(
       await probeReleaseAuth(env, () => ({
+        $connect: vi.fn().mockResolvedValue(undefined),
         $transaction: async (work) => work(tx),
         $disconnect: vi.fn().mockRejectedValue(new Error('synthetic-secret')),
       })),

@@ -12,6 +12,8 @@ export async function probeReleaseAuth(
   try {
     if (!environment.DATABASE_URL) throw new Error('P1013');
     client = createClient(environment.DATABASE_URL);
+    // Preserve authentication/TLS errors before transaction acquisition.
+    await client.$connect();
     const verified = await client.$transaction(
       async (transaction) => {
         await transaction.$executeRawUnsafe('SET TRANSACTION READ ONLY');

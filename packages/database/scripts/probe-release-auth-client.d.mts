@@ -3,6 +3,7 @@ type ProbeTransaction = {
   $queryRawUnsafe(query: string): Promise<Array<{ verified: boolean }>>;
 };
 export type ProbeClient = {
+  $connect(): Promise<void>;
   $transaction(
     work: (transaction: ProbeTransaction) => Promise<boolean>,
     options: { maxWait: number; timeout: number },
