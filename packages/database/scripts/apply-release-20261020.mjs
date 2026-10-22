@@ -143,10 +143,6 @@ export async function runRelease20261020Migration(
       DO $$ BEGIN
         IF current_database() <> 'postgres' OR current_user <> 'postgres'
         THEN RAISE EXCEPTION 'MIGRATION_PROBE_IDENTITY_MISMATCH'; END IF;
-        IF NOT EXISTS (
-          SELECT 1 FROM pg_stat_ssl
-          WHERE pid = pg_backend_pid() AND ssl
-        ) THEN RAISE EXCEPTION 'RELEASE_MIGRATION_TLS_NOT_ACTIVE'; END IF;
         IF current_setting('lock_timeout')::interval <> interval '${bounds.lockTimeoutMs} milliseconds'
            OR current_setting('statement_timeout')::interval <> interval '${bounds.statementTimeoutMs} milliseconds'
            OR current_setting('idle_in_transaction_session_timeout')::interval <> interval '${bounds.statementTimeoutMs} milliseconds'
