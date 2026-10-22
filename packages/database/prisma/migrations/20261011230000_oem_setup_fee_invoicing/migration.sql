@@ -1,3 +1,8 @@
+BEGIN;
+SET LOCAL lock_timeout = '5000ms';
+SET LOCAL statement_timeout = '60000ms';
+SET LOCAL idle_in_transaction_session_timeout = '60000ms';
+
 CREATE TYPE "TenantInvoiceKind" AS ENUM ('MONTHLY_USAGE', 'SETUP_FEE');
 
 CREATE TABLE "oem_setup_fee_charges" (
@@ -73,3 +78,4 @@ $$;
 CREATE TRIGGER "oem_setup_fee_charge_immutable"
 BEFORE UPDATE OR DELETE ON "oem_setup_fee_charges"
 FOR EACH ROW EXECUTE FUNCTION "protect_oem_setup_fee_charge"();
+COMMIT;

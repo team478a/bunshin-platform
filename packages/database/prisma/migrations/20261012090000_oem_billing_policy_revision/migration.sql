@@ -1,3 +1,8 @@
+BEGIN;
+SET LOCAL lock_timeout = '5000ms';
+SET LOCAL statement_timeout = '60000ms';
+SET LOCAL idle_in_transaction_session_timeout = '60000ms';
+
 CREATE TYPE "OemBillingPolicyRevisionAction" AS ENUM ('RESCHEDULED', 'CANCELLED');
 
 CREATE TABLE "oem_billing_policy_revisions" (
@@ -71,3 +76,4 @@ BEFORE UPDATE OR DELETE ON "oem_billing_policy_revisions"
 FOR EACH ROW EXECUTE FUNCTION "protect_oem_billing_policy_revision"();
 
 ALTER TABLE "oem_billing_policy_revisions" ENABLE ROW LEVEL SECURITY;
+COMMIT;

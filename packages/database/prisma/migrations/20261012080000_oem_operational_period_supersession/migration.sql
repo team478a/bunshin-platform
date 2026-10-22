@@ -1,3 +1,8 @@
+BEGIN;
+SET LOCAL lock_timeout = '5000ms';
+SET LOCAL statement_timeout = '60000ms';
+SET LOCAL idle_in_transaction_session_timeout = '60000ms';
+
 -- Corrections preserve the reviewed source rows and append one successor. Runtime
 -- operations serialize per member/group and select only rows without a successor.
 DROP INDEX "oem_registration_periods_group_membership_id_starts_at_key";
@@ -40,3 +45,4 @@ CHECK ("supersedes_id" IS NULL OR "supersedes_id" <> "id");
 ALTER TABLE "oem_offering_periods"
 ADD CONSTRAINT "oem_offering_no_self_supersession"
 CHECK ("supersedes_id" IS NULL OR "supersedes_id" <> "id");
+COMMIT;

@@ -175,6 +175,73 @@ async function hold(fixture, sql) {
 
 test('native psql release against real PostgreSQL and Prisma 6', async (t) => {
   await t.test(
+    'the observed historical checksums reject divergent main and accept the restored sources without history writes',
+    () =>
+      withFixture({}, async (f) => {
+        // Metadata replay only, in the disposable schema guarded above. This is
+        // not a production DDL/schema replay or a production history repair.
+        const evidence = JSON.parse(
+          readFileSync(
+            new URL(
+              '../test/fixtures/production-migration-checksums-20261022.json',
+              import.meta.url,
+            ),
+            'utf8',
+          ),
+        );
+        const migrations = loadReleaseMigrations(new URL('../prisma/migrations/', import.meta.url));
+        const approvedNames = [
+          '20261019120000_learning_provider_abstraction',
+          '20261020100000_personal_learning_tool_feature_updates',
+          '20261020120000_ops_morning_digest_runs',
+        ];
+        const historical = migrations.filter(
+          (migration) => !approvedNames.includes(migration.name),
+        );
+        assert.equal(historical.length, 260);
+        const values = historical.map((migration) => {
+          const checksum =
+            evidence.records.find((record) => record.name === migration.name)?.observedChecksum ??
+            migration.checksum;
+          return `('${randomUUID()}','${migration.name}','${checksum}',now())`;
+        });
+        await f.query(`DELETE FROM _prisma_migrations;
+          INSERT INTO _prisma_migrations(id,migration_name,checksum,finished_at) VALUES ${values.join(',')};`);
+        const history = () =>
+          f.query(
+            'SELECT md5(json_agg(row_to_json(m) ORDER BY migration_name)::text) FROM _prisma_migrations m;',
+          );
+        const before = await history();
+        const divergent = migrations.map((migration) => {
+          const previous = evidence.records.find((record) => record.name === migration.name);
+          return previous
+            ? {
+                ...migration,
+                checksum: previous.preRestorationChecksum,
+                compatibleChecksums: [previous.preRestorationChecksum],
+              }
+            : migration;
+        });
+        const rejected = await f.run('preview', { migrations: divergent, approvedNames });
+        assert.equal(rejected.diagnostic, 'release-checksum-mismatch');
+        const restored = await f.run('preview', { migrations, approvedNames });
+        assert.equal(restored.status, 0, restored.diagnostic);
+        assert.match(restored.capturedOutput, /RELEASE_PSQL_PREVIEW_VERIFIED/);
+        assert.equal(await history(), before);
+        assert.equal(await f.query("SELECT to_regclass('first_item') IS NULL;"), 't');
+        const changed = migrations.map((migration) =>
+          migration.name === evidence.records[0].name
+            ? { ...migration, checksum: '0'.repeat(64), compatibleChecksums: ['0'.repeat(64)] }
+            : migration,
+        );
+        assert.equal(
+          (await f.run('preview', { migrations: changed, approvedNames })).diagnostic,
+          'release-checksum-mismatch',
+        );
+        assert.equal(await history(), before);
+      }),
+  );
+  await t.test(
     'applies the three actual release SQL files unchanged and records their exact checksums',
     async () => {
       const approved = [

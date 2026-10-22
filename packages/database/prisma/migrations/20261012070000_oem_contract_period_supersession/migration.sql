@@ -1,3 +1,8 @@
+BEGIN;
+SET LOCAL lock_timeout = '5000ms';
+SET LOCAL statement_timeout = '60000ms';
+SET LOCAL idle_in_transaction_session_timeout = '60000ms';
+
 -- Keep the original reviewed period immutable. A correction is a new row pointing at
 -- the immediately previous version; current projections select rows without a successor.
 DROP INDEX "oem_contract_periods_workspace_id_starts_at_key";
@@ -19,3 +24,4 @@ ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "oem_contract_periods"
 ADD CONSTRAINT "oem_contract_no_self_supersession"
 CHECK ("supersedes_id" IS NULL OR "supersedes_id" <> "id");
+COMMIT;
