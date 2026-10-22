@@ -91,12 +91,17 @@ export async function runRelease20261020Migration(
     if (!sessionPoolerHost || !/^[a-z0-9.-]+\.pooler\.supabase\.com$/.test(sessionPoolerHost))
       throw new Error('SESSION_POOLER_HOST_INVALID');
     configurationDiagnostic = 'session-pooler-resolution-failed';
-    const sessionUrl = resolveMigrationDirectUrl(environment.DIRECT_URL, sessionPoolerHost);
+    let sessionUrl = resolveMigrationDirectUrl(environment.DIRECT_URL, sessionPoolerHost);
     configurationDiagnostic = 'session-pooler-target-invalid';
     const sessionIssue = sessionTargetIssue(sessionUrl, sessionPoolerHost);
     if (sessionIssue) {
       configurationDiagnostic = `session-pooler-target-invalid:${sessionIssue}`;
       throw new Error('POOLER_INVALID');
+    }
+    const sessionUrlWithTls = new URL(sessionUrl);
+    if ([null, 'prefer'].includes(sessionUrlWithTls.searchParams.get('sslmode'))) {
+      sessionUrlWithTls.searchParams.set('sslmode', 'require');
+      sessionUrl = sessionUrlWithTls.toString();
     }
     configurationDiagnostic = 'migration-timeout-settings-invalid';
     bounds = resolveMigrationBounds(environment);
@@ -137,14 +142,15 @@ export async function runRelease20261020Migration(
       input: `BEGIN READ ONLY;
       DO $$ BEGIN
         IF current_database() <> 'postgres' OR current_user <> 'postgres'
-           OR NOT EXISTS (
-             SELECT 1 FROM pg_stat_ssl
-             WHERE pid = pg_backend_pid() AND ssl
-           )
-           OR current_setting('lock_timeout')::interval <> interval '${bounds.lockTimeoutMs} milliseconds'
+        THEN RAISE EXCEPTION 'MIGRATION_PROBE_IDENTITY_MISMATCH'; END IF;
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_stat_ssl
+          WHERE pid = pg_backend_pid() AND ssl
+        ) THEN RAISE EXCEPTION 'RELEASE_MIGRATION_TLS_NOT_ACTIVE'; END IF;
+        IF current_setting('lock_timeout')::interval <> interval '${bounds.lockTimeoutMs} milliseconds'
            OR current_setting('statement_timeout')::interval <> interval '${bounds.statementTimeoutMs} milliseconds'
            OR current_setting('idle_in_transaction_session_timeout')::interval <> interval '${bounds.statementTimeoutMs} milliseconds'
-        THEN RAISE EXCEPTION 'RELEASE_MIGRATION_PREFLIGHT_REQUIREMENTS_NOT_ACTIVE'; END IF;
+        THEN RAISE EXCEPTION 'MIGRATION_BOUNDS_NOT_ACTIVE'; END IF;
       END $$;
       COMMIT;`,
     },
