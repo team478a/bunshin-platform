@@ -1,6 +1,8 @@
 import { createRequire } from 'node:module';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { runMigrationProcess } from './migration-process.mjs';
+import { releaseCaPath } from './release-ca.mjs';
+import { readReleasePrismaDiagnostic } from './release-prisma-command.mjs';
 import {
   matchesExpectedProject,
   resolveMigrationBounds,
@@ -87,6 +89,10 @@ export async function runRelease20261020Migration(
       throw new Error('INVALID_TLS');
     if ([null, 'prefer'].includes(session.searchParams.get('sslmode')))
       session.searchParams.set('sslmode', 'require');
+    configurationDiagnostic = 'release-ca-certificate-invalid';
+    const caPath = releaseCaPath();
+    session.searchParams.set('sslmode', 'verify-full');
+    session.searchParams.set('sslrootcert', caPath);
     const resolver = new URL(session);
     // libpq environment and Prisma must address the same validated endpoint.
     // In particular, Prisma's query-string host/schema overrides must not
@@ -97,8 +103,7 @@ export async function runRelease20261020Migration(
     resolver.searchParams.set('sslaccept', 'strict');
     resolver.searchParams.set('connect_timeout', '10');
     resolver.searchParams.set('socket_timeout', '60');
-    if (session.searchParams.has('sslrootcert'))
-      resolver.searchParams.set('sslcert', session.searchParams.get('sslrootcert'));
+    resolver.searchParams.set('sslcert', caPath);
     configurationDiagnostic = 'migration-timeout-settings-invalid';
     bounds = resolveMigrationBounds(environment);
     configurationDiagnostic = 'release-source-invalid';
@@ -140,6 +145,11 @@ export async function runRelease20261020Migration(
     result.status !== 0 ||
     !result.capturedOutput?.split(/\r?\n/).includes(marker)
   ) {
+    const detail = readReleasePrismaDiagnostic(result.capturedOutput ?? '');
+    if (detail)
+      console.error(
+        `[database] RELEASE_PRISMA_FAILURE phase=${detail.phase}; reason=${detail.diagnostic}.`,
+      );
     console.error(
       `[database] RELEASE_PSQL_FAILED_OR_UNCONFIRMED (${result.diagnostic ?? result.reason.toLowerCase()}): stop; inspect schema/history before retrying.`,
     );

@@ -4492,3 +4492,19 @@
 - 原因はproduction側に追加されたtransaction/timeout wrapperがmain側と異なること。今回に限り「マージ済みmigrationは編集しない」原則の例外として、履歴と一致する本番適用時の16 SQLをそのままmainへ復元する。新しい意味のDDLを過去ファイルへ追加したり、DB履歴のchecksumを書き換えたり、不一致検査を緩和したりしない。
 - 復元対象16件と本番で確認したchecksumをテストfixtureに固定する。SQL本文のDDLが変わらないこと、使い捨てDBの履歴照合で復元前は拒否・復元後はPreview成功することを検証する。fixtureに利用者データ・資格情報・生のDBログを含めない。
 - 新しいmigration、schema、LATEST_DATABASE_MIGRATION、workflow、環境設定、機能flagは変更しない。マージ後は本番Previewから再確認し、成功してから承認済み3件のApply・db:assert-ready・別途コード反映へ進む。
+
+## 2026-10-22: 専用リリースrunnerは公式CAでTLSを検証しPrisma失敗を安全に分類する
+
+- 状態: #1385マージ後のPreview `39744203995`は履歴照合を通過し、Prismaのread-only metadata接続で停止した。田中が接続修正の開始を指示した。Draft PRで検証し、本番適用・設定変更・マージ・デプロイは行わない。
+- 資格情報なしのPostgreSQL STARTTLS検査で、対象poolerの証明書はSupabase独自CAによるもので、既定の信頼ストアでは検証に失敗することを確認した。Prisma子プロセスの詳細は既存runnerで破棄されているため、実際のPrisma失敗原因を確定済みとは扱わない。
+- Supabase自身の公開dashboardコードが示す公式CAを固定し、DER SHA-256・CA属性・有効期限を検証してから、psqlのverify-fullとPrismaのsslaccept=strictへ同じCAを渡す。証明書検証の無効化、システムのtrust store変更、秘密値の追加設定はしない。
+- Prisma子プロセスの出力はメモリ内で固定ラベルへ分類し、生出力・URL・password・SQL本文を表示しない。SQL commit後の履歴登録失敗は従来どおり再適用禁止の状態として区別する。
+- CIへ認証情報が架空のローカルTLS接続検証を追加し、正しいCAの成功、誤CA・ホスト名の不一致の拒否、安全な分類、既存の履歴・timeout・lock検査を確認する。migration SQLとDB schemaは変更しない。
+
+## 2026-10-22: 適用後のschema確認はGitHub runner用pooler接続と確認専用workflowで行う
+
+- 状態: 本番run `39752566851`は承認済み3件のSQL適用・Prisma履歴照合に成功したが、後続の`db:assert-ready`がGitHubの`DATABASE_URL`のdirect hostへ到達できず停止した。田中が確認用接続の修正を承認した。適用済みmigrationを再実行しない。
+- GitHubの確認用子プロセスに限り、既存DATABASE_URLの同じproject・postgres role・postgres DBを検証してpooler接続へ変換し、通常runtimeと同じ6543・pgbouncer・connection_limit=1を使う。公開CAと厳格TLS検証を適用し、secret自体・Vercel設定・通常runtimeのURL変換は変更しない。
+- 確認は既存`db:assert-ready`のSELECTを再利用する。専用の手動・Production承認付きworkflowを追加し、DDL・migrate deploy/resolve・履歴更新なしに確認だけを再実行できるようにする。通常apply後の確認も同じrunnerへ接続する。
+- 子出力をメモリ内で分類し、接続URL・password・生のPrismaエラーを表示しない。対象違い・危険なTLS・期限切れCA・時間切れ・成功markerなしを拒否し、使い捨てDBの実Prisma Client/TLSと単体テストで検証する。
+- この確認の成功はGitHubから指定projectのschemaを確認できた証拠であり、Vercelの環境変数・実稼働SHA・画面smokeの確認を代替しない。今回のDraft PR作業では本番設定・DB・flag・デプロイを変更しない。
