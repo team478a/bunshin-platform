@@ -41,6 +41,7 @@
 - `apps/web/app/api/services/[serviceSlug]/ai-training/enrollments/[programEnrollmentId]/side-hustle/proposal/route.ts`
 - `apps/web/app/api/services/[serviceSlug]/ai-training/enrollments/[programEnrollmentId]/side-hustle/selection/route.ts`
 - `apps/web/app/s/[serviceSlug]/programs/[programEnrollmentId]/side-hustle/page.tsx`
+- `apps/web/app/s/[serviceSlug]/programs/[programEnrollmentId]/side-hustle/client.tsx`
 - `apps/web/app/s/[serviceSlug]/programs/[programEnrollmentId]/learning-request/page.tsx`
 
 ### 新規テスト
@@ -53,7 +54,8 @@
 
 ### 変更した既存テスト
 
-- `packages/capability-training/test/side-hustle-candidate.test.ts`: 指示書指定の固定文変更に伴う期待値更新と、その固定文を検証するテスト。
+- `packages/capability-training/test/side-hustle-candidate.test.ts`: 指示書指定の固定文変更に伴う期待値更新と、保存済み提案パーサーの検証を追加。
+- `packages/database/test/side-hustle-hearing.test.ts`: モックなしのRepositoryテストを追加し、検証済み提案の保存・readState読出し・候補選択と、除外候補metadata保持を確認。再開位置metadataも検証。
 - `packages/database/test/training-personal-data-export.test.ts`: 3イベントの出力範囲と内容を検証。
 - `packages/database/test/training-personal-data-deletion.test.ts`: 3イベントが既存の本人削除スコープに含まれることを検証。
 - `packages/database/test/training-retention-execution.test.ts`: 3イベント種別の保持期限対象を検証。
@@ -70,7 +72,9 @@
 - 提案・選択は本人のEnrollmentスコープと`SIDE_HUSTLE_V1`提供方針を毎回確認する。AI提案は`SIDE_HUSTLE_PROPOSAL`として既存の費用予約・利用記録・Provider予約に載せ、同一ヒアリング版の再訪では保存済み結果を返す。JST日次5回のAdmission制限を設ける。
 - PR-2の候補契約をStructured Output Schemaに反映。Provider入力には回答・不足条件・除外領域名と理由を含めるが、除外キーワード一覧は送らない。保存時にも最新ヒアリング版・Screening・成功利用記録を検証する。
 - `EXCLUDED`候補の詳細は保存データに残しつつAPI表示から除外する。選択は確認チェック付きの明示操作のみ受け、`FIT`/`CAUTION`のみ確定可能。選択後は候補名と要約を表示し、PR-4の準備中案内に留める。
-- 追加質問の回答も新しいヒアリングイベントとして保存する。ページ再読込時は保存済み回答数から未回答の追加質問を復元する。
+- 追加質問の回答も新しいヒアリングイベントとして保存する。ページ再読込時は保存済み提案の追加質問と回答履歴を照合して未回答位置を復元し、ヒアリング質問の再開位置はイベント保存回数ではなくmetadataの`lastAnsweredQuestionIndex`を使う。
+- AI出力には`validateSideHustleCandidateProposal`をProvider境界で一度だけ適用する。Providerは`removedCandidates`/`removedQuestionCount`を含む検証済み結果を返し、DB境界は中核4項目と除外メタデータを検証する`parseStoredSideHustleCandidateProposal`で保存・読出し・選択を行う。
+- 副業画面はサーバーpageで認証・Enrollment actor・`SIDE_HUSTLE_V1`方針を確認し、操作UIをClient Componentへ分離する。NO_FITと日次上限はそれぞれ指定の固定文で表示し、ヒアリング更新は`/hearing`だけで受け付ける。
 - 3イベントを本人データ出力・削除・保持期限管理の対象に含めた。DBスキーマ・migrationは変更していない。
 
 ## 4. 実行した検証
@@ -83,7 +87,8 @@ Node.js環境: `v24.19.0`（リポジトリ要件`>=24 <25`を満たす同梱ラ
 - `pnpm test`: 成功（531 test files、3,748 tests pass、3 live tests skipped）。
 - `pnpm build`: 成功（Next.js production build、全ルート生成まで完了）。
 - `git diff --check`: 成功。
-- 変更関連テスト: capability-training 37 files / 589 tests、database 4 files / 27 tests、web 3 files / 10 tests、application 1 file / 11 tests pass。これらは全体testに含まれる。
+- PR #1383レビュー対応の変更関連テスト: capability-training 37 files / 591 tests、database 213 files / 1,066 tests、web全体を含むworkspace 531 files / 3,748 tests pass、3 live tests skipped。
+- PR #1383レビュー対応の標準検証再実行: `pnpm format:check`、`pnpm typecheck`（25 tasks）、`pnpm lint`（0 errors、既存warning 4件）、`pnpm test`、`pnpm build`、`git diff --check`すべて成功。
 
 ## 5. 未解決事項
 

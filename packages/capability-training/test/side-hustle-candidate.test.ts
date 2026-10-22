@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   validateSideHustleCandidateProposal,
+  parseStoredSideHustleCandidateProposal,
   type SideHustleCandidate,
   type SideHustleCandidateProposal,
 } from '../src/index';
@@ -333,5 +334,26 @@ describe('side hustle candidate proposal contract', () => {
     expect(Object.isFrozen(result.candidates[0]?.workStyle)).toBe(true);
     expect(Object.isFrozen(result.candidates[0]?.fitReasons[0]?.basedOn)).toBe(true);
     expect(Object.isFrozen(result.removedCandidates)).toBe(true);
+  });
+
+  it('parses a stored, sanitized proposal without repeating candidate removal', () => {
+    const generated = validateSideHustleCandidateProposal({
+      ...ready([
+        candidate(),
+        { ...candidate('除外された候補'), summary: 'FXに関するサービスです。' },
+      ]),
+      reason: '除外された候補を含む提案です。',
+    });
+    expect(parseStoredSideHustleCandidateProposal(generated)).toEqual(generated);
+    expect(generated.removedCandidates).toEqual([
+      { name: '除外された候補', excludedAreaKey: expect.any(String) },
+    ]);
+  });
+
+  it('rejects malformed stored-proposal removal metadata', () => {
+    const generated = validateSideHustleCandidateProposal(ready());
+    expect(() =>
+      parseStoredSideHustleCandidateProposal({ ...generated, removedQuestionCount: -1 }),
+    ).toThrowError(ApplicationError);
   });
 });

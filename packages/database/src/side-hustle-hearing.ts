@@ -8,7 +8,7 @@ import {
   SIDE_HUSTLE_HEARING_VERSION,
   SIDE_HUSTLE_SCREENING_RULE_VERSION,
   validateSideHustleHearing,
-  validateSideHustleCandidateProposal,
+  parseStoredSideHustleCandidateProposal,
   screenSideHustleCandidates,
   type SideHustleHearing,
   type SideHustleScreeningResult,
@@ -35,6 +35,7 @@ export interface SavedSideHustleHearing {
   id: string;
   revision: number;
   hearing: SideHustleHearing;
+  lastAnsweredQuestionIndex: number;
   createdAt: string;
 }
 export interface SavedSideHustleProposal {
@@ -188,6 +189,7 @@ export class PrismaSideHustleHearingRepository extends PrismaPersonalLearningReq
     actor: PersonalLearningActor;
     hearing: unknown;
     expectedRevision: number;
+    lastAnsweredQuestionIndex?: number;
     idempotencyKey: string;
   }) {
     const hearing = validateSideHustleHearing(input.hearing);
@@ -198,7 +200,18 @@ export class PrismaSideHustleHearingRepository extends PrismaPersonalLearningReq
     )
       throw new ApplicationError('VALIDATION_ERROR', 'invalid hearing revision');
     if (input.expectedRevision >= 100) conflict();
-    const contentHash = digest({ hearing, expectedRevision: input.expectedRevision });
+    const lastAnsweredQuestionIndex = input.lastAnsweredQuestionIndex ?? 0;
+    if (
+      !Number.isSafeInteger(lastAnsweredQuestionIndex) ||
+      lastAnsweredQuestionIndex < 0 ||
+      lastAnsweredQuestionIndex > 12
+    )
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid hearing position');
+    const contentHash = digest({
+      hearing,
+      expectedRevision: input.expectedRevision,
+      lastAnsweredQuestionIndex,
+    });
     return this.authorized(
       input.actor,
       true,
@@ -240,6 +253,7 @@ export class PrismaSideHustleHearingRepository extends PrismaPersonalLearningReq
               schemaVersion: 1,
               hearingVersion: SIDE_HUSTLE_HEARING_VERSION,
               revision: input.expectedRevision + 1,
+              lastAnsweredQuestionIndex,
               hearing,
               contentHash,
             } as unknown as Prisma.InputJsonValue,
@@ -260,7 +274,7 @@ export class PrismaSideHustleHearingRepository extends PrismaPersonalLearningReq
     promptVersion: string;
     usageKey: string;
   }) {
-    const proposal = validateSideHustleCandidateProposal(input.proposal);
+    const proposal = parseStoredSideHustleCandidateProposal(input.proposal);
     if (
       input.screening.ruleVersion !== SIDE_HUSTLE_SCREENING_RULE_VERSION ||
       input.screening.candidateContractVersion !== SIDE_HUSTLE_CANDIDATE_CONTRACT_VERSION ||
@@ -400,7 +414,7 @@ export class PrismaSideHustleHearingRepository extends PrismaPersonalLearningReq
         )
           throw new ApplicationError('CONFLICT', 'side hustle proposal changed');
         const currentHearingEvent = latestHearing;
-        const proposal = validateSideHustleCandidateProposal(pm.proposal);
+        const proposal = parseStoredSideHustleCandidateProposal(pm.proposal);
         if (proposal.status !== 'READY' || input.candidateIndex >= proposal.candidates.length)
           throw new ApplicationError('VALIDATION_ERROR', 'candidate unavailable');
         const hearingMeta = metadata(currentHearingEvent.metadata);
@@ -474,6 +488,11 @@ const projectHearing = (
     id,
     revision: Number(meta.revision),
     hearing: validateSideHustleHearing(meta.hearing),
+    lastAnsweredQuestionIndex:
+      typeof meta.lastAnsweredQuestionIndex === 'number' &&
+      Number.isSafeInteger(meta.lastAnsweredQuestionIndex)
+        ? meta.lastAnsweredQuestionIndex
+        : Math.max(0, Math.min(12, Number(meta.revision) - 1)),
     createdAt,
   };
 };
@@ -500,7 +519,7 @@ const projectProposal = (
     screeningRuleVersion: String(meta.screeningRuleVersion),
     promptVersion: String(meta.promptVersion),
     usageKey: String(meta.usageKey),
-    proposal: validateSideHustleCandidateProposal(meta.proposal),
+    proposal: parseStoredSideHustleCandidateProposal(meta.proposal),
     screening: meta.screening as SideHustleScreeningResult,
     createdAt,
   };

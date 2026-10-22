@@ -9,7 +9,6 @@ import {
   SIDE_HUSTLE_EXCLUDED_AREAS,
   screenSideHustleCandidates,
   sideHustleHearingReadyForProposal,
-  validateSideHustleCandidateProposal,
 } from '@bunshin/capability-training';
 import { ApplicationError } from '@bunshin/shared';
 import { settleProviderRuntimeAdmission } from '../ai/runtime-provider-configuration';
@@ -182,7 +181,7 @@ export async function prepareSideHustleProposal(
   }
   if (!output)
     throw new ApplicationError('AI_PROVIDER_UNAVAILABLE', 'side hustle proposal unavailable');
-  const proposal = validateSideHustleCandidateProposal(output);
+  const proposal = output;
   const screened = screenSideHustleCandidates(
     state.hearing.hearing.conditions,
     proposal.candidates,

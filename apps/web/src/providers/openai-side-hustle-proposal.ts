@@ -8,7 +8,7 @@ import {
   SIDE_HUSTLE_REQUIREMENT_KINDS,
   SIDE_HUSTLE_FIT_BASES,
   validateSideHustleCandidateProposal,
-  type SideHustleCandidateProposal,
+  type ValidatedSideHustleCandidateProposal,
 } from '@bunshin/capability-training';
 import { generateLearningStructured } from './openai-learning-lesson';
 
@@ -157,14 +157,7 @@ export function generateSideHustleProposal(options: {
 }) {
   return generateLearningStructured({
     ...options,
-    validate: (value): SideHustleCandidateProposal => {
-      const validated = validateSideHustleCandidateProposal(value);
-      return {
-        status: validated.status,
-        reason: validated.reason,
-        questions: validated.questions,
-        candidates: validated.candidates,
-      };
-    },
+    validate: (value): ValidatedSideHustleCandidateProposal =>
+      validateSideHustleCandidateProposal(value),
   });
 }

@@ -11,6 +11,7 @@ const saveHearingBody = z
   .object({
     hearing: z.unknown(),
     expectedRevision: z.number().int().min(0).max(99),
+    lastAnsweredQuestionIndex: z.number().int().min(0).max(12).optional(),
     operationId: z.string().uuid(),
   })
   .strict();
@@ -92,6 +93,9 @@ export async function sideHustleResponse(request: Request, slug: string, enrollm
         actor,
         hearing: input.hearing,
         expectedRevision: input.expectedRevision,
+        ...(input.lastAnsweredQuestionIndex === undefined
+          ? {}
+          : { lastAnsweredQuestionIndex: input.lastAnsweredQuestionIndex }),
         idempotencyKey: input.operationId,
       });
       return Response.json({ data }, { headers });
@@ -122,11 +126,17 @@ export async function sideHustleResponse(request: Request, slug: string, enrollm
         : error,
       'side-hustle',
     );
+    const message =
+      error instanceof ApplicationError &&
+      (error.message === 'daily proposal limit reached' ||
+        error.message === 'daily side hustle proposal limit reached')
+        ? '今日の提案の上限に達しました。明日もう一度お試しください。'
+        : '副業の候補を確認できませんでした。ヒアリング内容と受講状態を確認してください。';
     return Response.json(
       {
         error: {
           code: mapped.body.error.code,
-          message: '副業の候補を確認できませんでした。ヒアリング内容と受講状態を確認してください。',
+          message,
         },
       },
       { status: mapped.status, headers },

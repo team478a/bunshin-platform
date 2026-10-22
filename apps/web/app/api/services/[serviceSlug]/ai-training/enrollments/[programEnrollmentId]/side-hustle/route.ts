@@ -5,4 +5,3 @@ async function handle(request: Request, context: Context) {
   return sideHustleResponse(request, params.serviceSlug, params.programEnrollmentId);
 }
 export const GET = handle;
-export const PUT = handle;

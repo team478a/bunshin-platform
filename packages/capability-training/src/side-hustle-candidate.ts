@@ -11,6 +11,7 @@ import {
   type SideHustleRequirementLevel,
 } from './side-hustle-types';
 import {
+  SIDE_HUSTLE_EXCLUDED_AREAS,
   findSideHustleExcludedArea,
   findSideHustleGuaranteeExpression,
 } from './side-hustle-safety';
@@ -344,6 +345,55 @@ export function validateSideHustleCandidateProposal(
     questions: Object.freeze(acceptedQuestions),
     candidates: Object.freeze(acceptedCandidates),
     removedCandidates: Object.freeze(removedCandidates.map((entry) => Object.freeze(entry))),
+    removedQuestionCount,
+  });
+}
+
+export function parseStoredSideHustleCandidateProposal(
+  value: unknown,
+): ValidatedSideHustleCandidateProposal {
+  const input = record(value, 'storedProposal');
+  exactKeys(
+    input,
+    ['status', 'reason', 'questions', 'candidates', 'removedCandidates', 'removedQuestionCount'],
+    'storedProposal',
+  );
+  const proposal = validateSideHustleCandidateProposal({
+    status: input.status,
+    reason: input.reason,
+    questions: input.questions,
+    candidates: input.candidates,
+  });
+  const rawRemovedCandidates = input.removedCandidates;
+  if (!Array.isArray(rawRemovedCandidates) || rawRemovedCandidates.length > 4)
+    validationError('storedProposal.removedCandidates');
+  const removedCandidates = (rawRemovedCandidates as unknown[]).map((entry, index) => {
+    const item = record(entry, `storedProposal.removedCandidates[${index}]`);
+    exactKeys(item, ['name', 'excludedAreaKey'], `storedProposal.removedCandidates[${index}]`);
+    const name = text(item.name, `storedProposal.removedCandidates[${index}].name`, 40);
+    const excludedAreaKey = enumValue(
+      item.excludedAreaKey,
+      SIDE_HUSTLE_EXCLUDED_AREAS.map(({ key }) => key),
+      `storedProposal.removedCandidates[${index}].excludedAreaKey`,
+    );
+    return Object.freeze({ name, excludedAreaKey });
+  });
+  if (
+    new Set(removedCandidates.map(({ name }) => name)).size !== removedCandidates.length ||
+    removedCandidates.some(({ name }) =>
+      proposal.candidates.some((candidate) => candidate.name === name),
+    )
+  )
+    validationError('storedProposal.removedCandidates.name');
+  const removedQuestionCount = integer(
+    input.removedQuestionCount,
+    'storedProposal.removedQuestionCount',
+    0,
+    4,
+  );
+  return Object.freeze({
+    ...proposal,
+    removedCandidates: Object.freeze(removedCandidates),
     removedQuestionCount,
   });
 }
