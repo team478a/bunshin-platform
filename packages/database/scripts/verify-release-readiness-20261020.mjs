@@ -31,8 +31,10 @@ export async function verifyReleaseReadiness(
     if (!matchesExpectedProject(source.toString(), project) || !source.password)
       throw new Error('INVALID_SOURCE');
     const direct = source.hostname === `db.${project}.supabase.co`;
-    if (!(direct ? source.port === '5432' : ['5432', '6543'].includes(source.port)))
+    const port = source.port || '5432';
+    if (!(direct ? port === '5432' : ['5432', '6543'].includes(port)))
       throw new Error('INVALID_PORT');
+    source.port = port;
     diagnostic = 'tls-mode-invalid';
     if (
       ![null, 'prefer', 'require', 'verify-ca', 'verify-full'].includes(

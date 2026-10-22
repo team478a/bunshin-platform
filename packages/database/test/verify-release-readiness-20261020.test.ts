@@ -25,6 +25,8 @@ describe('read-only production release readiness', () => {
 
   it.each([
     direct,
+    direct.replace(':5432', ''),
+    `postgresql://postgres.${project}:synthetic-secret@${host}/postgres`,
     `postgresql://postgres.${project}:synthetic-secret@${host}:5432/postgres`,
     `postgresql://postgres.${project}:synthetic-secret@${host}:6543/postgres`,
   ])(

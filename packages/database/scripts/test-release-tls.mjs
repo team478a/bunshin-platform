@@ -161,6 +161,8 @@ test('verified TLS for native psql, Prisma 6 CLI and the schema readiness Client
     url.searchParams.set('sslmode', 'require');
     url.searchParams.set('sslaccept', 'strict');
     url.searchParams.set('sslcert', ca);
+    url.searchParams.set('pgbouncer', 'true');
+    url.searchParams.set('connection_limit', '1');
     const probePrisma = (connection) =>
       execute(process.execPath, [wrapper, 'probe', process.execPath, cli, schema], {
         ...process.env,
