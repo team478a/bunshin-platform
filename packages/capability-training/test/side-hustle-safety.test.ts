@@ -31,6 +31,7 @@ describe('side hustle safety', () => {
     'ハンドメイドの材料を仕入れる',
     '自己投資として講座を受ける',
     'ブログで投資の基礎知識を学ぶ',
+    'タイムスロット',
   ])('does not reject the legitimate example %s', (value) => {
     expect(findSideHustleExcludedArea(value)).toBeNull();
   });
@@ -38,6 +39,13 @@ describe('side hustle safety', () => {
   it.each(GUARANTEE_EXPRESSIONS)('detects guarantee expression %s', (value) => {
     expect(findSideHustleGuaranteeExpression(`これは${value}という表現です`)).toBe(value);
   });
+
+  it.each(['リスクを絶対に避けたい場合は', '保証書を同梱します'])(
+    'does not flag safe wording %s as a guarantee',
+    (value) => {
+      expect(findSideHustleGuaranteeExpression(value)).toBeNull();
+    },
+  );
 
   it('exposes the three exact common notices', () => {
     expect(SIDE_HUSTLE_COMMON_NOTICES).toEqual([

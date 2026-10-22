@@ -77,6 +77,7 @@ export interface ValidatedSideHustleCandidateProposal extends SideHustleCandidat
     readonly name: string;
     readonly excludedAreaKey: string;
   }[];
+  readonly removedQuestionCount: number;
 }
 
 const validationError = (field: string): never => {
@@ -294,7 +295,6 @@ export function validateSideHustleCandidateProposal(
     validationError('proposal.NEEDS_CONTEXT');
   if (status === 'NO_FIT' && (questions.length > 0 || candidates.length > 0))
     validationError('proposal.NO_FIT');
-
   const removedCandidates: { name: string; excludedAreaKey: string }[] = [];
   const acceptedCandidates = candidates.filter((candidate) => {
     const excludedArea = candidateTexts(candidate)
@@ -304,12 +304,39 @@ export function validateSideHustleCandidateProposal(
     removedCandidates.push({ name: candidate.name, excludedAreaKey: excludedArea.key });
     return false;
   });
+  const acceptedQuestions = questions.filter((question) => !findSideHustleExcludedArea(question));
+  const removedQuestionCount = questions.length - acceptedQuestions.length;
+  const reasonMentionsRemovedCandidate = removedCandidates.some(({ name }) =>
+    reason.includes(name),
+  );
+  const sanitizedReason =
+    findSideHustleExcludedArea(reason) || reasonMentionsRemovedCandidate
+      ? '条件に合う候補を整理しました。'
+      : reason;
   const noSafeCandidate = status === 'READY' && acceptedCandidates.length === 0;
+  const noSafeQuestion = status === 'NEEDS_CONTEXT' && acceptedQuestions.length === 0;
+  const resultStatus = noSafeCandidate || noSafeQuestion ? 'NO_FIT' : status;
+  if (
+    resultStatus === 'READY' &&
+    (acceptedCandidates.length < 1 || acceptedCandidates.length > 3 || acceptedQuestions.length > 0)
+  )
+    validationError('proposal.READY');
+  if (
+    resultStatus === 'NEEDS_CONTEXT' &&
+    (acceptedQuestions.length < 1 || acceptedCandidates.length > 0)
+  )
+    validationError('proposal.NEEDS_CONTEXT');
+  if (resultStatus === 'NO_FIT' && (acceptedQuestions.length > 0 || acceptedCandidates.length > 0))
+    validationError('proposal.NO_FIT');
   return Object.freeze({
-    status: noSafeCandidate ? 'NO_FIT' : status,
-    reason: noSafeCandidate ? '条件に合う候補を安全に提案できませんでした。' : reason,
-    questions,
+    status: resultStatus,
+    reason:
+      noSafeCandidate || noSafeQuestion
+        ? '条件に合う候補を安全に提案できませんでした。'
+        : sanitizedReason,
+    questions: Object.freeze(acceptedQuestions),
     candidates: Object.freeze(acceptedCandidates),
     removedCandidates: Object.freeze(removedCandidates.map((entry) => Object.freeze(entry))),
+    removedQuestionCount,
   });
 }

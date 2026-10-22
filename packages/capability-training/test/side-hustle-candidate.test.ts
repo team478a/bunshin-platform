@@ -199,7 +199,7 @@ describe('side hustle candidate proposal contract', () => {
       requirements: [{ kind: 'LEGAL' as const, text: value }],
     }),
   ])('rejects a guarantee expression in every candidate text field', (change) => {
-    expectInvalid(ready([change('絶対に成功します')]));
+    expectInvalid(ready([change('絶対に稼げます')]));
   });
 
   it('rejects guarantee expressions in reason and questions', () => {
@@ -239,6 +239,65 @@ describe('side hustle candidate proposal contract', () => {
       ],
     });
   });
+
+  it('replaces a reason that mentions an excluded candidate name', () => {
+    const result = validateSideHustleCandidateProposal({
+      ...ready([
+        candidate('安全な候補'),
+        { ...candidate('動画編集サポート'), summary: 'FX関連の動画を編集します。' },
+      ]),
+      reason: '動画編集サポートが条件に合います。',
+    });
+    expect(result.reason).toBe('条件に合う候補を整理しました。');
+    expect(result.status).toBe('READY');
+  });
+
+  it('replaces a reason containing an excluded keyword', () => {
+    const result = validateSideHustleCandidateProposal({
+      ...ready(),
+      reason: 'FXに関する候補を含みます。',
+    });
+    expect(result.reason).toBe('条件に合う候補を整理しました。');
+  });
+
+  it('removes excluded questions and reports their count', () => {
+    const result = validateSideHustleCandidateProposal({
+      status: 'NEEDS_CONTEXT',
+      reason: '追加の回答が必要です。',
+      questions: ['週に使える時間を教えてください。', 'FXへの投資経験を教えてください。'],
+      candidates: [],
+    });
+    expect(result.status).toBe('NEEDS_CONTEXT');
+    expect(result.questions).toEqual(['週に使える時間を教えてください。']);
+    expect(result.removedQuestionCount).toBe(1);
+  });
+
+  it('changes NEEDS_CONTEXT to NO_FIT when every question is excluded', () => {
+    const result = validateSideHustleCandidateProposal({
+      status: 'NEEDS_CONTEXT',
+      reason: '追加の回答が必要です。',
+      questions: ['FXへの投資経験を教えてください。'],
+      candidates: [],
+    });
+    expect(result).toMatchObject({
+      status: 'NO_FIT',
+      reason: '条件に合う候補を安全に提案できませんでした。',
+      questions: [],
+      removedQuestionCount: 1,
+    });
+  });
+
+  it.each(['リスクを絶対に避けたい場合は', '保証書を同梱します', 'タイムスロット'])(
+    'does not let safe wording %s trigger exclusion or guarantee checks',
+    (phrase) => {
+      expect(
+        validateSideHustleCandidateProposal({
+          ...ready(),
+          reason: phrase,
+        }).reason,
+      ).toBe(phrase);
+    },
+  );
 
   it.each(['basis', 'checkedAt', 'verified'])('rejects unsupported verification key %s', (key) => {
     expectInvalid(ready([{ ...candidate(), [key]: key === 'verified' ? true : 'value' }]));
