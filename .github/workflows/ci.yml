@@ -82,3 +82,5 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y postgresql-client-16
       - name: Verify native release transactions and Prisma history on disposable PostgreSQL
         run: pnpm --filter @bunshin/database exec node --test scripts/test-native-release-psql.mjs
+      - name: Verify TLS trust and hostname checks with disposable PostgreSQL
+        run: pnpm --filter @bunshin/database exec node --test scripts/test-release-tls.mjs

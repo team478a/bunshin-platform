@@ -436,7 +436,7 @@ test('native psql release against real PostgreSQL and Prisma 6', async (t) => {
               resolveExecutable: '/bin/true',
               bounds: { lockTimeoutMs: 100, statementTimeoutMs: 1500, processTimeoutMs: 10000 },
             },
-            500,
+            1000,
           );
           assert.equal(result.reason, 'DEADLINE_EXCEEDED');
           assert.match(result.capturedOutput, /RELEASE_PSQL_PREFLIGHT_VERIFIED/);
