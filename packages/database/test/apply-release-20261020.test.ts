@@ -50,11 +50,15 @@ describe('approval-gated native psql release', () => {
     expect(options.env.PGHOST).toBe(host);
     expect(options.env.PGPORT).toBe('5432');
     expect(options.env.PGPASSWORD).toBe('synthetic-secret');
-    expect(options.env.PGSSLMODE).toBe('require');
+    expect(options.env.PGSSLMODE).toBe('verify-full');
+    expect(options.env.PGSSLROOTCERT).toBeTruthy();
+    const metadata = new URL(options.env.DIRECT_URL!);
+    expect(metadata.searchParams.get('sslcert')).toBe(options.env.PGSSLROOTCERT);
+    expect(metadata.searchParams.get('sslaccept')).toBe('strict');
     expect(options.env.PGOPTIONS).toBeUndefined();
     expect(options.env.PGSERVICE).toBeUndefined();
     expect(options.input).toContain('SET lock_timeout');
-    expect(options.input).not.toContain("migrate' 'resolve");
+    expect(options.input).not.toContain("'resolve' '" + process.execPath);
     expect(options.input).not.toContain('pg_stat_ssl');
   });
 
@@ -103,5 +107,35 @@ describe('approval-gated native psql release', () => {
     expect(resolver.hostname).toBe(host);
     expect(resolver.searchParams.has('host')).toBe(false);
     expect(resolver.searchParams.get('schema')).toBe('public');
+    expect(resolver.searchParams.get('sslaccept')).toBe('strict');
+    expect(resolver.searchParams.get('sslcert')).toBe(settings.PGSSLROOTCERT);
+  });
+
+  it('reports only a fixed metadata detail and preserves the committed-SQL warning', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const execute = vi.fn<typeof runMigrationProcess>().mockResolvedValue({
+      reason: 'EXITED',
+      status: 1,
+      diagnostic: 'release-sql-committed-history-unconfirmed',
+      capturedOutput: 'RELEASE_PRISMA_RESOLVE_FAILED:database-tls-failure\nsecret raw details',
+    });
+    expect(
+      await runRelease20261020Migration(execute, { ...env, MIGRATION_APPLY_MODE: 'apply' }),
+    ).toBe(1);
+    const output = vi.mocked(console.error).mock.calls.flat().join(' ');
+    expect(output).toContain('phase=resolve; reason=database-tls-failure');
+    expect(output).toContain('release-sql-committed-history-unconfirmed');
+    expect(output).not.toContain('secret raw details');
+  });
+
+  it('rejects the expired pinned CA before opening a connection', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2032-01-01'));
+    const execute = vi.fn<typeof runMigrationProcess>();
+    expect(await runRelease20261020Migration(execute, env)).toBe(1);
+    expect(execute).not.toHaveBeenCalled();
+    expect(vi.mocked(console.error).mock.calls.flat().join(' ')).toContain(
+      'release-ca-certificate-invalid',
+    );
   });
 });

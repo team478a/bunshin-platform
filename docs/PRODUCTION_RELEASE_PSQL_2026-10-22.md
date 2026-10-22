@@ -1,6 +1,6 @@
 # 2026-10-20リリースの3 migration：psql経由の適用
 
-状態：psql方式は#1384でmainへマージ済み。Preview run `39727857154`は過去migrationのchecksum不一致で停止し、DDL・履歴登録は未実施。ブラウザで本番履歴を読み取り専用で調査し、[16件のSQL正本復元](PRODUCTION_MIGRATION_SOURCE_RESTORATION_2026-10-22.md)を別Draft PRで準備する。適用・Vercel反映は未実施。
+状態：psql方式は#1384、[16件のSQL正本復元](PRODUCTION_MIGRATION_SOURCE_RESTORATION_2026-10-22.md)は#1385でmainへマージ済み。Preview run `39744203995`は履歴照合を通過しPrisma metadata接続で停止した。DDL・履歴登録・Vercel反映は未実施。[公式CAと安全なPrisma診断](PRODUCTION_RELEASE_TLS_2026-10-22.md)を別Draft PRで修正する。
 
 ## 対象と変更理由
 
@@ -24,11 +24,12 @@ Previewではpsqlのlock保持中にPrismaのread-only接続も確認する。�
 ## 適用時の制御
 
 - psqlの同一sessionで`lock_timeout=5秒`、`statement_timeout=60秒`、`idle_in_transaction_session_timeout=60秒`を設定・確認する。全プロセスは既定5分、workflowは15分で打ち切る。
-- 接続先は既存の承認済みSupabase project / session pooler 5432 / postgres DB・roleだけ。TLSはクライアント接続でrequire以上にする。認証値は子プロセス環境にだけ渡し、引数・生ログに出さない。
+- 接続先は既存の承認済みSupabase project / session pooler 5432 / postgres DB・roleだけ。固定した公式CAを使い、psqlはverify-full、Prismaはrequire + sslaccept=strictで検証する。認証値は子プロセス環境にだけ渡し、引数・生ログに出さない。
 - 適用済み履歴のchecksumをリポジトリの元SQL全件と比較する。不一致、失敗履歴、同名の重複完了履歴、3件以外のpending、未記録の既存DDLがあれば止まる。履歴の書き換えで通さない。
 - 過去履歴はPrisma 6と同様にLF/CRLF改行差だけを許容する。SQL内容の変更は許容しない。今回新しく記録するchecksumは元SQLの実バイト列と完全一致させる。
 - Prismaと同じadvisory lockをpsql sessionが全処理中保持する。競合時は待たず停止する。各SQLをtransactionで適用し、COMMIT後にPrisma 6の`migrate resolve --applied`で履歴を記録し、元SQLのchecksumと完了状態を再確認する。
 - resolve子プロセスだけ`PRISMA_SCHEMA_DISABLE_ADVISORY_LOCK=1`を指定する。親psqlが同じlockを保持しているための自己競合回避であり、通常deployのlockやProduction環境変数は変更しない。
+- Prisma wrapperは別process groupへdetachせず、親psqlと同じgroupに残す。全体期限でpsql・wrapper・CLI・engineをまとめて停止する。生出力はメモリ内で固定ラベルへ分類し、失敗時はphase=probe/resolveとreasonだけを追加表示する。
 
 ## 失敗時
 

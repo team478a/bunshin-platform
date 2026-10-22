@@ -4483,3 +4483,11 @@
 - 原因はproduction側に追加されたtransaction/timeout wrapperがmain側と異なること。今回に限り「マージ済みmigrationは編集しない」原則の例外として、履歴と一致する本番適用時の16 SQLをそのままmainへ復元する。新しい意味のDDLを過去ファイルへ追加したり、DB履歴のchecksumを書き換えたり、不一致検査を緩和したりしない。
 - 復元対象16件と本番で確認したchecksumをテストfixtureに固定する。SQL本文のDDLが変わらないこと、使い捨てDBの履歴照合で復元前は拒否・復元後はPreview成功することを検証する。fixtureに利用者データ・資格情報・生のDBログを含めない。
 - 新しいmigration、schema、LATEST_DATABASE_MIGRATION、workflow、環境設定、機能flagは変更しない。マージ後は本番Previewから再確認し、成功してから承認済み3件のApply・db:assert-ready・別途コード反映へ進む。
+
+## 2026-10-22: 専用リリースrunnerは公式CAでTLSを検証しPrisma失敗を安全に分類する
+
+- 状態: #1385マージ後のPreview `39744203995`は履歴照合を通過し、Prismaのread-only metadata接続で停止した。田中が接続修正の開始を指示した。Draft PRで検証し、本番適用・設定変更・マージ・デプロイは行わない。
+- 資格情報なしのPostgreSQL STARTTLS検査で、対象poolerの証明書はSupabase独自CAによるもので、既定の信頼ストアでは検証に失敗することを確認した。Prisma子プロセスの詳細は既存runnerで破棄されているため、実際のPrisma失敗原因を確定済みとは扱わない。
+- Supabase自身の公開dashboardコードが示す公式CAを固定し、DER SHA-256・CA属性・有効期限を検証してから、psqlのverify-fullとPrismaのsslaccept=strictへ同じCAを渡す。証明書検証の無効化、システムのtrust store変更、秘密値の追加設定はしない。
+- Prisma子プロセスの出力はメモリ内で固定ラベルへ分類し、生出力・URL・password・SQL本文を表示しない。SQL commit後の履歴登録失敗は従来どおり再適用禁止の状態として区別する。
+- CIへ認証情報が架空のローカルTLS接続検証を追加し、正しいCAの成功、誤CA・ホスト名の不一致の拒否、安全な分類、既存の履歴・timeout・lock検査を確認する。migration SQLとDB schemaは変更しない。

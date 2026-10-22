@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { readdirSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
 const literal = (value) => "'" + value.replaceAll("'", "''") + "'";
 const identifier = (value) => '"' + value.replaceAll('"', '""') + '"';
@@ -125,14 +126,13 @@ export function buildPsqlReleaseScript({
       AND actual.finished_at IS NOT NULL AND actual.rolled_back_at IS NULL)`;
   const transaction = ({ name, sql, checksum }) => {
     const command = [
+      process.execPath,
+      fileURLToPath(new URL('./release-prisma-command.mjs', import.meta.url)),
+      'resolve',
       resolveExecutable,
       prismaCli,
-      'migrate',
-      'resolve',
-      '--applied',
-      name,
-      '--schema',
       schemaPath,
+      name,
     ]
       .map(shellWord)
       .join(' ');
@@ -142,7 +142,7 @@ DO $bounds$ BEGIN ${boundsCheck} END $bounds$;
 ${sql}
 COMMIT;
 \\echo RELEASE_SQL_COMMITTED:${name}
-\\! env PRISMA_SCHEMA_DISABLE_ADVISORY_LOCK=1 ${command} > /dev/null 2>&1
+\\! ${command}
 \\if :SHELL_ERROR
 DO $failed$ BEGIN RAISE EXCEPTION 'RELEASE_HISTORY_RECORDING_FAILED'; END $failed$;
 \\endif
@@ -155,12 +155,11 @@ END $recorded$;
 `;
   };
   const metadataProbe = [
+    process.execPath,
+    fileURLToPath(new URL('./release-prisma-command.mjs', import.meta.url)),
+    'probe',
     resolveExecutable,
     prismaCli,
-    'db',
-    'execute',
-    '--stdin',
-    '--schema',
     schemaPath,
   ]
     .map(shellWord)
@@ -198,7 +197,7 @@ SELECT EXISTS (${missing}) AS release_needed \\gset
 ${preconditionSql}
 \\endif
 COMMIT;
-\\! printf '%s' 'BEGIN READ ONLY; SELECT 1; COMMIT;' | ${metadataProbe} > /dev/null 2>&1
+\\! ${metadataProbe}
 \\if :SHELL_ERROR
 DO $metadata$ BEGIN RAISE EXCEPTION 'RELEASE_METADATA_CONNECTION_FAILED'; END $metadata$;
 \\endif

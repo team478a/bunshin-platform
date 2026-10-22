@@ -428,15 +428,19 @@ test('native psql release against real PostgreSQL and Prisma 6', async (t) => {
       withFixture(
         { first: 'CREATE TABLE first_item(id integer); SELECT pg_sleep(30);' },
         async (f) => {
+          const probeCli = join(f.config.schemaPath, '..', 'deadline-probe.mjs');
+          // Consume the complete read-only probe input. An immediate /bin/true
+          // exit may close stdin early, which the wrapper correctly rejects.
+          writeFileSync(probeCli, 'process.stdin.resume();\n');
           const result = await f.run(
             'apply',
             {
               // Isolate the deadline from Prisma process startup latency; the
               // real metadata connection is covered by the other cases.
-              resolveExecutable: '/bin/true',
+              prismaCli: probeCli,
               bounds: { lockTimeoutMs: 100, statementTimeoutMs: 1500, processTimeoutMs: 10000 },
             },
-            500,
+            1000,
           );
           assert.equal(result.reason, 'DEADLINE_EXCEEDED');
           assert.match(result.capturedOutput, /RELEASE_PSQL_PREFLIGHT_VERIFIED/);
