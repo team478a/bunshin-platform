@@ -83,4 +83,27 @@ describe('approval-gated native psql release', () => {
     ).toBe(1);
     expect(execute).toHaveBeenCalledTimes(1);
   });
+
+  it('uses the same validated host and public schema for native SQL and Prisma metadata', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    const execute = vi
+      .fn<typeof runMigrationProcess>()
+      .mockResolvedValue({
+        reason: 'EXITED',
+        status: 0,
+        capturedOutput: 'RELEASE_PSQL_PREVIEW_VERIFIED\n',
+      });
+    expect(
+      await runRelease20261020Migration(execute, {
+        ...env,
+        DIRECT_URL: env.DIRECT_URL + '?host=untrusted.example&schema=other',
+      }),
+    ).toBe(0);
+    const settings = execute.mock.calls[0]![2].env;
+    const resolver = new URL(settings.DIRECT_URL!);
+    expect(settings.PGHOST).toBe(host);
+    expect(resolver.hostname).toBe(host);
+    expect(resolver.searchParams.has('host')).toBe(false);
+    expect(resolver.searchParams.get('schema')).toBe('public');
+  });
 });

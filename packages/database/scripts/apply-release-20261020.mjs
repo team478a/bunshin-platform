@@ -88,6 +88,11 @@ export async function runRelease20261020Migration(
     if ([null, 'prefer'].includes(session.searchParams.get('sslmode')))
       session.searchParams.set('sslmode', 'require');
     const resolver = new URL(session);
+    // libpq environment and Prisma must address the same validated endpoint.
+    // In particular, Prisma's query-string host/schema overrides must not
+    // redirect the metadata connection away from the native psql target.
+    resolver.search = '';
+    resolver.searchParams.set('schema', 'public');
     resolver.searchParams.set('sslmode', 'require');
     resolver.searchParams.set('sslaccept', 'strict');
     resolver.searchParams.set('connect_timeout', '10');
