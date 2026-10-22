@@ -22,8 +22,9 @@ if (
 }
 const cli = createRequire(import.meta.url).resolve('prisma/build/index.js');
 const wrapper = fileURLToPath(new URL('./release-prisma-command.mjs', import.meta.url));
+const readiness = fileURLToPath(new URL('./assert-schema-ready.mjs', import.meta.url));
 
-test('verified TLS for native psql and actual Prisma 6 CLI', async (t) => {
+test('verified TLS for native psql, Prisma 6 CLI and the schema readiness Client', async (t) => {
   const directory = mkdtempSync(join(tmpdir(), 'bunshin-release-tls-'));
   const sockets = new Set();
   let server;
@@ -166,6 +167,12 @@ test('verified TLS for native psql and actual Prisma 6 CLI', async (t) => {
         DATABASE_URL: connection.toString(),
         DIRECT_URL: connection.toString(),
       });
+    const probeReadiness = (connection) =>
+      execute(process.execPath, [readiness], {
+        ...process.env,
+        DATABASE_URL: connection.toString(),
+        DIRECT_URL: connection.toString(),
+      });
     const probeNative = (connection) => {
       const native = new URL(connection);
       native.searchParams.set('sslmode', 'verify-full');
@@ -178,17 +185,20 @@ test('verified TLS for native psql and actual Prisma 6 CLI', async (t) => {
         'BEGIN READ ONLY; SELECT 1; COMMIT;',
       );
     };
-    await t.test('both clients accept the trusted CA and matching hostname', async () => {
+    await t.test('all clients accept the trusted CA and matching hostname', async () => {
       const prisma = await probePrisma(url);
       assert.equal(prisma.status, 0, prisma.diagnostic);
       assert.equal(prisma.capturedOutput, ''); // CLI chatter is not forwarded.
       const native = await probeNative(url);
       assert.equal(native.status, 0, native.diagnostic);
       assert.equal(native.capturedOutput.trim(), '1');
+      const gate = await probeReadiness(url);
+      assert.equal(gate.status, 0, gate.diagnostic);
+      assert.match(gate.capturedOutput, /Database schema readiness gate passed\./);
     });
     for (const mode of ['missing-ca', 'wrong-ca', 'wrong-hostname']) {
       await t.test(
-        `both clients reject ${mode} and Prisma emits no raw credentials or SQL`,
+        `all clients reject ${mode} and the Prisma wrapper emits no raw credentials or SQL`,
         async () => {
           const invalid = new URL(url);
           if (mode === 'missing-ca') invalid.searchParams.delete('sslcert');
@@ -206,6 +216,7 @@ test('verified TLS for native psql and actual Prisma 6 CLI', async (t) => {
             'RELEASE_PRISMA_PROBE_FAILED:database-tls-failure',
           );
           assert.notEqual((await probeNative(invalid)).status, 0);
+          assert.notEqual((await probeReadiness(invalid)).status, 0);
         },
       );
     }

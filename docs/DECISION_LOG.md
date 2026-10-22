@@ -4491,3 +4491,11 @@
 - Supabase自身の公開dashboardコードが示す公式CAを固定し、DER SHA-256・CA属性・有効期限を検証してから、psqlのverify-fullとPrismaのsslaccept=strictへ同じCAを渡す。証明書検証の無効化、システムのtrust store変更、秘密値の追加設定はしない。
 - Prisma子プロセスの出力はメモリ内で固定ラベルへ分類し、生出力・URL・password・SQL本文を表示しない。SQL commit後の履歴登録失敗は従来どおり再適用禁止の状態として区別する。
 - CIへ認証情報が架空のローカルTLS接続検証を追加し、正しいCAの成功、誤CA・ホスト名の不一致の拒否、安全な分類、既存の履歴・timeout・lock検査を確認する。migration SQLとDB schemaは変更しない。
+
+## 2026-10-22: 適用後のschema確認はGitHub runner用pooler接続と確認専用workflowで行う
+
+- 状態: 本番run `39752566851`は承認済み3件のSQL適用・Prisma履歴照合に成功したが、後続の`db:assert-ready`がGitHubの`DATABASE_URL`のdirect hostへ到達できず停止した。田中が確認用接続の修正を承認した。適用済みmigrationを再実行しない。
+- GitHubの確認用子プロセスに限り、既存DATABASE_URLの同じproject・postgres role・postgres DBを検証してpooler接続へ変換し、通常runtimeと同じ6543・pgbouncer・connection_limit=1を使う。公開CAと厳格TLS検証を適用し、secret自体・Vercel設定・通常runtimeのURL変換は変更しない。
+- 確認は既存`db:assert-ready`のSELECTを再利用する。専用の手動・Production承認付きworkflowを追加し、DDL・migrate deploy/resolve・履歴更新なしに確認だけを再実行できるようにする。通常apply後の確認も同じrunnerへ接続する。
+- 子出力をメモリ内で分類し、接続URL・password・生のPrismaエラーを表示しない。対象違い・危険なTLS・期限切れCA・時間切れ・成功markerなしを拒否し、使い捨てDBの実Prisma Client/TLSと単体テストで検証する。
+- この確認の成功はGitHubから指定projectのschemaを確認できた証拠であり、Vercelの環境変数・実稼働SHA・画面smokeの確認を代替しない。今回のDraft PR作業では本番設定・DB・flag・デプロイを変更しない。

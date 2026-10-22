@@ -72,12 +72,17 @@ jobs:
           set -euo pipefail
           pnpm db:migration:apply:release-20261020 | tee -a "$GITHUB_STEP_SUMMARY"
 
-      - name: Verify application schema readiness after apply
+      - name: Verify release schema readiness through the transaction pooler after apply
         if: inputs.mode == 'apply'
         env:
+          VERCEL_ENV: production
+          RELEASE_READINESS_EXPECTED_PROJECT_REF: ${{ inputs.project_ref }}
+          RELEASE_READINESS_CONFIRMATION: VERIFY_RELEASE_20261020_SCHEMA_TO_vtkzinaudznwbsjoyszk
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          DIRECT_URL: ${{ secrets.DIRECT_URL }}
-        run: pnpm db:assert-ready
+          SUPABASE_SESSION_POOLER_HOST: ${{ vars.SUPABASE_SESSION_POOLER_HOST || secrets.SUPABASE_SESSION_POOLER_HOST }}
+        run: |
+          set -euo pipefail
+          node packages/database/scripts/verify-release-readiness-20261020.mjs | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Record outcome
         if: success()
