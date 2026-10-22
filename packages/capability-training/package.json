@@ -13,7 +13,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@bunshin/application": "workspace:*"
+    "@bunshin/application": "workspace:*",
+    "@bunshin/shared": "workspace:*"
   },
   "devDependencies": {
     "vitest": "^4.1.0"
