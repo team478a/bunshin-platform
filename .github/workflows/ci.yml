@@ -43,7 +43,7 @@ jobs:
       - run: pnpm build
 
   database:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     services:
       postgres:
         image: postgres:16
@@ -78,3 +78,7 @@ jobs:
           VERCEL_ENV: production
       - run: pnpm db:assert-ready
       - run: pnpm test:integration
+      - name: Install native PostgreSQL client for release tests
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client-16
+      - name: Verify native release transactions and Prisma history on disposable PostgreSQL
+        run: pnpm --filter @bunshin/database exec node --test scripts/test-native-release-psql.mjs

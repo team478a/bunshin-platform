@@ -1,5 +1,7 @@
 # 本番反映準備：運用まとめメール／マナベル PR-H〜I2
 
+2026-10-22追記：3件のmigrationの実行方法は[psql経由のPreview・適用手順](PRODUCTION_RELEASE_PSQL_2026-10-22.md)を参照する。以下のPowerShell direct接続手順は経緯として残す。コード反映・smoke・機能有効化の条件は本書を維持する。
+
 作成日: 2026-10-20（Asia/Tokyo）  
 状態: Draft PR。田中の確認・マージ、本番Probe、バックアップ確認、migration適用、本番反映は未実施。
 

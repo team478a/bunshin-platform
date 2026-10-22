@@ -4459,3 +4459,11 @@
 - 証拠確認・声かけ・ペルソナ推測のPrompt Versionを方針ごとに記録する。既存`AI_SKILL_V1`の値・同意文・画面文言は維持する。
 - 設定変更はProgram単位の監査ログへ前後の有効方針を含める。AI_SKILL_V1は互換性のため設定キーを削除し、SIDE_HUSTLE_V1のみ明示保存する。
 - 本決定は副業ヒアリング・候補生成（PR-3b）、DB migration、Programの本番設定変更、Pilot有効化、本番反映を承認しない。
+
+## 2026-10-22: 承認済み3 migrationはpsqlの同一sessionで設定・適用を行う
+
+- 状態: Draft PRで検証する。本番適用は未実施。田中が、startup options依存をやめた別方式への変更を指示した。
+- 専用GitHub workflowは既定をPreviewとし、psqlでSETした制限時間・接続先・履歴checksum・未適用3件の完全一致を同じsessionで確認する。PreviewはDDLと履歴登録を実行しない。
+- Applyは元のmigration SQLを変更せず1件ずつtransactionで適用し、成功後にPrisma migrate resolveで元ファイルの履歴を登録・照合する。SQL適用後の履歴登録失敗や結果不明では再適用せず停止する。
+- psql sessionがPrismaと同じmigration advisory lockを全処理中保持する。自分自身のlock待ちを避けるため、このsessionから起動するresolve子プロセスだけPrismaの重複lock取得を無効にする。通常のdeployや本番の恒久設定には変更しない。
+- SQL・lock・timeout・履歴失敗・checksum不一致を使い捨てPostgreSQLで実測する。接続URL、password、生のDBエラーは出力せず、固定ラベルと対象migration名だけを報告する。
