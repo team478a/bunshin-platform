@@ -4508,3 +4508,9 @@
 - 確認は既存`db:assert-ready`のSELECTを再利用する。専用の手動・Production承認付きworkflowを追加し、DDL・migrate deploy/resolve・履歴更新なしに確認だけを再実行できるようにする。通常apply後の確認も同じrunnerへ接続する。
 - 子出力をメモリ内で分類し、接続URL・password・生のPrismaエラーを表示しない。対象違い・危険なTLS・期限切れCA・時間切れ・成功markerなしを拒否し、使い捨てDBの実Prisma Client/TLSと単体テストで検証する。
 - この確認の成功はGitHubから指定projectのschemaを確認できた証拠であり、Vercelの環境変数・実稼働SHA・画面smokeの確認を代替しない。今回のDraft PR作業では本番設定・DB・flag・デプロイを変更しない。
+
+## 2026-10-22: 副業版の段階は本人の振り返りと操作でだけ進める（PR-5a）
+
+- 段階の案内条件は、現在の段階で確認できた実践2件以上、または28日経過とする。段階の正本は `SIDE_HUSTLE_STAGE_ADVANCED` とし、AIへは希望の新しい版で段階を伝える。進行中の課題は変えない。
+- 振り返りは `SIDE_HUSTLE_CHECKIN_SAVED` として保存し、本人が明示的に次へ進む場合だけ段階を更新する。3か月目の操作は `COMPLETED` を記録し、テーマと学習を継続可能なまま保つ。
+- 本決定はLINE表示、地図のAI見直し（PR-5b）、課金、本番反映、Pilot有効化を承認しない。

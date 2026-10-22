@@ -78,7 +78,11 @@ export function validatePersonalLearningWrite(input: PersonalLearningWrite): voi
     /^side-hustle-start:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
       input.idempotencyKey,
     );
-  if (!ordinaryKey && !sideHustleStartKey)
+  const sideHustleStageKey =
+    /^side-hustle-stage:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:MONTH_[123]:(?:MONTH_[23]|COMPLETED)$/i.test(
+      input.idempotencyKey,
+    );
+  if (!ordinaryKey && !sideHustleStartKey && !sideHustleStageKey)
     throw new ApplicationError('VALIDATION_ERROR', 'invalid personal learning operation key');
 }
 /** Server-internal service. Repository MUST reauthorize and validate current evidence in its transaction. */

@@ -23,6 +23,7 @@ import { PrismaTrainingPersonalDataExportRepository } from '../src/training-pers
 import { PrismaTrainingPersonalDataDeletionRepository } from '../src/training-personal-data-deletion';
 import { PrismaTrainingRetentionExecutionRepository } from '../src/training-retention-execution';
 import { PrismaTrainingRetentionCronRepository } from '../src/training-retention-cron';
+import { PrismaTrainingAnswerRepository } from '../src/training-answer';
 import {
   PrismaPersonalLearningNudgePreferenceRepository,
   updatePersonalLearningNudgePreferenceInTransaction,
@@ -1757,7 +1758,194 @@ export function registerPersonalLearningDIntegrationCases(client: PrismaClient) 
         kind: 'SIDE_HUSTLE',
         selectionEventId: selection.id,
         roadmapEventId: savedRoadmap.id,
+        currentPeriod: 'MONTH_1',
       });
+
+      // Build two real, topic-linked reviewed practice records using the same DB relations as the learner flow.
+      const practiceAssignmentIds: string[] = [];
+      const progressGoal = await client.programMemberGoal.create({
+        data: {
+          workspaceId: f.scope.workspaceId,
+          groupId: f.scope.groupId,
+          programEnrollmentId: f.scope.programEnrollmentId,
+          groupMembershipId: f.scope.groupMembershipId,
+          topicId: started.topicId,
+          title: 'Progress goal',
+          metricType: 'ACTION',
+          targetValue: 1,
+          currentValue: 0,
+          unit: 'practice',
+          startsAt: now,
+          createdByUserId: f.user.id,
+          updatedByUserId: f.user.id,
+        },
+      });
+      await client.personalLearningGoalConfirmation.create({
+        data: {
+          ...f.scope,
+          userId: f.user.id,
+          programMemberGoalId: progressGoal.id,
+          topicId: started.topicId,
+          packageKey: 'AI_TRAINING',
+          goalKey: 'SIDE_HUSTLE_PROGRESS',
+          semanticVersion: 'V1',
+          consultationRuleVersion: 'V1',
+          scopeRuleVersion: 'V1',
+          confirmedAt: now,
+        },
+      });
+      for (const index of [0, 1]) {
+        const planId = randomUUID();
+        await client.personalLearningPlanRevision.create({
+          data: {
+            ...f.scope,
+            userId: f.user.id,
+            topicId: started.topicId,
+            planId,
+            revision: 1,
+            previousRevision: null,
+            revisionReason: 'INITIAL',
+            programMemberGoalId: progressGoal.id,
+            contractVersion: 'PERSONAL_LEARNING_PLAN_V1',
+            ruleVersion: 'V1',
+            status: 'CONFIRMED',
+            steps: JSON.parse(
+              JSON.stringify(
+                AI_TRAINING_LEARNING_DEFINITION_FIXTURES.map((definition) => ({
+                  definition: definition.reference,
+                  prerequisites: definition.prerequisites,
+                  selectionReason: 'GOAL_ALIGNMENT',
+                })),
+              ),
+            ) as Prisma.InputJsonValue,
+            confirmedAt: now,
+          },
+        });
+        const assignmentId = randomUUID();
+        practiceAssignmentIds.push(assignmentId);
+        const candidateId = randomUUID();
+        await client.programMissionAssignment.create({
+          data: {
+            id: assignmentId,
+            workspaceId: f.scope.workspaceId,
+            groupId: f.scope.groupId,
+            programEnrollmentId: f.scope.programEnrollmentId,
+            programTemplateVersionId: f.program.programTemplateVersionId,
+            sequence: 100 + index,
+            routeKey: 'PERSONAL_LEARNING',
+            phaseKey: 'SIDE_HUSTLE',
+            missionDefinitionKey: 'PERSONAL_LEARNING_DYNAMIC_PRACTICE',
+            actionMode: 'WORK',
+            targetResourceType: 'PERSONAL_LEARNING_PLAN',
+            targetResourceId: planId,
+            status: 'STARTED',
+            displaySnapshot: {
+              dynamicPractice: {
+                version: 'PERSONAL_LEARNING_PRACTICE_V1',
+                topicId: started.topicId,
+                planId,
+                planRevision: 1,
+                goalId: progressGoal.id,
+                scope: f.scope,
+                candidate: { id: candidateId, materialVersion: 1 },
+              },
+            },
+            ruleVersion: 'PERSONAL_LEARNING_PRACTICE_V1',
+            presentedAt: now,
+            startedAt: now,
+          },
+        });
+        const answerResult = await new PrismaTrainingAnswerRepository(client).submit({
+          workspaceId: f.scope.workspaceId,
+          groupId: f.scope.groupId,
+          actorUserId: f.user.id,
+          programEnrollmentId: f.scope.programEnrollmentId,
+          missionAssignmentId: assignmentId,
+          answer: '確認できた実践',
+          practiceEvidence: {
+            kind: 'TEXT',
+            content: '確認できた実践',
+            expectedRevision: 0,
+            candidateId,
+            materialVersion: 1,
+          },
+          idempotencyKey: randomUUID(),
+          occurredAt: new Date(Date.now() + index + 1),
+        });
+        if (answerResult.outcome !== 'SUBMITTED')
+          throw new Error('practice evidence was not submitted');
+        await client.trainingMissionAnswer.update({
+          where: { id: answerResult.answer.id },
+          data: {
+            evaluationStatus: 'READY',
+            evaluation: {
+              schemaVersion: 'PERSONAL_LEARNING_EVIDENCE_REVIEW_V1',
+              review: {
+                state: 'CURRENT_STEP_EVIDENCE',
+                observed: ['確認済み'],
+                notEstablished: [],
+                feedback: '確認できました。',
+                nextAction: '続けてください。',
+              },
+            },
+            evaluatedAt: new Date(),
+          },
+        });
+      }
+      const progress = await repository.readProgress(actor, started.topicId);
+      expect(progress).toMatchObject({
+        period: 'MONTH_1',
+        verifiedPracticeCount: 2,
+        eligibility: { suggested: true, canAdvance: true, reason: 'ENOUGH_PRACTICE' },
+      });
+      const checkin = {
+        topicId: started.topicId,
+        period: 'MONTH_1' as const,
+        checkpointResults: ['PARTLY' as const],
+        feeling: 'OK' as const,
+        note: '少しずつ試せました',
+        decision: 'ADVANCE' as const,
+      };
+      const checkinOperationId = randomUUID();
+      const advanced = await repository.saveCheckin({
+        actor,
+        operationId: checkinOperationId,
+        checkin,
+      });
+      expect(advanced.period).toBe('MONTH_2');
+      const requestAfterAdvance = await client.personalLearningRequest.findFirstOrThrow({
+        where: { ...f.scope, topicId: started.topicId },
+        orderBy: { revision: 'desc' },
+      });
+      expect(requestAfterAdvance).toMatchObject({ revision: 2 });
+      expect(requestAfterAdvance.originalText).toContain('いまの段階：2か月目「試してみる」');
+      expect(
+        await client.programMissionAssignment.findMany({
+          where: { id: { in: practiceAssignmentIds } },
+          select: { status: true },
+        }),
+      ).toEqual([{ status: 'STARTED' }, { status: 'STARTED' }]);
+      const duplicateAdvance = await repository.saveCheckin({
+        actor,
+        operationId: randomUUID(),
+        checkin,
+      });
+      expect(duplicateAdvance).toMatchObject({ period: 'MONTH_2', replayed: true });
+      expect(
+        await client.personalLearningRequest.count({
+          where: { ...f.scope, topicId: started.topicId },
+        }),
+      ).toBe(2);
+      expect(
+        await client.programActionEvent.count({
+          where: {
+            workspaceId: f.scope.workspaceId,
+            groupId: f.scope.groupId,
+            programEnrollmentId: f.scope.programEnrollmentId,
+            eventType: 'SIDE_HUSTLE_STAGE_ADVANCED',
+          },
+        }),
+      ).toBe(1);
     });
   });
 }

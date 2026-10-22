@@ -170,19 +170,45 @@ export default async function Page({
       (goalSnapshot as Record<string, unknown>)['kind'] === 'SIDE_HUSTLE'
         ? (goalSnapshot as Record<string, unknown>)
         : null;
-    const roadmap = sideHustleGoal?.['roadmap'] as
-      { milestones?: readonly { period: string; title: string; outcome: string }[] } | undefined;
+    const sideHustleProgress =
+      sideHustleProgram && input.topicId
+        ? await new db.PrismaSideHustleHearingRepository(db.prisma).readProgress(
+            { actorUserId: input.actorUserId, scope: input.scope },
+            input.topicId,
+          )
+        : null;
+    const roadmap = sideHustleProgress?.roadmap;
     const roadmapCard =
-      sideHustleGoal && roadmap?.milestones?.length === 3 ? (
+      sideHustleGoal && roadmap?.milestones?.length === 3 && sideHustleProgress ? (
         <section className="service-entry__card" aria-label="90日の地図">
           <h2>90日の地図：{selectedTopic?.title}</h2>
-          <p>いまは1か月目「{roadmap.milestones[0]?.title}」です</p>
+          {sideHustleProgress.period === 'COMPLETED' ? (
+            <p>90日の地図を最後まで進めました</p>
+          ) : (
+            <p>
+              いまは{Number(sideHustleProgress.period.slice(-1))}か月目「
+              {roadmap.milestones[Number(sideHustleProgress.period.slice(-1)) - 1]?.title}」です
+            </p>
+          )}
+          {sideHustleProgress.eligibility.suggested &&
+            sideHustleProgress.period !== 'COMPLETED' && (
+              <p>
+                {sideHustleProgress.eligibility.reason === 'TIME_PASSED'
+                  ? `${Number(sideHustleProgress.period.slice(-1))}か月目を始めて4週間たちました。いまの進み具合を一緒に確認しましょう。`
+                  : `${Number(sideHustleProgress.period.slice(-1))}か月目の実践が進んでいます。ここまでを振り返ってみませんか？`}
+              </p>
+            )}
           {roadmap.milestones.map((milestone, index) => (
             <p key={milestone.period}>
               {index + 1}か月目：{milestone.title}（{milestone.outcome}）
             </p>
           ))}
-          <a href={`/s/${serviceSlug}/programs/${programEnrollmentId}/side-hustle`}>地図を見る</a>
+          <a href={`/s/${serviceSlug}/programs/${programEnrollmentId}/side-hustle`}>地図を見る</a>{' '}
+          {sideHustleProgress.period !== 'COMPLETED' && (
+            <a href={`/s/${serviceSlug}/programs/${programEnrollmentId}/side-hustle?checkin=1`}>
+              振り返る
+            </a>
+          )}
         </section>
       ) : null;
     if (multiTopic && !input.topicId) {

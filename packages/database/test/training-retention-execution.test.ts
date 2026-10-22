@@ -145,6 +145,8 @@ describe('training retention execution', () => {
     expect(queries).toContain('SIDE_HUSTLE_PROPOSAL_SAVED');
     expect(queries).toContain('SIDE_HUSTLE_ROADMAP_PROPOSED');
     expect(queries).toContain('SIDE_HUSTLE_STARTED');
+    expect(queries).toContain('SIDE_HUSTLE_CHECKIN_SAVED');
+    expect(queries).toContain('SIDE_HUSTLE_STAGE_ADVANCED');
   });
   it('erases expired answers and work copies while retaining Toolkit and scores', async () => {
     const { tx, repository } = fixture();

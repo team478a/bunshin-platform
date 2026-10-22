@@ -407,6 +407,8 @@ export class PrismaTrainingPersonalDataExportRepository implements TrainingPerso
                 'SIDE_HUSTLE_SELECTED',
                 'SIDE_HUSTLE_ROADMAP_PROPOSED',
                 'SIDE_HUSTLE_STARTED',
+                'SIDE_HUSTLE_CHECKIN_SAVED',
+                'SIDE_HUSTLE_STAGE_ADVANCED',
               ],
             },
           },
