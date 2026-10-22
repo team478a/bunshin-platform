@@ -1,4 +1,9 @@
 -- Additive, fail-closed cost reservation. Existing rows stay NULL and block same-day admission.
+BEGIN;
+SET LOCAL lock_timeout = '5s';
+SET LOCAL statement_timeout = '60s';
+SET LOCAL idle_in_transaction_session_timeout = '60s';
+
 ALTER TABLE "personal_learning_call_admissions"
   ADD COLUMN "reserved_cost_usd_micros" BIGINT,
   ADD COLUMN "pricing_version" VARCHAR(120),
@@ -8,3 +13,5 @@ ALTER TABLE "personal_learning_call_admissions"
       OR
       ("reserved_cost_usd_micros" > 0 AND "pricing_version" ~ '^[A-Za-z0-9][A-Za-z0-9._:/-]{0,119}$')
     );
+
+COMMIT;

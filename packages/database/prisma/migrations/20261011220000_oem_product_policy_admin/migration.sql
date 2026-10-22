@@ -1,3 +1,8 @@
+BEGIN;
+SET LOCAL lock_timeout = '5000ms';
+SET LOCAL statement_timeout = '60000ms';
+SET LOCAL idle_in_transaction_session_timeout = '60000ms';
+
 ALTER TABLE "commercial_service_products"
   ADD COLUMN "retired_by_user_id" UUID,
   ADD COLUMN "retired_reason" VARCHAR(1000),
@@ -28,3 +33,4 @@ $$;
 CREATE TRIGGER "commercial_service_product_retirement_immutable"
   BEFORE UPDATE ON "commercial_service_products"
   FOR EACH ROW EXECUTE FUNCTION "protect_commercial_service_product_retirement"();
+COMMIT;
