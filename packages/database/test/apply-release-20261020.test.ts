@@ -86,13 +86,11 @@ describe('approval-gated native psql release', () => {
 
   it('uses the same validated host and public schema for native SQL and Prisma metadata', async () => {
     vi.spyOn(console, 'log').mockImplementation(() => {});
-    const execute = vi
-      .fn<typeof runMigrationProcess>()
-      .mockResolvedValue({
-        reason: 'EXITED',
-        status: 0,
-        capturedOutput: 'RELEASE_PSQL_PREVIEW_VERIFIED\n',
-      });
+    const execute = vi.fn<typeof runMigrationProcess>().mockResolvedValue({
+      reason: 'EXITED',
+      status: 0,
+      capturedOutput: 'RELEASE_PSQL_PREVIEW_VERIFIED\n',
+    });
     expect(
       await runRelease20261020Migration(execute, {
         ...env,
