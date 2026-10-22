@@ -68,6 +68,18 @@
 
 ## 4. 実行した検証
 
+### PR #1386 レビュー対応（2026-10-22）
+
+- 開始の再送時は、operation IDに加えてselectionEventIdとroadmapEventIdの組でも既存の`SIDE_HUSTLE_STARTED`を検索し、保存済み結果を返すようにした。重複開始でテーマ作成・希望作成・既存テーマ停止を繰り返さない。
+- 開始確認画面を開いた時点でoperation IDを発行し、失敗後の再送では同じIDを使う。地図生成もIDを保持し、失敗後の再送は同じID、「作り直す」だけ新しいIDを使う。
+- 開始拒否の「テーマのない学習記録」と「複数テーマ設定OFF」は、それぞれ運営への問い合わせを案内する専用文言にした。地図の日次上限は「今日の地図づくりの上限に達しました」と表示する。
+- PR #1383（PR-3b）はマージ済み。リポジトリの判断記録ではPR-3bは本番反映・Pilot有効化を承認しておらず、この作業内にも有効化を承認する記録はない。そのため本番/Pilot利用は確認できていない（実環境のProgram設定・デプロイ状態は別途確認が必要）。
+- hearingのcontentHashはPR-4でJSONプロパティ順を正規化する方式に変更された。既存イベントとの再送照合では、新方式に加えて旧`JSON.stringify`方式のハッシュも許容する回帰テストを追加した。既知の旧形式再送を拒否しない互換措置であり、実環境に既存再送があるという確認ではない。
+- 今回追加・変更したテスト: `apps/web/test/side-hustle-roadmap-service.test.ts`（同一操作IDで保存済み地図を返しProviderを呼ばない）、`apps/web/test/side-hustle-http.test.ts`（開始拒否・地図上限文言）、`packages/database/test/side-hustle-hearing.test.ts`（旧ハッシュ形式の再送）、`packages/database/test/personal-learning-d.integration-cases.ts`（異なる開始操作IDでもテーマ・希望を増やさず開始テーマがACTIVEのまま）。
+- 今回の標準検証: `pnpm format:check`、`pnpm typecheck`、`pnpm lint`、`pnpm build`は成功（lintは既存の未使用eslint-disable警告4件のみ）。
+- `pnpm test`は1,113件成功、既存の`test/apply-release-20261020.test.ts`の1件が5秒timeoutで失敗。該当ファイルを単独再実行すると10/10成功。今回追加したDB単体テスト3件、Webテスト5件は成功。
+- 隔離した使い捨てPostgreSQLで`pnpm --filter @bunshin/database test:integration`を再実行し256/256件成功。run ID `9f4c6e1a82b7`の専用コンテナは検証後削除済み。
+
 - Node.js 24.19.0で最終検証を再実行。
 - `pnpm format:check`: 成功。
 - `pnpm typecheck`: 成功（Turbo 25 tasksとlearning UI typecheck）。

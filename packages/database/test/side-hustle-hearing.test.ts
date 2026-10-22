@@ -1,10 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
+import { createHash } from 'node:crypto';
 import type { Prisma } from '@prisma/client';
 import type { PersonalLearningActor } from '@bunshin/application';
 import { PrismaSideHustleHearingRepository } from '../src';
 import {
   screenSideHustleCandidates,
   validateSideHustleCandidateProposal,
+  validateSideHustleHearing,
 } from '@bunshin/capability-training';
 
 const actor: PersonalLearningActor = {
@@ -107,6 +109,24 @@ describe('side hustle hearing event repository', () => {
     });
     expect(retry.id).toBe(first.id);
     expect(first.lastAnsweredQuestionIndex).toBe(5);
+    expect(tx.programActionEvent.create).toHaveBeenCalledOnce();
+    const legacyInput = {
+      hearing: validateSideHustleHearing(hearing),
+      expectedRevision: 0,
+      lastAnsweredQuestionIndex: 5,
+    };
+    events[0]!.metadata = {
+      ...(events[0]!.metadata as Record<string, unknown>),
+      contentHash: createHash('sha256').update(JSON.stringify(legacyInput)).digest('hex'),
+    };
+    const legacyRetry = await repo.saveHearing({
+      actor,
+      hearing,
+      expectedRevision: 0,
+      lastAnsweredQuestionIndex: 5,
+      idempotencyKey: operationId,
+    });
+    expect(legacyRetry.id).toBe(first.id);
     expect(tx.programActionEvent.create).toHaveBeenCalledOnce();
     expect(events[0]).toMatchObject({
       eventType: 'SIDE_HUSTLE_HEARING_SAVED',

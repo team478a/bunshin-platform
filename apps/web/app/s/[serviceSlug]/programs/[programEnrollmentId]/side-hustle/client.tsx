@@ -275,6 +275,8 @@ export default function SideHustleClient({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [proposalOperationId, setProposalOperationId] = useState('');
+  const [roadmapOperationId, setRoadmapOperationId] = useState('');
+  const [startOperationId, setStartOperationId] = useState('');
   const [questionIndex, setQuestionIndex] = useState(0);
   const [followUpAnswer, setFollowUpAnswer] = useState('');
   const [candidateIndex, setCandidateIndex] = useState<number | null>(null);
@@ -294,6 +296,8 @@ export default function SideHustleClient({
       if (!response.ok) throw new Error(json.error?.message ?? '読み込めませんでした。');
       const loaded = json.data;
       setState(loaded);
+      if (loaded.selection && !loaded.roadmap)
+        setRoadmapOperationId((current) => current || crypto.randomUUID());
       if (loaded.hearing) {
         setHearing(loaded.hearing.hearing);
         setStep(Math.min(loaded.hearing.lastAnsweredQuestionIndex, questions.length - 1));
@@ -474,6 +478,7 @@ export default function SideHustleClient({
       const json = (await response.json()) as ApiEnvelope<SavedSelection>;
       if (!response.ok) throw new Error(json.error?.message ?? '選択を保存できませんでした。');
       setState((currentState) => ({ ...currentState, selection: json.data }));
+      setRoadmapOperationId(crypto.randomUUID());
       setScreen('roadmap');
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '選択を保存できませんでした。');
@@ -482,8 +487,10 @@ export default function SideHustleClient({
     }
   };
 
-  const createRoadmap = async () => {
+  const createRoadmap = async (newOperationId?: string) => {
     if (!state.selection) return;
+    const operationId = newOperationId || roadmapOperationId || crypto.randomUUID();
+    setRoadmapOperationId(operationId);
     setBusy(true);
     setError('');
     try {
@@ -492,7 +499,7 @@ export default function SideHustleClient({
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           selectionEventId: state.selection.id,
-          operationId: crypto.randomUUID(),
+          operationId,
         }),
       });
       const json = (await response.json()) as ApiEnvelope<NonNullable<State['roadmap']>>;
@@ -513,6 +520,8 @@ export default function SideHustleClient({
   };
   const startSideHustle = async () => {
     if (!state.selection || !state.roadmap || !confirmed) return;
+    const operationId = startOperationId || crypto.randomUUID();
+    setStartOperationId(operationId);
     setBusy(true);
     setError('');
     try {
@@ -522,7 +531,7 @@ export default function SideHustleClient({
         body: JSON.stringify({
           selectionEventId: state.selection.id,
           roadmapEventId: state.roadmap.id,
-          operationId: crypto.randomUUID(),
+          operationId,
           confirmed: true,
         }),
       });
@@ -817,7 +826,7 @@ export default function SideHustleClient({
           )}
           {error && (
             <>
-              <p>地図を作れませんでした。時間をおいて、もう一度お試しください。</p>
+              <p role="alert">{error}</p>
               <button disabled={busy} onClick={() => void createRoadmap()}>
                 もう一度試す
               </button>
@@ -856,12 +865,13 @@ export default function SideHustleClient({
             disabled={busy}
             onClick={() => {
               setConfirmed(false);
+              setStartOperationId(crypto.randomUUID());
               setScreen('confirmStart');
             }}
           >
             この計画で始める
           </button>{' '}
-          <button disabled={busy} onClick={() => void createRoadmap()}>
+          <button disabled={busy} onClick={() => void createRoadmap(crypto.randomUUID())}>
             作り直す
           </button>
         </section>

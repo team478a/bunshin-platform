@@ -43,6 +43,8 @@ const stableJson = (value: unknown): string => {
   return JSON.stringify(normalize(value));
 };
 const digest = (value: unknown) => createHash('sha256').update(stableJson(value)).digest('hex');
+const legacyDigest = (value: unknown) =>
+  createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const metadata = (value: Prisma.JsonValue): Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value) ? value : {};
 const scopeOf = (actor: PersonalLearningActor) => ({
@@ -292,6 +294,11 @@ export class PrismaSideHustleHearingRepository extends PrismaPersonalLearningReq
       expectedRevision: input.expectedRevision,
       lastAnsweredQuestionIndex,
     });
+    const previousContentHash = legacyDigest({
+      hearing,
+      expectedRevision: input.expectedRevision,
+      lastAnsweredQuestionIndex,
+    });
     return this.authorized(
       input.actor,
       true,
@@ -307,7 +314,7 @@ export class PrismaSideHustleHearingRepository extends PrismaPersonalLearningReq
           if (
             prior.actorUserId !== input.actor.scope.userId ||
             prior.eventType !== HEARING ||
-            meta.contentHash !== contentHash
+            (meta.contentHash !== contentHash && meta.contentHash !== previousContentHash)
           )
             conflict();
           return projectHearing(prior.id, meta, prior.occurredAt.toISOString());
@@ -714,6 +721,39 @@ export class PrismaSideHustleHearingRepository extends PrismaPersonalLearningReq
             requestId: String(meta.requestId),
             roadmapEventId: input.roadmapEventId,
             startedAt: prior.occurredAt.toISOString(),
+            pausedTopicIds: Array.isArray(meta.pausedTopicIds) ? meta.pausedTopicIds : [],
+          };
+        }
+        const existingStart = await tx.programActionEvent.findFirst({
+          where: {
+            ...s,
+            actorUserId: scope.userId,
+            eventType: STARTED,
+            AND: [
+              {
+                metadata: {
+                  path: ['selectionEventId'],
+                  equals: input.selectionEventId,
+                },
+              },
+              {
+                metadata: {
+                  path: ['roadmapEventId'],
+                  equals: input.roadmapEventId,
+                },
+              },
+            ],
+          },
+          orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }],
+        });
+        if (existingStart) {
+          const meta = metadata(existingStart.metadata);
+          return {
+            id: existingStart.id,
+            topicId: String(meta.topicId),
+            requestId: String(meta.requestId),
+            roadmapEventId: input.roadmapEventId,
+            startedAt: existingStart.occurredAt.toISOString(),
             pausedTopicIds: Array.isArray(meta.pausedTopicIds) ? meta.pausedTopicIds : [],
           };
         }

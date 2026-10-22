@@ -1706,6 +1706,28 @@ export function registerPersonalLearningDIntegrationCases(client: PrismaClient) 
         roadmapEventId: savedRoadmap.id,
         idempotencyKey: randomUUID(),
       });
+      const topicCountAfterStart = await client.personalLearningTopic.count({ where: f.scope });
+      const requestCountAfterStart = await client.personalLearningRequest.count({ where: f.scope });
+      const retriedStart = await repository.start({
+        actor,
+        selectionEventId: selection.id,
+        roadmapEventId: savedRoadmap.id,
+        idempotencyKey: randomUUID(),
+      });
+      expect(retriedStart).toMatchObject({
+        id: started.id,
+        topicId: started.topicId,
+        requestId: started.requestId,
+      });
+      expect(await client.personalLearningTopic.count({ where: f.scope })).toBe(
+        topicCountAfterStart,
+      );
+      expect(await client.personalLearningRequest.count({ where: f.scope })).toBe(
+        requestCountAfterStart,
+      );
+      expect(
+        (await client.personalLearningTopic.findUnique({ where: { id: started.topicId } }))?.status,
+      ).toBe('ACTIVE');
       const startedState = await repository.readState(actor);
       expect(startedState.started).toMatchObject({
         topicId: started.topicId,

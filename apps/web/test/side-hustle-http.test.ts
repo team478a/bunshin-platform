@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ApplicationError } from '@bunshin/shared';
-import { projectSideHustleProposalForLearner } from '../src/http/side-hustle';
+import { projectSideHustleProposalForLearner, sideHustleFailure } from '../src/http/side-hustle';
 
 const auth = vi.hoisted(() => ({
   getCurrentUser: vi.fn(),
@@ -20,6 +20,31 @@ vi.mock('../src/auth/request-security', () => ({ requireSameOrigin: vi.fn() }));
 import { sideHustleResponse } from '../src/http/side-hustle';
 
 describe('side hustle learner API projection', () => {
+  it('shows an operator-contact message for both start restrictions', async () => {
+    const historic = await sideHustleFailure(
+      new ApplicationError('CONFLICT', 'unscoped learning requests exist'),
+      'start',
+    ).json();
+    const multiTopicOff = await sideHustleFailure(
+      new ApplicationError('CONFIGURATION_ERROR', 'multi-topic learning is required'),
+      'start',
+    ).json();
+    expect(historic.error.message).toBe(
+      '以前の学習記録があるため、副業版を開始できません。運営にお問い合わせください',
+    );
+    expect(multiTopicOff.error.message).toContain('運営にお問い合わせください');
+    expect(historic.error.message).not.toContain('時間をおいて');
+    expect(multiTopicOff.error.message).not.toContain('時間をおいて');
+  });
+
+  it('uses the dedicated roadmap daily-limit message', async () => {
+    const response = await sideHustleFailure(
+      new ApplicationError('CONFLICT', 'daily side hustle proposal limit reached'),
+      'roadmap',
+    ).json();
+    expect(response.error.message).toBe('今日の地図づくりの上限に達しました');
+  });
+
   it('rejects an enrollment without AI usage consent before any proposal Provider call', async () => {
     auth.getCurrentUser.mockResolvedValue({ userId: 'user' });
     auth.resolveActor.mockRejectedValue(new ApplicationError('FORBIDDEN', 'usage consent missing'));
