@@ -1,5 +1,10 @@
 import 'server-only';
-import { personalLearningFeatures, personalLearningMode } from '@bunshin/capability-training';
+import {
+  PERSONAL_LEARNING_OFFER_POLICIES,
+  personalLearningFeatures,
+  personalLearningMode,
+  personalLearningOfferPolicy,
+} from '@bunshin/capability-training';
 import { requestIdFromHeader } from '@bunshin/observability';
 import { ApplicationError, toApiError } from '@bunshin/shared';
 import { z } from 'zod';
@@ -25,6 +30,7 @@ const inputSchema = z
     learningFeatures: featureSchema,
     reviewEvidenceKey: z.string().regex(/^[a-zA-Z0-9_.:-]{1,100}$/),
     confirmation: z.literal('CONFIRM_PROGRAM_FEATURE_SETTINGS'),
+    learningOfferPolicy: z.enum(PERSONAL_LEARNING_OFFER_POLICIES).optional(),
   })
   .strict();
 
@@ -106,19 +112,34 @@ export async function programFeatureFlagsResponse(request: Request, serviceSlug:
         orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
       });
       return response(
-        programs.map((program) => {
-          const flags = readFlags(program.settings);
-          return {
-            id: program.id,
-            name: program.displayName,
-            status: program.status,
-            updatedAt: stateToken(program.updatedAt),
-            learningMode: flags.learningMode,
-            learningFeatures: flags.learningFeatures,
-            enabled: currentPilot(program.settings)['enabled'] === true,
-            configurationValid: flags.learningMode !== null && flags.learningFeatures !== null,
-          };
-        }),
+        await Promise.all(
+          programs.map(async (program) => {
+            const flags = readFlags(program.settings);
+            const learningOfferPolicy = personalLearningOfferPolicy(program.settings);
+            const enrollmentCount = await db.prisma.programEnrollment.count({
+              where: {
+                workspaceId: service.workspaceId,
+                groupId: service.serviceId,
+                serviceProgramId: program.id,
+              },
+            });
+            return {
+              id: program.id,
+              name: program.displayName,
+              status: program.status,
+              updatedAt: stateToken(program.updatedAt),
+              learningMode: flags.learningMode,
+              learningFeatures: flags.learningFeatures,
+              enabled: currentPilot(program.settings)['enabled'] === true,
+              configurationValid:
+                flags.learningMode !== null &&
+                flags.learningFeatures !== null &&
+                learningOfferPolicy !== null,
+              learningOfferPolicy,
+              hasEnrollments: enrollmentCount > 0,
+            };
+          }),
+        ),
         requestId,
       );
     }
@@ -155,19 +176,40 @@ export async function programFeatureFlagsResponse(request: Request, serviceSlug:
         if (current.status === 'ACTIVE' || currentPilot(current.settings)['enabled'] === true)
           throw new ApplicationError('CONFLICT', 'suspend this Program before changing flags');
         const before = readFlags(current.settings);
+        const currentOfferPolicy = personalLearningOfferPolicy(current.settings);
+        if (currentOfferPolicy === null)
+          throw new ApplicationError('CONFIGURATION_ERROR', 'Program offer policy invalid');
         if (before.learningMode === null || before.learningFeatures === null)
           throw new ApplicationError('CONFIGURATION_ERROR', 'Program feature settings invalid');
 
         const currentSettings = current.settings as Record<string, unknown>;
         const pilot = currentPilot(current.settings);
+        const nextOfferPolicy = input.learningOfferPolicy ?? currentOfferPolicy;
+        if (nextOfferPolicy !== currentOfferPolicy) {
+          const enrollmentCount = await tx.programEnrollment.count({
+            where: {
+              workspaceId: service.workspaceId,
+              groupId: service.serviceId,
+              serviceProgramId: current.id,
+            },
+          });
+          if (enrollmentCount > 0)
+            throw new ApplicationError(
+              'CONFLICT',
+              'cannot change offer policy while enrollments exist',
+            );
+        }
         const nextSettings = {
           ...currentSettings,
+          ...(nextOfferPolicy === 'SIDE_HUSTLE_V1' ? { learningOfferPolicy: nextOfferPolicy } : {}),
           personalLearningPilot: {
             ...pilot,
             learningMode: input.learningMode,
             learningFeatures: input.learningFeatures,
           },
         };
+        if (nextOfferPolicy === 'AI_SKILL_V1')
+          delete (nextSettings as Record<string, unknown>)['learningOfferPolicy'];
         const updated = await tx.serviceProgram.update({
           where: { id: current.id },
           data: { settings: nextSettings },
@@ -179,11 +221,12 @@ export async function programFeatureFlagsResponse(request: Request, serviceSlug:
             resourceType: 'SERVICE_PROGRAM',
             resourceId: current.id,
             action: 'LEARNING_FEATURES_UPDATED',
-            beforeData: before,
+            beforeData: { ...before, learningOfferPolicy: currentOfferPolicy },
             afterData: {
               learningMode: input.learningMode,
               learningFeatures: input.learningFeatures,
               reviewEvidenceKey: input.reviewEvidenceKey,
+              learningOfferPolicy: nextOfferPolicy,
             },
             performedByUserId: actor.userId,
           },
@@ -196,6 +239,14 @@ export async function programFeatureFlagsResponse(request: Request, serviceSlug:
     if (flags.learningMode === null || flags.learningFeatures === null)
       throw new ApplicationError('INTERNAL_ERROR', 'updated settings unavailable');
     const token = stateToken(program.updatedAt);
+    const hasEnrollments =
+      (await db.prisma.programEnrollment.count({
+        where: {
+          workspaceId: service.workspaceId,
+          groupId: service.serviceId,
+          serviceProgramId: program.id,
+        },
+      })) > 0;
     return response(
       {
         id: program.id,
@@ -206,6 +257,8 @@ export async function programFeatureFlagsResponse(request: Request, serviceSlug:
         learningFeatures: flags.learningFeatures,
         enabled: currentPilot(program.settings)['enabled'] === true,
         configurationValid: true,
+        learningOfferPolicy: personalLearningOfferPolicy(program.settings),
+        hasEnrollments,
       },
       requestId,
     );

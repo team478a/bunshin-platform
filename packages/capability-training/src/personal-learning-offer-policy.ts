@@ -3,7 +3,7 @@ const object = (value: unknown): Record<string, unknown> | null =>
     ? (value as Record<string, unknown>)
     : null;
 
-export const PERSONAL_LEARNING_OFFER_POLICIES = ['AI_SKILL_V1'] as const;
+export const PERSONAL_LEARNING_OFFER_POLICIES = ['AI_SKILL_V1', 'SIDE_HUSTLE_V1'] as const;
 export type PersonalLearningOfferPolicy = (typeof PERSONAL_LEARNING_OFFER_POLICIES)[number];
 
 /** Missing is the legacy AI-skill offer; malformed explicit values fail closed. */

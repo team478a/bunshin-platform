@@ -4,6 +4,19 @@ import { generateLearningNudge, learningNudgeBody } from '../src/providers/opena
 const permit = { maxRequestBytes: 2000, maxOutputTokens: 100 };
 
 describe('N-2 bounded learning nudge provider', () => {
+  it('uses SIDE_HUSTLE_V1 nudge instructions', () => {
+    const body = JSON.parse(
+      learningNudgeBody({
+        situation: 'STUCK',
+        ordinal: 1,
+        model: 'gpt-5.2',
+        permit,
+        offerPolicy: 'SIDE_HUSTLE_V1',
+      }),
+    ) as { input: { role: string; content: string }[] };
+    expect(body.input[0]?.content).toContain('副業支援の短い声かけ文');
+    expect(body.input[0]?.content).toContain('収入や成果の断定');
+  });
   it('sends only situation, ordinal, and fixed intent; no learner text or history', () => {
     const body = JSON.parse(
       learningNudgeBody({ situation: 'STUCK', ordinal: 1, model: 'gpt-5.2', permit }),

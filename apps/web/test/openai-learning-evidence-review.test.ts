@@ -30,6 +30,19 @@ const body = (kind: 'TEXT' | 'SELF_REPORT', content: string) =>
   });
 
 describe('personal learning evidence review', () => {
+  it('uses SIDE_HUSTLE_V1 evidence review instructions', () => {
+    const requestBody = learningEvidenceReviewBody({
+      material,
+      kind: 'TEXT',
+      content: '提出内容',
+      model: 'gpt-5-mini',
+      maxRequestBytes: 20_000,
+      maxOutputTokens: 400,
+      offerPolicy: 'SIDE_HUSTLE_V1',
+    });
+    expect(requestBody).toContain('副業支援の今回の課題');
+    expect(requestBody).toContain('収入や成果を約束しない');
+  });
   it('pins the original criteria, evidence kind and submission as data in a bounded request', () => {
     const body = learningEvidenceReviewBody({
       material,
