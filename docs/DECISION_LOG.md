@@ -4535,3 +4535,11 @@
 - 最新のVercel失敗はmigration履歴確認の開始から約60秒後に停止した。既存の確認プロセスの上限と一致するが、ログに終了理由がないためtimeoutと断定しない。GitHubのschema確認成功をVercelの接続設定の証明にしない。
 - 既存の失敗箇所だけで、子プロセスの終了理由、終了コードの0／非0、履歴判定、既存のエラー分類器による固定ラベルを記録する。例外本文、接続URL、password、SQL、生の子出力、任意のdiagnostic文字列は記録しない。
 - 接続先・資格情報・TLS・timeout・実行コマンド・成功／失敗の判断・再試行方針は変更しない。履歴確認失敗時は引き続きmigrationを開始せず停止する。DB、migration、schema、Vercel設定、GitHub workflow、機能flagは変更しない。
+
+## 2026-10-23: Vercelからmigration適用を分離し読み取り専用の完全照合を行う
+
+- 状態: 田中がDraft PR作成を承認した。本番設定・DB・secret・flag・デプロイは変更しない。
+- #1391後のVercelではPrisma CLIの履歴確認が60秒のwatchdogで停止した。DB履歴263件は完了している。poolerログのtransaction表示だけからDIRECT_URLのport誤りと断定した説明は撤回し、CLI待機の根本原因は未確定のまま記録する。
+- VercelのbuildCommandから自動migrationを外す。適用は対象・revision・backup・Previewを確認した既存の人手承認付き手順で先に行い、未適用があればVercelは適用せず停止する。既存3件限定runnerの範囲を広げず、将来のmigrationは別途承認された適用手順を用意する。
+- db:assert-readyをPrisma Clientによる読み取り専用transactionでの検証へ強化する。全migrationの名前・SHA-256・完了状態と、生成モデルが必要とするテーブル・列・enum値を照合し、未知・欠落・失敗・重複・不一致・接続失敗はすべて拒否する。DB履歴を修正・補完しない。
+- 実行は通常runtimeと同じDATABASE_URLを参照し、Supabase poolerでは既存runtime変換と固定済み公式CAによる厳格TLSを使う。Prisma migrate status/deploy/resolveへfallbackせず、transaction・SQL・接続と子プロセス全体に期限を付け、生エラー・SQL・URL・秘密値を出力しない。

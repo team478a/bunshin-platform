@@ -3,6 +3,7 @@ import { registerOemBillingIntegrationCases } from './oem-billing.integration-ca
 import { registerOpsMorningDigestIntegrationCases } from './ops-morning-digest.integration-cases';
 import { registerOpsMorningDigestRunIntegrationCases } from './ops-morning-digest-runs.integration-cases';
 import { registerMigrationBoundsIntegrationCases } from './migration-bounds.integration-cases';
+import { registerDeploymentDatabaseGateIntegrationCases } from './deployment-database-gate.integration-cases';
 import { randomUUID } from 'node:crypto';
 import { registerImprovementTriageIntegrationCases } from './improvement-triage.integration-cases';
 import { registerImprovementRetentionJobIntegrationCases } from './improvement-retention-jobs.integration-cases';
@@ -230,6 +231,7 @@ describe('database ownership boundaries', () => {
   registerOpsMorningDigestIntegrationCases();
   registerOpsMorningDigestRunIntegrationCases();
   registerMigrationBoundsIntegrationCases(client);
+  registerDeploymentDatabaseGateIntegrationCases(client);
   registerAiProviderCallAdmissionIntegrationCases(client);
   registerServiceImprovementProgressIntegrationCases(client);
 

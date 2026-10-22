@@ -73,9 +73,8 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm db:validate
-      - run: pnpm db:migrate:vercel
-        env:
-          VERCEL_ENV: production
+      # Explicit setup of the disposable CI database, never the production build path.
+      - run: pnpm db:migrate:deploy
       - run: pnpm db:assert-ready
       - run: pnpm test:integration
       - name: Install native PostgreSQL client for release tests
