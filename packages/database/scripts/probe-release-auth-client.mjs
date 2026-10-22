@@ -34,7 +34,7 @@ export async function probeReleaseAuth(
     try {
       await client?.$disconnect();
     } catch {
-      diagnostic = 'database-connection-closed';
+      diagnostic ??= 'database-connection-closed';
     }
   }
   if (diagnostic) {

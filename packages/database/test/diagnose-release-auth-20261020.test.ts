@@ -207,7 +207,7 @@ describe('read-only Prisma Client authentication probe', () => {
     );
   });
 
-  it('redacts Prisma errors and disconnects after authentication failure', async () => {
+  it('preserves the authentication error even if cleanup also fails, without raw details', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     const client: ProbeClient = {
       $connect: vi.fn().mockRejectedValue({
@@ -215,7 +215,7 @@ describe('read-only Prisma Client authentication probe', () => {
         message: 'postgresql://owner:synthetic-secret@host/db',
       }),
       $transaction: vi.fn(),
-      $disconnect: vi.fn().mockResolvedValue(undefined),
+      $disconnect: vi.fn().mockRejectedValue(new Error('synthetic-cleanup-secret')),
     };
     expect(await probeReleaseAuth(env, () => client)).toBe(1);
     expect(client.$disconnect).toHaveBeenCalledTimes(1);
