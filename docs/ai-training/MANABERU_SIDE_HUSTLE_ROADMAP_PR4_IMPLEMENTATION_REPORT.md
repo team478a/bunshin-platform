@@ -1,7 +1,7 @@
 # 副業版90日の地図 PR-4 実装報告
 
-作成日: 2026-10-22  
-作業ブランチ: `codex/manaberu-side-hustle-roadmap-pr4`  
+作成日: 2026-10-22
+作業ブランチ: `codex/manaberu-side-hustle-roadmap-pr4`
 開始時の`origin/main`: `148de0295e2a6cc5a2b3ebe858ce486ae7f15448`（PR #1383 merge）
 
 ## 1. 調査した内容
