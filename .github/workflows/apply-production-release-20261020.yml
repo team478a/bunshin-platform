@@ -11,6 +11,12 @@ on:
         description: Approved 20-character Supabase project reference
         required: true
         type: string
+      mode:
+        description: Preview first; apply executes only the approved three migrations
+        required: true
+        type: choice
+        default: preview
+        options: [preview, apply]
 
 permissions:
   contents: read
@@ -22,7 +28,7 @@ concurrency:
 jobs:
   apply:
     if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     environment: production
     steps:
@@ -50,11 +56,15 @@ jobs:
       - name: Install locked dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Install native PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client-16
+
       - name: Apply only the approved migration set through the session pooler
         env:
           VERCEL_ENV: production
           MIGRATION_APPLY_EXPECTED_PROJECT_REF: ${{ inputs.project_ref }}
           MIGRATION_APPLY_CONFIRMATION: ${{ inputs.confirmation }}
+          MIGRATION_APPLY_MODE: ${{ inputs.mode }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
           SUPABASE_SESSION_POOLER_HOST: ${{ vars.SUPABASE_SESSION_POOLER_HOST || secrets.SUPABASE_SESSION_POOLER_HOST }}
@@ -62,13 +72,23 @@ jobs:
           set -euo pipefail
           pnpm db:migration:apply:release-20261020 | tee -a "$GITHUB_STEP_SUMMARY"
 
+      - name: Verify application schema readiness after apply
+        if: inputs.mode == 'apply'
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+        run: pnpm db:assert-ready
+
       - name: Record outcome
         if: success()
+        env:
+          RELEASE_MODE: ${{ inputs.mode }}
         run: |
           {
             echo "## Production migration release 2026-10-20"
             echo ""
-            echo "- Result: applied and verified (or already up to date)"
+            echo "- Mode: $RELEASE_MODE"
+            echo "- Result: successful; Preview does not execute DDL or record migrations"
             echo "- Scope: exactly the three approved migrations"
             echo "- Database credentials: not recorded"
           } >> "$GITHUB_STEP_SUMMARY"
