@@ -24,7 +24,7 @@ const reviewedNonLearningModels = new Set([
 const schemaNames: Record<OpenAiCompatibilityTask, readonly string[]> = {
   SOCIAL_PLANNER: ['daily_mission_brief', 'weekly_plan'],
   TRAINING_ASSESSMENT: ['training_evaluation', 'personal_learning_evidence_review'],
-  LEARNING_LESSON: ['learning_lesson', 'side_hustle_proposal'],
+  LEARNING_LESSON: ['learning_lesson', 'side_hustle_proposal', 'side_hustle_roadmap'],
   LEARNING_SUPPORT: ['learning_support'],
   LEARNING_CONVERSATION: ['learning_conversation'],
   LEARNING_NUDGE: ['learning_nudge'],

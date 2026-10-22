@@ -266,6 +266,74 @@ export class PrismaPersonalLearningTextOperationRepository
     if (count >= 5)
       throw new ApplicationError('CONFLICT', 'daily side hustle proposal limit reached');
   }
+  private async assertSideHustleRoadmapAdmission(
+    tx: Prisma.TransactionClient,
+    input: PersonalLearningTextOperation,
+  ) {
+    const scope = input.actor.scope;
+    if (input.actor.topicId !== undefined)
+      throw new ApplicationError('NOT_FOUND', 'side hustle roadmap unavailable');
+    const selected = await tx.programActionEvent.findFirst({
+      where: {
+        workspaceId: scope.workspaceId,
+        groupId: scope.groupId,
+        programEnrollmentId: scope.programEnrollmentId,
+        actorUserId: scope.userId,
+        id: input.requestId,
+        eventType: 'SIDE_HUSTLE_SELECTED',
+      },
+      select: { id: true },
+    });
+    const latest = await tx.programActionEvent.findFirst({
+      where: {
+        workspaceId: scope.workspaceId,
+        groupId: scope.groupId,
+        programEnrollmentId: scope.programEnrollmentId,
+        actorUserId: scope.userId,
+        eventType: 'SIDE_HUSTLE_SELECTED',
+      },
+      orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }],
+      select: { id: true },
+    });
+    if (!selected || latest?.id !== selected.id || input.expectedRequestRevision !== 1)
+      throw new ApplicationError('CONFLICT', 'side hustle selection changed');
+    const program = await tx.serviceProgram.findFirst({
+      where: {
+        id: input.policy.serviceProgramId,
+        workspaceId: scope.workspaceId,
+        groupId: scope.groupId,
+        settings: { path: ['learningOfferPolicy'], equals: 'SIDE_HUSTLE_V1' },
+      },
+      select: { id: true },
+    });
+    if (!program) throw new ApplicationError('NOT_FOUND', 'side hustle roadmap unavailable');
+    const [databaseClock] = await tx.$queryRaw<{ now: Date }[]>`SELECT clock_timestamp() AS now`;
+    if (!databaseClock)
+      throw new ApplicationError('DATABASE_UNAVAILABLE', 'database clock unavailable');
+    const jst = new Date(databaseClock.now.getTime() + 9 * 60 * 60 * 1000);
+    const dayStart = new Date(
+      Date.UTC(jst.getUTCFullYear(), jst.getUTCMonth(), jst.getUTCDate()) - 9 * 60 * 60 * 1000,
+    );
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`side-hustle-roadmap-day:${scope.workspaceId}:${scope.groupId}:${scope.userId}`}, 0))`;
+    const count = await tx.personalLearningCallAdmission.count({
+      where: {
+        workspaceId: scope.workspaceId,
+        groupId: scope.groupId,
+        admittedAt: { gte: dayStart, lt: new Date(dayStart.getTime() + 24 * 60 * 60 * 1000) },
+        AND: [
+          {
+            operationContext: {
+              path: ['actorKeyHash'],
+              equals: createHash('sha256').update(scope.userId).digest('hex'),
+            },
+          },
+          { operationContext: { path: ['operationKind'], equals: 'SIDE_HUSTLE_ROADMAP' } },
+        ],
+      },
+    });
+    if (count >= 5)
+      throw new ApplicationError('CONFLICT', 'daily side hustle proposal limit reached');
+  }
   async admit(input: PersonalLearningTextOperation) {
     validatePersonalLearningTextOperation(input);
     return this.authorized(
@@ -287,6 +355,8 @@ export class PrismaPersonalLearningTextOperationRepository
           await this.assertNudgeAdmission(tx, input, now);
         } else if (input.operationKind === 'SIDE_HUSTLE_PROPOSAL') {
           await this.assertSideHustleProposalAdmission(tx, input);
+        } else if (input.operationKind === 'SIDE_HUSTLE_ROADMAP') {
+          await this.assertSideHustleRoadmapAdmission(tx, input);
         } else {
           const wish = await tx.personalLearningRequest.findFirst({
             where: { ...s, ...(input.actor.topicId ? { topicId: input.actor.topicId } : {}) },

@@ -188,6 +188,7 @@ describe('side hustle hearing event repository', () => {
         },
       },
       aiUsageEvent: { findFirst: () => Promise.resolve({ id: 'usage' }) },
+      personalLearningTopic: { findFirst: () => Promise.resolve(null) },
     };
     class InMemoryEventRepository extends PrismaSideHustleHearingRepository {
       constructor() {

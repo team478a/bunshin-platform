@@ -107,6 +107,7 @@ export function ProgramFeatureFlagsCard({
       JSON.stringify(features) !== JSON.stringify(selected.learningFeatures));
   const policyChanged = !!selected && offerPolicy !== selected.learningOfferPolicy;
   const evidenceValid = /^[a-zA-Z0-9_.:-]{1,100}$/.test(evidence);
+  const sideHustleMultiTopicInvalid = offerPolicy === 'SIDE_HUSTLE_V1' && !features.multiTopic;
 
   function chooseProgram(id: string) {
     const next = programs.find((program) => program.id === id);
@@ -308,7 +309,13 @@ export function ProgramFeatureFlagsCard({
                       type="checkbox"
                       role="switch"
                       checked={features[key]}
-                      disabled={!canEdit || busy}
+                      disabled={
+                        !canEdit ||
+                        busy ||
+                        (key === 'multiTopic' &&
+                          offerPolicy === 'SIDE_HUSTLE_V1' &&
+                          features.multiTopic)
+                      }
                       onChange={() =>
                         setFeatures((current) => ({ ...current, [key]: !current[key] }))
                       }
@@ -317,6 +324,9 @@ export function ProgramFeatureFlagsCard({
                   </div>
                 ))}
               </fieldset>
+              {sideHustleMultiTopicInvalid && (
+                <p role="alert">副業支援では、複数テーマの機能が必要です</p>
+              )}
               <label className="program-feature-flags__field">
                 提供方針
                 <select

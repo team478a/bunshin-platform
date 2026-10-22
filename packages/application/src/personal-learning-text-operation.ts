@@ -26,7 +26,8 @@ export interface PersonalLearningTextOperation {
     | 'CONVERSATION_TURN'
     | 'PERSONA_INFERENCE'
     | 'NUDGE_COPY'
-    | 'SIDE_HUSTLE_PROPOSAL';
+    | 'SIDE_HUSTLE_PROPOSAL'
+    | 'SIDE_HUSTLE_ROADMAP';
   /** Closed, non-identifying facts only. Never include learner text or profile data. */
   nudge?: {
     situation:
@@ -90,40 +91,45 @@ export function validatePersonalLearningTextOperation(input: PersonalLearningTex
       'PERSONA_INFERENCE',
       'NUDGE_COPY',
       'SIDE_HUSTLE_PROPOSAL',
+      'SIDE_HUSTLE_ROADMAP',
     ].includes(input.operationKind) ||
-    (input.operationKind === 'NUDGE_COPY'
-      ? !input.nudge ||
-        input.actor.topicId !== undefined ||
-        ![
-          'REST_RESUME',
-          'STUCK',
-          'NEW_LEARNER_STALLED',
-          'PRACTICE_COMPLETE',
-          'RETURN_INACTIVE',
-          'NO_RESPONSE',
-        ].includes(input.nudge.situation) ||
-        ![1, 2].includes(input.nudge.ordinal) ||
-        !/^\d{4}-\d{2}-\d{2}$/.test(input.nudge.judgmentDate) ||
-        !Number.isFinite(Date.parse(`${input.nudge.judgmentDate}T00:00:00Z`)) ||
-        new Date(`${input.nudge.judgmentDate}T00:00:00Z`).toISOString().slice(0, 10) !==
-          input.nudge.judgmentDate ||
-        Object.keys(input).some(
-          (key) =>
-            ![
-              'actor',
-              'requestId',
-              'expectedRequestRevision',
-              'operationId',
-              'operationKind',
-              'nudge',
-              'attempt',
-              'provider',
-              'promptVersion',
-              'policy',
-              'pricingRegistry',
-            ].includes(key),
-        )
-      : input.nudge !== undefined) ||
+    (input.operationKind === 'SIDE_HUSTLE_ROADMAP'
+      ? input.actor.topicId !== undefined ||
+        input.nudge !== undefined ||
+        input.practice !== undefined
+      : input.operationKind === 'NUDGE_COPY'
+        ? !input.nudge ||
+          input.actor.topicId !== undefined ||
+          ![
+            'REST_RESUME',
+            'STUCK',
+            'NEW_LEARNER_STALLED',
+            'PRACTICE_COMPLETE',
+            'RETURN_INACTIVE',
+            'NO_RESPONSE',
+          ].includes(input.nudge.situation) ||
+          ![1, 2].includes(input.nudge.ordinal) ||
+          !/^\d{4}-\d{2}-\d{2}$/.test(input.nudge.judgmentDate) ||
+          !Number.isFinite(Date.parse(`${input.nudge.judgmentDate}T00:00:00Z`)) ||
+          new Date(`${input.nudge.judgmentDate}T00:00:00Z`).toISOString().slice(0, 10) !==
+            input.nudge.judgmentDate ||
+          Object.keys(input).some(
+            (key) =>
+              ![
+                'actor',
+                'requestId',
+                'expectedRequestRevision',
+                'operationId',
+                'operationKind',
+                'nudge',
+                'attempt',
+                'provider',
+                'promptVersion',
+                'policy',
+                'pricingRegistry',
+              ].includes(key),
+          )
+        : input.nudge !== undefined) ||
     (input.operationKind === 'SIDE_HUSTLE_PROPOSAL' && input.actor.topicId !== undefined) ||
     (input.operationKind === 'PRACTICE_SUPPORT'
       ? !input.practice ||

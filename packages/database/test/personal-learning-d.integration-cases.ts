@@ -6,6 +6,9 @@ import {
   personalLearningDynamicProgramAllows,
   personalLearningFeatureEnabled,
   AI_TRAINING_LEARNING_DEFINITION_FIXTURES,
+  validateSideHustleCandidateProposal,
+  validateSideHustleRoadmapProposal,
+  screenSideHustleCandidates,
 } from '@bunshin/capability-training';
 import {
   PrismaPersonalLearningPersonaRepository,
@@ -13,6 +16,7 @@ import {
   PrismaPersonalLearningTopicRepository,
 } from '../src/personal-learning-d';
 import { PrismaPersonalLearningRequestRepository } from '../src/personal-learning-request';
+import { PrismaSideHustleHearingRepository } from '../src/side-hustle-hearing';
 import { PrismaPersonalLearningConversationRepository } from '../src/personal-learning-conversation';
 import { PrismaPersonalLearningPersistenceRepository } from '../src/personal-learning-persistence';
 import { PrismaTrainingPersonalDataExportRepository } from '../src/training-personal-data-export';
@@ -51,6 +55,7 @@ export function registerPersonalLearningDIntegrationCases(client: PrismaClient) 
         multiTopic?: boolean;
         learningMode?: 'DYNAMIC_V1' | 'FIXED_DEFINITIONS_V1';
         workspaceId?: string;
+        offerPolicy?: 'SIDE_HUSTLE_V1';
       } = {},
     ) {
       const multiTopic = options.multiTopic ?? true;
@@ -158,6 +163,7 @@ export function registerPersonalLearningDIntegrationCases(client: PrismaClient) 
         data: {
           settings: {
             moduleKey: 'AI_TRAINING_V1',
+            ...(options.offerPolicy ? { learningOfferPolicy: options.offerPolicy } : {}),
             trainingOperations: {
               notificationsEnabled: false,
               postponedReminderEnabled: false,
@@ -197,6 +203,9 @@ export function registerPersonalLearningDIntegrationCases(client: PrismaClient) 
         },
       });
       cleanup.push(async () => {
+        await client.aiUsageEvent.deleteMany({
+          where: { workspaceId: workspace.id, actorUserId: user.id },
+        });
         await client.groupMembership.deleteMany({ where: { groupId: group.id } });
         await client.group.deleteMany({ where: { id: group.id } });
         if (!options.workspaceId)
@@ -1534,6 +1543,199 @@ export function registerPersonalLearningDIntegrationCases(client: PrismaClient) 
           idempotencyKey: randomUUID(),
         }),
       ).rejects.toThrow();
+    });
+
+    it('saves a validated roadmap, reads it, starts the side hustle, and reads its initial wish without mocks', async () => {
+      const f = await serviceFixture('PR-4 roadmap start', { offerPolicy: 'SIDE_HUSTLE_V1' });
+      const actor = { actorUserId: f.user.id, scope: f.scope };
+      const repository = new PrismaSideHustleHearingRepository(client);
+      const hearing = {
+        conditions: {
+          initialBudget: null,
+          monthlyBudget: null,
+          weeklyHours: 5,
+          faceExposure: null,
+          snsPosting: null,
+          clientInteraction: null,
+          salesOutreach: null,
+          inventory: null,
+          device: 'PC' as const,
+        },
+        freeText: {
+          goal: '得意なことを活かしたい',
+          experience: '文章を書く経験',
+          interest: null,
+          constraint: null,
+        },
+        followUps: [],
+      };
+      const savedHearing = await repository.saveHearing({
+        actor,
+        hearing,
+        expectedRevision: 0,
+        lastAnsweredQuestionIndex: 13,
+        idempotencyKey: randomUUID(),
+      });
+      const candidate = {
+        name: '文章作成サポート',
+        category: 'SKILL_SERVICE',
+        summary: '依頼を受けて読みやすい文章を作る仕事です。',
+        monetization: '依頼内容に応じて報酬を受け取ります。',
+        fitReasons: [{ text: '経験を活かせます。', basedOn: ['experience'] }],
+        initialCost: 'NONE',
+        monthlyCost: 'NONE',
+        weeklyHoursMin: 3,
+        difficulty: 1,
+        requiredSkills: ['文章作成'],
+        workStyle: {
+          faceExposure: 'NONE',
+          snsPosting: 'NONE',
+          clientInteraction: 'REQUIRED',
+          salesOutreach: 'OPTIONAL',
+          inventory: 'NONE',
+          device: 'PC_REQUIRED',
+        },
+        typicalFlow: ['見本を作る', '小さな依頼を探す', '文章を納品する'],
+        risks: ['依頼内容を確認します。'],
+        requirements: [{ kind: 'PLATFORM_TERMS', text: '利用サービスの規約を確認します。' }],
+      };
+      const candidateProposal = validateSideHustleCandidateProposal({
+        status: 'READY',
+        reason: '条件をもとに候補を整理しました。',
+        questions: [],
+        candidates: [candidate],
+      });
+      const proposalUsageKey = `personal-learning-operation:${'a'.repeat(64)}`;
+      await client.aiUsageEvent.create({
+        data: {
+          workspaceId: f.scope.workspaceId,
+          actorUserId: f.user.id,
+          bunshinId: null,
+          taskType: 'PERSONAL_LEARNING_SIDE_HUSTLE_PROPOSAL',
+          provider: 'openai',
+          model: 'gpt-5.2',
+          promptVersion: 'side-hustle-candidates-v1',
+          status: 'SUCCESS',
+          inputTokens: 1,
+          outputTokens: 1,
+          latencyMs: 10,
+          estimatedCostUsdMicros: 1n,
+          idempotencyKey: proposalUsageKey,
+          occurredAt: now,
+        },
+      });
+      const screening = screenSideHustleCandidates(
+        hearing.conditions,
+        candidateProposal.candidates,
+      );
+      const savedProposal = await repository.saveProposal({
+        actor,
+        hearingEventId: savedHearing.id,
+        hearingRevision: savedHearing.revision,
+        proposal: candidateProposal,
+        screening,
+        promptVersion: 'side-hustle-candidates-v1',
+        usageKey: proposalUsageKey,
+      });
+      const selection = await repository.select({
+        actor,
+        proposalEventId: savedProposal.id,
+        candidateIndex: 0,
+        idempotencyKey: randomUUID(),
+      });
+      const roadmap = validateSideHustleRoadmapProposal(
+        {
+          reason: '準備から少しずつ進めます。',
+          milestones: [
+            {
+              period: 'MONTH_1',
+              title: '準備する',
+              outcome: '必要な情報を整理できている',
+              checkpoints: ['公式情報を確認する'],
+              weeklyHours: 2,
+            },
+            {
+              period: 'MONTH_2',
+              title: '試してみる',
+              outcome: '小さな実践を記録している',
+              checkpoints: ['自分で試す'],
+              weeklyHours: 3,
+            },
+            {
+              period: 'MONTH_3',
+              title: '続け方を整える',
+              outcome: '続け方を振り返っている',
+              checkpoints: ['記録を振り返る'],
+              weeklyHours: 3,
+            },
+          ],
+        },
+        { weeklyHours: 5 },
+      );
+      const roadmapUsageKey = `personal-learning-operation:${'b'.repeat(64)}`;
+      await client.aiUsageEvent.create({
+        data: {
+          workspaceId: f.scope.workspaceId,
+          actorUserId: f.user.id,
+          bunshinId: null,
+          taskType: 'PERSONAL_LEARNING_SIDE_HUSTLE_ROADMAP',
+          provider: 'openai',
+          model: 'gpt-5.2',
+          promptVersion: 'side-hustle-roadmap-v1',
+          status: 'SUCCESS',
+          inputTokens: 1,
+          outputTokens: 1,
+          latencyMs: 10,
+          estimatedCostUsdMicros: 1n,
+          idempotencyKey: roadmapUsageKey,
+          occurredAt: now,
+        },
+      });
+      const savedRoadmap = await repository.saveRoadmap({
+        actor,
+        selectionEventId: selection.id,
+        roadmap,
+        promptVersion: 'side-hustle-roadmap-v1',
+        usageKey: roadmapUsageKey,
+        idempotencyKey: randomUUID(),
+      });
+      expect((await repository.readState(actor)).roadmap?.roadmap).toEqual(savedRoadmap.roadmap);
+      const started = await repository.start({
+        actor,
+        selectionEventId: selection.id,
+        roadmapEventId: savedRoadmap.id,
+        idempotencyKey: randomUUID(),
+      });
+      const startedState = await repository.readState(actor);
+      expect(startedState.started).toMatchObject({
+        topicId: started.topicId,
+        requestId: started.requestId,
+        roadmapEventId: savedRoadmap.id,
+      });
+      const request = await new PrismaPersonalLearningRequestRepository(client).readRequest({
+        ...actor,
+        topicId: started.topicId,
+      });
+      expect(request).toMatchObject({
+        id: started.requestId,
+        revision: 1,
+        deviceType: 'PC',
+        toolDescription: null,
+      });
+      expect(request?.originalText).toContain('90日の地図（本人が確認済み）：');
+      const topic = await client.personalLearningTopic.findFirst({
+        where: { ...f.scope, id: started.topicId },
+      });
+      expect(topic).toMatchObject({
+        title: candidate.name,
+        sourceRequestId: started.requestId,
+        status: 'ACTIVE',
+      });
+      expect(topic?.goalSnapshot).toMatchObject({
+        kind: 'SIDE_HUSTLE',
+        selectionEventId: selection.id,
+        roadmapEventId: savedRoadmap.id,
+      });
     });
   });
 }

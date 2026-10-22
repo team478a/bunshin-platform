@@ -141,7 +141,7 @@ describe('training personal data export isolation', () => {
     });
   });
 
-  it('includes side hustle hearing, proposal, and selection event contents in the owner export', async () => {
+  it('includes side hustle hearing, proposal, selection, roadmap, and start event contents in the owner export', async () => {
     const { tx, repository } = fixture();
     tx.programActionEvent.findMany.mockImplementation(((args: {
       where?: { eventType?: { in?: string[] } };
@@ -164,6 +164,16 @@ describe('training personal data export isolation', () => {
           occurredAt: now,
           metadata: { candidate: { name: '候補' } },
         },
+        {
+          eventType: 'SIDE_HUSTLE_ROADMAP_PROPOSED',
+          occurredAt: now,
+          metadata: { roadmap: { milestones: [] } },
+        },
+        {
+          eventType: 'SIDE_HUSTLE_STARTED',
+          occurredAt: now,
+          metadata: { topicId: 'topic', requestId: 'request' },
+        },
       ]);
     }) as never);
     const result = await repository.read(input);
@@ -178,6 +188,8 @@ describe('training personal data export isolation', () => {
         'SIDE_HUSTLE_HEARING_SAVED',
         'SIDE_HUSTLE_PROPOSAL_SAVED',
         'SIDE_HUSTLE_SELECTED',
+        'SIDE_HUSTLE_ROADMAP_PROPOSED',
+        'SIDE_HUSTLE_STARTED',
       ]),
     );
   });

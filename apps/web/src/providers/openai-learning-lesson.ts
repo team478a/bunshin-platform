@@ -134,6 +134,7 @@ function learningTask(body: string): LearningAiRequest['task'] {
   const tasks: Record<string, LearningAiRequest['task']> = {
     learning_lesson: 'LESSON',
     side_hustle_proposal: 'LESSON',
+    side_hustle_roadmap: 'LESSON',
     learning_conversation: 'CONVERSATION',
     learning_support: 'PRACTICE_SUPPORT',
     learning_nudge: 'NUDGE_COPY',

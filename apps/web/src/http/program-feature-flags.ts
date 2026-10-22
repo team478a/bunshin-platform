@@ -185,6 +185,14 @@ export async function programFeatureFlagsResponse(request: Request, serviceSlug:
         const currentSettings = current.settings as Record<string, unknown>;
         const pilot = currentPilot(current.settings);
         const nextOfferPolicy = input.learningOfferPolicy ?? currentOfferPolicy;
+        if (
+          (nextOfferPolicy === 'SIDE_HUSTLE_V1' || currentOfferPolicy === 'SIDE_HUSTLE_V1') &&
+          !input.learningFeatures.multiTopic
+        )
+          throw new ApplicationError(
+            'VALIDATION_ERROR',
+            'side hustle requires multi-topic learning',
+          );
         if (nextOfferPolicy !== currentOfferPolicy) {
           const enrollmentCount = await tx.programEnrollment.count({
             where: {

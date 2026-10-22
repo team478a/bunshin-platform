@@ -5,6 +5,7 @@ import { currentUserProvider } from '../auth/current-user';
 import { requireSameOrigin } from '../auth/request-security';
 import { resolvePersonalLearningRequestActor } from '../services/personal-learning-request-access';
 import { prepareSideHustleProposal } from '../services/side-hustle-proposal';
+import { prepareSideHustleRoadmap } from '../services/side-hustle-roadmap';
 import { boundedLearningJson } from './personal-learning-request';
 
 const saveHearingBody = z
@@ -26,6 +27,17 @@ const selectionBody = z
   .object({
     proposalEventId: z.string().uuid(),
     candidateIndex: z.number().int().nonnegative(),
+    operationId: z.string().uuid(),
+    confirmed: z.literal(true),
+  })
+  .strict();
+const roadmapBody = z
+  .object({ selectionEventId: z.string().uuid(), operationId: z.string().uuid() })
+  .strict();
+const startBody = z
+  .object({
+    selectionEventId: z.string().uuid(),
+    roadmapEventId: z.string().uuid(),
     operationId: z.string().uuid(),
     confirmed: z.literal(true),
   })
@@ -141,5 +153,101 @@ export async function sideHustleResponse(request: Request, slug: string, enrollm
       },
       { status: mapped.status, headers },
     );
+  }
+}
+
+async function sideHustleActor(slug: string, enrollmentId: string) {
+  const user = await (await currentUserProvider()).getCurrentUser();
+  if (!user) throw new ApplicationError('UNAUTHENTICATED', 'session required');
+  const resolvedActor = await resolvePersonalLearningRequestActor(
+    slug,
+    enrollmentId,
+    user.userId,
+    undefined,
+    undefined,
+    { allowUnselectedTopic: true },
+  );
+  return { actorUserId: resolvedActor.actorUserId, scope: resolvedActor.scope };
+}
+
+function sideHustleFailure(error: unknown) {
+  const mapped = toApiError(
+    error instanceof z.ZodError
+      ? new ApplicationError('VALIDATION_ERROR', 'invalid side hustle request')
+      : error,
+    'side-hustle-roadmap',
+  );
+  const message =
+    error instanceof ApplicationError &&
+    (error.message === 'daily proposal limit reached' ||
+      error.message === 'daily side hustle proposal limit reached')
+      ? '今日の提案の上限に達しました。明日もう一度お試しください。'
+      : '副業の計画を確認できませんでした。時間をおいて、もう一度お試しください。';
+  return Response.json(
+    { error: { code: mapped.body.error.code, message } },
+    {
+      status: mapped.status,
+      headers: { 'cache-control': 'private, no-store' },
+    },
+  );
+}
+
+export async function sideHustleRoadmapResponse(
+  request: Request,
+  slug: string,
+  enrollmentId: string,
+) {
+  try {
+    if (request.method !== 'POST')
+      return Response.json(
+        { error: { code: 'METHOD_NOT_ALLOWED' } },
+        { status: 405, headers: { allow: 'POST', 'cache-control': 'private, no-store' } },
+      );
+    requireSameOrigin(request);
+    if (!request.headers.get('content-type')?.startsWith('application/json'))
+      throw new ApplicationError('VALIDATION_ERROR', 'JSON required');
+    const input = roadmapBody.parse(await boundedLearningJson(request));
+    const actor = await sideHustleActor(slug, enrollmentId);
+    const data = await prepareSideHustleRoadmap(actor, input.selectionEventId, input.operationId);
+    return Response.json({ data }, { headers: { 'cache-control': 'private, no-store' } });
+  } catch (error) {
+    return sideHustleFailure(error);
+  }
+}
+
+export async function sideHustleStartResponse(
+  request: Request,
+  slug: string,
+  enrollmentId: string,
+) {
+  try {
+    if (request.method !== 'POST')
+      return Response.json(
+        { error: { code: 'METHOD_NOT_ALLOWED' } },
+        { status: 405, headers: { allow: 'POST', 'cache-control': 'private, no-store' } },
+      );
+    requireSameOrigin(request);
+    if (!request.headers.get('content-type')?.startsWith('application/json'))
+      throw new ApplicationError('VALIDATION_ERROR', 'JSON required');
+    const input = startBody.parse(await boundedLearningJson(request));
+    const actor = await sideHustleActor(slug, enrollmentId);
+    const db = await import('@bunshin/database');
+    const data = await new db.PrismaSideHustleHearingRepository(db.prisma).start({
+      actor,
+      selectionEventId: input.selectionEventId,
+      roadmapEventId: input.roadmapEventId,
+      idempotencyKey: input.operationId,
+    });
+    return Response.json(
+      {
+        data: {
+          ...data,
+          learningUrl: `/s/${encodeURIComponent(slug)}/programs/${encodeURIComponent(enrollmentId)}/learning-request?topicId=${encodeURIComponent(data.topicId)}`,
+        },
+      },
+      { headers: { 'cache-control': 'private, no-store' } },
+    );
+  } catch (error) {
+    return sideHustleFailure(error);
   }
 }
