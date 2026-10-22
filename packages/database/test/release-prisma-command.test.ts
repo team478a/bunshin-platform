@@ -14,13 +14,11 @@ describe('safe Prisma subprocess wrapper', () => {
     ['unknown synthetic error', 'unclassified-preflight-error'],
   ])('classifies %s without logging raw output', async (raw, expected) => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
-    const execute = vi
-      .fn()
-      .mockResolvedValue({
-        reason: 'EXITED',
-        status: 1,
-        capturedOutput: `${raw} postgresql://owner:synthetic-secret@host/db private-sql`,
-      });
+    const execute = vi.fn().mockResolvedValue({
+      reason: 'EXITED',
+      status: 1,
+      capturedOutput: `${raw} postgresql://owner:synthetic-secret@host/db private-sql`,
+    });
     expect(await runReleasePrismaCommand(['probe', 'node', 'cli', 'schema'], {}, execute)).toBe(1);
     const output = vi.mocked(console.error).mock.calls.flat().join('\n');
     expect(output).toBe(`RELEASE_PRISMA_PROBE_FAILED:${expected}`);
