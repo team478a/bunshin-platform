@@ -4516,3 +4516,10 @@
 - SQLはREAD ONLY transactionのidentity確認SELECTに限定し、各接続を30秒で制限する。最大2回、並列化・自動再試行・別資格情報への自動fallbackは行わない。対象project・role・DB・port・TLS・CA・明示確認語を接続前に検証する。
 - 手動・main限定・Production人手承認・contents read・既存applyと同じconcurrencyの専用workflowを使う。診断成功をschema readiness・Vercel反映・外部公開の証明にしない。既存DATABASE_URL経由のreadiness確認は維持し、成功した資格情報でその失敗を隠さない。
 - 本PRでmigration再適用、DB・secret・パスワード・flagの変更、デプロイは行わない。本番診断はレビュー・マージとProduction承認後に実施する。
+
+## 2026-10-22: Vercelのmigration履歴確認失敗は固定ラベルだけで区別する
+
+- 状態: 田中が、2日近く続くデプロイ失敗の切り分けのため最小修正を承認した。Draft PRで確認し、この作業では本番変更・再デプロイを行わない。
+- 最新のVercel失敗はmigration履歴確認の開始から約60秒後に停止した。既存の確認プロセスの上限と一致するが、ログに終了理由がないためtimeoutと断定しない。GitHubのschema確認成功をVercelの接続設定の証明にしない。
+- 既存の失敗箇所だけで、子プロセスの終了理由、終了コードの0／非0、履歴判定、既存のエラー分類器による固定ラベルを記録する。例外本文、接続URL、password、SQL、生の子出力、任意のdiagnostic文字列は記録しない。
+- 接続先・資格情報・TLS・timeout・実行コマンド・成功／失敗の判断・再試行方針は変更しない。履歴確認失敗時は引き続きmigrationを開始せず停止する。DB、migration、schema、Vercel設定、GitHub workflow、機能flagは変更しない。
