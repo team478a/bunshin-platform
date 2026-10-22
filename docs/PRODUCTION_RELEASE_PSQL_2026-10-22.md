@@ -16,7 +16,7 @@ Prismaの接続URLのstartup optionsで指定したtimeoutがsession pooler経�
 4. Preview成功後、同じmain SHAで`mode=apply`を実行する。Production承認後、`RELEASE_MIGRATIONS_APPLIED_AND_VERIFIED`と後続の`db:assert-ready`成功を確認する。
 5. DB確認後のコード反映・画面smoke・flag判断は[既存の本番反映手順](PRODUCTION_RELEASE_PREFLIGHT_2026-10-20.md)に従う。このworkflow自体はVercelをデプロイしない。
 
-接続はGitHub Production Environmentの既存`DATABASE_URL` / `DIRECT_URL`と`SUPABASE_SESSION_POOLER_HOST`を再利用する。追加の資格情報や恒久DB設定は不要。workflowはLinuxとPostgreSQL client 16を使用する。従来のPowerShell direct接続runnerを、このpsql経路の代用として再試行しない。
+接続はGitHub Production Environmentの既存`DATABASE_URL` / `DIRECT_URL`と`SUPABASE_SESSION_POOLER_HOST`を再利用する。追加の資格情報や恒久DB設定は不要。workflowとDB検証jobはUbuntu 24.04とPostgreSQL client 16を使用する。従来のPowerShell direct接続runnerを、このpsql経路の代用として再試行しない。
 
 Previewではpsqlのlock保持中にPrismaのread-only接続も確認する。履歴登録に必要な2本目の接続枠とTLS設定が使えない場合は、DDLより前に停止する。
 
