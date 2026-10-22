@@ -33,6 +33,25 @@ const raw = (p: unknown = proposal) => ({
   output: [{ content: [{ type: 'output_text', text: JSON.stringify(p) }] }],
 });
 describe('lesson Provider', () => {
+  it.each([false, true])('uses SIDE_HUSTLE_V1 prompt in extended scope=%s', (extendedScope) => {
+    const value = JSON.parse(
+      learningLessonBody(
+        wish,
+        'gpt-5.2',
+        { maxRequestBytes: 16000, maxOutputTokens: 2000 },
+        extendedScope,
+        [],
+        undefined,
+        'SIDE_HUSTLE_V1',
+      ),
+    ) as { input: { role: string; content: string }[] };
+    expect(value.input.find(({ role }) => role === 'system')?.content).toContain(
+      '本人が選んだ副業',
+    );
+    expect(value.input.find(({ role }) => role === 'system')?.content).toContain(
+      extendedScope ? 'スクリーンショットがある場合' : '本人が選んだ副業',
+    );
+  });
   it('keeps original wish, unknown experience and non-storage request', () => {
     const v = JSON.parse(body()) as {
       store: boolean;

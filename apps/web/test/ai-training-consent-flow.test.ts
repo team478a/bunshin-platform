@@ -31,6 +31,10 @@ const trainingPage = readFileSync(
   new URL('../app/s/[serviceSlug]/training/page.tsx', import.meta.url),
   'utf8',
 );
+const consentPolicy = readFileSync(
+  new URL('../src/services/ai-training-consent-policy.ts', import.meta.url),
+  'utf8',
+);
 const consentReader = readFileSync(
   new URL('../src/services/ai-training-consent.ts', import.meta.url),
   'utf8',
@@ -101,7 +105,7 @@ describe('Manaberu AI training consent flow', () => {
     expect(consentReader).toContain('consentVersion: AI_TRAINING_AI_CONSENT_VERSION');
     expect(consentReader).toContain('textDigest: consentTextDigest');
     expect(consentReader).not.toContain('AI_TRAINING_EXTERNAL_AI_V2');
-    expect(trainingPage.match(/同意して研修へ進む/g)?.length).toBe(1);
+    expect(consentPolicy.match(/submitLabel: '同意して研修へ進む'/g)?.length).toBe(1);
     expect(trainingPage).not.toContain('AI_TRAINING_EXTERNAL_AI_V2');
   });
 

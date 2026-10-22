@@ -29,7 +29,7 @@ describe('personal learning offer policy', () => {
     );
   });
 
-  it.each(['', 'SIDE_HUSTLE_V1', 1, null, {}])(
+  it.each(['', 'UNKNOWN_POLICY', 1, null, {}])(
     'fails closed for an unregistered or malformed value (%j)',
     (learningOfferPolicy) => {
       expect(personalLearningOfferPolicy({ ...settings, learningOfferPolicy })).toBeNull();

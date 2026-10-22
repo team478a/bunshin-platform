@@ -148,6 +148,7 @@ export async function readAiTrainingParticipation(serviceSlug: string, userId: s
     return {
       enrollmentId: enrollment.id,
       programName: program.displayName,
+      offerPolicy,
       isDynamicLearning: personalLearningMode(program.settings) === 'DYNAMIC_V1',
       state,
       consentedAt: state === 'READY' ? (consent?.consentedAt.toISOString() ?? null) : null,

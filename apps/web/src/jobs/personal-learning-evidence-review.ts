@@ -23,8 +23,8 @@ import { withOrganizationAiGenerationQuota } from '../organization-ai-generation
 import {
   generateLearningEvidenceReview,
   learningEvidenceReviewBody,
-  LEARNING_EVIDENCE_REVIEW_PROMPT_VERSION,
 } from '../providers/openai-learning-evidence-review';
+import { personalLearningOfferPromptPolicy } from '../providers/personal-learning-offer-policy';
 
 const object = (value: unknown): Record<string, unknown> =>
   value && typeof value === 'object' && !Array.isArray(value)
@@ -78,6 +78,7 @@ export async function executePersonalLearningEvidenceReview(input: {
     throw new ApplicationError('NOT_FOUND', 'practice evaluator unavailable');
   const offerPolicy = personalLearningOfferPolicy(program.settings);
   if (!offerPolicy) throw new ApplicationError('NOT_FOUND', 'practice evaluator unavailable');
+  const promptVersion = personalLearningOfferPromptPolicy(offerPolicy).evidenceReviewVersion;
   await requireAiTrainingUsageConsent({
     workspaceId: input.workspaceId,
     groupId: input.groupId,
@@ -244,7 +245,7 @@ export async function executePersonalLearningEvidenceReview(input: {
       taskType: 'AI_TRAINING_ANSWER_EVALUATION',
       provider: runtime.provider,
       model: observed.measurement?.model ?? runtime.model,
-      promptVersion: LEARNING_EVIDENCE_REVIEW_PROMPT_VERSION,
+      promptVersion,
       status: 'SUCCESS',
       inputTokens: observed.measurement?.inputTokens ?? null,
       outputTokens: observed.measurement?.outputTokens ?? null,
@@ -337,7 +338,7 @@ export async function executePersonalLearningEvidenceReview(input: {
             review: reviewValue,
             provider: runtime.provider,
             model: observed.measurement?.model ?? runtime.model,
-            promptVersion: LEARNING_EVIDENCE_REVIEW_PROMPT_VERSION,
+            promptVersion,
             inputTokens: observed.measurement?.inputTokens ?? null,
             outputTokens: observed.measurement?.outputTokens ?? null,
             latencyMs: Math.max(0, Date.now() - started),
@@ -361,7 +362,7 @@ export async function executePersonalLearningEvidenceReview(input: {
             revision: submission.revision,
             kind: answerValue.kind,
             reviewState: reviewValue.state,
-            promptVersion: LEARNING_EVIDENCE_REVIEW_PROMPT_VERSION,
+            promptVersion,
           },
           actorUserId: input.actorUserId,
           occurredAt: new Date(),
@@ -379,7 +380,7 @@ export async function executePersonalLearningEvidenceReview(input: {
         taskType: 'AI_TRAINING_ANSWER_EVALUATION',
         provider: runtime.provider,
         model: measurement?.model ?? runtime.model,
-        promptVersion: LEARNING_EVIDENCE_REVIEW_PROMPT_VERSION,
+        promptVersion,
         status: 'FAILED',
         inputTokens: measurement?.inputTokens ?? null,
         outputTokens: measurement?.outputTokens ?? null,
