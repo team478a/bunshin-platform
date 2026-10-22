@@ -4508,3 +4508,11 @@
 - 確認は既存`db:assert-ready`のSELECTを再利用する。専用の手動・Production承認付きworkflowを追加し、DDL・migrate deploy/resolve・履歴更新なしに確認だけを再実行できるようにする。通常apply後の確認も同じrunnerへ接続する。
 - 子出力をメモリ内で分類し、接続URL・password・生のPrismaエラーを表示しない。対象違い・危険なTLS・期限切れCA・時間切れ・成功markerなしを拒否し、使い捨てDBの実Prisma Client/TLSと単体テストで検証する。
 - この確認の成功はGitHubから指定projectのschemaを確認できた証拠であり、Vercelの環境変数・実稼働SHA・画面smokeの確認を代替しない。今回のDraft PR作業では本番設定・DB・flag・デプロイを変更しない。
+
+## 2026-10-22: 本番DB認証は同一資格情報の2接続方式で読み取り専用診断する
+
+- 状態: #1388マージ後の確認run `39759099562`は`database-authentication-failed`で停止した。適用成功時はDIRECT_URL、確認時はDATABASE_URLを資格情報の参照元にしている。資格情報の違いか接続方式の違いかを断定せず、田中の承認を受けて診断用Draft PRを作る。
+- 既存DIRECT_URLの同じ資格情報で、同じproject・role・DB・CA・Prisma Clientを使い、session 5432とtransaction 6543を順に1回ずつ比較する。DATABASE_URLとの資格情報比較は一致／不一致だけを出し、値・長さ・ハッシュ・生エラーを記録しない。
+- SQLはREAD ONLY transactionのidentity確認SELECTに限定し、各接続を30秒で制限する。最大2回、並列化・自動再試行・別資格情報への自動fallbackは行わない。対象project・role・DB・port・TLS・CA・明示確認語を接続前に検証する。
+- 手動・main限定・Production人手承認・contents read・既存applyと同じconcurrencyの専用workflowを使う。診断成功をschema readiness・Vercel反映・外部公開の証明にしない。既存DATABASE_URL経由のreadiness確認は維持し、成功した資格情報でその失敗を隠さない。
+- 本PRでmigration再適用、DB・secret・パスワード・flagの変更、デプロイは行わない。本番診断はレビュー・マージとProduction承認後に実施する。
