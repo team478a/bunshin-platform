@@ -1,6 +1,6 @@
 # 2026-10-20リリースの3 migration：psql経由の適用
 
-状態：psql方式は#1384、[16件のSQL正本復元](PRODUCTION_MIGRATION_SOURCE_RESTORATION_2026-10-22.md)は#1385でmainへマージ済み。Preview run `39744203995`は履歴照合を通過しPrisma metadata接続で停止した。DDL・履歴登録・Vercel反映は未実施。[公式CAと安全なPrisma診断](PRODUCTION_RELEASE_TLS_2026-10-22.md)を別Draft PRで修正する。
+状態：#1384・#1385・#1387はmainへマージ済み。Preview `39752054448`は成功し、Apply `39752566851`は承認済み3件のSQL適用・履歴照合に成功した。後続のschema確認だけがGitHubのdirect接続先へ到達できず失敗した。**Applyや失敗run全体を再実行しない。** 次は[確認専用workflow](PRODUCTION_RELEASE_READINESS_2026-10-22.md)の修正をレビューし、マージ後に確認だけを実行する。Vercel反映は未実施。
 
 ## 対象と変更理由
 
@@ -16,6 +16,8 @@ Prismaの接続URLのstartup optionsで指定したtimeoutがsession pooler経�
 3. 初回は`mode=preview`を選ぶ（既定）。GitHubのProduction承認後、`RELEASE_PSQL_PREVIEW_VERIFIED`を確認する。Previewはsession設定、migration lock、identity、履歴checksum、未適用集合、適用済み未記録のDDL痕跡を確認する。DDLとPrisma履歴登録は行わない。
 4. Preview成功後、同じmain SHAで`mode=apply`を実行する。Production承認後、`RELEASE_MIGRATIONS_APPLIED_AND_VERIFIED`と後続の`db:assert-ready`成功を確認する。
 5. DB確認後のコード反映・画面smoke・flag判断は[既存の本番反映手順](PRODUCTION_RELEASE_PREFLIGHT_2026-10-20.md)に従う。このworkflow自体はVercelをデプロイしない。
+
+2026-10-22の本適用はすでに完了した。以後のschema確認は **Verify production release schema (read-only, 2026-10-20)** を使う。Apply後の確認も同じ専用runnerから既存`db:assert-ready`を実行する。GitHubの確認用接続を同じprojectのtransaction poolerへ変換するが、Vercel環境変数が正しいことの証明にはしない。
 
 接続はGitHub Production Environmentの既存`DATABASE_URL` / `DIRECT_URL`と`SUPABASE_SESSION_POOLER_HOST`を再利用する。追加の資格情報や恒久DB設定は不要。workflowとDB検証jobはUbuntu 24.04とPostgreSQL client 16を使用する。従来のPowerShell direct接続runnerを、このpsql経路の代用として再試行しない。
 
