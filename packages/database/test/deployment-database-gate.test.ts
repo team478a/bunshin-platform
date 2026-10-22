@@ -179,13 +179,11 @@ describe('read-only deployment database gate', () => {
   });
   it('accepts only marker plus exit zero and distinguishes preview skip', async () => {
     vi.spyOn(console, 'log').mockImplementation(() => {});
-    const execute = vi
-      .fn<typeof runMigrationProcess>()
-      .mockResolvedValue({
-        reason: 'EXITED',
-        status: 0,
-        capturedOutput: 'Database schema readiness gate passed.\n',
-      });
+    const execute = vi.fn<typeof runMigrationProcess>().mockResolvedValue({
+      reason: 'EXITED',
+      status: 0,
+      capturedOutput: 'Database schema readiness gate passed.\n',
+    });
     expect(await runSchemaReadiness({ VERCEL_ENV: 'production' }, execute)).toBe(0);
     expect(await runSchemaReadiness({ VERCEL_ENV: 'preview' }, execute)).toBe(0);
     expect(execute).toHaveBeenCalledTimes(1);
