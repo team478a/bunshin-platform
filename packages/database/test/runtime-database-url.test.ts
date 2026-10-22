@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { runtimeDatabaseUrl } from '../src/runtime-database-url';
 
 const schemaReadinessScript = readFileSync(
-  new URL('../scripts/assert-schema-ready.mjs', import.meta.url),
+  new URL('../scripts/deployment-database-gate.mjs', import.meta.url),
   'utf8',
 );
 
@@ -45,7 +45,7 @@ describe('runtimeDatabaseUrl', () => {
     expect(schemaReadinessScript).toContain(
       "import { runtimeDatabaseUrl } from '../src/runtime-database-url.ts';",
     );
-    expect(schemaReadinessScript).toContain('runtimeDatabaseUrl(databaseUrl) ?? databaseUrl');
+    expect(schemaReadinessScript).toContain('runtimeDatabaseUrl(url.toString())');
   });
 
   it('does not modify direct or unrelated session-pooler URLs', () => {
