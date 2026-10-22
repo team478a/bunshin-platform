@@ -1,3 +1,8 @@
+BEGIN;
+SET LOCAL lock_timeout = '5000ms';
+SET LOCAL statement_timeout = '60000ms';
+SET LOCAL idle_in_transaction_session_timeout = '60000ms';
+
 CREATE TABLE personal_learning_requests (
  id UUID PRIMARY KEY,
  workspace_id UUID NOT NULL,
@@ -26,3 +31,4 @@ CREATE UNIQUE INDEX personal_learning_request_operation_key
  ON personal_learning_requests(workspace_id, group_id, program_enrollment_id, idempotency_key);
 ALTER TABLE personal_learning_requests ENABLE ROW LEVEL SECURITY;
 -- Server repository only; no direct anon/authenticated read/write policies.
+COMMIT;

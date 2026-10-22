@@ -4484,3 +4484,11 @@
 - Applyは元のmigration SQLを変更せず1件ずつtransactionで適用し、成功後にPrisma migrate resolveで元ファイルの履歴を登録・照合する。SQL適用後の履歴登録失敗や結果不明では再適用せず停止する。
 - psql sessionがPrismaと同じmigration advisory lockを全処理中保持する。自分自身のlock待ちを避けるため、このsessionから起動するresolve子プロセスだけPrismaの重複lock取得を無効にする。通常のdeployや本番の恒久設定には変更しない。
 - SQL・lock・timeout・履歴失敗・checksum不一致を使い捨てPostgreSQLで実測する。接続URL、password、生のDBエラーは出力せず、固定ラベルと対象migration名だけを報告する。
+
+## 2026-10-22: 本番適用済み16 migrationの正本をmainへ復元する
+
+- 状態: 田中が本番DBのブラウザ調査結果を確認後、修正の開始を指示した。Draft PRでレビューする。migration適用、DB履歴更新、マージ、デプロイはこの修正作業では行わない。
+- Supabase SQL EditorのREAD ONLY transactionで本番のmigration履歴260件を取得・照合した。全件完了、失敗・rollback・同名重複なし。mainと不一致の16件はすべてproduction `b96cea56083cb47632f565aab0b74b70bd612986`のSQLと一致し、未適用は承認済み3件だけだった。
+- 原因はproduction側に追加されたtransaction/timeout wrapperがmain側と異なること。今回に限り「マージ済みmigrationは編集しない」原則の例外として、履歴と一致する本番適用時の16 SQLをそのままmainへ復元する。新しい意味のDDLを過去ファイルへ追加したり、DB履歴のchecksumを書き換えたり、不一致検査を緩和したりしない。
+- 復元対象16件と本番で確認したchecksumをテストfixtureに固定する。SQL本文のDDLが変わらないこと、使い捨てDBの履歴照合で復元前は拒否・復元後はPreview成功することを検証する。fixtureに利用者データ・資格情報・生のDBログを含めない。
+- 新しいmigration、schema、LATEST_DATABASE_MIGRATION、workflow、環境設定、機能flagは変更しない。マージ後は本番Previewから再確認し、成功してから承認済み3件のApply・db:assert-ready・別途コード反映へ進む。

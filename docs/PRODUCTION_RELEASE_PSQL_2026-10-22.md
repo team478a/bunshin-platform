@@ -1,6 +1,6 @@
 # 2026-10-20リリースの3 migration：psql経由の適用
 
-状態：Draft PRで検証中。本番でのPreview・適用・Vercel反映は未実施。
+状態：psql方式は#1384でmainへマージ済み。Preview run `39727857154`は過去migrationのchecksum不一致で停止し、DDL・履歴登録は未実施。ブラウザで本番履歴を読み取り専用で調査し、[16件のSQL正本復元](PRODUCTION_MIGRATION_SOURCE_RESTORATION_2026-10-22.md)を別Draft PRで準備する。適用・Vercel反映は未実施。
 
 ## 対象と変更理由
 
@@ -11,6 +11,7 @@ Prismaの接続URLのstartup optionsで指定したtimeoutがsession pooler経�
 ## GitHubでの実行
 
 1. PRを確認・マージし、verify / database CIの成功を確認する。最新バックアップと対象projectを再確認する。
+   - 16件の過去SQLは本番適用時のproduction版をmainへ復元してから進める。DB履歴のchecksumを変更したり、16件を再適用したりしない。復元PRのCI成功だけを本番Preview成功とみなさない。
 2. Actionsの **Apply approved production migrations (2026-10-20 release)** をmainから実行する。`project_ref`は既存の対象project ref、`confirmation`は画面に示す確認語を入力する。秘密値は入力欄やログへ貼らない。
 3. 初回は`mode=preview`を選ぶ（既定）。GitHubのProduction承認後、`RELEASE_PSQL_PREVIEW_VERIFIED`を確認する。Previewはsession設定、migration lock、identity、履歴checksum、未適用集合、適用済み未記録のDDL痕跡を確認する。DDLとPrisma履歴登録は行わない。
 4. Preview成功後、同じmain SHAで`mode=apply`を実行する。Production承認後、`RELEASE_MIGRATIONS_APPLIED_AND_VERIFIED`と後続の`db:assert-ready`成功を確認する。
