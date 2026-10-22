@@ -84,6 +84,28 @@ describe('side hustle candidate proposal contract', () => {
     ).toBe('NO_FIT');
   });
 
+  it('uses a state-specific fixed reason when an unsafe explanation is replaced', () => {
+    const readyResult = validateSideHustleCandidateProposal({
+      ...ready(),
+      reason: 'FXに関する候補です。',
+    });
+    expect(readyResult.reason).toBe('条件に合う候補を整理しました。');
+    const needsContext = validateSideHustleCandidateProposal({
+      status: 'NEEDS_CONTEXT',
+      reason: 'FXの経験はありますか？',
+      questions: ['使える時間を教えてください。'],
+      candidates: [],
+    });
+    expect(needsContext.reason).toBe('候補を考えるために、いくつか確認させてください。');
+    const noFit = validateSideHustleCandidateProposal({
+      status: 'NO_FIT',
+      reason: 'FXは安全に提案できません。',
+      questions: [],
+      candidates: [],
+    });
+    expect(noFit.reason).toBe('今の条件では、安全に提案できる副業が見つかりませんでした。');
+  });
+
   it.each([
     { ...ready(), questions: ['不要な質問'] },
     { status: 'NEEDS_CONTEXT', reason: '追加確認', questions: ['質問'], candidates: [candidate()] },
@@ -232,7 +254,7 @@ describe('side hustle candidate proposal contract', () => {
     );
     expect(result).toMatchObject({
       status: 'NO_FIT',
-      reason: '条件に合う候補を安全に提案できませんでした。',
+      reason: '今の条件では、安全に提案できる副業が見つかりませんでした。',
       candidates: [],
       removedCandidates: [
         { name: '除外候補', excludedAreaKey: 'PERSONAL_DATA_OR_ACCOUNT_TRADING' },
@@ -281,7 +303,7 @@ describe('side hustle candidate proposal contract', () => {
     });
     expect(result).toMatchObject({
       status: 'NO_FIT',
-      reason: '条件に合う候補を安全に提案できませんでした。',
+      reason: '今の条件では、安全に提案できる副業が見つかりませんでした。',
       questions: [],
       removedQuestionCount: 1,
     });

@@ -25,7 +25,8 @@ export interface PersonalLearningTextOperation {
     | 'PRACTICE_SUPPORT'
     | 'CONVERSATION_TURN'
     | 'PERSONA_INFERENCE'
-    | 'NUDGE_COPY';
+    | 'NUDGE_COPY'
+    | 'SIDE_HUSTLE_PROPOSAL';
   /** Closed, non-identifying facts only. Never include learner text or profile data. */
   nudge?: {
     situation:
@@ -88,6 +89,7 @@ export function validatePersonalLearningTextOperation(input: PersonalLearningTex
       'CONVERSATION_TURN',
       'PERSONA_INFERENCE',
       'NUDGE_COPY',
+      'SIDE_HUSTLE_PROPOSAL',
     ].includes(input.operationKind) ||
     (input.operationKind === 'NUDGE_COPY'
       ? !input.nudge ||
@@ -122,6 +124,7 @@ export function validatePersonalLearningTextOperation(input: PersonalLearningTex
             ].includes(key),
         )
       : input.nudge !== undefined) ||
+    (input.operationKind === 'SIDE_HUSTLE_PROPOSAL' && input.actor.topicId !== undefined) ||
     (input.operationKind === 'PRACTICE_SUPPORT'
       ? !input.practice ||
         !uuid(input.practice.assignmentId) ||

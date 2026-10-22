@@ -1,0 +1,201 @@
+import 'server-only';
+import {
+  executePersonalLearningTextOperation,
+  parsePersonalLearningCallAdmissionPolicy,
+  reservePersonalLearningCallCost,
+  type PersonalLearningActor,
+} from '@bunshin/application';
+import {
+  SIDE_HUSTLE_EXCLUDED_AREAS,
+  screenSideHustleCandidates,
+  sideHustleHearingReadyForProposal,
+  validateSideHustleCandidateProposal,
+} from '@bunshin/capability-training';
+import { ApplicationError } from '@bunshin/shared';
+import { settleProviderRuntimeAdmission } from '../ai/runtime-provider-configuration';
+import {
+  reserveLearningProviderRuntimeConfiguration,
+  resolveLearningProviderRuntimeConfiguration,
+  type LearningAiRuntimeConfiguration,
+} from '../ai/learning-provider-runtime';
+import { personalLearningPricingRegistry } from '../observability/personal-learning-ai-call';
+import {
+  generateSideHustleProposal,
+  sideHustleProposalBody,
+} from '../providers/openai-side-hustle-proposal';
+import { personalLearningOfferPromptPolicy } from '../providers/personal-learning-offer-policy';
+import { LEARNING_CONVERSATION_SAFETY_POLICY } from '../providers/learning-proposal-policy';
+import { resolvePersonalLearningOfferContext } from './personal-learning-extended-scope';
+
+export async function prepareSideHustleProposal(
+  actor: PersonalLearningActor,
+  hearingEventId: string,
+  hearingRevision: number,
+  operationId: string,
+) {
+  if (actor.topicId !== undefined)
+    throw new ApplicationError('NOT_FOUND', 'side hustle unavailable');
+  const db = await import('@bunshin/database');
+  const repository = new db.PrismaSideHustleHearingRepository(db.prisma);
+  const state = await repository.readState(actor);
+  if (state.hearing?.id !== hearingEventId || state.hearing.revision !== hearingRevision)
+    throw new ApplicationError('CONFLICT', 'side hustle hearing changed');
+  if (!sideHustleHearingReadyForProposal(state.hearing.hearing))
+    throw new ApplicationError('VALIDATION_ERROR', 'side hustle goal required');
+  if (state.proposal?.hearingEventId === hearingEventId) return state.proposal;
+  const { offerPolicy } = await resolvePersonalLearningOfferContext(actor);
+  if (offerPolicy !== 'SIDE_HUSTLE_V1')
+    throw new ApplicationError('NOT_FOUND', 'side hustle unavailable');
+  const prompts = personalLearningOfferPromptPolicy(offerPolicy);
+  if (!('candidateProposal' in prompts) || !prompts.candidateProposal)
+    throw new ApplicationError('CONFIGURATION_ERROR', 'side hustle candidate policy unavailable');
+  const instructions = prompts.candidateProposal.instructions;
+  const promptVersion = prompts.candidateProposal.version;
+  const configValue = (() => {
+    try {
+      return JSON.parse(process.env['PERSONAL_LEARNING_LESSON_ADMISSION'] ?? 'null') as unknown;
+    } catch {
+      throw new ApplicationError('CONFIGURATION_ERROR', 'lesson admission unavailable');
+    }
+  })();
+  const policy = parsePersonalLearningCallAdmissionPolicy(configValue);
+  if (
+    !policy ||
+    policy.workspaceId !== actor.scope.workspaceId ||
+    policy.groupId !== actor.scope.groupId
+  )
+    throw new ApplicationError('CONFIGURATION_ERROR', 'lesson admission unavailable');
+  const provider = policy.provider ?? 'openai';
+  const runtime = await resolveLearningProviderRuntimeConfiguration(provider, 'LEARNING_LESSON');
+  if (runtime.model !== policy.model)
+    throw new ApplicationError('CONFIGURATION_ERROR', 'lesson model mismatch');
+  const pricingRegistry = personalLearningPricingRegistry();
+  const reservation = reservePersonalLearningCallCost({
+    policy,
+    provider,
+    pricingRegistry,
+    occurredAt: new Date(),
+  });
+  if (!reservation) throw new ApplicationError('CONFIGURATION_ERROR', 'lesson price unavailable');
+  const screening = screenSideHustleCandidates(state.hearing.hearing.conditions, []);
+  const body = sideHustleProposalBody({
+    model: policy.model,
+    safetyPolicy: LEARNING_CONVERSATION_SAFETY_POLICY,
+    instructions,
+    hearing: state.hearing.hearing,
+    missingConditions: screening.missingConditions,
+    excludedAreas: SIDE_HUSTLE_EXCLUDED_AREAS.map(({ label, reason }) => ({ label, reason })),
+  });
+  if (Buffer.byteLength(body, 'utf8') > policy.maxRequestBytes)
+    throw new ApplicationError('VALIDATION_ERROR', 'side hustle request too large');
+  let attempt = 1;
+  for (; attempt <= 3; attempt += 1) {
+    const operationHash = db.personalLearningOperationHash({
+      actor,
+      operationId,
+      attempt,
+      operationKind: 'SIDE_HUSTLE_PROPOSAL',
+    });
+    const prior = await db.prisma.personalLearningCallAdmission.findFirst({
+      where: {
+        workspaceId: actor.scope.workspaceId,
+        groupId: actor.scope.groupId,
+        serviceProgramId: policy.serviceProgramId,
+        operationHash,
+      },
+      select: { settledAt: true, operationContext: true },
+    });
+    if (!prior) break;
+    const context =
+      prior.operationContext &&
+      typeof prior.operationContext === 'object' &&
+      !Array.isArray(prior.operationContext)
+        ? (prior.operationContext as Record<string, unknown>)
+        : {};
+    const measurement =
+      context['measurement'] && typeof context['measurement'] === 'object'
+        ? (context['measurement'] as Record<string, unknown>)
+        : {};
+    if (!prior.settledAt || measurement['success'] !== false || attempt === 3)
+      throw new ApplicationError('CONFLICT', 'proposal operation is not retryable');
+  }
+  if (attempt > 3) throw new ApplicationError('CONFLICT', 'proposal attempts exhausted');
+  let providerAdmission: LearningAiRuntimeConfiguration | null = null;
+  let usageKey = '';
+  let permitId = '';
+  let output;
+  try {
+    output = await executePersonalLearningTextOperation(
+      new db.PrismaPersonalLearningTextOperationRepository(db.prisma),
+      {
+        actor,
+        requestId: hearingEventId,
+        expectedRequestRevision: hearingRevision,
+        operationId,
+        operationKind: 'SIDE_HUSTLE_PROPOSAL',
+        attempt,
+        provider,
+        promptVersion,
+        policy,
+        pricingRegistry,
+      },
+      async (permit) => {
+        usageKey = `personal-learning-operation:${permit.operationHash}`;
+        permitId = permit.id;
+        const frozen = await db.prisma.personalLearningCallAdmission.findUnique({
+          where: { id: permit.id },
+          select: { reservedCostUsdMicros: true },
+        });
+        if (
+          frozen?.reservedCostUsdMicros == null ||
+          frozen.reservedCostUsdMicros < 1n ||
+          frozen.reservedCostUsdMicros > BigInt(Number.MAX_SAFE_INTEGER)
+        )
+          throw new ApplicationError('CONFIGURATION_ERROR', 'lesson reservation unavailable');
+        providerAdmission = await reserveLearningProviderRuntimeConfiguration(
+          usageKey,
+          provider,
+          'LEARNING_LESSON',
+          Number(frozen.reservedCostUsdMicros),
+          1,
+        );
+        if (providerAdmission.model !== policy.model)
+          throw new ApplicationError('CONFIGURATION_ERROR', 'lesson model changed');
+        return generateSideHustleProposal({
+          apiKey: providerAdmission.apiKey,
+          model: providerAdmission.model,
+          provider: providerAdmission.provider,
+          modelCapabilities: providerAdmission.modelCapabilities,
+          body,
+        });
+      },
+    );
+  } finally {
+    const admission = providerAdmission as LearningAiRuntimeConfiguration | null;
+    if (admission?.admission && permitId) {
+      const cost = await db.prisma.personalLearningCallAdmission.findUnique({
+        where: { id: permitId },
+        select: { settledAt: true },
+      });
+      if (cost?.settledAt) await settleProviderRuntimeAdmission(admission.admission);
+    }
+  }
+  if (!output)
+    throw new ApplicationError('AI_PROVIDER_UNAVAILABLE', 'side hustle proposal unavailable');
+  const proposal = validateSideHustleCandidateProposal(output);
+  const screened = screenSideHustleCandidates(
+    state.hearing.hearing.conditions,
+    proposal.candidates,
+  );
+  if (screened.entries.some(({ candidateIndex }) => !Number.isSafeInteger(candidateIndex)))
+    throw new ApplicationError('VALIDATION_ERROR', 'invalid side hustle screening');
+  return repository.saveProposal({
+    actor,
+    hearingEventId,
+    hearingRevision,
+    proposal,
+    screening: screened,
+    promptVersion,
+    usageKey,
+  });
+}

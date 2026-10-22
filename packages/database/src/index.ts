@@ -341,10 +341,12 @@ export {
 } from './personal-learning-public-registration';
 export * from './personal-learning-request';
 export * from './personal-learning-text-operation';
+export { personalLearningOperationHash } from './personal-learning-operation-identity';
 export * from './personal-learning-lesson-candidate';
 export * from './personal-learning-practice';
 export * from './personal-learning-practice-support';
 export * from './personal-learning-conversation';
+export * from './side-hustle-hearing';
 export { purgeExpiredSupportCases, SUPPORT_CASE_RETENTION_DAYS } from './support-case-retention';
 export { PrismaOpsMorningDigestCollector } from './ops-morning-digest';
 export { PrismaOpsMorningDigestRunRepository } from './ops-morning-digest-runs';

@@ -316,6 +316,16 @@ export function validateSideHustleCandidateProposal(
   const noSafeCandidate = status === 'READY' && acceptedCandidates.length === 0;
   const noSafeQuestion = status === 'NEEDS_CONTEXT' && acceptedQuestions.length === 0;
   const resultStatus = noSafeCandidate || noSafeQuestion ? 'NO_FIT' : status;
+  const safeReason =
+    noSafeCandidate || noSafeQuestion
+      ? '今の条件では、安全に提案できる副業が見つかりませんでした。'
+      : sanitizedReason !== reason
+        ? resultStatus === 'READY'
+          ? '条件に合う候補を整理しました。'
+          : resultStatus === 'NEEDS_CONTEXT'
+            ? '候補を考えるために、いくつか確認させてください。'
+            : '今の条件では、安全に提案できる副業が見つかりませんでした。'
+        : sanitizedReason;
   if (
     resultStatus === 'READY' &&
     (acceptedCandidates.length < 1 || acceptedCandidates.length > 3 || acceptedQuestions.length > 0)
@@ -330,10 +340,7 @@ export function validateSideHustleCandidateProposal(
     validationError('proposal.NO_FIT');
   return Object.freeze({
     status: resultStatus,
-    reason:
-      noSafeCandidate || noSafeQuestion
-        ? '条件に合う候補を安全に提案できませんでした。'
-        : sanitizedReason,
+    reason: safeReason,
     questions: Object.freeze(acceptedQuestions),
     candidates: Object.freeze(acceptedCandidates),
     removedCandidates: Object.freeze(removedCandidates.map((entry) => Object.freeze(entry))),
