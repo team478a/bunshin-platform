@@ -4520,3 +4520,18 @@
 - 段階を進めるときは `originalText` の「いまの段階の目安：」行も新しい月の目安で置き換え、前の月で残った項目を同じ行に付記する。PR-4開始時点で目安行がない場合は「いまの段階：」の直後に追加し、重複行は失敗として扱う。
 - 月の目安は `originalText` に保持する（`currentPosition` は次の実践で上書きされるため）。`currentPosition` は従来どおり次の実践のための表示用位置として更新する。
 - PR-5bがマージされるまでは、画面に「地図を見直す」を表示しない。サーバー側の `REVISE` 記録は受け付ける。
+
+## 2026-10-22: 本番DB認証は同一資格情報の2接続方式で読み取り専用診断する
+
+- 状態: #1388マージ後の確認run `39759099562`は`database-authentication-failed`で停止した。適用成功時はDIRECT_URL、確認時はDATABASE_URLを資格情報の参照元にしている。資格情報の違いか接続方式の違いかを断定せず、田中の承認を受けて診断用Draft PRを作る。
+- 既存DIRECT_URLの同じ資格情報で、同じproject・role・DB・CA・Prisma Clientを使い、session 5432とtransaction 6543を順に1回ずつ比較する。DATABASE_URLとの資格情報比較は一致／不一致だけを出し、値・長さ・ハッシュ・生エラーを記録しない。
+- SQLはREAD ONLY transactionのidentity確認SELECTに限定し、各接続を30秒で制限する。最大2回、並列化・自動再試行・別資格情報への自動fallbackは行わない。対象project・role・DB・port・TLS・CA・明示確認語を接続前に検証する。
+- 手動・main限定・Production人手承認・contents read・既存applyと同じconcurrencyの専用workflowを使う。診断成功をschema readiness・Vercel反映・外部公開の証明にしない。既存DATABASE_URL経由のreadiness確認は維持し、成功した資格情報でその失敗を隠さない。
+- 本PRでmigration再適用、DB・secret・パスワード・flagの変更、デプロイは行わない。本番診断はレビュー・マージとProduction承認後に実施する。
+
+## 2026-10-22: Vercelのmigration履歴確認失敗は固定ラベルだけで区別する
+
+- 状態: 田中が、2日近く続くデプロイ失敗の切り分けのため最小修正を承認した。Draft PRで確認し、この作業では本番変更・再デプロイを行わない。
+- 最新のVercel失敗はmigration履歴確認の開始から約60秒後に停止した。既存の確認プロセスの上限と一致するが、ログに終了理由がないためtimeoutと断定しない。GitHubのschema確認成功をVercelの接続設定の証明にしない。
+- 既存の失敗箇所だけで、子プロセスの終了理由、終了コードの0／非0、履歴判定、既存のエラー分類器による固定ラベルを記録する。例外本文、接続URL、password、SQL、生の子出力、任意のdiagnostic文字列は記録しない。
+- 接続先・資格情報・TLS・timeout・実行コマンド・成功／失敗の判断・再試行方針は変更しない。履歴確認失敗時は引き続きmigrationを開始せず停止する。DB、migration、schema、Vercel設定、GitHub workflow、機能flagは変更しない。

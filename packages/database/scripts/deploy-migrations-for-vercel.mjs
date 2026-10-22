@@ -1,7 +1,7 @@
 import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import { performance } from 'node:perf_hooks';
-import { runMigrationProcess } from './migration-process.mjs';
+import { classifyMigrationProcessFailure, runMigrationProcess } from './migration-process.mjs';
 import { parseMigrationHistoryStatus } from './migration-history-status.mjs';
 
 const requireModule = createRequire(import.meta.url);
@@ -86,6 +86,25 @@ export function matchesExpectedProject(connection, projectRef) {
     ['postgres:', 'postgresql:'].includes(url.protocol) &&
     url.pathname === '/postgres' &&
     ((direct && role === 'postgres') || (pooler && role === `postgres.${projectRef}`))
+  );
+}
+
+/** Log only fixed labels, never child output, exceptions or an arbitrary diagnostic field. */
+function reportHistoryFailure(result, historyStatus) {
+  const processReason = ['EXITED', 'START_FAILED', 'SIGNALLED', 'DEADLINE_EXCEEDED'].includes(
+    result?.reason,
+  )
+    ? result.reason
+    : 'EXCEPTION';
+  const exit = result?.reason === 'EXITED' ? (result.status === 0 ? 'ZERO' : 'NONZERO') : 'NONE';
+  const history = ['UP_TO_DATE', 'PENDING', 'NEEDS_REVIEW', 'UNKNOWN'].includes(historyStatus)
+    ? historyStatus
+    : 'NOT_CHECKED';
+  const diagnostic = result
+    ? (classifyMigrationProcessFailure(result.capturedOutput ?? '') ?? 'no-diagnostic-output')
+    : 'not-available';
+  console.error(
+    `[database] MIGRATION_HISTORY_CHECK_FAILED (process=${processReason}; exit=${exit}; history=${history}; diagnostic=${diagnostic}): build stopped before migration.`,
   );
 }
 
@@ -206,7 +225,7 @@ async function runMigration(environment, execute, probeOnly) {
       // Connection probe below intentionally remains independent of migration history.
     } else {
       if (history.reason !== 'EXITED') {
-        console.error('[database] MIGRATION_HISTORY_CHECK_FAILED: build stopped before migration.');
+        reportHistoryFailure(history);
         return 1;
       }
       const parsedHistory = parseMigrationHistoryStatus(history.capturedOutput ?? '');
@@ -215,7 +234,7 @@ async function runMigration(environment, execute, probeOnly) {
         return 0;
       }
       if (parsedHistory.status !== 'PENDING') {
-        console.error('[database] MIGRATION_HISTORY_CHECK_FAILED: build stopped before migration.');
+        reportHistoryFailure(history, parsedHistory.status);
         return 1;
       }
       console.log(
@@ -223,7 +242,7 @@ async function runMigration(environment, execute, probeOnly) {
       );
     }
   } catch {
-    console.error('[database] MIGRATION_HISTORY_CHECK_FAILED: build stopped before migration.');
+    reportHistoryFailure();
     return 1;
   }
   try {

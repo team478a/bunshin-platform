@@ -23,8 +23,9 @@ if (
 const cli = createRequire(import.meta.url).resolve('prisma/build/index.js');
 const wrapper = fileURLToPath(new URL('./release-prisma-command.mjs', import.meta.url));
 const readiness = fileURLToPath(new URL('./assert-schema-ready.mjs', import.meta.url));
+const authentication = fileURLToPath(new URL('./probe-release-auth-client.mjs', import.meta.url));
 
-test('verified TLS for native psql, Prisma 6 CLI and the schema readiness Client', async (t) => {
+test('verified TLS for psql, Prisma CLI, readiness and READ ONLY authentication Clients', async (t) => {
   const directory = mkdtempSync(join(tmpdir(), 'bunshin-release-tls-'));
   const sockets = new Set();
   let server;
@@ -175,6 +176,17 @@ test('verified TLS for native psql, Prisma 6 CLI and the schema readiness Client
         DATABASE_URL: connection.toString(),
         DIRECT_URL: connection.toString(),
       });
+    const probeAuthentication = (connection) => {
+      const database = new URL(connection);
+      // The disposable PostgreSQL service also has its standard postgres DB.
+      // The auth child checks only that identity and READ ONLY, not app tables.
+      database.pathname = '/postgres';
+      return execute(process.execPath, [authentication], {
+        ...process.env,
+        DATABASE_URL: database.toString(),
+        DIRECT_URL: database.toString(),
+      });
+    };
     const probeNative = (connection) => {
       const native = new URL(connection);
       native.searchParams.set('sslmode', 'verify-full');
@@ -197,6 +209,9 @@ test('verified TLS for native psql, Prisma 6 CLI and the schema readiness Client
       const gate = await probeReadiness(url);
       assert.equal(gate.status, 0, gate.diagnostic);
       assert.match(gate.capturedOutput, /Database schema readiness gate passed\./);
+      const auth = await probeAuthentication(url);
+      assert.equal(auth.status, 0, auth.diagnostic);
+      assert.equal(auth.capturedOutput.trim(), 'RELEASE_AUTH_CONNECTION_VERIFIED');
     });
     for (const mode of ['missing-ca', 'wrong-ca', 'wrong-hostname']) {
       await t.test(
@@ -219,6 +234,10 @@ test('verified TLS for native psql, Prisma 6 CLI and the schema readiness Client
           );
           assert.notEqual((await probeNative(invalid)).status, 0);
           assert.notEqual((await probeReadiness(invalid)).status, 0);
+          const auth = await probeAuthentication(invalid);
+          assert.notEqual(auth.status, 0);
+          assert.ok(readReleasePrismaDiagnostic(auth.capturedOutput));
+          assert.equal(auth.capturedOutput.includes('postgresql://'), false);
         },
       );
     }

@@ -1,0 +1,69 @@
+name: Diagnose production DB authentication (read-only)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type DIAGNOSE_RELEASE_20261020_AUTH_TO_vtkzinaudznwbsjoyszk (read-only)
+        required: true
+        type: string
+      project_ref:
+        description: Approved 20-character Supabase project reference
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-migration-apply
+  cancel-in-progress: false
+
+jobs:
+  diagnose:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: production
+    steps:
+      - name: Require main and exact read-only target confirmation
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+          EXPECTED_PROJECT_REF: ${{ inputs.project_ref }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$CONFIRMATION" = "DIAGNOSE_RELEASE_20261020_AUTH_TO_vtkzinaudznwbsjoyszk"
+          test "$EXPECTED_PROJECT_REF" = "vtkzinaudznwbsjoyszk"
+
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.10.0
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma Client without connecting to a database
+        env:
+          DATABASE_URL: postgresql://unused:unused@localhost:5432/unused
+          DIRECT_URL: postgresql://unused:unused@localhost:5432/unused
+        run: pnpm --filter @bunshin/database db:generate
+
+      - name: Compare credentials in memory and probe two modes once each
+        env:
+          VERCEL_ENV: production
+          RELEASE_AUTH_EXPECTED_PROJECT_REF: ${{ inputs.project_ref }}
+          RELEASE_AUTH_CONFIRMATION: ${{ inputs.confirmation }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+          SUPABASE_SESSION_POOLER_HOST: ${{ vars.SUPABASE_SESSION_POOLER_HOST || secrets.SUPABASE_SESSION_POOLER_HOST }}
+        run: |
+          set -euo pipefail
+          node packages/database/scripts/diagnose-release-auth-20261020.mjs | tee -a "$GITHUB_STEP_SUMMARY"
