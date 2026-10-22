@@ -43,7 +43,22 @@ type State = {
     };
     removedCandidateCount: number;
   } | null;
-  selection: { candidate: Candidate } | null;
+  selection: { id: string; candidate: Candidate } | null;
+  roadmap: {
+    id: string;
+    roadmap: {
+      reason: string;
+      milestones: readonly {
+        period: string;
+        title: string;
+        outcome: string;
+        checkpoints: readonly string[];
+        weeklyHours: number;
+      }[];
+    };
+  } | null;
+  started: { topicId: string; requestId: string } | null;
+  activeSideHustle: { id: string; title: string } | null;
 };
 type ApiEnvelope<T> = { data: T; error?: { message?: string } };
 type SavedHearing = NonNullable<State['hearing']>;
@@ -235,15 +250,33 @@ export default function SideHustleClient({
   programEnrollmentId: string;
 }) {
   const [route] = useState({ serviceSlug, programEnrollmentId });
-  const [state, setState] = useState<State>({ hearing: null, proposal: null, selection: null });
+  const [state, setState] = useState<State>({
+    hearing: null,
+    proposal: null,
+    selection: null,
+    roadmap: null,
+    started: null,
+    activeSideHustle: null,
+  });
   const [hearing, setHearing] = useState<SideHustleHearing>(blankHearing());
   const [step, setStep] = useState(0);
   const [screen, setScreen] = useState<
-    'intro' | 'questions' | 'review' | 'proposal' | 'followup' | 'selection' | 'selected'
+    | 'intro'
+    | 'questions'
+    | 'review'
+    | 'proposal'
+    | 'followup'
+    | 'selection'
+    | 'selected'
+    | 'roadmap'
+    | 'confirmStart'
+    | 'started'
   >('intro');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [proposalOperationId, setProposalOperationId] = useState('');
+  const [roadmapOperationId, setRoadmapOperationId] = useState('');
+  const [startOperationId, setStartOperationId] = useState('');
   const [questionIndex, setQuestionIndex] = useState(0);
   const [followUpAnswer, setFollowUpAnswer] = useState('');
   const [candidateIndex, setCandidateIndex] = useState<number | null>(null);
@@ -263,9 +296,11 @@ export default function SideHustleClient({
       if (!response.ok) throw new Error(json.error?.message ?? '読み込めませんでした。');
       const loaded = json.data;
       setState(loaded);
+      if (loaded.selection && !loaded.roadmap)
+        setRoadmapOperationId((current) => current || crypto.randomUUID());
       if (loaded.hearing) {
         setHearing(loaded.hearing.hearing);
-        setStep(loaded.hearing.lastAnsweredQuestionIndex);
+        setStep(Math.min(loaded.hearing.lastAnsweredQuestionIndex, questions.length - 1));
       }
       if (loaded.proposal?.proposal.status === 'NEEDS_CONTEXT' && loaded.hearing) {
         const followUps = loaded.hearing.hearing.followUps;
@@ -279,9 +314,13 @@ export default function SideHustleClient({
           : 0;
         setQuestionIndex(Math.min(answeredCount, questionsForProposal.length - 1));
       }
-      if (loaded.selection) setScreen('selected');
+      if (loaded.started) setScreen('started');
+      else if (loaded.selection) setScreen('roadmap');
       else if (loaded.proposal) setScreen('proposal');
-      else if (loaded.hearing) setScreen('questions');
+      else if (loaded.hearing)
+        setScreen(
+          loaded.hearing.lastAnsweredQuestionIndex >= questions.length ? 'review' : 'questions',
+        );
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '読み込めませんでした。');
     } finally {
@@ -439,10 +478,68 @@ export default function SideHustleClient({
       const json = (await response.json()) as ApiEnvelope<SavedSelection>;
       if (!response.ok) throw new Error(json.error?.message ?? '選択を保存できませんでした。');
       setState((currentState) => ({ ...currentState, selection: json.data }));
-      setScreen('selected');
+      setRoadmapOperationId(crypto.randomUUID());
+      setScreen('roadmap');
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '選択を保存できませんでした。');
     } finally {
+      setBusy(false);
+    }
+  };
+
+  const createRoadmap = async (newOperationId?: string) => {
+    if (!state.selection) return;
+    const operationId = newOperationId || roadmapOperationId || crypto.randomUUID();
+    setRoadmapOperationId(operationId);
+    setBusy(true);
+    setError('');
+    try {
+      const response = await fetch(api('/roadmap'), {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          selectionEventId: state.selection.id,
+          operationId,
+        }),
+      });
+      const json = (await response.json()) as ApiEnvelope<NonNullable<State['roadmap']>>;
+      if (!response.ok)
+        throw new Error(
+          json.error?.message ?? '地図を作れませんでした。時間をおいて、もう一度お試しください。',
+        );
+      setState((currentState) => ({ ...currentState, roadmap: json.data }));
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : '地図を作れませんでした。時間をおいて、もう一度お試しください。',
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+  const startSideHustle = async () => {
+    if (!state.selection || !state.roadmap || !confirmed) return;
+    const operationId = startOperationId || crypto.randomUUID();
+    setStartOperationId(operationId);
+    setBusy(true);
+    setError('');
+    try {
+      const response = await fetch(api('/start'), {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          selectionEventId: state.selection.id,
+          roadmapEventId: state.roadmap.id,
+          operationId,
+          confirmed: true,
+        }),
+      });
+      const json = (await response.json()) as ApiEnvelope<{ topicId: string; learningUrl: string }>;
+      if (!response.ok) throw new Error(json.error?.message ?? '開始できませんでした。');
+      window.location.assign(json.data.learningUrl);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : '開始できませんでした。');
       setBusy(false);
     }
   };
@@ -714,6 +811,127 @@ export default function SideHustleClient({
               戻る
             </button>
           </p>
+        </section>
+      )}
+      {screen === 'roadmap' && state.selection && !state.roadmap && (
+        <section>
+          <h2>次は、90日の地図を作ります</h2>
+          <p>
+            選んだ副業を始めて続けるために、1か月ごとの目標を3つ作ります。毎日の課題は、進み具合に合わせて1つずつ用意します。
+          </p>
+          {busy ? (
+            <p>地図を作っています。少しお待ちください。</p>
+          ) : (
+            <button onClick={() => void createRoadmap()}>90日の地図を作る</button>
+          )}
+          {error && (
+            <>
+              <p role="alert">{error}</p>
+              <button disabled={busy} onClick={() => void createRoadmap()}>
+                もう一度試す
+              </button>
+            </>
+          )}
+        </section>
+      )}
+      {screen === 'roadmap' && state.selection && state.roadmap && (
+        <section>
+          <h2>「{state.selection.candidate.name}」の90日の地図</h2>
+          <p>1か月ごとの目安です。進み具合に合わせて見直せます。</p>
+          {state.roadmap.roadmap.milestones.map((item, index) => (
+            <article key={item.period}>
+              <h3>
+                {index + 1}か月目：{item.title}
+              </h3>
+              <p>
+                <strong>目指す状態</strong>
+                <br />
+                {item.outcome}
+              </p>
+              <p>
+                <strong>目安になること</strong>
+              </p>
+              <ul>
+                {item.checkpoints.map((checkpoint) => (
+                  <li key={checkpoint}>{checkpoint}</li>
+                ))}
+              </ul>
+              <p>使う時間の目安：週{item.weeklyHours}時間くらい</p>
+            </article>
+          ))}
+          <p>この地図は、収入や成果を約束するものではありません。</p>
+          {error && <p role="alert">{error}</p>}
+          <button
+            disabled={busy}
+            onClick={() => {
+              setConfirmed(false);
+              setStartOperationId(crypto.randomUUID());
+              setScreen('confirmStart');
+            }}
+          >
+            この計画で始める
+          </button>{' '}
+          <button disabled={busy} onClick={() => void createRoadmap(crypto.randomUUID())}>
+            作り直す
+          </button>
+        </section>
+      )}
+      {screen === 'confirmStart' && state.selection && state.roadmap && (
+        <section role="dialog" aria-modal="true">
+          <h2>この計画で始めますか？</h2>
+          <p>1か月目の目標に向けて、最初の課題を用意します。地図はあとから見直せます。</p>
+          {state.activeSideHustle &&
+            state.activeSideHustle.title !== state.selection.candidate.name && (
+              <p>
+                いま進めている「{state.activeSideHustle.title}
+                」は一時停止になります。記録は残ります。
+              </p>
+            )}
+          <label>
+            <input
+              type="checkbox"
+              checked={confirmed}
+              onChange={(event) => setConfirmed(event.target.checked)}
+            />
+            内容を確認しました
+          </label>
+          {error && <p role="alert">{error}</p>}
+          <p>
+            <button disabled={busy || !confirmed} onClick={() => void startSideHustle()}>
+              始める
+            </button>{' '}
+            <button disabled={busy} onClick={() => setScreen('roadmap')}>
+              戻る
+            </button>
+          </p>
+        </section>
+      )}
+      {screen === 'started' && state.selection && (
+        <section>
+          <h2>進めている副業：{state.selection.candidate.name}</h2>
+          {state.roadmap && (
+            <article>
+              <h3>「{state.selection.candidate.name}」の90日の地図</h3>
+              <p>1か月ごとの目安です。進み具合に合わせて見直せます。</p>
+              {state.roadmap.roadmap.milestones.map((item, index) => (
+                <section key={item.period}>
+                  <h4>
+                    {index + 1}か月目：{item.title}
+                  </h4>
+                  <p>{item.outcome}</p>
+                </section>
+              ))}
+              <p>この地図は、収入や成果を約束するものではありません。</p>
+            </article>
+          )}
+          <p>
+            <a
+              href={`/s/${encodeURIComponent(route.serviceSlug)}/programs/${encodeURIComponent(route.programEnrollmentId)}/learning-request?topicId=${encodeURIComponent(state.started?.topicId ?? '')}`}
+            >
+              学習画面へ進む
+            </a>
+          </p>
+          <button onClick={() => setScreen('proposal')}>別の副業を選び直す</button>
         </section>
       )}
       {screen === 'selected' && state.selection && (

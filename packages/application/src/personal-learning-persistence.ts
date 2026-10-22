@@ -73,7 +73,12 @@ export function validatePersonalLearningActor(input: PersonalLearningActor): voi
 }
 export function validatePersonalLearningWrite(input: PersonalLearningWrite): void {
   validatePersonalLearningActor(input);
-  if (!/^[A-Za-z0-9_-]{1,100}$/.test(input.idempotencyKey))
+  const ordinaryKey = /^[A-Za-z0-9_-]{1,100}$/.test(input.idempotencyKey);
+  const sideHustleStartKey =
+    /^side-hustle-start:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+      input.idempotencyKey,
+    );
+  if (!ordinaryKey && !sideHustleStartKey)
     throw new ApplicationError('VALIDATION_ERROR', 'invalid personal learning operation key');
 }
 /** Server-internal service. Repository MUST reauthorize and validate current evidence in its transaction. */

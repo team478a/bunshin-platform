@@ -64,7 +64,7 @@ const command = {
   serviceProgramId: programId,
   expectedUpdatedAt: updatedAt.toISOString(),
   learningMode: 'DYNAMIC_V1',
-  learningFeatures: { ...oldFeatures, conversation: true, learningNudges: true },
+  learningFeatures: { ...oldFeatures, conversation: true, multiTopic: true, learningNudges: true },
   reviewEvidenceKey: 'review-2026-10-19',
   confirmation: 'CONFIRM_PROGRAM_FEATURE_SETTINGS',
 };
