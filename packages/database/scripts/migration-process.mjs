@@ -7,7 +7,6 @@ export function classifyMigrationProcessFailure(output) {
   const text = String(output).slice(-MAX_DIAGNOSTIC_BYTES);
   if (!text.trim()) return undefined;
   const labels = [
-    [/RELEASE_MIGRATION_TLS_NOT_ACTIVE/i, 'database-session-not-encrypted'],
     [/MIGRATION_BOUNDS_NOT_ACTIVE/i, 'migration-bounds-not-active'],
     [/MIGRATION_PROBE_IDENTITY_MISMATCH/i, 'database-identity-mismatch'],
     [/\bP1000\b|authentication failed/i, 'database-authentication-failed'],
