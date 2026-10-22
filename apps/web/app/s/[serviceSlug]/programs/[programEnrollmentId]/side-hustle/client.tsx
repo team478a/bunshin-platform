@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { SIDE_HUSTLE_COMMON_NOTICES, type SideHustleHearing } from '@bunshin/capability-training';
+import { CheckinDecisionSelect, CheckinDecisionSubmitButton } from './checkin-controls';
 
 type Candidate = {
   name: string;
@@ -1094,14 +1095,12 @@ export default function SideHustleClient({
             </label>
             <label>
               次にどうしますか？
-              <select value={decision} onChange={(event) => setDecision(event.target.value)}>
-                <option value="ADVANCE">
-                  {state.progress.period === 'MONTH_3' ? '90日の地図を終える' : '次の段階へ進む'}
-                </option>
-                <option value="CONTINUE">いまの段階を続ける</option>
-                <option value="REVISE">地図を見直す</option>
-                <option value="RESELECT">別の副業を選び直す</option>
-              </select>
+              <CheckinDecisionSelect
+                value={decision}
+                month3={state.progress.period === 'MONTH_3'}
+                canAdvance={state.progress.eligibility.canAdvance}
+                onChange={setDecision}
+              />
             </label>
             {!state.progress.eligibility.canAdvance && decision === 'ADVANCE' && (
               <p>
@@ -1109,17 +1108,17 @@ export default function SideHustleClient({
                 か月目で確認できた実践がまだないため、次の段階へは進めません。まずは今の課題を進めてみましょう。
               </p>
             )}
-            <button
-              disabled={busy || (decision === 'ADVANCE' && !state.progress.eligibility.canAdvance)}
+            <CheckinDecisionSubmitButton
+              busy={busy}
+              decision={decision}
+              canAdvance={state.progress.eligibility.canAdvance}
               onClick={() => {
                 if (decision === 'ADVANCE') {
                   setCheckinOperationId(crypto.randomUUID());
                   setScreen('confirmAdvance');
                 } else void submitCheckin(decision);
               }}
-            >
-              決める
-            </button>
+            />
           </section>
         )}
       {screen === 'confirmAdvance' && state.progress && (

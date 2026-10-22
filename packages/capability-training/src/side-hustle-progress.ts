@@ -93,6 +93,17 @@ export function sideHustleCheckinEligibility(input: {
   };
 }
 
+export function sideHustleProgressGuidance(
+  period: SideHustlePeriod | 'COMPLETED',
+  reason: 'ENOUGH_PRACTICE' | 'TIME_PASSED' | 'NOT_YET',
+): string | null {
+  const month = period === 'COMPLETED' ? null : Number(period.slice(-1));
+  if (month === null || reason === 'NOT_YET') return null;
+  return reason === 'TIME_PASSED'
+    ? `${month}か月目を始めて4週間たちました。いまの進み具合を一緒に確認しましょう。`
+    : `${month}か月目の実践が進んでいます。ここまでを振り返ってみませんか？`;
+}
+
 export function buildSideHustleStageRequest(input: {
   previous: {
     originalText: string;
@@ -109,10 +120,15 @@ export function buildSideHustleStageRequest(input: {
   const target = input.roadmap.milestones[monthIndex];
   const lineSeparator = input.previous.originalText.includes('\r\n') ? '\r\n' : '\n';
   const lines = input.previous.originalText.split(/\r?\n/);
-  const indexes = lines.flatMap((line, index) => (line.startsWith('いまの段階：') ? [index] : []));
-  if (indexes.length !== 1 || !target)
+  const stageIndexes = lines.flatMap((line, index) =>
+    line.startsWith('いまの段階：') ? [index] : [],
+  );
+  const checkpointIndexes = lines.flatMap((line, index) =>
+    line.startsWith('いまの段階の目安：') ? [index] : [],
+  );
+  if (stageIndexes.length !== 1 || checkpointIndexes.length > 1 || !target)
     throw new ApplicationError('CONFLICT', 'invalid current stage line');
-  lines[indexes[0]!] = `いまの段階：${monthIndex + 1}か月目「${target.title}」`;
+  lines[stageIndexes[0]!] = `いまの段階：${monthIndex + 1}か月目「${target.title}」`;
   const limit = 500;
   const base = `${monthIndex + 1}か月目の目安：${target.checkpoints.join('／')}`;
   const leftovers = input.roadmap.milestones[monthIndex - 1]!.checkpoints.filter(
@@ -127,5 +143,10 @@ export function buildSideHustleStageRequest(input: {
     while (retained.length && retained.join('／').length > available) retained.shift();
     if (retained.length) currentPosition += `${prefix}${retained.join('／')}${suffix}`;
   }
+  const checkpointLine = `いまの段階の目安：${target.checkpoints.join('／')}${
+    leftovers.length ? `（前の月で残ったこと：${leftovers.join('／')}）` : ''
+  }`;
+  if (checkpointIndexes.length === 1) lines[checkpointIndexes[0]!] = checkpointLine;
+  else lines.splice(stageIndexes[0]! + 1, 0, checkpointLine);
   return { ...input.previous, originalText: lines.join(lineSeparator), currentPosition };
 }

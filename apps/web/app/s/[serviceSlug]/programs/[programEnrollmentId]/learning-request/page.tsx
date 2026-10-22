@@ -6,7 +6,11 @@ import {
   personalLearningRequestEnabled,
 } from '../../../../../../src/services/personal-learning-request-access';
 import { PersonalLearningRequestCard } from './card';
-import { personalLearningMode, personalLearningOfferPolicy } from '@bunshin/capability-training';
+import {
+  personalLearningMode,
+  personalLearningOfferPolicy,
+  sideHustleProgressGuidance,
+} from '@bunshin/capability-training';
 import { personalLearningFeatureEnabled } from '@bunshin/capability-training';
 import { LearningTopicSelector } from './topic-selector';
 import { AiTrainingDataExportCard } from '../ai-training-data-export-card';
@@ -193,9 +197,10 @@ export default async function Page({
           {sideHustleProgress.eligibility.suggested &&
             sideHustleProgress.period !== 'COMPLETED' && (
               <p>
-                {sideHustleProgress.eligibility.reason === 'TIME_PASSED'
-                  ? `${Number(sideHustleProgress.period.slice(-1))}か月目を始めて4週間たちました。いまの進み具合を一緒に確認しましょう。`
-                  : `${Number(sideHustleProgress.period.slice(-1))}か月目の実践が進んでいます。ここまでを振り返ってみませんか？`}
+                {sideHustleProgressGuidance(
+                  sideHustleProgress.period,
+                  sideHustleProgress.eligibility.reason,
+                )}
               </p>
             )}
           {roadmap.milestones.map((milestone, index) => (

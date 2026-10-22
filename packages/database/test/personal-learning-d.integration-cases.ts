@@ -1794,7 +1794,14 @@ export function registerPersonalLearningDIntegrationCases(client: PrismaClient) 
           confirmedAt: now,
         },
       });
-      for (const index of [0, 1]) {
+      async function recordPractice(
+        index: number,
+        options: {
+          reviewState?: 'CURRENT_STEP_EVIDENCE' | 'SELF_REPORT_ONLY';
+          evaluationStatus?: 'READY' | 'PENDING';
+          occurredAt?: Date;
+        } = {},
+      ) {
         const planId = randomUUID();
         await client.personalLearningPlanRevision.create({
           data: {
@@ -1855,6 +1862,7 @@ export function registerPersonalLearningDIntegrationCases(client: PrismaClient) 
             startedAt: now,
           },
         });
+        const occurredAt = options.occurredAt ?? new Date(Date.now() + index + 1);
         const answerResult = await new PrismaTrainingAnswerRepository(client).submit({
           workspaceId: f.scope.workspaceId,
           groupId: f.scope.groupId,
@@ -1870,18 +1878,18 @@ export function registerPersonalLearningDIntegrationCases(client: PrismaClient) 
             materialVersion: 1,
           },
           idempotencyKey: randomUUID(),
-          occurredAt: new Date(Date.now() + index + 1),
+          occurredAt,
         });
         if (answerResult.outcome !== 'SUBMITTED')
           throw new Error('practice evidence was not submitted');
         await client.trainingMissionAnswer.update({
           where: { id: answerResult.answer.id },
           data: {
-            evaluationStatus: 'READY',
+            evaluationStatus: options.evaluationStatus ?? 'READY',
             evaluation: {
               schemaVersion: 'PERSONAL_LEARNING_EVIDENCE_REVIEW_V1',
               review: {
-                state: 'CURRENT_STEP_EVIDENCE',
+                state: options.reviewState ?? 'CURRENT_STEP_EVIDENCE',
                 observed: ['確認済み'],
                 notEstablished: [],
                 feedback: '確認できました。',
@@ -1892,6 +1900,9 @@ export function registerPersonalLearningDIntegrationCases(client: PrismaClient) 
           },
         });
       }
+      for (const index of [0, 1]) await recordPractice(index);
+      await recordPractice(2, { reviewState: 'SELF_REPORT_ONLY' });
+      await recordPractice(3, { evaluationStatus: 'PENDING' });
       const progress = await repository.readProgress(actor, started.topicId);
       expect(progress).toMatchObject({
         period: 'MONTH_1',
@@ -1919,12 +1930,13 @@ export function registerPersonalLearningDIntegrationCases(client: PrismaClient) 
       });
       expect(requestAfterAdvance).toMatchObject({ revision: 2 });
       expect(requestAfterAdvance.originalText).toContain('いまの段階：2か月目「試してみる」');
+      expect(requestAfterAdvance.originalText).toContain('いまの段階の目安：自分で試す');
       expect(
         await client.programMissionAssignment.findMany({
           where: { id: { in: practiceAssignmentIds } },
           select: { status: true },
         }),
-      ).toEqual([{ status: 'STARTED' }, { status: 'STARTED' }]);
+      ).toEqual(practiceAssignmentIds.map(() => ({ status: 'STARTED' })));
       const duplicateAdvance = await repository.saveCheckin({
         actor,
         operationId: randomUUID(),
@@ -1946,6 +1958,143 @@ export function registerPersonalLearningDIntegrationCases(client: PrismaClient) 
           },
         }),
       ).toBe(1);
+
+      // Race a next-practice wish append against stage advancement. Exactly one initial writer
+      // must conflict on the captured request revision; a retry must preserve both additions.
+      expect((await repository.readProgress(actor, started.topicId)).verifiedPracticeCount).toBe(0);
+      await recordPractice(5);
+      const monthTwoCheckin = {
+        ...checkin,
+        period: 'MONTH_2' as const,
+        checkpointResults: ['DONE' as const],
+      };
+      const requestRepository = new PrismaPersonalLearningRequestRepository(client);
+      const currentRequest = await requestRepository.readRequest({
+        ...actor,
+        topicId: started.topicId,
+      });
+      if (!currentRequest) throw new Error('started request missing');
+      const nextPracticeWish = {
+        originalText: `${currentRequest.originalText}\n結果に応じた次の実践：短い案内文も試す`,
+        deviceType: currentRequest.deviceType,
+        toolDescription: currentRequest.toolDescription,
+        experienceDescription: currentRequest.experienceDescription,
+        currentPosition: '結果に応じた次の実践を準備する',
+      };
+      const race = await Promise.allSettled([
+        repository.saveCheckin({ actor, operationId: randomUUID(), checkin: monthTwoCheckin }),
+        requestRepository.saveRequest({
+          actorUserId: actor.actorUserId,
+          scope: actor.scope,
+          topicId: started.topicId,
+          expectedRevision: currentRequest.revision,
+          idempotencyKey: randomUUID(),
+          content: nextPracticeWish,
+        }),
+      ]);
+      expect(race.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+      expect(race.filter((result) => result.status === 'rejected')).toHaveLength(1);
+      if (race[0]?.status === 'rejected') {
+        expect(race[0].reason).toMatchObject({ code: 'CONFLICT' });
+        await repository.saveCheckin({
+          actor,
+          operationId: randomUUID(),
+          checkin: monthTwoCheckin,
+        });
+      } else if (race[1]?.status === 'rejected') {
+        expect(race[1].reason).toMatchObject({ code: 'CONFLICT' });
+      }
+      const latestAfterRace = await requestRepository.readRequest({
+        ...actor,
+        topicId: started.topicId,
+      });
+      if (!latestAfterRace) throw new Error('request missing after concurrent update');
+      if (!latestAfterRace.originalText.includes('結果に応じた次の実践：短い案内文も試す')) {
+        await requestRepository.saveRequest({
+          actorUserId: actor.actorUserId,
+          scope: actor.scope,
+          topicId: started.topicId,
+          expectedRevision: latestAfterRace.revision,
+          idempotencyKey: randomUUID(),
+          content: {
+            ...nextPracticeWish,
+            originalText: `${latestAfterRace.originalText}\n結果に応じた次の実践：短い案内文も試す`,
+          },
+        });
+      }
+      const latestAfterPreservingRetry = await requestRepository.readRequest({
+        ...actor,
+        topicId: started.topicId,
+      });
+      expect(latestAfterPreservingRetry?.originalText).toContain(
+        'いまの段階：3か月目「続け方を整える」',
+      );
+      expect(latestAfterPreservingRetry?.originalText).toContain(
+        'いまの段階の目安：記録を振り返る',
+      );
+      expect(latestAfterPreservingRetry?.originalText).toContain(
+        '結果に応じた次の実践：短い案内文も試す',
+      );
+      const monthThreeProgress = await repository.readProgress(actor, started.topicId);
+      expect(monthThreeProgress).toMatchObject({ period: 'MONTH_3', verifiedPracticeCount: 0 });
+      await recordPractice(6);
+      const monthThreeRequest = await requestRepository.readRequest({
+        ...actor,
+        topicId: started.topicId,
+      });
+      if (!monthThreeRequest) throw new Error('month-three request missing');
+      const requestCountBeforeCompletion = await client.personalLearningRequest.count({
+        where: { ...f.scope, topicId: started.topicId },
+      });
+      const completed = await repository.saveCheckin({
+        actor,
+        operationId: randomUUID(),
+        checkin: {
+          ...checkin,
+          period: 'MONTH_3',
+          checkpointResults: ['DONE'],
+        },
+      });
+      expect(completed.period).toBe('COMPLETED');
+      expect(
+        await client.personalLearningRequest.count({
+          where: { ...f.scope, topicId: started.topicId },
+        }),
+      ).toBe(requestCountBeforeCompletion);
+      expect(
+        (await client.personalLearningTopic.findUnique({ where: { id: started.topicId } }))?.status,
+      ).toBe('ACTIVE');
+
+      await client.personalLearningTopic.update({
+        where: { id: started.topicId },
+        data: { status: 'PAUSED' },
+      });
+      await expect(
+        repository.saveCheckin({
+          actor,
+          operationId: randomUUID(),
+          checkin: { ...checkin, period: 'MONTH_3' },
+        }),
+      ).rejects.toThrow(/paused/i);
+
+      const otherEnrollment = await serviceFixture('side hustle different enrollment', {
+        offerPolicy: 'SIDE_HUSTLE_V1',
+      });
+      const otherEnrollmentTopic = await client.personalLearningTopic.create({
+        data: {
+          ...otherEnrollment.scope,
+          title: '別Enrollmentのテーマ',
+          status: 'ACTIVE',
+          goalSnapshot: { kind: 'SIDE_HUSTLE', schemaVersion: 1 },
+        },
+      });
+      await expect(
+        repository.saveCheckin({
+          actor,
+          operationId: randomUUID(),
+          checkin: { ...checkin, topicId: otherEnrollmentTopic.id },
+        }),
+      ).rejects.toThrow(/unavailable/i);
     });
   });
 }

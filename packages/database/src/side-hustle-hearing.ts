@@ -365,8 +365,14 @@ export class PrismaSideHustleHearingRepository extends PrismaPersonalLearningReq
         });
         const lastCheckin =
           topicEvents.filter((event) => event.eventType === CHECKIN).at(-1) ?? null;
+        const latestRequest = await tx.personalLearningRequest.findFirst({
+          where: { ...scope, topicId },
+          orderBy: { revision: 'desc' },
+          select: { revision: true },
+        });
         return {
           topicId,
+          requestRevision: latestRequest?.revision ?? 0,
           status: topic.status,
           period,
           periodStartedAt: periodStartedAt.toISOString(),
@@ -583,7 +589,7 @@ export class PrismaSideHustleHearingRepository extends PrismaPersonalLearningReq
             where: { ...scope, topicId },
             orderBy: { revision: 'desc' },
           });
-          if (!previous) conflict();
+          if (!previous || previous.revision !== state.requestRevision) conflict();
           const request = buildSideHustleStageRequest({
             previous: {
               originalText: previous!.originalText,

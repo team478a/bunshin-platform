@@ -5,8 +5,10 @@ import {
   SIDE_HUSTLE_STAGE_ADVANCE_PRACTICE_THRESHOLD,
   buildSideHustleStageRequest,
   sideHustleCheckinEligibility,
+  sideHustleProgressGuidance,
   validateSideHustleCheckin,
 } from '../src/side-hustle-progress';
+import type { SideHustleRoadmapProposal } from '../src/side-hustle-roadmap';
 
 const roadmap = {
   reason: 'test',
@@ -99,9 +101,31 @@ describe('side hustle progress', () => {
     expect(() => validateSideHustleCheckin({ ...base, note: ' 投資の助言' }, 2)).toThrow(
       ApplicationError,
     );
+    expect(() => validateSideHustleCheckin({ ...base, note: '気づき ' }, 2)).toThrow(
+      ApplicationError,
+    );
+    expect(() => validateSideHustleCheckin({ ...base, note: ' 気づき' }, 2)).toThrow(
+      ApplicationError,
+    );
+    expect(() => validateSideHustleCheckin({ ...base, note: '絶対に稼げます' }, 2)).toThrow(
+      ApplicationError,
+    );
+    expect(() => validateSideHustleCheckin({ ...base, note: 'パチスロで稼ぐ' }, 2)).toThrow(
+      ApplicationError,
+    );
     expect(() => validateSideHustleCheckin({ ...base, note: 'x'.repeat(201) }, 2)).toThrow(
       ApplicationError,
     );
+  });
+
+  it('uses the Appendix B-1 guidance for each eligibility reason', () => {
+    expect(sideHustleProgressGuidance('MONTH_2', 'ENOUGH_PRACTICE')).toBe(
+      '2か月目の実践が進んでいます。ここまでを振り返ってみませんか？',
+    );
+    expect(sideHustleProgressGuidance('MONTH_2', 'TIME_PASSED')).toBe(
+      '2か月目を始めて4週間たちました。いまの進み具合を一緒に確認しましょう。',
+    );
+    expect(sideHustleProgressGuidance('MONTH_2', 'NOT_YET')).toBeNull();
   });
 
   it('changes only the current-stage line and carries unfinished checkpoints within the limit', () => {
@@ -117,9 +141,78 @@ describe('side hustle progress', () => {
       toPeriod: 'MONTH_2',
       checkpointResults: ['PARTLY', 'NOT_YET'],
     });
-    expect(result.originalText).toBe('希望\nいまの段階：2か月目「2月目」');
+    expect(result.originalText).toBe(
+      `希望\nいまの段階：2か月目「2月目」\nいまの段階の目安：${['A'.repeat(40), 'B'].join('／')}（前の月で残ったこと：${['A'.repeat(40), 'B'].join('／')}）`,
+    );
     expect(result.currentPosition).toContain('前の月で残ったこと');
     expect(result.deviceType).toBe('PC');
+    const replacement = buildSideHustleStageRequest({
+      previous: {
+        originalText: '希望\nいまの段階：1か月目「1月目」\nいまの段階の目安：古い目安',
+        deviceType: null,
+        toolDescription: null,
+        experienceDescription: null,
+        currentPosition: null,
+      },
+      roadmap,
+      toPeriod: 'MONTH_2',
+      checkpointResults: ['DONE', 'DONE'],
+    });
+    expect(replacement.originalText).toContain(
+      `いまの段階の目安：${roadmap.milestones[1].checkpoints.join('／')}`,
+    );
+    expect(replacement.originalText).not.toContain('古い目安');
+    expect(() =>
+      buildSideHustleStageRequest({
+        previous: {
+          originalText: 'いまの段階：1か月目\nいまの段階：重複',
+          deviceType: null,
+          toolDescription: null,
+          experienceDescription: null,
+          currentPosition: null,
+        },
+        roadmap,
+        toPeriod: 'MONTH_2',
+        checkpointResults: [],
+      }),
+    ).toThrow(ApplicationError);
+    expect(() =>
+      buildSideHustleStageRequest({
+        previous: {
+          originalText: 'いまの段階：1か月目\nいまの段階の目安：A\nいまの段階の目安：B',
+          deviceType: null,
+          toolDescription: null,
+          experienceDescription: null,
+          currentPosition: null,
+        },
+        roadmap,
+        toPeriod: 'MONTH_2',
+        checkpointResults: [],
+      }),
+    ).toThrow(ApplicationError);
+    const longRoadmap = {
+      ...roadmap,
+      milestones: roadmap.milestones.map((milestone) => ({
+        ...milestone,
+        checkpoints: ['A'.repeat(80), 'B'.repeat(80), 'C'.repeat(80)],
+      })),
+    } as unknown as SideHustleRoadmapProposal;
+    const bounded = buildSideHustleStageRequest({
+      previous: {
+        originalText: 'いまの段階：1か月目',
+        deviceType: null,
+        toolDescription: null,
+        experienceDescription: null,
+        currentPosition: null,
+      },
+      roadmap: longRoadmap,
+      toPeriod: 'MONTH_2',
+      checkpointResults: ['NOT_YET', 'PARTLY', 'NOT_YET'],
+    });
+    expect(bounded.currentPosition?.length).toBeLessThanOrEqual(500);
+    expect(bounded.currentPosition).toContain(
+      `（前の月で残ったこと：${['B'.repeat(80), 'C'.repeat(80)].join('／')}）`,
+    );
     expect(() =>
       buildSideHustleStageRequest({
         previous: {
