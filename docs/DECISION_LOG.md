@@ -4460,6 +4460,14 @@
 - 設定変更はProgram単位の監査ログへ前後の有効方針を含める。AI_SKILL_V1は互換性のため設定キーを削除し、SIDE_HUSTLE_V1のみ明示保存する。
 - 本決定は副業ヒアリング・候補生成（PR-3b）、DB migration、Programの本番設定変更、Pilot有効化、本番反映を承認しない。
 
+## 2026-10-22: 副業ヒアリング・提案・選択（PR-3b）
+
+- 副業ヒアリング・提案・選択は、Enrollment単位の`ProgramActionEvent`（`SIDE_HUSTLE_HEARING_SAVED`、`SIDE_HUSTLE_PROPOSAL_SAVED`、`SIDE_HUSTLE_SELECTED`）に保存する。DB migrationは作らない。
+- AIの提案はテキストAI操作`SIDE_HUSTLE_PROPOSAL`として、既存の費用予約・記録を通す。同じヒアリングの版では再度AIを呼ばず、JST日次5回の制限を適用する。
+- 照合で合わない候補は受講者に表示せず、選ばせない。選択は本人の明示的な確認でだけ確定する。
+- 3種類のイベントを本人データの出力・削除・保持期限の対象に含める。
+- 本決定はPR-4のカリキュラム生成、LINE対応、本番反映、Pilot有効化を承認しない。
+
 ## 2026-10-22: 承認済み3 migrationはpsqlの同一sessionで設定・適用を行う
 
 - 状態: Draft PRで検証する。本番適用は未実施。田中が、startup options依存をやめた別方式への変更を指示した。

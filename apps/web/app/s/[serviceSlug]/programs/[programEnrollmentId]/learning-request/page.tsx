@@ -6,7 +6,7 @@ import {
   personalLearningRequestEnabled,
 } from '../../../../../../src/services/personal-learning-request-access';
 import { PersonalLearningRequestCard } from './card';
-import { personalLearningMode } from '@bunshin/capability-training';
+import { personalLearningMode, personalLearningOfferPolicy } from '@bunshin/capability-training';
 import { personalLearningFeatureEnabled } from '@bunshin/capability-training';
 import { LearningTopicSelector } from './topic-selector';
 import { AiTrainingDataExportCard } from '../ai-training-data-export-card';
@@ -56,6 +56,30 @@ export default async function Page({
         })
       : null;
     const dynamicProgram = personalLearningMode(program?.settings) === 'DYNAMIC_V1';
+    const sideHustle =
+      personalLearningOfferPolicy(program?.settings) === 'SIDE_HUSTLE_V1'
+        ? await new db.PrismaSideHustleHearingRepository(db.prisma).readState({
+            actorUserId: input.actorUserId,
+            scope: input.scope,
+          })
+        : null;
+    const sideHustlePath = `/s/${serviceSlug}/programs/${programEnrollmentId}/side-hustle`;
+    const selectedCandidate = sideHustle?.selection?.candidate as { name?: unknown } | undefined;
+    const sideHustleEntry = sideHustle ? (
+      <section className="service-entry__card" aria-label="副業の選択">
+        {typeof selectedCandidate?.name === 'string' ? (
+          <>
+            <h2>選んだ副業：{selectedCandidate.name}</h2>
+            <a href={sideHustlePath}>副業の選択を確認する</a>
+          </>
+        ) : (
+          <>
+            <h2>まず、あなたに合う副業を一緒に選びましょう</h2>
+            <a href={sideHustlePath}>副業を選ぶ</a>
+          </>
+        )}
+      </section>
+    ) : null;
     const multiTopic = personalLearningFeatureEnabled(program?.settings, 'multiTopic');
     const pagePath = `/s/${serviceSlug}/programs/${programEnrollmentId}/learning-request`;
     const topicEndpoint = `/api/services/${serviceSlug}/ai-training/enrollments/${programEnrollmentId}/topics`;
@@ -100,6 +124,7 @@ export default async function Page({
     if (multiTopic && !input.topicId) {
       return (
         <main style={{ maxWidth: 560, margin: '0 auto', padding: 20 }}>
+          {sideHustleEntry}
           <LearningTopicSelector endpoint={topicEndpoint} pagePath={pagePath} topics={topics} />
           {dynamicProgram && (
             <LearningNudgePreferenceCard
@@ -129,6 +154,7 @@ export default async function Page({
     );
     return (
       <main style={{ maxWidth: 560, margin: '0 auto', padding: 20 }}>
+        {sideHustleEntry}
         {personaInvitation}
         {dynamicProgram && (
           <LearningNudgePreferenceCard

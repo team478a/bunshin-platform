@@ -396,6 +396,22 @@ export class PrismaTrainingPersonalDataExportRepository implements TrainingPerso
             take,
           }),
         ]);
+        const sideHustleEvents = await tx.programActionEvent.findMany({
+          where: {
+            ...scope,
+            actorUserId: input.actorUserId,
+            eventType: {
+              in: [
+                'SIDE_HUSTLE_HEARING_SAVED',
+                'SIDE_HUSTLE_PROPOSAL_SAVED',
+                'SIDE_HUSTLE_SELECTED',
+              ],
+            },
+          },
+          select: { eventType: true, occurredAt: true, metadata: true },
+          orderBy: [{ occurredAt: 'asc' }, { id: 'asc' }],
+          take,
+        });
         if (
           [
             assignments,
@@ -407,6 +423,7 @@ export class PrismaTrainingPersonalDataExportRepository implements TrainingPerso
             learningPlans,
             learningRequests,
             practiceNotes,
+            sideHustleEvents,
             practiceSupport,
             practiceSupportImages,
             conversationEvents,
@@ -429,7 +446,8 @@ export class PrismaTrainingPersonalDataExportRepository implements TrainingPerso
               lineLearningResponses.length +
               practiceSupportImages.length +
               (learningNudgePreference ? 1 : 0) +
-              practiceNotes.length >
+              practiceNotes.length +
+              sideHustleEvents.length >
             0
               ? {
                   personalLearning: [
@@ -504,6 +522,11 @@ export class PrismaTrainingPersonalDataExportRepository implements TrainingPerso
                     ...practiceNotes.map((row) => ({
                       ...row,
                       kind: 'PRACTICE_NOTE',
+                      occurredAt: iso(row.occurredAt),
+                    })),
+                    ...sideHustleEvents.map((row) => ({
+                      kind: row.eventType,
+                      metadata: row.metadata,
                       occurredAt: iso(row.occurredAt),
                     })),
                     ...practiceSupportImages.map((row) => ({

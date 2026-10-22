@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   validateSideHustleCandidateProposal,
+  parseStoredSideHustleCandidateProposal,
   type SideHustleCandidate,
   type SideHustleCandidateProposal,
 } from '../src/index';
@@ -82,6 +83,28 @@ describe('side hustle candidate proposal contract', () => {
         candidates: [],
       }).status,
     ).toBe('NO_FIT');
+  });
+
+  it('uses a state-specific fixed reason when an unsafe explanation is replaced', () => {
+    const readyResult = validateSideHustleCandidateProposal({
+      ...ready(),
+      reason: 'FXに関する候補です。',
+    });
+    expect(readyResult.reason).toBe('条件に合う候補を整理しました。');
+    const needsContext = validateSideHustleCandidateProposal({
+      status: 'NEEDS_CONTEXT',
+      reason: 'FXの経験はありますか？',
+      questions: ['使える時間を教えてください。'],
+      candidates: [],
+    });
+    expect(needsContext.reason).toBe('候補を考えるために、いくつか確認させてください。');
+    const noFit = validateSideHustleCandidateProposal({
+      status: 'NO_FIT',
+      reason: 'FXは安全に提案できません。',
+      questions: [],
+      candidates: [],
+    });
+    expect(noFit.reason).toBe('今の条件では、安全に提案できる副業が見つかりませんでした。');
   });
 
   it.each([
@@ -232,7 +255,7 @@ describe('side hustle candidate proposal contract', () => {
     );
     expect(result).toMatchObject({
       status: 'NO_FIT',
-      reason: '条件に合う候補を安全に提案できませんでした。',
+      reason: '今の条件では、安全に提案できる副業が見つかりませんでした。',
       candidates: [],
       removedCandidates: [
         { name: '除外候補', excludedAreaKey: 'PERSONAL_DATA_OR_ACCOUNT_TRADING' },
@@ -281,7 +304,7 @@ describe('side hustle candidate proposal contract', () => {
     });
     expect(result).toMatchObject({
       status: 'NO_FIT',
-      reason: '条件に合う候補を安全に提案できませんでした。',
+      reason: '今の条件では、安全に提案できる副業が見つかりませんでした。',
       questions: [],
       removedQuestionCount: 1,
     });
@@ -311,5 +334,26 @@ describe('side hustle candidate proposal contract', () => {
     expect(Object.isFrozen(result.candidates[0]?.workStyle)).toBe(true);
     expect(Object.isFrozen(result.candidates[0]?.fitReasons[0]?.basedOn)).toBe(true);
     expect(Object.isFrozen(result.removedCandidates)).toBe(true);
+  });
+
+  it('parses a stored, sanitized proposal without repeating candidate removal', () => {
+    const generated = validateSideHustleCandidateProposal({
+      ...ready([
+        candidate(),
+        { ...candidate('除外された候補'), summary: 'FXに関するサービスです。' },
+      ]),
+      reason: '除外された候補を含む提案です。',
+    });
+    expect(parseStoredSideHustleCandidateProposal(generated)).toEqual(generated);
+    expect(generated.removedCandidates).toEqual([
+      { name: '除外された候補', excludedAreaKey: expect.any(String) },
+    ]);
+  });
+
+  it('rejects malformed stored-proposal removal metadata', () => {
+    const generated = validateSideHustleCandidateProposal(ready());
+    expect(() =>
+      parseStoredSideHustleCandidateProposal({ ...generated, removedQuestionCount: -1 }),
+    ).toThrowError(ApplicationError);
   });
 });

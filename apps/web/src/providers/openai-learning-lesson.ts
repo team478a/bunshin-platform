@@ -133,6 +133,7 @@ function learningTask(body: string): LearningAiRequest['task'] {
     format && typeof format === 'object' ? (format as Record<string, unknown>)['name'] : null;
   const tasks: Record<string, LearningAiRequest['task']> = {
     learning_lesson: 'LESSON',
+    side_hustle_proposal: 'LESSON',
     learning_conversation: 'CONVERSATION',
     learning_support: 'PRACTICE_SUPPORT',
     learning_nudge: 'NUDGE_COPY',

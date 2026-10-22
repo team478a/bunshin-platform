@@ -11,6 +11,7 @@ import {
   type SideHustleRequirementLevel,
 } from './side-hustle-types';
 import {
+  SIDE_HUSTLE_EXCLUDED_AREAS,
   findSideHustleExcludedArea,
   findSideHustleGuaranteeExpression,
 } from './side-hustle-safety';
@@ -316,6 +317,16 @@ export function validateSideHustleCandidateProposal(
   const noSafeCandidate = status === 'READY' && acceptedCandidates.length === 0;
   const noSafeQuestion = status === 'NEEDS_CONTEXT' && acceptedQuestions.length === 0;
   const resultStatus = noSafeCandidate || noSafeQuestion ? 'NO_FIT' : status;
+  const safeReason =
+    noSafeCandidate || noSafeQuestion
+      ? '今の条件では、安全に提案できる副業が見つかりませんでした。'
+      : sanitizedReason !== reason
+        ? resultStatus === 'READY'
+          ? '条件に合う候補を整理しました。'
+          : resultStatus === 'NEEDS_CONTEXT'
+            ? '候補を考えるために、いくつか確認させてください。'
+            : '今の条件では、安全に提案できる副業が見つかりませんでした。'
+        : sanitizedReason;
   if (
     resultStatus === 'READY' &&
     (acceptedCandidates.length < 1 || acceptedCandidates.length > 3 || acceptedQuestions.length > 0)
@@ -330,13 +341,59 @@ export function validateSideHustleCandidateProposal(
     validationError('proposal.NO_FIT');
   return Object.freeze({
     status: resultStatus,
-    reason:
-      noSafeCandidate || noSafeQuestion
-        ? '条件に合う候補を安全に提案できませんでした。'
-        : sanitizedReason,
+    reason: safeReason,
     questions: Object.freeze(acceptedQuestions),
     candidates: Object.freeze(acceptedCandidates),
     removedCandidates: Object.freeze(removedCandidates.map((entry) => Object.freeze(entry))),
+    removedQuestionCount,
+  });
+}
+
+export function parseStoredSideHustleCandidateProposal(
+  value: unknown,
+): ValidatedSideHustleCandidateProposal {
+  const input = record(value, 'storedProposal');
+  exactKeys(
+    input,
+    ['status', 'reason', 'questions', 'candidates', 'removedCandidates', 'removedQuestionCount'],
+    'storedProposal',
+  );
+  const proposal = validateSideHustleCandidateProposal({
+    status: input.status,
+    reason: input.reason,
+    questions: input.questions,
+    candidates: input.candidates,
+  });
+  const rawRemovedCandidates = input.removedCandidates;
+  if (!Array.isArray(rawRemovedCandidates) || rawRemovedCandidates.length > 4)
+    validationError('storedProposal.removedCandidates');
+  const removedCandidates = (rawRemovedCandidates as unknown[]).map((entry, index) => {
+    const item = record(entry, `storedProposal.removedCandidates[${index}]`);
+    exactKeys(item, ['name', 'excludedAreaKey'], `storedProposal.removedCandidates[${index}]`);
+    const name = text(item.name, `storedProposal.removedCandidates[${index}].name`, 40);
+    const excludedAreaKey = enumValue(
+      item.excludedAreaKey,
+      SIDE_HUSTLE_EXCLUDED_AREAS.map(({ key }) => key),
+      `storedProposal.removedCandidates[${index}].excludedAreaKey`,
+    );
+    return Object.freeze({ name, excludedAreaKey });
+  });
+  if (
+    new Set(removedCandidates.map(({ name }) => name)).size !== removedCandidates.length ||
+    removedCandidates.some(({ name }) =>
+      proposal.candidates.some((candidate) => candidate.name === name),
+    )
+  )
+    validationError('storedProposal.removedCandidates.name');
+  const removedQuestionCount = integer(
+    input.removedQuestionCount,
+    'storedProposal.removedQuestionCount',
+    0,
+    4,
+  );
+  return Object.freeze({
+    ...proposal,
+    removedCandidates: Object.freeze(removedCandidates),
     removedQuestionCount,
   });
 }

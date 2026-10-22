@@ -84,6 +84,17 @@ describe('preassignment text operation', () => {
     ).toThrow();
   });
 
+  it('accepts side hustle proposal operation only at enrollment scope', () => {
+    const proposal = { ...input, operationKind: 'SIDE_HUSTLE_PROPOSAL' as const };
+    expect(() => validatePersonalLearningTextOperation(proposal)).not.toThrow();
+    expect(() =>
+      validatePersonalLearningTextOperation({
+        ...proposal,
+        actor: { ...proposal.actor, topicId: id },
+      }),
+    ).toThrow();
+  });
+
   it('passes real operation identity and limits without an Assignment/Answer', async () => {
     const repo = repository();
     const call = vi
