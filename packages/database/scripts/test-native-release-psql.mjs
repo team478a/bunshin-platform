@@ -26,6 +26,9 @@ if (
     'Native release tests require an explicitly allowlisted disposable local database',
   );
 }
+// Only after the disposable-target guard: the CI PostgreSQL service has no TLS.
+// The production entry point separately requires TLS and never calls this file.
+source.searchParams.set('sslmode', 'disable');
 const names = [
   '20261001000000_baseline',
   '20261002000000_first',
