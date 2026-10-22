@@ -7,6 +7,15 @@ export function classifyMigrationProcessFailure(output) {
   const text = String(output).slice(-MAX_DIAGNOSTIC_BYTES);
   if (!text.trim()) return undefined;
   const labels = [
+    [/RELEASE_PSQL_VERSION_UNSUPPORTED/i, 'release-psql-version-unsupported'],
+    [/RELEASE_PENDING_SET_MISMATCH/i, 'release-pending-set-mismatch'],
+    [/RELEASE_CHECKSUM_MISMATCH/i, 'release-checksum-mismatch'],
+    [/RELEASE_FAILED_HISTORY/i, 'release-failed-history'],
+    [/RELEASE_LOCK_BUSY/i, 'release-lock-busy'],
+    [/RELEASE_EXISTING_ARTIFACTS_REQUIRE_REVIEW/i, 'release-existing-artifacts-require-review'],
+    [/RELEASE_HISTORY_RECORDING_FAILED/i, 'release-sql-committed-history-unconfirmed'],
+    [/RELEASE_METADATA_CONNECTION_FAILED/i, 'release-metadata-connection-failed'],
+    [/RELEASE_POSTCHECK_FAILED/i, 'release-postcheck-failed'],
     [/MIGRATION_BOUNDS_NOT_ACTIVE/i, 'migration-bounds-not-active'],
     [/MIGRATION_PROBE_IDENTITY_MISMATCH/i, 'database-identity-mismatch'],
     [/\bP1000\b|authentication failed/i, 'database-authentication-failed'],
@@ -22,6 +31,8 @@ export function classifyMigrationProcessFailure(output) {
     [/ENOTFOUND|EAI_AGAIN/i, 'database-host-not-found'],
     [/ETIMEDOUT/i, 'database-connection-timeout'],
     [/too many connections|remaining connection slots/i, 'database-connection-capacity'],
+    [/lock timeout/i, 'database-lock-timeout'],
+    [/statement timeout/i, 'database-statement-timeout'],
   ];
   return labels.find(([pattern]) => pattern.test(text))?.[1] ?? 'unclassified-preflight-error';
 }
@@ -33,6 +44,7 @@ export function runMigrationProcess(command, args, options) {
     let timer;
     let settled = false;
     let output = '';
+    let stdinFailed = false;
     const appendOutput = (chunk) => {
       output = (output + chunk.toString()).slice(-MAX_DIAGNOSTIC_BYTES);
     };
@@ -77,13 +89,18 @@ export function runMigrationProcess(command, args, options) {
     child.once('error', () => finish({ reason: 'START_FAILED', status: 1 }));
     if (child.stdin) {
       child.stdin.on('error', () => {
-        terminate();
-        finish({ reason: 'START_FAILED', status: 1 });
+        // An early SQL/client failure may close stdin while a large script is
+        // still being written. Wait for close to retain its safe diagnostic.
+        // A zero exit after an incomplete write is never accepted as success.
+        stdinFailed = true;
       });
       child.stdin.end(options.input);
     }
     child.once('close', (code, signal) => {
-      finish({ reason: signal ? 'SIGNALLED' : 'EXITED', status: code ?? 1 });
+      finish({
+        reason: signal ? 'SIGNALLED' : stdinFailed && code === 0 ? 'START_FAILED' : 'EXITED',
+        status: stdinFailed && code === 0 ? 1 : (code ?? 1),
+      });
     });
     timer = setTimeout(() => {
       terminate();

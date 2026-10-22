@@ -1,174 +1,86 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { runRelease20261020Migration } from '../scripts/apply-release-20261020.mjs';
 import type { runMigrationProcess } from '../scripts/migration-process.mjs';
+import { runMigrationProcess as executeMigrationProcess } from '../scripts/migration-process.mjs';
 
 const projectRef = 'vtkzinaudznwbsjoyszk';
 const host = 'aws-0-ap-northeast-1.pooler.supabase.com';
-const direct = `postgresql://postgres:synthetic-secret@db.${projectRef}.supabase.co:5432/postgres?sslmode=require`;
-const pooledDatabase = `postgresql://postgres.${projectRef}:synthetic-secret@${host}:6543/postgres?sslmode=require`;
 const env = {
   VERCEL_ENV: 'production',
   MIGRATION_APPLY_EXPECTED_PROJECT_REF: projectRef,
   MIGRATION_APPLY_CONFIRMATION: `APPLY_RELEASE_20261020_MIGRATIONS_TO_${projectRef}`,
-  DATABASE_URL: pooledDatabase,
-  DIRECT_URL: direct,
+  DATABASE_URL: `postgresql://postgres.${projectRef}:synthetic-secret@${host}:6543/postgres`,
+  DIRECT_URL: `postgresql://postgres:synthetic-secret@db.${projectRef}.supabase.co:5432/postgres`,
   SUPABASE_SESSION_POOLER_HOST: host,
+  PGOPTIONS: '-c statement_timeout=0',
+  PGSERVICE: 'unexpected-service',
 };
-const migrations = [
-  '20261019120000_learning_provider_abstraction',
-  '20261020100000_personal_learning_tool_feature_updates',
-  '20261020120000_ops_morning_digest_runs',
-];
-const pending =
-  'The following migration(s) have not yet been applied:\n' + migrations.join('\n') + '\n';
 
-describe('approval-gated 2026-10-20 release migrations', () => {
+describe('approval-gated native psql release', () => {
   afterEach(() => vi.restoreAllMocks());
 
-  it('requires active bounded session-pooler connection, exact pending set, and verifies after deploy', async () => {
-    vi.spyOn(console, 'log').mockImplementation(() => {});
-    const execute = vi
-      .fn<typeof runMigrationProcess>()
-      .mockResolvedValueOnce({ reason: 'EXITED', status: 0 })
-      .mockResolvedValueOnce({ reason: 'EXITED', status: 1, capturedOutput: pending })
-      .mockResolvedValueOnce({ reason: 'EXITED', status: 0 })
-      .mockResolvedValueOnce({
-        reason: 'EXITED',
-        status: 0,
-        capturedOutput: 'Database schema is up to date!',
-      });
-
-    expect(await runRelease20261020Migration(execute, env)).toBe(0);
-    expect(execute).toHaveBeenCalledTimes(4);
-    expect(execute.mock.calls[0]![2].input).toContain('BEGIN READ ONLY');
-    expect(execute.mock.calls[0]![2].input).not.toContain('pg_stat_ssl');
-    expect(execute.mock.calls[0]![2].input).toContain('statement_timeout');
-    expect(new URL(execute.mock.calls[0]![2].env.DIRECT_URL!).hostname).toBe(host);
-    expect(
-      new URL(execute.mock.calls[0]![2].env.DIRECT_URL!).searchParams.get('options'),
-    ).toContain('lock_timeout=5000');
-    expect(execute.mock.calls[2]![1]).toContain('deploy');
-    expect(vi.mocked(console.log).mock.calls.flat().join(' ')).not.toContain('synthetic-secret');
-  });
-
-  it('rejects an unconfirmed action before connecting', async () => {
-    vi.spyOn(console, 'error').mockImplementation(() => {});
-    const execute = vi.fn<typeof runMigrationProcess>();
-    expect(
-      await runRelease20261020Migration(execute, {
-        ...env,
-        MIGRATION_APPLY_CONFIRMATION: 'wrong',
-      }),
-    ).toBe(1);
-    expect(execute).not.toHaveBeenCalled();
-  });
-
-  it.each([
-    ['partial set', migrations.slice(0, 2)],
-    ['unexpected set', [...migrations, '20261020130000_unexpected']],
-  ])('rejects a %s without running migrate deploy', async (_label, names) => {
-    vi.spyOn(console, 'error').mockImplementation(() => {});
-    const execute = vi
-      .fn<typeof runMigrationProcess>()
-      .mockResolvedValueOnce({ reason: 'EXITED', status: 0 })
-      .mockResolvedValueOnce({
-        reason: 'EXITED',
-        status: 1,
-        capturedOutput:
-          'The following migration(s) have not yet been applied:\n' + names.join('\n'),
-      });
-    expect(await runRelease20261020Migration(execute, env)).toBe(1);
-    expect(execute).toHaveBeenCalledTimes(2);
-    expect(execute.mock.calls.some(([, args]) => args.includes('deploy'))).toBe(false);
-  });
-
-  it.each([
-    [
-      'pooler host mismatch',
+  it('preserves the safe client error when a rejected connection closes stdin before a large script is written', async () => {
+    const result = await executeMigrationProcess(
+      process.execPath,
+      ['-e', "process.stderr.write('P1000 authentication failed'); process.exit(1);"],
       {
-        DIRECT_URL: direct
-          .replace(`db.${projectRef}.supabase.co`, 'other.pooler.supabase.com')
-          .replace('postgres:', `postgres.${projectRef}:`),
+        cwd: new URL('../', import.meta.url),
+        env: process.env,
+        timeoutMs: 5000,
+        input: 'x'.repeat(1024 * 1024),
       },
-      'session-pooler-host-mismatch',
-    ],
-    [
-      'TLS disabled',
-      { DIRECT_URL: direct.replace('sslmode=require', 'sslmode=disable') },
-      'tls-mode-invalid',
-    ],
-    [
-      'missing password',
-      { DIRECT_URL: direct.replace('postgres:synthetic-secret@', 'postgres:@') },
-      'password-missing',
-    ],
-  ])('reports only the safe reason for %s before connecting', async (_label, overrides, reason) => {
+    );
+    expect(result.status).toBe(1);
+    expect(result.diagnostic).toBe('database-authentication-failed');
+    expect(result.capturedOutput).toBeUndefined();
+  });
+
+  it('defaults to Preview, uses environment credentials, and does not invoke resolve', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    const execute = vi.fn<typeof runMigrationProcess>().mockResolvedValue({
+      reason: 'EXITED',
+      status: 0,
+      capturedOutput: 'RELEASE_PSQL_PREVIEW_VERIFIED\n',
+    });
+    expect(await runRelease20261020Migration(execute, env)).toBe(0);
+    expect(execute).toHaveBeenCalledTimes(1);
+    const [command, args, options] = execute.mock.calls[0]!;
+    expect(command).toBe('psql');
+    expect(args.join(' ')).not.toContain('synthetic-secret');
+    expect(options.env.PGHOST).toBe(host);
+    expect(options.env.PGPORT).toBe('5432');
+    expect(options.env.PGPASSWORD).toBe('synthetic-secret');
+    expect(options.env.PGSSLMODE).toBe('require');
+    expect(options.env.PGOPTIONS).toBeUndefined();
+    expect(options.env.PGSERVICE).toBeUndefined();
+    expect(options.input).toContain('SET lock_timeout');
+    expect(options.input).not.toContain("migrate' 'resolve");
+    expect(options.input).not.toContain('pg_stat_ssl');
+  });
+
+  it.each([
+    { MIGRATION_APPLY_CONFIRMATION: 'wrong' },
+    { MIGRATION_APPLY_EXPECTED_PROJECT_REF: 'wrong' },
+    { MIGRATION_APPLY_MODE: 'invalid' },
+    { DIRECT_URL: '' },
+    { SUPABASE_SESSION_POOLER_HOST: 'wrong.example.com' },
+    { DIRECT_URL: env.DIRECT_URL + '?sslmode=disable' },
+  ])('fails closed before connecting for invalid configuration %j', async (overrides) => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     const execute = vi.fn<typeof runMigrationProcess>();
     expect(await runRelease20261020Migration(execute, { ...env, ...overrides })).toBe(1);
     expect(execute).not.toHaveBeenCalled();
-    const diagnostic = vi.mocked(console.error).mock.calls.flat().join(' ');
-    expect(diagnostic).toContain(`session-pooler-target-invalid:${reason}`);
-    expect(diagnostic).not.toContain('synthetic-secret');
+    expect(vi.mocked(console.error).mock.calls.flat().join(' ')).not.toContain('synthetic-secret');
   });
 
-  it('accepts a session pooler URL using verify-full TLS', async () => {
-    vi.spyOn(console, 'log').mockImplementation(() => {});
+  it('does not accept process exit 0 without the final verification marker', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
     const execute = vi
       .fn<typeof runMigrationProcess>()
-      .mockResolvedValueOnce({ reason: 'EXITED', status: 0 })
-      .mockResolvedValueOnce({ reason: 'EXITED', status: 1, capturedOutput: pending })
-      .mockResolvedValueOnce({ reason: 'EXITED', status: 0 })
-      .mockResolvedValueOnce({
-        reason: 'EXITED',
-        status: 0,
-        capturedOutput: 'Database schema is up to date!',
-      });
-
+      .mockResolvedValue({ reason: 'EXITED', status: 0 });
     expect(
-      await runRelease20261020Migration(execute, {
-        ...env,
-        DIRECT_URL: direct.replace('sslmode=require', 'sslmode=verify-full'),
-      }),
-    ).toBe(0);
-    expect(execute).toHaveBeenCalledTimes(4);
-  });
-
-  it.each([
-    ['omitted', direct.replace('?sslmode=require', '')],
-    ['prefer', direct.replace('sslmode=require', 'sslmode=prefer')],
-  ])(
-    'forces client-side TLS for a %s sslmode without checking pooler upstream TLS',
-    async (_label, url) => {
-      vi.spyOn(console, 'log').mockImplementation(() => {});
-      const execute = vi
-        .fn<typeof runMigrationProcess>()
-        .mockResolvedValueOnce({ reason: 'EXITED', status: 0 })
-        .mockResolvedValueOnce({ reason: 'EXITED', status: 1, capturedOutput: pending })
-        .mockResolvedValueOnce({ reason: 'EXITED', status: 0 })
-        .mockResolvedValueOnce({
-          reason: 'EXITED',
-          status: 0,
-          capturedOutput: 'Database schema is up to date!',
-        });
-
-      expect(await runRelease20261020Migration(execute, { ...env, DIRECT_URL: url })).toBe(0);
-      expect(execute).toHaveBeenCalledTimes(4);
-      expect(new URL(execute.mock.calls[0]![2].env.DIRECT_URL!).searchParams.get('sslmode')).toBe(
-        'require',
-      );
-      expect(execute.mock.calls[0]![2].input).not.toContain('pg_stat_ssl');
-    },
-  );
-
-  it('fails closed when DIRECT_URL is missing before connecting', async () => {
-    vi.spyOn(console, 'error').mockImplementation(() => {});
-    const execute = vi.fn<typeof runMigrationProcess>();
-    expect(await runRelease20261020Migration(execute, { ...env, DIRECT_URL: '' })).toBe(1);
-    expect(execute).not.toHaveBeenCalled();
-    expect(vi.mocked(console.error).mock.calls.flat().join(' ')).toContain(
-      'connection-url-missing',
-    );
-    expect(vi.mocked(console.error).mock.calls.flat().join(' ')).not.toContain('synthetic-secret');
+      await runRelease20261020Migration(execute, { ...env, MIGRATION_APPLY_MODE: 'apply' }),
+    ).toBe(1);
+    expect(execute).toHaveBeenCalledTimes(1);
   });
 });
