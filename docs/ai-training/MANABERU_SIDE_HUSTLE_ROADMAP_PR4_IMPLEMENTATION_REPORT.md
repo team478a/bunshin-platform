@@ -72,7 +72,7 @@
 - `pnpm format:check`: 成功。
 - `pnpm typecheck`: 成功（Turbo 25 tasksとlearning UI typecheck）。
 - `pnpm lint`: 成功（アーキテクチャ境界チェックを含む）。既存の未使用eslint-disable警告4件のみ。
-- `pnpm test`: 成功。Web・Database・Application・その他全workspaceのsuiteが成功。Database 213 files / 1,065 tests、Application 145 files / 1,026 tests、capability-training 38 files / 610 tests。
+- `pnpm test`: Architecture、Database 213 files / 1,065 tests、Application 145 files / 1,026 tests、capability-training 38 files / 610 testsを含む他workspaceは成功。Webは532 files成功・3 skippedの一方、既存の`test/daily-missions.test.ts`内2件が並列負荷時に5秒timeout（3748 passed / 2 failed / 3 skipped）。該当ファイルを単独再実行し10/10成功したため、隔離したコード失敗ではなく全suite負荷時のtimeoutとして記録する。
 - `pnpm build`: 成功（Next.js production build、静的ページ38件生成）。
 - `git diff --check`: 成功。
 - focused tests: 契約テスト19件、Providerテスト2件、Program設定・HTTPテスト12件が成功。DB repository unit test 3件も成功。
