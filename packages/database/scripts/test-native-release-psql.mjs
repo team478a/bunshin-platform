@@ -189,7 +189,11 @@ test('native psql release against real PostgreSQL and Prisma 6', async (t) => {
             'utf8',
           ),
         );
-        const migrations = loadReleaseMigrations(new URL('../prisma/migrations/', import.meta.url));
+        // Freeze this replay at the release boundary. Future migrations are not
+        // part of the 260-row historical snapshot and must not change its fixture.
+        const migrations = loadReleaseMigrations(
+          new URL('../prisma/migrations/', import.meta.url),
+        ).filter((migration) => migration.name <= '20261020120000_ops_morning_digest_runs');
         const approvedNames = [
           '20261019120000_learning_provider_abstraction',
           '20261020100000_personal_learning_tool_feature_updates',
