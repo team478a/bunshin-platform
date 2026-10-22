@@ -3,12 +3,12 @@ type ProbeTransaction = {
   $queryRawUnsafe(query: string): Promise<Array<{ verified: boolean }>>;
 };
 export type ProbeClient = {
-  $connect(): Promise<void>;
-  $transaction(
+  $connect: () => Promise<void>;
+  $transaction: (
     work: (transaction: ProbeTransaction) => Promise<boolean>,
     options: { maxWait: number; timeout: number },
-  ): Promise<boolean>;
-  $disconnect(): Promise<void>;
+  ) => Promise<boolean>;
+  $disconnect: () => Promise<void>;
 };
 export function probeReleaseAuth(
   environment?: NodeJS.ProcessEnv,
