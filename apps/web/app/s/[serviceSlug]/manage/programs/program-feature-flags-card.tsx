@@ -11,6 +11,7 @@ type Features = {
   toolUpdates: boolean;
 };
 type LearningMode = 'DYNAMIC_V1' | 'FIXED_DEFINITIONS_V1';
+type OfferPolicy = 'AI_SKILL_V1' | 'SIDE_HUSTLE_V1' | null;
 type ProgramOption = {
   id: string;
   name: string;
@@ -20,6 +21,8 @@ type ProgramOption = {
   learningFeatures: Features | null;
   enabled: boolean;
   configurationValid: boolean;
+  learningOfferPolicy: OfferPolicy;
+  hasEnrollments: boolean;
 };
 
 const defaults: Features = {
@@ -83,6 +86,9 @@ export function ProgramFeatureFlagsCard({
     selected?.learningMode ?? 'FIXED_DEFINITIONS_V1',
   );
   const [features, setFeatures] = useState<Features>(selected?.learningFeatures ?? defaults);
+  const [offerPolicy, setOfferPolicy] = useState<OfferPolicy>(
+    selected?.learningOfferPolicy ?? 'AI_SKILL_V1',
+  );
   const [evidence, setEvidence] = useState('');
   const [confirmed, setConfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -99,6 +105,7 @@ export function ProgramFeatureFlagsCard({
     !!selected &&
     (learningMode !== selected.learningMode ||
       JSON.stringify(features) !== JSON.stringify(selected.learningFeatures));
+  const policyChanged = !!selected && offerPolicy !== selected.learningOfferPolicy;
   const evidenceValid = /^[a-zA-Z0-9_.:-]{1,100}$/.test(evidence);
 
   function chooseProgram(id: string) {
@@ -106,6 +113,7 @@ export function ProgramFeatureFlagsCard({
     setSelectedId(id);
     setLearningMode(next?.learningMode ?? 'FIXED_DEFINITIONS_V1');
     setFeatures(next?.learningFeatures ?? defaults);
+    setOfferPolicy(next?.learningOfferPolicy ?? 'AI_SKILL_V1');
     setEvidence('');
     setConfirmed(false);
     setMessage('選択したProgramの状態を表示しています。');
@@ -137,12 +145,21 @@ export function ProgramFeatureFlagsCard({
     setSelectedId(id);
     setLearningMode(next?.learningMode ?? 'FIXED_DEFINITIONS_V1');
     setFeatures(next?.learningFeatures ?? defaults);
+    setOfferPolicy(next?.learningOfferPolicy ?? 'AI_SKILL_V1');
     setEvidence('');
     setConfirmed(false);
   }
 
   async function save() {
-    if (!selected || !canEdit || !changed || !confirmed || !evidenceValid || busy) return;
+    if (
+      !selected ||
+      !canEdit ||
+      (!changed && !policyChanged) ||
+      !confirmed ||
+      !evidenceValid ||
+      busy
+    )
+      return;
     setBusy(true);
     setMessage('設定を保存し、保存後の状態を確認しています。');
     try {
@@ -156,6 +173,7 @@ export function ProgramFeatureFlagsCard({
           expectedUpdatedAt: selected.updatedAt,
           learningMode,
           learningFeatures: features,
+          learningOfferPolicy: offerPolicy,
           reviewEvidenceKey: evidence,
           confirmation: 'CONFIRM_PROGRAM_FEATURE_SETTINGS',
         }),
@@ -176,6 +194,7 @@ export function ProgramFeatureFlagsCard({
       if (
         updated.id !== selected.id ||
         updated.learningMode !== learningMode ||
+        updated.learningOfferPolicy !== offerPolicy ||
         !isFeatures(updated.learningFeatures) ||
         JSON.stringify(updated.learningFeatures) !== JSON.stringify(features)
       )
@@ -185,6 +204,7 @@ export function ProgramFeatureFlagsCard({
       );
       setLearningMode(updated.learningMode ?? 'FIXED_DEFINITIONS_V1');
       setFeatures(updated.learningFeatures);
+      setOfferPolicy(updated.learningOfferPolicy);
       setEvidence('');
       setConfirmed(false);
       setMessage('選択したProgramだけに保存しました。');
@@ -297,6 +317,21 @@ export function ProgramFeatureFlagsCard({
                   </div>
                 ))}
               </fieldset>
+              <label className="program-feature-flags__field">
+                提供方針
+                <select
+                  className="program-feature-flags__control"
+                  value={offerPolicy ?? 'AI_SKILL_V1'}
+                  disabled={!canEdit || busy || selected.hasEnrollments}
+                  onChange={(event) => setOfferPolicy(event.target.value as OfferPolicy)}
+                >
+                  <option value="AI_SKILL_V1">AI研修（既定）</option>
+                  <option value="SIDE_HUSTLE_V1">副業支援</option>
+                </select>
+              </label>
+              {selected.hasEnrollments && (
+                <p className="program-feature-flags__hint">受講者がいるため変更できません</p>
+              )}
               {!canEdit && selected.configurationValid && (
                 <p>設定の変更には、対象Programを下書きまたは停止状態にしてください。</p>
               )}
@@ -328,7 +363,9 @@ export function ProgramFeatureFlagsCard({
               <button
                 className="program-feature-flags__button program-feature-flags__button--primary"
                 type="button"
-                disabled={!canEdit || !changed || !confirmed || !evidenceValid || busy}
+                disabled={
+                  !canEdit || (!changed && !policyChanged) || !confirmed || !evidenceValid || busy
+                }
                 onClick={() => void save()}
               >
                 選択したProgramの設定を保存

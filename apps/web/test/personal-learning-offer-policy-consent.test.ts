@@ -140,7 +140,54 @@ describe('invalid offer policy consent boundaries', () => {
       },
     ]);
     const current = await readAiTrainingParticipation('service', 'user');
-    expect(current.enrollments[0]).toMatchObject({ state: 'READY' });
+    expect(current.enrollments[0]).toMatchObject({ state: 'READY', offerPolicy: 'AI_SKILL_V1' });
+  });
+
+  it('matches SIDE_HUSTLE consent only against its own version and text digest', async () => {
+    const sidePolicy = await import('../src/services/ai-training-consent-policy');
+    const policy = sidePolicy.aiTrainingConsentPolicy('SIDE_HUSTLE_V1');
+    f.programMany.mockResolvedValue([
+      {
+        id: 'program',
+        displayName: 'program',
+        status: 'ACTIVE',
+        settings: { ...invalidSettings, learningOfferPolicy: 'SIDE_HUSTLE_V1' },
+      },
+    ]);
+    f.enrollmentMany.mockResolvedValue([
+      {
+        id: enrollmentId,
+        serviceProgramId: 'program',
+        startsAt: new Date('2026-10-01T00:00:00.000Z'),
+        endsAt: null,
+      },
+    ]);
+    f.seatMany.mockResolvedValue([
+      { serviceProgramId: 'program', programEnrollmentId: enrollmentId },
+    ]);
+    f.consentMany.mockResolvedValue([
+      {
+        programEnrollmentId: enrollmentId,
+        consentVersion: AI_TRAINING_AI_CONSENT_VERSION,
+        textDigest: aiTrainingConsentTextDigest(AI_TRAINING_AI_CONSENT_TEXT),
+        consentedAt: new Date(),
+      },
+    ]);
+    const wrongPolicy = await readAiTrainingParticipation('service', 'user');
+    expect(wrongPolicy.enrollments[0]).toMatchObject({
+      offerPolicy: 'SIDE_HUSTLE_V1',
+      state: 'CONSENT_REQUIRED',
+    });
+    f.consentMany.mockResolvedValue([
+      {
+        programEnrollmentId: enrollmentId,
+        consentVersion: policy.version,
+        textDigest: aiTrainingConsentTextDigest(policy.text),
+        consentedAt: new Date(),
+      },
+    ]);
+    const current = await readAiTrainingParticipation('service', 'user');
+    expect(current.enrollments[0]).toMatchObject({ offerPolicy: 'SIDE_HUSTLE_V1', state: 'READY' });
   });
 
   it('refuses to save consent for an invalid-policy Program', async () => {

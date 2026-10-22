@@ -16,6 +16,27 @@ const request = {
 };
 
 describe('versioned learning conversation provider', () => {
+  it.each([false, true])(
+    'uses SIDE_HUSTLE_V1 conversation prompt in extended scope=%s',
+    (extendedScope) => {
+      const parsed = JSON.parse(
+        learningConversationBody({
+          request,
+          history: [],
+          currentMessage: '続きを相談',
+          candidate: null,
+          practice: null,
+          model: 'gpt-5.2',
+          permit: { maxRequestBytes: 12000, maxOutputTokens: 400 },
+          extendedScope,
+          offerPolicy: 'SIDE_HUSTLE_V1',
+        }),
+      ) as { input: { role: string; content: string }[] };
+      const prompt = parsed.input.map(({ content }) => content).join('\n');
+      expect(prompt).toContain('副業支援');
+      expect(prompt).toContain('収入・成果・単価・採用・売上を約束したり予測したりしない。');
+    },
+  );
   it('uses the original wish as context and reserves the next learner step', () => {
     const body = learningConversationBody({
       request,

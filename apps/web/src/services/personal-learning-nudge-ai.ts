@@ -17,11 +17,8 @@ import {
   type LearningAiRuntimeConfiguration,
 } from '../ai/learning-provider-runtime';
 import { personalLearningPricingRegistry } from '../observability/personal-learning-ai-call';
-import {
-  generateLearningNudge,
-  LEARNING_NUDGE_PROMPT_VERSION,
-  learningNudgeBody,
-} from '../providers/openai-learning-nudge';
+import { generateLearningNudge, learningNudgeBody } from '../providers/openai-learning-nudge';
+import { personalLearningOfferPromptPolicy } from '../providers/personal-learning-offer-policy';
 import { requireAiTrainingUsageConsent } from './ai-training-consent';
 
 const logger = createLogger();
@@ -51,6 +48,7 @@ export async function generatePersonalLearningNudgeCopy(input: {
   judgmentDate: string;
   offerPolicy: PersonalLearningOfferPolicy;
 }): Promise<string | null> {
+  const promptVersion = personalLearningOfferPromptPolicy(input.offerPolicy).nudgeVersion;
   let policy;
   try {
     policy = parsePersonalLearningCallAdmissionPolicy(
@@ -103,7 +101,7 @@ export async function generatePersonalLearningNudgeCopy(input: {
       },
       attempt: 1,
       provider,
-      promptVersion: LEARNING_NUDGE_PROMPT_VERSION,
+      promptVersion,
       policy,
       pricingRegistry,
     };
@@ -160,7 +158,7 @@ export async function generatePersonalLearningNudgeCopy(input: {
     // Admission/provider/output errors are deliberately opaque; the caller uses the fixed copy.
     logger.error('personal learning nudge AI unavailable; fixed copy will be used', {
       errorCode: 'PERSONAL_LEARNING_NUDGE_AI_UNAVAILABLE',
-      promptVersion: LEARNING_NUDGE_PROMPT_VERSION,
+      promptVersion,
     });
     return null;
   }

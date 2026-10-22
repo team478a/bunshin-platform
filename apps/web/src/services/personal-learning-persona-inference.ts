@@ -17,11 +17,11 @@ import { personalLearningPricingRegistry } from '../observability/personal-learn
 import {
   generatePersonaInference,
   personaInferenceBody,
-  PERSONAL_LEARNING_PERSONA_INFERENCE_PROMPT_VERSION,
   screenPersonaInferenceSources,
   type PersonaInferenceSource,
 } from '../providers/openai-learning-persona-inference';
 import type { PersonalLearningOfferPolicy } from '@bunshin/capability-training';
+import { personalLearningOfferPromptPolicy } from '../providers/personal-learning-offer-policy';
 
 const logger = createLogger();
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
@@ -45,6 +45,9 @@ export async function inferPersonalLearningPersonaAfterSuccess(input: {
   const scope = input.actor.scope;
   const now = new Date();
   try {
+    const promptVersion = personalLearningOfferPromptPolicy(
+      input.offerPolicy,
+    ).personaInferenceVersion;
     const db = await import('@bunshin/database');
     const persona = new db.PrismaPersonalLearningPersonaRepository(db.prisma);
     const profile = await persona.profile(scope);
@@ -143,7 +146,7 @@ export async function inferPersonalLearningPersonaAfterSuccess(input: {
           operationKind: 'PERSONA_INFERENCE',
           attempt: 1,
           provider,
-          promptVersion: PERSONAL_LEARNING_PERSONA_INFERENCE_PROMPT_VERSION,
+          promptVersion,
           policy,
           pricingRegistry: personalLearningPricingRegistry(),
         },

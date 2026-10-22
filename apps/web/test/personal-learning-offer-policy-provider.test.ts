@@ -32,6 +32,9 @@ describe('AI_SKILL_V1 offer policy compatibility', () => {
       standard: 'learning-practice-support-vision-v2',
       extended: 'learning-practice-support-vision-v3',
     });
+    expect(policy.evidenceReviewVersion).toBe('learning-evidence-review-v1');
+    expect(policy.nudgeVersion).toBe('manaberu-learning-nudge-v1');
+    expect(policy.personaInferenceVersion).toBe('manaberu-persona-inference-v1');
     expect(policy.lessonPersonaScope).toBe('personaContextは本人の研修内に限った補助情報です。');
     expect(policy.supportIntroduction).toBe('本人がAIを使ってできることを増やす研修の途中支援。');
     expect(policy.evidenceReviewInstructions).toBe(
@@ -49,11 +52,61 @@ describe('AI_SKILL_V1 offer policy compatibility', () => {
     expect(aiTrainingConsentPolicy('AI_SKILL_V1')).toEqual({
       version: 'AI_TRAINING_EXTERNAL_AI_V3',
       text: currentConsentText,
+      copy: expect.objectContaining({
+        pageTitle: 'AI研修への参加',
+        checkboxLabel: 'この研修で、外部のAIサービスを使うことに同意します',
+        submitLabel: '同意して研修へ進む',
+        continueLabel: '研修を続ける',
+      }),
     });
     expect(AI_TRAINING_AI_CONSENT_VERSION).toBe('AI_TRAINING_EXTERNAL_AI_V3');
     expect(AI_TRAINING_AI_CONSENT_TEXT).toBe(currentConsentText);
     expect(createHash('sha256').update(currentConsentText).digest('hex')).toBe(
       'c5d781221bbfb1940e5a0e8f3e59d595eaf7727ad8d140a672ec1c491f2f4870',
+    );
+  });
+
+  it('registers the SIDE_HUSTLE_V1 prompt and consent policy', () => {
+    const policy = personalLearningOfferPromptPolicy('SIDE_HUSTLE_V1');
+    expect(policy.proposal.standard.version).toBe('side-hustle-proposal-v1');
+    expect(policy.proposal.extended.version).toBe('side-hustle-proposal-tool-guidance-v1');
+    expect(policy.conversationVersions).toEqual({
+      standard: 'side-hustle-conversation-v1',
+      extended: 'side-hustle-conversation-tool-guidance-v1',
+    });
+    expect(policy.supportVersions).toEqual({
+      standard: 'side-hustle-practice-support-v1',
+      extended: 'side-hustle-practice-support-tool-guidance-v1',
+    });
+    expect(policy.evidenceReviewVersion).toBe('side-hustle-evidence-review-v1');
+    expect(policy.nudgeVersion).toBe('side-hustle-nudge-v1');
+    expect(policy.personaInferenceVersion).toBe('side-hustle-persona-inference-v1');
+    expect(policy.lessonPersonaScope).toBe(
+      'personaContextは本人の副業支援内に限った補助情報です。',
+    );
+    expect(policy.supportIntroduction).toBe('本人が選んだ副業の実践を支える途中支援。');
+    expect(policy.proposal.standard.instructions).toContain(
+      '収入・成果・単価・採用・売上を約束したり予測したりしない。',
+    );
+    expect(policy.proposal.extended.instructions).toContain(
+      'スクリーンショットがある場合は見える範囲だけを根拠にする。',
+    );
+    expect(aiTrainingConsentPolicy('SIDE_HUSTLE_V1')).toMatchObject({
+      version: 'SIDE_HUSTLE_EXTERNAL_AI_V1',
+      text: expect.stringContaining('副業の希望、ヒアリングの回答、実践の記録'),
+      copy: {
+        pageTitle: 'AI副業支援への参加',
+        checkboxLabel: 'この副業支援で、外部のAIサービスを使うことに同意します',
+      },
+    });
+  });
+
+  it('fails closed for unregistered offer policies', () => {
+    expect(() => personalLearningOfferPromptPolicy('UNKNOWN_POLICY' as never)).toThrow(
+      'unknown learning offer policy',
+    );
+    expect(() => aiTrainingConsentPolicy('UNKNOWN_POLICY' as never)).toThrow(
+      'unknown learning offer policy',
     );
   });
 });
