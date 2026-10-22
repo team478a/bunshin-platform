@@ -2,20 +2,36 @@ import { ApplicationError } from '@bunshin/shared';
 import { describe, expect, it } from 'vitest';
 
 import {
-  SIDE_HUSTLE_CATALOG,
-  screenSideHustleCatalog,
+  screenSideHustleCandidates,
+  type SideHustleCandidate,
   type SideHustleConditions,
-  type SideHustleDefinition,
 } from '../src/index';
 
-const definition = (
-  key: string,
-  overrides: Partial<SideHustleDefinition> = {},
-): SideHustleDefinition => ({
-  ...structuredClone(SIDE_HUSTLE_CATALOG[0]!),
-  key,
-  status: 'ACTIVE',
-  checkedAt: '2026-10-22',
+const candidate = (
+  name: string,
+  overrides: Partial<SideHustleCandidate> = {},
+): SideHustleCandidate => ({
+  name,
+  category: 'OTHER',
+  summary: '概要です。',
+  monetization: '作業に応じて報酬を受け取ります。',
+  fitReasons: [{ text: '経験を生かせます。', basedOn: ['experience'] }],
+  initialCost: 'NONE',
+  monthlyCost: 'NONE',
+  weeklyHoursMin: 3,
+  difficulty: 1,
+  requiredSkills: ['基本操作'],
+  workStyle: {
+    faceExposure: 'NONE',
+    snsPosting: 'NONE',
+    clientInteraction: 'NONE',
+    salesOutreach: 'NONE',
+    inventory: 'NONE',
+    device: 'SMARTPHONE_OK',
+  },
+  typicalFlow: ['準備する', '実施する', '見直す'],
+  risks: ['成果が出ない場合があります。'],
+  requirements: [],
   ...overrides,
 });
 
@@ -32,22 +48,16 @@ const answered = (overrides: Partial<SideHustleConditions> = {}): SideHustleCond
   ...overrides,
 });
 
-const expectInvalid = (conditions: SideHustleConditions) => {
-  try {
-    screenSideHustleCatalog(conditions, [definition('TEST')]);
-    throw new Error('expected validation failure');
-  } catch (error) {
-    expect(error).toBeInstanceOf(ApplicationError);
-    expect((error as ApplicationError).code).toBe('VALIDATION_ERROR');
-  }
+const expectInvalid = (conditions: SideHustleConditions, candidates = [candidate('候補')]) => {
+  expect(() => screenSideHustleCandidates(conditions, candidates)).toThrowError(ApplicationError);
 };
 
-describe('side hustle screening', () => {
-  it('keeps every active entry fit while reporting all nine unanswered conditions', () => {
+describe('side hustle candidate screening', () => {
+  it('reports all nine unanswered conditions without worsening the verdict', () => {
     const conditions = Object.fromEntries(
       Object.keys(answered()).map((key) => [key, null]),
     ) as unknown as SideHustleConditions;
-    const result = screenSideHustleCatalog(conditions, [definition('FIRST'), definition('SECOND')]);
+    const result = screenSideHustleCandidates(conditions, [candidate('一'), candidate('二')]);
     expect(result.missingConditions).toEqual([
       'initialBudget',
       'monthlyBudget',
@@ -67,22 +77,22 @@ describe('side hustle screening', () => {
     }
   });
 
-  it('uses inclusive cost and time boundaries and excludes values above the limits', () => {
-    const candidate = definition('BOUNDARY', {
-      initialCost: { tier: 'UNDER_10K', basis: 'GENERAL_ESTIMATE' },
-      monthlyCost: { tier: 'UNDER_10K', basis: 'GENERAL_ESTIMATE' },
-      weeklyHoursMin: { hours: 5, basis: 'GENERAL_ESTIMATE' },
+  it('uses inclusive cost and time boundaries and excludes values above them', () => {
+    const value = candidate('境界', {
+      initialCost: 'UNDER_10K',
+      monthlyCost: 'UNDER_10K',
+      weeklyHoursMin: 5,
     });
     expect(
-      screenSideHustleCatalog(
+      screenSideHustleCandidates(
         answered({ initialBudget: 'UNDER_10K', monthlyBudget: 'UNDER_10K', weeklyHours: 5 }),
-        [candidate],
+        [value],
       ).entries[0],
     ).toMatchObject({ verdict: 'FIT', reasons: [] });
     expect(
-      screenSideHustleCatalog(
+      screenSideHustleCandidates(
         answered({ initialBudget: 'NONE', monthlyBudget: 'NONE', weeklyHours: 4 }),
-        [candidate],
+        [value],
       ).entries[0],
     ).toMatchObject({
       verdict: 'EXCLUDED',
@@ -90,8 +100,8 @@ describe('side hustle screening', () => {
     });
   });
 
-  it('distinguishes required, optional and unnecessary work styles', () => {
-    const candidate = definition('WORK_STYLE', {
+  it('distinguishes REQUIRED, OPTIONAL and NONE work styles', () => {
+    const value = candidate('働き方', {
       workStyle: {
         faceExposure: 'REQUIRED',
         snsPosting: 'OPTIONAL',
@@ -102,9 +112,9 @@ describe('side hustle screening', () => {
       },
     });
     expect(
-      screenSideHustleCatalog(
+      screenSideHustleCandidates(
         answered({ faceExposure: 'NG', snsPosting: 'NG', clientInteraction: 'NG' }),
-        [candidate],
+        [value],
       ).entries[0],
     ).toMatchObject({
       verdict: 'EXCLUDED',
@@ -112,12 +122,10 @@ describe('side hustle screening', () => {
     });
   });
 
-  it('requires a PC only for PC-required definitions', () => {
-    const result = screenSideHustleCatalog(answered({ device: 'SMARTPHONE_ONLY' }), [
-      definition('PC', { workStyle: { ...definition('BASE').workStyle, device: 'PC_REQUIRED' } }),
-      definition('PHONE', {
-        workStyle: { ...definition('BASE').workStyle, device: 'SMARTPHONE_OK' },
-      }),
+  it('requires a PC only for PC-required candidates', () => {
+    const result = screenSideHustleCandidates(answered({ device: 'SMARTPHONE_ONLY' }), [
+      candidate('PC', { workStyle: { ...candidate('基準').workStyle, device: 'PC_REQUIRED' } }),
+      candidate('スマホ'),
     ]);
     expect(result.entries.map(({ verdict, reasons }) => ({ verdict, reasons }))).toEqual([
       { verdict: 'EXCLUDED', reasons: ['PC_REQUIRED'] },
@@ -125,13 +133,13 @@ describe('side hustle screening', () => {
     ]);
   });
 
-  it('keeps caution reasons when another reason excludes the definition', () => {
-    const candidate = definition('MIXED', {
-      weeklyHoursMin: { hours: 10, basis: 'GENERAL_ESTIMATE' },
-      workStyle: { ...definition('BASE').workStyle, faceExposure: 'OPTIONAL' },
+  it('keeps caution reasons alongside an exclusion reason', () => {
+    const value = candidate('複合', {
+      weeklyHoursMin: 10,
+      workStyle: { ...candidate('基準').workStyle, faceExposure: 'OPTIONAL' },
     });
     expect(
-      screenSideHustleCatalog(answered({ weeklyHours: 1, faceExposure: 'NG' }), [candidate])
+      screenSideHustleCandidates(answered({ weeklyHours: 1, faceExposure: 'NG' }), [value])
         .entries[0],
     ).toMatchObject({
       verdict: 'EXCLUDED',
@@ -139,44 +147,50 @@ describe('side hustle screening', () => {
     });
   });
 
-  it('omits draft and retired definitions', () => {
-    const draft = { ...definition('DRAFT'), status: 'DRAFT' as const, checkedAt: null };
-    const retired = { ...definition('RETIRED'), status: 'RETIRED' as const, checkedAt: null };
-    const active = definition('ACTIVE');
-    expect(
-      screenSideHustleCatalog(answered(), [draft, retired, active]).entries.map(({ key }) => key),
-    ).toEqual(['ACTIVE']);
+  it('preserves candidate order and zero-based candidateIndex', () => {
+    const result = screenSideHustleCandidates(answered(), [
+      candidate('三番目'),
+      candidate('一番目'),
+      candidate('二番目'),
+    ]);
+    expect(result.entries.map(({ candidateIndex, name }) => ({ candidateIndex, name }))).toEqual([
+      { candidateIndex: 0, name: '三番目' },
+      { candidateIndex: 1, name: '一番目' },
+      { candidateIndex: 2, name: '二番目' },
+    ]);
   });
 
-  it('returns no entries for the default all-draft catalog', () => {
-    expect(screenSideHustleCatalog(answered()).entries).toEqual([]);
+  it('returns no entries for an empty candidate array', () => {
+    expect(screenSideHustleCandidates(answered(), []).entries).toEqual([]);
   });
 
-  it('preserves catalog order', () => {
-    expect(
-      screenSideHustleCatalog(answered(), [
-        definition('THIRD'),
-        definition('FIRST'),
-        definition('SECOND'),
-      ]).entries.map(({ key }) => key),
-    ).toEqual(['THIRD', 'FIRST', 'SECOND']);
-  });
-
-  it('returns the same result for the same input', () => {
+  it('returns the same frozen result for the same input', () => {
     const conditions = answered({ faceExposure: 'NG', weeklyHours: 2 });
-    const catalog = [definition('STABLE')];
-    expect(screenSideHustleCatalog(conditions, catalog)).toEqual(
-      screenSideHustleCatalog(conditions, catalog),
-    );
+    const candidates = [candidate('安定')];
+    const first = screenSideHustleCandidates(conditions, candidates);
+    expect(first).toEqual(screenSideHustleCandidates(conditions, candidates));
+    expect(Object.isFrozen(first)).toBe(true);
+    expect(Object.isFrozen(first.entries)).toBe(true);
+    expect(Object.isFrozen(first.entries[0]?.reasons)).toBe(true);
   });
 
   it.each([-1, 81, 1.5])('rejects invalid weeklyHours %s', (weeklyHours) => {
     expectInvalid(answered({ weeklyHours }));
   });
 
-  it('rejects undefined enum values', () => {
+  it('rejects undefined condition enum values', () => {
     expectInvalid(answered({ faceExposure: 'MAYBE' as 'OK' }));
     expectInvalid(answered({ initialBudget: 'CHEAP' as 'NONE' }));
     expectInvalid(answered({ device: 'TABLET' as 'PC' }));
+  });
+
+  it('rechecks candidate fields used by the screening rules', () => {
+    expectInvalid(answered(), [{ ...candidate('不正'), weeklyHoursMin: 0 }]);
+    expectInvalid(answered(), [
+      {
+        ...candidate('不正'),
+        workStyle: { ...candidate('基準').workStyle, device: 'TABLET' as 'PC_REQUIRED' },
+      },
+    ]);
   });
 });

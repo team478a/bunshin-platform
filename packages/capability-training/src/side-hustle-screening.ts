@@ -1,16 +1,17 @@
 import { ApplicationError } from '@bunshin/shared';
 
 import {
+  SIDE_HUSTLE_CANDIDATE_CONTRACT_VERSION,
+  validateSideHustleCandidate,
+  type SideHustleCandidate,
+} from './side-hustle-candidate';
+import {
   SIDE_HUSTLE_COST_TIERS,
-  SIDE_HUSTLE_CATALOG_VERSION,
-  validateSideHustleCatalog,
   type SideHustleCostTier,
-  type SideHustleDefinition,
   type SideHustleRequirementLevel,
-} from './side-hustle-catalog';
-import { SIDE_HUSTLE_CATALOG } from './side-hustle-catalog-data';
+} from './side-hustle-types';
 
-export const SIDE_HUSTLE_SCREENING_RULE_VERSION = 'SIDE_HUSTLE_SCREENING_V1';
+export const SIDE_HUSTLE_SCREENING_RULE_VERSION = 'SIDE_HUSTLE_SCREENING_V2';
 
 export interface SideHustleConditions {
   readonly initialBudget: SideHustleCostTier | null;
@@ -63,10 +64,10 @@ export type SideHustleScreeningReason =
 
 export interface SideHustleScreeningResult {
   readonly ruleVersion: typeof SIDE_HUSTLE_SCREENING_RULE_VERSION;
-  readonly catalogVersion: typeof SIDE_HUSTLE_CATALOG_VERSION;
+  readonly candidateContractVersion: typeof SIDE_HUSTLE_CANDIDATE_CONTRACT_VERSION;
   readonly entries: readonly {
-    readonly key: string;
-    readonly revision: number;
+    readonly candidateIndex: number;
+    readonly name: string;
     readonly verdict: 'FIT' | 'CAUTION' | 'EXCLUDED';
     readonly reasons: readonly SideHustleScreeningReason[];
   }[];
@@ -74,7 +75,7 @@ export interface SideHustleScreeningResult {
 }
 
 const validationError = (field: string): never => {
-  throw new ApplicationError('VALIDATION_ERROR', `invalid side hustle conditions: ${field}`);
+  throw new ApplicationError('VALIDATION_ERROR', `invalid side hustle screening input: ${field}`);
 };
 
 const validateNullableEnum = <T extends string>(
@@ -90,10 +91,11 @@ const validateNullableEnum = <T extends string>(
 const validateConditions = (conditions: SideHustleConditions): SideHustleConditions => {
   if (typeof conditions !== 'object' || conditions === null || Array.isArray(conditions))
     validationError('conditions');
-  const weeklyHours = conditions.weeklyHours;
   if (
-    weeklyHours !== null &&
-    (!Number.isInteger(weeklyHours) || weeklyHours < 0 || weeklyHours > 80)
+    conditions.weeklyHours !== null &&
+    (!Number.isInteger(conditions.weeklyHours) ||
+      conditions.weeklyHours < 0 ||
+      conditions.weeklyHours > 80)
   )
     validationError('weeklyHours');
   return Object.freeze({
@@ -107,7 +109,7 @@ const validateConditions = (conditions: SideHustleConditions): SideHustleConditi
       SIDE_HUSTLE_COST_TIERS,
       'monthlyBudget',
     ),
-    weeklyHours,
+    weeklyHours: conditions.weeklyHours,
     faceExposure: validateNullableEnum(conditions.faceExposure, ['OK', 'NG'], 'faceExposure'),
     snsPosting: validateNullableEnum(conditions.snsPosting, ['OK', 'NG'], 'snsPosting'),
     clientInteraction: validateNullableEnum(
@@ -157,87 +159,86 @@ const cautionReasons = new Set<SideHustleScreeningReason>([
   'INVENTORY_AVOIDABLE',
 ]);
 
-export function screenSideHustleCatalog(
+export function screenSideHustleCandidates(
   conditions: SideHustleConditions,
-  catalog: readonly SideHustleDefinition[] = SIDE_HUSTLE_CATALOG,
+  candidates: readonly SideHustleCandidate[],
 ): SideHustleScreeningResult {
   const input = validateConditions(conditions);
-  const definitions = validateSideHustleCatalog(catalog);
+  if (!Array.isArray(candidates)) validationError('candidates');
+  const validatedCandidates = candidates.map(validateSideHustleCandidate);
   const missingConditions = Object.freeze(
     SIDE_HUSTLE_CONDITION_KEYS.filter((key) => input[key] === null),
   );
-  const entries = definitions
-    .filter(({ status }) => status === 'ACTIVE')
-    .map((definition) => {
-      const reasons: SideHustleScreeningReason[] = [];
-      if (input.initialBudget === null) reasons.push('INITIAL_BUDGET_UNKNOWN');
-      else if (isOverBudget(definition.initialCost.tier, input.initialBudget))
-        reasons.push('INITIAL_COST_OVER_BUDGET');
-      if (input.monthlyBudget === null) reasons.push('MONTHLY_BUDGET_UNKNOWN');
-      else if (isOverBudget(definition.monthlyCost.tier, input.monthlyBudget))
-        reasons.push('MONTHLY_COST_OVER_BUDGET');
-      if (input.weeklyHours === null) reasons.push('WEEKLY_HOURS_UNKNOWN');
-      else if (definition.weeklyHoursMin.hours > input.weeklyHours) reasons.push('NOT_ENOUGH_TIME');
+  const entries = validatedCandidates.map((candidate, candidateIndex) => {
+    const reasons: SideHustleScreeningReason[] = [];
+    if (input.initialBudget === null) reasons.push('INITIAL_BUDGET_UNKNOWN');
+    else if (isOverBudget(candidate.initialCost, input.initialBudget))
+      reasons.push('INITIAL_COST_OVER_BUDGET');
+    if (input.monthlyBudget === null) reasons.push('MONTHLY_BUDGET_UNKNOWN');
+    else if (isOverBudget(candidate.monthlyCost, input.monthlyBudget))
+      reasons.push('MONTHLY_COST_OVER_BUDGET');
+    if (input.weeklyHours === null) reasons.push('WEEKLY_HOURS_UNKNOWN');
+    else if (candidate.weeklyHoursMin > input.weeklyHours) reasons.push('NOT_ENOUGH_TIME');
 
-      addWorkStyleReason(
-        reasons,
-        definition.workStyle.faceExposure,
-        input.faceExposure,
-        'FACE_EXPOSURE_REQUIRED',
-        'FACE_EXPOSURE_AVOIDABLE',
-        'FACE_EXPOSURE_UNKNOWN',
-      );
-      addWorkStyleReason(
-        reasons,
-        definition.workStyle.snsPosting,
-        input.snsPosting,
-        'SNS_POSTING_REQUIRED',
-        'SNS_POSTING_AVOIDABLE',
-        'SNS_POSTING_UNKNOWN',
-      );
-      addWorkStyleReason(
-        reasons,
-        definition.workStyle.clientInteraction,
-        input.clientInteraction,
-        'CLIENT_INTERACTION_REQUIRED',
-        'CLIENT_INTERACTION_AVOIDABLE',
-        'CLIENT_INTERACTION_UNKNOWN',
-      );
-      addWorkStyleReason(
-        reasons,
-        definition.workStyle.salesOutreach,
-        input.salesOutreach,
-        'SALES_OUTREACH_REQUIRED',
-        'SALES_OUTREACH_AVOIDABLE',
-        'SALES_OUTREACH_UNKNOWN',
-      );
-      addWorkStyleReason(
-        reasons,
-        definition.workStyle.inventory,
-        input.inventory,
-        'INVENTORY_REQUIRED',
-        'INVENTORY_AVOIDABLE',
-        'INVENTORY_UNKNOWN',
-      );
-      if (input.device === null) reasons.push('DEVICE_UNKNOWN');
-      else if (definition.workStyle.device === 'PC_REQUIRED' && input.device === 'SMARTPHONE_ONLY')
-        reasons.push('PC_REQUIRED');
+    addWorkStyleReason(
+      reasons,
+      candidate.workStyle.faceExposure,
+      input.faceExposure,
+      'FACE_EXPOSURE_REQUIRED',
+      'FACE_EXPOSURE_AVOIDABLE',
+      'FACE_EXPOSURE_UNKNOWN',
+    );
+    addWorkStyleReason(
+      reasons,
+      candidate.workStyle.snsPosting,
+      input.snsPosting,
+      'SNS_POSTING_REQUIRED',
+      'SNS_POSTING_AVOIDABLE',
+      'SNS_POSTING_UNKNOWN',
+    );
+    addWorkStyleReason(
+      reasons,
+      candidate.workStyle.clientInteraction,
+      input.clientInteraction,
+      'CLIENT_INTERACTION_REQUIRED',
+      'CLIENT_INTERACTION_AVOIDABLE',
+      'CLIENT_INTERACTION_UNKNOWN',
+    );
+    addWorkStyleReason(
+      reasons,
+      candidate.workStyle.salesOutreach,
+      input.salesOutreach,
+      'SALES_OUTREACH_REQUIRED',
+      'SALES_OUTREACH_AVOIDABLE',
+      'SALES_OUTREACH_UNKNOWN',
+    );
+    addWorkStyleReason(
+      reasons,
+      candidate.workStyle.inventory,
+      input.inventory,
+      'INVENTORY_REQUIRED',
+      'INVENTORY_AVOIDABLE',
+      'INVENTORY_UNKNOWN',
+    );
+    if (input.device === null) reasons.push('DEVICE_UNKNOWN');
+    else if (candidate.workStyle.device === 'PC_REQUIRED' && input.device === 'SMARTPHONE_ONLY')
+      reasons.push('PC_REQUIRED');
 
-      const verdict = reasons.some((reason) => exclusionReasons.has(reason))
-        ? 'EXCLUDED'
-        : reasons.some((reason) => cautionReasons.has(reason))
-          ? 'CAUTION'
-          : 'FIT';
-      return Object.freeze({
-        key: definition.key,
-        revision: definition.revision,
-        verdict,
-        reasons: Object.freeze(reasons),
-      });
+    const verdict = reasons.some((reason) => exclusionReasons.has(reason))
+      ? 'EXCLUDED'
+      : reasons.some((reason) => cautionReasons.has(reason))
+        ? 'CAUTION'
+        : 'FIT';
+    return Object.freeze({
+      candidateIndex,
+      name: candidate.name,
+      verdict,
+      reasons: Object.freeze(reasons),
     });
+  });
   return Object.freeze({
     ruleVersion: SIDE_HUSTLE_SCREENING_RULE_VERSION,
-    catalogVersion: SIDE_HUSTLE_CATALOG_VERSION,
+    candidateContractVersion: SIDE_HUSTLE_CANDIDATE_CONTRACT_VERSION,
     entries: Object.freeze(entries),
     missingConditions,
   });
