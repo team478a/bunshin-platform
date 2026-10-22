@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { Prisma, type PrismaClient } from '@prisma/client';
+import type { Prisma, PrismaClient } from '@prisma/client';
 import {
   deploymentDatabaseUrl,
   gateFailureLabel,
@@ -58,10 +58,8 @@ describe('read-only deployment database gate', () => {
     [[row, row], 'history-duplicate'],
     [[{ ...row, rolled_back: true }], 'history-missing'],
   ])('rejects bad history without repair: %j', async (history, label) => {
-    const tx = transaction(history as unknown[]);
-    await expect(inspectDeploymentSnapshot(asTx(tx), manifest, shape)).rejects.toThrow(
-      label as string,
-    );
+    const tx = transaction(history);
+    await expect(inspectDeploymentSnapshot(asTx(tx), manifest, shape)).rejects.toThrow(label);
     expect(tx.$executeRawUnsafe).not.toHaveBeenCalled();
   });
   it('allows a matching rolled-back attempt only with one completed retry', async () => {
@@ -92,7 +90,7 @@ describe('read-only deployment database gate', () => {
       manifest,
       shape,
     );
-    expect(tx.$executeRawUnsafe.mock.calls.map(([sql]) => sql)).toEqual([
+    expect(tx.$executeRawUnsafe.mock.calls.map(([sql]) => String(sql))).toEqual([
       'SET TRANSACTION READ ONLY',
       "SET LOCAL lock_timeout = '1s'",
       "SET LOCAL statement_timeout = '10s'",
