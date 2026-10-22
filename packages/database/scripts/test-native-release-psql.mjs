@@ -359,8 +359,13 @@ test('native psql release against real PostgreSQL and Prisma 6', async (t) => {
         async (f) => {
           const result = await f.run(
             'apply',
-            { bounds: { lockTimeoutMs: 100, statementTimeoutMs: 8000, processTimeoutMs: 15000 } },
-            4000,
+            {
+              // Isolate the deadline from Prisma process startup latency; the
+              // real metadata connection is covered by the other cases.
+              resolveExecutable: '/bin/true',
+              bounds: { lockTimeoutMs: 100, statementTimeoutMs: 1500, processTimeoutMs: 10000 },
+            },
+            500,
           );
           assert.equal(result.reason, 'DEADLINE_EXCEEDED');
           assert.match(result.capturedOutput, /RELEASE_PSQL_PREFLIGHT_VERIFIED/);
