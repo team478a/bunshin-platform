@@ -3,6 +3,7 @@ import type { Prisma, PrismaClient } from '@prisma/client';
 import {
   validateSavePersonalLearningRequest,
   type PersonalLearningActor,
+  type SavePersonalLearningRequest,
 } from '@bunshin/application';
 import { ApplicationError } from '@bunshin/shared';
 import {
@@ -1081,6 +1082,122 @@ export class PrismaSideHustleHearingRepository extends PrismaPersonalLearningReq
       },
       true,
     );
+  }
+
+  async saveRoadmapRevision(
+    input: SavePersonalLearningRequest & {
+      roadmapEventId: string;
+      roadmap: SideHustleRoadmapProposal;
+      currentPeriod: (typeof SIDE_HUSTLE_PERIODS)[number];
+    },
+  ) {
+    validateSavePersonalLearningRequest(input);
+    const topicId = input.topicId;
+    if (
+      typeof topicId !== 'string' ||
+      !SIDE_HUSTLE_PERIODS.includes(input.currentPeriod) ||
+      !/^[0-9a-f-]{36}$/i.test(input.roadmapEventId)
+    )
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid roadmap revision');
+    const requestDigest = createHash('sha256')
+      .update(
+        JSON.stringify({
+          expectedRevision: input.expectedRevision,
+          originalText: input.content.originalText,
+          deviceType: input.content.deviceType,
+          toolDescription: input.content.toolDescription,
+          experienceDescription: input.content.experienceDescription,
+          currentPosition: input.content.currentPosition,
+          topicId,
+        }),
+      )
+      .digest('hex');
+    return this.authorized(input, true, async (tx) => {
+      await this.normalLearner(tx, input);
+      await this.assertPolicy(tx, input);
+      const scope = input.scope;
+      const topic = await tx.personalLearningTopic.findFirst({
+        where: {
+          ...scope,
+          id: topicId,
+          status: 'ACTIVE',
+          goalSnapshot: { path: ['kind'], equals: 'SIDE_HUSTLE' },
+        },
+      });
+      if (!topic) conflict();
+      const latestStage = await tx.programActionEvent.findFirst({
+        where: {
+          ...scopeOf(input),
+          actorUserId: input.scope.userId,
+          eventType: STAGE_ADVANCED,
+          metadata: { path: ['topicId'], equals: topicId },
+        },
+        orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }],
+      });
+      const actualPeriod = latestStage
+        ? metadata(latestStage.metadata).toPeriod
+        : SIDE_HUSTLE_PERIODS[0];
+      if (actualPeriod !== input.currentPeriod || actualPeriod === 'COMPLETED') conflict();
+      const roadmapEvent = await tx.programActionEvent.findFirst({
+        where: {
+          ...scopeOf(input),
+          actorUserId: input.actorUserId,
+          id: input.roadmapEventId,
+          eventType: ROADMAP,
+        },
+      });
+      const snapshot = metadata(topic!.goalSnapshot);
+      if (
+        !roadmapEvent ||
+        metadata(roadmapEvent.metadata).selectionEventId !== snapshot.selectionEventId
+      )
+        conflict();
+
+      const previous = await tx.personalLearningRequest.findFirst({
+        where: { ...scope, topicId, idempotencyKey: input.idempotencyKey },
+      });
+      let saved = previous;
+      if (previous) {
+        if (previous.digest !== requestDigest) conflict();
+      } else {
+        const latest = await tx.personalLearningRequest.findFirst({
+          where: { ...scope, topicId },
+          orderBy: { revision: 'desc' },
+        });
+        if ((latest?.revision ?? 0) !== input.expectedRevision) conflict();
+        saved = await tx.personalLearningRequest.create({
+          data: {
+            ...scope,
+            topicId,
+            ...input.content,
+            revision: input.expectedRevision + 1,
+            idempotencyKey: input.idempotencyKey,
+            digest: requestDigest,
+          },
+        });
+      }
+      await tx.personalLearningTopic.update({
+        where: { id: topic!.id },
+        data: {
+          sourceRequestId: saved!.id,
+          goalSnapshot: {
+            ...snapshot,
+            roadmapEventId: input.roadmapEventId,
+            roadmap: input.roadmap,
+          } as unknown as Prisma.InputJsonValue,
+        },
+      });
+      return {
+        id: saved!.id,
+        revision: saved!.revision,
+        createdAt: saved!.createdAt.toISOString(),
+        originalText: saved!.originalText,
+        currentPosition: saved!.currentPosition,
+        deviceType: saved!.deviceType as 'SMARTPHONE' | 'PC' | 'BOTH' | null,
+        toolDescription: saved!.toolDescription,
+        experienceDescription: saved!.experienceDescription,
+      };
+    });
   }
 
   async start(input: {

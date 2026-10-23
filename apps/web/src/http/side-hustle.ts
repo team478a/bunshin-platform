@@ -6,6 +6,7 @@ import { requireSameOrigin } from '../auth/request-security';
 import { resolvePersonalLearningRequestActor } from '../services/personal-learning-request-access';
 import { prepareSideHustleProposal } from '../services/side-hustle-proposal';
 import { prepareSideHustleRoadmap } from '../services/side-hustle-roadmap';
+import { confirmSideHustleRoadmapRevision } from '../services/side-hustle-roadmap-revision';
 import { boundedLearningJson } from './personal-learning-request';
 
 const saveHearingBody = z
@@ -33,6 +34,14 @@ const selectionBody = z
   .strict();
 const roadmapBody = z
   .object({ selectionEventId: z.string().uuid(), operationId: z.string().uuid() })
+  .strict();
+const roadmapRevisionBody = z
+  .object({
+    topicId: z.string().uuid(),
+    roadmapEventId: z.string().uuid(),
+    operationId: z.string().uuid(),
+    confirmed: z.literal(true),
+  })
   .strict();
 const startBody = z
   .object({
@@ -220,6 +229,29 @@ export async function sideHustleRoadmapResponse(
     const input = roadmapBody.parse(await boundedLearningJson(request));
     const actor = await sideHustleActor(slug, enrollmentId);
     const data = await prepareSideHustleRoadmap(actor, input.selectionEventId, input.operationId);
+    return Response.json({ data }, { headers: { 'cache-control': 'private, no-store' } });
+  } catch (error) {
+    return sideHustleFailure(error, 'roadmap');
+  }
+}
+
+export async function sideHustleRoadmapRevisionResponse(
+  request: Request,
+  slug: string,
+  enrollmentId: string,
+) {
+  try {
+    if (request.method !== 'POST')
+      return Response.json(
+        { error: { code: 'METHOD_NOT_ALLOWED' } },
+        { status: 405, headers: { allow: 'POST', 'cache-control': 'private, no-store' } },
+      );
+    requireSameOrigin(request);
+    if (!request.headers.get('content-type')?.startsWith('application/json'))
+      throw new ApplicationError('VALIDATION_ERROR', 'JSON required');
+    const input = roadmapRevisionBody.parse(await boundedLearningJson(request));
+    const actor = await sideHustleActor(slug, enrollmentId);
+    const data = await confirmSideHustleRoadmapRevision(actor, input);
     return Response.json({ data }, { headers: { 'cache-control': 'private, no-store' } });
   } catch (error) {
     return sideHustleFailure(error, 'roadmap');
