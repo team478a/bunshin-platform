@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { SIDE_HUSTLE_COMMON_NOTICES, type SideHustleHearing } from '@bunshin/capability-training';
+import { CheckinDecisionSelect, CheckinDecisionSubmitButton } from './checkin-controls';
 
 type Candidate = {
   name: string;
@@ -58,6 +59,16 @@ type State = {
     };
   } | null;
   started: { topicId: string; requestId: string } | null;
+  progress?: {
+    topicId: string;
+    status: string;
+    period: string;
+    periodStartedAt: string;
+    verifiedPracticeCount: number;
+    eligibility: { suggested: boolean; canAdvance: boolean; reason: string };
+    roadmap: NonNullable<State['roadmap']>['roadmap'];
+    lastCheckin: unknown;
+  } | null;
   activeSideHustle: { id: string; title: string } | null;
 };
 type ApiEnvelope<T> = { data: T; error?: { message?: string } };
@@ -271,6 +282,8 @@ export default function SideHustleClient({
     | 'roadmap'
     | 'confirmStart'
     | 'started'
+    | 'checkin'
+    | 'confirmAdvance'
   >('intro');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -281,6 +294,11 @@ export default function SideHustleClient({
   const [followUpAnswer, setFollowUpAnswer] = useState('');
   const [candidateIndex, setCandidateIndex] = useState<number | null>(null);
   const [confirmed, setConfirmed] = useState(false);
+  const [checkpointResults, setCheckpointResults] = useState<string[]>([]);
+  const [feeling, setFeeling] = useState('OK');
+  const [checkinNote, setCheckinNote] = useState('');
+  const [decision, setDecision] = useState('CONTINUE');
+  const [checkinOperationId, setCheckinOperationId] = useState('');
   const api = useCallback(
     (path = '') =>
       route ? `${endpoint(route.serviceSlug, route.programEnrollmentId)}${path}` : '',
@@ -296,6 +314,23 @@ export default function SideHustleClient({
       if (!response.ok) throw new Error(json.error?.message ?? '読み込めませんでした。');
       const loaded = json.data;
       setState(loaded);
+      if (loaded.started) {
+        const progressResponse = await fetch(
+          api(`/progress?topicId=${encodeURIComponent(loaded.started.topicId)}`),
+          { cache: 'no-store' },
+        );
+        const progressJson = (await progressResponse.json()) as ApiEnvelope<
+          NonNullable<State['progress']>
+        >;
+        if (progressResponse.ok) {
+          setState((currentState) => ({ ...currentState, progress: progressJson.data }));
+          setCheckpointResults(
+            progressJson.data.roadmap.milestones[
+              Number(progressJson.data.period.slice(-1)) - 1
+            ]?.checkpoints.map(() => 'NOT_YET') ?? [],
+          );
+        }
+      }
       if (loaded.selection && !loaded.roadmap)
         setRoadmapOperationId((current) => current || crypto.randomUUID());
       if (loaded.hearing) {
@@ -314,7 +349,10 @@ export default function SideHustleClient({
           : 0;
         setQuestionIndex(Math.min(answeredCount, questionsForProposal.length - 1));
       }
-      if (loaded.started) setScreen('started');
+      if (loaded.started)
+        setScreen(
+          new URLSearchParams(window.location.search).has('checkin') ? 'checkin' : 'started',
+        );
       else if (loaded.selection) setScreen('roadmap');
       else if (loaded.proposal) setScreen('proposal');
       else if (loaded.hearing)
@@ -518,6 +556,44 @@ export default function SideHustleClient({
       setBusy(false);
     }
   };
+
+  const submitCheckin = async (selectedDecision: string) => {
+    if (!state.started || !state.progress) return;
+    const operationId = checkinOperationId || crypto.randomUUID();
+    setCheckinOperationId(operationId);
+    setBusy(true);
+    setError('');
+    try {
+      const response = await fetch(api('/checkin'), {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          operationId,
+          checkin: {
+            topicId: state.started.topicId,
+            period: state.progress.period,
+            checkpointResults,
+            feeling,
+            note: checkinNote || null,
+            decision: selectedDecision,
+          },
+        }),
+      });
+      const json = (await response.json()) as ApiEnvelope<unknown>;
+      if (!response.ok) throw new Error(json.error?.message ?? '振り返りを保存できませんでした。');
+      if (selectedDecision === 'RESELECT') {
+        setScreen('proposal');
+        return;
+      }
+      setConfirmed(false);
+      setCheckinOperationId('');
+      await load();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : '振り返りを保存できませんでした。');
+    } finally {
+      setBusy(false);
+    }
+  };
   const startSideHustle = async () => {
     if (!state.selection || !state.roadmap || !confirmed) return;
     const operationId = startOperationId || crypto.randomUUID();
@@ -563,6 +639,10 @@ export default function SideHustleClient({
             <br />
             氏名、勤務先名、住所、口座番号など、個人を特定できる情報は入力しないでください。
           </p>
+          {state.progress?.period !== 'MONTH_3' &&
+            checkpointResults.some((item) => item !== 'DONE') && (
+              <p>「まだ」「一部できた」の目安は、次の段階でも意識できるように引き継ぎます。</p>
+            )}
           <button disabled={busy} onClick={() => setScreen('questions')}>
             はじめる
           </button>
@@ -924,6 +1004,33 @@ export default function SideHustleClient({
               <p>この地図は、収入や成果を約束するものではありません。</p>
             </article>
           )}
+          {state.progress && state.progress.period === 'COMPLETED' ? (
+            <p>90日の地図を最後まで進めました</p>
+          ) : (
+            state.progress && (
+              <>
+                <p>
+                  いまは{Number(state.progress.period.slice(-1))}か月目「
+                  {
+                    state.progress.roadmap.milestones[Number(state.progress.period.slice(-1)) - 1]
+                      ?.title
+                  }
+                  」です
+                </p>
+                {state.progress.eligibility.suggested && (
+                  <p>ここまでの進み具合を振り返ってみませんか？</p>
+                )}
+                <button
+                  onClick={() => {
+                    setCheckinOperationId('');
+                    setScreen('checkin');
+                  }}
+                >
+                  振り返る
+                </button>
+              </>
+            )
+          )}
           <p>
             <a
               href={`/s/${encodeURIComponent(route.serviceSlug)}/programs/${encodeURIComponent(route.programEnrollmentId)}/learning-request?topicId=${encodeURIComponent(state.started?.topicId ?? '')}`}
@@ -932,6 +1039,114 @@ export default function SideHustleClient({
             </a>
           </p>
           <button onClick={() => setScreen('proposal')}>別の副業を選び直す</button>
+        </section>
+      )}
+      {screen === 'checkin' &&
+        state.progress &&
+        state.started &&
+        state.progress.period !== 'COMPLETED' && (
+          <section>
+            <h2>{Number(state.progress.period.slice(-1))}か月目の振り返り</h2>
+            <p>
+              {Number(state.progress.period.slice(-1))}
+              か月目の目安を、1つずつ確かめましょう。できていなくても大丈夫です。次にどうするかを一緒に決めます。
+            </p>
+            {state.progress.roadmap.milestones[
+              Number(state.progress.period.slice(-1)) - 1
+            ]?.checkpoints.map((checkpoint, index) => (
+              <fieldset key={`${index}-${checkpoint}`}>
+                <legend>{checkpoint}</legend>
+                {[
+                  ['DONE', 'できた'],
+                  ['PARTLY', '一部できた'],
+                  ['NOT_YET', 'まだ'],
+                ].map(([value, label]) => (
+                  <label key={value}>
+                    <input
+                      type="radio"
+                      name={`checkpoint-${index}`}
+                      checked={checkpointResults[index] === value}
+                      onChange={() =>
+                        setCheckpointResults((current) =>
+                          current.map((item, i) => (i === index ? value! : item)),
+                        )
+                      }
+                    />
+                    {label}
+                  </label>
+                ))}
+              </fieldset>
+            ))}
+            <label>
+              ここまで進めてみて、負担はどうでしたか？
+              <select value={feeling} onChange={(event) => setFeeling(event.target.value)}>
+                <option value="EASY">余裕があった</option>
+                <option value="OK">ちょうどよかった</option>
+                <option value="HARD">大変だった</option>
+              </select>
+            </label>
+            <label>
+              気づいたこと・困っていること（任意・200文字まで）
+              <textarea
+                maxLength={200}
+                value={checkinNote}
+                onChange={(event) => setCheckinNote(event.target.value)}
+              />
+            </label>
+            <label>
+              次にどうしますか？
+              <CheckinDecisionSelect
+                value={decision}
+                month3={state.progress.period === 'MONTH_3'}
+                canAdvance={state.progress.eligibility.canAdvance}
+                onChange={setDecision}
+              />
+            </label>
+            {!state.progress.eligibility.canAdvance && decision === 'ADVANCE' && (
+              <p>
+                {Number(state.progress.period.slice(-1))}
+                か月目で確認できた実践がまだないため、次の段階へは進めません。まずは今の課題を進めてみましょう。
+              </p>
+            )}
+            <CheckinDecisionSubmitButton
+              busy={busy}
+              decision={decision}
+              canAdvance={state.progress.eligibility.canAdvance}
+              onClick={() => {
+                if (decision === 'ADVANCE') {
+                  setCheckinOperationId(crypto.randomUUID());
+                  setScreen('confirmAdvance');
+                } else void submitCheckin(decision);
+              }}
+            />
+          </section>
+        )}
+      {screen === 'confirmAdvance' && state.progress && (
+        <section>
+          <h2>
+            {state.progress.period === 'MONTH_3'
+              ? '90日の地図を終えますか？'
+              : `${Number(state.progress.period.slice(-1)) + 1}か月目へ進みますか？`}
+          </h2>
+          <p>
+            {state.progress.period === 'MONTH_3'
+              ? '90日の地図を最後まで進めたことを記録します。学習と相談は、このまま続けられます。'
+              : `次の課題から、${Number(state.progress.period.slice(-1)) + 1}か月目「${state.progress.roadmap.milestones[Number(state.progress.period.slice(-1))]?.title}」に向けた内容になります。いま進めている課題は、そのまま続けられます。`}
+          </p>
+          <label>
+            <input
+              type="checkbox"
+              checked={confirmed}
+              onChange={(event) => setConfirmed(event.target.checked)}
+            />
+            内容を確認しました
+          </label>
+          <button disabled={busy || !confirmed} onClick={() => void submitCheckin('ADVANCE')}>
+            進む
+          </button>{' '}
+          <button disabled={busy} onClick={() => setScreen('checkin')}>
+            戻る
+          </button>
         </section>
       )}
       {screen === 'selected' && state.selection && (

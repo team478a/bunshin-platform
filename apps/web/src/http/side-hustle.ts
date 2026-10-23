@@ -42,6 +42,8 @@ const startBody = z
     confirmed: z.literal(true),
   })
   .strict();
+const progressTopic = z.string().uuid();
+const checkinBody = z.object({ operationId: z.string().uuid(), checkin: z.unknown() }).strict();
 
 export function projectSideHustleProposalForLearner(
   proposal: Awaited<ReturnType<typeof prepareSideHustleProposal>>,
@@ -258,5 +260,92 @@ export async function sideHustleStartResponse(
     );
   } catch (error) {
     return sideHustleFailure(error, 'start');
+  }
+}
+
+export async function sideHustleProgressResponse(
+  request: Request,
+  slug: string,
+  enrollmentId: string,
+) {
+  const headers = { 'cache-control': 'private, no-store' };
+  try {
+    if (request.method !== 'GET')
+      return Response.json(
+        { error: { code: 'METHOD_NOT_ALLOWED' } },
+        { status: 405, headers: { ...headers, allow: 'GET' } },
+      );
+    const topicId = progressTopic.parse(new URL(request.url).searchParams.get('topicId'));
+    const actor = await sideHustleActor(slug, enrollmentId);
+    const db = await import('@bunshin/database');
+    const data = await new db.PrismaSideHustleHearingRepository(db.prisma).readProgress(
+      actor,
+      topicId,
+    );
+    return Response.json({ data }, { headers });
+  } catch (error) {
+    const mapped = toApiError(
+      error instanceof z.ZodError
+        ? new ApplicationError('VALIDATION_ERROR', 'invalid topic')
+        : error,
+      'side-hustle-progress',
+    );
+    return Response.json(
+      {
+        error: {
+          code: mapped.body.error.code,
+          message: '進捗を確認できませんでした。画面を読み込み直してください。',
+        },
+      },
+      { status: mapped.status, headers },
+    );
+  }
+}
+
+export async function sideHustleCheckinResponse(
+  request: Request,
+  slug: string,
+  enrollmentId: string,
+) {
+  const headers = { 'cache-control': 'private, no-store' };
+  try {
+    if (request.method !== 'POST')
+      return Response.json(
+        { error: { code: 'METHOD_NOT_ALLOWED' } },
+        { status: 405, headers: { ...headers, allow: 'POST' } },
+      );
+    requireSameOrigin(request);
+    if (!request.headers.get('content-type')?.startsWith('application/json'))
+      throw new ApplicationError('VALIDATION_ERROR', 'JSON required');
+    const input = checkinBody.parse(await boundedLearningJson(request));
+    const actor = await sideHustleActor(slug, enrollmentId);
+    const db = await import('@bunshin/database');
+    const data = await new db.PrismaSideHustleHearingRepository(db.prisma).saveCheckin({
+      actor,
+      operationId: input.operationId,
+      checkin: input.checkin,
+    });
+    return Response.json({ data }, { headers });
+  } catch (error) {
+    const mapped = toApiError(
+      error instanceof z.ZodError
+        ? new ApplicationError('VALIDATION_ERROR', 'invalid checkin')
+        : error,
+      'side-hustle-checkin',
+    );
+    const message =
+      error instanceof ApplicationError && error.message === 'side hustle note unsafe'
+        ? '一言に、ここでは扱えない内容が含まれています。言い方を変えてもう一度お試しください。'
+        : error instanceof ApplicationError && error.message === 'side hustle topic paused'
+          ? 'この副業は一時停止中です。副業の画面から確認してください。'
+          : error instanceof ApplicationError && error.message === 'side hustle stage not ready'
+            ? 'この段階で確認できた実践がまだないため、次へ進めません。'
+            : error instanceof ApplicationError && error.code === 'CONFLICT'
+              ? '段階がすでに変わったか、ほかの操作と重なりました。画面を読み込み直してください。'
+              : '処理できませんでした。画面を読み込み直してください。';
+    return Response.json(
+      { error: { code: mapped.body.error.code, message } },
+      { status: mapped.status, headers },
+    );
   }
 }

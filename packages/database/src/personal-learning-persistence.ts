@@ -155,7 +155,8 @@ export class PrismaPersonalLearningPersistenceRepository implements PersonalLear
     } catch (error) {
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
-        ['P2002', 'P2034'].includes(error.code)
+        (['P2002', 'P2034'].includes(error.code) ||
+          (error.code === 'P2010' && error.meta?.['code'] === '40001'))
       )
         conflict();
       throw error;

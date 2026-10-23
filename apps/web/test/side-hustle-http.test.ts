@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ApplicationError } from '@bunshin/shared';
-import { projectSideHustleProposalForLearner, sideHustleFailure } from '../src/http/side-hustle';
+import {
+  projectSideHustleProposalForLearner,
+  sideHustleCheckinResponse,
+  sideHustleFailure,
+} from '../src/http/side-hustle';
 
 const auth = vi.hoisted(() => ({
   getCurrentUser: vi.fn(),
@@ -17,9 +21,37 @@ vi.mock('../src/services/side-hustle-proposal', () => ({
   prepareSideHustleProposal: auth.proposal,
 }));
 vi.mock('../src/auth/request-security', () => ({ requireSameOrigin: vi.fn() }));
+import { requireSameOrigin } from '../src/auth/request-security';
 import { sideHustleResponse } from '../src/http/side-hustle';
 
 describe('side hustle learner API projection', () => {
+  it('rejects cross-origin and non-JSON checkin requests before resolving the learner', async () => {
+    vi.mocked(requireSameOrigin).mockImplementationOnce(() => {
+      throw new ApplicationError('FORBIDDEN', 'same origin required');
+    });
+    const crossOrigin = await sideHustleCheckinResponse(
+      new Request('https://example.test/checkin', {
+        method: 'POST',
+        headers: { origin: 'https://attacker.test', 'content-type': 'application/json' },
+        body: '{}',
+      }),
+      'service',
+      'enrollment',
+    );
+    const nonJson = await sideHustleCheckinResponse(
+      new Request('https://example.test/checkin', {
+        method: 'POST',
+        headers: { 'content-type': 'text/plain' },
+        body: '{}',
+      }),
+      'service',
+      'enrollment',
+    );
+    expect(crossOrigin.status).toBe(403);
+    expect(nonJson.status).toBe(400);
+    expect(auth.resolveActor).not.toHaveBeenCalled();
+  });
+
   it('shows an operator-contact message for both start restrictions', async () => {
     const historic = await sideHustleFailure(
       new ApplicationError('CONFLICT', 'unscoped learning requests exist'),

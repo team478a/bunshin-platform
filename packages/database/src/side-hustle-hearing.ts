@@ -14,6 +14,11 @@ import {
   validateSideHustleHearing,
   validateSideHustleRoadmapProposal,
   buildSideHustleInitialRequest,
+  SIDE_HUSTLE_PERIODS,
+  SIDE_HUSTLE_CHECKIN_VERSION,
+  validateSideHustleCheckin,
+  sideHustleCheckinEligibility,
+  buildSideHustleStageRequest,
   parseStoredSideHustleCandidateProposal,
   screenSideHustleCandidates,
   type SideHustleHearing,
@@ -29,6 +34,8 @@ const PROPOSAL = 'SIDE_HUSTLE_PROPOSAL_SAVED';
 const SELECTED = 'SIDE_HUSTLE_SELECTED';
 const ROADMAP = 'SIDE_HUSTLE_ROADMAP_PROPOSED';
 const STARTED = 'SIDE_HUSTLE_STARTED';
+const CHECKIN = 'SIDE_HUSTLE_CHECKIN_SAVED';
+const STAGE_ADVANCED = 'SIDE_HUSTLE_STAGE_ADVANCED';
 const stableJson = (value: unknown): string => {
   const normalize = (item: unknown): unknown => {
     if (Array.isArray(item)) return item.map(normalize);
@@ -261,6 +268,400 @@ export class PrismaSideHustleHearingRepository extends PrismaPersonalLearningReq
           roadmap,
           started,
           activeSideHustle: activeSideHustleTopic,
+        };
+      },
+      true,
+    );
+  }
+
+  async readProgress(actor: PersonalLearningActor, topicId: string) {
+    const unscopedActor: PersonalLearningActor = {
+      actorUserId: actor.actorUserId,
+      scope: actor.scope,
+    };
+    return this.authorized(
+      unscopedActor,
+      true,
+      async (tx, now) => {
+        await this.normalLearner(tx, actor);
+        await this.assertPolicy(tx, actor);
+        const scope = actor.scope;
+        const topic = await tx.personalLearningTopic.findFirst({
+          where: { ...scope, id: topicId },
+        });
+        const snapshot = metadata(topic?.goalSnapshot ?? {});
+        if (!topic || snapshot.kind !== 'SIDE_HUSTLE')
+          throw new ApplicationError('NOT_FOUND', 'side hustle topic unavailable');
+        const events = await tx.programActionEvent.findMany({
+          where: {
+            ...scopeOf(actor),
+            actorUserId: actor.actorUserId,
+            eventType: { in: [STARTED, STAGE_ADVANCED, CHECKIN] },
+          },
+          orderBy: [{ occurredAt: 'asc' }, { id: 'asc' }],
+        });
+        const topicEvents = events.filter((event) => metadata(event.metadata).topicId === topicId);
+        const start = topicEvents.find((event) => event.eventType === STARTED);
+        if (!start) throw new ApplicationError('NOT_FOUND', 'side hustle start unavailable');
+        const advancements = topicEvents.filter((event) => event.eventType === STAGE_ADVANCED);
+        const latest = advancements.at(-1);
+        const period = (latest ? metadata(latest.metadata).toPeriod : 'MONTH_1') as
+          (typeof SIDE_HUSTLE_PERIODS)[number] | 'COMPLETED';
+        const periodStartedAt = latest?.occurredAt ?? start.occurredAt;
+        const verifiedPracticeCount = await tx.$queryRaw<{ count: bigint }[]>`
+        WITH linked AS (
+          SELECT a.id AS assignment_id, a.started_at,
+            (a.display_snapshot #>> '{dynamicPractice,planRevision}')::int AS plan_revision,
+            a.target_resource_id AS plan_id
+          FROM program_mission_assignments a
+          JOIN personal_learning_plan_revisions p
+            ON p.workspace_id=a.workspace_id AND p.group_id=a.group_id
+            AND p.program_enrollment_id=a.program_enrollment_id
+            AND p.plan_id=a.target_resource_id
+            AND p.revision=(a.display_snapshot #>> '{dynamicPractice,planRevision}')::int
+            AND p.topic_id=${topicId}::uuid
+            AND p.group_membership_id=${scope.groupMembershipId}::uuid
+            AND p.user_id=${scope.userId}::uuid
+          WHERE a.workspace_id=${scope.workspaceId}::uuid AND a.group_id=${scope.groupId}::uuid
+            AND a.program_enrollment_id=${scope.programEnrollmentId}::uuid
+            AND a.target_resource_type='PERSONAL_LEARNING_PLAN'
+            AND a.rule_version='PERSONAL_LEARNING_PRACTICE_V1'
+            AND a.display_snapshot #>> '{dynamicPractice,topicId}'=${topicId}
+            AND a.display_snapshot #>> '{dynamicPractice,scope,userId}'=${scope.userId}
+        ), ranked AS (
+          SELECT a.mission_assignment_id,
+            a.evaluation_status, a.evaluation,
+            row_number() OVER (PARTITION BY a.mission_assignment_id ORDER BY
+              COALESCE((a.answer::jsonb->>'revision')::int, 0) DESC, a.created_at DESC) AS rank
+          FROM training_mission_answers a JOIN linked l ON l.assignment_id=a.mission_assignment_id
+          WHERE a.workspace_id=${scope.workspaceId}::uuid AND a.group_id=${scope.groupId}::uuid
+            AND a.program_enrollment_id=${scope.programEnrollmentId}::uuid AND a.user_id=${actor.actorUserId}::uuid
+            AND a.created_at > ${periodStartedAt}
+        )
+        SELECT count(*)::bigint AS count FROM ranked
+        WHERE rank=1 AND evaluation_status='READY'
+          AND evaluation #>> '{review,state}'='CURRENT_STEP_EVIDENCE'
+      `;
+        const roadmapId =
+          typeof snapshot.roadmapEventId === 'string' ? snapshot.roadmapEventId : null;
+        const roadmapEvent = roadmapId
+          ? await tx.programActionEvent.findFirst({
+              where: { ...scopeOf(actor), id: roadmapId, eventType: ROADMAP },
+            })
+          : null;
+        const roadmap = roadmapEvent
+          ? projectRoadmap(
+              roadmapEvent.id,
+              metadata(roadmapEvent.metadata),
+              roadmapEvent.occurredAt.toISOString(),
+            ).roadmap
+          : null;
+        if (!roadmap) throw new ApplicationError('CONFLICT', 'side hustle roadmap unavailable');
+        const eligibility = sideHustleCheckinEligibility({
+          period,
+          periodStartedAt,
+          verifiedPracticeCount: Number(verifiedPracticeCount[0]?.count ?? 0),
+          now,
+        });
+        const lastCheckin =
+          topicEvents.filter((event) => event.eventType === CHECKIN).at(-1) ?? null;
+        const latestRequest = await tx.personalLearningRequest.findFirst({
+          where: { ...scope, topicId },
+          orderBy: { revision: 'desc' },
+          select: { revision: true },
+        });
+        return {
+          topicId,
+          requestRevision: latestRequest?.revision ?? 0,
+          status: topic.status,
+          period,
+          periodStartedAt: periodStartedAt.toISOString(),
+          verifiedPracticeCount: Number(verifiedPracticeCount[0]?.count ?? 0),
+          eligibility,
+          roadmap,
+          lastCheckin: lastCheckin ? metadata(lastCheckin.metadata).checkin : null,
+        };
+      },
+      true,
+    );
+  }
+
+  async saveCheckin(input: {
+    actor: PersonalLearningActor;
+    operationId: string;
+    checkin: unknown;
+  }) {
+    if (!/^[0-9a-f-]{36}$/i.test(input.operationId))
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid checkin operation');
+    const topicIdForProgress = (input.checkin as { topicId?: unknown })?.topicId;
+    if (typeof topicIdForProgress !== 'string')
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid checkin topic');
+    const unscopedActor: PersonalLearningActor = {
+      actorUserId: input.actor.actorUserId,
+      scope: input.actor.scope,
+    };
+    const state: Awaited<ReturnType<typeof this.readProgress>> = await this.readProgress(
+      unscopedActor,
+      topicIdForProgress,
+    );
+    return this.authorized(
+      unscopedActor,
+      true,
+      async (tx, now) => {
+        await this.normalLearner(tx, input.actor);
+        await this.assertPolicy(tx, input.actor);
+        const scope = input.actor.scope;
+        const topicId = (input.checkin as { topicId?: unknown })?.topicId;
+        if (typeof topicId !== 'string')
+          throw new ApplicationError('VALIDATION_ERROR', 'invalid checkin topic');
+        const topic = await tx.personalLearningTopic.findFirst({
+          where: { ...scope, id: topicId },
+        });
+        const snapshot = metadata(topic?.goalSnapshot ?? {});
+        if (!topic || snapshot.kind !== 'SIDE_HUSTLE')
+          throw new ApplicationError('NOT_FOUND', 'side hustle topic unavailable');
+        if (topic.status !== 'ACTIVE')
+          throw new ApplicationError('CONFLICT', 'side hustle topic paused');
+        const requestedPeriod = (input.checkin as { period?: unknown }).period;
+        const requestedIndex = SIDE_HUSTLE_PERIODS.indexOf(
+          requestedPeriod as (typeof SIDE_HUSTLE_PERIODS)[number],
+        );
+        if (requestedIndex < 0)
+          throw new ApplicationError('VALIDATION_ERROR', 'invalid checkin period');
+        const content = validateSideHustleCheckin(
+          input.checkin,
+          state.roadmap.milestones[requestedIndex]?.checkpoints.length ?? 0,
+        );
+        const latestPeriodEvent = await tx.programActionEvent.findFirst({
+          where: {
+            ...scopeOf(input.actor),
+            actorUserId: scope.userId,
+            eventType: STAGE_ADVANCED,
+            metadata: { path: ['topicId'], equals: topicId },
+          },
+          orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }],
+        });
+        const actualPeriod = latestPeriodEvent
+          ? metadata(latestPeriodEvent.metadata).toPeriod
+          : 'MONTH_1';
+        if (actualPeriod !== state.period) conflict();
+        const startEvent = await tx.programActionEvent.findFirst({
+          where: {
+            ...scopeOf(input.actor),
+            actorUserId: scope.userId,
+            eventType: STARTED,
+            metadata: { path: ['topicId'], equals: topicId },
+          },
+          orderBy: [{ occurredAt: 'asc' }, { id: 'asc' }],
+        });
+        if (!startEvent) throw new ApplicationError('NOT_FOUND', 'side hustle start unavailable');
+        const currentPeriodStartedAt = latestPeriodEvent?.occurredAt ?? startEvent.occurredAt;
+        const evidenceCount = await tx.$queryRaw<{ count: bigint }[]>`
+          WITH linked AS (
+            SELECT a.id AS assignment_id
+            FROM program_mission_assignments a
+            JOIN personal_learning_plan_revisions p
+              ON p.workspace_id=a.workspace_id AND p.group_id=a.group_id
+              AND p.program_enrollment_id=a.program_enrollment_id
+              AND p.plan_id=a.target_resource_id
+              AND p.revision=(a.display_snapshot #>> '{dynamicPractice,planRevision}')::int
+              AND p.topic_id=${topicId}::uuid
+              AND p.group_membership_id=${scope.groupMembershipId}::uuid
+              AND p.user_id=${scope.userId}::uuid
+            WHERE a.workspace_id=${scope.workspaceId}::uuid AND a.group_id=${scope.groupId}::uuid
+              AND a.program_enrollment_id=${scope.programEnrollmentId}::uuid
+              AND a.target_resource_type='PERSONAL_LEARNING_PLAN'
+              AND a.rule_version='PERSONAL_LEARNING_PRACTICE_V1'
+              AND a.display_snapshot #>> '{dynamicPractice,topicId}'=${topicId}
+              AND a.display_snapshot #>> '{dynamicPractice,scope,userId}'=${scope.userId}
+          ), ranked AS (
+            SELECT a.mission_assignment_id, a.evaluation_status, a.evaluation,
+              row_number() OVER (PARTITION BY a.mission_assignment_id ORDER BY
+                COALESCE((a.answer::jsonb->>'revision')::int, 0) DESC, a.created_at DESC) AS rank
+            FROM training_mission_answers a JOIN linked l ON l.assignment_id=a.mission_assignment_id
+            WHERE a.workspace_id=${scope.workspaceId}::uuid AND a.group_id=${scope.groupId}::uuid
+              AND a.program_enrollment_id=${scope.programEnrollmentId}::uuid
+              AND a.user_id=${input.actor.actorUserId}::uuid AND a.created_at > ${currentPeriodStartedAt}
+          )
+          SELECT count(*)::bigint AS count FROM ranked
+          WHERE rank=1 AND evaluation_status='READY'
+            AND evaluation #>> '{review,state}'='CURRENT_STEP_EVIDENCE'
+        `;
+        const currentEligibility = sideHustleCheckinEligibility({
+          period: state.period,
+          periodStartedAt: currentPeriodStartedAt,
+          verifiedPracticeCount: Number(evidenceCount[0]?.count ?? 0),
+          now,
+        });
+        const key = `side-hustle-checkin:${input.operationId}`;
+        const prior = await tx.programActionEvent.findFirst({
+          where: { ...scopeOf(input.actor), actorUserId: scope.userId, idempotencyKey: key },
+        });
+        if (prior) {
+          const meta = metadata(prior.metadata);
+          if (
+            prior.eventType !== CHECKIN ||
+            meta.topicId !== topicId ||
+            digest(meta.checkin) !== digest(content)
+          )
+            conflict();
+          return {
+            checkinEventId: prior.id,
+            period: state.period,
+            eligibility: currentEligibility,
+            replayed: true,
+          };
+        }
+        const matchingAdvance = await tx.programActionEvent.findFirst({
+          where: {
+            ...scopeOf(input.actor),
+            actorUserId: scope.userId,
+            eventType: STAGE_ADVANCED,
+            metadata: { path: ['topicId'], equals: topicId },
+          },
+          orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }],
+        });
+        if (content.period !== state.period) {
+          if (
+            content.decision === 'ADVANCE' &&
+            matchingAdvance &&
+            metadata(matchingAdvance.metadata).fromPeriod === content.period
+          )
+            return {
+              checkinEventId: String(metadata(matchingAdvance.metadata).checkinEventId),
+              period: state.period,
+              eligibility: currentEligibility,
+              replayed: true,
+            };
+          conflict();
+        }
+        const allowed = currentEligibility;
+        if (content.decision === 'ADVANCE' && !allowed.canAdvance)
+          throw new ApplicationError('CONFLICT', 'side hustle stage not ready');
+        const checkinEvent = await tx.programActionEvent.create({
+          data: {
+            ...scopeOf(input.actor),
+            actorUserId: scope.userId,
+            eventType: CHECKIN,
+            idempotencyKey: key,
+            occurredAt: now,
+            metadata: {
+              schemaVersion: 1,
+              checkinVersion: SIDE_HUSTLE_CHECKIN_VERSION,
+              topicId,
+              period: content.period,
+              checkin: content,
+            } as unknown as Prisma.InputJsonValue,
+          },
+        });
+        if (content.decision !== 'ADVANCE')
+          return {
+            checkinEventId: checkinEvent.id,
+            period: state.period,
+            eligibility: currentEligibility,
+            replayed: false,
+          };
+        const toPeriod =
+          content.period === 'MONTH_1'
+            ? 'MONTH_2'
+            : content.period === 'MONTH_2'
+              ? 'MONTH_3'
+              : 'COMPLETED';
+        const transitionKey = `side-hustle-stage:${topicId}:${content.period}:${toPeriod}`;
+        const priorAdvance = await tx.programActionEvent.findFirst({
+          where: {
+            ...scopeOf(input.actor),
+            idempotencyKey: transitionKey,
+            eventType: STAGE_ADVANCED,
+          },
+        });
+        if (priorAdvance)
+          return {
+            checkinEventId: checkinEvent.id,
+            period: metadata(priorAdvance.metadata).toPeriod,
+            eligibility: currentEligibility,
+            replayed: true,
+          };
+        let requestRevision: number | null = null;
+        let requestId: string | null = null;
+        if (toPeriod !== 'COMPLETED') {
+          const previous = await tx.personalLearningRequest.findFirst({
+            where: { ...scope, topicId },
+            orderBy: { revision: 'desc' },
+          });
+          if (!previous || previous.revision !== state.requestRevision) conflict();
+          const request = buildSideHustleStageRequest({
+            previous: {
+              originalText: previous!.originalText,
+              deviceType: previous!.deviceType as never,
+              toolDescription: previous!.toolDescription,
+              experienceDescription: previous!.experienceDescription,
+              currentPosition: previous!.currentPosition,
+            },
+            roadmap: state.roadmap,
+            toPeriod,
+            checkpointResults: content.checkpointResults,
+          });
+          validateSavePersonalLearningRequest({
+            actorUserId: input.actor.actorUserId,
+            scope,
+            topicId,
+            content: request,
+            expectedRevision: previous!.revision,
+            idempotencyKey: transitionKey,
+          });
+          const requestDigest = createHash('sha256')
+            .update(JSON.stringify({ expectedRevision: previous!.revision, ...request, topicId }))
+            .digest('hex');
+          const saved = await tx.personalLearningRequest.create({
+            data: {
+              ...scope,
+              topicId,
+              revision: previous!.revision + 1,
+              ...request,
+              idempotencyKey: transitionKey,
+              digest: requestDigest,
+            },
+          });
+          requestId = saved.id;
+          requestRevision = saved.revision;
+        }
+        const advanced = await tx.programActionEvent.create({
+          data: {
+            ...scopeOf(input.actor),
+            actorUserId: scope.userId,
+            eventType: STAGE_ADVANCED,
+            idempotencyKey: transitionKey,
+            occurredAt: now,
+            metadata: {
+              schemaVersion: 1,
+              topicId,
+              roadmapEventId: snapshot.roadmapEventId,
+              fromPeriod: content.period,
+              toPeriod,
+              checkinEventId: checkinEvent.id,
+              requestId,
+              requestRevision,
+            } as unknown as Prisma.InputJsonValue,
+          },
+        });
+        await tx.personalLearningTopic.update({
+          where: { id: topicId },
+          data: {
+            goalSnapshot: {
+              ...snapshot,
+              currentPeriod: toPeriod,
+              currentPeriodStartedAt: now.toISOString(),
+            },
+          },
+        });
+        return {
+          checkinEventId: checkinEvent.id,
+          stageEventId: advanced.id,
+          period: toPeriod,
+          requestId,
+          requestRevision,
+          replayed: false,
         };
       },
       true,
@@ -898,6 +1299,8 @@ export class PrismaSideHustleHearingRepository extends PrismaPersonalLearningReq
               candidate,
               roadmap: proposalRoadmap.roadmap,
               startedAt: now.toISOString(),
+              currentPeriod: 'MONTH_1',
+              currentPeriodStartedAt: now.toISOString(),
             } as unknown as Prisma.InputJsonValue,
           },
         });

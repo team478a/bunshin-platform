@@ -18,6 +18,7 @@ export * from './side-hustle-candidate';
 export * from './side-hustle-screening';
 export * from './side-hustle-hearing';
 export * from './side-hustle-roadmap';
+export * from './side-hustle-progress';
 import { AI_TRAINING_MISSION_QUALITY } from './mission-quality';
 import type { TrainingGoalKey } from './learning-catalog';
 
