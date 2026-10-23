@@ -14,6 +14,18 @@ const source = {
 };
 
 describe('persona inference provider', () => {
+  it('uses SIDE_HUSTLE_V1 persona inference instructions', () => {
+    const body = personaInferenceBody({
+      model: 'gpt-5.2',
+      maxOutputTokens: 300,
+      maxRequestBytes: 6000,
+      maxSourceBytes: 1000,
+      sources: [source],
+      offerPolicy: 'SIDE_HUSTLE_V1',
+    });
+    expect(body).toContain('副業支援の記録から、学び方と進め方に関する本人の傾向だけ');
+    expect(body).toContain('取引先名');
+  });
   it.each(['毎日がんばりたい', '取引先への提案資料を作りたい'])(
     'keeps ordinary source wording in the AI request: %s',
     (text) => {

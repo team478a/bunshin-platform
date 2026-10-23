@@ -1,0 +1,101 @@
+{
+  "productionCommit": "b96cea56083cb47632f565aab0b74b70bd612986",
+  "records": [
+    {
+      "name": "20261007170000_add_oem_registration_billing",
+      "observedChecksum": "da03f85151ef562908d5177fb6409e788ff87c9d5e71806041fb491e44874858",
+      "preRestorationChecksum": "6fa9c9d24026b267beefaf93b6494572b645a0295b7a75153e508031568fe1dd",
+      "bodyChecksum": "e8a411a43abb328bb60955825f5429be6e8b65752af8c4627af3257db632deba"
+    },
+    {
+      "name": "20261007173000_oem_billing_guardrails",
+      "observedChecksum": "4c74b344b11dcc96d6fe9b5076df4f6c89ebfeb2a09105d1b100f5fe144854a3",
+      "preRestorationChecksum": "065e5f76ba0c33c777810b2e7b94914e7ba7a285e1008f5d97135942a9faddb6",
+      "bodyChecksum": "2e503df06b9649d6d4df799a17d5f80dd2f7a4726308c21309e75eebcc0a39f3"
+    },
+    {
+      "name": "20261010070000_personal_learning_call_cost_reservation",
+      "observedChecksum": "33fa5dae2b8a568a44f9fd41d73a3e37b5b68125ca63afa47ab1c5ea6629be87",
+      "preRestorationChecksum": "11c0cedba9c74bf6a0ad3d8111602f0a0d59c948c530112a1b9d227b59ab812a",
+      "bodyChecksum": "380feafbe1969ea33be2ee498a0b27bc05939c98fb85e852dc3cdb022903853f"
+    },
+    {
+      "name": "20261011180000_ai_provider_call_admission",
+      "observedChecksum": "d67508c57d3f59818b920a2e69968a3a83ceaa221ee883de736776d0d45e041e",
+      "preRestorationChecksum": "35b457e9ed0d29d9ab2f526885d0c93701dd41e87e87200be611dd184b776a81",
+      "bodyChecksum": "0defd6c55e437e0c1f45a8c4bcd74914df372ed66b11f363bb1b4b914d487b3c"
+    },
+    {
+      "name": "20261011200000_oem_service_product_policy",
+      "observedChecksum": "248130a3947a94deae9bd5ce63b0391d7b5ca903503bb346209e0c6d07bb4472",
+      "preRestorationChecksum": "57878f570db3faeeb9c96575d6fd492599f9265444e01e02fa2ab9c6a00747b3",
+      "bodyChecksum": "cce4c7d1fefdfb698f41ad3aecd6c4b5c2bf92bf15e92f1663add42393b241fd"
+    },
+    {
+      "name": "20261011220000_oem_product_policy_admin",
+      "observedChecksum": "5c8bf90c2a0fda6a1a53cb76e858d231f824b68d43d127c8ccd2a0145d165c03",
+      "preRestorationChecksum": "2cd7e697b48ca9e2ae349ba32a791138026e28e031036084b4195ef5fcf80807",
+      "bodyChecksum": "542778ee7af0b376cc536171e4f1102fe0c6edd1c65aad6f7b10f69a73b4d67a"
+    },
+    {
+      "name": "20261011230000_oem_setup_fee_invoicing",
+      "observedChecksum": "7f81bdb8c64b6b668d2f233187823ded1a3e35c6ca71c205d9805350d18c3791",
+      "preRestorationChecksum": "ea7f607c85920c2e760278db2cfcf94eb1a4d0ebd1f47ef2bb1828c053099b36",
+      "bodyChecksum": "aa210461f8a30ca52f56af6f1a93f3284555e550c958af0db1b6ae77052af48f"
+    },
+    {
+      "name": "20261012070000_oem_contract_period_supersession",
+      "observedChecksum": "d0b16d823200010c881ede392bcfbb8d13c1f7241931471b15b5ceccdbb19f5d",
+      "preRestorationChecksum": "ee4f0678c6a6608553d9850a812d022e9725051cd638f90e96019724e25087dc",
+      "bodyChecksum": "ffe778a86b73bf6dce1575252d2e9862d423daf0e4b75e825a6a53cc36de1ba4"
+    },
+    {
+      "name": "20261012080000_oem_operational_period_supersession",
+      "observedChecksum": "257ff8f8233495c287924eaa4bf484640ebe7205086d21afedcb10f67ba7eb83",
+      "preRestorationChecksum": "5b18068bbda7710686ce384da801bdc4fc50cc02880c8952b1573296d13d694b",
+      "bodyChecksum": "4255a14971b83d4352bd189f4e23db29368de2b0c7487032eeac82c907db564b"
+    },
+    {
+      "name": "20261012090000_oem_billing_policy_revision",
+      "observedChecksum": "11660ceead90fe39821d7f923a71d32f0e47491b29c8d9be1d287e75d975fe41",
+      "preRestorationChecksum": "5793ecf59bcda209941c0f6af5885c0b3811987423bc95694a2aa9063b81af9d",
+      "bodyChecksum": "09ac81629aa597e0077cf3c89b87e284c3f8ac96f58a797a40d829b350eb6504"
+    },
+    {
+      "name": "20261013000000_personal_learning_requests",
+      "observedChecksum": "c22e681f06c33668b38419302c69739305a94eb41422f08beedf2e0fc3f86e00",
+      "preRestorationChecksum": "9a62e1af60f49e82e11f54c828d7dd1d444c70be0f2db823dc1e17dc12535e23",
+      "bodyChecksum": "e60cdf4469d9b69b7d0284661e3a8b9a0a1c6b148603eada7e310a398583d3aa"
+    },
+    {
+      "name": "20261013010000_personal_learning_operation_cost",
+      "observedChecksum": "a16e07182844c65ee8c0375a0101d821edd3b3af99fef0f7ed027bde5d4662d6",
+      "preRestorationChecksum": "824a89d0ec16cd36a4666e2a4ef30b9f23429619547da1b4b6d292ce2c8a39df",
+      "bodyChecksum": "51a68813db9075da24b74f8c117b6f91867aac6f6fc5d0502dcb3342a7493c54"
+    },
+    {
+      "name": "20261013020000_personal_learning_lesson_candidate",
+      "observedChecksum": "cbb285f7cd34f86cfb24d313b7747f6eb382aa451603ba7cb735126d8c902537",
+      "preRestorationChecksum": "7d71b229fcce6fce3ae9eadc95302d4714022a85c76ba2a926f3743f84835222",
+      "bodyChecksum": "f56e1ff61fbf164c35240b4f50d878f8d7f89b189a6ad25e1447c2b5b633bbc0"
+    },
+    {
+      "name": "20261013030000_personal_learning_answer_revisions",
+      "observedChecksum": "65daf4eb49c1f614466fad47d8ca9dbd5e38321d8829ff383614d3d2347d1fe1",
+      "preRestorationChecksum": "a79c41a45b62b8974a841661c351dd26c7502a8430258a5c7e5539b47d1e7ac1",
+      "bodyChecksum": "97262161ec4f53bb1062b6eae45184b0311baef09e2b0eb80ff1773509611e15"
+    },
+    {
+      "name": "20261013040000_personal_learning_practice_support_images",
+      "observedChecksum": "709bd2aa18b2f72710759d4b863a8c0c5838490e67c74a293a8231505231c5a6",
+      "preRestorationChecksum": "ba0c348c6e9c5b21075926ee4cb087fb307307fdc088213f70534c7f9b3e21b6",
+      "bodyChecksum": "55603b19c9a069346c739b1a2b50d2d0a5d82315fb66ced51bfe75f3338ac2d0"
+    },
+    {
+      "name": "20261013050000_personal_learning_line_rich_menu",
+      "observedChecksum": "1592640da3db9f5f50f748666f1262d89a5b55c693da07341ea626691a4a7bea",
+      "preRestorationChecksum": "6d61f6cc910209af0836d262c11f789b3fc9db30558331caea20224fa66b3851",
+      "bodyChecksum": "d310a989b2451a06e76c4b49bb014598c9da0af30e876230496a1132de4411ec"
+    }
+  ]
+}

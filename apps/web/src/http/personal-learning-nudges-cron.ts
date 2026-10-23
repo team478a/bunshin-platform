@@ -8,6 +8,7 @@ import {
   decidePersonalLearningNudge,
   nudgeSendTimeJst,
   personalLearningNudgeCopy,
+  personalLearningOfferPolicy,
   type NudgeHistory,
   type NudgeLearnerAction,
   type NudgePractice,
@@ -16,10 +17,7 @@ import {
 import { prisma } from '@bunshin/database';
 import { createLogger, requestIdFromHeader } from '@bunshin/observability';
 import { toApiError } from '@bunshin/shared';
-import {
-  AI_TRAINING_AI_CONSENT_TEXT,
-  AI_TRAINING_AI_CONSENT_VERSION,
-} from '../services/ai-training-consent-policy';
+import { aiTrainingConsentPolicy } from '../services/ai-training-consent-policy';
 import { authorizeCronRequest } from './cron-security';
 import { AesGcmLineSecretCrypto, currentLineEnvironment } from '../line/secure-configuration';
 import { LineMessagingApiAdapter } from '../line/messaging-provider';
@@ -28,7 +26,6 @@ import { generatePersonalLearningNudgeCopy } from '../services/personal-learning
 import { personalLearningNudgeDeliveryMessage } from '../services/personal-learning-nudge-message';
 
 const logger = createLogger();
-const digest = createHash('sha256').update(AI_TRAINING_AI_CONSENT_TEXT).digest('hex');
 const headers = { 'cache-control': 'private, no-store', 'x-content-type-options': 'nosniff' };
 const learnerEventTypes = [
   'PERSONAL_LEARNING_CONVERSATION_MESSAGE',
@@ -128,6 +125,13 @@ async function run(now: Date) {
       skipped++;
       continue;
     }
+    const offerPolicy = personalLearningOfferPolicy(program.settings);
+    if (!offerPolicy) {
+      skipped++;
+      continue;
+    }
+    const consentPolicy = aiTrainingConsentPolicy(offerPolicy);
+    const consentDigest = createHash('sha256').update(consentPolicy.text).digest('hex');
     const s = {
       workspaceId: enrollment.workspaceId,
       groupId: enrollment.groupId,
@@ -136,7 +140,7 @@ async function run(now: Date) {
       userId: membership.userId,
     };
     const consent = await prisma.aiTrainingUsageConsent.findFirst({
-      where: { ...s, consentVersion: AI_TRAINING_AI_CONSENT_VERSION, textDigest: digest },
+      where: { ...s, consentVersion: consentPolicy.version, textDigest: consentDigest },
       select: { id: true },
     });
     if (!consent) {
@@ -253,7 +257,7 @@ async function run(now: Date) {
         (!preference.enabled ||
           preference.stoppedAt ||
           (preference.pausedUntil && preference.pausedUntil > now) ||
-          preference.consentVersion !== AI_TRAINING_AI_CONSENT_VERSION))
+          preference.consentVersion !== consentPolicy.version))
     ) {
       skipped++;
       continue;
@@ -455,6 +459,15 @@ async function run(now: Date) {
       skipped++;
       continue;
     }
+    const currentOfferPolicy = personalLearningOfferPolicy(stillConfigured.settings);
+    if (!currentOfferPolicy || currentOfferPolicy !== offerPolicy) {
+      skipped++;
+      continue;
+    }
+    const currentConsentPolicy = aiTrainingConsentPolicy(currentOfferPolicy);
+    const currentConsentDigest = createHash('sha256')
+      .update(currentConsentPolicy.text)
+      .digest('hex');
     const stillLineConfiguration = await prisma.groupLineChannelConfiguration.findFirst({
       where: {
         id: configuration.id,
@@ -473,7 +486,11 @@ async function run(now: Date) {
       continue;
     }
     const currentConsent = await prisma.aiTrainingUsageConsent.findFirst({
-      where: { ...s, consentVersion: AI_TRAINING_AI_CONSENT_VERSION, textDigest: digest },
+      where: {
+        ...s,
+        consentVersion: currentConsentPolicy.version,
+        textDigest: currentConsentDigest,
+      },
       select: { id: true },
     });
     const currentPreference = await prisma.personalLearningNudgePreference.findFirst({
@@ -485,7 +502,7 @@ async function run(now: Date) {
       (currentPreference &&
         (!currentPreference.enabled ||
           currentPreference.stoppedAt ||
-          currentPreference.consentVersion !== AI_TRAINING_AI_CONSENT_VERSION ||
+          currentPreference.consentVersion !== currentConsentPolicy.version ||
           (currentPreference.pausedUntil && currentPreference.pausedUntil > new Date())))
     ) {
       skipped++;
@@ -519,6 +536,7 @@ async function run(now: Date) {
       situation: decision.situation,
       ordinal: decision.ordinal === 1 ? 1 : 2,
       judgmentDate: dayKey,
+      offerPolicy,
     });
     const nudgeUrl = new URL(
       `/s/${slug.slug}/programs/${enrollment.id}/learning-request${topics[0] ? `?topicId=${topics[0].id}` : ''}`,

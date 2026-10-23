@@ -280,6 +280,128 @@ describe('Vercel production migrations', () => {
     ).toBe(1);
     expect(execute).toHaveBeenCalledTimes(1);
     expect(errorLog.mock.calls.flat().join(' ')).not.toContain('synthetic-secret');
+    expect(errorLog.mock.calls[0]![0]).toContain(
+      'process=EXCEPTION; exit=NONE; history=NOT_CHECKED; diagnostic=not-available',
+    );
+  });
+
+  it.each([
+    ['P1000 authentication failed', 'database-authentication-failed'],
+    ['P1001 cannot reach database server', 'database-unreachable'],
+    ['P1002 database timed out', 'database-connection-timeout'],
+    ['P1008 operation timed out', 'database-operation-timeout'],
+    ['P1010 user was denied access', 'database-access-denied'],
+    ['P1011 TLS certificate verification failed', 'database-tls-failure'],
+    ['P1013 invalid database string', 'database-url-invalid'],
+    ['P1017 server has closed the connection', 'database-connection-closed'],
+    ['unexpected failure', 'unclassified-preflight-error'],
+  ])('classifies history failure %s without leaking child output', async (failure, diagnostic) => {
+    const infoLog = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const errorLog = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const url = 'postgresql://test:synthetic-secret@localhost/test';
+    const execute = vi.fn<typeof runMigrationProcess>().mockResolvedValue({
+      reason: 'EXITED',
+      status: 1,
+      capturedOutput: `${failure}\n${url}\nSELECT 'private-sql-body';`,
+      diagnostic: 'injected-private-diagnostic',
+    });
+    const environment = { VERCEL_ENV: 'production', DATABASE_URL: url, DIRECT_URL: url };
+    expect(await runVercelMigration(environment, execute)).toBe(1);
+    expect(execute).toHaveBeenCalledTimes(1);
+    const [command, args, options] = execute.mock.calls[0]!;
+    expect(command).toBe(process.execPath);
+    expect(args.slice(1)).toEqual(['migrate', 'status', '--schema', 'prisma/schema.prisma']);
+    expect(options.timeoutMs).toBe(60000);
+    expect(options.captureOutput).toBe(true);
+    expect(options.input).toBeUndefined();
+    const connection = new URL(options.env.DIRECT_URL!);
+    expect(connection.hostname).toBe('localhost');
+    expect(connection.password).toBe('synthetic-secret');
+    expect(connection.searchParams.has('options')).toBe(false);
+    expect(environment.DIRECT_URL).toBe(url);
+    expect(errorLog).toHaveBeenCalledExactlyOnceWith(
+      `[database] MIGRATION_HISTORY_CHECK_FAILED (process=EXITED; exit=NONZERO; history=UNKNOWN; diagnostic=${diagnostic}): build stopped before migration.`,
+    );
+    const logs = [...infoLog.mock.calls, ...errorLog.mock.calls].flat().join(' ');
+    for (const secret of [
+      url,
+      'synthetic-secret',
+      'private-sql-body',
+      'injected-private-diagnostic',
+    ])
+      expect(logs).not.toContain(secret);
+  });
+
+  it.each<MigrationProcessResult['reason']>(['DEADLINE_EXCEEDED', 'SIGNALLED', 'START_FAILED'])(
+    'distinguishes history process %s and never starts another command',
+    async (reason) => {
+      vi.spyOn(console, 'log').mockImplementation(() => {});
+      const errorLog = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const execute = vi.fn<typeof runMigrationProcess>().mockResolvedValue({ reason, status: 1 });
+      const url = 'postgresql://test:synthetic-secret@localhost/test';
+      expect(
+        await runVercelMigration(
+          { VERCEL_ENV: 'production', DATABASE_URL: url, DIRECT_URL: url },
+          execute,
+        ),
+      ).toBe(1);
+      expect(execute).toHaveBeenCalledTimes(1);
+      expect(errorLog).toHaveBeenCalledExactlyOnceWith(
+        `[database] MIGRATION_HISTORY_CHECK_FAILED (process=${reason}; exit=NONE; history=NOT_CHECKED; diagnostic=no-diagnostic-output): build stopped before migration.`,
+      );
+    },
+  );
+
+  it.each([
+    ['Following migration(s) have failed:\nprivate-migration-body', 'NEEDS_REVIEW'],
+    ['The migration history and the migrations table are different', 'NEEDS_REVIEW'],
+    ['private-unrecognized-output', 'UNKNOWN'],
+    ['', 'UNKNOWN'],
+  ])('distinguishes successful but unusable history output as %s', async (output, history) => {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    const errorLog = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const execute = vi.fn<typeof runMigrationProcess>().mockResolvedValue({
+      reason: 'EXITED',
+      status: 0,
+      capturedOutput: output,
+    });
+    const url = 'postgresql://test:synthetic-secret@localhost/test';
+    expect(
+      await runVercelMigration(
+        { VERCEL_ENV: 'production', DATABASE_URL: url, DIRECT_URL: url },
+        execute,
+      ),
+    ).toBe(1);
+    expect(execute).toHaveBeenCalledTimes(1);
+    const log = errorLog.mock.calls.flat().join(' ');
+    expect(log).toContain(`process=EXITED; exit=ZERO; history=${history}; diagnostic=`);
+    expect(log).not.toContain('private-');
+    expect(log).not.toContain('synthetic-secret');
+  });
+
+  it('reports the actual watchdog deadline without printing partial child output', async () => {
+    const infoLog = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const errorLog = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const execute = vi.fn<typeof runMigrationProcess>((_command, _args, options) =>
+      runMigrationProcess(
+        process.execPath,
+        ['-e', 'console.error("private-child-output"); setInterval(() => {}, 1000)'],
+        { ...options, timeoutMs: 400 },
+      ),
+    );
+    const url = 'postgresql://test:synthetic-secret@localhost/test';
+    expect(
+      await runVercelMigration(
+        { VERCEL_ENV: 'production', DATABASE_URL: url, DIRECT_URL: url },
+        execute,
+      ),
+    ).toBe(1);
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(execute.mock.calls[0]![2].timeoutMs).toBe(60000);
+    expect(errorLog.mock.calls[0]![0]).toContain('process=DEADLINE_EXCEEDED; exit=NONE;');
+    const logs = [...infoLog.mock.calls, ...errorLog.mock.calls].flat().join(' ');
+    expect(logs).not.toContain('private-child-output');
+    expect(logs).not.toContain('synthetic-secret');
   });
 
   it('bounds a real stalled process without exposing its output', async () => {

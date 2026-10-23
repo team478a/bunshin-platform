@@ -22,6 +22,7 @@ function fixture() {
     groupMembershipId: 'membership',
     serviceProgramId: 'program',
     status: 'EXPIRED',
+    startsAt: new Date('2026-06-01T00:00:00Z'),
     endsAt: new Date('2026-06-20'),
     updatedAt: now,
   };
@@ -69,6 +70,9 @@ function fixture() {
     personalLearningSavedExample: table(),
     personalLearningPersonaProfile: table(),
     personalLearningPracticeSupportImage: table(),
+    personalLearningLineInbox: table(),
+    personalLearningLinePush: table(),
+    personalLearningNudgePreference: table(),
     programActionEvent: table(),
     job: { updateMany: vi.fn() },
     programAuditLog: { findFirst: vi.fn().mockResolvedValue(null), create: vi.fn() },
@@ -120,6 +124,29 @@ describe('training retention execution', () => {
     });
     expect(tx.trainingMissionAnswer.deleteMany).not.toHaveBeenCalled();
     expect(tx.$queryRaw).not.toHaveBeenCalled();
+  });
+  it('includes side hustle learner events in retention activity and content scans', async () => {
+    const { tx, repository } = fixture();
+    tx.serviceProgram.findFirst.mockResolvedValue({
+      id: 'program',
+      settings: {
+        moduleKey: 'AI_TRAINING_V1',
+        personalLearningPilot: {
+          enabled: true,
+          enrollmentIds: ['enrollment'],
+          learningMode: 'DYNAMIC_V1',
+        },
+      },
+    });
+    await repository.preview(input);
+    const queries = JSON.stringify(tx.programActionEvent.findMany.mock.calls);
+    expect(queries).toContain('SIDE_HUSTLE_HEARING_SAVED');
+    expect(queries).toContain('SIDE_HUSTLE_SELECTED');
+    expect(queries).toContain('SIDE_HUSTLE_PROPOSAL_SAVED');
+    expect(queries).toContain('SIDE_HUSTLE_ROADMAP_PROPOSED');
+    expect(queries).toContain('SIDE_HUSTLE_STARTED');
+    expect(queries).toContain('SIDE_HUSTLE_CHECKIN_SAVED');
+    expect(queries).toContain('SIDE_HUSTLE_STAGE_ADVANCED');
   });
   it('erases expired answers and work copies while retaining Toolkit and scores', async () => {
     const { tx, repository } = fixture();

@@ -8,6 +8,7 @@ import {
   type AiCallMeasurement,
 } from '@bunshin/application';
 import { ApplicationError } from '@bunshin/shared';
+import { personalLearningOfferPolicy } from '@bunshin/capability-training';
 import { personalLearningPilotExecutionAllowed } from '../services/personal-learning-pilot-access';
 import { requireAiTrainingUsageConsent } from '../services/ai-training-consent';
 import { admitPersonalLearningCall } from '../services/personal-learning-call-admission';
@@ -22,8 +23,8 @@ import { withOrganizationAiGenerationQuota } from '../organization-ai-generation
 import {
   generateLearningEvidenceReview,
   learningEvidenceReviewBody,
-  LEARNING_EVIDENCE_REVIEW_PROMPT_VERSION,
 } from '../providers/openai-learning-evidence-review';
+import { personalLearningOfferPromptPolicy } from '../providers/personal-learning-offer-policy';
 
 const object = (value: unknown): Record<string, unknown> =>
   value && typeof value === 'object' && !Array.isArray(value)
@@ -75,6 +76,9 @@ export async function executePersonalLearningEvidenceReview(input: {
   });
   if (!program || !personalLearningPilotExecutionAllowed(program.settings, enrollment.id, true))
     throw new ApplicationError('NOT_FOUND', 'practice evaluator unavailable');
+  const offerPolicy = personalLearningOfferPolicy(program.settings);
+  if (!offerPolicy) throw new ApplicationError('NOT_FOUND', 'practice evaluator unavailable');
+  const promptVersion = personalLearningOfferPromptPolicy(offerPolicy).evidenceReviewVersion;
   await requireAiTrainingUsageConsent({
     workspaceId: input.workspaceId,
     groupId: input.groupId,
@@ -205,6 +209,7 @@ export async function executePersonalLearningEvidenceReview(input: {
               model: runtime.model,
               maxRequestBytes: admission.requestLimits.maxRequestBytes,
               maxOutputTokens: admission.requestLimits.maxOutputTokens,
+              offerPolicy,
             }),
           });
           observed.measurement = result.measurement;
@@ -240,7 +245,7 @@ export async function executePersonalLearningEvidenceReview(input: {
       taskType: 'AI_TRAINING_ANSWER_EVALUATION',
       provider: runtime.provider,
       model: observed.measurement?.model ?? runtime.model,
-      promptVersion: LEARNING_EVIDENCE_REVIEW_PROMPT_VERSION,
+      promptVersion,
       status: 'SUCCESS',
       inputTokens: observed.measurement?.inputTokens ?? null,
       outputTokens: observed.measurement?.outputTokens ?? null,
@@ -333,7 +338,7 @@ export async function executePersonalLearningEvidenceReview(input: {
             review: reviewValue,
             provider: runtime.provider,
             model: observed.measurement?.model ?? runtime.model,
-            promptVersion: LEARNING_EVIDENCE_REVIEW_PROMPT_VERSION,
+            promptVersion,
             inputTokens: observed.measurement?.inputTokens ?? null,
             outputTokens: observed.measurement?.outputTokens ?? null,
             latencyMs: Math.max(0, Date.now() - started),
@@ -357,7 +362,7 @@ export async function executePersonalLearningEvidenceReview(input: {
             revision: submission.revision,
             kind: answerValue.kind,
             reviewState: reviewValue.state,
-            promptVersion: LEARNING_EVIDENCE_REVIEW_PROMPT_VERSION,
+            promptVersion,
           },
           actorUserId: input.actorUserId,
           occurredAt: new Date(),
@@ -375,7 +380,7 @@ export async function executePersonalLearningEvidenceReview(input: {
         taskType: 'AI_TRAINING_ANSWER_EVALUATION',
         provider: runtime.provider,
         model: measurement?.model ?? runtime.model,
-        promptVersion: LEARNING_EVIDENCE_REVIEW_PROMPT_VERSION,
+        promptVersion,
         status: 'FAILED',
         inputTokens: measurement?.inputTokens ?? null,
         outputTokens: measurement?.outputTokens ?? null,

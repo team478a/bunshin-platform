@@ -6,6 +6,8 @@ import {
 import type { AiCallMeasurement, AiModelCapability } from '@bunshin/application';
 import { serializeOpenAiTaskRequest } from '../ai/openai-task-compatibility';
 import { generateLearningStructured } from './openai-learning-lesson';
+import type { PersonalLearningOfferPolicy } from '@bunshin/capability-training';
+import { personalLearningOfferPromptPolicy } from './personal-learning-offer-policy';
 
 export const PERSONAL_LEARNING_PERSONA_INFERENCE_PROMPT_VERSION = 'manaberu-persona-inference-v1';
 export type PersonaInferenceSource = {
@@ -64,6 +66,7 @@ export function personaInferenceBody(input: {
   maxRequestBytes: number;
   maxSourceBytes: number;
   sources: readonly PersonaInferenceSource[];
+  offerPolicy?: PersonalLearningOfferPolicy;
 }) {
   const build = (
     sources: readonly {
@@ -79,8 +82,8 @@ export function personaInferenceBody(input: {
       input: [
         {
           role: 'system',
-          content:
-            '研修記録から、学び方に関する本人の傾向だけを推測します。許可キーは learning_purpose, explanation_style, learning_pace, stated_goal, ai_tool_familiarity のみです。会社名・年代・業種・職種は推測禁止。第三者の個人情報、健康・障害・診断、宗教・政治、民族・国籍、性的指向、収入・資産、住所、取引先名は出力禁止です。根拠が弱い属性は出力しません。各値は根拠記録の範囲で控えめに表現し、根拠配列のsourceIndexを必ず返してください。JSONは{"items":[{"attributeKey":"...","value":"...","sourceIndex":0}]}です。',
+          content: personalLearningOfferPromptPolicy(input.offerPolicy)
+            .personaInferenceInstructions,
         },
         { role: 'user', content: JSON.stringify({ sources }) },
       ],

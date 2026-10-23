@@ -140,6 +140,71 @@ describe('training personal data export isolation', () => {
       take: TRAINING_EXPORT_MAX_ROWS + 1,
     });
   });
+
+  it('includes side hustle hearing, proposal, selection, roadmap, start, checkin and stage events in the owner export', async () => {
+    const { tx, repository } = fixture();
+    tx.programActionEvent.findMany.mockImplementation(((args: {
+      where?: { eventType?: { in?: string[] } };
+    }) => {
+      const types = args.where?.eventType?.in ?? [];
+      if (!types.includes('SIDE_HUSTLE_HEARING_SAVED')) return Promise.resolve([]);
+      return Promise.resolve([
+        {
+          eventType: 'SIDE_HUSTLE_HEARING_SAVED',
+          occurredAt: now,
+          metadata: { hearing: { freeText: { goal: '回答' } } },
+        },
+        {
+          eventType: 'SIDE_HUSTLE_PROPOSAL_SAVED',
+          occurredAt: now,
+          metadata: { proposal: { reason: '提案' } },
+        },
+        {
+          eventType: 'SIDE_HUSTLE_SELECTED',
+          occurredAt: now,
+          metadata: { candidate: { name: '候補' } },
+        },
+        {
+          eventType: 'SIDE_HUSTLE_ROADMAP_PROPOSED',
+          occurredAt: now,
+          metadata: { roadmap: { milestones: [] } },
+        },
+        {
+          eventType: 'SIDE_HUSTLE_STARTED',
+          occurredAt: now,
+          metadata: { topicId: 'topic', requestId: 'request' },
+        },
+        {
+          eventType: 'SIDE_HUSTLE_CHECKIN_SAVED',
+          occurredAt: now,
+          metadata: { topicId: 'topic', checkin: { note: '振り返り' } },
+        },
+        {
+          eventType: 'SIDE_HUSTLE_STAGE_ADVANCED',
+          occurredAt: now,
+          metadata: { topicId: 'topic', fromPeriod: 'MONTH_1', toPeriod: 'MONTH_2' },
+        },
+      ]);
+    }) as never);
+    const result = await repository.read(input);
+    expect(result.outcome).toBe('FOUND');
+    if (result.outcome !== 'FOUND') throw new Error('export not found');
+    const personalLearning = result.data.personalLearning as unknown as readonly {
+      kind: string;
+      metadata: unknown;
+    }[];
+    expect(personalLearning.map(({ kind }) => kind)).toEqual(
+      expect.arrayContaining([
+        'SIDE_HUSTLE_HEARING_SAVED',
+        'SIDE_HUSTLE_PROPOSAL_SAVED',
+        'SIDE_HUSTLE_SELECTED',
+        'SIDE_HUSTLE_ROADMAP_PROPOSED',
+        'SIDE_HUSTLE_STARTED',
+        'SIDE_HUSTLE_CHECKIN_SAVED',
+        'SIDE_HUSTLE_STAGE_ADVANCED',
+      ]),
+    );
+  });
   it('stops before reading answers for a foreign/inactive user, foreign enrollment or other module', async () => {
     for (const blocked of ['groupMembership', 'programEnrollment', 'serviceProgram'] as const) {
       const { tx, repository } = fixture();

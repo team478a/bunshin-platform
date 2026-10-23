@@ -87,6 +87,23 @@ function raw(value: unknown = advice) {
   };
 }
 describe('practice support Provider', () => {
+  it('uses SIDE_HUSTLE_V1 support prompt and version', () => {
+    const value = JSON.parse(
+      learningSupportBody(
+        practice,
+        request,
+        'gpt-5.2',
+        { maxRequestBytes: 16000, maxOutputTokens: 1000 },
+        null,
+        false,
+        'SIDE_HUSTLE_V1',
+      ),
+    ) as { input: { role: string; content: string }[] };
+    expect(value.input[1]?.content).toContain('本人が選んだ副業の実践を支える途中支援。');
+    expect(learningSupportPromptVersion(false, 'SIDE_HUSTLE_V1')).toBe(
+      'side-hustle-practice-support-v1',
+    );
+  });
   it('keeps the prior scope when OFF and adds screenshot-grounded tool guidance only when ON', () => {
     const system = (extendedScope: boolean) => {
       const outgoing = JSON.parse(

@@ -10,7 +10,11 @@ import { ProgramManagementEditor } from './program-management-editor';
 import { ProgramProductAdmin } from './program-product-admin';
 import { AiResaleOfferAdmin } from './ai-resale-offer-admin';
 import { ProgramFeatureFlagsCard } from './program-feature-flags-card';
-import { personalLearningFeatures, personalLearningMode } from '@bunshin/capability-training';
+import {
+  personalLearningFeatures,
+  personalLearningMode,
+  personalLearningOfferPolicy,
+} from '@bunshin/capability-training';
 import {
   isTrainingProgram,
   selectableTrainingModes,
@@ -207,8 +211,12 @@ export default async function ServiceProgramsPage({
         learningMode: personalLearningMode(settings),
         learningFeatures: personalLearningFeatures(settings),
         enabled: pilot['enabled'] === true,
+        learningOfferPolicy: personalLearningOfferPolicy(settings),
         configurationValid:
-          personalLearningMode(settings) !== null && personalLearningFeatures(settings) !== null,
+          personalLearningMode(settings) !== null &&
+          personalLearningFeatures(settings) !== null &&
+          personalLearningOfferPolicy(settings) !== null,
+        hasEnrollments: enrollments.some((item) => item.serviceProgramId === program.id),
       };
     });
   const productPrograms = servicePrograms

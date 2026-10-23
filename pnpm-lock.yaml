@@ -205,6 +205,9 @@ importers:
       '@bunshin/application':
         specifier: workspace:*
         version: link:../application
+      '@bunshin/shared':
+        specifier: workspace:*
+        version: link:../shared
     devDependencies:
       vitest:
         specifier: 4.1.11

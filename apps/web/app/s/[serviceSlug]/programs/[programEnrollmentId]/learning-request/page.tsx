@@ -6,7 +6,11 @@ import {
   personalLearningRequestEnabled,
 } from '../../../../../../src/services/personal-learning-request-access';
 import { PersonalLearningRequestCard } from './card';
-import { personalLearningMode } from '@bunshin/capability-training';
+import {
+  personalLearningMode,
+  personalLearningOfferPolicy,
+  sideHustleProgressGuidance,
+} from '@bunshin/capability-training';
 import { personalLearningFeatureEnabled } from '@bunshin/capability-training';
 import { LearningTopicSelector } from './topic-selector';
 import { AiTrainingDataExportCard } from '../ai-training-data-export-card';
@@ -28,7 +32,7 @@ export default async function Page({
     `/s/${serviceSlug}/programs/${programEnrollmentId}/learning-request`,
   );
   try {
-    const input = await resolvePersonalLearningRequestActor(
+    let input = await resolvePersonalLearningRequestActor(
       serviceSlug,
       programEnrollmentId,
       actor.userId,
@@ -56,6 +60,64 @@ export default async function Page({
         })
       : null;
     const dynamicProgram = personalLearningMode(program?.settings) === 'DYNAMIC_V1';
+    const sideHustle =
+      personalLearningOfferPolicy(program?.settings) === 'SIDE_HUSTLE_V1'
+        ? await new db.PrismaSideHustleHearingRepository(db.prisma).readState({
+            actorUserId: input.actorUserId,
+            scope: input.scope,
+          })
+        : null;
+    const sideHustleProgram = personalLearningOfferPolicy(program?.settings) === 'SIDE_HUSTLE_V1';
+    if (sideHustleProgram && !sideHustle?.started) {
+      const candidate = sideHustle?.selection?.candidate as { name?: unknown } | undefined;
+      return (
+        <main style={{ maxWidth: 560, margin: '0 auto', padding: 20 }}>
+          <section className="service-entry__card" aria-label="副業の選択">
+            {typeof candidate?.name === 'string' ? (
+              <>
+                <h2>選んだ副業：{candidate.name}</h2>
+                <a href={`/s/${serviceSlug}/programs/${programEnrollmentId}/side-hustle`}>
+                  副業の選択を確認する
+                </a>
+              </>
+            ) : (
+              <>
+                <h2>まず、あなたに合う副業を一緒に選びましょう</h2>
+                <a href={`/s/${serviceSlug}/programs/${programEnrollmentId}/side-hustle`}>
+                  副業を選ぶ
+                </a>
+              </>
+            )}
+          </section>
+        </main>
+      );
+    }
+    if (sideHustleProgram && sideHustle?.started && !selectedTopicId) {
+      input = await resolvePersonalLearningRequestActor(
+        serviceSlug,
+        programEnrollmentId,
+        actor.userId,
+        undefined,
+        sideHustle.started.topicId,
+      );
+    }
+    const sideHustlePath = `/s/${serviceSlug}/programs/${programEnrollmentId}/side-hustle`;
+    const selectedCandidate = sideHustle?.selection?.candidate as { name?: unknown } | undefined;
+    const sideHustleEntry = sideHustle ? (
+      <section className="service-entry__card" aria-label="副業の選択">
+        {typeof selectedCandidate?.name === 'string' ? (
+          <>
+            <h2>選んだ副業：{selectedCandidate.name}</h2>
+            <a href={sideHustlePath}>副業の選択を確認する</a>
+          </>
+        ) : (
+          <>
+            <h2>まず、あなたに合う副業を一緒に選びましょう</h2>
+            <a href={sideHustlePath}>副業を選ぶ</a>
+          </>
+        )}
+      </section>
+    ) : null;
     const multiTopic = personalLearningFeatureEnabled(program?.settings, 'multiTopic');
     const pagePath = `/s/${serviceSlug}/programs/${programEnrollmentId}/learning-request`;
     const topicEndpoint = `/api/services/${serviceSlug}/ai-training/enrollments/${programEnrollmentId}/topics`;
@@ -97,10 +159,73 @@ export default async function Page({
           (await new db.PrismaPersonalLearningTopicRepository(db.prisma).list(input.scope)) ?? []
         ).filter((topic) => topic.status === 'ACTIVE')
       : [];
+    const selectedTopic =
+      sideHustleProgram && input.topicId
+        ? await db.prisma.personalLearningTopic.findFirst({
+            where: { ...input.scope, id: input.topicId },
+            select: { id: true, title: true, goalSnapshot: true },
+          })
+        : null;
+    const goalSnapshot = selectedTopic?.goalSnapshot;
+    const sideHustleGoal =
+      goalSnapshot &&
+      typeof goalSnapshot === 'object' &&
+      !Array.isArray(goalSnapshot) &&
+      (goalSnapshot as Record<string, unknown>)['kind'] === 'SIDE_HUSTLE'
+        ? (goalSnapshot as Record<string, unknown>)
+        : null;
+    const sideHustleProgress =
+      sideHustleProgram && input.topicId
+        ? await new db.PrismaSideHustleHearingRepository(db.prisma).readProgress(
+            { actorUserId: input.actorUserId, scope: input.scope },
+            input.topicId,
+          )
+        : null;
+    const roadmap = sideHustleProgress?.roadmap;
+    const roadmapCard =
+      sideHustleGoal && roadmap?.milestones?.length === 3 && sideHustleProgress ? (
+        <section className="service-entry__card" aria-label="90日の地図">
+          <h2>90日の地図：{selectedTopic?.title}</h2>
+          {sideHustleProgress.period === 'COMPLETED' ? (
+            <p>90日の地図を最後まで進めました</p>
+          ) : (
+            <p>
+              いまは{Number(sideHustleProgress.period.slice(-1))}か月目「
+              {roadmap.milestones[Number(sideHustleProgress.period.slice(-1)) - 1]?.title}」です
+            </p>
+          )}
+          {sideHustleProgress.eligibility.suggested &&
+            sideHustleProgress.period !== 'COMPLETED' && (
+              <p>
+                {sideHustleProgressGuidance(
+                  sideHustleProgress.period,
+                  sideHustleProgress.eligibility.reason,
+                )}
+              </p>
+            )}
+          {roadmap.milestones.map((milestone, index) => (
+            <p key={milestone.period}>
+              {index + 1}か月目：{milestone.title}（{milestone.outcome}）
+            </p>
+          ))}
+          <a href={`/s/${serviceSlug}/programs/${programEnrollmentId}/side-hustle`}>地図を見る</a>{' '}
+          {sideHustleProgress.period !== 'COMPLETED' && (
+            <a href={`/s/${serviceSlug}/programs/${programEnrollmentId}/side-hustle?checkin=1`}>
+              振り返る
+            </a>
+          )}
+        </section>
+      ) : null;
     if (multiTopic && !input.topicId) {
       return (
         <main style={{ maxWidth: 560, margin: '0 auto', padding: 20 }}>
-          <LearningTopicSelector endpoint={topicEndpoint} pagePath={pagePath} topics={topics} />
+          {sideHustleEntry}
+          <LearningTopicSelector
+            endpoint={topicEndpoint}
+            pagePath={pagePath}
+            topics={topics}
+            allowCreate={!sideHustleProgram}
+          />
           {dynamicProgram && (
             <LearningNudgePreferenceCard
               endpoint={`/api/services/${serviceSlug}/ai-training/enrollments/${programEnrollmentId}/personal-learning/nudge-preference`}
@@ -129,6 +254,8 @@ export default async function Page({
     );
     return (
       <main style={{ maxWidth: 560, margin: '0 auto', padding: 20 }}>
+        {sideHustleEntry}
+        {roadmapCard}
         {personaInvitation}
         {dynamicProgram && (
           <LearningNudgePreferenceCard
@@ -148,6 +275,7 @@ export default async function Page({
             pagePath={pagePath}
             topics={topics}
             selectedTopicId={input.topicId}
+            allowCreate={!sideHustleProgram}
           />
         )}
         {multiTopic && (

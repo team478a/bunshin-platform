@@ -4,10 +4,10 @@ import { redirect } from 'next/navigation';
 import { z } from 'zod';
 import { currentUserProvider } from '../../../../src/auth/current-user';
 import {
-  AI_TRAINING_AI_CONSENT_TEXT,
   readAiTrainingParticipation,
   recordAiTrainingUsageConsent,
 } from '../../../../src/services/ai-training-consent';
+import { aiTrainingConsentPolicy } from '../../../../src/services/ai-training-consent-policy';
 import { PublicShell } from '../../../ui/public-shell';
 import { PendingSubmitButton } from '../../../ui/pending-submit-button';
 
@@ -34,44 +34,6 @@ export async function acceptAiTrainingConsent(formData: FormData) {
   redirect(`/s/${input.data.serviceSlug}/programs/${input.data.enrollmentId}` as Route);
 }
 
-const stateCopy = {
-  PROGRAM_WAITING: {
-    title: '研修プログラムの準備中です',
-    message: '運営が研修プログラムを準備しています。準備ができると、この画面から確認できます。',
-  },
-  ENROLLMENT_WAITING: {
-    title: '研修参加の準備待ちです',
-    message:
-      'サービスへの参加は完了しています。運営が研修Enrollmentと参加枠を準備すると、ここに表示されます。',
-  },
-  SEAT_WAITING: {
-    title: '研修参加枠の準備待ちです',
-    message:
-      '運営があなたのEnrollmentに内部テスター枠を付与しています。枠が確認されるまでAI処理は行われません。',
-  },
-  CONSENT_REQUIRED: {
-    title: '研修参加の確認',
-    message:
-      '参加枠が確認できました。AIを使った研修を始める前に、送信される情報と注意点を確認してください。',
-  },
-  READY: {
-    title: '研修を開始できます',
-    message: '参加枠とAI利用同意を確認しました。研修を続けられます。',
-  },
-} as const;
-const dynamicStateCopy = {
-  ...stateCopy,
-  ENROLLMENT_WAITING: {
-    title: '研修参加の準備待ちです',
-    message: 'サービスへの参加は完了しています。運営が研修への参加手続きと参加枠を準備しています。',
-  },
-  SEAT_WAITING: {
-    title: '研修参加枠の準備待ちです',
-    message:
-      '参加枠が準備できるまで、AIを使った学習は始まりません。準備ができると、この画面に表示されます。',
-  },
-} as const;
-
 export default async function AiTrainingConfirmationPage({
   params,
 }: {
@@ -82,32 +44,38 @@ export default async function AiTrainingConfirmationPage({
   if (!actor)
     redirect(`/login?returnTo=${encodeURIComponent(`/s/${serviceSlug}/training`)}` as Route);
   const participation = await readAiTrainingParticipation(serviceSlug, actor.userId);
-  const currentCopy = (participation.isDynamicLearning ? dynamicStateCopy : stateCopy)[
-    participation.state
-  ];
+  const policies = [...new Set(participation.enrollments.map(({ offerPolicy }) => offerPolicy))];
+  const mixedPolicies = policies.length > 1;
+  const pagePolicy = mixedPolicies
+    ? aiTrainingConsentPolicy('AI_SKILL_V1')
+    : aiTrainingConsentPolicy(policies[0] ?? 'AI_SKILL_V1');
+  const currentCopy = (
+    participation.isDynamicLearning ? pagePolicy.copy.dynamicStates : pagePolicy.copy.states
+  )[participation.state];
 
   return (
     <PublicShell showPlatformBrand={false}>
       <main className="app-page">
         <header className="app-page__heading">
           <p className="eyebrow">{participation.serviceName}</p>
-          <h1>AI研修への参加</h1>
+          <h1>{mixedPolicies ? 'AIを使った支援への参加' : pagePolicy.copy.pageTitle}</h1>
         </header>
         <section className="settings-card" aria-labelledby="ai-training-confirmation-title">
           <h2 id="ai-training-confirmation-title">{currentCopy.title}</h2>
           <p>{currentCopy.message}</p>
           {participation.enrollments.map((enrollment) => {
-            const enrollmentCopy = (enrollment.isDynamicLearning ? dynamicStateCopy : stateCopy)[
-              enrollment.state
-            ];
+            const policyCopy = aiTrainingConsentPolicy(enrollment.offerPolicy).copy;
+            const enrollmentCopy = (
+              enrollment.isDynamicLearning ? policyCopy.dynamicStates : policyCopy.states
+            )[enrollment.state];
             return (
               <article className="settings-card" key={enrollment.enrollmentId}>
                 <h3>{enrollment.programName}</h3>
-                {enrollment.state === 'CONSENT_REQUIRED' ? (
+                {enrollment.state === 'CONSENT_REQUIRED' && enrollment.consentText ? (
                   <>
                     <p>AI利用について</p>
                     <ul>
-                      {AI_TRAINING_AI_CONSENT_TEXT.split('\n').map((line) => (
+                      {enrollment.consentText.split('\n').map((line) => (
                         <li key={line}>{line}</li>
                       ))}
                     </ul>
@@ -116,13 +84,13 @@ export default async function AiTrainingConfirmationPage({
                       <input type="hidden" name="enrollmentId" value={enrollment.enrollmentId} />
                       <label>
                         <input type="checkbox" name="accepted" value="yes" required />
-                        この研修で、外部のAIサービスを使うことに同意します
+                        {policyCopy.checkboxLabel}
                       </label>
                       <PendingSubmitButton
                         className="button button--primary"
                         pendingLabel="同意を保存しています…"
                       >
-                        同意して研修へ進む
+                        {policyCopy.submitLabel}
                       </PendingSubmitButton>
                     </form>
                   </>
@@ -134,7 +102,7 @@ export default async function AiTrainingConfirmationPage({
                         className="button button--primary"
                         href={`/s/${serviceSlug}/programs/${enrollment.enrollmentId}` as Route}
                       >
-                        研修を続ける
+                        {policyCopy.continueLabel}
                       </Link>
                     )}
                     {enrollment.consentedAt && (

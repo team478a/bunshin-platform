@@ -18,6 +18,7 @@ const f = vi.hoisted(() => ({
 vi.mock('@bunshin/config', () => ({ getServerEnvironment: () => ({ APP_ENV: 'development' }) }));
 vi.mock('@bunshin/capability-training', () => ({
   personalLearningDynamicProgramAllows: () => true,
+  personalLearningOfferPolicy: () => 'AI_SKILL_V1',
   personalLearningFeatureEnabled: (value: unknown, feature: string) =>
     (value as { personalLearningPilot?: { learningFeatures?: Record<string, boolean> } })
       .personalLearningPilot?.learningFeatures?.[feature] === true,
