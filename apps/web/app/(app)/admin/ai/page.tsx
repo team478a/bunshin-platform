@@ -1,4 +1,5 @@
 import {
+  ListUnknownAiUsageCosts,
   ListAiProviderConfigurations,
   ListOpenAiProviderRuntimeAdmissions,
 } from '@bunshin/application';
@@ -9,6 +10,7 @@ import { currentAiProviderEnvironment } from '../../../../src/ai/secure-provider
 import { currentUserProvider } from '../../../../src/auth/current-user';
 import { AiProviderConfigurationEditor } from './provider-configuration-editor';
 import { AiProviderAdmissionRecovery } from './provider-admission-recovery';
+import { AiUsageCostReconciliation } from './ai-usage-cost-reconciliation';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,9 +21,15 @@ export default async function AiProviderConfigurationPage() {
   try {
     const environment = currentAiProviderEnvironment();
     const repository = new db.PrismaAiProviderConfigurationRepository();
-    const [configurations, admissions] = await Promise.all([
+    const [configurations, admissions, unknownCosts] = await Promise.all([
       new ListAiProviderConfigurations(repository).execute(user.userId, environment),
       new ListOpenAiProviderRuntimeAdmissions(repository).execute(user.userId, environment),
+      new ListUnknownAiUsageCosts(new db.PrismaAiUsageCostReconciliationRepository()).execute({
+        actorUserId: user.userId,
+        environment,
+        provider: 'OPENAI',
+        limit: 100,
+      }),
     ]);
     return (
       <main className="app-page">
@@ -53,6 +61,12 @@ export default async function AiProviderConfigurationPage() {
           }))}
           recoveryScanTruncated={admissions.recoveryScanTruncated}
           canRecover={admissions.canRecover}
+        />
+        <AiUsageCostReconciliation
+          initialRows={unknownCosts.rows.map((row) => ({
+            ...row,
+            occurredAt: row.occurredAt.toISOString(),
+          }))}
         />
         <section className="settings-card">
           <h2>AIツールの公式更新情報</h2>
