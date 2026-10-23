@@ -170,6 +170,16 @@ describe('training personal data export isolation', () => {
           metadata: { roadmap: { milestones: [] } },
         },
         {
+          eventType: 'SIDE_HUSTLE_ROADMAP_REVISION_PROPOSED',
+          occurredAt: now,
+          metadata: { roadmap: { milestones: [] } },
+        },
+        {
+          eventType: 'SIDE_HUSTLE_ROADMAP_REVISED',
+          occurredAt: now,
+          metadata: { revisionProposalEventId: 'proposal' },
+        },
+        {
           eventType: 'SIDE_HUSTLE_STARTED',
           occurredAt: now,
           metadata: { topicId: 'topic', requestId: 'request' },
@@ -199,6 +209,8 @@ describe('training personal data export isolation', () => {
         'SIDE_HUSTLE_PROPOSAL_SAVED',
         'SIDE_HUSTLE_SELECTED',
         'SIDE_HUSTLE_ROADMAP_PROPOSED',
+        'SIDE_HUSTLE_ROADMAP_REVISION_PROPOSED',
+        'SIDE_HUSTLE_ROADMAP_REVISED',
         'SIDE_HUSTLE_STARTED',
         'SIDE_HUSTLE_CHECKIN_SAVED',
         'SIDE_HUSTLE_STAGE_ADVANCED',

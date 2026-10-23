@@ -126,9 +126,9 @@ export function buildSideHustleInitialRequest(input: {
 export function buildSideHustleRoadmapRevisionRequest(input: {
   readonly previous: PersonalLearningRequestContent;
   readonly roadmap: SideHustleRoadmapProposal;
-  readonly currentPeriod: 'MONTH_1' | 'MONTH_2' | 'MONTH_3';
+  readonly fromPeriod: SideHustleRoadmapPeriod;
 }): PersonalLearningRequestContent {
-  const monthIndex = Number(input.currentPeriod.slice(-1)) - 1;
+  const monthIndex = Number(input.fromPeriod.slice(-1)) - 1;
   const target = input.roadmap.milestones[monthIndex];
   if (!target) throw new ApplicationError('CONFLICT', 'current roadmap month is missing');
 
@@ -151,8 +151,9 @@ export function buildSideHustleRoadmapRevisionRequest(input: {
     throw new ApplicationError('CONFLICT', 'invalid side hustle roadmap lines');
 
   input.roadmap.milestones.forEach((milestone, index) => {
-    lines[mapLineIndexes[index]![0]!] =
-      `${index + 1}か月目：${milestone.title}（${milestone.outcome}）`;
+    if (index >= monthIndex)
+      lines[mapLineIndexes[index]![0]!] =
+        `${index + 1}か月目：${milestone.title}（${milestone.outcome}）`;
   });
   lines[stageIndexes[0]!] = `いまの段階：${monthIndex + 1}か月目「${target.title}」`;
   const checkpointLine = `いまの段階の目安：${target.checkpoints.join('／')}`;
@@ -166,4 +167,19 @@ export function buildSideHustleRoadmapRevisionRequest(input: {
     originalText,
     currentPosition: `${monthIndex + 1}か月目の目安：${target.checkpoints.join('／')}`,
   });
+}
+
+export function assertSideHustleRoadmapRevisionPreservesCompletedMonths(input: {
+  readonly base: SideHustleRoadmapProposal;
+  readonly revision: SideHustleRoadmapProposal;
+  readonly fromPeriod: SideHustleRoadmapPeriod;
+}): void {
+  const fromIndex = SIDE_HUSTLE_ROADMAP_PERIODS.indexOf(input.fromPeriod);
+  for (let index = 0; index < fromIndex; index += 1) {
+    if (
+      JSON.stringify(input.base.milestones[index]) !==
+      JSON.stringify(input.revision.milestones[index])
+    )
+      throw new ApplicationError('VALIDATION_ERROR', 'completed roadmap month changed');
+  }
 }
