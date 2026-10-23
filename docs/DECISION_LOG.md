@@ -4549,3 +4549,11 @@
 - VercelのbuildCommandから自動migrationを外す。適用は対象・revision・backup・Previewを確認した既存の人手承認付き手順で先に行い、未適用があればVercelは適用せず停止する。既存3件限定runnerの範囲を広げず、将来のmigrationは別途承認された適用手順を用意する。
 - db:assert-readyをPrisma Clientによる読み取り専用transactionでの検証へ強化する。全migrationの名前・SHA-256・完了状態と、生成モデルが必要とするテーブル・列・enum値を照合し、未知・欠落・失敗・重複・不一致・接続失敗はすべて拒否する。DB履歴を修正・補完しない。
 - 実行は通常runtimeと同じDATABASE_URLを参照し、Supabase poolerでは既存runtime変換と固定済み公式CAによる厳格TLSを使う。Prisma migrate status/deploy/resolveへfallbackせず、transaction・SQL・接続と子プロセス全体に期限を付け、生エラー・SQL・URL・秘密値を出力しない。
+
+## 2026-10-23: 原価未確定のAI使用量は証跡付きで段階的に精算する
+
+- 状態: Draft PRで確認待ち。本番DBの読み取り集計は実行したが、更新・削除・AI呼び出しは行っていない。
+- 当月OpenAIの原価未確定は1,569件で、成功記録にも含まれていた。失敗種別、トークン数、タスク種別から費用発生なしを推測してガードを解除しない。
+- SUPER_ADMINが課金証跡または承認済み価格表、価格版、理由を指定した場合だけ、当月・Provider・原価NULLのイベントを最大100件ずつ精算する。正の原価だけを受け付け、同じ値での再実行を冪等に許可する。
+- 自動バックフィル、0円化、原価不明の失敗記録の解放、既存fail-closedガードの緩和は行わない。migrationとschemaは追加しない。
+- 精算後のAI再開、本番POST、Provider設定変更、デプロイは田中の別承認を待つ。
