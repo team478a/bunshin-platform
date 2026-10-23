@@ -127,6 +127,7 @@ export * from './learning-router';
 export * from './ai-call-observability';
 export * from './learning-ai-provider';
 export * from './ai-cost-reconciliation';
+export * from './ai-usage-cost-reconciliation';
 export * from './personal-learning-call-admission';
 export * from './personal-learning-preparation-authority';
 export * from './personal-learning-pilot-operations';

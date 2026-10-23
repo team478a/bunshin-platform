@@ -233,6 +233,7 @@ export {
   PrismaAiUsageEventRepository,
   PrismaOrganizationAiGenerationReservationRepository,
 } from './ai-usage';
+export { PrismaAiUsageCostReconciliationRepository } from './ai-usage-cost-reconciliation';
 export { PrismaActivityContinuityRuleRepository } from './activity-continuity-rules';
 export {
   PrismaSocialActivityBarrierCaseRepository,
