@@ -55,8 +55,10 @@
 - `pnpm lint` — 成功。既存のunused eslint-disable警告がWeb lintに4件あり、エラーなし。
 - `pnpm build` — 成功。Next.js production build、TypeScript、静的ページ38件の生成を確認。
 - `pnpm test` — 全workspaceで実行。architecture 10件成功、application 145ファイル/1,026件、capability-training 39ファイル/618件、social 29ファイル/305件を含むsuiteが成功。Databaseで既存の `deployment-database-gate.test.ts` と `apply-release-20261020.test.ts` の各1件が5秒timeoutとなったため、両ファイルを個別に再実行し **39/39件成功** を確認した。したがって全workspace一括実行はtimeoutのため終了コード非0、個別再実行で対象テストの成否を補足した。
-- DB integration: fresh run `5c23a0b17fd2` の使い捨てPostgreSQL16を使用。263 migrationをこの新規DBだけに適用し、database name/comment markerのpreflight後に `pnpm --filter @bunshin/database test:integration` を実行。全267件中262件成功、5件失敗。1件は見直しテストfixtureの `typicalFlow` 件数不足で、3件は既存Personal Learning/retentionの5秒timeout、もう1件も既存expiryケースの5秒timeoutだった。fixtureを修正後、今回追加した2競合シナリオを含む見直しのmockなしDB結合ケースを、新規の使い捨てPostgreSQL16 run `8b3a91c64d2f`（263 migration適用、database name/comment marker preflight済み）で再実行し **1件成功** を確認。別に再実行した既存境界4ケースではexpiryは成功したが、internal owner、PR-4開始、personal-data exportの3ケースは5秒timeoutを再現した。全integration suiteの成功とは扱わない。
-- 現行main比較: GitHubから取得した比較対象は `origin/main` `34be4cebe4ff799e282f4fc1e8a9ce2f17769275`。別worktreeを作り、オフライン依存配置を試したが完了せず、main上で3つのtimeoutケースを再実行するところまでは到達できなかった。したがって「現行mainでも同じtimeoutが起きる」とは確認できていない。以前のtimeout結果はPRブランチ上の実行であり、main上での再現性は未確定として残す。
+- DB integration: PR-5cの2競合シナリオを含む絞り込みケースを、263 migration適用・DB marker preflight済みの使い捨てPostgreSQL16で再実行し **1件成功** を確認。続けて同じPR-5cコミット `22dd789` でintegration suite全体を実行し **267/267件成功**（156.68秒、tests 143.49秒）。タイムアウト値は変更していない。
+- timeout比較: 同じ3ケース（`internal owner` に一致する2件、PR-4開始、personal-data export）を絞り込み、各時点で実行。`16f7f5f`（PR-5a）では **4件成功 / 262件skip**（18.49秒、tests 5.30秒）、`fc49853`（PR-5bマージ後）では **4件成功 / 262件skip**（29.98秒、tests 6.32秒）、PR-5c `22dd789` では **4件成功 / 263件skip**（19.42秒、tests 5.67秒）。3ケースいずれの時点でもtimeoutは再現しなかった。`fc49853` と `16f7f5f` のPrisma schema・migrationに差分はない。
+- GitHub CI: PR head `22dd789` の `database` と `verify` は成功（Run `39896367877`）。
+- 以前の全integration実行では3件の5秒timeoutが出たが、今回の同じ基準コミット比較とPR-5c全体再実行では再現しなかった。PR-5b/5cの処理による遅延や特定の原因は確認できず、テストtimeoutを延長する変更も行っていない。
 - `git diff --check` — 成功。
 - `pnpm test` / integration中の5秒timeoutは期待値変更・skip・timeout延長で隠していない。実AI Provider・本番DB接続は行っていない。integration DB・Auth・gateway containerおよび専用networkは検証後に停止・削除済み。
 
@@ -64,7 +66,7 @@
 
 - 本番またはPilotでPR-5b形式の記録が実際に使われたかは外部証跡未取得のため未確定。利用済みだった場合の移行は本PRの範囲外。
 - 一括integration suiteは、報告した既存3ケースの5秒timeoutにより全件成功ではない。これらのtimeoutはテストまたは環境側で別途調査が必要。
-- 上記3ケースが現行mainでも同様にtimeoutするかは未確認。mainでの比較実行が必要。
+- 以前timeoutした3ケースは今回再現しなかった。過去に一時的なtimeoutが出た実行環境要因は特定できていないため、CIで再発した場合は該当runの実行ログ・並列度・runner負荷を確認する。
 - 実利用者の画面確認、本番反映、Pilot有効化は未実施。
 
 ## 6. 次へ進める条件
