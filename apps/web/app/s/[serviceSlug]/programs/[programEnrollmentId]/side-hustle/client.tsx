@@ -280,6 +280,7 @@ export default function SideHustleClient({
     | 'selection'
     | 'selected'
     | 'roadmap'
+    | 'roadmapRevision'
     | 'confirmStart'
     | 'started'
     | 'checkin'
@@ -289,6 +290,8 @@ export default function SideHustleClient({
   const [error, setError] = useState('');
   const [proposalOperationId, setProposalOperationId] = useState('');
   const [roadmapOperationId, setRoadmapOperationId] = useState('');
+  const [revisionRoadmapOperationId, setRevisionRoadmapOperationId] = useState('');
+  const [revisionConfirmOperationId, setRevisionConfirmOperationId] = useState('');
   const [startOperationId, setStartOperationId] = useState('');
   const [questionIndex, setQuestionIndex] = useState(0);
   const [followUpAnswer, setFollowUpAnswer] = useState('');
@@ -525,7 +528,7 @@ export default function SideHustleClient({
     }
   };
 
-  const createRoadmap = async (newOperationId?: string) => {
+  const createRoadmap = async (newOperationId?: string, forRevision = false) => {
     if (!state.selection) return;
     const operationId = newOperationId || roadmapOperationId || crypto.randomUUID();
     setRoadmapOperationId(operationId);
@@ -546,6 +549,7 @@ export default function SideHustleClient({
           json.error?.message ?? '地図を作れませんでした。時間をおいて、もう一度お試しください。',
         );
       setState((currentState) => ({ ...currentState, roadmap: json.data }));
+      if (forRevision) setScreen('roadmapRevision');
     } catch (cause) {
       setError(
         cause instanceof Error
@@ -585,11 +589,47 @@ export default function SideHustleClient({
         setScreen('proposal');
         return;
       }
+      if (selectedDecision === 'REVISE') {
+        const roadmapId = revisionRoadmapOperationId || crypto.randomUUID();
+        setRevisionRoadmapOperationId(roadmapId);
+        setRevisionConfirmOperationId((current) => current || crypto.randomUUID());
+        await createRoadmap(roadmapId, true);
+        return;
+      }
       setConfirmed(false);
       setCheckinOperationId('');
       await load();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '振り返りを保存できませんでした。');
+    } finally {
+      setBusy(false);
+    }
+  };
+  const confirmRoadmapRevision = async () => {
+    if (!state.started || !state.roadmap || !state.progress || !revisionConfirmOperationId) return;
+    setBusy(true);
+    setError('');
+    try {
+      const response = await fetch(api('/revision'), {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          topicId: state.started.topicId,
+          roadmapEventId: state.roadmap.id,
+          operationId: revisionConfirmOperationId,
+          confirmed: true,
+        }),
+      });
+      const json = (await response.json()) as ApiEnvelope<unknown>;
+      if (!response.ok) throw new Error(json.error?.message ?? '地図を確定できませんでした。');
+      setRevisionRoadmapOperationId('');
+      setRevisionConfirmOperationId('');
+      setCheckinOperationId('');
+      setScreen('started');
+      await load();
+      setScreen('started');
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : '地図を確定できませんでした。');
     } finally {
       setBusy(false);
     }
@@ -953,6 +993,36 @@ export default function SideHustleClient({
           </button>{' '}
           <button disabled={busy} onClick={() => void createRoadmap(crypto.randomUUID())}>
             作り直す
+          </button>
+        </section>
+      )}
+      {screen === 'roadmapRevision' && state.selection && state.roadmap && state.progress && (
+        <section>
+          <h2>見直した90日の地図を確認</h2>
+          <p>
+            いまは{Number(state.progress.period.slice(-1))}
+            か月目です。内容を確認して確定してください。
+          </p>
+          {state.roadmap.roadmap.milestones.map((item, index) => (
+            <section key={item.period}>
+              <h3>
+                {index + 1}か月目：{item.title}
+              </h3>
+              <p>{item.outcome}</p>
+              <ul>
+                {item.checkpoints.map((checkpoint) => (
+                  <li key={checkpoint}>{checkpoint}</li>
+                ))}
+              </ul>
+            </section>
+          ))}
+          <p>この地図は、収入や成果を約束するものではありません。</p>
+          {error && <p role="alert">{error}</p>}
+          <button disabled={busy} onClick={() => void confirmRoadmapRevision()}>
+            この地図で確定
+          </button>{' '}
+          <button disabled={busy} onClick={() => setScreen('started')}>
+            戻る
           </button>
         </section>
       )}

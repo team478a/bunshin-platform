@@ -5,6 +5,7 @@ import type { PersonalLearningActor } from '@bunshin/application';
 import { PrismaSideHustleHearingRepository } from '../src';
 import {
   screenSideHustleCandidates,
+  type SideHustleRoadmapProposal,
   validateSideHustleCandidateProposal,
   validateSideHustleHearing,
 } from '@bunshin/capability-training';
@@ -284,6 +285,108 @@ describe('side hustle hearing event repository', () => {
       idempotencyKey: '77777777-7777-4777-8777-777777777777',
     });
     expect(selected.candidate).toMatchObject({ name: '文章作成サポート' });
+  });
+
+  it('confirms a revised roadmap idempotently and updates the active topic snapshot', async () => {
+    const topicId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const roadmapEventId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+    const selectionEventId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+    const topic: { id: string; goalSnapshot: Record<string, unknown> } = {
+      id: topicId,
+      goalSnapshot: { kind: 'SIDE_HUSTLE', selectionEventId, roadmapEventId: 'old' },
+    };
+    const roadmap: SideHustleRoadmapProposal = {
+      reason: '今の条件に合わせて整理しました。',
+      milestones: (['MONTH_1', 'MONTH_2', 'MONTH_3'] as const).map((period, index) => ({
+        period,
+        title: `新しい${index + 1}か月目`,
+        outcome: '小さく試して記録します。',
+        checkpoints: ['準備する'],
+        weeklyHours: 3,
+      })),
+    };
+    const content = {
+      originalText: [
+        '90日の地図（本人が確認済み）：',
+        '1か月目：旧1',
+        '2か月目：旧2',
+        '3か月目：旧3',
+        'いまの段階：1か月目「旧1」',
+        'いまの段階の目安：旧目安',
+      ].join('\n'),
+      deviceType: null,
+      toolDescription: null,
+      experienceDescription: null,
+      currentPosition: '2か月目の目安：次に試す',
+    };
+    const requestRows: Record<string, unknown>[] = [];
+    const tx = {
+      programEnrollment: { findFirst: () => Promise.resolve({ serviceProgramId: 'program' }) },
+      serviceProgram: {
+        findFirst: () => Promise.resolve({ settings: { learningOfferPolicy: 'SIDE_HUSTLE_V1' } }),
+      },
+      personalLearningTopic: {
+        findFirst: () => Promise.resolve(topic),
+        update: vi.fn(({ data }: { data: { goalSnapshot: Record<string, unknown> } }) => {
+          topic.goalSnapshot = data.goalSnapshot;
+          return Promise.resolve(topic);
+        }),
+      },
+      programActionEvent: {
+        findFirst: ({ where }: { where: Record<string, unknown> }) =>
+          Promise.resolve(
+            where['eventType'] === 'SIDE_HUSTLE_STAGE_ADVANCED'
+              ? null
+              : { id: roadmapEventId, metadata: { selectionEventId } },
+          ),
+      },
+      personalLearningRequest: {
+        findFirst: ({ where }: { where: Record<string, unknown> }) =>
+          Promise.resolve(
+            requestRows.find((row) =>
+              Object.entries(where).every(([key, value]) => row[key] === value),
+            ) ?? null,
+          ),
+        create: ({ data }: { data: Record<string, unknown> }) => {
+          const row = { ...data, id: 'request-1', createdAt: new Date('2026-10-22T00:00:00Z') };
+          requestRows.push(row);
+          return Promise.resolve(row);
+        },
+      },
+    };
+    class RevisionRepository extends PrismaSideHustleHearingRepository {
+      constructor() {
+        super({} as never);
+      }
+      protected override authorized<T>(
+        _actor: PersonalLearningActor,
+        _write: boolean,
+        work: (client: Prisma.TransactionClient, now: Date) => Promise<T>,
+      ) {
+        return work(tx as unknown as Prisma.TransactionClient, new Date('2026-10-22T00:00:00Z'));
+      }
+      protected override normalLearner() {
+        return Promise.resolve();
+      }
+    }
+    const repo = new RevisionRepository();
+    const input = {
+      actorUserId: actor.scope.userId,
+      scope: actor.scope,
+      topicId,
+      expectedRevision: 0,
+      content,
+      idempotencyKey: 'side_hustle_map_revision_66666666-6666-4666-8666-666666666666',
+      roadmapEventId,
+      roadmap,
+      currentPeriod: 'MONTH_1' as const,
+    };
+    const first = await repo.saveRoadmapRevision(input);
+    const retry = await repo.saveRoadmapRevision(input);
+    expect(retry.id).toBe(first.id);
+    expect(requestRows).toHaveLength(1);
+    expect(tx.personalLearningTopic.update).toHaveBeenCalledTimes(2);
+    expect(topic.goalSnapshot).toMatchObject({ roadmapEventId, roadmap });
   });
 
   it('uses NOT_FOUND for a non-side-hustle Program', async () => {
