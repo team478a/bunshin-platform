@@ -3,6 +3,10 @@ import { readFileSync } from 'node:fs';
 
 const fake = vi.hoisted(() => ({
   programs: vi.fn(),
+  enrollments: vi.fn(),
+  membership: vi.fn(),
+  consent: vi.fn(),
+  generate: vi.fn(),
   environment: {
     APP_ENV: 'production',
     CRON_SECRET: 'n'.repeat(32),
@@ -10,7 +14,17 @@ const fake = vi.hoisted(() => ({
   },
 }));
 vi.mock('@bunshin/config', () => ({ getServerEnvironment: () => fake.environment }));
-vi.mock('@bunshin/database', () => ({ prisma: { serviceProgram: { findMany: fake.programs } } }));
+vi.mock('@bunshin/database', () => ({
+  prisma: {
+    serviceProgram: { findMany: fake.programs },
+    programEnrollment: { findMany: fake.enrollments },
+    groupMembership: { findFirst: fake.membership },
+    aiTrainingUsageConsent: { findFirst: fake.consent },
+  },
+}));
+vi.mock('../src/services/personal-learning-nudge-ai', () => ({
+  generatePersonalLearningNudgeCopy: fake.generate,
+}));
 
 import { personalLearningNudgesCronResponse } from '../src/http/personal-learning-nudges-cron';
 
@@ -40,6 +54,52 @@ describe('N-1 fixed LINE learning nudges cron', () => {
     const response = await personalLearningNudgesCronResponse(request());
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ outcome: 'COMPLETED', scanned: 0, sent: 0 });
+  });
+
+  it('skips an invalid offer policy before consent lookup or AI generation', async () => {
+    const enrollmentId = '00000000-0000-4000-8000-000000000001';
+    fake.programs.mockResolvedValue([
+      {
+        id: 'program',
+        workspaceId: 'workspace',
+        groupId: 'group',
+        settings: {
+          moduleKey: 'AI_TRAINING_V1',
+          learningOfferPolicy: 'UNKNOWN_POLICY',
+          personalLearningPilot: {
+            enabled: true,
+            enrollmentIds: [enrollmentId],
+            learningMode: 'DYNAMIC_V1',
+            learningFeatures: {
+              conversation: true,
+              multiTopic: false,
+              lineLearning: true,
+              extendedScope: false,
+              learningNudges: true,
+              toolUpdates: false,
+            },
+          },
+        },
+      },
+    ]);
+    fake.enrollments.mockResolvedValue([
+      {
+        id: enrollmentId,
+        workspaceId: 'workspace',
+        groupId: 'group',
+        groupMembershipId: 'membership',
+        serviceProgramId: 'program',
+        startsAt: new Date('2026-10-01T00:00:00.000Z'),
+      },
+    ]);
+    fake.membership.mockResolvedValue({ id: 'membership', userId: 'user' });
+
+    const response = await personalLearningNudgesCronResponse(request());
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ scanned: 1, sent: 0, skipped: 1 });
+    expect(fake.consent).not.toHaveBeenCalled();
+    expect(fake.generate).not.toHaveBeenCalled();
   });
 
   it('keeps N-1 fixed copy as the fallback when the N-2 AI attempt is unavailable', () => {

@@ -23,6 +23,10 @@ const trainingPage = readFileSync(
   new URL('../app/s/[serviceSlug]/training/page.tsx', import.meta.url),
   'utf8',
 );
+const trainingConsentPolicy = readFileSync(
+  new URL('../src/services/ai-training-consent-policy.ts', import.meta.url),
+  'utf8',
+);
 const practiceCard = readFileSync(
   new URL(
     '../app/s/[serviceSlug]/programs/[programEnrollmentId]/learning-request/practice-card.tsx',
@@ -142,15 +146,15 @@ describe('Manaberu dynamic learning UI', () => {
     expect(trainingPage).not.toContain("serviceSlug === 'manaberu-style'");
     expect(programPage).toContain("personalLearningMode(program.settings) === 'DYNAMIC_V1'");
     expect(programPage).not.toContain("service.configuration.slug === 'manaberu-style'");
-    expect(trainingPage).toContain('研修への参加手続きと参加枠を準備しています');
-    expect(trainingPage).toContain('参加枠が準備できるまで、AIを使った学習は始まりません');
+    expect(trainingConsentPolicy).toContain('研修への参加手続きと参加枠を準備しています');
+    expect(trainingConsentPolicy).toContain('参加枠が準備できるまで、AIを使った学習は始まりません');
     expect(practiceCard).toContain('あなたが報告してくれた内容です。');
     expect(conversationCard).toContain(
       '学習を手伝うための返答です。達成や合格を決めるものではありません。',
     );
     expect(candidateCard).toContain('この練習の内容を確認してください。');
     expect(candidateCard).toContain('教材版 ${candidate.materialVersion}');
-    expect(trainingPage).toContain('この研修で、外部のAIサービスを使うことに同意します');
+    expect(trainingConsentPolicy).toContain('この研修で、外部のAIサービスを使うことに同意します');
     expect(AI_TRAINING_AI_CONSENT_VERSION).toBe('AI_TRAINING_EXTERNAL_AI_V3');
     expect(AI_TRAINING_AI_CONSENT_TEXT).toContain('この同意は、この研修への参加に対するものです');
     expect(AI_TRAINING_AI_CONSENT_TEXT).not.toContain('Enrollment');

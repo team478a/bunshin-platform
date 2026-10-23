@@ -13,20 +13,16 @@ import { ApplicationError } from '@bunshin/shared';
 import {
   personalLearningDynamicProgramAllows,
   personalLearningFeatureEnabled,
+  personalLearningOfferPolicy,
 } from '@bunshin/capability-training';
 import { AesGcmLineSecretCrypto, currentLineEnvironment } from './secure-configuration';
 import { GroupParticipationService } from '@bunshin/application';
 import { groupInvitationTokenHash } from '../http/group-invitations';
-import {
-  AI_TRAINING_AI_CONSENT_VERSION,
-  AI_TRAINING_AI_CONSENT_TEXT,
-} from '../services/ai-training-consent';
+import { aiTrainingConsentPolicy } from '../services/ai-training-consent-policy';
 import {
   parsePersonalLearningNudgeLineAction,
   type PersonalLearningNudgeLineAction,
 } from './personal-learning-nudge-actions';
-
-const aiConsentDigest = createHash('sha256').update(AI_TRAINING_AI_CONSENT_TEXT).digest('hex');
 
 const webhookBody = z
   .object({
@@ -289,12 +285,14 @@ export class PrismaGroupLineLearningInbox implements GroupLineLearningInboxPort 
             })
           : null;
         const settings = program?.settings;
+        const offerPolicy = personalLearningOfferPolicy(settings);
+        const consentPolicy = offerPolicy ? aiTrainingConsentPolicy(offerPolicy) : null;
         const lineLearning = personalLearningFeatureEnabled(settings, 'lineLearning');
         const dynamicEnabled = enrollment
           ? personalLearningDynamicProgramAllows(settings, enrollment.id)
           : false;
         const consent =
-          enrollment && connection
+          enrollment && connection && consentPolicy
             ? await tx.aiTrainingUsageConsent.findFirst({
                 where: {
                   workspaceId: input.workspaceId,
@@ -302,8 +300,8 @@ export class PrismaGroupLineLearningInbox implements GroupLineLearningInboxPort 
                   programEnrollmentId: enrollment.id,
                   groupMembershipId: connection.groupMembershipId,
                   userId: connection.userId,
-                  consentVersion: AI_TRAINING_AI_CONSENT_VERSION,
-                  textDigest: aiConsentDigest,
+                  consentVersion: consentPolicy.version,
+                  textDigest: createHash('sha256').update(consentPolicy.text).digest('hex'),
                 },
                 select: { id: true },
               })
@@ -481,8 +479,10 @@ export class PrismaGroupLineNudgeAction implements GroupLineNudgeActionPort {
               select: { settings: true },
             })
           : null;
+        const offerPolicy = personalLearningOfferPolicy(program?.settings);
+        const consentPolicy = offerPolicy ? aiTrainingConsentPolicy(offerPolicy) : null;
         const consent =
-          connection && enrollment
+          connection && enrollment && consentPolicy
             ? await tx.aiTrainingUsageConsent.findFirst({
                 where: {
                   workspaceId: input.workspaceId,
@@ -490,8 +490,8 @@ export class PrismaGroupLineNudgeAction implements GroupLineNudgeActionPort {
                   programEnrollmentId: enrollment.id,
                   groupMembershipId: connection.groupMembershipId,
                   userId: connection.userId,
-                  consentVersion: AI_TRAINING_AI_CONSENT_VERSION,
-                  textDigest: aiConsentDigest,
+                  consentVersion: consentPolicy.version,
+                  textDigest: createHash('sha256').update(consentPolicy.text).digest('hex'),
                 },
                 select: { consentedAt: true },
               })
@@ -500,6 +500,7 @@ export class PrismaGroupLineNudgeAction implements GroupLineNudgeActionPort {
           connection &&
           enrollment &&
           program &&
+          consentPolicy &&
           consent &&
           personalLearningDynamicProgramAllows(program.settings, enrollment.id)
         ) {
@@ -529,7 +530,7 @@ export class PrismaGroupLineNudgeAction implements GroupLineNudgeActionPort {
             await updatePersonalLearningNudgePreferenceInTransaction(tx, actor, {
               action,
               now,
-              consentVersion: AI_TRAINING_AI_CONSENT_VERSION,
+              consentVersion: consentPolicy.version,
               consentedAt: consent.consentedAt,
               idempotencyKey: `learning-nudge-line:${input.configurationId}:${event.providerEventId}`,
               channel: 'LINE',

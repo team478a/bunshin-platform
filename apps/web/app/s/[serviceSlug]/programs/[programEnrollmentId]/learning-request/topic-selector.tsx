@@ -8,11 +8,13 @@ export function LearningTopicSelector({
   pagePath,
   topics,
   selectedTopicId,
+  allowCreate = true,
 }: {
   endpoint: string;
   pagePath: string;
   topics: Topic[];
   selectedTopicId?: string | undefined;
+  allowCreate?: boolean;
 }) {
   const [title, setTitle] = useState('');
   const [pending, setPending] = useState(false);
@@ -57,14 +59,22 @@ export function LearningTopicSelector({
           ))}
         </ul>
       )}
-      <label>
-        {topics.length ? '別のテーマを追加' : '最初のテーマ'}
-        <input maxLength={160} value={title} onChange={(event) => setTitle(event.target.value)} />
-      </label>
-      <button disabled={pending || !title.trim()} onClick={() => void create()} type="button">
-        {pending ? '作成中…' : 'テーマを作成'}
-      </button>
-      <p role="status">{error}</p>
+      {allowCreate && (
+        <>
+          <label>
+            {topics.length ? '別のテーマを追加' : '最初のテーマ'}
+            <input
+              maxLength={160}
+              value={title}
+              onChange={(event) => setTitle(event.target.value)}
+            />
+          </label>
+          <button disabled={pending || !title.trim()} onClick={() => void create()} type="button">
+            {pending ? '作成中…' : 'テーマを作成'}
+          </button>
+          <p role="status">{error}</p>
+        </>
+      )}
     </section>
   );
 }

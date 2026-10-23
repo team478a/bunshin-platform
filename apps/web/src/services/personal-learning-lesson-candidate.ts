@@ -15,7 +15,7 @@ import {
 import { personalLearningPricingRegistry } from '../observability/personal-learning-ai-call';
 import { generateLearningLesson, learningLessonBody } from '../providers/openai-learning-lesson';
 import { learningProposalPolicy } from '../providers/learning-proposal-policy';
-import { resolvePersonalLearningExtendedScope } from './personal-learning-extended-scope';
+import { resolvePersonalLearningOfferContext } from './personal-learning-extended-scope';
 import { loadPersonalLearningToolFeatureContext } from './personal-learning-tool-feature-context';
 
 export async function prepareLearningLesson(
@@ -58,8 +58,8 @@ export async function prepareLearningLesson(
     occurredAt: new Date(),
   });
   if (!reservation) throw new ApplicationError('CONFIGURATION_ERROR', 'lesson price unavailable');
-  const extendedScope = await resolvePersonalLearningExtendedScope(actor);
-  const proposalPolicy = learningProposalPolicy(extendedScope);
+  const { offerPolicy, extendedScope } = await resolvePersonalLearningOfferContext(actor);
+  const proposalPolicy = learningProposalPolicy(extendedScope, offerPolicy);
   const personaContext = await new db.PrismaPersonalLearningPersonaRepository(db.prisma).listForAi(
     actor.scope,
   );
@@ -71,6 +71,7 @@ export async function prepareLearningLesson(
     extendedScope,
     personaContext,
     toolFeatureContext,
+    offerPolicy,
   ); // Validate byte limit before admission.
   let providerAdmission: LearningAiRuntimeConfiguration | null = null;
   let usageKey = '';

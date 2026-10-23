@@ -6,6 +6,9 @@ import {
   personalLearningDynamicProgramAllows,
   personalLearningFeatureEnabled,
   AI_TRAINING_LEARNING_DEFINITION_FIXTURES,
+  validateSideHustleCandidateProposal,
+  validateSideHustleRoadmapProposal,
+  screenSideHustleCandidates,
 } from '@bunshin/capability-training';
 import {
   PrismaPersonalLearningPersonaRepository,
@@ -13,12 +16,14 @@ import {
   PrismaPersonalLearningTopicRepository,
 } from '../src/personal-learning-d';
 import { PrismaPersonalLearningRequestRepository } from '../src/personal-learning-request';
+import { PrismaSideHustleHearingRepository } from '../src/side-hustle-hearing';
 import { PrismaPersonalLearningConversationRepository } from '../src/personal-learning-conversation';
 import { PrismaPersonalLearningPersistenceRepository } from '../src/personal-learning-persistence';
 import { PrismaTrainingPersonalDataExportRepository } from '../src/training-personal-data-export';
 import { PrismaTrainingPersonalDataDeletionRepository } from '../src/training-personal-data-deletion';
 import { PrismaTrainingRetentionExecutionRepository } from '../src/training-retention-execution';
 import { PrismaTrainingRetentionCronRepository } from '../src/training-retention-cron';
+import { PrismaTrainingAnswerRepository } from '../src/training-answer';
 import {
   PrismaPersonalLearningNudgePreferenceRepository,
   updatePersonalLearningNudgePreferenceInTransaction,
@@ -51,6 +56,7 @@ export function registerPersonalLearningDIntegrationCases(client: PrismaClient) 
         multiTopic?: boolean;
         learningMode?: 'DYNAMIC_V1' | 'FIXED_DEFINITIONS_V1';
         workspaceId?: string;
+        offerPolicy?: 'SIDE_HUSTLE_V1';
       } = {},
     ) {
       const multiTopic = options.multiTopic ?? true;
@@ -158,6 +164,7 @@ export function registerPersonalLearningDIntegrationCases(client: PrismaClient) 
         data: {
           settings: {
             moduleKey: 'AI_TRAINING_V1',
+            ...(options.offerPolicy ? { learningOfferPolicy: options.offerPolicy } : {}),
             trainingOperations: {
               notificationsEnabled: false,
               postponedReminderEnabled: false,
@@ -197,6 +204,9 @@ export function registerPersonalLearningDIntegrationCases(client: PrismaClient) 
         },
       });
       cleanup.push(async () => {
+        await client.aiUsageEvent.deleteMany({
+          where: { workspaceId: workspace.id, actorUserId: user.id },
+        });
         await client.groupMembership.deleteMany({ where: { groupId: group.id } });
         await client.group.deleteMany({ where: { id: group.id } });
         if (!options.workspaceId)
@@ -1534,6 +1544,557 @@ export function registerPersonalLearningDIntegrationCases(client: PrismaClient) 
           idempotencyKey: randomUUID(),
         }),
       ).rejects.toThrow();
+    });
+
+    it('saves a validated roadmap, reads it, starts the side hustle, and reads its initial wish without mocks', async () => {
+      const f = await serviceFixture('PR-4 roadmap start', { offerPolicy: 'SIDE_HUSTLE_V1' });
+      const actor = { actorUserId: f.user.id, scope: f.scope };
+      const repository = new PrismaSideHustleHearingRepository(client);
+      const hearing = {
+        conditions: {
+          initialBudget: null,
+          monthlyBudget: null,
+          weeklyHours: 5,
+          faceExposure: null,
+          snsPosting: null,
+          clientInteraction: null,
+          salesOutreach: null,
+          inventory: null,
+          device: 'PC' as const,
+        },
+        freeText: {
+          goal: '得意なことを活かしたい',
+          experience: '文章を書く経験',
+          interest: null,
+          constraint: null,
+        },
+        followUps: [],
+      };
+      const savedHearing = await repository.saveHearing({
+        actor,
+        hearing,
+        expectedRevision: 0,
+        lastAnsweredQuestionIndex: 13,
+        idempotencyKey: randomUUID(),
+      });
+      const candidate = {
+        name: '文章作成サポート',
+        category: 'SKILL_SERVICE',
+        summary: '依頼を受けて読みやすい文章を作る仕事です。',
+        monetization: '依頼内容に応じて報酬を受け取ります。',
+        fitReasons: [{ text: '経験を活かせます。', basedOn: ['experience'] }],
+        initialCost: 'NONE',
+        monthlyCost: 'NONE',
+        weeklyHoursMin: 3,
+        difficulty: 1,
+        requiredSkills: ['文章作成'],
+        workStyle: {
+          faceExposure: 'NONE',
+          snsPosting: 'NONE',
+          clientInteraction: 'REQUIRED',
+          salesOutreach: 'OPTIONAL',
+          inventory: 'NONE',
+          device: 'PC_REQUIRED',
+        },
+        typicalFlow: ['見本を作る', '小さな依頼を探す', '文章を納品する'],
+        risks: ['依頼内容を確認します。'],
+        requirements: [{ kind: 'PLATFORM_TERMS', text: '利用サービスの規約を確認します。' }],
+      };
+      const candidateProposal = validateSideHustleCandidateProposal({
+        status: 'READY',
+        reason: '条件をもとに候補を整理しました。',
+        questions: [],
+        candidates: [candidate],
+      });
+      const proposalUsageKey = `personal-learning-operation:${'a'.repeat(64)}`;
+      await client.aiUsageEvent.create({
+        data: {
+          workspaceId: f.scope.workspaceId,
+          actorUserId: f.user.id,
+          bunshinId: null,
+          taskType: 'PERSONAL_LEARNING_SIDE_HUSTLE_PROPOSAL',
+          provider: 'openai',
+          model: 'gpt-5.2',
+          promptVersion: 'side-hustle-candidates-v1',
+          status: 'SUCCESS',
+          inputTokens: 1,
+          outputTokens: 1,
+          latencyMs: 10,
+          estimatedCostUsdMicros: 1n,
+          idempotencyKey: proposalUsageKey,
+          occurredAt: now,
+        },
+      });
+      const screening = screenSideHustleCandidates(
+        hearing.conditions,
+        candidateProposal.candidates,
+      );
+      const savedProposal = await repository.saveProposal({
+        actor,
+        hearingEventId: savedHearing.id,
+        hearingRevision: savedHearing.revision,
+        proposal: candidateProposal,
+        screening,
+        promptVersion: 'side-hustle-candidates-v1',
+        usageKey: proposalUsageKey,
+      });
+      const selection = await repository.select({
+        actor,
+        proposalEventId: savedProposal.id,
+        candidateIndex: 0,
+        idempotencyKey: randomUUID(),
+      });
+      const roadmap = validateSideHustleRoadmapProposal(
+        {
+          reason: '準備から少しずつ進めます。',
+          milestones: [
+            {
+              period: 'MONTH_1',
+              title: '準備する',
+              outcome: '必要な情報を整理できている',
+              checkpoints: ['公式情報を確認する'],
+              weeklyHours: 2,
+            },
+            {
+              period: 'MONTH_2',
+              title: '試してみる',
+              outcome: '小さな実践を記録している',
+              checkpoints: ['自分で試す'],
+              weeklyHours: 3,
+            },
+            {
+              period: 'MONTH_3',
+              title: '続け方を整える',
+              outcome: '続け方を振り返っている',
+              checkpoints: ['記録を振り返る'],
+              weeklyHours: 3,
+            },
+          ],
+        },
+        { weeklyHours: 5 },
+      );
+      const roadmapUsageKey = `personal-learning-operation:${'b'.repeat(64)}`;
+      await client.aiUsageEvent.create({
+        data: {
+          workspaceId: f.scope.workspaceId,
+          actorUserId: f.user.id,
+          bunshinId: null,
+          taskType: 'PERSONAL_LEARNING_SIDE_HUSTLE_ROADMAP',
+          provider: 'openai',
+          model: 'gpt-5.2',
+          promptVersion: 'side-hustle-roadmap-v1',
+          status: 'SUCCESS',
+          inputTokens: 1,
+          outputTokens: 1,
+          latencyMs: 10,
+          estimatedCostUsdMicros: 1n,
+          idempotencyKey: roadmapUsageKey,
+          occurredAt: now,
+        },
+      });
+      const savedRoadmap = await repository.saveRoadmap({
+        actor,
+        selectionEventId: selection.id,
+        roadmap,
+        promptVersion: 'side-hustle-roadmap-v1',
+        usageKey: roadmapUsageKey,
+        idempotencyKey: randomUUID(),
+      });
+      expect((await repository.readState(actor)).roadmap?.roadmap).toEqual(savedRoadmap.roadmap);
+      const started = await repository.start({
+        actor,
+        selectionEventId: selection.id,
+        roadmapEventId: savedRoadmap.id,
+        idempotencyKey: randomUUID(),
+      });
+      const topicCountAfterStart = await client.personalLearningTopic.count({ where: f.scope });
+      const requestCountAfterStart = await client.personalLearningRequest.count({ where: f.scope });
+      const retriedStart = await repository.start({
+        actor,
+        selectionEventId: selection.id,
+        roadmapEventId: savedRoadmap.id,
+        idempotencyKey: randomUUID(),
+      });
+      expect(retriedStart).toMatchObject({
+        id: started.id,
+        topicId: started.topicId,
+        requestId: started.requestId,
+      });
+      expect(await client.personalLearningTopic.count({ where: f.scope })).toBe(
+        topicCountAfterStart,
+      );
+      expect(await client.personalLearningRequest.count({ where: f.scope })).toBe(
+        requestCountAfterStart,
+      );
+      expect(
+        (await client.personalLearningTopic.findUnique({ where: { id: started.topicId } }))?.status,
+      ).toBe('ACTIVE');
+      const startedState = await repository.readState(actor);
+      expect(startedState.started).toMatchObject({
+        topicId: started.topicId,
+        requestId: started.requestId,
+        roadmapEventId: savedRoadmap.id,
+      });
+      const request = await new PrismaPersonalLearningRequestRepository(client).readRequest({
+        ...actor,
+        topicId: started.topicId,
+      });
+      expect(request).toMatchObject({
+        id: started.requestId,
+        revision: 1,
+        deviceType: 'PC',
+        toolDescription: null,
+      });
+      expect(request?.originalText).toContain('90日の地図（本人が確認済み）：');
+      const topic = await client.personalLearningTopic.findFirst({
+        where: { ...f.scope, id: started.topicId },
+      });
+      expect(topic).toMatchObject({
+        title: candidate.name,
+        sourceRequestId: started.requestId,
+        status: 'ACTIVE',
+      });
+      expect(topic?.goalSnapshot).toMatchObject({
+        kind: 'SIDE_HUSTLE',
+        selectionEventId: selection.id,
+        roadmapEventId: savedRoadmap.id,
+        currentPeriod: 'MONTH_1',
+      });
+
+      // Build two real, topic-linked reviewed practice records using the same DB relations as the learner flow.
+      const practiceAssignmentIds: string[] = [];
+      const progressGoal = await client.programMemberGoal.create({
+        data: {
+          workspaceId: f.scope.workspaceId,
+          groupId: f.scope.groupId,
+          programEnrollmentId: f.scope.programEnrollmentId,
+          groupMembershipId: f.scope.groupMembershipId,
+          topicId: started.topicId,
+          title: 'Progress goal',
+          metricType: 'ACTION',
+          targetValue: 1,
+          currentValue: 0,
+          unit: 'practice',
+          startsAt: now,
+          createdByUserId: f.user.id,
+          updatedByUserId: f.user.id,
+        },
+      });
+      await client.personalLearningGoalConfirmation.create({
+        data: {
+          ...f.scope,
+          userId: f.user.id,
+          programMemberGoalId: progressGoal.id,
+          topicId: started.topicId,
+          packageKey: 'AI_TRAINING',
+          goalKey: 'SIDE_HUSTLE_PROGRESS',
+          semanticVersion: 'V1',
+          consultationRuleVersion: 'V1',
+          scopeRuleVersion: 'V1',
+          confirmedAt: now,
+        },
+      });
+      async function recordPractice(
+        index: number,
+        options: {
+          reviewState?: 'CURRENT_STEP_EVIDENCE' | 'SELF_REPORT_ONLY';
+          evaluationStatus?: 'READY' | 'PENDING';
+          occurredAt?: Date;
+        } = {},
+      ) {
+        const planId = randomUUID();
+        await client.personalLearningPlanRevision.create({
+          data: {
+            ...f.scope,
+            userId: f.user.id,
+            topicId: started.topicId,
+            planId,
+            revision: 1,
+            previousRevision: null,
+            revisionReason: 'INITIAL',
+            programMemberGoalId: progressGoal.id,
+            contractVersion: 'PERSONAL_LEARNING_PLAN_V1',
+            ruleVersion: 'V1',
+            status: 'CONFIRMED',
+            steps: JSON.parse(
+              JSON.stringify(
+                AI_TRAINING_LEARNING_DEFINITION_FIXTURES.map((definition) => ({
+                  definition: definition.reference,
+                  prerequisites: definition.prerequisites,
+                  selectionReason: 'GOAL_ALIGNMENT',
+                })),
+              ),
+            ) as Prisma.InputJsonValue,
+            confirmedAt: now,
+          },
+        });
+        const assignmentId = randomUUID();
+        practiceAssignmentIds.push(assignmentId);
+        const candidateId = randomUUID();
+        await client.programMissionAssignment.create({
+          data: {
+            id: assignmentId,
+            workspaceId: f.scope.workspaceId,
+            groupId: f.scope.groupId,
+            programEnrollmentId: f.scope.programEnrollmentId,
+            programTemplateVersionId: f.program.programTemplateVersionId,
+            sequence: 100 + index,
+            routeKey: 'PERSONAL_LEARNING',
+            phaseKey: 'SIDE_HUSTLE',
+            missionDefinitionKey: 'PERSONAL_LEARNING_DYNAMIC_PRACTICE',
+            actionMode: 'WORK',
+            targetResourceType: 'PERSONAL_LEARNING_PLAN',
+            targetResourceId: planId,
+            status: 'STARTED',
+            displaySnapshot: {
+              dynamicPractice: {
+                version: 'PERSONAL_LEARNING_PRACTICE_V1',
+                topicId: started.topicId,
+                planId,
+                planRevision: 1,
+                goalId: progressGoal.id,
+                scope: f.scope,
+                candidate: { id: candidateId, materialVersion: 1 },
+              },
+            },
+            ruleVersion: 'PERSONAL_LEARNING_PRACTICE_V1',
+            presentedAt: now,
+            startedAt: now,
+          },
+        });
+        const occurredAt = options.occurredAt ?? new Date(Date.now() + index + 1);
+        const answerResult = await new PrismaTrainingAnswerRepository(client).submit({
+          workspaceId: f.scope.workspaceId,
+          groupId: f.scope.groupId,
+          actorUserId: f.user.id,
+          programEnrollmentId: f.scope.programEnrollmentId,
+          missionAssignmentId: assignmentId,
+          answer: '確認できた実践',
+          practiceEvidence: {
+            kind: 'TEXT',
+            content: '確認できた実践',
+            expectedRevision: 0,
+            candidateId,
+            materialVersion: 1,
+          },
+          idempotencyKey: randomUUID(),
+          occurredAt,
+        });
+        if (answerResult.outcome !== 'SUBMITTED')
+          throw new Error('practice evidence was not submitted');
+        await client.trainingMissionAnswer.update({
+          where: { id: answerResult.answer.id },
+          data: {
+            evaluationStatus: options.evaluationStatus ?? 'READY',
+            evaluation: {
+              schemaVersion: 'PERSONAL_LEARNING_EVIDENCE_REVIEW_V1',
+              review: {
+                state: options.reviewState ?? 'CURRENT_STEP_EVIDENCE',
+                observed: ['確認済み'],
+                notEstablished: [],
+                feedback: '確認できました。',
+                nextAction: '続けてください。',
+              },
+            },
+            evaluatedAt: new Date(),
+          },
+        });
+      }
+      for (const index of [0, 1]) await recordPractice(index);
+      await recordPractice(2, { reviewState: 'SELF_REPORT_ONLY' });
+      await recordPractice(3, { evaluationStatus: 'PENDING' });
+      const progress = await repository.readProgress(actor, started.topicId);
+      expect(progress).toMatchObject({
+        period: 'MONTH_1',
+        verifiedPracticeCount: 2,
+        eligibility: { suggested: true, canAdvance: true, reason: 'ENOUGH_PRACTICE' },
+      });
+      const checkin = {
+        topicId: started.topicId,
+        period: 'MONTH_1' as const,
+        checkpointResults: ['PARTLY' as const],
+        feeling: 'OK' as const,
+        note: '少しずつ試せました',
+        decision: 'ADVANCE' as const,
+      };
+      const checkinOperationId = randomUUID();
+      const advanced = await repository.saveCheckin({
+        actor,
+        operationId: checkinOperationId,
+        checkin,
+      });
+      expect(advanced.period).toBe('MONTH_2');
+      const requestAfterAdvance = await client.personalLearningRequest.findFirstOrThrow({
+        where: { ...f.scope, topicId: started.topicId },
+        orderBy: { revision: 'desc' },
+      });
+      expect(requestAfterAdvance).toMatchObject({ revision: 2 });
+      expect(requestAfterAdvance.originalText).toContain('いまの段階：2か月目「試してみる」');
+      expect(requestAfterAdvance.originalText).toContain('いまの段階の目安：自分で試す');
+      expect(
+        await client.programMissionAssignment.findMany({
+          where: { id: { in: practiceAssignmentIds } },
+          select: { status: true },
+        }),
+      ).toEqual(practiceAssignmentIds.map(() => ({ status: 'STARTED' })));
+      const duplicateAdvance = await repository.saveCheckin({
+        actor,
+        operationId: randomUUID(),
+        checkin,
+      });
+      expect(duplicateAdvance).toMatchObject({ period: 'MONTH_2', replayed: true });
+      expect(
+        await client.personalLearningRequest.count({
+          where: { ...f.scope, topicId: started.topicId },
+        }),
+      ).toBe(2);
+      expect(
+        await client.programActionEvent.count({
+          where: {
+            workspaceId: f.scope.workspaceId,
+            groupId: f.scope.groupId,
+            programEnrollmentId: f.scope.programEnrollmentId,
+            eventType: 'SIDE_HUSTLE_STAGE_ADVANCED',
+          },
+        }),
+      ).toBe(1);
+
+      // Race a next-practice wish append against stage advancement. Exactly one initial writer
+      // must conflict on the captured request revision; a retry must preserve both additions.
+      expect((await repository.readProgress(actor, started.topicId)).verifiedPracticeCount).toBe(0);
+      await recordPractice(5);
+      const monthTwoCheckin = {
+        ...checkin,
+        period: 'MONTH_2' as const,
+        checkpointResults: ['DONE' as const],
+      };
+      const requestRepository = new PrismaPersonalLearningRequestRepository(client);
+      const currentRequest = await requestRepository.readRequest({
+        ...actor,
+        topicId: started.topicId,
+      });
+      if (!currentRequest) throw new Error('started request missing');
+      const nextPracticeWish = {
+        originalText: `${currentRequest.originalText}\n結果に応じた次の実践：短い案内文も試す`,
+        deviceType: currentRequest.deviceType,
+        toolDescription: currentRequest.toolDescription,
+        experienceDescription: currentRequest.experienceDescription,
+        currentPosition: '結果に応じた次の実践を準備する',
+      };
+      const race = await Promise.allSettled([
+        repository.saveCheckin({ actor, operationId: randomUUID(), checkin: monthTwoCheckin }),
+        requestRepository.saveRequest({
+          actorUserId: actor.actorUserId,
+          scope: actor.scope,
+          topicId: started.topicId,
+          expectedRevision: currentRequest.revision,
+          idempotencyKey: randomUUID(),
+          content: nextPracticeWish,
+        }),
+      ]);
+      expect(race.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+      expect(race.filter((result) => result.status === 'rejected')).toHaveLength(1);
+      if (race[0]?.status === 'rejected') {
+        expect(race[0].reason).toMatchObject({ code: 'CONFLICT' });
+        await repository.saveCheckin({
+          actor,
+          operationId: randomUUID(),
+          checkin: monthTwoCheckin,
+        });
+      } else if (race[1]?.status === 'rejected') {
+        expect(race[1].reason).toMatchObject({ code: 'CONFLICT' });
+      }
+      const latestAfterRace = await requestRepository.readRequest({
+        ...actor,
+        topicId: started.topicId,
+      });
+      if (!latestAfterRace) throw new Error('request missing after concurrent update');
+      if (!latestAfterRace.originalText.includes('結果に応じた次の実践：短い案内文も試す')) {
+        await requestRepository.saveRequest({
+          actorUserId: actor.actorUserId,
+          scope: actor.scope,
+          topicId: started.topicId,
+          expectedRevision: latestAfterRace.revision,
+          idempotencyKey: randomUUID(),
+          content: {
+            ...nextPracticeWish,
+            originalText: `${latestAfterRace.originalText}\n結果に応じた次の実践：短い案内文も試す`,
+          },
+        });
+      }
+      const latestAfterPreservingRetry = await requestRepository.readRequest({
+        ...actor,
+        topicId: started.topicId,
+      });
+      expect(latestAfterPreservingRetry?.originalText).toContain(
+        'いまの段階：3か月目「続け方を整える」',
+      );
+      expect(latestAfterPreservingRetry?.originalText).toContain(
+        'いまの段階の目安：記録を振り返る',
+      );
+      expect(latestAfterPreservingRetry?.originalText).toContain(
+        '結果に応じた次の実践：短い案内文も試す',
+      );
+      const monthThreeProgress = await repository.readProgress(actor, started.topicId);
+      expect(monthThreeProgress).toMatchObject({ period: 'MONTH_3', verifiedPracticeCount: 0 });
+      await recordPractice(6);
+      const monthThreeRequest = await requestRepository.readRequest({
+        ...actor,
+        topicId: started.topicId,
+      });
+      if (!monthThreeRequest) throw new Error('month-three request missing');
+      const requestCountBeforeCompletion = await client.personalLearningRequest.count({
+        where: { ...f.scope, topicId: started.topicId },
+      });
+      const completed = await repository.saveCheckin({
+        actor,
+        operationId: randomUUID(),
+        checkin: {
+          ...checkin,
+          period: 'MONTH_3',
+          checkpointResults: ['DONE'],
+        },
+      });
+      expect(completed.period).toBe('COMPLETED');
+      expect(
+        await client.personalLearningRequest.count({
+          where: { ...f.scope, topicId: started.topicId },
+        }),
+      ).toBe(requestCountBeforeCompletion);
+      expect(
+        (await client.personalLearningTopic.findUnique({ where: { id: started.topicId } }))?.status,
+      ).toBe('ACTIVE');
+
+      await client.personalLearningTopic.update({
+        where: { id: started.topicId },
+        data: { status: 'PAUSED' },
+      });
+      await expect(
+        repository.saveCheckin({
+          actor,
+          operationId: randomUUID(),
+          checkin: { ...checkin, period: 'MONTH_3' },
+        }),
+      ).rejects.toThrow(/paused/i);
+
+      const otherEnrollment = await serviceFixture('side hustle different enrollment', {
+        offerPolicy: 'SIDE_HUSTLE_V1',
+      });
+      const otherEnrollmentTopic = await client.personalLearningTopic.create({
+        data: {
+          ...otherEnrollment.scope,
+          title: '別Enrollmentのテーマ',
+          status: 'ACTIVE',
+          goalSnapshot: { kind: 'SIDE_HUSTLE', schemaVersion: 1 },
+        },
+      });
+      await expect(
+        repository.saveCheckin({
+          actor,
+          operationId: randomUUID(),
+          checkin: { ...checkin, topicId: otherEnrollmentTopic.id },
+        }),
+      ).rejects.toThrow(/unavailable/i);
     });
   });
 }

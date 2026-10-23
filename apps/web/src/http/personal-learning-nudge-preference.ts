@@ -7,8 +7,11 @@ import { requireSameOrigin } from '../auth/request-security';
 import { resolvePersonalLearningRequestActor } from '../services/personal-learning-request-access';
 import { boundedLearningJson } from './personal-learning-request';
 import { PrismaPersonalLearningNudgePreferenceRepository, prisma } from '@bunshin/database';
-import { personalLearningFeatureEnabled } from '@bunshin/capability-training';
-import { AI_TRAINING_AI_CONSENT_VERSION } from '../services/ai-training-consent-policy';
+import {
+  personalLearningFeatureEnabled,
+  personalLearningOfferPolicy,
+} from '@bunshin/capability-training';
+import { aiTrainingConsentPolicy } from '../services/ai-training-consent-policy';
 
 const headers = { 'cache-control': 'private, no-store', 'x-content-type-options': 'nosniff' };
 const actionSchema = z.discriminatedUnion('action', [
@@ -61,6 +64,9 @@ export async function personalLearningNudgePreferenceResponse(
         select: { settings: true },
       }));
     if (!program) throw new ApplicationError('NOT_FOUND', 'nudge preference unavailable');
+    const offerPolicy = personalLearningOfferPolicy(program.settings);
+    if (!offerPolicy) throw new ApplicationError('NOT_FOUND', 'nudge preference unavailable');
+    const consentPolicy = aiTrainingConsentPolicy(offerPolicy);
     if (request.method === 'GET') {
       const preference = await repository.read(actor);
       return Response.json(
@@ -88,7 +94,7 @@ export async function personalLearningNudgePreferenceResponse(
         programEnrollmentId: actor.scope.programEnrollmentId,
         groupMembershipId: actor.scope.groupMembershipId,
         userId: actor.scope.userId,
-        consentVersion: AI_TRAINING_AI_CONSENT_VERSION,
+        consentVersion: consentPolicy.version,
       },
       select: { consentedAt: true },
     });
@@ -99,7 +105,7 @@ export async function personalLearningNudgePreferenceResponse(
       const saved = await repository.update(actor, {
         action: 'ENABLE',
         now: new Date(),
-        consentVersion: AI_TRAINING_AI_CONSENT_VERSION,
+        consentVersion: consentPolicy.version,
         consentedAt: currentConsent.consentedAt,
       });
       return Response.json(
@@ -111,7 +117,7 @@ export async function personalLearningNudgePreferenceResponse(
     const updated = await repository.update(actor, {
       action: parsed.data.action,
       now,
-      consentVersion: AI_TRAINING_AI_CONSENT_VERSION,
+      consentVersion: consentPolicy.version,
       consentedAt: currentConsent.consentedAt,
       ...(parsed.data.action === 'PAUSE'
         ? { pauseUntil: new Date(now.getTime() + parsed.data.days * 86_400_000) }

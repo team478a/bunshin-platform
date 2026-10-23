@@ -1,9 +1,13 @@
 import 'server-only';
 import type { PersonalLearningActor } from '@bunshin/application';
-import { personalLearningFeatureEnabled } from '@bunshin/capability-training';
+import {
+  personalLearningFeatureEnabled,
+  personalLearningOfferPolicy,
+} from '@bunshin/capability-training';
+import { ApplicationError } from '@bunshin/shared';
 
-/** Resolve this switch from the server-side enrollment/program, never from client input. */
-export async function resolvePersonalLearningExtendedScope(actor: PersonalLearningActor) {
+/** Resolve offer policy and switches from the server-side enrollment/program, never client input. */
+export async function resolvePersonalLearningOfferContext(actor: PersonalLearningActor) {
   const db = await import('@bunshin/database');
   const enrollment = await db.prisma.programEnrollment.findFirst({
     where: {
@@ -25,5 +29,15 @@ export async function resolvePersonalLearningExtendedScope(actor: PersonalLearni
         select: { settings: true },
       })
     : null;
-  return personalLearningFeatureEnabled(program?.settings, 'extendedScope');
+  const offerPolicy = personalLearningOfferPolicy(program?.settings);
+  if (!program || !offerPolicy)
+    throw new ApplicationError('NOT_FOUND', 'learning request unavailable');
+  return {
+    offerPolicy,
+    extendedScope: personalLearningFeatureEnabled(program.settings, 'extendedScope'),
+  } as const;
+}
+
+export async function resolvePersonalLearningExtendedScope(actor: PersonalLearningActor) {
+  return (await resolvePersonalLearningOfferContext(actor)).extendedScope;
 }

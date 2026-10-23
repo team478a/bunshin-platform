@@ -152,6 +152,16 @@ describe('personal training data deletion', () => {
       data: { programEnrollmentId: null, revokedAt: expect.any(Date) },
     });
     expect(tx.personalLearningPilotSeat.deleteMany).not.toHaveBeenCalled();
+    expect(tx.programActionEvent.deleteMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          workspaceId: scope.workspaceId,
+          groupId: scope.groupId,
+          programEnrollmentId: scope.programEnrollmentId,
+          eventType: { not: expect.any(String) },
+        }),
+      }),
+    );
     expect(tx.$executeRaw).toHaveBeenCalledTimes(2);
     expect(tx.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
       tx.programAuditLog.findFirst.mock.invocationCallOrder[0]!,

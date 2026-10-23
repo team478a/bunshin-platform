@@ -4425,3 +4425,121 @@
 - mainにはproduction branchにある既存16 migration SQLのtransaction/timeout wrapperの差分もある。適用済みchecksumは未確認であり、pending一覧だけで安全と判断しない。差分不整合や不明点があれば適用を停止する。
 - コード反映だけで運用まとめ送信は始めない。`OPS_DIGEST_ENABLED`の既定値はfalse。マナベル機能flagはProgram単位の明示opt-inで、既定OFF。PR-HのProvider経路変更がすでに有効なDYNAMIC_V1利用者の次回操作へ影響する可能性があるため、現行Program/Provider状態は反映前に田中が確認する。
 - 外部公開GateにはPR-Gの未実施評価とバックアップ復元元の証明を残す。PRマージやCIを本番反映・外部公開の承認とみなさない。
+
+## 2026-10-21: マナベル動的学習の提供方針をProgram設定で切り替える
+
+- 状態: PR-1 Draftで確認待ち。既存マナベルの動作・プロンプト・同意文を変えず、後続PRで別の提供方針を追加できる境界を設ける。
+- マナベル動的学習は`AI_TRAINING_V1`モジュールのまま、Service Programの最上位設定`settings.learningOfferPolicy`で提供方針を切り替える。キーがない既存Programは`AI_SKILL_V1`として扱い、副業版は後続PRで別の方針として追加する。
+- `personalLearningPilot`および`learningFeatures`の許可キーは変更しない。既存の厳格な許可リストとfail-closedを維持し、提供方針をその配下へ混在させない。
+- 未登録値・文字列以外・空文字の提供方針はfail-closedとし、受講者画面・LINE・Job・CronのAI処理、および同意の表示・保存・照合を拒否する。
+- 本決定は副業用方針、管理API・管理画面、DB migration、Program設定変更、本番反映、Pilot開始を承認しない。
+
+## 2026-10-22: マナベル副業版の副業候補はAIが自由に作り、安全は決定的なルールで守る
+
+- 状態: PR-2 Draftで確認待ち。出力契約と決定的な安全確認だけを実装し、AI呼び出し、本番反映、外部提供は未実施。
+- 副業候補を固定の一覧に限定しない。利用者の要望に柔軟に応えるマナベル形式を優先する。
+- AIの出力は`SIDE_HUSTLE_CANDIDATE_V1`の契約に限定し、形式違反・保証表現は採用しない。
+- 除外領域はキーワードで機械的に取り除く。プロンプトでの禁止に対する最後の防波堤として位置づけ、誤検出は安全側に倒す。
+- AIが出した費用・許認可・リスクは「AIによる目安・未確認」とし、確認済みと表示しない。勤務先規定・申告・目安の注意は固定文で必ず添える。
+- 本PRでmigrationを作らない。2026-10-20リリースの反映スクリプトが未反映migrationの完全一致を条件にしており、別migrationの追加が既存の本番反映手順を停止させるためである。
+- 当初のコード上の版付きカタログ案は採らない。固定一覧は、利用者の要望へ柔軟に応えるマナベル形式の方針と矛盾するためである。
+
+## 2026-10-22: 副業候補の説明・質問にも除外語を適用する
+
+- 状態: PR #1379のレビュー指摘に基づく修正。候補本文に加え、提案理由と追加質問も同じ除外キーワードで確認する。
+- 除外語に該当する質問は除き、除去数を`removedQuestionCount`で返す。NEEDS_CONTEXTの質問がすべて除かれた場合は、安全な追加質問がないため固定文のNO_FITへ変換する。
+- 理由文に除外語または除外済み候補名が含まれる場合は「条件に合う候補を整理しました。」へ置き換える。READYで候補がすべて除外された場合、および質問がすべて除かれた場合は従来のNO_FIT固定文を使う。
+- 保証検出は具体的な収益保証表現に限定し、一般的な「絶対」「保証」を単独では検出しない。投資・ギャンブル除外語は「スロット」によるタイムスロット等の誤検出を避けるため「パチスロ」「スロットマシン」に限定する。
+- この修正は出力検証・テスト・文書のみで、AI Provider呼出し、DB、API、画面、本番反映、PRマージを許可しない。
+
+## 2026-10-22: 副業支援の提供方針とProgram設定
+
+- 状態: PR-3a Draft。提供方針`SIDE_HUSTLE_V1`を追加する。副業版は既存の動的学習（`AI_TRAINING_V1`）の上で、指示文・Prompt Version・同意文・同意画面の文言を切り替えて提供する。
+- 方針の変更は、受講者がいないProgramに限る。AI研修と副業支援の記録の混在と、同意の版の切り替わりを防ぐためである。同じ方針の再送は変更とみなさない。
+- 証拠確認・声かけ・ペルソナ推測のPrompt Versionを方針ごとに記録する。既存`AI_SKILL_V1`の値・同意文・画面文言は維持する。
+- 設定変更はProgram単位の監査ログへ前後の有効方針を含める。AI_SKILL_V1は互換性のため設定キーを削除し、SIDE_HUSTLE_V1のみ明示保存する。
+- 本決定は副業ヒアリング・候補生成（PR-3b）、DB migration、Programの本番設定変更、Pilot有効化、本番反映を承認しない。
+
+## 2026-10-22: 副業ヒアリング・提案・選択（PR-3b）
+
+- 副業ヒアリング・提案・選択は、Enrollment単位の`ProgramActionEvent`（`SIDE_HUSTLE_HEARING_SAVED`、`SIDE_HUSTLE_PROPOSAL_SAVED`、`SIDE_HUSTLE_SELECTED`）に保存する。DB migrationは作らない。
+- AIの提案はテキストAI操作`SIDE_HUSTLE_PROPOSAL`として、既存の費用予約・記録を通す。同じヒアリングの版では再度AIを呼ばず、JST日次5回の制限を適用する。
+- 照合で合わない候補は受講者に表示せず、選ばせない。選択は本人の明示的な確認でだけ確定する。
+- 3種類のイベントを本人データの出力・削除・保持期限の対象に含める。
+- 本決定はPR-4のカリキュラム生成、LINE対応、本番反映、Pilot有効化を承認しない。
+
+## 2026-10-22: 副業版の90日の地図と学習テーマ接続（PR-4）
+
+- 副業版の90日の地図は、1か月ごとの到達点3つとする。日々の課題は既存の流れで1つずつ作り、90日分のタスクを一括で作らない。
+- 選んだ副業は1つのテーマとして扱い、開始時に最初の希望を決まった形で自動作成する。以降は既存の動的学習の流れを使う。
+- `SIDE_HUSTLE_V1` では `multiTopic` を必須とし、同時に進める副業は1つとする。選び直して開始すると前の副業テーマは一時停止になる。
+- 副業の開始では、テーマのない既存記録を自動で移さない。存在する場合は開始を競合として拒否し、手動移行もしない。
+- 地図・開始の記録はEnrollment単位の`ProgramActionEvent`に保存し、DB migrationは作らない。
+- 本決定はPR-5の段階移行、LINE表示、課金、本番反映、Pilot有効化を承認しない。
+
+## 2026-10-22: 承認済み3 migrationはpsqlの同一sessionで設定・適用を行う
+
+- 状態: Draft PRで検証する。本番適用は未実施。田中が、startup options依存をやめた別方式への変更を指示した。
+- 専用GitHub workflowは既定をPreviewとし、psqlでSETした制限時間・接続先・履歴checksum・未適用3件の完全一致を同じsessionで確認する。PreviewはDDLと履歴登録を実行しない。
+- Applyは元のmigration SQLを変更せず1件ずつtransactionで適用し、成功後にPrisma migrate resolveで元ファイルの履歴を登録・照合する。SQL適用後の履歴登録失敗や結果不明では再適用せず停止する。
+- psql sessionがPrismaと同じmigration advisory lockを全処理中保持する。自分自身のlock待ちを避けるため、このsessionから起動するresolve子プロセスだけPrismaの重複lock取得を無効にする。通常のdeployや本番の恒久設定には変更しない。
+- SQL・lock・timeout・履歴失敗・checksum不一致を使い捨てPostgreSQLで実測する。接続URL、password、生のDBエラーは出力せず、固定ラベルと対象migration名だけを報告する。
+
+## 2026-10-22: 本番適用済み16 migrationの正本をmainへ復元する
+
+- 状態: 田中が本番DBのブラウザ調査結果を確認後、修正の開始を指示した。Draft PRでレビューする。migration適用、DB履歴更新、マージ、デプロイはこの修正作業では行わない。
+- Supabase SQL EditorのREAD ONLY transactionで本番のmigration履歴260件を取得・照合した。全件完了、失敗・rollback・同名重複なし。mainと不一致の16件はすべてproduction `b96cea56083cb47632f565aab0b74b70bd612986`のSQLと一致し、未適用は承認済み3件だけだった。
+- 原因はproduction側に追加されたtransaction/timeout wrapperがmain側と異なること。今回に限り「マージ済みmigrationは編集しない」原則の例外として、履歴と一致する本番適用時の16 SQLをそのままmainへ復元する。新しい意味のDDLを過去ファイルへ追加したり、DB履歴のchecksumを書き換えたり、不一致検査を緩和したりしない。
+- 復元対象16件と本番で確認したchecksumをテストfixtureに固定する。SQL本文のDDLが変わらないこと、使い捨てDBの履歴照合で復元前は拒否・復元後はPreview成功することを検証する。fixtureに利用者データ・資格情報・生のDBログを含めない。
+- 新しいmigration、schema、LATEST_DATABASE_MIGRATION、workflow、環境設定、機能flagは変更しない。マージ後は本番Previewから再確認し、成功してから承認済み3件のApply・db:assert-ready・別途コード反映へ進む。
+
+## 2026-10-22: 専用リリースrunnerは公式CAでTLSを検証しPrisma失敗を安全に分類する
+
+- 状態: #1385マージ後のPreview `39744203995`は履歴照合を通過し、Prismaのread-only metadata接続で停止した。田中が接続修正の開始を指示した。Draft PRで検証し、本番適用・設定変更・マージ・デプロイは行わない。
+- 資格情報なしのPostgreSQL STARTTLS検査で、対象poolerの証明書はSupabase独自CAによるもので、既定の信頼ストアでは検証に失敗することを確認した。Prisma子プロセスの詳細は既存runnerで破棄されているため、実際のPrisma失敗原因を確定済みとは扱わない。
+- Supabase自身の公開dashboardコードが示す公式CAを固定し、DER SHA-256・CA属性・有効期限を検証してから、psqlのverify-fullとPrismaのsslaccept=strictへ同じCAを渡す。証明書検証の無効化、システムのtrust store変更、秘密値の追加設定はしない。
+- Prisma子プロセスの出力はメモリ内で固定ラベルへ分類し、生出力・URL・password・SQL本文を表示しない。SQL commit後の履歴登録失敗は従来どおり再適用禁止の状態として区別する。
+- CIへ認証情報が架空のローカルTLS接続検証を追加し、正しいCAの成功、誤CA・ホスト名の不一致の拒否、安全な分類、既存の履歴・timeout・lock検査を確認する。migration SQLとDB schemaは変更しない。
+
+## 2026-10-22: 適用後のschema確認はGitHub runner用pooler接続と確認専用workflowで行う
+
+- 状態: 本番run `39752566851`は承認済み3件のSQL適用・Prisma履歴照合に成功したが、後続の`db:assert-ready`がGitHubの`DATABASE_URL`のdirect hostへ到達できず停止した。田中が確認用接続の修正を承認した。適用済みmigrationを再実行しない。
+- GitHubの確認用子プロセスに限り、既存DATABASE_URLの同じproject・postgres role・postgres DBを検証してpooler接続へ変換し、通常runtimeと同じ6543・pgbouncer・connection_limit=1を使う。公開CAと厳格TLS検証を適用し、secret自体・Vercel設定・通常runtimeのURL変換は変更しない。
+- 確認は既存`db:assert-ready`のSELECTを再利用する。専用の手動・Production承認付きworkflowを追加し、DDL・migrate deploy/resolve・履歴更新なしに確認だけを再実行できるようにする。通常apply後の確認も同じrunnerへ接続する。
+- 子出力をメモリ内で分類し、接続URL・password・生のPrismaエラーを表示しない。対象違い・危険なTLS・期限切れCA・時間切れ・成功markerなしを拒否し、使い捨てDBの実Prisma Client/TLSと単体テストで検証する。
+- この確認の成功はGitHubから指定projectのschemaを確認できた証拠であり、Vercelの環境変数・実稼働SHA・画面smokeの確認を代替しない。今回のDraft PR作業では本番設定・DB・flag・デプロイを変更しない。
+
+## 2026-10-22: 副業版の段階は本人の振り返りと操作でだけ進める（PR-5a）
+
+- 段階の案内条件は、現在の段階で確認できた実践2件以上、または28日経過とする。段階の正本は `SIDE_HUSTLE_STAGE_ADVANCED` とし、AIへは希望の新しい版で段階を伝える。進行中の課題は変えない。
+- 振り返りは `SIDE_HUSTLE_CHECKIN_SAVED` として保存し、本人が明示的に次へ進む場合だけ段階を更新する。3か月目の操作は `COMPLETED` を記録し、テーマと学習を継続可能なまま保つ。
+- 本決定はLINE表示、地図のAI見直し（PR-5b）、課金、本番反映、Pilot有効化を承認しない。
+
+## 2026-10-22: 副業版の月の目安は希望本文に保持する（PR-5a）
+
+- 段階を進めるときは `originalText` の「いまの段階の目安：」行も新しい月の目安で置き換え、前の月で残った項目を同じ行に付記する。PR-4開始時点で目安行がない場合は「いまの段階：」の直後に追加し、重複行は失敗として扱う。
+- 月の目安は `originalText` に保持する（`currentPosition` は次の実践で上書きされるため）。`currentPosition` は従来どおり次の実践のための表示用位置として更新する。
+- PR-5bがマージされるまでは、画面に「地図を見直す」を表示しない。サーバー側の `REVISE` 記録は受け付ける。
+
+## 2026-10-22: 本番DB認証は同一資格情報の2接続方式で読み取り専用診断する
+
+- 状態: #1388マージ後の確認run `39759099562`は`database-authentication-failed`で停止した。適用成功時はDIRECT_URL、確認時はDATABASE_URLを資格情報の参照元にしている。資格情報の違いか接続方式の違いかを断定せず、田中の承認を受けて診断用Draft PRを作る。
+- 既存DIRECT_URLの同じ資格情報で、同じproject・role・DB・CA・Prisma Clientを使い、session 5432とtransaction 6543を順に1回ずつ比較する。DATABASE_URLとの資格情報比較は一致／不一致だけを出し、値・長さ・ハッシュ・生エラーを記録しない。
+- SQLはREAD ONLY transactionのidentity確認SELECTに限定し、各接続を30秒で制限する。最大2回、並列化・自動再試行・別資格情報への自動fallbackは行わない。対象project・role・DB・port・TLS・CA・明示確認語を接続前に検証する。
+- 手動・main限定・Production人手承認・contents read・既存applyと同じconcurrencyの専用workflowを使う。診断成功をschema readiness・Vercel反映・外部公開の証明にしない。既存DATABASE_URL経由のreadiness確認は維持し、成功した資格情報でその失敗を隠さない。
+- 本PRでmigration再適用、DB・secret・パスワード・flagの変更、デプロイは行わない。本番診断はレビュー・マージとProduction承認後に実施する。
+
+## 2026-10-22: Vercelのmigration履歴確認失敗は固定ラベルだけで区別する
+
+- 状態: 田中が、2日近く続くデプロイ失敗の切り分けのため最小修正を承認した。Draft PRで確認し、この作業では本番変更・再デプロイを行わない。
+- 最新のVercel失敗はmigration履歴確認の開始から約60秒後に停止した。既存の確認プロセスの上限と一致するが、ログに終了理由がないためtimeoutと断定しない。GitHubのschema確認成功をVercelの接続設定の証明にしない。
+- 既存の失敗箇所だけで、子プロセスの終了理由、終了コードの0／非0、履歴判定、既存のエラー分類器による固定ラベルを記録する。例外本文、接続URL、password、SQL、生の子出力、任意のdiagnostic文字列は記録しない。
+- 接続先・資格情報・TLS・timeout・実行コマンド・成功／失敗の判断・再試行方針は変更しない。履歴確認失敗時は引き続きmigrationを開始せず停止する。DB、migration、schema、Vercel設定、GitHub workflow、機能flagは変更しない。
+
+## 2026-10-23: Vercelからmigration適用を分離し読み取り専用の完全照合を行う
+
+- 状態: 田中がDraft PR作成を承認した。本番設定・DB・secret・flag・デプロイは変更しない。
+- #1391後のVercelではPrisma CLIの履歴確認が60秒のwatchdogで停止した。DB履歴263件は完了している。poolerログのtransaction表示だけからDIRECT_URLのport誤りと断定した説明は撤回し、CLI待機の根本原因は未確定のまま記録する。
+- VercelのbuildCommandから自動migrationを外す。適用は対象・revision・backup・Previewを確認した既存の人手承認付き手順で先に行い、未適用があればVercelは適用せず停止する。既存3件限定runnerの範囲を広げず、将来のmigrationは別途承認された適用手順を用意する。
+- db:assert-readyをPrisma Clientによる読み取り専用transactionでの検証へ強化する。全migrationの名前・SHA-256・完了状態と、生成モデルが必要とするテーブル・列・enum値を照合し、未知・欠落・失敗・重複・不一致・接続失敗はすべて拒否する。DB履歴を修正・補完しない。
+- 実行は通常runtimeと同じDATABASE_URLを参照し、Supabase poolerでは既存runtime変換と固定済み公式CAによる厳格TLSを使う。Prisma migrate status/deploy/resolveへfallbackせず、transaction・SQL・接続と子プロセス全体に期限を付け、生エラー・SQL・URL・秘密値を出力しない。

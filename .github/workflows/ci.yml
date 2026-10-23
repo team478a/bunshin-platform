@@ -43,7 +43,7 @@ jobs:
       - run: pnpm build
 
   database:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     services:
       postgres:
         image: postgres:16
@@ -73,11 +73,13 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm db:validate
-      # The release runner intentionally accepts only the audited production pre/post history,
-      # so bootstrap the disposable CI database before exercising its post-state gate.
+      # Explicit setup of the disposable CI database, never the production build path.
       - run: pnpm db:migrate:deploy
-      - run: pnpm db:migrate:vercel
-        env:
-          VERCEL_ENV: production
       - run: pnpm db:assert-ready
       - run: pnpm test:integration
+      - name: Install native PostgreSQL client for release tests
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client-16
+      - name: Verify native release transactions and Prisma history on disposable PostgreSQL
+        run: pnpm --filter @bunshin/database exec node --test scripts/test-native-release-psql.mjs
+      - name: Verify TLS trust and hostname checks with disposable PostgreSQL
+        run: pnpm --filter @bunshin/database exec node --test scripts/test-release-tls.mjs

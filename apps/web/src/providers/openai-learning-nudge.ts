@@ -8,6 +8,8 @@ import {
 import type { AiModelCapability, PersonalLearningTextPermit } from '@bunshin/application';
 import { serializeOpenAiTaskRequest } from '../ai/openai-task-compatibility';
 import { generateLearningStructured } from './openai-learning-lesson';
+import type { PersonalLearningOfferPolicy } from '@bunshin/capability-training';
+import { personalLearningOfferPromptPolicy } from './personal-learning-offer-policy';
 
 export const LEARNING_NUDGE_PROMPT_VERSION = PERSONAL_LEARNING_NUDGE_PROMPT_VERSION;
 
@@ -25,6 +27,7 @@ export function learningNudgeBody(input: {
   ordinal: 1 | 2;
   model: string;
   permit: Pick<PersonalLearningTextPermit, 'maxRequestBytes' | 'maxOutputTokens'>;
+  offerPolicy?: PersonalLearningOfferPolicy;
 }) {
   const body = serializeOpenAiTaskRequest('LEARNING_NUDGE', {
     model: input.model,
@@ -33,8 +36,7 @@ export function learningNudgeBody(input: {
     input: [
       {
         role: 'system',
-        content:
-          'あなたはAI研修の短い声かけ文を整える補助です。与えられた固定文面の意図を保ち、自然で短い日本語に言い換えてください。記載された状況以外の事実を推測せず、名前・個人情報・URL・成果の断定・急かす表現・追加の質問を入れないでください。利用者の自由記述、プロフィール、相談、学習履歴は入力されていません。出力はmessageだけのJSONにしてください。',
+        content: personalLearningOfferPromptPolicy(input.offerPolicy).nudgeInstructions,
       },
       {
         role: 'user',
