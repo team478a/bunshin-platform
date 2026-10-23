@@ -31,7 +31,7 @@
 
 - `packages/capability-training/test/side-hustle-roadmap.test.ts` — 旧PR-5b契約の「全月置換」期待を、新要件の「完了月保持・見直し対象以降の置換」へ変更し、1文字差分拒否を追加。
 - `packages/database/test/side-hustle-hearing.test.ts` — repository API変更に合わせてfixture/mockを更新し、既存の期待内容を維持。
-- `packages/database/test/personal-learning-d.integration-cases.ts` — mockなしDB結合フローを追加。開始後に実践2件をDBへ記録し、MONTH_2へ進行、REVISE振り返り、提案保存、確定、再送を検証。
+- `packages/database/test/personal-learning-d.integration-cases.ts` — mockなしDB結合フローを追加。開始後に実践2件をDBへ記録し、MONTH_2へ進行、REVISE振り返り、提案保存、確定、再送を検証。追加で、同一地図の2提案の片方を確定した後に他方がCONFLICTとなり希望版・確定イベントが増えないこと、および提案後にMONTH_2からMONTH_3へ進行すると提案確定がCONFLICTとなり希望版・確定イベントが増えないことを検証。
 - `apps/web/test/openai-side-hustle-roadmap.test.ts` — 見直し用Provider入力を検証。
 - `packages/database/test/training-personal-data-export.test.ts`、`packages/database/test/training-retention-execution.test.ts` — 新イベントをfixture/保持検査へ追加。
 
@@ -55,7 +55,8 @@
 - `pnpm lint` — 成功。既存のunused eslint-disable警告がWeb lintに4件あり、エラーなし。
 - `pnpm build` — 成功。Next.js production build、TypeScript、静的ページ38件の生成を確認。
 - `pnpm test` — 全workspaceで実行。architecture 10件成功、application 145ファイル/1,026件、capability-training 39ファイル/618件、social 29ファイル/305件を含むsuiteが成功。Databaseで既存の `deployment-database-gate.test.ts` と `apply-release-20261020.test.ts` の各1件が5秒timeoutとなったため、両ファイルを個別に再実行し **39/39件成功** を確認した。したがって全workspace一括実行はtimeoutのため終了コード非0、個別再実行で対象テストの成否を補足した。
-- DB integration: fresh run `5c23a0b17fd2` の使い捨てPostgreSQL16を使用。263 migrationをこの新規DBだけに適用し、database name/comment markerのpreflight後に `pnpm --filter @bunshin/database test:integration` を実行。全267件中262件成功、5件失敗。1件は見直しテストfixtureの `typicalFlow` 件数不足で、3件は既存Personal Learning/retentionの5秒timeout、もう1件も既存expiryケースの5秒timeoutだった。fixtureを3件の有効なflowへ修正後、見直しのmockなしDB結合ケースを `vitest run test/database.integration.test.ts -t 'proposes and confirms a revision without changing completed months'` で再実行し **1件成功** を確認。別に再実行した既存境界4ケースではexpiryは成功したが、internal owner、PR-4開始、personal-data exportの3ケースは5秒timeoutを再現した。全integration suiteの成功とは扱わない。
+- DB integration: fresh run `5c23a0b17fd2` の使い捨てPostgreSQL16を使用。263 migrationをこの新規DBだけに適用し、database name/comment markerのpreflight後に `pnpm --filter @bunshin/database test:integration` を実行。全267件中262件成功、5件失敗。1件は見直しテストfixtureの `typicalFlow` 件数不足で、3件は既存Personal Learning/retentionの5秒timeout、もう1件も既存expiryケースの5秒timeoutだった。fixtureを修正後、今回追加した2競合シナリオを含む見直しのmockなしDB結合ケースを、新規の使い捨てPostgreSQL16 run `8b3a91c64d2f`（263 migration適用、database name/comment marker preflight済み）で再実行し **1件成功** を確認。別に再実行した既存境界4ケースではexpiryは成功したが、internal owner、PR-4開始、personal-data exportの3ケースは5秒timeoutを再現した。全integration suiteの成功とは扱わない。
+- 現行main比較: GitHubから取得した比較対象は `origin/main` `34be4cebe4ff799e282f4fc1e8a9ce2f17769275`。別worktreeを作り、オフライン依存配置を試したが完了せず、main上で3つのtimeoutケースを再実行するところまでは到達できなかった。したがって「現行mainでも同じtimeoutが起きる」とは確認できていない。以前のtimeout結果はPRブランチ上の実行であり、main上での再現性は未確定として残す。
 - `git diff --check` — 成功。
 - `pnpm test` / integration中の5秒timeoutは期待値変更・skip・timeout延長で隠していない。実AI Provider・本番DB接続は行っていない。integration DB・Auth・gateway containerおよび専用networkは検証後に停止・削除済み。
 
@@ -63,6 +64,7 @@
 
 - 本番またはPilotでPR-5b形式の記録が実際に使われたかは外部証跡未取得のため未確定。利用済みだった場合の移行は本PRの範囲外。
 - 一括integration suiteは、報告した既存3ケースの5秒timeoutにより全件成功ではない。これらのtimeoutはテストまたは環境側で別途調査が必要。
+- 上記3ケースが現行mainでも同様にtimeoutするかは未確認。mainでの比較実行が必要。
 - 実利用者の画面確認、本番反映、Pilot有効化は未実施。
 
 ## 6. 次へ進める条件
