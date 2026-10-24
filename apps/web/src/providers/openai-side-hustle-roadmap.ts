@@ -72,6 +72,43 @@ export function sideHustleRoadmapBody(input: {
   });
 }
 
+export function sideHustleRoadmapRevisionBody(input: {
+  model: string;
+  safetyPolicy: string;
+  instructions: string;
+  selectedSideHustle: unknown;
+  hearing: unknown;
+  baseRoadmap: unknown;
+  fromPeriod: string;
+  checkin: { checkpointResults: readonly string[]; feeling: string; note: string | null };
+  verifiedPracticeCount: number;
+  excludedAreas: readonly { label: string; reason: string }[];
+}) {
+  const body = JSON.parse(
+    sideHustleRoadmapBody({
+      model: input.model,
+      safetyPolicy: input.safetyPolicy,
+      instructions: input.instructions,
+      selectedSideHustle: input.selectedSideHustle,
+      hearing: input.hearing,
+      excludedAreas: input.excludedAreas,
+    }),
+  ) as Record<string, unknown>;
+  const messages = body['input'] as { role: string; content: string }[];
+  const userMessage = messages.at(-1);
+  if (!userMessage) throw new Error('side hustle roadmap input missing');
+  userMessage.content = JSON.stringify({
+    selectedSideHustle: input.selectedSideHustle,
+    hearing: input.hearing,
+    baseRoadmap: input.baseRoadmap,
+    fromPeriod: input.fromPeriod,
+    checkin: input.checkin,
+    verifiedPracticeCount: input.verifiedPracticeCount,
+    excludedAreas: input.excludedAreas,
+  });
+  return JSON.stringify(body);
+}
+
 export function generateSideHustleRoadmap(options: {
   apiKey: string;
   model: string;

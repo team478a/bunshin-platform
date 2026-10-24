@@ -144,6 +144,8 @@ describe('training retention execution', () => {
     expect(queries).toContain('SIDE_HUSTLE_SELECTED');
     expect(queries).toContain('SIDE_HUSTLE_PROPOSAL_SAVED');
     expect(queries).toContain('SIDE_HUSTLE_ROADMAP_PROPOSED');
+    expect(queries).toContain('SIDE_HUSTLE_ROADMAP_REVISION_PROPOSED');
+    expect(queries).toContain('SIDE_HUSTLE_ROADMAP_REVISED');
     expect(queries).toContain('SIDE_HUSTLE_STARTED');
     expect(queries).toContain('SIDE_HUSTLE_CHECKIN_SAVED');
     expect(queries).toContain('SIDE_HUSTLE_STAGE_ADVANCED');
