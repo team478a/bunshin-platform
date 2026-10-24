@@ -88,16 +88,17 @@ export async function requirePersonalLearningPreparationAuthority(
     })) !== ids.length
   )
     throw new ApplicationError('NOT_FOUND', 'preparation allowlist scope unavailable');
-  // Approval is Service-owned. Do not silently change another training Program's Definition state.
-  if (
-    await tx.serviceProgram.count({
-      where: {
-        workspaceId: parsed.workspaceId,
-        groupId: parsed.groupId,
-        id: { not: parsed.serviceProgramId },
-        settings: { path: ['moduleKey'], equals: 'AI_TRAINING_V1' },
-      },
-    })
-  )
+  // Approval is Service-owned. Do not silently change another Personal Learning Program's Definition state.
+  const otherPersonalLearningPrograms = await tx.$queryRaw<{ id: string }[]>`
+    SELECT id
+    FROM service_programs
+    WHERE workspace_id=${parsed.workspaceId}::uuid
+      AND group_id=${parsed.groupId}::uuid
+      AND id <> ${parsed.serviceProgramId}::uuid
+      AND settings->>'moduleKey'='AI_TRAINING_V1'
+      AND settings ? 'personalLearningPilot'
+    LIMIT 1
+  `;
+  if (otherPersonalLearningPrograms.length)
     throw new ApplicationError('NOT_FOUND', 'dedicated preparation service required');
 }

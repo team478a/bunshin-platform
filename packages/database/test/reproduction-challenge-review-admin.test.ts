@@ -29,10 +29,13 @@ function fixture() {
     trainingOperations: { notificationsEnabled: false, postponedReminderEnabled: false },
   };
   let clock = 0;
+  let otherPersonalLearningProgramExists = false;
   const guard = vi.fn();
   const tx = {
     $queryRaw: vi.fn((strings: TemplateStringsArray) => {
       const sql = strings.join('');
+      if (sql.includes("settings ? 'personalLearningPilot'"))
+        return Promise.resolve(otherPersonalLearningProgramExists ? [{ id: id(99) }] : []);
       if (sql.includes('FROM service_programs')) return Promise.resolve([{ settings }]);
       return Promise.resolve([{ id: id(9) }]);
     }),
@@ -75,7 +78,18 @@ function fixture() {
       checklist,
     };
   }
-  return { rows, tx, client, repo, guard, settings, command };
+  return {
+    rows,
+    tx,
+    client,
+    repo,
+    guard,
+    settings,
+    command,
+    setOtherPersonalLearningProgramExists: (value: boolean) => {
+      otherPersonalLearningProgramExists = value;
+    },
+  };
 }
 describe('bounded stopped-service challenge review repository', () => {
   it('computes material/commit on server, creates review and retains DRAFT/UNKNOWN', async () => {
@@ -300,9 +314,9 @@ describe('bounded stopped-service challenge review repository', () => {
     f.tx.programEnrollment.count.mockResolvedValue(0);
     await expect(f.repo.change(actor, c)).rejects.toThrow();
     f.tx.programEnrollment.count.mockResolvedValue(1);
-    f.tx.serviceProgram.count.mockResolvedValue(1);
+    f.setOtherPersonalLearningProgramExists(true);
     await expect(f.repo.change(actor, c)).rejects.toThrow();
-    f.tx.serviceProgram.count.mockResolvedValue(0);
+    f.setOtherPersonalLearningProgramExists(false);
     f.guard.mockImplementation(() => {
       throw new Error('disabled');
     });
