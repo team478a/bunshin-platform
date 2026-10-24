@@ -25,8 +25,10 @@ import {
   type AuthReturnContext,
 } from '../../../src/auth/auth-return-attempt';
 
-export function GET(request: Request): Response {
+export function GET(request: Request): Response | Promise<Response> {
   const url = new URL(request.url);
+  const code = url.searchParams.get('code');
+  if (code !== null) return completePkceEmailCallback(request, url, code);
   const tokenHash = url.searchParams.get('token_hash');
   const type = url.searchParams.get('type');
   if (tokenHash === null || !/^[A-Za-z0-9_-]+$/.test(tokenHash) || type !== 'email') {
@@ -47,6 +49,48 @@ export function GET(request: Request): Response {
   response.headers.set('cache-control', 'no-store');
   response.headers.set('referrer-policy', 'no-referrer');
   return response;
+}
+
+async function completePkceEmailCallback(
+  request: Request,
+  url: URL,
+  code: string,
+): Promise<Response> {
+  let context: AuthReturnContext | null = null;
+  let displayReturnTo: string | null = null;
+  let ownedStage: 'CLAIMED' | 'AUTHENTICATED' = 'CLAIMED';
+  let claimed = false;
+  try {
+    displayReturnTo = emailAuthReturnTo(url);
+    context = await readAuthReturnContext(
+      request,
+      singleAuthAttemptId(url.searchParams.getAll('authAttempt')),
+      { method: 'EMAIL' },
+    );
+    if (url.searchParams.has('error') || code.length === 0 || code.length > 2048)
+      throw new Error('email callback rejected');
+    await claimAuthReturnAttempt(context);
+    claimed = true;
+    const buffered = context.attempt ? await createSupabaseAttemptClient() : null;
+    const supabase = buffered?.client ?? (await createSupabaseServerClient());
+    const exchanged = await supabase.auth.exchangeCodeForSession(code);
+    if (exchanged.error !== null) throw exchanged.error;
+    assertEmailIdentity(context, exchanged.data?.user);
+    if (buffered) await buffered.commitCookies();
+    return await completeEmailSession(request, context, displayReturnTo, (stage) => {
+      ownedStage = stage;
+    });
+  } catch (error) {
+    if (claimed) await cancelAuthReturnAttempt(context, ownedStage);
+    return clearAuthReturnCookie(
+      loginErrorResponse(
+        request,
+        error instanceof AuthReturnContextError ? 'auth-context' : '1',
+        context?.returnTo ?? displayReturnTo,
+      ),
+      claimed ? context : null,
+    );
+  }
 }
 
 export async function POST(request: Request): Promise<Response> {
@@ -79,36 +123,11 @@ export async function POST(request: Request): Promise<Response> {
       type: type as EmailOtpType,
     });
     if (verified.error !== null) throw verified.error;
-    if (
-      context.attempt &&
-      (!verified.data.user?.email ||
-        authEmailHash(verified.data.user.email, context.attempt.proofHash) !==
-          context.attempt.loginIdentityHash)
-    )
-      throw new AuthReturnContextError();
+    assertEmailIdentity(context, verified.data?.user);
     if (buffered) await buffered.commitCookies();
-    const currentUser = await (await currentUserProvider()).getCurrentUser();
-    if (currentUser === null) throw new Error('user unavailable');
-    const db = await import('@bunshin/database');
-    await authenticateAuthReturnAttempt(context, currentUser.userId);
-    ownedStage = 'AUTHENTICATED';
-    const required = await new db.PrismaLegalConsentRepository().findRequiredForUser(
-      currentUser.userId,
-    );
-    if (required.some((item) => !item.consentedAt))
-      return NextResponse.redirect(new URL(authConsentPath(context), request.url), 303);
-    const registration = await db.prisma.userRegistrationProfile.findUnique({
-      where: { userId: currentUser.userId },
-      select: { status: true },
+    return await completeEmailSession(request, context, displayReturnTo, (stage) => {
+      ownedStage = stage;
     });
-    await consumeAuthReturnAttempt(context, currentUser.userId);
-    return clearAuthReturnCookie(
-      NextResponse.redirect(
-        new URL(authReturnDestination(context, registration?.status, displayReturnTo), request.url),
-        303,
-      ),
-      context,
-    );
   } catch (error) {
     if (claimed) await cancelAuthReturnAttempt(context, ownedStage);
     return clearAuthReturnCookie(
@@ -120,4 +139,46 @@ export async function POST(request: Request): Promise<Response> {
       claimed ? context : null,
     );
   }
+}
+
+function assertEmailIdentity(
+  context: AuthReturnContext,
+  user: { email?: string | null } | null | undefined,
+): void {
+  if (
+    context.attempt &&
+    (!user?.email ||
+      authEmailHash(user.email, context.attempt.proofHash) !== context.attempt.loginIdentityHash)
+  )
+    throw new AuthReturnContextError();
+}
+
+async function completeEmailSession(
+  request: Request,
+  context: AuthReturnContext,
+  displayReturnTo: string | null,
+  onStageChange: (stage: 'CLAIMED' | 'AUTHENTICATED') => void,
+): Promise<Response> {
+  const currentUser = await (await currentUserProvider()).getCurrentUser();
+  if (currentUser === null) throw new Error('user unavailable');
+  const db = await import('@bunshin/database');
+  await authenticateAuthReturnAttempt(context, currentUser.userId);
+  onStageChange('AUTHENTICATED');
+  const required = await new db.PrismaLegalConsentRepository().findRequiredForUser(
+    currentUser.userId,
+  );
+  if (required.some((item) => !item.consentedAt))
+    return NextResponse.redirect(new URL(authConsentPath(context), request.url), 303);
+  const registration = await db.prisma.userRegistrationProfile.findUnique({
+    where: { userId: currentUser.userId },
+    select: { status: true },
+  });
+  await consumeAuthReturnAttempt(context, currentUser.userId);
+  return clearAuthReturnCookie(
+    NextResponse.redirect(
+      new URL(authReturnDestination(context, registration?.status, displayReturnTo), request.url),
+      303,
+    ),
+    context,
+  );
 }
