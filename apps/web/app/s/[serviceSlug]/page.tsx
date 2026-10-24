@@ -8,6 +8,8 @@ import { currentUserProvider } from '../../../src/auth/current-user';
 import { isRouteNotFound } from '../../../src/navigation/route-not-found';
 import { ParticipationForm } from './participation-form';
 import { PendingSubmitButton } from '../../ui/pending-submit-button';
+import { ServiceHomeAccessGuidance } from './home/service-home-access-guidance';
+import { serviceAuthBrandForSlug } from '../../../src/services/service-auth-brand';
 
 export const dynamic = 'force-dynamic';
 
@@ -44,7 +46,7 @@ const service = cache(async (slug: string) => {
   try {
     return await resolvePublicServiceContext(slug);
   } catch (error) {
-    if (isRouteNotFound(error)) notFound();
+    if (isRouteNotFound(error)) return null;
     throw error;
   }
 });
@@ -56,6 +58,14 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { serviceSlug } = await params;
   const context = await service(serviceSlug);
+  if (!context) {
+    const brand = serviceAuthBrandForSlug(serviceSlug);
+    if (!brand) notFound();
+    return {
+      title: brand.serviceName,
+      description: `${brand.serviceName}の利用案内`,
+    };
+  }
   return {
     title: context.configuration.displayName,
     description: context.configuration.description,
@@ -78,8 +88,20 @@ export default async function ServiceEntryPage({
 }) {
   const { serviceSlug } = await params;
   const query = await searchParams;
-  const { configuration } = await service(serviceSlug);
+  const context = await service(serviceSlug);
   const currentUser = await (await currentUserProvider()).getCurrentUser();
+  if (!context) {
+    const brand = serviceAuthBrandForSlug(serviceSlug);
+    if (!brand) notFound();
+    return (
+      <ServiceHomeAccessGuidance
+        state={currentUser ? 'LINK_UNAVAILABLE' : 'LOGIN_REQUIRED'}
+        brand={brand}
+        serviceSlug={serviceSlug}
+      />
+    );
+  }
+  const { configuration } = context;
   const db = await import('@bunshin/database');
   const { ServiceParticipationService } = await import('@bunshin/application');
   const participation = await new ServiceParticipationService(
