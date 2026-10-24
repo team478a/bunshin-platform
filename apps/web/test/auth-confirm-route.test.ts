@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { GET } from '../app/auth/confirm/route';
 
 describe('magic link confirmation route', () => {
-  it('moves a valid token to the explicit confirmation screen', () => {
-    const response = GET(
+  it('moves a valid token to the explicit confirmation screen', async () => {
+    const response = await GET(
       new Request('https://bunshin.example/auth/confirm?token_hash=abc_123-Z&type=email'),
     );
 
@@ -13,8 +13,8 @@ describe('magic link confirmation route', () => {
     );
   });
 
-  it('preserves only a validated service return path for branded email confirmation', () => {
-    const response = GET(
+  it('preserves only a validated service return path for branded email confirmation', async () => {
+    const response = await GET(
       new Request(
         'https://bunshin.example/auth/confirm?token_hash=abc_123-Z&type=email&returnTo=%2Fs%2Fmanaberu-style%2Fhome',
       ),
@@ -25,8 +25,8 @@ describe('magic link confirmation route', () => {
     );
   });
 
-  it('rejects an unsafe service return path instead of displaying misleading context', () => {
-    const response = GET(
+  it('rejects an unsafe service return path instead of displaying misleading context', async () => {
+    const response = await GET(
       new Request(
         'https://bunshin.example/auth/confirm?token_hash=abc_123-Z&type=email&returnTo=https%3A%2F%2Fevil.example',
       ),
@@ -37,8 +37,8 @@ describe('magic link confirmation route', () => {
     );
   });
 
-  it('rejects missing or malformed magic-link parameters', () => {
-    const response = GET(
+  it('rejects missing or malformed magic-link parameters', async () => {
+    const response = await GET(
       new Request('https://bunshin.example/auth/confirm?token_hash=%3Cscript%3E&type=email'),
     );
 

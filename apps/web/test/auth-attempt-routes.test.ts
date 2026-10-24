@@ -466,12 +466,9 @@ describe('attempt-scoped route contracts', () => {
       'redirect_to',
       `${origin}/auth/confirm?authAttempt=${a.id}&returnTo=%2Fs%2Ftraining%2Fhome`,
     );
-    expect(location(emailLanding(new Request(callback))).searchParams.get('authAttempt')).toBe(
-      a.id,
-    );
-    expect(location(emailLanding(new Request(callback))).searchParams.get('returnTo')).toBe(
-      '/s/training/home',
-    );
+    const landing = await emailLanding(new Request(callback));
+    expect(location(landing).searchParams.get('authAttempt')).toBe(a.id);
+    expect(location(landing).searchParams.get('returnTo')).toBe('/s/training/home');
     state.otp.mockResolvedValue({ data: { user: { email: 'other@example.com' } }, error: null });
     const response = await finishEmail(
       post('/auth/confirm', { token_hash: 'token', type: 'email', authAttempt: a.id }, a.cookie),
@@ -515,6 +512,46 @@ describe('attempt-scoped route contracts', () => {
 
     expect(location(response).pathname).toBe('/s/manaberu-style/home');
     expect(location(response).pathname).not.toBe('/onboarding');
+  });
+
+  it('exchanges a PKCE email callback code and returns legacy auth to the service', async () => {
+    vi.stubEnv('AUTH_RETURN_ATTEMPTS_ENABLED', 'false');
+    state.registrationStatus = 'IN_PROGRESS';
+    state.exchange.mockResolvedValue({
+      data: { user: { email: 'member@example.com' } },
+      error: null,
+    });
+
+    const response = await emailLanding(
+      new Request(`${origin}/auth/confirm?code=pkce-code&returnTo=%2Fs%2Fmanaberu-style`),
+    );
+
+    expect(state.exchange).toHaveBeenCalledWith('pkce-code');
+    expect(location(response).pathname).toBe('/s/manaberu-style');
+    expect(location(response).pathname).not.toBe('/onboarding');
+  });
+
+  it('completes a PKCE email callback within its auth attempt and preserves the service', async () => {
+    const a = proof(
+      await startEmail(
+        post('/auth/email', { email: 'member@example.com', returnTo: '/s/manaberu-style/home' }),
+      ),
+    );
+    state.exchange.mockResolvedValue({
+      data: { user: { email: 'member@example.com' } },
+      error: null,
+    });
+
+    const response = await emailLanding(
+      new Request(
+        `${origin}/auth/confirm?code=pkce-code&authAttempt=${a.id}&returnTo=%2Fs%2Fmanaberu-style%2Fhome`,
+        { headers: { cookie: a.cookie } },
+      ),
+    );
+
+    expect(state.exchange).toHaveBeenCalledWith('pkce-code');
+    expect(location(response).pathname).toBe('/s/manaberu-style/home');
+    expect(attemptRows.get(a.id)?.stage).toBe('CONSUMED');
   });
 
   it('explains a different email browser and keeps the service on the retry screen', async () => {
