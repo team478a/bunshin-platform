@@ -62,6 +62,16 @@ describe('attempt-scoped authentication return records', () => {
     expect(authReturnDestination(context, null, 'https://evil.example')).toBe('/onboarding');
   });
 
+  it('prefers the current legacy email callback over a stale service cookie', () => {
+    vi.stubEnv('AUTH_RETURN_ATTEMPTS_ENABLED', 'false');
+    const context = { attempt: null, returnTo: '/s/hassy' };
+
+    expect(authReturnDestination(context, 'COMPLETED', '/s/manaberu-style')).toBe(
+      '/s/manaberu-style',
+    );
+    expect(authReturnDestination(context, 'COMPLETED')).toBe('/s/hassy');
+  });
+
   it('does not use a callback fallback when attempt-scoped auth is enabled', () => {
     vi.stubEnv('AUTH_RETURN_ATTEMPTS_ENABLED', 'true');
     const context = { attempt: null, returnTo: null };

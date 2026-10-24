@@ -12,18 +12,27 @@ import {
   consumeAuthReturnAttempt,
   authReturnDestination,
   AuthReturnContextError,
+  authReturnAttemptsEnabled,
 } from '../../src/auth/auth-return-attempt';
+import { safeLineAuthReturnPath } from '../../src/auth/line-return';
 
 export const dynamic = 'force-dynamic';
 
 export default async function ConsentPage({
   searchParams,
 }: {
-  searchParams: Promise<{ authAttempt?: string | string[] }>;
+  searchParams: Promise<{ authAttempt?: string | string[]; returnTo?: string | string[] }>;
 }) {
-  const user = await (await currentUserProvider()).getCurrentUser();
-  if (!user) redirect('/login');
   const query = await searchParams;
+  const requestedReturnTo =
+    typeof query.returnTo === 'string' ? safeLineAuthReturnPath(query.returnTo) : null;
+  if (query.returnTo !== undefined && (!requestedReturnTo || authReturnAttemptsEnabled()))
+    redirect('/login?error=auth-context');
+  const user = await (await currentUserProvider()).getCurrentUser();
+  if (!user)
+    redirect(
+      requestedReturnTo ? `/login?returnTo=${encodeURIComponent(requestedReturnTo)}` : '/login',
+    );
   const context = await (async () => {
     try {
       const id = singleAuthAttemptId(
@@ -59,7 +68,7 @@ export default async function ConsentPage({
     }
     // Next narrows redirect after typed routes are generated; clean CI sees a string instead.
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion -- Required with generated Next typed routes; destinations are allowlisted.
-    redirect(authReturnDestination(context, profile?.status) as Route);
+    redirect(authReturnDestination(context, profile?.status, requestedReturnTo) as Route);
   }
   return (
     <PublicShell>
@@ -71,6 +80,7 @@ export default async function ConsentPage({
         </div>
         <form action="/consent/accept" method="post">
           {context.attempt && <input type="hidden" name="authAttempt" value={context.attempt.id} />}
+          {requestedReturnTo && <input type="hidden" name="returnTo" value={requestedReturnTo} />}
           <div className="consent-documents">
             {documents.map((document) => (
               <section className="legal-card consent-document" key={document.id}>

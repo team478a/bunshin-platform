@@ -86,7 +86,7 @@ async function completePkceEmailCallback(
       loginErrorResponse(
         request,
         error instanceof AuthReturnContextError ? 'auth-context' : '1',
-        context?.returnTo ?? displayReturnTo,
+        displayReturnTo ?? context?.returnTo ?? null,
       ),
       claimed ? context : null,
     );
@@ -134,7 +134,7 @@ export async function POST(request: Request): Promise<Response> {
       loginErrorResponse(
         request,
         error instanceof AuthReturnContextError ? 'auth-context' : '1',
-        context?.returnTo ?? displayReturnTo,
+        displayReturnTo ?? context?.returnTo ?? null,
       ),
       claimed ? context : null,
     );
@@ -168,7 +168,10 @@ async function completeEmailSession(
     currentUser.userId,
   );
   if (required.some((item) => !item.consentedAt))
-    return NextResponse.redirect(new URL(authConsentPath(context), request.url), 303);
+    return NextResponse.redirect(
+      new URL(authConsentPath(context, displayReturnTo), request.url),
+      303,
+    );
   const registration = await db.prisma.userRegistrationProfile.findUnique({
     where: { userId: currentUser.userId },
     select: { status: true },
