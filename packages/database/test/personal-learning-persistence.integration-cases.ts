@@ -4404,7 +4404,7 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
       }
       expect(await client.trainingParticipantProfile.count()).toBe(0);
     });
-    it('production preparation refuses a shared Service with another AI Training Program', async () => {
+    it('production preparation allows an ordinary AI Training Program on the same Service', async () => {
       const f = await profilePreparation();
       const program = await client.serviceProgram.findUniqueOrThrow({
         where: { id: f.enrollment.serviceProgramId },
@@ -4416,6 +4416,41 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
           displayName: 'Synthetic existing V1',
           settings: { moduleKey: 'AI_TRAINING_V1' },
           status: 'ACTIVE',
+        },
+      });
+      const authority = {
+        workspaceId: f.scope.workspaceId,
+        groupId: f.scope.groupId,
+        serviceProgramId: program.id,
+      };
+      const admin = new PrismaLearningDefinitionApprovalAdminRepository(
+        client,
+        () => now,
+        authority,
+      );
+      await expect(
+        admin.list({
+          workspaceId: f.scope.workspaceId,
+          groupId: f.scope.groupId,
+          actorUserId: f.owner.id,
+        }),
+      ).resolves.toBeDefined();
+    });
+    it('production preparation still refuses another Personal Learning Program', async () => {
+      const f = await profilePreparation();
+      const program = await client.serviceProgram.findUniqueOrThrow({
+        where: { id: f.enrollment.serviceProgramId },
+      });
+      await client.serviceProgram.create({
+        data: {
+          ...program,
+          id: randomUUID(),
+          displayName: 'Synthetic existing Personal Learning',
+          settings: {
+            moduleKey: 'AI_TRAINING_V1',
+            personalLearningPilot: { enabled: false, enrollmentIds: [] },
+          },
+          status: 'SUSPENDED',
         },
       });
       const authority = {
