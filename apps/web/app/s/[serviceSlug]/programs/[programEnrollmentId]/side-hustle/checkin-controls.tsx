@@ -20,6 +20,7 @@ export function CheckinDecisionSelect({
         {month3 ? '90日の地図を終える' : '次の段階へ進む'}
       </option>
       <option value="CONTINUE">いまの段階を続ける</option>
+      <option value="REVISE">地図を見直す</option>
       <option value="RESELECT">別の副業を選び直す</option>
     </select>
   );

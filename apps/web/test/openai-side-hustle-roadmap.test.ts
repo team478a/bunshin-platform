@@ -9,6 +9,7 @@ import {
   SIDE_HUSTLE_ROADMAP_SCHEMA,
   generateSideHustleRoadmap,
   sideHustleRoadmapBody,
+  sideHustleRoadmapRevisionBody,
 } from '../src/providers/openai-side-hustle-roadmap';
 
 const valid = {
@@ -84,5 +85,26 @@ describe('side-hustle roadmap provider', () => {
         milestones: valid.milestones.map((item) => ({ ...item, weeklyHours: 4 })),
       }),
     ).toThrow();
+  });
+
+  it('sends revision check-in facts but never practice answers, conversation, or exclusion keywords', () => {
+    const body = sideHustleRoadmapRevisionBody({
+      model: 'model',
+      safetyPolicy: 'safety',
+      instructions: 'instructions',
+      selectedSideHustle: { name: '文章作成' },
+      hearing: { freeText: { goal: '練習する' } },
+      baseRoadmap: valid,
+      fromPeriod: 'MONTH_2',
+      checkin: { checkpointResults: ['PARTLY'], feeling: 'HARD', note: '負担を軽くしたい' },
+      verifiedPracticeCount: 2,
+      excludedAreas: [{ label: '投資', reason: '対象外' }],
+    });
+    expect(body).toContain('負担を軽くしたい');
+    expect(body).toContain('PARTLY');
+    expect(body).toContain('HARD');
+    expect(body).not.toContain('practiceAnswerText');
+    expect(body).not.toContain('conversationTranscript');
+    expect(body).not.toContain('excludedKeywords');
   });
 });

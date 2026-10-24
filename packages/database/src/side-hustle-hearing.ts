@@ -3,6 +3,7 @@ import type { Prisma, PrismaClient } from '@prisma/client';
 import {
   validateSavePersonalLearningRequest,
   type PersonalLearningActor,
+  type SavePersonalLearningRequest,
 } from '@bunshin/application';
 import { ApplicationError } from '@bunshin/shared';
 import {
@@ -14,11 +15,13 @@ import {
   validateSideHustleHearing,
   validateSideHustleRoadmapProposal,
   buildSideHustleInitialRequest,
+  buildSideHustleRoadmapRevisionRequest,
   SIDE_HUSTLE_PERIODS,
   SIDE_HUSTLE_CHECKIN_VERSION,
   validateSideHustleCheckin,
   sideHustleCheckinEligibility,
   buildSideHustleStageRequest,
+  assertSideHustleRoadmapRevisionPreservesCompletedMonths,
   parseStoredSideHustleCandidateProposal,
   screenSideHustleCandidates,
   type SideHustleHearing,
@@ -33,6 +36,8 @@ const HEARING = 'SIDE_HUSTLE_HEARING_SAVED';
 const PROPOSAL = 'SIDE_HUSTLE_PROPOSAL_SAVED';
 const SELECTED = 'SIDE_HUSTLE_SELECTED';
 const ROADMAP = 'SIDE_HUSTLE_ROADMAP_PROPOSED';
+const ROADMAP_REVISION_PROPOSED = 'SIDE_HUSTLE_ROADMAP_REVISION_PROPOSED';
+const ROADMAP_REVISED = 'SIDE_HUSTLE_ROADMAP_REVISED';
 const STARTED = 'SIDE_HUSTLE_STARTED';
 const CHECKIN = 'SIDE_HUSTLE_CHECKIN_SAVED';
 const STAGE_ADVANCED = 'SIDE_HUSTLE_STAGE_ADVANCED';
@@ -220,18 +225,6 @@ export class PrismaSideHustleHearingRepository extends PrismaPersonalLearningReq
                 createdAt: latestSelection.occurredAt.toISOString(),
               } satisfies SavedSideHustleSelection)
             : null;
-        const roadmapEvent = selection
-          ? events.find(
-              (event) =>
-                event.eventType === ROADMAP &&
-                metadata(event.metadata).selectionEventId === selection.id,
-            )
-          : undefined;
-        const roadmapMeta = roadmapEvent ? metadata(roadmapEvent.metadata) : null;
-        const roadmap =
-          roadmapEvent && roadmapMeta
-            ? projectRoadmap(roadmapEvent.id, roadmapMeta, roadmapEvent.occurredAt.toISOString())
-            : null;
         const startedEvent = selection
           ? events.find(
               (event) =>
@@ -252,6 +245,38 @@ export class PrismaSideHustleHearingRepository extends PrismaPersonalLearningReq
                   ? startedMeta.pausedTopicIds.filter((id): id is string => typeof id === 'string')
                   : [],
               }
+            : null;
+        const startedTopic = started
+          ? await tx.personalLearningTopic.findFirst({
+              where: { ...actor.scope, id: started.topicId },
+              select: { goalSnapshot: true },
+            })
+          : null;
+        const startedSnapshot = metadata(startedTopic?.goalSnapshot ?? {});
+        const committedRoadmapId =
+          typeof startedSnapshot.roadmapEventId === 'string'
+            ? startedSnapshot.roadmapEventId
+            : null;
+        const roadmapEvent = selection
+          ? committedRoadmapId
+            ? await tx.programActionEvent.findFirst({
+                where: {
+                  ...s,
+                  actorUserId: actor.scope.userId,
+                  id: committedRoadmapId,
+                  eventType: { in: [ROADMAP, ROADMAP_REVISION_PROPOSED] },
+                },
+              })
+            : events.find(
+                (event) =>
+                  event.eventType === ROADMAP &&
+                  metadata(event.metadata).selectionEventId === selection.id,
+              )
+          : undefined;
+        const roadmapMeta = roadmapEvent ? metadata(roadmapEvent.metadata) : null;
+        const roadmap =
+          roadmapEvent && roadmapMeta
+            ? projectRoadmap(roadmapEvent.id, roadmapMeta, roadmapEvent.occurredAt.toISOString())
             : null;
         const activeSideHustleTopic = await tx.personalLearningTopic.findFirst({
           where: {
@@ -346,7 +371,11 @@ export class PrismaSideHustleHearingRepository extends PrismaPersonalLearningReq
           typeof snapshot.roadmapEventId === 'string' ? snapshot.roadmapEventId : null;
         const roadmapEvent = roadmapId
           ? await tx.programActionEvent.findFirst({
-              where: { ...scopeOf(actor), id: roadmapId, eventType: ROADMAP },
+              where: {
+                ...scopeOf(actor),
+                id: roadmapId,
+                eventType: { in: [ROADMAP, ROADMAP_REVISION_PROPOSED] },
+              },
             })
           : null;
         const roadmap = roadmapEvent
@@ -379,7 +408,9 @@ export class PrismaSideHustleHearingRepository extends PrismaPersonalLearningReq
           verifiedPracticeCount: Number(verifiedPracticeCount[0]?.count ?? 0),
           eligibility,
           roadmap,
-          lastCheckin: lastCheckin ? metadata(lastCheckin.metadata).checkin : null,
+          lastCheckin: lastCheckin
+            ? { id: lastCheckin.id, ...(metadata(lastCheckin.metadata).checkin as object) }
+            : null,
         };
       },
       true,
@@ -1083,6 +1114,428 @@ export class PrismaSideHustleHearingRepository extends PrismaPersonalLearningReq
     );
   }
 
+  async saveRoadmapRevisionProposal(input: {
+    actor: PersonalLearningActor;
+    topicId: string;
+    selectionEventId: string;
+    baseRoadmapEventId: string;
+    fromPeriod: (typeof SIDE_HUSTLE_PERIODS)[number];
+    checkinEventId: string;
+    operationId: string;
+    roadmap: unknown;
+    promptVersion: string;
+    usageKey: string;
+  }) {
+    if (
+      ![
+        input.topicId,
+        input.selectionEventId,
+        input.baseRoadmapEventId,
+        input.checkinEventId,
+        input.operationId,
+      ].every((id) => /^[0-9a-f-]{36}$/i.test(id)) ||
+      !SIDE_HUSTLE_PERIODS.includes(input.fromPeriod) ||
+      input.promptVersion !== 'side-hustle-roadmap-revision-v1' ||
+      !/^personal-learning-operation:[0-9a-f]{64}$/.test(input.usageKey)
+    )
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid roadmap revision proposal');
+    return this.authorized(
+      input.actor,
+      true,
+      async (tx, now) => {
+        await this.normalLearner(tx, input.actor);
+        await this.assertPolicy(tx, input.actor);
+        const s = scopeOf(input.actor);
+        const key = `side-hustle-roadmap-revision:${input.operationId}`;
+        const prior = await tx.programActionEvent.findFirst({
+          where: { ...s, idempotencyKey: key },
+        });
+        if (prior) {
+          const meta = metadata(prior.metadata);
+          if (
+            prior.eventType !== ROADMAP_REVISION_PROPOSED ||
+            meta.topicId !== input.topicId ||
+            meta.baseRoadmapEventId !== input.baseRoadmapEventId ||
+            meta.fromPeriod !== input.fromPeriod ||
+            meta.checkinEventId !== input.checkinEventId
+          )
+            conflict();
+          return projectRoadmap(prior.id, meta, prior.occurredAt.toISOString());
+        }
+        const topic = await tx.personalLearningTopic.findFirst({
+          where: {
+            ...input.actor.scope,
+            id: input.topicId,
+            status: 'ACTIVE',
+            goalSnapshot: { path: ['kind'], equals: 'SIDE_HUSTLE' },
+          },
+        });
+        if (!topic) conflict();
+        const snapshot = metadata(topic!.goalSnapshot);
+        if (
+          snapshot.selectionEventId !== input.selectionEventId ||
+          snapshot.roadmapEventId !== input.baseRoadmapEventId
+        )
+          throw new ApplicationError('CONFLICT', 'side hustle roadmap changed');
+        const stage = await tx.programActionEvent.findFirst({
+          where: {
+            ...s,
+            actorUserId: input.actor.scope.userId,
+            eventType: STAGE_ADVANCED,
+            metadata: { path: ['topicId'], equals: input.topicId },
+          },
+          orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }],
+        });
+        const currentPeriod = stage ? metadata(stage.metadata).toPeriod : SIDE_HUSTLE_PERIODS[0];
+        if (currentPeriod !== input.fromPeriod)
+          throw new ApplicationError('CONFLICT', 'side hustle roadmap changed');
+        const checkin = await tx.programActionEvent.findFirst({
+          where: {
+            ...s,
+            actorUserId: input.actor.scope.userId,
+            id: input.checkinEventId,
+            eventType: CHECKIN,
+            metadata: { path: ['topicId'], equals: input.topicId },
+          },
+        });
+        const checkinMeta = checkin ? metadata(checkin.metadata) : {};
+        const checkinContent = checkinMeta.checkin as
+          { decision?: unknown; period?: unknown } | undefined;
+        const latestCheckin = await tx.programActionEvent.findFirst({
+          where: {
+            ...s,
+            actorUserId: input.actor.scope.userId,
+            eventType: CHECKIN,
+            metadata: { path: ['topicId'], equals: input.topicId },
+          },
+          orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }],
+        });
+        if (
+          !checkin ||
+          latestCheckin?.id !== checkin.id ||
+          checkinContent?.decision !== 'REVISE' ||
+          checkinContent.period !== input.fromPeriod
+        )
+          conflict();
+        const baseEvent = await tx.programActionEvent.findFirst({
+          where: {
+            ...s,
+            actorUserId: input.actor.scope.userId,
+            id: input.baseRoadmapEventId,
+            eventType: { in: [ROADMAP, ROADMAP_REVISION_PROPOSED] },
+          },
+        });
+        if (!baseEvent) conflict();
+        const baseMeta = metadata(baseEvent!.metadata);
+        const baseRoadmap = validateSideHustleRoadmapProposal(baseMeta.roadmap, {
+          weeklyHours: null,
+        });
+        const selection = await tx.programActionEvent.findFirst({
+          where: {
+            ...s,
+            actorUserId: input.actor.scope.userId,
+            id: input.selectionEventId,
+            eventType: SELECTED,
+          },
+        });
+        const selectionMeta = metadata(selection?.metadata ?? {});
+        const candidate = selectionMeta.candidate as SideHustleCandidate | undefined;
+        const selectedProposal = selection
+          ? await tx.programActionEvent.findFirst({
+              where: {
+                ...s,
+                actorUserId: input.actor.scope.userId,
+                id: String(selectionMeta.proposalEventId),
+                eventType: PROPOSAL,
+              },
+            })
+          : null;
+        const hearingEventId = selectedProposal
+          ? metadata(selectedProposal.metadata).hearingEventId
+          : null;
+        const hearingEvent =
+          typeof hearingEventId === 'string'
+            ? await tx.programActionEvent.findFirst({
+                where: {
+                  ...s,
+                  actorUserId: input.actor.scope.userId,
+                  id: hearingEventId,
+                  eventType: HEARING,
+                },
+              })
+            : null;
+        if (!selection || !candidate || !hearingEvent) conflict();
+        const hearing = validateSideHustleHearing(metadata(hearingEvent!.metadata).hearing);
+        const weeklyHours = hearing.conditions.weeklyHours ?? candidate!.weeklyHoursMin;
+        const roadmap = validateSideHustleRoadmapProposal(input.roadmap, { weeklyHours });
+        try {
+          assertSideHustleRoadmapRevisionPreservesCompletedMonths({
+            base: baseRoadmap,
+            revision: roadmap,
+            fromPeriod: input.fromPeriod,
+          });
+        } catch {
+          throw new ApplicationError('VALIDATION_ERROR', 'completed roadmap month changed');
+        }
+        const usage = await tx.aiUsageEvent.findFirst({
+          where: {
+            workspaceId: input.actor.scope.workspaceId,
+            actorUserId: input.actor.scope.userId,
+            idempotencyKey: input.usageKey,
+            status: 'SUCCESS',
+            estimatedCostUsdMicros: { not: null },
+            promptVersion: input.promptVersion,
+            taskType: 'PERSONAL_LEARNING_SIDE_HUSTLE_ROADMAP_REVISION',
+          },
+        });
+        if (!usage) conflict();
+        const row = await tx.programActionEvent.create({
+          data: {
+            ...s,
+            actorUserId: input.actor.scope.userId,
+            eventType: ROADMAP_REVISION_PROPOSED,
+            idempotencyKey: key,
+            occurredAt: now,
+            metadata: {
+              schemaVersion: 1,
+              topicId: input.topicId,
+              selectionEventId: input.selectionEventId,
+              baseRoadmapEventId: input.baseRoadmapEventId,
+              fromPeriod: input.fromPeriod,
+              checkinEventId: input.checkinEventId,
+              operationId: input.operationId,
+              roadmapContractVersion: 'SIDE_HUSTLE_ROADMAP_V1',
+              promptVersion: input.promptVersion,
+              usageKey: input.usageKey,
+              roadmap,
+            } as unknown as Prisma.InputJsonValue,
+          },
+        });
+        return projectRoadmap(row.id, metadata(row.metadata), row.occurredAt.toISOString());
+      },
+      true,
+    );
+  }
+
+  async readRoadmapRevisionProposal(
+    actor: PersonalLearningActor,
+    input: { operationId: string; topicId: string; checkinEventId: string },
+  ) {
+    const { operationId } = input;
+    if (!/^[0-9a-f-]{36}$/i.test(operationId))
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid roadmap revision operation');
+    return this.authorized(
+      actor,
+      true,
+      async (tx) => {
+        await this.normalLearner(tx, actor);
+        await this.assertPolicy(tx, actor);
+        const row = await tx.programActionEvent.findFirst({
+          where: {
+            ...scopeOf(actor),
+            actorUserId: actor.scope.userId,
+            eventType: ROADMAP_REVISION_PROPOSED,
+            idempotencyKey: `side-hustle-roadmap-revision:${operationId}`,
+          },
+        });
+        if (!row) return null;
+        const meta = metadata(row.metadata);
+        if (meta.topicId !== input.topicId || meta.checkinEventId !== input.checkinEventId)
+          conflict();
+        return projectRoadmap(row.id, meta, row.occurredAt.toISOString());
+      },
+      true,
+    );
+  }
+
+  async saveRoadmapRevision(input: {
+    actorUserId: string;
+    scope: PersonalLearningActor['scope'];
+    topicId: string;
+    revisionProposalEventId: string;
+    operationId: string;
+  }) {
+    const topicId = input.topicId;
+    if (
+      !/^[0-9a-f-]{36}$/i.test(topicId) ||
+      !/^[0-9a-f-]{36}$/i.test(input.revisionProposalEventId) ||
+      !/^[0-9a-f-]{36}$/i.test(input.operationId)
+    )
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid roadmap revision');
+    return this.authorized(input, true, async (tx, now) => {
+      await this.normalLearner(tx, input);
+      await this.assertPolicy(tx, input);
+      const scope = input.scope;
+      const topic = await tx.personalLearningTopic.findFirst({
+        where: {
+          ...scope,
+          id: topicId,
+          status: 'ACTIVE',
+          goalSnapshot: { path: ['kind'], equals: 'SIDE_HUSTLE' },
+        },
+      });
+      if (!topic) conflict();
+      const s = scopeOf(input);
+      const proposalEvent = await tx.programActionEvent.findFirst({
+        where: {
+          ...s,
+          actorUserId: scope.userId,
+          id: input.revisionProposalEventId,
+          eventType: ROADMAP_REVISION_PROPOSED,
+        },
+      });
+      if (!proposalEvent) conflict();
+      const proposalMeta = metadata(proposalEvent!.metadata);
+      if (proposalMeta.topicId !== topicId) conflict();
+      const alreadyRevised = await tx.programActionEvent.findFirst({
+        where: {
+          ...s,
+          actorUserId: scope.userId,
+          eventType: ROADMAP_REVISED,
+          metadata: { path: ['revisionProposalEventId'], equals: input.revisionProposalEventId },
+        },
+      });
+      if (alreadyRevised) {
+        const revisedMeta = metadata(alreadyRevised.metadata);
+        const saved = await tx.personalLearningRequest.findFirst({
+          where: {
+            ...scope,
+            topicId,
+            id: String(revisedMeta.requestId),
+            revision: Number(revisedMeta.requestRevision),
+          },
+        });
+        if (!saved) conflict();
+        return projectSavedRequest(saved!);
+      }
+      const latestStage = await tx.programActionEvent.findFirst({
+        where: {
+          ...scopeOf(input),
+          actorUserId: input.scope.userId,
+          eventType: STAGE_ADVANCED,
+          metadata: { path: ['topicId'], equals: topicId },
+        },
+        orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }],
+      });
+      const actualPeriod = latestStage
+        ? metadata(latestStage.metadata).toPeriod
+        : SIDE_HUSTLE_PERIODS[0];
+      const fromPeriod = proposalMeta.fromPeriod;
+      if (
+        actualPeriod !== fromPeriod ||
+        actualPeriod === 'COMPLETED' ||
+        !SIDE_HUSTLE_PERIODS.includes(fromPeriod as (typeof SIDE_HUSTLE_PERIODS)[number])
+      )
+        throw new ApplicationError('CONFLICT', 'side hustle roadmap changed');
+      const snapshot = metadata(topic!.goalSnapshot);
+      if (
+        proposalMeta.baseRoadmapEventId !== snapshot.roadmapEventId ||
+        proposalMeta.selectionEventId !== snapshot.selectionEventId
+      )
+        throw new ApplicationError('CONFLICT', 'side hustle roadmap changed');
+      const baseEvent = await tx.programActionEvent.findFirst({
+        where: {
+          ...scopeOf(input),
+          actorUserId: input.actorUserId,
+          id: String(proposalMeta.baseRoadmapEventId),
+          eventType: { in: [ROADMAP, ROADMAP_REVISION_PROPOSED] },
+        },
+      });
+      if (!baseEvent) conflict();
+      const baseRoadmap = validateSideHustleRoadmapProposal(metadata(baseEvent!.metadata).roadmap, {
+        weeklyHours: null,
+      });
+      const roadmap = validateSideHustleRoadmapProposal(proposalMeta.roadmap, {
+        weeklyHours: null,
+      });
+      try {
+        assertSideHustleRoadmapRevisionPreservesCompletedMonths({
+          base: baseRoadmap,
+          revision: roadmap,
+          fromPeriod: fromPeriod as (typeof SIDE_HUSTLE_PERIODS)[number],
+        });
+      } catch {
+        throw new ApplicationError('VALIDATION_ERROR', 'completed roadmap month changed');
+      }
+      const previous = await tx.personalLearningRequest.findFirst({
+        where: { ...scope, topicId },
+        orderBy: { revision: 'desc' },
+      });
+      if (!previous) conflict();
+      const content = buildSideHustleRoadmapRevisionRequest({
+        previous: {
+          originalText: previous!.originalText,
+          currentPosition: previous!.currentPosition,
+          deviceType: previous!.deviceType as 'SMARTPHONE' | 'PC' | 'BOTH' | null,
+          toolDescription: previous!.toolDescription,
+          experienceDescription: previous!.experienceDescription,
+        },
+        roadmap,
+        fromPeriod: fromPeriod as (typeof SIDE_HUSTLE_PERIODS)[number],
+      });
+      const requestKey = `side_hustle_roadmap_revision_${input.revisionProposalEventId}`;
+      const requestInput: SavePersonalLearningRequest = {
+        actorUserId: input.actorUserId,
+        scope,
+        topicId,
+        content,
+        expectedRevision: previous!.revision,
+        idempotencyKey: requestKey,
+      };
+      validateSavePersonalLearningRequest(requestInput);
+      const requestDigest = createHash('sha256')
+        .update(JSON.stringify({ expectedRevision: previous!.revision, ...content, topicId }))
+        .digest('hex');
+      const saved = await tx.personalLearningRequest.create({
+        data: {
+          ...scope,
+          topicId,
+          ...content,
+          revision: previous!.revision + 1,
+          idempotencyKey: requestKey,
+          digest: requestDigest,
+        },
+      });
+      const revised = await tx.programActionEvent.create({
+        data: {
+          ...s,
+          actorUserId: scope.userId,
+          eventType: ROADMAP_REVISED,
+          idempotencyKey: `side-hustle-roadmap-revised:${input.revisionProposalEventId}`,
+          occurredAt: now,
+          metadata: {
+            schemaVersion: 1,
+            topicId,
+            revisionProposalEventId: proposalEvent!.id,
+            baseRoadmapEventId: String(proposalMeta.baseRoadmapEventId),
+            fromPeriod,
+            operationId: input.operationId,
+            requestId: saved.id,
+            requestRevision: saved.revision,
+          } as unknown as Prisma.InputJsonValue,
+        },
+      });
+      void revised;
+      const roadmapHistory = Array.isArray(snapshot.roadmapHistory)
+        ? snapshot.roadmapHistory.filter((item): item is string => typeof item === 'string')
+        : [];
+      await tx.personalLearningTopic.update({
+        where: { id: topic!.id },
+        data: {
+          goalSnapshot: {
+            ...snapshot,
+            roadmapEventId: proposalEvent!.id,
+            roadmap,
+            roadmapHistory: [
+              ...new Set([...roadmapHistory, String(proposalMeta.baseRoadmapEventId)]),
+            ],
+          } as unknown as Prisma.InputJsonValue,
+        },
+      });
+      return projectSavedRequest(saved);
+    });
+  }
+
   async start(input: {
     actor: PersonalLearningActor;
     selectionEventId: string;
@@ -1422,3 +1875,23 @@ const projectRoadmap = (
     createdAt,
   };
 };
+
+const projectSavedRequest = (saved: {
+  id: string;
+  revision: number;
+  createdAt: Date;
+  originalText: string;
+  currentPosition: string | null;
+  deviceType: string | null;
+  toolDescription: string | null;
+  experienceDescription: string | null;
+}) => ({
+  id: saved.id,
+  revision: saved.revision,
+  createdAt: saved.createdAt.toISOString(),
+  originalText: saved.originalText,
+  currentPosition: saved.currentPosition,
+  deviceType: saved.deviceType as 'SMARTPHONE' | 'PC' | 'BOTH' | null,
+  toolDescription: saved.toolDescription,
+  experienceDescription: saved.experienceDescription,
+});

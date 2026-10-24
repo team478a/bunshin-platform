@@ -2096,5 +2096,647 @@ export function registerPersonalLearningDIntegrationCases(client: PrismaClient) 
         }),
       ).rejects.toThrow(/unavailable/i);
     });
+
+    it('proposes and confirms a revision without changing completed months or exposing an unconfirmed map', async () => {
+      const f = await serviceFixture('PR-5c roadmap revision', { offerPolicy: 'SIDE_HUSTLE_V1' });
+      const actor = { actorUserId: f.user.id, scope: f.scope };
+      const repository = new PrismaSideHustleHearingRepository(client);
+      const hearing = {
+        conditions: {
+          initialBudget: null,
+          monthlyBudget: null,
+          weeklyHours: 5,
+          faceExposure: null,
+          snsPosting: null,
+          clientInteraction: null,
+          salesOutreach: null,
+          inventory: null,
+          device: 'PC' as const,
+        },
+        freeText: {
+          goal: '得意なことを活かしたい',
+          experience: '文章を書く経験',
+          interest: null,
+          constraint: null,
+        },
+        followUps: [],
+      };
+      const savedHearing = await repository.saveHearing({
+        actor,
+        hearing,
+        expectedRevision: 0,
+        idempotencyKey: randomUUID(),
+      });
+      const candidate = {
+        name: '文章作成サポート',
+        category: 'SKILL_SERVICE',
+        summary: '依頼を受けて文章を作ります。',
+        monetization: '依頼内容に応じた報酬です。',
+        fitReasons: [{ text: '経験を活かせます。', basedOn: ['experience'] }],
+        initialCost: 'NONE',
+        monthlyCost: 'NONE',
+        weeklyHoursMin: 3,
+        difficulty: 1,
+        requiredSkills: ['文章作成'],
+        workStyle: {
+          faceExposure: 'NONE',
+          snsPosting: 'NONE',
+          clientInteraction: 'REQUIRED',
+          salesOutreach: 'OPTIONAL',
+          inventory: 'NONE',
+          device: 'PC_REQUIRED',
+        },
+        typicalFlow: ['文章の見本を用意する', '小さな依頼を確認する', '文章を納品して振り返る'],
+        risks: ['依頼内容を確認します。'],
+        requirements: [{ kind: 'PLATFORM_TERMS', text: '規約を確認します。' }],
+      };
+      const candidateProposal = validateSideHustleCandidateProposal({
+        status: 'READY',
+        reason: '候補を整理しました。',
+        questions: [],
+        candidates: [candidate],
+      });
+      const proposalUsageKey = `personal-learning-operation:${'c'.repeat(64)}`;
+      await client.aiUsageEvent.create({
+        data: {
+          workspaceId: f.scope.workspaceId,
+          actorUserId: f.user.id,
+          bunshinId: null,
+          taskType: 'PERSONAL_LEARNING_SIDE_HUSTLE_PROPOSAL',
+          provider: 'openai',
+          model: 'gpt-5.2',
+          promptVersion: 'side-hustle-candidates-v1',
+          status: 'SUCCESS',
+          inputTokens: 1,
+          outputTokens: 1,
+          latencyMs: 10,
+          estimatedCostUsdMicros: 1n,
+          idempotencyKey: proposalUsageKey,
+          occurredAt: now,
+        },
+      });
+      const savedProposal = await repository.saveProposal({
+        actor,
+        hearingEventId: savedHearing.id,
+        hearingRevision: 1,
+        proposal: candidateProposal,
+        screening: screenSideHustleCandidates(hearing.conditions, candidateProposal.candidates),
+        promptVersion: 'side-hustle-candidates-v1',
+        usageKey: proposalUsageKey,
+      });
+      const selection = await repository.select({
+        actor,
+        proposalEventId: savedProposal.id,
+        candidateIndex: 0,
+        idempotencyKey: randomUUID(),
+      });
+      const baseRoadmap = validateSideHustleRoadmapProposal(
+        {
+          reason: '最初の地図です。',
+          milestones: [
+            {
+              period: 'MONTH_1',
+              title: '基礎を整える',
+              outcome: '情報を整理している',
+              checkpoints: ['公式情報を確認する'],
+              weeklyHours: 2,
+            },
+            {
+              period: 'MONTH_2',
+              title: '小さく試す',
+              outcome: '試行を記録している',
+              checkpoints: ['自分で試す'],
+              weeklyHours: 3,
+            },
+            {
+              period: 'MONTH_3',
+              title: '続け方を整える',
+              outcome: '続け方を振り返っている',
+              checkpoints: ['記録を見る'],
+              weeklyHours: 3,
+            },
+          ],
+        },
+        { weeklyHours: 5 },
+      );
+      const roadmapUsageKey = `personal-learning-operation:${'d'.repeat(64)}`;
+      await client.aiUsageEvent.create({
+        data: {
+          workspaceId: f.scope.workspaceId,
+          actorUserId: f.user.id,
+          bunshinId: null,
+          taskType: 'PERSONAL_LEARNING_SIDE_HUSTLE_ROADMAP',
+          provider: 'openai',
+          model: 'gpt-5.2',
+          promptVersion: 'side-hustle-roadmap-v1',
+          status: 'SUCCESS',
+          inputTokens: 1,
+          outputTokens: 1,
+          latencyMs: 10,
+          estimatedCostUsdMicros: 1n,
+          idempotencyKey: roadmapUsageKey,
+          occurredAt: now,
+        },
+      });
+      const savedRoadmap = await repository.saveRoadmap({
+        actor,
+        selectionEventId: selection.id,
+        roadmap: baseRoadmap,
+        promptVersion: 'side-hustle-roadmap-v1',
+        usageKey: roadmapUsageKey,
+        idempotencyKey: randomUUID(),
+      });
+      const started = await repository.start({
+        actor,
+        selectionEventId: selection.id,
+        roadmapEventId: savedRoadmap.id,
+        idempotencyKey: randomUUID(),
+      });
+      const initialRequest = await client.personalLearningRequest.findFirstOrThrow({
+        where: { ...f.scope, topicId: started.topicId, revision: 1 },
+      });
+      const progressGoal = await client.programMemberGoal.create({
+        data: {
+          workspaceId: f.scope.workspaceId,
+          groupId: f.scope.groupId,
+          programEnrollmentId: f.scope.programEnrollmentId,
+          groupMembershipId: f.scope.groupMembershipId,
+          topicId: started.topicId,
+          title: '副業の実践',
+          metricType: 'ACTION',
+          targetValue: 2,
+          currentValue: 0,
+          unit: 'practice',
+          startsAt: now,
+          createdByUserId: f.user.id,
+          updatedByUserId: f.user.id,
+        },
+      });
+      await client.personalLearningGoalConfirmation.create({
+        data: {
+          ...f.scope,
+          userId: f.user.id,
+          programMemberGoalId: progressGoal.id,
+          topicId: started.topicId,
+          packageKey: 'AI_TRAINING',
+          goalKey: 'SIDE_HUSTLE_REVISION_TEST',
+          semanticVersion: 'V1',
+          consultationRuleVersion: 'V1',
+          scopeRuleVersion: 'V1',
+          confirmedAt: now,
+        },
+      });
+      for (const index of [0, 1]) {
+        const planId = randomUUID();
+        await client.personalLearningPlanRevision.create({
+          data: {
+            ...f.scope,
+            userId: f.user.id,
+            topicId: started.topicId,
+            planId,
+            revision: 1,
+            previousRevision: null,
+            revisionReason: 'INITIAL',
+            programMemberGoalId: progressGoal.id,
+            contractVersion: 'PERSONAL_LEARNING_PLAN_V1',
+            ruleVersion: 'V1',
+            status: 'CONFIRMED',
+            steps: JSON.parse(
+              JSON.stringify(
+                AI_TRAINING_LEARNING_DEFINITION_FIXTURES.map((definition) => ({
+                  definition: definition.reference,
+                  prerequisites: definition.prerequisites,
+                  selectionReason: 'GOAL_ALIGNMENT',
+                })),
+              ),
+            ) as Prisma.InputJsonValue,
+            confirmedAt: now,
+          },
+        });
+        const assignmentId = randomUUID();
+        await client.programMissionAssignment.create({
+          data: {
+            id: assignmentId,
+            workspaceId: f.scope.workspaceId,
+            groupId: f.scope.groupId,
+            programEnrollmentId: f.scope.programEnrollmentId,
+            programTemplateVersionId: f.program.programTemplateVersionId,
+            sequence: 980 + index,
+            routeKey: 'PERSONAL_LEARNING',
+            phaseKey: 'SIDE_HUSTLE',
+            missionDefinitionKey: 'PERSONAL_LEARNING_DYNAMIC_PRACTICE',
+            actionMode: 'WORK',
+            targetResourceType: 'PERSONAL_LEARNING_PLAN',
+            targetResourceId: planId,
+            status: 'STARTED',
+            displaySnapshot: {
+              dynamicPractice: {
+                version: 'PERSONAL_LEARNING_PRACTICE_V1',
+                topicId: started.topicId,
+                planId,
+                planRevision: 1,
+                goalId: progressGoal.id,
+                scope: f.scope,
+                candidate: { id: randomUUID(), materialVersion: 1 },
+              },
+            },
+            ruleVersion: 'PERSONAL_LEARNING_PRACTICE_V1',
+            presentedAt: now,
+            startedAt: now,
+          },
+        });
+        await client.trainingMissionAnswer.create({
+          data: {
+            workspaceId: f.scope.workspaceId,
+            groupId: f.scope.groupId,
+            programEnrollmentId: f.scope.programEnrollmentId,
+            missionAssignmentId: assignmentId,
+            userId: f.user.id,
+            answer: JSON.stringify({ revision: 1, text: '確認済みの小さな実践' }),
+            evaluationStatus: 'READY',
+            evaluation: {
+              schemaVersion: 'PERSONAL_LEARNING_EVIDENCE_REVIEW_V1',
+              review: {
+                state: 'CURRENT_STEP_EVIDENCE',
+                observed: ['記録を確認'],
+                notEstablished: [],
+                feedback: '確認できました。',
+                nextAction: '続けてください。',
+              },
+            },
+            evaluatedAt: now,
+            createdAt: new Date(Date.now() + index + 1),
+          },
+        });
+      }
+      const advanced = await repository.saveCheckin({
+        actor,
+        operationId: randomUUID(),
+        checkin: {
+          topicId: started.topicId,
+          period: 'MONTH_1',
+          checkpointResults: ['DONE'],
+          feeling: 'OK',
+          note: null,
+          decision: 'ADVANCE',
+        },
+      });
+      expect(advanced.period).toBe('MONTH_2');
+      const monthTwoStartedAt = (
+        await client.personalLearningTopic.findUniqueOrThrow({ where: { id: started.topicId } })
+      ).goalSnapshot as { currentPeriodStartedAt: string };
+      const monthTwoStartedAtIso = monthTwoStartedAt.currentPeriodStartedAt;
+      expect((await repository.readProgress(actor, started.topicId)).verifiedPracticeCount).toBe(0);
+      const checkin = await repository.saveCheckin({
+        actor,
+        operationId: randomUUID(),
+        checkin: {
+          topicId: started.topicId,
+          period: 'MONTH_2',
+          checkpointResults: ['PARTLY'],
+          feeling: 'HARD',
+          note: '少し負担を減らしたい',
+          decision: 'REVISE',
+        },
+      });
+      const revision = validateSideHustleRoadmapProposal(
+        {
+          reason: '負担を抑えて進めます。',
+          milestones: [
+            baseRoadmap.milestones[0]!,
+            {
+              period: 'MONTH_2',
+              title: '範囲を絞って試す',
+              outcome: '小さく試して記録する',
+              checkpoints: ['一つだけ試す'],
+              weeklyHours: 2,
+            },
+            {
+              period: 'MONTH_3',
+              title: '続け方を調整する',
+              outcome: '無理のない方法を選ぶ',
+              checkpoints: ['続け方を見直す'],
+              weeklyHours: 2,
+            },
+          ],
+        },
+        { weeklyHours: 5 },
+      );
+      const revisionUsageKey = `personal-learning-operation:${'e'.repeat(64)}`;
+      await client.aiUsageEvent.create({
+        data: {
+          workspaceId: f.scope.workspaceId,
+          actorUserId: f.user.id,
+          bunshinId: null,
+          taskType: 'PERSONAL_LEARNING_SIDE_HUSTLE_ROADMAP_REVISION',
+          provider: 'openai',
+          model: 'gpt-5.2',
+          promptVersion: 'side-hustle-roadmap-revision-v1',
+          status: 'SUCCESS',
+          inputTokens: 1,
+          outputTokens: 1,
+          latencyMs: 10,
+          estimatedCostUsdMicros: 1n,
+          idempotencyKey: revisionUsageKey,
+          occurredAt: now,
+        },
+      });
+      const proposal = await repository.saveRoadmapRevisionProposal({
+        actor,
+        topicId: started.topicId,
+        selectionEventId: selection.id,
+        baseRoadmapEventId: savedRoadmap.id,
+        fromPeriod: 'MONTH_2',
+        checkinEventId: checkin.checkinEventId,
+        operationId: randomUUID(),
+        roadmap: revision,
+        promptVersion: 'side-hustle-roadmap-revision-v1',
+        usageKey: revisionUsageKey,
+      });
+      const competingUsageKey = `personal-learning-operation:${'f'.repeat(64)}`;
+      await client.aiUsageEvent.create({
+        data: {
+          workspaceId: f.scope.workspaceId,
+          actorUserId: f.user.id,
+          bunshinId: null,
+          taskType: 'PERSONAL_LEARNING_SIDE_HUSTLE_ROADMAP_REVISION',
+          provider: 'openai',
+          model: 'gpt-5.2',
+          promptVersion: 'side-hustle-roadmap-revision-v1',
+          status: 'SUCCESS',
+          inputTokens: 1,
+          outputTokens: 1,
+          latencyMs: 10,
+          estimatedCostUsdMicros: 1n,
+          idempotencyKey: competingUsageKey,
+          occurredAt: now,
+        },
+      });
+      const competingProposal = await repository.saveRoadmapRevisionProposal({
+        actor,
+        topicId: started.topicId,
+        selectionEventId: selection.id,
+        baseRoadmapEventId: savedRoadmap.id,
+        fromPeriod: 'MONTH_2',
+        checkinEventId: checkin.checkinEventId,
+        operationId: randomUUID(),
+        roadmap: revision,
+        promptVersion: 'side-hustle-roadmap-revision-v1',
+        usageKey: competingUsageKey,
+      });
+      expect((await repository.readState(actor)).roadmap?.id).toBe(savedRoadmap.id);
+      expect((await repository.readProgress(actor, started.topicId)).roadmap.milestones[0]).toEqual(
+        baseRoadmap.milestones[0],
+      );
+      expect(
+        (await client.personalLearningTopic.findUniqueOrThrow({ where: { id: started.topicId } }))
+          .goalSnapshot,
+      ).toMatchObject({ roadmapEventId: savedRoadmap.id });
+      expect(
+        await client.personalLearningRequest.count({
+          where: { ...f.scope, topicId: started.topicId },
+        }),
+      ).toBe(2);
+      const revisionSavedProposal = await repository.readRoadmapRevisionProposal(actor, {
+        operationId: proposal.operationId,
+        topicId: started.topicId,
+        checkinEventId: checkin.checkinEventId,
+      });
+      expect(revisionSavedProposal?.id).toBe(proposal.id);
+      const revisedRequest = await repository.saveRoadmapRevision({
+        actorUserId: actor.actorUserId,
+        scope: actor.scope,
+        topicId: started.topicId,
+        revisionProposalEventId: proposal.id,
+        operationId: randomUUID(),
+      });
+      expect(revisedRequest.revision).toBe(3);
+      expect(revisedRequest.originalText).toContain('1か月目：基礎を整える（情報を整理している）');
+      expect(revisedRequest.originalText).toContain(
+        '2か月目：範囲を絞って試す（小さく試して記録する）',
+      );
+      expect(revisedRequest.originalText).toContain(
+        '3か月目：続け方を調整する（無理のない方法を選ぶ）',
+      );
+      expect(revisedRequest.originalText).toContain('いまの段階の目安：一つだけ試す');
+      const confirmedState = await repository.readState(actor);
+      expect(confirmedState.roadmap?.id).toBe(proposal.id);
+      expect((await repository.readProgress(actor, started.topicId)).period).toBe('MONTH_2');
+      const topic = await client.personalLearningTopic.findUniqueOrThrow({
+        where: { id: started.topicId },
+      });
+      expect(topic.sourceRequestId).toBe(initialRequest.id);
+      expect(topic.goalSnapshot).toMatchObject({
+        roadmapEventId: proposal.id,
+        roadmapHistory: [savedRoadmap.id],
+        currentPeriod: 'MONTH_2',
+        currentPeriodStartedAt: monthTwoStartedAtIso,
+      });
+      await repository.saveRoadmapRevision({
+        actorUserId: actor.actorUserId,
+        scope: actor.scope,
+        topicId: started.topicId,
+        revisionProposalEventId: proposal.id,
+        operationId: randomUUID(),
+      });
+      expect(
+        await client.personalLearningRequest.count({
+          where: { ...f.scope, topicId: started.topicId },
+        }),
+      ).toBe(3);
+      expect(
+        await client.programActionEvent.count({
+          where: {
+            workspaceId: f.scope.workspaceId,
+            groupId: f.scope.groupId,
+            programEnrollmentId: f.scope.programEnrollmentId,
+            eventType: 'SIDE_HUSTLE_ROADMAP_REVISED',
+          },
+        }),
+      ).toBe(1);
+
+      const requestCountBeforeStaleProposal = await client.personalLearningRequest.count({
+        where: { ...f.scope, topicId: started.topicId },
+      });
+      await expect(
+        repository.saveRoadmapRevision({
+          actorUserId: actor.actorUserId,
+          scope: actor.scope,
+          topicId: started.topicId,
+          revisionProposalEventId: competingProposal.id,
+          operationId: randomUUID(),
+        }),
+      ).rejects.toMatchObject({ code: 'CONFLICT' });
+      expect(
+        await client.personalLearningRequest.count({
+          where: { ...f.scope, topicId: started.topicId },
+        }),
+      ).toBe(requestCountBeforeStaleProposal);
+      expect(
+        await client.programActionEvent.count({
+          where: {
+            workspaceId: f.scope.workspaceId,
+            groupId: f.scope.groupId,
+            programEnrollmentId: f.scope.programEnrollmentId,
+            eventType: 'SIDE_HUSTLE_ROADMAP_REVISED',
+          },
+        }),
+      ).toBe(1);
+
+      const staleUsageKey = `personal-learning-operation:${'a'.repeat(64)}`;
+      await client.aiUsageEvent.create({
+        data: {
+          workspaceId: f.scope.workspaceId,
+          actorUserId: f.user.id,
+          bunshinId: null,
+          taskType: 'PERSONAL_LEARNING_SIDE_HUSTLE_ROADMAP_REVISION',
+          provider: 'openai',
+          model: 'gpt-5.2',
+          promptVersion: 'side-hustle-roadmap-revision-v1',
+          status: 'SUCCESS',
+          inputTokens: 1,
+          outputTokens: 1,
+          latencyMs: 10,
+          estimatedCostUsdMicros: 1n,
+          idempotencyKey: staleUsageKey,
+          occurredAt: now,
+        },
+      });
+      const staleProposal = await repository.saveRoadmapRevisionProposal({
+        actor,
+        topicId: started.topicId,
+        selectionEventId: selection.id,
+        baseRoadmapEventId: proposal.id,
+        fromPeriod: 'MONTH_2',
+        checkinEventId: checkin.checkinEventId,
+        operationId: randomUUID(),
+        roadmap: revision,
+        promptVersion: 'side-hustle-roadmap-revision-v1',
+        usageKey: staleUsageKey,
+      });
+      for (const index of [2, 3]) {
+        const planId = randomUUID();
+        await client.personalLearningPlanRevision.create({
+          data: {
+            ...f.scope,
+            userId: f.user.id,
+            topicId: started.topicId,
+            planId,
+            revision: 1,
+            previousRevision: null,
+            revisionReason: 'INITIAL',
+            programMemberGoalId: progressGoal.id,
+            contractVersion: 'PERSONAL_LEARNING_PLAN_V1',
+            ruleVersion: 'V1',
+            status: 'CONFIRMED',
+            steps: JSON.parse(
+              JSON.stringify(
+                AI_TRAINING_LEARNING_DEFINITION_FIXTURES.map((definition) => ({
+                  definition: definition.reference,
+                  prerequisites: definition.prerequisites,
+                  selectionReason: 'GOAL_ALIGNMENT',
+                })),
+              ),
+            ) as Prisma.InputJsonValue,
+            confirmedAt: now,
+          },
+        });
+        const assignmentId = randomUUID();
+        await client.programMissionAssignment.create({
+          data: {
+            id: assignmentId,
+            workspaceId: f.scope.workspaceId,
+            groupId: f.scope.groupId,
+            programEnrollmentId: f.scope.programEnrollmentId,
+            programTemplateVersionId: f.program.programTemplateVersionId,
+            sequence: 990 + index,
+            routeKey: 'PERSONAL_LEARNING',
+            phaseKey: 'SIDE_HUSTLE',
+            missionDefinitionKey: 'PERSONAL_LEARNING_DYNAMIC_PRACTICE',
+            actionMode: 'WORK',
+            targetResourceType: 'PERSONAL_LEARNING_PLAN',
+            targetResourceId: planId,
+            status: 'STARTED',
+            displaySnapshot: {
+              dynamicPractice: {
+                version: 'PERSONAL_LEARNING_PRACTICE_V1',
+                topicId: started.topicId,
+                planId,
+                planRevision: 1,
+                goalId: progressGoal.id,
+                scope: f.scope,
+                candidate: { id: randomUUID(), materialVersion: 1 },
+              },
+            },
+            ruleVersion: 'PERSONAL_LEARNING_PRACTICE_V1',
+            presentedAt: now,
+            startedAt: now,
+          },
+        });
+        await client.trainingMissionAnswer.create({
+          data: {
+            workspaceId: f.scope.workspaceId,
+            groupId: f.scope.groupId,
+            programEnrollmentId: f.scope.programEnrollmentId,
+            missionAssignmentId: assignmentId,
+            userId: f.user.id,
+            answer: JSON.stringify({ revision: 1, text: '2か月目の確認済み実践' }),
+            evaluationStatus: 'READY',
+            evaluation: {
+              schemaVersion: 'PERSONAL_LEARNING_EVIDENCE_REVIEW_V1',
+              review: {
+                state: 'CURRENT_STEP_EVIDENCE',
+                observed: ['2か月目の実践を確認'],
+                notEstablished: [],
+                feedback: '確認できました。',
+                nextAction: '続けてください。',
+              },
+            },
+            evaluatedAt: now,
+            createdAt: new Date(Date.now() + index + 10),
+          },
+        });
+      }
+      const advancedToMonthThree = await repository.saveCheckin({
+        actor,
+        operationId: randomUUID(),
+        checkin: {
+          topicId: started.topicId,
+          period: 'MONTH_2',
+          checkpointResults: ['DONE'],
+          feeling: 'OK',
+          note: null,
+          decision: 'ADVANCE',
+        },
+      });
+      expect(advancedToMonthThree.period).toBe('MONTH_3');
+      const requestCountBeforeStaleConfirm = await client.personalLearningRequest.count({
+        where: { ...f.scope, topicId: started.topicId },
+      });
+      await expect(
+        repository.saveRoadmapRevision({
+          actorUserId: actor.actorUserId,
+          scope: actor.scope,
+          topicId: started.topicId,
+          revisionProposalEventId: staleProposal.id,
+          operationId: randomUUID(),
+        }),
+      ).rejects.toMatchObject({ code: 'CONFLICT' });
+      expect(
+        await client.personalLearningRequest.count({
+          where: { ...f.scope, topicId: started.topicId },
+        }),
+      ).toBe(requestCountBeforeStaleConfirm);
+      expect(
+        await client.programActionEvent.count({
+          where: {
+            workspaceId: f.scope.workspaceId,
+            groupId: f.scope.groupId,
+            programEnrollmentId: f.scope.programEnrollmentId,
+            eventType: 'SIDE_HUSTLE_ROADMAP_REVISED',
+          },
+        }),
+      ).toBe(1);
+    });
   });
 }

@@ -6,7 +6,7 @@ import {
 } from '../app/s/[serviceSlug]/programs/[programEnrollmentId]/side-hustle/checkin-controls';
 
 describe('side-hustle check-in controls', () => {
-  it('disables advancing when no verified practice is available and hides PR-5b revision', () => {
+  it('disables advancing when no verified practice is available and shows PR-5b revision', () => {
     const select = renderToStaticMarkup(
       <CheckinDecisionSelect
         value="CONTINUE"
@@ -25,8 +25,7 @@ describe('side-hustle check-in controls', () => {
     );
 
     expect(select).toContain('<option disabled="" value="ADVANCE">次の段階へ進む</option>');
-    expect(select).not.toContain('地図を見直す');
-    expect(select).not.toContain('REVISE');
+    expect(select).toContain('<option value="REVISE">地図を見直す</option>');
     expect(advance).toContain('<button disabled="">決める</button>');
   });
 });

@@ -327,7 +327,17 @@ export class PrismaPersonalLearningTextOperationRepository
               equals: createHash('sha256').update(scope.userId).digest('hex'),
             },
           },
-          { operationContext: { path: ['operationKind'], equals: 'SIDE_HUSTLE_ROADMAP' } },
+          {
+            OR: [
+              { operationContext: { path: ['operationKind'], equals: 'SIDE_HUSTLE_ROADMAP' } },
+              {
+                operationContext: {
+                  path: ['operationKind'],
+                  equals: 'SIDE_HUSTLE_ROADMAP_REVISION',
+                },
+              },
+            ],
+          },
         ],
       },
     });
@@ -355,7 +365,10 @@ export class PrismaPersonalLearningTextOperationRepository
           await this.assertNudgeAdmission(tx, input, now);
         } else if (input.operationKind === 'SIDE_HUSTLE_PROPOSAL') {
           await this.assertSideHustleProposalAdmission(tx, input);
-        } else if (input.operationKind === 'SIDE_HUSTLE_ROADMAP') {
+        } else if (
+          input.operationKind === 'SIDE_HUSTLE_ROADMAP' ||
+          input.operationKind === 'SIDE_HUSTLE_ROADMAP_REVISION'
+        ) {
           await this.assertSideHustleRoadmapAdmission(tx, input);
         } else {
           const wish = await tx.personalLearningRequest.findFirst({

@@ -27,7 +27,8 @@ export interface PersonalLearningTextOperation {
     | 'PERSONA_INFERENCE'
     | 'NUDGE_COPY'
     | 'SIDE_HUSTLE_PROPOSAL'
-    | 'SIDE_HUSTLE_ROADMAP';
+    | 'SIDE_HUSTLE_ROADMAP'
+    | 'SIDE_HUSTLE_ROADMAP_REVISION';
   /** Closed, non-identifying facts only. Never include learner text or profile data. */
   nudge?: {
     situation:
@@ -92,8 +93,10 @@ export function validatePersonalLearningTextOperation(input: PersonalLearningTex
       'NUDGE_COPY',
       'SIDE_HUSTLE_PROPOSAL',
       'SIDE_HUSTLE_ROADMAP',
+      'SIDE_HUSTLE_ROADMAP_REVISION',
     ].includes(input.operationKind) ||
-    (input.operationKind === 'SIDE_HUSTLE_ROADMAP'
+    (input.operationKind === 'SIDE_HUSTLE_ROADMAP' ||
+    input.operationKind === 'SIDE_HUSTLE_ROADMAP_REVISION'
       ? input.actor.topicId !== undefined ||
         input.nudge !== undefined ||
         input.practice !== undefined

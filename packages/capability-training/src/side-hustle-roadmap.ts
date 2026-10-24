@@ -122,3 +122,64 @@ export function buildSideHustleInitialRequest(input: {
   };
   return Object.freeze(content);
 }
+
+export function buildSideHustleRoadmapRevisionRequest(input: {
+  readonly previous: PersonalLearningRequestContent;
+  readonly roadmap: SideHustleRoadmapProposal;
+  readonly fromPeriod: SideHustleRoadmapPeriod;
+}): PersonalLearningRequestContent {
+  const monthIndex = Number(input.fromPeriod.slice(-1)) - 1;
+  const target = input.roadmap.milestones[monthIndex];
+  if (!target) throw new ApplicationError('CONFLICT', 'current roadmap month is missing');
+
+  const separator = input.previous.originalText.includes('\r\n') ? '\r\n' : '\n';
+  const lines = input.previous.originalText.split(/\r?\n/);
+  const mapLineIndexes = [1, 2, 3].map((month) =>
+    lines.flatMap((line, index) => (line.startsWith(`${month}か月目：`) ? [index] : [])),
+  );
+  const stageIndexes = lines.flatMap((line, index) =>
+    line.startsWith('いまの段階：') ? [index] : [],
+  );
+  const checkpointIndexes = lines.flatMap((line, index) =>
+    line.startsWith('いまの段階の目安：') ? [index] : [],
+  );
+  if (
+    mapLineIndexes.some((indexes) => indexes.length !== 1) ||
+    stageIndexes.length !== 1 ||
+    checkpointIndexes.length > 1
+  )
+    throw new ApplicationError('CONFLICT', 'invalid side hustle roadmap lines');
+
+  input.roadmap.milestones.forEach((milestone, index) => {
+    if (index >= monthIndex)
+      lines[mapLineIndexes[index]![0]!] =
+        `${index + 1}か月目：${milestone.title}（${milestone.outcome}）`;
+  });
+  lines[stageIndexes[0]!] = `いまの段階：${monthIndex + 1}か月目「${target.title}」`;
+  const checkpointLine = `いまの段階の目安：${target.checkpoints.join('／')}`;
+  if (checkpointIndexes.length === 1) lines[checkpointIndexes[0]!] = checkpointLine;
+  else lines.splice(stageIndexes[0]! + 1, 0, checkpointLine);
+
+  const originalText = lines.join(separator);
+  if (!strictText(originalText, 2000)) fail();
+  return Object.freeze({
+    ...input.previous,
+    originalText,
+    currentPosition: `${monthIndex + 1}か月目の目安：${target.checkpoints.join('／')}`,
+  });
+}
+
+export function assertSideHustleRoadmapRevisionPreservesCompletedMonths(input: {
+  readonly base: SideHustleRoadmapProposal;
+  readonly revision: SideHustleRoadmapProposal;
+  readonly fromPeriod: SideHustleRoadmapPeriod;
+}): void {
+  const fromIndex = SIDE_HUSTLE_ROADMAP_PERIODS.indexOf(input.fromPeriod);
+  for (let index = 0; index < fromIndex; index += 1) {
+    if (
+      JSON.stringify(input.base.milestones[index]) !==
+      JSON.stringify(input.revision.milestones[index])
+    )
+      throw new ApplicationError('VALIDATION_ERROR', 'completed roadmap month changed');
+  }
+}

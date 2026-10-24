@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { validateSavePersonalLearningRequest } from '@bunshin/application';
 import {
   buildSideHustleInitialRequest,
+  buildSideHustleRoadmapRevisionRequest,
+  assertSideHustleRoadmapRevisionPreservesCompletedMonths,
   validateSideHustleRoadmapProposal,
   type SideHustleRoadmapProposal,
 } from '../src/side-hustle-roadmap';
@@ -202,5 +204,105 @@ describe('side hustle roadmap contract', () => {
         roadmap: proposal,
       }).deviceType,
     ).toBeNull();
+  });
+
+  it('preserves completed roadmap lines and replaces the current/future map and aim lines', () => {
+    const previous = {
+      originalText: [
+        '希望：文章を書く',
+        '90日の地図（本人が確認済み）：',
+        '1か月目：旧1（旧成果1）',
+        '2か月目：旧2（旧成果2）',
+        '3か月目：旧3（旧成果3）',
+        'いまの段階：2か月目「旧2」',
+        'いまの段階の目安：古い目安',
+      ].join('\n'),
+      currentPosition: '古い位置',
+      deviceType: 'PC' as const,
+      toolDescription: null,
+      experienceDescription: null,
+    };
+    const revised = buildSideHustleRoadmapRevisionRequest({
+      previous,
+      roadmap: proposal,
+      fromPeriod: 'MONTH_2',
+    });
+
+    expect(revised.originalText).toContain('1か月目：旧1（旧成果1）');
+    expect(revised.originalText).toContain('2か月目：試してみる（小さな実践を行い記録している）');
+    expect(revised.originalText).toContain('3か月目：続け方を整える（続ける方法を振り返っている）');
+    expect(revised.originalText).toContain('いまの段階：2か月目「試してみる」');
+    expect(revised.originalText).toContain('いまの段階の目安：自分で試す');
+    expect(revised.currentPosition).toBe('2か月目の目安：自分で試す');
+    expect(revised.deviceType).toBe('PC');
+  });
+
+  it('adds a missing current-month aim after the stage line and rejects duplicate aim lines', () => {
+    const previous = {
+      originalText:
+        '希望\n90日の地図（本人が確認済み）：\n1か月目：A\n2か月目：B\n3か月目：C\nいまの段階：2か月目「B」',
+      currentPosition: null,
+      deviceType: null,
+      toolDescription: null,
+      experienceDescription: null,
+    };
+    expect(
+      buildSideHustleRoadmapRevisionRequest({
+        previous,
+        roadmap: proposal,
+        fromPeriod: 'MONTH_2',
+      }).originalText,
+    ).toContain('いまの段階：2か月目「試してみる」\nいまの段階の目安：自分で試す');
+    expect(() =>
+      buildSideHustleRoadmapRevisionRequest({
+        previous: {
+          ...previous,
+          originalText: `${previous.originalText}\nいまの段階の目安：重複1\nいまの段階の目安：重複2`,
+        },
+        roadmap: proposal,
+        fromPeriod: 'MONTH_2',
+      }),
+    ).toThrow();
+  });
+
+  it('allows all three roadmap months to change when revision starts in month one', () => {
+    const previous = {
+      originalText: '希望\n1か月目：旧1\n2か月目：旧2\n3か月目：旧3\nいまの段階：1か月目「旧1」',
+      currentPosition: '旧目安',
+      deviceType: null,
+      toolDescription: null,
+      experienceDescription: null,
+    };
+    const revised = buildSideHustleRoadmapRevisionRequest({
+      previous,
+      roadmap: proposal,
+      fromPeriod: 'MONTH_1',
+    });
+    expect(revised.originalText).toContain('1か月目：準備する（必要な情報を整理できている）');
+    expect(revised.originalText).toContain('2か月目：試してみる（小さな実践を行い記録している）');
+    expect(revised.originalText).toContain('3か月目：続け方を整える（続ける方法を振り返っている）');
+  });
+
+  it('rejects a revision whose completed month differs by one character', () => {
+    const altered = {
+      ...proposal,
+      milestones: proposal.milestones.map((milestone, index) =>
+        index === 0 ? { ...milestone, title: `${milestone.title}!` } : milestone,
+      ),
+    };
+    expect(() =>
+      assertSideHustleRoadmapRevisionPreservesCompletedMonths({
+        base: proposal,
+        revision: altered,
+        fromPeriod: 'MONTH_2',
+      }),
+    ).toThrow();
+    expect(() =>
+      assertSideHustleRoadmapRevisionPreservesCompletedMonths({
+        base: proposal,
+        revision: proposal,
+        fromPeriod: 'MONTH_1',
+      }),
+    ).not.toThrow();
   });
 });

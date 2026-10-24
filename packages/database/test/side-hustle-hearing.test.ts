@@ -5,6 +5,7 @@ import type { PersonalLearningActor } from '@bunshin/application';
 import { PrismaSideHustleHearingRepository } from '../src';
 import {
   screenSideHustleCandidates,
+  type SideHustleRoadmapProposal,
   validateSideHustleCandidateProposal,
   validateSideHustleHearing,
 } from '@bunshin/capability-training';
@@ -284,6 +285,146 @@ describe('side hustle hearing event repository', () => {
       idempotencyKey: '77777777-7777-4777-8777-777777777777',
     });
     expect(selected.candidate).toMatchObject({ name: '文章作成サポート' });
+  });
+
+  it('confirms a revised roadmap idempotently and updates the active topic snapshot', async () => {
+    const topicId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const roadmapEventId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+    const selectionEventId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+    const proposalEventId = '99999999-9999-4999-8999-999999999999';
+    const topic: { id: string; goalSnapshot: Record<string, unknown> } = {
+      id: topicId,
+      goalSnapshot: { kind: 'SIDE_HUSTLE', selectionEventId, roadmapEventId },
+    };
+    const baseRoadmap: SideHustleRoadmapProposal = {
+      reason: '今の条件に合わせて整理しました。',
+      milestones: (['MONTH_1', 'MONTH_2', 'MONTH_3'] as const).map((period, index) => ({
+        period,
+        title: `現在の${index + 1}か月目`,
+        outcome: '小さく試して記録します。',
+        checkpoints: ['準備する'],
+        weeklyHours: 3,
+      })),
+    };
+    const roadmap: SideHustleRoadmapProposal = {
+      reason: '今の条件に合わせて整理しました。',
+      milestones: baseRoadmap.milestones.map((milestone, index) => ({
+        ...milestone,
+        title: `新しい${index + 1}か月目`,
+      })),
+    };
+    const requestRows: Record<string, unknown>[] = [];
+    let revisedEvent: Record<string, unknown> | null = null;
+    const initialRequest = {
+      id: 'request-0',
+      revision: 1,
+      originalText:
+        '90日の地図（本人が確認済み）：\n1か月目：現在の1か月目\n2か月目：現在の2か月目\n3か月目：現在の3か月目\nいまの段階：1か月目「現在の1か月目」\nいまの段階の目安：旧目安',
+      currentPosition: '旧位置',
+      deviceType: null,
+      toolDescription: null,
+      experienceDescription: null,
+      createdAt: new Date('2026-10-21T00:00:00Z'),
+    };
+    const tx = {
+      programEnrollment: { findFirst: () => Promise.resolve({ serviceProgramId: 'program' }) },
+      serviceProgram: {
+        findFirst: () => Promise.resolve({ settings: { learningOfferPolicy: 'SIDE_HUSTLE_V1' } }),
+      },
+      personalLearningTopic: {
+        findFirst: () => Promise.resolve(topic),
+        update: vi.fn(({ data }: { data: { goalSnapshot: Record<string, unknown> } }) => {
+          topic.goalSnapshot = data.goalSnapshot;
+          return Promise.resolve(topic);
+        }),
+      },
+      programActionEvent: {
+        findFirst: ({ where }: { where: Record<string, unknown> }) => {
+          if (where['eventType'] === 'SIDE_HUSTLE_STAGE_ADVANCED') return Promise.resolve(null);
+          if (where['eventType'] === 'SIDE_HUSTLE_ROADMAP_REVISION_PROPOSED')
+            return Promise.resolve({
+              id: proposalEventId,
+              metadata: {
+                topicId,
+                selectionEventId,
+                baseRoadmapEventId: roadmapEventId,
+                fromPeriod: 'MONTH_1',
+                roadmap,
+              },
+            });
+          if (where['eventType'] === 'SIDE_HUSTLE_ROADMAP_REVISED')
+            return Promise.resolve(revisedEvent);
+          if (where['id'] === roadmapEventId)
+            return Promise.resolve({
+              id: roadmapEventId,
+              metadata: { selectionEventId, roadmap: baseRoadmap },
+            });
+          return Promise.resolve(null);
+        },
+        create: vi.fn(({ data }: { data: Record<string, unknown> }) => {
+          revisedEvent = {
+            ...data,
+            id: 'revised-event',
+            occurredAt: new Date('2026-10-22T00:00:00Z'),
+          };
+          return Promise.resolve(revisedEvent);
+        }),
+      },
+      personalLearningRequest: {
+        findFirst: ({ where, orderBy }: { where: Record<string, unknown>; orderBy?: unknown }) => {
+          const found = requestRows.find((row) =>
+            Object.entries(where).every(([key, value]) => row[key] === value),
+          );
+          if (found) return Promise.resolve(found);
+          if (orderBy) return Promise.resolve(initialRequest);
+          return Promise.resolve(null);
+        },
+        create: ({ data }: { data: Record<string, unknown> }) => {
+          const row = {
+            ...data,
+            id: 'request-1',
+            revision: 2,
+            createdAt: new Date('2026-10-22T00:00:00Z'),
+          };
+          requestRows.push(row);
+          return Promise.resolve(row);
+        },
+      },
+    };
+    class RevisionRepository extends PrismaSideHustleHearingRepository {
+      constructor() {
+        super({} as never);
+      }
+      protected override authorized<T>(
+        _actor: PersonalLearningActor,
+        _write: boolean,
+        work: (client: Prisma.TransactionClient, now: Date) => Promise<T>,
+      ) {
+        return work(tx as unknown as Prisma.TransactionClient, new Date('2026-10-22T00:00:00Z'));
+      }
+      protected override normalLearner() {
+        return Promise.resolve();
+      }
+    }
+    const repo = new RevisionRepository();
+    const input = {
+      actorUserId: actor.scope.userId,
+      scope: actor.scope,
+      topicId,
+      revisionProposalEventId: proposalEventId,
+      operationId: '66666666-6666-4666-8666-666666666666',
+    };
+    const first = await repo.saveRoadmapRevision(input);
+    const retry = await repo.saveRoadmapRevision(input);
+    expect(retry.id).toBe(first.id);
+    expect(requestRows).toHaveLength(1);
+    expect(tx.personalLearningTopic.update).toHaveBeenCalledTimes(1);
+    expect(topic.goalSnapshot).toMatchObject({
+      roadmapEventId: proposalEventId,
+      roadmap,
+      roadmapHistory: [roadmapEventId],
+    });
+    expect(first.originalText).toContain('1か月目：新しい1か月目（小さく試して記録します。）');
   });
 
   it('uses NOT_FOUND for a non-side-hustle Program', async () => {
