@@ -10,7 +10,7 @@ Gmail等でメールmagic linkを開いた際に、ログインを開始したLI
 
 - `/auth/email`が既存の許可リストに合格した`returnTo`をメール確認URLへ渡す。`/auth/confirm`は同一originのSupabase callbackだけを処理し、URL/redirect_toの重複・矛盾・未知query、危険なpathは拒否する。
 - 確認画面は既存のService auth brand resolverを使う。独立ブランドは明示allowlistだけを使い、公開Service設定が見つからない場合にService参加状態や存在を推測しない。
-- hidden `returnTo`は表示と失敗後の再試行画面にだけ使う。成功後の遷移は`AuthReturnAttempt.returnPath`が正本で、認可は遷移先で再実行する。
+- attempt-scoped認証ではhidden `returnTo`を表示と失敗後の再試行画面にだけ使い、成功後の遷移は`AuthReturnAttempt.returnPath`を正本とする。旧来認証（`AUTH_RETURN_ATTEMPTS_ENABLED=false`）で試行記録がない場合に限り、同じcallbackから受け取った検証済みのサービス戻り先を遷移のfallbackとして使う。いずれも認可は遷移先で再実行する。
 - 認証Cookie/proofを別ブラウザへ渡さない。違うブラウザからのcallbackは既存のAuthReturnAttempt検証で拒否し、LINEで続ける場合はLINEに戻ってLINEログインするよう説明する。
 - 試行ID付きの確認画面は、表示時にも現在ブラウザのproof/試行状態を検証する。proofが見つからない場合は、認証POSTボタンを出さず、原因とログイン方法の選び直しを表示する。
 
