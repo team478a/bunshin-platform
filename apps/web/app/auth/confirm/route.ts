@@ -86,7 +86,7 @@ async function completePkceEmailCallback(
       loginErrorResponse(
         request,
         error instanceof AuthReturnContextError ? 'auth-context' : '1',
-        displayReturnTo ?? context?.returnTo,
+        displayReturnTo ?? context?.returnTo ?? null,
       ),
       claimed ? context : null,
     );
@@ -134,7 +134,7 @@ export async function POST(request: Request): Promise<Response> {
       loginErrorResponse(
         request,
         error instanceof AuthReturnContextError ? 'auth-context' : '1',
-        displayReturnTo ?? context?.returnTo,
+        displayReturnTo ?? context?.returnTo ?? null,
       ),
       claimed ? context : null,
     );
