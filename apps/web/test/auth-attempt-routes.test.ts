@@ -17,6 +17,7 @@ const state = vi.hoisted(() => ({
   identityOwner: '11111111-1111-4111-8111-111111111111',
   lineIdentityOwner: null as string | null,
   required: false,
+  registrationStatus: 'COMPLETED',
   cookie: '',
 }));
 vi.mock('server-only', () => ({}));
@@ -100,7 +101,9 @@ vi.mock('@bunshin/database', () => ({
           create: () => Promise.resolve({}),
         },
       }),
-    userRegistrationProfile: { findUnique: () => Promise.resolve({ status: 'COMPLETED' }) },
+    userRegistrationProfile: {
+      findUnique: () => Promise.resolve({ status: state.registrationStatus }),
+    },
     registrationFunnelEvent: { upsert: () => Promise.resolve({}) },
   },
   listActiveWorkspacesForUser: () => Promise.resolve([]),
@@ -166,6 +169,7 @@ describe('attempt-scoped route contracts', () => {
     state.identityOwner = state.actor;
     state.lineIdentityOwner = null;
     state.required = false;
+    state.registrationStatus = 'COMPLETED';
     state.cookie = '';
     state.oauth.mockImplementation(() =>
       Promise.resolve({
@@ -496,6 +500,21 @@ describe('attempt-scoped route contracts', () => {
     expect(callback.searchParams.get('authAttempt')).toBe(attempt.id);
     expect(callback.searchParams.get('returnTo')).toBe('/s/manaberu-style/home');
     expect(attemptRows.get(attempt.id)?.returnPath).toBe('/s/manaberu-style/home');
+  });
+
+  it('returns legacy email auth to the service instead of the platform questionnaire', async () => {
+    vi.stubEnv('AUTH_RETURN_ATTEMPTS_ENABLED', 'false');
+    state.registrationStatus = 'IN_PROGRESS';
+    const response = await finishEmail(
+      post('/auth/confirm', {
+        token_hash: 'token',
+        type: 'email',
+        returnTo: '/s/manaberu-style/home',
+      }),
+    );
+
+    expect(location(response).pathname).toBe('/s/manaberu-style/home');
+    expect(location(response).pathname).not.toBe('/onboarding');
   });
 
   it('explains a different email browser and keeps the service on the retry screen', async () => {

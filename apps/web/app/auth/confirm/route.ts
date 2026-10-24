@@ -104,7 +104,7 @@ export async function POST(request: Request): Promise<Response> {
     await consumeAuthReturnAttempt(context, currentUser.userId);
     return clearAuthReturnCookie(
       NextResponse.redirect(
-        new URL(authReturnDestination(context, registration?.status), request.url),
+        new URL(authReturnDestination(context, registration?.status, displayReturnTo), request.url),
         303,
       ),
       context,

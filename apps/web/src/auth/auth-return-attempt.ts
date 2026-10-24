@@ -407,10 +407,17 @@ export function authConsentPath(context: AuthReturnContext): string {
 export function authReturnDestination(
   context: AuthReturnContext,
   registrationStatus: string | null | undefined,
+  legacyReturnTo: string | null = null,
 ): string {
-  if (!requiresPlatformOnboarding(registrationStatus, context.returnTo))
-    return context.returnTo ?? '/bunshins';
-  return `/onboarding${context.returnTo ? `?returnTo=${encodeURIComponent(context.returnTo)}` : ''}`;
+  // Attempt-scoped authentication keeps the database record as the only
+  // successful destination. Legacy authentication has no record to read, so
+  // retain the already-validated service path carried by the callback. This
+  // prevents a service login from falling into the platform questionnaire.
+  const returnTo =
+    context.returnTo ??
+    (!authReturnAttemptsEnabled() ? safeLineAuthReturnPath(legacyReturnTo) : null);
+  if (!requiresPlatformOnboarding(registrationStatus, returnTo)) return returnTo ?? '/bunshins';
+  return `/onboarding${returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : ''}`;
 }
 
 export function authReturnPageRequest(path: string, headers: Headers, id: string | null): Request {

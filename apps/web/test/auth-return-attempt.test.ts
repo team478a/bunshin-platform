@@ -51,6 +51,24 @@ describe('attempt-scoped authentication return records', () => {
     expect(authReturnDestination(context, 'COMPLETED')).toBe(returnTo);
   });
 
+  it('keeps a legacy email service login out of the platform questionnaire', () => {
+    vi.stubEnv('AUTH_RETURN_ATTEMPTS_ENABLED', 'false');
+    const context = { attempt: null, returnTo: null };
+
+    expect(authReturnDestination(context, null, '/s/manaberu-style')).toBe('/s/manaberu-style');
+    expect(authReturnDestination(context, null, '/s/manaberu-style/home')).toBe(
+      '/s/manaberu-style/home',
+    );
+    expect(authReturnDestination(context, null, 'https://evil.example')).toBe('/onboarding');
+  });
+
+  it('does not use a callback fallback when attempt-scoped auth is enabled', () => {
+    vi.stubEnv('AUTH_RETURN_ATTEMPTS_ENABLED', 'true');
+    const context = { attempt: null, returnTo: null };
+
+    expect(authReturnDestination(context, null, '/s/manaberu-style')).toBe('/onboarding');
+  });
+
   it('keeps two projects independent when completed in reverse order', async () => {
     const a = await createAuthReturnAttempt(start(), 'LINE', '/s/media/line');
     const b = await createAuthReturnAttempt(start(proofCookie(a)), 'LINE', '/s/training/home');
