@@ -37,6 +37,21 @@ describe('service home access guidance', () => {
     expect(html).toContain('参加案内を確認する');
   });
 
+  it('explains that the service management screen requires an operator role', () => {
+    const html = renderToStaticMarkup(
+      createElement(ServiceHomeAccessGuidance, {
+        state: 'MANAGEMENT_REQUIRED',
+        serviceName: 'ハッシー',
+        serviceSlug: 'hassy',
+      }),
+    );
+
+    expect(html).toContain('ハッシーの管理画面を利用できません');
+    expect(html).toContain('サービス管理者として登録されたアカウント');
+    expect(html).toContain('ハッシーの利用画面へ');
+    expect(html).toContain('/s/hassy/home');
+  });
+
   it('keeps a login action available without exposing a private service entry', () => {
     const html = renderToStaticMarkup(
       createElement(ServiceHomeAccessGuidance, {

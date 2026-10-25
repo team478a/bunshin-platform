@@ -5,7 +5,8 @@ import { PublicShell } from '../../../ui/public-shell';
 import { ServiceAuthBranding } from '../../../ui/service-auth-branding';
 import type { ServiceAuthBrand } from '../../../../src/services/service-auth-brand';
 
-export type ServiceHomeAccessState = 'LOGIN_REQUIRED' | 'MEMBERSHIP_REQUIRED' | 'LINK_UNAVAILABLE';
+export type ServiceHomeAccessState =
+  'LOGIN_REQUIRED' | 'MEMBERSHIP_REQUIRED' | 'MANAGEMENT_REQUIRED' | 'LINK_UNAVAILABLE';
 
 export function ServiceHomeAccessGuidance({
   state,
@@ -34,6 +35,11 @@ export function ServiceHomeAccessGuidance({
       title: `${serviceName ?? 'サービス'}への参加登録を確認できません`,
       description:
         '参加登録に使ったアカウントでログインしているか確認してください。初めて利用する場合は、サービスの参加案内から登録してください。',
+    },
+    MANAGEMENT_REQUIRED: {
+      title: `${serviceName ?? 'サービス'}の管理画面を利用できません`,
+      description:
+        'この画面はサービス管理者専用です。サービス管理者として登録されたアカウントでログインするか、運営者に管理権限の付与を依頼してください。',
     },
     LINK_UNAVAILABLE: {
       title: 'サービスの利用状態を確認できません',
@@ -69,9 +75,22 @@ export function ServiceHomeAccessGuidance({
             ログインして続ける
           </Link>
         )}
-        {state !== 'LINK_UNAVAILABLE' && serviceName && (
+        {state === 'MANAGEMENT_REQUIRED' && serviceName && (
+          <Link
+            className="button button--primary button--full"
+            href={`/s/${serviceSlug}/home` as Route}
+          >
+            {serviceName}の利用画面へ
+          </Link>
+        )}
+        {state !== 'LINK_UNAVAILABLE' && serviceName && state !== 'MANAGEMENT_REQUIRED' && (
           <Link className="service-entry__login-link" href={serviceEntry}>
             {state === 'MEMBERSHIP_REQUIRED' ? '参加案内を確認する' : 'サービスの案内を見る'}
+          </Link>
+        )}
+        {state === 'MANAGEMENT_REQUIRED' && serviceName && (
+          <Link className="service-entry__login-link" href={serviceEntry}>
+            参加案内を確認する
           </Link>
         )}
         <p className="service-home-access__help">
