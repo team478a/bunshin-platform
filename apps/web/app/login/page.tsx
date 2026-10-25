@@ -52,8 +52,16 @@ export default async function LoginPage({
         </div>
         {query.sent === '1' && (
           <div className="notice notice--success" role="status">
-            <strong>メールを送信しました</strong>
-            <span>受信箱を確認し、最新のログインリンクを開いてください。</span>
+            <strong>
+              {serviceName
+                ? `${serviceName}のログインリンクを送信しました`
+                : 'メールを送信しました'}
+            </strong>
+            <span>
+              {serviceName
+                ? `${serviceName}の利用を続けるリンクを受信箱で確認してください。`
+                : '受信箱を確認し、最新のログインリンクを開いてください。'}
+            </span>
           </div>
         )}
         {query.error === '1' && (
