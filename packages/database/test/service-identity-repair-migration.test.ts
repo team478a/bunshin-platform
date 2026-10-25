@@ -33,6 +33,7 @@ describe('service identity repair migrations', () => {
       "target.group_id <> '74000000-0000-4000-8000-000000000003'::UUID",
     );
     expect(officialRepair).toContain('service configuration is absent');
+    expect(officialRepair).toContain("target.group_name IS DISTINCT FROM '企業向け'");
     expect(officialRepair).toContain("'ワタシワークス公式'");
     expect(officialRepair).toContain("'https://www.watashi-works.com/watashiworks-logo.jpg'");
     expect(officialRepair).toContain("'https://www.watashi-works.com/watashiworks-icon.jpg'");
@@ -53,6 +54,7 @@ describe('service identity repair migrations', () => {
       "target.group_id <> 'ae9e96ca-16f3-4210-af4f-44d18bdaebe3'::UUID",
     );
     expect(manaberuCopyRepair).toContain('service configuration is absent');
+    expect(manaberuCopyRepair).toContain("target.group_name IS DISTINCT FROM 'マナベルスタイル'");
     expect(manaberuCopyRepair).toContain('現在は無料Pilotとして提供しています。');
     expect(manaberuCopyRepair).toContain('service_configuration_audits');
     expect(manaberuCopyRepair).not.toContain('service_registration_policies');

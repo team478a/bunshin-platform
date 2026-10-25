@@ -34,7 +34,7 @@ BEGIN
     RAISE EXCEPTION 'Manaberu public-copy repair target is mismatched';
   END IF;
 
-  IF target.group_name <> 'マナベルスタイル' THEN
+  IF target.group_name IS DISTINCT FROM 'マナベルスタイル' THEN
     RAISE EXCEPTION 'Manaberu public-copy repair target group is unexpected: %', target.group_name;
   END IF;
 

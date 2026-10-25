@@ -40,7 +40,7 @@ BEGIN
     RAISE EXCEPTION 'official service identity repair target is mismatched';
   END IF;
 
-  IF target.group_name <> '企業向け' THEN
+  IF target.group_name IS DISTINCT FROM '企業向け' THEN
     RAISE EXCEPTION 'official service identity repair target group is unexpected: %', target.group_name;
   END IF;
 
