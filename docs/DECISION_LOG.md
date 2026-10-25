@@ -1,5 +1,13 @@
 # BUNSHIN Platform Decision Log
 
+## 2026-10-25: HASSY本番サービス設定の限定migration経路
+
+- 状態: 専用allowlist・本番環境保護・read-only readiness検証を追加。Production migrationは未実行。
+- 本番の`service_configurations`と`groups`を読み取り専用で確認した結果、HASSYのmigration履歴がなく、アプリ側の公開入口だけが先にデプロイされた状態だった。これが`/s/hassy`の参加状態確認がfail-closedになる根本原因である。
+- `20261025120000_seed_hassy_public_service`だけを対象にした専用workflowをmain限定で用意する。専用確認語、Production environment approval、Supabase session pooler、TLS/CA、厳密なpending集合、適用後のread-only schema readinessを必須とする。既存の別migration用workflowは変更しない。
+- 実行前に同名HASSY設定またはGroupが既に存在する場合は、未知の本番状態を上書きせず停止する。手動SQL、migration resolve、他サービス設定の流用は行わない。
+- PreviewはDDL・migration historyを変更しない。Applyは承認済みmigration 1件のみに限定し、適用後にreadinessと`/s/hassy` smokeを再確認してから公開運用へ進む。
+
 ## 2026-10-19: AI研修の未精算費用予約を運用通知センターに表示する
 
 - 状態: Proposed（Draft PRのレビュー待ち。本番反映・設定変更は未承認）
