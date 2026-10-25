@@ -20,11 +20,21 @@ import {
   readServiceManagementHomeRecords,
 } from './service-management-home-repository';
 
+export class ServiceManagementAccessError extends Error {
+  constructor() {
+    super('SERVICE_MANAGEMENT_ACCESS_REQUIRED');
+    this.name = 'ServiceManagementAccessError';
+  }
+}
+
 export async function loadServiceManagementHome(serviceSlug: string) {
   const actor = await (await currentUserProvider()).getCurrentUser();
   if (!actor) redirect(`/login?returnTo=${encodeURIComponent(`/s/${serviceSlug}/manage`)}`);
-  const service = await resolveManagedServiceContext(serviceSlug, actor.userId).catch(() => null);
-  if (!service) notFound();
+  const service = await resolveManagedServiceContext(serviceSlug, actor.userId).catch((error) => {
+    if (error instanceof Error && error.message === 'SERVICE_NOT_FOUND') return null;
+    throw error;
+  });
+  if (!service) throw new ServiceManagementAccessError();
   const configuration = service.configuration;
   const onboarding = readServiceOnboardingSettings(
     configuration.registration.onboardingConfig,
