@@ -1,10 +1,17 @@
 # Phase 2 Production Gate
 
-更新日: 2026-08-19
+更新日: 2026-10-26
 
 ## 判定
 
-Phase 2コードは完了しているが、Production利用開始は未承認である。値やsecretを本書へ記録せず、完了日時、実行者、GitHub Actions runまたは確認画面だけを運用記録へ残す。
+Phase 2コードは完了している。サービス識別情報migrationの本番適用とschema readinessは完了したが、Production利用開始はまだ未承認である。値やsecretを本書へ記録せず、完了日時、実行者、GitHub Actions runまたは確認画面だけを運用記録へ残す。最新の整理は`docs/PRODUCTION_GATE_STATUS_20261026.md`を参照する。
+
+### 2026-10-26時点の証跡
+
+- main CI: [40216246761](https://github.com/team478a/bunshin-platform/actions/runs/40216246761)
+- migration preview: [40217346169](https://github.com/team478a/bunshin-platform/actions/runs/40217346169)
+- migration apply / schema readiness: [40232455152](https://github.com/team478a/bunshin-platform/actions/runs/40232455152)
+- apply後migration history: [40232586540](https://github.com/team478a/bunshin-platform/actions/runs/40232586540)（`pending=0`）
 
 ## A. 完了確認済み
 
@@ -21,11 +28,11 @@ Phase 2コードは完了しているが、Production利用開始は未承認で
 
 - [ ] Supabase daily backupが有効で保持期間を確認した
 - [ ] restore手順を確認し、必要ならrehearsalを実施した
-- [ ] GitHub Environment `production`のrequired reviewerを確認した
-- [ ] `DATABASE_URL`がtransaction pooler、`DIRECT_URL`がmigration用session/direct接続である
-- [ ] `main`の対象commitとmigration 5件を確認した
-- [ ] `Production Database Migration` workflowを承認付きで実行した
-- [ ] 実行後の`prisma migrate status`が最新である
+- [x] GitHub Environment `production`のrequired reviewerを確認した
+- [x] `DATABASE_URL`がtransaction pooler、`DIRECT_URL`がmigration用session/direct接続であることをrelease preflightで確認した
+- [x] `main`の対象commitと承認済みmigration setを確認した
+- [x] Production migration workflowをEnvironment承認付きで実行した
+- [x] 実行後のmigration history probeが`pending=0`を返した
 - [ ] `/api/health/ready`が`database: ok`を返す
 
 ## C. Production Auth
