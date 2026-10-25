@@ -16,6 +16,7 @@ describe('service home access guidance', () => {
       }),
     );
 
+    expect(html).toContain('マナベルスタイルを利用するにはログインが必要です');
     expect(html).toContain('LINE内のブラウザでは');
     expect(html).toContain('ログインして続ける');
     expect(html).toContain('/login?returnTo=%2Fs%2Fmanaberu-style%2Fhome');
@@ -72,8 +73,10 @@ describe('service home access guidance', () => {
       }),
     );
 
-    expect(html).toContain('サービスの利用状態を確認できません');
+    expect(html).toContain('サービスの利用設定を確認できません');
     expect(html).toContain('ログインは完了しています');
+    expect(html).toContain('サービスの利用確認');
+    expect(html).not.toContain('LINEからのご利用');
     expect(html).not.toContain('LINEでログインし直す');
     expect(html).not.toContain('/login?returnTo=');
     expect(html).not.toContain('service-auth-brand');
@@ -96,12 +99,13 @@ describe('service home access guidance', () => {
       }),
     );
 
-    expect(html).toContain('サービスの利用状態を確認できません');
+    expect(html).toContain(`${name}の利用設定を確認できません`);
     expect(html).toContain(name);
     expect(html).toContain('ワタシワークスを利用しています');
-    expect(html).toContain('何度もログインし直さず');
+    expect(html).toContain('サービスの利用確認');
+    expect(html).toContain('メールとLINEのアカウントは別の認証方法です');
     expect(html).not.toContain('LINEでログインし直す');
-    expect(html).not.toContain('参加案内を確認する');
-    expect(html).not.toContain(`/s/${slug}`);
+    expect(html).toContain('サービスの案内を確認する');
+    expect(html).toContain(`/s/${slug}`);
   });
 });
