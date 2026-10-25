@@ -4592,3 +4592,10 @@
 - `verify` と `database` をmainの必須Status Checkとして維持し、migration追加時の最新migration定数不一致をmerge前に停止する。今回のHASSY PRでこのゲートが実際に不一致を検出した。
 - PRテンプレートに `LATEST_DATABASE_MIGRATION` 更新、disposable DBでのmigration/readiness、ProductionのPreview→承認→適用→readiness→アプリデプロイ順序を必須確認として追加する。
 - Production定期SmokeにHASSY公開入口の確認を追加し、サービス名・公開登録文言が表示され、サービス設定不在の案内が出ていないことを検査する。認証・参加登録の変更やメール送信は行わない。
+
+## 2026-10-25: 全サービス監査では停止中サービスとサービス別ブランドを混在させない
+
+- `service_configurations` はslugだけでなく、Workspace・Group・Configurationの組み合わせを境界として扱う。公式サービスの表示名・説明・ブランド資産は専用IDへ限定して復元し、HASSYやマナベルの設定を流用しない。
+- SUSPENDEDなサービスは公開設定が残っていても認証フォールバックを表示しない。停止案内または未解決案内へ進め、停止中サービスをログイン可能に見せない。
+- マナベルスタイルは既存のPUBLIC登録ポリシーを変更せず、公開文言だけを実際の提供範囲（無料Pilot、本人がAIを使って学ぶサービス）へ合わせる。業務代行・完成品制作と誤認させる説明は追加しない。
+- 修復migrationは対象設定が空の使い捨てDBでは通知してスキップし、対象slugが存在する本番相当DBではID・Workspace・Group・Group名の不一致や欠落を停止する。登録ポリシーは更新せず、変更時は監査証跡を残す。

@@ -86,7 +86,6 @@ describe('service home access guidance', () => {
   it.each([
     ['manaberu-style', 'マナベルスタイル'],
     ['hassy', 'ハッシー'],
-    ['sennokuni-media', '千ノ国メディア'],
   ])('shows only the approved %s brand on an unresolved service-link screen', (slug, name) => {
     const brand = serviceAuthBrandForSlug(slug);
     expect(brand).toEqual({ serviceName: name, logoUrl: null, poweredBy: true });
