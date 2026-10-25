@@ -38,6 +38,7 @@
     "db:migration:history:probe": "node packages/database/scripts/probe-migration-history.mjs",
     "db:migration:apply:release-20261020": "node packages/database/scripts/apply-release-20261020.mjs",
     "db:migration:apply:release-20261025": "node packages/database/scripts/apply-release-20261025.mjs",
+    "db:migration:apply:release-20261026": "node packages/database/scripts/apply-release-20261026.mjs",
     "db:migration:probe": "node packages/database/scripts/probe-migration-connection.mjs",
     "db:assert-ready": "pnpm --filter @bunshin/database db:assert-ready"
   },
