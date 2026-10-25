@@ -1,5 +1,12 @@
 # BUNSHIN Platform Decision Log
 
+## 2026-10-26: サービス識別情報migrationの本番反映経路を分離する
+
+- 状態: 本番migrationは未実行。main CI成功後、読み取り専用履歴確認で対象pendingが2件に限定されることを確認した。
+- 既存のHASSY seed releaseは対象を混在させず、`20261025130000_repair_official_service_identity` と `20261025131000_align_manaberu_public_registration_copy` だけを許可する専用release workflowを追加する。
+- PreviewはDDLとmigration historyを変更しない。ApplyはProduction environment approval、Supabase session pooler、TLS/CA、厳密なpending集合、適用後readiness確認を必須とする。
+- 接続probeが`migration-bounds-not-active`で停止する場合は、poolerがmigration timeout boundsを保持しない安全ガードであり、直接SQLやmigration resolveで迂回しない。
+
 ## 2026-10-25: HASSY本番サービス設定の限定migration経路
 
 - 状態: 専用allowlist・本番環境保護・read-only readiness検証を追加。Production migrationは未実行。
