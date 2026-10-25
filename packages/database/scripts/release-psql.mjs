@@ -6,6 +6,16 @@ const literal = (value) => "'" + value.replaceAll("'", "''") + "'";
 const identifier = (value) => '"' + value.replaceAll('"', '""') + '"';
 const shellWord = (value) => "'" + value.replaceAll("'", "'\\''") + "'";
 
+// Migration bodies may contain a PL/pgSQL DO block.  Transaction control inside
+// that block is scoped by PostgreSQL and is not a psql transaction wrapper.  Only
+// reject transaction-control statements that remain outside dollar-quoted bodies.
+const hasTopLevelTransactionControl = (sql) => {
+  const withoutDollarQuotedBodies = sql.replace(/\$([A-Za-z_][A-Za-z0-9_]*)?\$[\s\S]*?\$\1\$/g, '');
+  return /^\s*(BEGIN(?:\s+READ\s+ONLY)?|COMMIT|ROLLBACK|END|START\s+TRANSACTION)\s*;\s*$/im.test(
+    withoutDollarQuotedBodies,
+  );
+};
+
 export const psqlArguments = [
   '-X',
   '-w',
@@ -84,11 +94,7 @@ export function buildPsqlReleaseScript({
   }
   const approved = approvedNames.map((name) => {
     const migration = migrations.find((item) => item.name === name);
-    if (
-      !migration ||
-      /^\s*\\/m.test(migration.sql) ||
-      /^\s*(BEGIN|COMMIT|ROLLBACK|END|START\s+TRANSACTION)\b/im.test(migration.sql)
-    )
+    if (!migration || /^\s*\\/m.test(migration.sql) || hasTopLevelTransactionControl(migration.sql))
       throw new Error('UNSUPPORTED_RELEASE_SQL');
     return migration;
   });
