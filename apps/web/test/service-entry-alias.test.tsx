@@ -55,8 +55,10 @@ describe('service entry aliases', () => {
       await ServiceEntryPage({ params: params('hassy'), searchParams }),
     );
 
-    expect(html).toContain('サービスの利用状態を確認できません');
+    expect(html).toContain('ハッシーの利用設定を確認できません');
     expect(html).toContain('何度もログインし直さず');
+    expect(html).toContain('メールとLINEのアカウントは別の認証方法です');
+    expect(html).toContain('サービスの案内を確認する');
     expect(html).not.toContain('ログインして続ける');
   });
 
