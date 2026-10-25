@@ -4572,3 +4572,15 @@
 - 原因は、試行単位認証を無効にしている旧来経路でブラウザCookieが失われたとき、callbackに含まれる検証済みのサービス戻り先を成功後の遷移に使わず、未完了Userを共通アンケートへ送っていたこと。サービス付き `/onboarding` 自体は既存の境界でサービス画面へ戻すが、戻り先が遷移から失われると判定できなかった。
 - `AUTH_RETURN_ATTEMPTS_ENABLED=true` の試行単位経路では、従来どおり `AuthReturnAttempt.returnPath` だけを成功後の正本とする。旧来経路に限り、同一callbackから取得した `safeLineAuthReturnPath` 済みの戻り先をfallbackとして使い、外部URLや未許可queryは受け付けない。
 - サービス戻り先が存在する場合は、未完了Userでも共通の業種・SNS目的アンケートを表示しない。認証後のサービス側で本人・所属・参加状態を再確認する。migration、DB、機能flag、本番設定、デプロイは変更しない。
+
+## 2026-10-25: ハッシーの本番公開サービス設定を専用migrationで復元する
+
+- 本番DBの読み取り専用確認で、ハッシーの画面・コードは存在する一方、`service_configurations` に `hassy` がなく、認証後の参加状態確認がサービス未解決で停止していたことを確認した。マナベルスタイルや他ServiceのGroupを流用しない。
+- `20261025120000_seed_hassy_public_service` は、ワタシワークス運営Workspace配下の専用Group・ServiceConfiguration・RegistrationPolicy・CommercialSetting・FeaturePolicyを同じscopeで冪等に作成／補完する。公開登録、メール／LINE、有効な100人の無料テスト枠、最小事業者プロフィールを明示する。
+- migrationはアクティブなSUPER_ADMINを監査主体として解決し、別Workspaceの同名設定や不一致Groupは停止する。Supabase Authの標準メール本文を動的に変更するものではなく、Send Email Hookは別タスクとする。
+
+## 2026-10-25: migration追加漏れを本番公開前に止める運用ゲートを強化する
+
+- `verify` と `database` をmainの必須Status Checkとして維持し、migration追加時の最新migration定数不一致をmerge前に停止する。今回のHASSY PRでこのゲートが実際に不一致を検出した。
+- PRテンプレートに `LATEST_DATABASE_MIGRATION` 更新、disposable DBでのmigration/readiness、ProductionのPreview→承認→適用→readiness→アプリデプロイ順序を必須確認として追加する。
+- Production定期SmokeにHASSY公開入口の確認を追加し、サービス名・公開登録文言が表示され、サービス設定不在の案内が出ていないことを検査する。認証・参加登録の変更やメール送信は行わない。
