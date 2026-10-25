@@ -9,7 +9,6 @@ export interface ServiceAuthBrand {
 const INDEPENDENT_SERVICE_BRANDS: Record<string, string> = {
   'manaberu-style': 'マナベルスタイル',
   hassy: 'ハッシー',
-  'sennokuni-media': '千ノ国メディア',
 };
 
 /**

@@ -31,10 +31,7 @@ beforeEach(() => {
 });
 
 describe('service entry aliases', () => {
-  it.each([
-    ['hassy', 'ハッシー'],
-    ['sennokuni-media', '千ノ国メディア'],
-  ])(
+  it.each([['hassy', 'ハッシー']])(
     'keeps the approved %s direct URL usable when public settings are unavailable',
     async (slug, name) => {
       const html = renderToStaticMarkup(
@@ -68,10 +65,16 @@ describe('service entry aliases', () => {
     ).rejects.toThrow('ROUTE_NOT_FOUND');
   });
 
-  it('provides metadata for an approved alias without inventing service settings', async () => {
-    await expect(generateMetadata({ params: params('sennokuni-media') })).resolves.toMatchObject({
-      title: '千ノ国メディア',
-      description: '千ノ国メディアの利用案内',
+  it('does not turn the suspended Sennokuni service into a login fallback', async () => {
+    await expect(
+      ServiceEntryPage({ params: params('sennokuni-media'), searchParams }),
+    ).rejects.toThrow('ROUTE_NOT_FOUND');
+  });
+
+  it('provides metadata for the approved HASSY fallback without inventing service settings', async () => {
+    await expect(generateMetadata({ params: params('hassy') })).resolves.toMatchObject({
+      title: 'ハッシー',
+      description: 'ハッシーの利用案内',
     });
   });
 });
