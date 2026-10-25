@@ -16,16 +16,22 @@ BEGIN
     g."name" AS group_name
   INTO target
   FROM "service_configurations" sc
-  INNER JOIN "groups" g
+  LEFT JOIN "groups" g
     ON g."workspace_id" = sc."workspace_id"
    AND g."id" = sc."group_id"
-  WHERE sc."id" = '1b74ed83-977a-4a54-9750-ab381c5d8367'::UUID
-    AND sc."workspace_id" = '74000000-0000-4000-8000-000000000001'::UUID
-    AND sc."group_id" = 'ae9e96ca-16f3-4210-af4f-44d18bdaebe3'::UUID
-    AND sc."slug" = 'manaberu-style';
+  WHERE sc."slug" = 'manaberu-style'
+  LIMIT 1;
 
   IF NOT FOUND THEN
-    RAISE EXCEPTION 'Manaberu public-copy repair target is missing or mismatched';
+    RAISE NOTICE 'Manaberu public-copy repair skipped: service configuration is absent';
+    RETURN;
+  END IF;
+
+  IF target.id <> '1b74ed83-977a-4a54-9750-ab381c5d8367'::UUID
+    OR target.workspace_id <> '74000000-0000-4000-8000-000000000001'::UUID
+    OR target.group_id <> 'ae9e96ca-16f3-4210-af4f-44d18bdaebe3'::UUID
+  THEN
+    RAISE EXCEPTION 'Manaberu public-copy repair target is mismatched';
   END IF;
 
   IF target.group_name <> 'マナベルスタイル' THEN

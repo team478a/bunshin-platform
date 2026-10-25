@@ -22,16 +22,22 @@ BEGIN
     g."name" AS group_name
   INTO target
   FROM "service_configurations" sc
-  INNER JOIN "groups" g
+  LEFT JOIN "groups" g
     ON g."workspace_id" = sc."workspace_id"
    AND g."id" = sc."group_id"
-  WHERE sc."id" = '74000000-0000-4000-8000-000000000005'::UUID
-    AND sc."workspace_id" = '74000000-0000-4000-8000-000000000001'::UUID
-    AND sc."group_id" = '74000000-0000-4000-8000-000000000003'::UUID
-    AND sc."slug" = 'watashi-works-official';
+  WHERE sc."slug" = 'watashi-works-official'
+  LIMIT 1;
 
   IF NOT FOUND THEN
-    RAISE EXCEPTION 'official service identity repair target is missing or mismatched';
+    RAISE NOTICE 'official service identity repair skipped: service configuration is absent';
+    RETURN;
+  END IF;
+
+  IF target.id <> '74000000-0000-4000-8000-000000000005'::UUID
+    OR target.workspace_id <> '74000000-0000-4000-8000-000000000001'::UUID
+    OR target.group_id <> '74000000-0000-4000-8000-000000000003'::UUID
+  THEN
+    RAISE EXCEPTION 'official service identity repair target is mismatched';
   END IF;
 
   IF target.group_name <> '企業向け' THEN
