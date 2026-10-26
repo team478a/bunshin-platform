@@ -1,5 +1,13 @@
 # BUNSHIN Platform Decision Log
 
+## 2026-10-26: ログインメールのResend設定を管理者通知と分離する
+
+- 状態: 実装中。SMTP資格情報の本番設定と実メールの確認は未実施。
+- `/admin/email` のResend設定は障害発生時の管理者通知専用とし、Supabase Authのログイン・登録メールへ流用しない。
+- ログインメールはSupabase AuthのCustom SMTPとしてResendを設定する。Resend APIキー、SMTPパスワード、Supabase管理者キーはアプリ管理画面・DB・チャットへ保存しない。
+- 管理画面には設定経路と確認手順だけを表示し、Supabase Dashboardで設定したあとに本番テストアカウントで送信・callback・ログアウトを確認する。
+- 既存のMagic Link callback、PKCE、サービス別returnTo、認証失敗時のfail-closed挙動は変更しない。
+
 ## 2026-10-26: サービス識別情報migrationの本番反映経路を分離する
 
 - 状態: 本番migrationは未実行。main CI成功後、読み取り専用履歴確認で対象pendingが2件に限定されることを確認した。
