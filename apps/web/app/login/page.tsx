@@ -6,6 +6,15 @@ import { serviceAuthReturnSlug } from '../../src/auth/line-return';
 import { resolvePublicServiceContext } from '../../src/services/public-service';
 import { serviceAuthBrandForSlug } from '../../src/services/service-auth-brand';
 import { isRouteNotFound } from '../../src/navigation/route-not-found';
+import { serviceAuthMetadata } from '../../src/services/service-auth-metadata';
+
+export async function generateMetadata({
+  searchParams,
+}: {
+  searchParams: Promise<{ returnTo?: string }>;
+}) {
+  return serviceAuthMetadata((await searchParams).returnTo, 'ログイン');
+}
 
 export default async function LoginPage({
   searchParams,
