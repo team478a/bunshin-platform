@@ -140,3 +140,4 @@ export * from './personal-learning-practice-support';
 export * from './personal-learning-conversation';
 export * from './ops-morning-digest';
 export * from './member-usage';
+export * from './member-roadmap';
