@@ -1,5 +1,6 @@
 // Local browser harness only. No production route, credentials, DB or Provider.
 import { createRoot } from 'react-dom/client';
+import { GrowthHarness } from './growth-harness';
 import { LearningCandidateCard } from '../../../apps/web/app/s/[serviceSlug]/programs/[programEnrollmentId]/learning-request/candidate-card';
 import { lessonWish, lessonCandidate } from './lesson-fixture';
 import {
@@ -16,7 +17,9 @@ import '../../../apps/web/app/styles.css';
 import { PersonalLearningRequestCard } from '../../../apps/web/app/s/[serviceSlug]/programs/[programEnrollmentId]/learning-request/card';
 
 createRoot(document.getElementById('root')!).render(
-  new URLSearchParams(window.location.search).has('practice') ? (
+  new URLSearchParams(window.location.search).has('member-growth') ? (
+    <GrowthHarness />
+  ) : new URLSearchParams(window.location.search).has('practice') ? (
     <PersonalLearningRequestCard
       endpoint="/api/synthetic/wish"
       initial={lessonWish}
