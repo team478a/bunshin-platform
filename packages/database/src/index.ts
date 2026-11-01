@@ -1,4 +1,5 @@
 export { PrismaBunshinRepository } from './bunshin-core';
+export { PrismaMemberUsageRepository, MEMBER_USAGE_SOURCE_LIMIT } from './member-usage-repository';
 export {
   checkDatabaseReadiness,
   PrismaPersonalityLearningProposalRepository,
