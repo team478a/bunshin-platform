@@ -2,7 +2,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApplicationError } from '@bunshin/shared';
 import { serviceAuthMetadata } from '../src/services/service-auth-metadata';
 
-const { lookup } = vi.hoisted(() => ({ lookup: vi.fn() }));
+type ServiceLookup = (slug: string) => Promise<{
+  configuration: {
+    displayName: string;
+    brand: { logoUrl: null };
+    poweredByEnabled: boolean;
+  };
+}>;
+
+const { lookup } = vi.hoisted(() => ({ lookup: vi.fn<ServiceLookup>() }));
 vi.mock('../src/services/public-service', () => ({ resolvePublicServiceContext: lookup }));
 
 describe('service auth metadata', () => {
@@ -11,13 +19,15 @@ describe('service auth metadata', () => {
   });
 
   it('keeps service titles separate and uses configured names', async () => {
-    lookup.mockImplementation(async (slug: string) => ({
-      configuration: {
-        displayName: slug === 'hassy' ? 'ハッシー' : 'マナベルスタイル',
-        brand: { logoUrl: null },
-        poweredByEnabled: true,
-      },
-    }));
+    lookup.mockImplementation((slug: string) =>
+      Promise.resolve({
+        configuration: {
+          displayName: slug === 'hassy' ? 'ハッシー' : 'マナベルスタイル',
+          brand: { logoUrl: null },
+          poweredByEnabled: true,
+        },
+      }),
+    );
     expect(await serviceAuthMetadata('/s/hassy', 'ログイン')).toEqual({
       title: 'ハッシー｜ログイン',
     });
