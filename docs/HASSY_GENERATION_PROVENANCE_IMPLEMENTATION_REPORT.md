@@ -34,7 +34,7 @@ Node 24.22.1、pnpm 10.10.0、PostgreSQL 16で実施。
 - Social別案テスト: 12件成功
 - Web関連テスト: 5ファイル39件成功
 - PostgreSQL利用実績統合テスト: 21件成功（今回追加7件を含む）
-- Web単体TypeScriptチェック: 成功
+- Web / Database単体TypeScriptチェック: 成功
 - 変更TS / MarkdownのPrettier検査、依存境界検査: 成功
 
 使い捨てDB `bunshin_disposable_51cf70e699c226b3` を127.0.0.1:18998へ限定して作成し、267 migrationを適用した。既存のDB名・comment marker preflight内で合成データのみ使用した。Container IDとtask/run labelを照合して終了し、専用container・一時volumeは削除済み。既存DBや本番には接続していない。
@@ -42,6 +42,8 @@ Node 24.22.1、pnpm 10.10.0、PostgreSQL 16で実施。
 初回のSQLテスト4件はfixtureのサービスID指定不足で既存認可に拒否されたため、fixtureにgroupIdを明示して21件成功を確認した。認可コードは緩和していない。型チェックでポイント経路の起動元引渡し不足も検出・修正した。
 
 WindowsではPrisma生成とテストの並行実行によるDLL競合、および複数パッケージを一度にlintした際のNode heap上限が発生した。生成・テストを順に実行し、lintはパッケージごとに分ける。リポジトリのタイムアウト・メモリ設定は変更していない。
+
+Databaseのlintでテストモックの不要なasyncを検出し、Promiseを直接返す形へ修正した。該当17件を再実行して成功した。パッケージ別lintの最終結果はPRに記録する。
 
 リポジトリ全体のformat / typecheck / lint / test / buildとDB全統合・release・TLS検証は、PRのCI verify / databaseを最終品質ゲートとする。最終結果はPRのチェック画面へ記録する。
 

@@ -17,7 +17,9 @@ function setup(status?: string) {
   const generation = {
     create: vi
       .fn()
-      .mockImplementation(async ({ data }: { data: object }) => ({ id: 'claim', ...data })),
+      .mockImplementation(({ data }: { data: object }) =>
+        Promise.resolve({ id: 'claim', ...data }),
+      ),
     findFirst: vi.fn().mockResolvedValue(existing),
     updateMany: vi.fn().mockResolvedValue({ count: 1 }),
     findUniqueOrThrow: vi.fn().mockResolvedValue({ ...existing, generationTrigger: 'USER' }),
