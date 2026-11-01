@@ -48,7 +48,12 @@ describe('Photo First observation provenance', () => {
         ...(initiatingSource ? { initiatingSource } : {}),
       });
       expect(tx.missionContentVariantGeneration.create).toHaveBeenCalledWith({
-        data: { ...scope, idempotencyKey: 'key', initiatingSource: initiatingSource ?? null },
+        data: {
+          ...scope,
+          idempotencyKey: 'key',
+          initiatingSource: initiatingSource ?? null,
+          generationTrigger: 'UNKNOWN',
+        },
       });
     },
   );
@@ -63,10 +68,23 @@ describe('Photo First observation provenance', () => {
     expect(tx.missionContentVariantGeneration.create).not.toHaveBeenCalled();
   });
   it('replays an old unknown row without relabeling or creating a new generation', async () => {
-    const { repository, tx } = claims({ ...scope, id: generationId, initiatingSource: null });
+    const { repository, tx } = claims({
+      ...scope,
+      id: generationId,
+      initiatingSource: null,
+      generationTrigger: 'UNKNOWN',
+    });
     expect(
-      await repository.claim({ ...scope, idempotencyKey: 'key', initiatingSource: 'PHOTO_FIRST' }),
-    ).toMatchObject({ acquired: false, generation: { initiatingSource: null } });
+      await repository.claim({
+        ...scope,
+        idempotencyKey: 'key',
+        initiatingSource: 'PHOTO_FIRST',
+        generationTrigger: 'USER',
+      }),
+    ).toMatchObject({
+      acquired: false,
+      generation: { initiatingSource: null, generationTrigger: 'UNKNOWN' },
+    });
     expect(tx.missionContentVariantGeneration.create).not.toHaveBeenCalled();
   });
 });

@@ -45,6 +45,8 @@ WindowsではPrisma生成とテストの並行実行によるDLL競合、およ�
 
 Databaseのlintでテストモックの不要なasyncを検出し、Promiseを直接返す形へ修正した。該当17件を再実行して成功した。パッケージ別lintの最終結果はPRに記録する。
 
+初回CIはDB job（全289件の統合テスト・release・TLS）が成功した。verifyは既存Photo First観測テスト3件の保存引数期待値に新列がないため失敗した。期待値へUNKNOWNを追加し、旧行の再送でUSERへ書き換えないことも既存テストで確認するよう修正した。修正版のCIを最終ゲートとする。
+
 リポジトリ全体のformat / typecheck / lint / test / buildとDB全統合・release・TLS検証は、PRのCI verify / databaseを最終品質ゲートとする。最終結果はPRのチェック画面へ記録する。
 
 ## 5. 未解決事項
