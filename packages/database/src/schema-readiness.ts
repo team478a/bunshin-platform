@@ -1,1 +1,1 @@
-export const LATEST_DATABASE_MIGRATION = '20261020120000_ops_morning_digest_runs';
+export const LATEST_DATABASE_MIGRATION = '20261025131000_align_manaberu_public_registration_copy';
