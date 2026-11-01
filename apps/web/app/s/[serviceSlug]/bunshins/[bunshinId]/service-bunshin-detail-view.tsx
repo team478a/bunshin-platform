@@ -19,6 +19,7 @@ import { SocialInsightRecorder } from './social-insight-recorder';
 import type { ServiceBunshinDetailModel } from './service-bunshin-detail-data';
 import { ActivityBarrierCard } from './activity-barrier-card';
 import { ImprovementFeedbackForm } from '../../../../ui/improvement-feedback-form';
+import { MemberGrowthRoadmap } from '../../../../ui/member-growth-roadmap/card';
 
 function MemberHomeDrawer({
   title,
@@ -180,6 +181,17 @@ export function ServiceBunshinDetailView({ model }: { model: ServiceBunshinDetai
             <h2 id="service-member-tools-title">その他のメニュー</h2>
             <p>普段は開かなくても大丈夫です。確認したい項目だけ選んでください。</p>
           </header>
+          {bunshin.ownerUserId === actor.userId &&
+          capabilities.some(({ capabilityType }) => capabilityType === 'SOCIAL') ? (
+            <MemberHomeDrawer
+              title="成長ロードマップを確認する"
+              description="活動日数、できたこと、次のおすすめを確認できます。"
+            >
+              <MemberGrowthRoadmap
+                endpointBase={`/api/services/${encodeURIComponent(service.configuration.slug)}/bunshins/${encodeURIComponent(bunshin.id)}`}
+              />
+            </MemberHomeDrawer>
+          ) : null}
           {approvedBusinessStrategy ? (
             <MemberHomeDrawer
               label="最初に1回"
