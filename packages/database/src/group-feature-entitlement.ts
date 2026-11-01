@@ -239,6 +239,14 @@ export class PrismaGroupFeatureEntitlementRepository implements GroupFeatureEnti
     return this.resolveAccessWith(this.client, input);
   }
 
+  /** Read-only resolution within the caller's authorized snapshot. Does not consume quota. */
+  async resolveAccessInTransaction(
+    tx: Prisma.TransactionClient,
+    input: Parameters<GroupFeatureEntitlementRepository['resolveAccess']>[0],
+  ): Promise<EffectiveGroupFeatureAccess | null> {
+    return this.resolveAccessWith(tx, input);
+  }
+
   private async resolveAccessWith(
     client: PrismaClient | Prisma.TransactionClient,
     input: Parameters<GroupFeatureEntitlementRepository['resolveAccess']>[0],
@@ -276,10 +284,35 @@ export class PrismaGroupFeatureEntitlementRepository implements GroupFeatureEnti
     }
     const [policies, assignments] = await Promise.all([
       client.groupFeaturePolicy.findMany({
-        where: { groupId: input.groupId, featureKey: { in: requiredKeys } },
+        where: {
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          featureKey: { in: requiredKeys },
+        },
+        select: {
+          featureKey: true,
+          status: true,
+          dailyLimit: true,
+          monthlyLimit: true,
+          startsAt: true,
+          endsAt: true,
+        },
       }),
       client.groupMemberFeatureAssignment.findMany({
-        where: { groupMembershipId: membership.id, featureKey: { in: requiredKeys } },
+        where: {
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          groupMembershipId: membership.id,
+          featureKey: { in: requiredKeys },
+        },
+        select: {
+          featureKey: true,
+          status: true,
+          dailyLimit: true,
+          monthlyLimit: true,
+          startsAt: true,
+          endsAt: true,
+        },
       }),
     ]);
     if (

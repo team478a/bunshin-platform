@@ -352,6 +352,7 @@ export * from './side-hustle-hearing';
 export { purgeExpiredSupportCases, SUPPORT_CASE_RETENTION_DAYS } from './support-case-retention';
 export { PrismaOpsMorningDigestCollector } from './ops-morning-digest';
 export { PrismaOpsMorningDigestRunRepository } from './ops-morning-digest-runs';
+export { PrismaMemberRoadmapContextRepository } from './member-roadmap-context';
 export type {
   OpsMorningDigestClaim,
   OpsMorningDigestEnvironment,
