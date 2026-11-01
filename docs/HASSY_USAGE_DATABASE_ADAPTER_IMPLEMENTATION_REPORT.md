@@ -2,7 +2,7 @@
 
 作成日: 2026-11-01
 
-基点: `origin/main` `46e3a67555f74a19ec0d50667268f300329648c6`（PR #1414マージ後）
+基点: `origin/main` `d6521f5ea79c059ab4c2c17ab5afddb33c12e916`（PR #1414・#1415マージ後）
 
 ブランチ: `codex/hassy-usage-database-adapter`
 
