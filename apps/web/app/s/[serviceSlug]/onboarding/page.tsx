@@ -13,8 +13,14 @@ import {
 } from '../../../../src/services/service-onboarding-response';
 import { PublicShell } from '../../../ui/public-shell';
 import { ServiceOnboardingForm } from './service-onboarding-form';
+import { serviceAuthMetadata } from '../../../../src/services/service-auth-metadata';
 
 export const dynamic = 'force-dynamic';
+
+export async function generateMetadata({ params }: { params: Promise<{ serviceSlug: string }> }) {
+  const { serviceSlug } = await params;
+  return serviceAuthMetadata(`/s/${serviceSlug}/onboarding`, '最初のかんたん設定');
+}
 
 async function context(slug: string, actorUserId: string) {
   try {

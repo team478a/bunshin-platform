@@ -8,12 +8,22 @@ import { serviceAuthReturnSlug, safeLineAuthReturnPath } from '../../../src/auth
 import { resolvePublicServiceContext } from '../../../src/services/public-service';
 import { serviceAuthBrandForSlug } from '../../../src/services/service-auth-brand';
 import { isRouteNotFound } from '../../../src/navigation/route-not-found';
+import { serviceAuthMetadata } from '../../../src/services/service-auth-metadata';
 import {
   AuthReturnContextError,
   authReturnAttemptsEnabled,
   authReturnPageRequest,
   readAuthReturnContext,
 } from '../../../src/auth/auth-return-attempt';
+
+export async function generateMetadata({
+  searchParams,
+}: {
+  searchParams: Promise<{ returnTo?: string | string[] }>;
+}) {
+  const { returnTo } = await searchParams;
+  return serviceAuthMetadata(typeof returnTo === 'string' ? returnTo : undefined, 'ログインを確認');
+}
 
 export default async function LoginConfirmPage({
   searchParams,
