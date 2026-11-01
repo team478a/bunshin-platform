@@ -38,9 +38,13 @@ Node `24.22.1`、pnpm `10.10.0`で実行。
 - 新規合成データテスト: 23件成功
 - Application全体: 147ファイル、1,052件成功
 - Application typecheck / lint / build: 成功
+- リポジトリ全体の `pnpm typecheck`: ローカル成功
 - 依存境界検査とその否定テスト10件: 成功
 - リポジトリ全体のformat:check、変更ファイルのPrettier、git diff --check: 成功
-- その他の標準検証: 実行結果を確定後に追記
+- 実装コミット `f56c48d9` の [CI run 41310112296](https://github.com/team478a/bunshin-platform/actions/runs/41310112296): `verify` / `database` ともに成功
+- CIでは全体のformat / typecheck / lint / test、既存UIテスト、build、disposable PostgreSQLのmigration / readiness / integration / release / TLSテストが成功
+
+この結果は上記実装コミットの証跡であり、本報告追記後のHEADの状態は [PR #1414のチェック](https://github.com/team478a/bunshin-platform/pull/1414/checks) を参照する。本番反映の証拠とはしない。
 
 ## 5. 未解決事項
 
