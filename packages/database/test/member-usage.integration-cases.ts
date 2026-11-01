@@ -3,6 +3,8 @@ import type { PrismaClient } from '@prisma/client';
 import { GetMemberUsageSummary, type MemberUsageRequest } from '@bunshin/application';
 import { afterEach, describe, expect, it } from 'vitest';
 import { PrismaMemberUsageRepository } from '../src/member-usage-repository';
+import { PrismaDailyMissionGenerationRepository } from '../src/daily-mission-generation-repository';
+import { PrismaMissionContentVariantRepository } from '../src/mission-content-variant-repository';
 
 const at = new Date('2026-10-31T15:00:00Z');
 const now = new Date('2026-11-02T00:00:00Z');
@@ -122,6 +124,173 @@ export function registerMemberUsageIntegrationCases(client: PrismaClient) {
         },
       });
     }
+
+    it.each(['USER', 'SCHEDULER', 'SYSTEM', 'UNKNOWN'] as const)(
+      'persists and projects %s origin without inferring from the actor or operation type',
+      async (generationTrigger) => {
+        const f = await fixture();
+        const m = await mission(f.workspace.id, f.bunshin.id);
+        const owned = {
+          workspaceId: f.workspace.id,
+          bunshinId: f.bunshin.id,
+          actorUserId: f.user.id,
+        };
+        const daily = new PrismaDailyMissionGenerationRepository(client);
+        const claimInput = {
+          ...owned,
+          missionDate: '2026-10-31',
+          idempotencyKey: randomUUID(),
+          generationTrigger,
+        };
+        const claim = await daily.claim(claimInput);
+        expect(claim.record.generationTrigger).toBe(generationTrigger);
+        await daily.complete({ ...owned, id: claim.record.id, dailyMissionId: m.id });
+        expect(await daily.claim({ ...claimInput, generationTrigger: 'USER' })).toMatchObject({
+          acquired: false,
+          record: { generationTrigger },
+        });
+        const variants = new PrismaMissionContentVariantRepository(client);
+        const variantInput = {
+          ...owned,
+          groupId: f.group.id,
+          dailyMissionId: m.id,
+          idempotencyKey: randomUUID(),
+          initiatingSource: 'STANDARD' as const,
+          generationTrigger,
+        };
+        const variantClaim = await variants.claim(variantInput);
+        expect(variantClaim?.acquired).toBe(true);
+        const persisted = await client.missionContentVariantGeneration.findUniqueOrThrow({
+          where: { id: variantClaim!.generation.id },
+        });
+        expect(persisted.generationTrigger).toBe(generationTrigger);
+        expect(await variants.claim({ ...variantInput, generationTrigger: 'USER' })).toMatchObject({
+          acquired: false,
+        });
+        expect(
+          (
+            await client.missionContentVariantGeneration.findUniqueOrThrow({
+              where: { id: persisted.id },
+            })
+          ).generationTrigger,
+        ).toBe(generationTrigger);
+        await variants.complete({
+          ...owned,
+          groupId: f.group.id,
+          dailyMissionId: m.id,
+          generationId: persisted.id,
+          format: 'TEXT',
+          content: { body: 'Synthetic proposal' },
+          qualityScore: 90,
+          model: 'synthetic',
+          promptVersion: 'synthetic',
+          inputTokens: null,
+          outputTokens: null,
+          estimatedCostMicros: null,
+          latencyMs: 1,
+          qualityAudit: { verdict: 'PASS', score: 90, issueCodes: [], repairCount: 0 },
+        });
+        f.request.asOf = new Date(Date.now() + 60_000);
+        expect((await f.summary()).allTime).toMatchObject({
+          generated: 2,
+          activeDays: generationTrigger === 'USER' ? 1 : 0,
+          unknownTriggerGenerations: generationTrigger === 'UNKNOWN' ? 2 : 0,
+        });
+      },
+    );
+
+    it('keeps legacy defaults unknown and rejects unsupported origins in both tables', async () => {
+      const f = await fixture();
+      const m = await mission(f.workspace.id, f.bunshin.id);
+      const owned = {
+        workspaceId: f.workspace.id,
+        bunshinId: f.bunshin.id,
+        actorUserId: f.user.id,
+      };
+      const daily = await client.dailyMissionGeneration.create({
+        data: { ...owned, missionDate: at, status: 'PENDING', idempotencyKey: randomUUID() },
+      });
+      const variant = await client.missionContentVariantGeneration.create({
+        data: {
+          ...owned,
+          dailyMissionId: m.id,
+          initiatingSource: 'PHOTO_FIRST',
+          idempotencyKey: randomUUID(),
+        },
+      });
+      expect(daily.generationTrigger).toBe('UNKNOWN');
+      expect(variant.generationTrigger).toBe('UNKNOWN');
+      await expect(
+        client.dailyMissionGeneration.update({
+          where: { id: daily.id },
+          data: { generationTrigger: 'PHOTO_FIRST' },
+        }),
+      ).rejects.toThrow();
+      await expect(
+        client.missionContentVariantGeneration.update({
+          where: { id: variant.id },
+          data: { generationTrigger: 'STANDARD' },
+        }),
+      ).rejects.toThrow();
+    });
+
+    it('records the retry origin only for the acquired attempt', async () => {
+      const f = await fixture();
+      const owned = {
+        workspaceId: f.workspace.id,
+        bunshinId: f.bunshin.id,
+        actorUserId: f.user.id,
+      };
+      const repository = new PrismaDailyMissionGenerationRepository(client);
+      const input = {
+        ...owned,
+        missionDate: '2026-10-31',
+        idempotencyKey: randomUUID(),
+        generationTrigger: 'SCHEDULER' as const,
+      };
+      const first = await repository.claim(input);
+      await repository.fail({ ...owned, id: first.record.id, errorCategory: 'SYNTHETIC' });
+      const retry = await repository.claim({
+        ...input,
+        idempotencyKey: randomUUID(),
+        generationTrigger: 'USER',
+      });
+      expect(retry).toMatchObject({
+        acquired: true,
+        record: { id: first.record.id, generationTrigger: 'USER', status: 'PENDING' },
+      });
+    });
+
+    it('allows only one concurrent retry to own the stored origin', async () => {
+      const f = await fixture();
+      const owned = {
+        workspaceId: f.workspace.id,
+        bunshinId: f.bunshin.id,
+        actorUserId: f.user.id,
+      };
+      const repository = new PrismaDailyMissionGenerationRepository(client);
+      const input = { ...owned, missionDate: '2026-10-31', idempotencyKey: randomUUID() };
+      const first = await repository.claim(input);
+      await repository.fail({ ...owned, id: first.record.id, errorCategory: 'SYNTHETIC' });
+      const results = await Promise.allSettled(
+        (['USER', 'SCHEDULER'] as const).map((generationTrigger) =>
+          repository.claim({ ...input, idempotencyKey: randomUUID(), generationTrigger }),
+        ),
+      );
+      const winners = results.filter(
+        (result) => result.status === 'fulfilled' && result.value.acquired,
+      );
+      expect(winners).toHaveLength(1);
+      const winner = winners[0];
+      if (winner?.status !== 'fulfilled') throw new Error('expected acquired retry');
+      expect(
+        await client.dailyMissionGeneration.findUniqueOrThrow({ where: { id: first.record.id } }),
+      ).toMatchObject({
+        generationTrigger: winner.value.record.generationTrigger,
+        idempotencyKey: winner.value.record.idempotencyKey,
+        status: 'PENDING',
+      });
+    });
 
     it('reads actual existing sources, preserves unknown cost and never writes usage or membership', async () => {
       const f = await fixture();

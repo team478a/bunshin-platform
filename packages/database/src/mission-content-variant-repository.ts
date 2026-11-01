@@ -3,7 +3,7 @@ import type {
   MissionContentVariantGeneration,
   MissionContentVariantRepository,
 } from '@bunshin/capability-social';
-import { canManageBunshin } from '@bunshin/platform-domain';
+import { canManageBunshin, GENERATION_TRIGGERS } from '@bunshin/platform-domain';
 import { ApplicationError } from '@bunshin/shared';
 import type { Prisma } from './client';
 import { type PrismaClient, prisma } from './client';
@@ -124,6 +124,10 @@ export class PrismaMissionContentVariantRepository implements MissionContentVari
   }
 
   async claim(input: Parameters<MissionContentVariantRepository['claim']>[0]) {
+    const generationTrigger =
+      input.generationTrigger === undefined ? 'UNKNOWN' : input.generationTrigger;
+    if (!GENERATION_TRIGGERS.includes(generationTrigger))
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid generation trigger');
     if (
       input.initiatingSource !== undefined &&
       !['STANDARD', 'PHOTO_FIRST'].includes(input.initiatingSource)
@@ -193,6 +197,7 @@ export class PrismaMissionContentVariantRepository implements MissionContentVari
           actorUserId: input.actorUserId,
           idempotencyKey: input.idempotencyKey,
           initiatingSource: input.initiatingSource ?? null,
+          generationTrigger,
         },
       });
       return { acquired: true, generation: this.generation(generation) };

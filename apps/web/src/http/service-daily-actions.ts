@@ -424,6 +424,7 @@ export function generateServicePhotoFirstResponse(
         const { createDailyMissionGenerationService } =
           await import('../services/daily-mission-generation');
         const mission = await createDailyMissionGenerationService().execute({
+          generationTrigger: 'USER',
           workspaceId: scope.workspaceId,
           groupId: scope.groupId,
           bunshinId,
@@ -481,6 +482,7 @@ export function generateServicePhotoFirstResponse(
       const { createMissionContentVariantGenerationService } =
         await import('../services/mission-content-variant-generation');
       const result = await createMissionContentVariantGenerationService().executePhotoFirst({
+        generationTrigger: 'USER',
         workspaceId: scope.workspaceId,
         groupId: scope.groupId,
         bunshinId,

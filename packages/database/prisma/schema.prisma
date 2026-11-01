@@ -7663,6 +7663,7 @@ model GenerationContextSnapshot {
 }
 
 model DailyMissionGeneration {
+  generationTrigger String @default("UNKNOWN") @map("generation_trigger") @db.VarChar(20)
   id             String   @id @default(uuid()) @db.Uuid
   workspaceId    String   @map("workspace_id") @db.Uuid
   bunshinId      String   @map("bunshin_id") @db.Uuid
@@ -7735,6 +7736,7 @@ model MissionContentVariantPhotoFirstMetadata {
 
 /// 別案生成のclaim/成功/失敗を冪等に記録する。失敗時にもAI観測値を残す。
 model MissionContentVariantGeneration {
+  generationTrigger String @default("UNKNOWN") @map("generation_trigger") @db.VarChar(20)
   id                  String                                @id @default(uuid()) @db.Uuid
   workspaceId         String                                @map("workspace_id") @db.Uuid
   bunshinId           String                                @map("bunshin_id") @db.Uuid

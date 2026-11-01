@@ -1,4 +1,5 @@
 import 'server-only';
+import type { GenerationTrigger } from '@bunshin/platform-domain';
 import {
   ListDailyMissions,
   type DailyMissionPlannerInput,
@@ -33,6 +34,7 @@ import { runDailyMissionDecisionContentOrchestration } from './daily-mission-dec
 import { runDailyMissionRebriefGeneration } from './daily-mission-rebrief-runtime';
 
 interface Input {
+  generationTrigger: GenerationTrigger;
   workspaceId: string;
   groupId?: string | null;
   bunshinId: string;
@@ -136,6 +138,7 @@ export class DailyMissionGenerationService {
       const generations = new db.PrismaDailyMissionGenerationRepository();
       const claim = await generations.claim({
         ...scope,
+        generationTrigger: input.generationTrigger,
         missionDate: input.missionDate,
         idempotencyKey: input.generationIdempotencyKey,
       });

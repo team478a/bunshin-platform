@@ -1,4 +1,5 @@
 import 'server-only';
+import type { GenerationTrigger } from '@bunshin/platform-domain';
 import { GetGenerationContextSnapshot, RequireActiveBunshinCapability } from '@bunshin/application';
 import {
   AuthorizeDailyMissionCopy,
@@ -25,6 +26,7 @@ import {
 } from './mission-content-variant-validation';
 
 interface Input {
+  generationTrigger: GenerationTrigger;
   workspaceId: string;
   groupId?: string | null;
   bunshinId: string;
@@ -125,6 +127,7 @@ export class MissionContentVariantGenerationService {
         dailyMissionId: mission.id,
         idempotencyKey: input.generationIdempotencyKey,
         initiatingSource: 'photoActionId' in input ? 'PHOTO_FIRST' : 'STANDARD',
+        generationTrigger: input.generationTrigger,
         ...('sourceVariantId' in input && input.sourceVariantId
           ? { sourceVariantId: input.sourceVariantId }
           : {}),

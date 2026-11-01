@@ -53,6 +53,23 @@ function setup() {
 }
 
 describe('member usage DB adapter', () => {
+  it.each(['USER', 'SCHEDULER', 'SYSTEM', 'UNKNOWN'] as const)(
+    'uses recorded %s origin for primary and variant generation',
+    async (generationTrigger) => {
+      const s = setup();
+      s.tx.dailyMissionGeneration.findMany.mockResolvedValue([
+        { id: id(20), dailyMissionId: id(6), updatedAt: at, generationTrigger },
+      ]);
+      s.tx.missionContentVariant.findMany.mockResolvedValue([
+        { id: id(30), createdAt: at, generation: { updatedAt: at, generationTrigger } },
+      ]);
+      expect((await s.summary()).allTime).toMatchObject({
+        generated: 2,
+        activeDays: generationTrigger === 'USER' ? 1 : 0,
+        unknownTriggerGenerations: generationTrigger === 'UNKNOWN' ? 2 : 0,
+      });
+    },
+  );
   it.each(['workspaceId', 'serviceId', 'groupMembershipId', 'userId', 'bunshinId'] as const)(
     'rejects an omitted %s before Prisma can drop an undefined filter',
     (key) => {
@@ -204,9 +221,9 @@ describe('member usage DB adapter', () => {
   it('maps completed primary and saved legacy variants to UNKNOWN without counting orphan claims', async () => {
     const s = setup();
     s.tx.dailyMissionGeneration.findMany.mockResolvedValue([
-      { id: id(20), dailyMissionId: id(6), updatedAt: at },
-      { id: id(21), dailyMissionId: id(6), updatedAt: at },
-      { id: id(22), dailyMissionId: id(99), updatedAt: at },
+      { id: id(20), dailyMissionId: id(6), updatedAt: at, generationTrigger: 'UNKNOWN' },
+      { id: id(21), dailyMissionId: id(6), updatedAt: at, generationTrigger: 'UNKNOWN' },
+      { id: id(22), dailyMissionId: id(99), updatedAt: at, generationTrigger: 'USER' },
     ]);
     s.tx.missionContentVariant.findMany.mockResolvedValue([
       { id: id(30), createdAt: at, generation: null },

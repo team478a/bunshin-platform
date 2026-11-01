@@ -150,7 +150,7 @@ export class PrismaMemberUsageRepository
             },
             orderBy: [{ updatedAt: 'asc' }, { id: 'asc' }],
             take,
-            select: { id: true, dailyMissionId: true, updatedAt: true },
+            select: { id: true, dailyMissionId: true, updatedAt: true, generationTrigger: true },
           }),
           tx.missionContentVariant.findMany({
             where: {
@@ -168,7 +168,11 @@ export class PrismaMemberUsageRepository
             },
             orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
             take,
-            select: { id: true, createdAt: true, generation: { select: { updatedAt: true } } },
+            select: {
+              id: true,
+              createdAt: true,
+              generation: { select: { updatedAt: true, generationTrigger: true } },
+            },
           }),
           tx.missionActivity.findMany({
             where: { ...owned, occurredAt: { lte: request.asOf }, dailyMission: mission },
@@ -241,7 +245,7 @@ export class PrismaMemberUsageRepository
           primary.set(row.dailyMissionId, {
             ...record(`mission:${row.dailyMissionId}`, row.updatedAt),
             status: 'SUCCESS',
-            trigger: 'UNKNOWN',
+            trigger: row.generationTrigger as MemberUsageSources['generations'][number]['trigger'],
           });
       }
       const bounded = [claims, variants, activities, decisions, posts, costs, selections].some(
@@ -256,7 +260,8 @@ export class PrismaMemberUsageRepository
           ...variants.map((row) => ({
             ...record(`variant:${row.id}`, row.generation?.updatedAt ?? row.createdAt),
             status: 'SUCCESS' as const,
-            trigger: 'UNKNOWN' as const,
+            trigger: (row.generation?.generationTrigger ??
+              'UNKNOWN') as MemberUsageSources['generations'][number]['trigger'],
           })),
         ],
         activities: [

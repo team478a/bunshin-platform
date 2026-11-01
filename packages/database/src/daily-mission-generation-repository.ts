@@ -1,4 +1,5 @@
 import { ApplicationError } from '@bunshin/shared';
+import { GENERATION_TRIGGERS, type GenerationTrigger } from '@bunshin/platform-domain';
 import { Prisma, type PrismaClient, prisma } from './client';
 
 export class PrismaDailyMissionGenerationRepository {
@@ -10,7 +11,12 @@ export class PrismaDailyMissionGenerationRepository {
     actorUserId: string;
     missionDate: string;
     idempotencyKey: string;
+    generationTrigger?: GenerationTrigger;
   }) {
+    const generationTrigger =
+      input.generationTrigger === undefined ? 'UNKNOWN' : input.generationTrigger;
+    if (!GENERATION_TRIGGERS.includes(generationTrigger))
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid generation trigger');
     const authorized = await this.client.bunshin.findFirst({
       where: {
         id: input.bunshinId,
@@ -35,6 +41,7 @@ export class PrismaDailyMissionGenerationRepository {
             idempotencyKey: input.idempotencyKey,
             missionDate,
             status: 'PENDING',
+            generationTrigger,
           },
         }),
         acquired: true,
@@ -49,10 +56,21 @@ export class PrismaDailyMissionGenerationRepository {
       if (existing.actorUserId !== input.actorUserId)
         throw new ApplicationError('CONFLICT', 'daily mission generation already claimed');
       if (existing.status === 'FAILED') {
+        // A new attempt owns its origin. Only one concurrent retry can acquire it.
+        const retry = await this.client.dailyMissionGeneration.updateMany({
+          where: { id: existing.id, status: 'FAILED', updatedAt: existing.updatedAt },
+          data: {
+            status: 'PENDING',
+            idempotencyKey: input.idempotencyKey,
+            errorCategory: null,
+            generationTrigger,
+          },
+        });
+        if (retry.count !== 1)
+          throw new ApplicationError('CONFLICT', 'daily mission generation already claimed');
         return {
-          record: await this.client.dailyMissionGeneration.update({
+          record: await this.client.dailyMissionGeneration.findUniqueOrThrow({
             where: { id: existing.id },
-            data: { status: 'PENDING', idempotencyKey: input.idempotencyKey, errorCategory: null },
           }),
           acquired: true,
         };
