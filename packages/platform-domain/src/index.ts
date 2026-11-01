@@ -1,5 +1,9 @@
 export * from './improvement-engine';
 
+// Execution origin, independent of the operation type (e.g. STANDARD/PHOTO_FIRST).
+export const GENERATION_TRIGGERS = ['USER', 'SCHEDULER', 'SYSTEM', 'UNKNOWN'] as const;
+export type GenerationTrigger = (typeof GENERATION_TRIGGERS)[number];
+
 export const USER_STATUSES = ['ACTIVE', 'SUSPENDED', 'DELETED'] as const;
 export type UserStatus = (typeof USER_STATUSES)[number];
 

@@ -9,6 +9,7 @@ import {
 } from '../src/services/point-funded-mission-content-variant';
 
 const input: PointFundedMissionContentVariantInput = {
+  generationTrigger: 'USER',
   workspaceId: 'workspace-1',
   groupId: 'group-1',
   bunshinId: 'bunshin-1',

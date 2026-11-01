@@ -149,6 +149,7 @@ export function generateDailyMissionResponse(
         await import('../services/daily-mission-generation');
       return dailyMissionDto(
         await createDailyMissionGenerationService().execute({
+          generationTrigger: 'USER',
           workspaceId,
           bunshinId,
           actorUserId: actor,
@@ -287,6 +288,7 @@ export function generateMissionContentVariantResponse(
       return missionContentVariantDto(
         await generatePointFundedMissionContentVariant({
           ...(await scope(workspaceId, bunshinId)),
+          generationTrigger: 'USER',
           dailyMissionId: resourceId(dailyMissionId),
           generationIdempotencyKey: parsed.data.idempotencyKey,
           usageIdempotencyPrefix: requestId,

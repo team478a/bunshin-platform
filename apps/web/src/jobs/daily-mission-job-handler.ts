@@ -63,6 +63,7 @@ export function createDailyMissionJobHandler(): MissionAutomationHandler {
       try {
         mission = await createDailyMissionGenerationService().execute({
           ...scope,
+          generationTrigger: 'SCHEDULER',
           serviceSafeMode: Boolean(scope.groupId),
           ...(scope.groupId ? { allowServiceOwnerMemories: true } : {}),
           missionDate: localDate,

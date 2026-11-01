@@ -1,4 +1,5 @@
 import 'server-only';
+import type { GenerationTrigger } from '@bunshin/platform-domain';
 import {
   ConfirmPointRedemption,
   ListPointRewardCatalog,
@@ -12,6 +13,7 @@ import { ApplicationError } from '@bunshin/shared';
 export const MISSION_CONTENT_VARIANT_REDEMPTION_RESOURCE = 'MISSION_CONTENT_VARIANT_GENERATION';
 
 export interface PointFundedMissionContentVariantInput {
+  generationTrigger: GenerationTrigger;
   workspaceId: string;
   groupId?: string | null;
   bunshinId: string;
@@ -69,6 +71,7 @@ export async function executePointFundedMissionContentVariant(
   let generationCompleted = false;
   try {
     const variant = await dependencies.generate({
+      generationTrigger: input.generationTrigger,
       workspaceId: input.workspaceId,
       ...(input.groupId === undefined ? {} : { groupId: input.groupId }),
       bunshinId: input.bunshinId,
