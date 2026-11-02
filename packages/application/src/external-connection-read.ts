@@ -69,6 +69,9 @@ export interface ExternalReadPorts {
     ): Promise<void>;
   };
 }
+/** Owner/credential checks are required. Additional quota/evidence storage is opt-in. */
+export type ExternalReadDependencies = Pick<ExternalReadPorts, 'grants' | 'authorization'> &
+  Partial<Pick<ExternalReadPorts, 'admission' | 'audit'>>;
 const scopeKeys = ['workspaceId', 'serviceId', 'groupMembershipId', 'userId', 'bunshinId'] as const;
 function fail(code: ExternalReadFailure): never {
   throw new ExternalReadError(code);
@@ -116,17 +119,17 @@ function sameGrant(a: ExternalReadGrant, b: ExternalReadGrant) {
 /** Internal application coordinator. This is neither an authenticator nor a public endpoint. */
 export class ExternalConnectionRead<T> {
   constructor(
-    private readonly ports: ExternalReadPorts,
+    private readonly ports: ExternalReadDependencies,
     private readonly operation: string,
     private readonly read: (context: ExternalReadContext) => Promise<{ data: T; count: number }>,
     private readonly now: () => Date = () => new Date(),
-    private readonly timeoutMs = 5_000,
+    private readonly timeoutMs = 30_000,
   ) {
     if (
       !/^[a-z][a-z0-9-]{0,63}:read$/.test(operation) ||
       !Number.isInteger(timeoutMs) ||
       timeoutMs < 1 ||
-      timeoutMs > 5_000
+      timeoutMs > 60_000
     )
       fail('INVALID');
   }
@@ -156,7 +159,7 @@ export class ExternalConnectionRead<T> {
       count: number,
       signal: AbortSignal,
     ) =>
-      this.ports.audit.record(
+      this.ports.audit?.record(
         {
           version: EXTERNAL_READ_VERSION,
           requestId,
@@ -190,14 +193,16 @@ export class ExternalConnectionRead<T> {
       )
         fail('DENIED');
       assertRunning();
-      const permit = await this.ports.admission.reserve(copyGrant(grant), controller.signal);
-      if (!permit) fail('LIMITED');
-      // A slow adapter may return after timeout; release its lease without starting a read.
-      if (controller.signal.aborted) {
-        permit.release();
-        fail('TIMEOUT');
+      if (this.ports.admission) {
+        const permit = await this.ports.admission.reserve(copyGrant(grant), controller.signal);
+        if (!permit) fail('LIMITED');
+        // A slow adapter may return after timeout; release without starting a read.
+        if (controller.signal.aborted) {
+          permit.release();
+          fail('TIMEOUT');
+        }
+        release = () => permit.release();
       }
-      release = () => permit.release();
       const result = await this.read({
         scope: { ...grant.scope },
         asOf: new Date(startedAt),
@@ -259,7 +264,7 @@ export class ExternalConnectionRead<T> {
     }
     // READ_COMPLETED is a read receipt, not proof that authorization allowed delivery.
     // On failure append a fixed denial/error receipt; never include raw exception text.
-    if (failure) {
+    if (failure && this.ports.audit) {
       const auditController = new AbortController();
       let auditTimer: ReturnType<typeof setTimeout> | undefined;
       try {

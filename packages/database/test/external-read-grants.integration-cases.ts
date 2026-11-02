@@ -6,6 +6,7 @@ import {
   EXTERNAL_READ_FEATURE_KEY,
   ManageExternalReadGrants,
   ReadExternalMemberUsage,
+  ReadAuthenticatedExternalMemberUsage,
   type ExternalGrantOwner,
   type ExternalGrantIssue,
   type ExternalReadPorts,
@@ -134,7 +135,19 @@ export function registerExternalReadGrantIntegrationCases(client: PrismaClient) 
         'test',
         () => policy,
         () => clock,
+        'https://auth.example.invalid/auth/v1',
       );
+      const credential = {
+        issuer: 'https://auth.example.invalid/auth/v1',
+        subject: randomUUID(),
+        sessionId: randomUUID(),
+        clientId: principal.clientId,
+        environment: 'test' as const,
+        expiresAt: new Date('2026-11-03T02:00:00Z'),
+      };
+      await client.authIdentity.create({
+        data: { userId: user.id, provider: 'EMAIL', providerUserId: credential.subject },
+      });
       const manager = new ManageExternalReadGrants(repository);
       const command: ExternalGrantIssue = {
         commandId: randomUUID(),
@@ -151,6 +164,7 @@ export function registerExternalReadGrantIntegrationCases(client: PrismaClient) 
         bunshin,
         owner,
         repository,
+        credential,
         manager,
         command,
         setPolicy: (v: ExternalGrantServerPolicy) => {
@@ -161,6 +175,186 @@ export function registerExternalReadGrantIntegrationCases(client: PrismaClient) 
         },
       };
     }
+    it('blocks direct reads and writes by a non-privileged DB role while server operations remain usable', async () => {
+      const f = await fixture();
+      const grant = await f.manager.issue(f.owner, f.command);
+      await f.repository.bind(grant.connectionId, f.credential, signal());
+      const row = await client.externalReadGrant.findUniqueOrThrow({
+        where: { id: grant.connectionId },
+      });
+      // Generated test identifier only, never derived from a caller or production config.
+      const role = `external_read_${randomUUID().replaceAll('-', '')}`;
+      await client.$executeRawUnsafe(`CREATE ROLE "${role}" NOLOGIN NOSUPERUSER NOBYPASSRLS`);
+      try {
+        await client.$executeRawUnsafe(`GRANT USAGE ON SCHEMA public TO "${role}"`);
+        await client.$executeRawUnsafe(
+          `GRANT SELECT, INSERT, UPDATE, DELETE ON external_read_grants TO "${role}"`,
+        );
+        const result = await client.$transaction(async (tx) => {
+          await tx.$executeRawUnsafe(`SET LOCAL ROLE "${role}"`);
+          const rows = await tx.externalReadGrant.findMany();
+          const changed = await tx.externalReadGrant.updateMany({
+            where: { id: grant.connectionId },
+            data: { revision: { increment: 1 } },
+          });
+          const removed = await tx.externalReadGrant.deleteMany({
+            where: { id: grant.connectionId },
+          });
+          return { rows, changed: changed.count, removed: removed.count };
+        });
+        expect(result).toEqual({ rows: [], changed: 0, removed: 0 });
+        await expect(
+          client.$transaction(async (tx) => {
+            await tx.$executeRawUnsafe(`SET LOCAL ROLE "${role}"`);
+            return tx.externalReadGrant.create({ data: { ...row, id: randomUUID() } });
+          }),
+        ).rejects.toThrow(/row-level security/);
+        expect(
+          await f.repository.resolve(grant.connectionId, f.credential, signal()),
+        ).not.toBeNull();
+      } finally {
+        await client.$executeRawUnsafe(`DROP OWNED BY "${role}"`);
+        await client.$executeRawUnsafe(`DROP ROLE "${role}"`);
+      }
+    });
+    it('requires a binding, stores only a hash, and revokes it through the existing owner grant', async () => {
+      const f = await fixture();
+      const grant = await f.manager.issue(f.owner, f.command);
+      expect(await f.repository.resolve(grant.connectionId, f.credential, signal())).toBeNull();
+      const bound = await f.repository.bind(grant.connectionId, f.credential, signal());
+      expect(bound.revision).toBe(2);
+      const row = await client.externalReadGrant.findUniqueOrThrow({
+        where: { id: grant.connectionId },
+      });
+      expect(row.credentialBindingHash).toMatch(/^[a-f0-9]{64}$/);
+      expect(row.credentialBoundAt).toEqual(epoch);
+      expect(row.credentialBindingHash).not.toContain(f.credential.subject);
+      expect(await f.repository.resolve(grant.connectionId, f.credential, signal())).toEqual(bound);
+      await f.manager.revoke(f.owner, {
+        connectionId: grant.connectionId,
+        expectedRevision: bound.revision,
+      });
+      expect(await f.repository.resolve(grant.connectionId, f.credential, signal())).toBeNull();
+    });
+    it('serializes identical binding retries and rejects a different OAuth session', async () => {
+      const f = await fixture();
+      await f.manager.issue(f.owner, f.command);
+      const result = await Promise.all([
+        f.repository.bind(f.command.commandId, f.credential, signal()),
+        f.repository.bind(f.command.commandId, f.credential, signal()),
+      ]);
+      expect(result[0]).toEqual(result[1]);
+      expect(
+        await client.groupFeatureAuditLog.count({
+          where: { workspaceId: f.workspace.id, action: 'EXTERNAL_READ_BOUND' },
+        }),
+      ).toBe(1);
+      const other = { ...f.credential, sessionId: randomUUID() };
+      await expect(f.repository.bind(f.command.commandId, other, signal())).rejects.toMatchObject({
+        code: 'CONFLICT',
+      });
+      expect(await f.repository.resolve(f.command.commandId, other, signal())).toBeNull();
+    });
+    it.each(['subject', 'client', 'issuer', 'environment', 'expiry'] as const)(
+      'refuses credential %s substitution without changing a grant',
+      async (change) => {
+        const f = await fixture(),
+          other = await fixture();
+        await f.manager.issue(f.owner, f.command);
+        const credential = { ...f.credential };
+        if (change === 'subject') credential.subject = other.credential.subject;
+        if (change === 'client') credential.clientId = 'foreign-client';
+        if (change === 'issuer') credential.issuer = 'https://foreign.example/auth/v1';
+        if (change === 'environment') Object.assign(credential, { environment: 'production' });
+        if (change === 'expiry') credential.expiresAt = epoch;
+        await expect(
+          f.repository.bind(f.command.commandId, credential, signal()),
+        ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+        expect(await f.repository.resolve(f.command.commandId, credential, signal())).toBeNull();
+        expect((await f.manager.list(f.owner))[0]?.revision).toBe(1);
+      },
+    );
+    it('accepts a refreshed token only in the same bound session and within the original grant lifetime', async () => {
+      const f = await fixture();
+      await f.manager.issue(f.owner, f.command);
+      const short = { ...f.credential, expiresAt: new Date('2026-11-03T00:15:00Z') };
+      const bound = await f.repository.bind(f.command.commandId, short, signal());
+      f.setClock(new Date('2026-11-03T00:30:00Z'));
+      expect(await f.repository.resolve(f.command.commandId, short, signal())).toBeNull();
+      expect(await f.repository.resolve(f.command.commandId, f.credential, signal())).toEqual(
+        bound,
+      );
+      f.setClock(new Date('2026-11-03T01:00:00Z'));
+      expect(await f.repository.resolve(f.command.commandId, f.credential, signal())).toBeNull();
+    });
+    it('rolls back binding and revision if its shared audit write fails', async () => {
+      const f = await fixture();
+      await f.manager.issue(f.owner, f.command);
+      const broken = client.$extends({
+        query: {
+          groupFeatureAuditLog: {
+            create({ args, query }) {
+              if (args.data.action === 'EXTERNAL_READ_BOUND')
+                throw new Error('synthetic binding audit failure');
+              return query(args);
+            },
+          },
+        },
+      }) as unknown as PrismaClient;
+      const repository = new PrismaExternalReadGrantRepository(
+        broken,
+        'test',
+        () => ({ enabled: true, clients: [principal.clientId] }),
+        () => epoch,
+        f.credential.issuer,
+      );
+      await expect(repository.bind(f.command.commandId, f.credential, signal())).rejects.toThrow(
+        'synthetic binding audit',
+      );
+      const row = await client.externalReadGrant.findUniqueOrThrow({
+        where: { id: f.command.commandId },
+      });
+      expect(row.revision).toBe(1);
+      expect(row.credentialBindingHash).toBeNull();
+      expect(row.credentialBoundAt).toBeNull();
+    });
+    it('rechecks bound authentication during canonical usage read and discards an owner-revoked result', async () => {
+      const f = await fixture();
+      await f.manager.issue(f.owner, f.command);
+      await f.repository.bind(f.command.commandId, f.credential, signal());
+      const usage = new PrismaMemberUsageRepository(client, () => epoch);
+      const release = vi.fn();
+      const ports: Omit<ExternalReadPorts, 'grants'> = {
+        authorization: f.repository,
+        admission: { reserve: () => Promise.resolve({ release }) },
+        audit: { record: () => Promise.resolve() },
+      };
+      const sources = {
+        read: async (input: Parameters<typeof usage.read>[0]) => {
+          const result = await usage.read(input);
+          await f.manager.revoke(f.owner, {
+            connectionId: f.command.commandId,
+            expectedRevision: 2,
+          });
+          return result;
+        },
+      };
+      const reader = new ReadAuthenticatedExternalMemberUsage(
+        { verify: () => Promise.resolve(f.credential) },
+        f.repository,
+        ports,
+        usage,
+        sources,
+        () => epoch,
+      );
+      await expect(
+        reader.execute('Bearer synthetic-never-logged', {
+          connectionId: f.command.commandId,
+          requestId: randomUUID(),
+        }),
+      ).rejects.toMatchObject({ code: 'DENIED' });
+      expect(release).toHaveBeenCalledOnce();
+    });
     it('checks issuance eligibility with no probe grant or audit write', async () => {
       const f = await fixture();
       expect(await f.repository.issuanceAllowed(f.owner, principal.clientId)).toBe(true);

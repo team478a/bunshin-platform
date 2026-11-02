@@ -1,7 +1,7 @@
 import {
   ExternalConnectionRead,
   ExternalReadError,
-  type ExternalReadPorts,
+  type ExternalReadDependencies,
   type ExternalReadPrincipal,
 } from './external-connection-read';
 import {
@@ -39,11 +39,11 @@ export type ExternalMemberUsageDto = ReturnType<typeof externalUsageDto>;
 export class ReadExternalMemberUsage {
   private readonly reader: ExternalConnectionRead<ExternalMemberUsageDto>;
   constructor(
-    ports: ExternalReadPorts,
+    ports: ExternalReadDependencies,
     authorization: MemberUsageAuthorizationPort,
     sources: MemberUsageSourceRepository,
     now: () => Date = () => new Date(),
-    timeoutMs = 5_000,
+    timeoutMs = 30_000,
   ) {
     this.reader = new ExternalConnectionRead(
       ports,

@@ -148,3 +148,4 @@ export * from './service-referral-management';
 export * from './external-connection-read';
 export * from './external-member-usage';
 export * from './external-read-grant-management';
+export * from './external-read-credential';
