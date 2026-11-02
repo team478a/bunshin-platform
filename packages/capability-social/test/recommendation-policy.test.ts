@@ -9,6 +9,7 @@ import {
   socialSupportCooldownDays,
   SOCIAL_RECOMMENDATION_POLICY_VERSION as version,
 } from '../src/recommendation-policy';
+import type { SocialRecommendationPolicy } from '../src/recommendation-policy';
 import type { SocialActivityBarrierEvidence } from '../src/activity-barrier';
 const defaults = () => defaultSocialRecommendationSettings();
 describe('SNS-specific recommendation policy', () => {
@@ -48,7 +49,7 @@ describe('SNS-specific recommendation policy', () => {
     ).toThrow();
   });
   it('keeps stale OEM overrides inside a subsequently stricter headquarters policy', () => {
-    const policy = {
+    const policy: SocialRecommendationPolicy = {
       version,
       revision: 2,
       headquarters: {
