@@ -7,6 +7,7 @@ import type {
   SocialActivitySupportProgress,
 } from '@bunshin/capability-social';
 import { useRef, useState, type MouseEvent } from 'react';
+import './activity-support.css';
 
 type AnswerResponse = {
   data?: { supportProgress: SocialActivitySupportProgress | null };
@@ -185,7 +186,7 @@ export function ActivityBarrierCard({
                   </button>
                 </>
               )}
-              <label>
+              <label className="activity-barrier-support__reason">
                 見送る理由（任意）
                 <input
                   value={skipReason}

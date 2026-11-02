@@ -28,6 +28,14 @@ test('answers, accepts, opens a manual action and saves the decline reason', asy
   await screen.getByRole('button', 'このサポートを始める').tap();
   await screen.getByRole('link', '投稿の準備を進める').tap();
   expect(await browser.evaluate(() => location.hash)).toBe('#today-post');
+  expect(
+    await browser.evaluate(
+      () =>
+        document
+          .querySelector<HTMLInputElement>('.activity-barrier-support__reason input')!
+          .getBoundingClientRect().width >= 200,
+    ),
+  ).toBe(true);
   await app.screenshot('activity-support-mobile');
   await screen.getByRole('textbox', '見送る理由（任意）').fill('投稿はすでに済んでいます');
   await screen.getByRole('button', '今回は見送る').tap();
