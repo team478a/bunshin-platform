@@ -8370,7 +8370,7 @@ model ServiceReferral {
   confirmedPolicyVersionId String?                                    @map("confirmed_policy_version_id") @db.Uuid
   confirmedAt              DateTime?                                  @map("confirmed_at") @db.Timestamptz(6)
   revokedAt                DateTime?                                  @map("revoked_at") @db.Timestamptz(6)
-  confirmedPolicy          ServiceReferralQualificationPolicyVersion? @relation(fields: [workspaceId, groupId, confirmedPolicyVersionId], references: [workspaceId, groupId, id], onDelete: Restrict, map: "service_referral_qualification_policy_fk")
+  confirmedPolicy          ServiceReferralQualificationPolicyVersion? @relation(fields: [workspaceId, groupId, confirmedPolicyVersionId], references: [workspaceId, groupId, id], onDelete: Restrict, onUpdate: NoAction, map: "service_referral_qualification_policy_fk")
   qualificationAudits      ServiceReferralQualificationAudit[]
   registeredAt          DateTime?               @map("registered_at") @db.Timestamptz(6)
   onboardingCompletedAt DateTime?               @map("onboarding_completed_at") @db.Timestamptz(6)
@@ -8392,6 +8392,7 @@ model ServiceReferral {
   @@unique([workspaceId, groupId, id])
   @@index([workspaceId, groupId, status, createdAt])
   @@index([referralCodeId, status])
+  @@index([workspaceId, groupId, qualificationState, referralCodeId], map: "service_referral_qualification_count")
   @@map("service_referrals")
 }
 
@@ -8412,8 +8413,8 @@ model ServiceReferralQualificationPolicyVersion {
   createdByUserId    String            @map("created_by_user_id") @db.Uuid
   createdAt          DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
   confirmedReferrals ServiceReferral[]
-  group Group @relation(fields: [workspaceId, groupId], references: [workspaceId, id], onDelete: Restrict, map: "service_referral_qualification_polic_workspace_id_group_id_fkey")
-  createdBy User @relation("ReferralQualificationPolicyCreator", fields: [createdByUserId], references: [id], onDelete: Restrict, map: "service_referral_qualification_policy_v_created_by_user_id_fkey")
+  group Group @relation(fields: [workspaceId, groupId], references: [workspaceId, id], onDelete: Restrict, onUpdate: NoAction, map: "service_referral_qualification_polic_workspace_id_group_id_fkey")
+  createdBy User @relation("ReferralQualificationPolicyCreator", fields: [createdByUserId], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "service_referral_qualification_policy_v_created_by_user_id_fkey")
 
   @@unique([workspaceId, groupId, id], map: "referral_qualification_policy_scope")
   @@unique([workspaceId, groupId, policyKey, version], map: "referral_qualification_policy_version")
@@ -8434,8 +8435,8 @@ model ServiceReferralQualificationAudit {
   beforeRevision Int             @map("before_revision")
   result         Json
   occurredAt     DateTime        @default(now()) @map("occurred_at") @db.Timestamptz(6)
-  referral       ServiceReferral @relation(fields: [workspaceId, groupId, referralId], references: [workspaceId, groupId, id], onDelete: Restrict, map: "service_referral_qualificatio_workspace_id_group_id_referr_fkey")
-  actor User @relation("ReferralQualificationAuditActor", fields: [actorUserId], references: [id], onDelete: Restrict, map: "service_referral_qualification_audits_actor_user_id_fkey")
+  referral       ServiceReferral @relation(fields: [workspaceId, groupId, referralId], references: [workspaceId, groupId, id], onDelete: Restrict, onUpdate: NoAction, map: "service_referral_qualificatio_workspace_id_group_id_referr_fkey")
+  actor User @relation("ReferralQualificationAuditActor", fields: [actorUserId], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "service_referral_qualification_audits_actor_user_id_fkey")
 
   @@unique([workspaceId, groupId, commandId], map: "referral_qualification_command")
   @@index([workspaceId, groupId, referralId, occurredAt], map: "service_referral_qualification_audit_lookup")
