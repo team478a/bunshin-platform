@@ -1420,6 +1420,8 @@ enum GroupFeatureAccessStatus {
 }
 
 enum GroupFeatureAuditAction {
+  EXTERNAL_READ_GRANTED
+  EXTERNAL_READ_REVOKED
   GROUP_POLICY_SET
   MEMBER_ASSIGNMENT_SET
 }
@@ -3691,6 +3693,7 @@ model ServiceMemberBusinessProfile {
 }
 
 model GroupMembership {
+  externalReadGrants ExternalReadGrant[]
   oemRegistrationPeriods OemRegistrationPeriod[]
   id                           String                           @id @default(uuid()) @db.Uuid
   personalLearningGoalConfirmations PersonalLearningGoalConfirmation[]
@@ -6935,6 +6938,7 @@ model AccountDeletionOperationAudit {
 }
 
 model Bunshin {
+  externalReadGrants ExternalReadGrant[]
   id                              String                           @id @default(uuid()) @db.Uuid
   improvementFeedback             ImprovementFeedback[]
   workspaceId                     String                           @map("workspace_id") @db.Uuid
@@ -6999,6 +7003,7 @@ model Bunshin {
   socialActivityBarrierCases      SocialActivityBarrierCase[]
   fortunePersonalizationParticipants FortuneParticipant[]              @relation("FortuneParticipantPersonalizationBunshin")
 
+  @@unique([workspaceId, groupId, ownerUserId, id], map: "bunshin_external_read_owner_scope_key")
   @@unique([workspaceId, slug])
   @@unique([workspaceId, id])
   @@index([workspaceId, status, updatedAt])
@@ -8769,4 +8774,27 @@ model OpsMorningDigestRun {
   @@unique([environment, targetDate], map: "ops_morning_digest_runs_environment_target_date_key")
   @@index([environment, createdAt])
   @@map("ops_morning_digest_runs")
+}
+
+/// Explicit owner-approved scope. Not a credential or authentication token.
+model ExternalReadGrant {
+  id                String @id @db.Uuid
+  workspaceId       String @map("workspace_id") @db.Uuid
+  groupId           String @map("group_id") @db.Uuid
+  groupMembershipId String @map("group_membership_id") @db.Uuid
+  userId            String @map("user_id") @db.Uuid
+  bunshinId         String @map("bunshin_id") @db.Uuid
+  clientId          String @map("client_id") @db.VarChar(128)
+  environment       String @db.VarChar(16)
+  operations        String[] @db.VarChar(80)
+  consentVersion    String @map("consent_version") @db.VarChar(80)
+  revision          Int @default(1)
+  grantedAt         DateTime @map("granted_at") @db.Timestamptz(6)
+  expiresAt         DateTime @map("expires_at") @db.Timestamptz(6)
+  revokedAt         DateTime? @map("revoked_at") @db.Timestamptz(6)
+  membership GroupMembership @relation(fields: [workspaceId, groupId, groupMembershipId, userId], references: [workspaceId, groupId, id, userId], onDelete: Cascade, onUpdate: Restrict, map: "external_read_grants_membership_fkey")
+  bunshin Bunshin @relation(fields: [workspaceId, groupId, userId, bunshinId], references: [workspaceId, groupId, ownerUserId, id], onDelete: Cascade, onUpdate: Restrict, map: "external_read_grants_bunshin_fkey")
+
+  @@index([workspaceId, groupId, groupMembershipId, userId, grantedAt], map: "external_read_grants_owner_idx")
+  @@map("external_read_grants")
 }

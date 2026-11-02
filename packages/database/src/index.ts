@@ -368,3 +368,7 @@ export { PrismaSocialRecommendationPolicyRepository } from './social-recommendat
 export * from './managed-feature-policy';
 
 export * from './social-usage-guidance-policy';
+export {
+  PrismaExternalReadGrantRepository,
+  type ExternalGrantServerPolicy,
+} from './external-read-grants';
