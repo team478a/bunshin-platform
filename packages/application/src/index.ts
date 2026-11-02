@@ -142,3 +142,4 @@ export * from './ops-morning-digest';
 export * from './member-usage';
 export * from './member-roadmap';
 export * from './service-referral-qualification';
+export * from './service-referral-registration-evidence';

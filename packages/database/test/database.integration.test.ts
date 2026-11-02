@@ -14,6 +14,7 @@ import { registerAiProviderCallAdmissionIntegrationCases } from './provider-call
 import { registerServiceImprovementProgressIntegrationCases } from './service-improvement-progress.integration-cases';
 import { registerMemberUsageIntegrationCases } from './member-usage.integration-cases';
 import { registerMemberRoadmapContextIntegrationCases } from './member-roadmap-context.integration-cases';
+import { registerSocialServiceReferralEvidenceIntegrationCases } from './social-service-referral-evidence.integration-cases';
 import { cleanupProgramFixtures } from './program-fixture-cleanup';
 import {
   integrationDatabaseTarget,
@@ -238,6 +239,7 @@ describe('database ownership boundaries', () => {
   registerServiceImprovementProgressIntegrationCases(client);
   registerMemberUsageIntegrationCases(client);
   registerMemberRoadmapContextIntegrationCases(client);
+  registerSocialServiceReferralEvidenceIntegrationCases(client);
 
   it('fixture cleanup regression: program and training residue is absent before new fixtures', async () => {
     expect(

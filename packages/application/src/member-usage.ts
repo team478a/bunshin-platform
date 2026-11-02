@@ -110,10 +110,7 @@ function daysBefore(date: string, days: number) {
 }
 
 /** In-memory projection only. Does not authorize access or persist duplicate events. */
-export function aggregateMemberUsage(
-  request: MemberUsageRequest,
-  sources: MemberUsageSources,
-): MemberUsageSummary {
+function usageProjection(request: MemberUsageRequest, sources: MemberUsageSources) {
   const formatter = validateRequest(request);
   if (!sameScope(request.scope, sources.scope) || sources.completeness !== 'COMPLETE')
     throw invalid();
@@ -172,12 +169,44 @@ export function aggregateMemberUsage(
   const generated = generations.filter((row) => row.status === 'SUCCESS');
   const selected = [...decisionEvents.values()];
   const reported = [...postedEvents.values()];
+  const copied = activities.filter((row) => copies.has(row.type));
   const active = [
     ...generated.filter((row) => row.trigger === 'USER'),
     ...selected,
     ...reported,
-    ...activities.filter((row) => copies.has(row.type)),
+    ...copied,
   ];
+  return {
+    formatter,
+    generated,
+    selected,
+    reported,
+    active,
+    ai,
+    copied,
+  };
+}
+
+/** Canonical SOCIAL usage metadata shared with metrics. Does not authorize or choose referral conditions. */
+export function projectMemberUsageEvidence(
+  request: MemberUsageRequest,
+  sources: MemberUsageSources,
+) {
+  const { generated, selected, reported, copied } = usageProjection(request, sources);
+  return { generations: generated, decisions: selected, postRecords: reported, copies: copied };
+}
+
+/** In-memory metrics only. Does not authorize access or persist duplicate events. */
+export function aggregateMemberUsage(
+  request: MemberUsageRequest,
+  sources: MemberUsageSources,
+): MemberUsageSummary {
+  const { formatter, generated, selected, reported, active, ai } = usageProjection(
+    request,
+    sources,
+  );
+  const byTime = (a: UsageRecord, b: UsageRecord) =>
+    a.occurredAt.getTime() - b.occurredAt.getTime();
   const today = formatter.format(request.asOf);
   function metrics(from: string | null): MemberUsageMetrics {
     const inWindow = (row: UsageRecord) =>

@@ -36,3 +36,4 @@ export {
   summarizeHassyPhotoQuality,
 } from './improvement-photo-quality';
 export * from './service-referral-qualification';
+export * from './service-referral-evidence';
