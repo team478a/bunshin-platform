@@ -1,3 +1,4 @@
+import { HassyAutomationGuide } from '../../../apps/web/app/ui/hassy-automation-guide/card';
 import { ActivitySupportHarness } from './activity-support-harness';
 import { ReferralManagementHarness } from './referral-management-harness';
 // Local browser harness only. No production route, credentials, DB or Provider.
@@ -19,7 +20,11 @@ import '../../../apps/web/app/styles.css';
 import { PersonalLearningRequestCard } from '../../../apps/web/app/s/[serviceSlug]/programs/[programEnrollmentId]/learning-request/card';
 
 createRoot(document.getElementById('root')!).render(
-  new URLSearchParams(window.location.search).has('activity-support') ? (
+  new URLSearchParams(window.location.search).has('automation-guide') ? (
+    <main style={{ maxWidth: 720, margin: 'auto', padding: 16 }}>
+      <HassyAutomationGuide />
+    </main>
+  ) : new URLSearchParams(window.location.search).has('activity-support') ? (
     <ActivitySupportHarness />
   ) : new URLSearchParams(window.location.search).has('referral-management') ? (
     <ReferralManagementHarness />

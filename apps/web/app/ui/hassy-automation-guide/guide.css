@@ -1,0 +1,37 @@
+.hassy-automation-guide {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+.hassy-automation-guide details {
+  border: 1px solid #d9deeb;
+  border-radius: 16px;
+  padding: 1rem;
+  background: #fff;
+}
+.hassy-automation-guide summary {
+  min-height: 44px;
+  display: list-item;
+  cursor: pointer;
+  font-weight: 700;
+}
+.hassy-automation-guide textarea {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+  line-height: 1.7;
+  margin: 1rem 0;
+}
+.hassy-automation-guide a,
+.hassy-automation-guide button {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0.5rem;
+  overflow-wrap: anywhere;
+}
+.hassy-automation-guide li {
+  margin: 0.75rem 0;
+}
