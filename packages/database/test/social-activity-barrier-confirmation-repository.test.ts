@@ -92,6 +92,7 @@ function barrierCaseWithMixedGoals(id: string, category: 'TIME' | 'EFFORT') {
 function withAuthorization<T extends object>(tx: T) {
   const supplied = tx as {
     bunshin?: object;
+    socialActivityBarrierCase?: object;
     groupMembership?: object;
     socialActivitySupportIntervention?: object;
   };
@@ -112,6 +113,10 @@ function withAuthorization<T extends object>(tx: T) {
       ...supplied.groupMembership,
     },
     bunshin: { findFirst: vi.fn().mockResolvedValue({ id: scope.bunshinId }), ...supplied.bunshin },
+    socialActivityBarrierCase: {
+      findFirst: vi.fn().mockResolvedValue(null),
+      ...supplied.socialActivityBarrierCase,
+    },
     serviceLegalDocument: { findMany: vi.fn().mockResolvedValue([]) },
     serviceLegalConsent: { count: vi.fn().mockResolvedValue(0) },
     featureDefinition: {
@@ -223,7 +228,7 @@ describe('PrismaSocialActivityBarrierConfirmationRepository', () => {
     expect(supportCreate).toHaveBeenCalledOnce();
     expect(supportCreate).toHaveBeenCalledWith({
       data: expect.objectContaining({
-        ruleVersion: 'social-activity-support-v3',
+        ruleVersion: 'social-activity-support-v4',
         definitionSnapshot: expect.objectContaining({
           selection: {
             mode: 'COMMON',
@@ -297,7 +302,7 @@ describe('PrismaSocialActivityBarrierConfirmationRepository', () => {
     expect(supportCreate).toHaveBeenCalledWith({
       data: expect.objectContaining({
         supportKey: 'INQUIRY_LEAD_FOLLOW_UP',
-        ruleVersion: 'social-activity-support-v3',
+        ruleVersion: 'social-activity-support-v4',
         definitionSnapshot: expect.objectContaining({
           selection: {
             mode: 'GOAL_SPECIFIC',

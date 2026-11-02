@@ -1,3 +1,4 @@
+import { isSocialUsageGuidance, SOCIAL_USAGE_GUIDANCE_KEYS } from '@bunshin/capability-social';
 import {
   SOCIAL_ACTIVITY_BARRIER_CATEGORIES,
   socialActivityBarrierLabel,
@@ -36,15 +37,24 @@ export async function getSocialActivityBarrierServiceSummary(
       groupMembership: { status: 'ACTIVE' },
     },
     select: {
+      evidenceSnapshots: {
+        orderBy: { detectedAt: 'desc' },
+        take: 1,
+        select: { evidenceCode: true },
+      },
       category: true,
       status: true,
-      supportActions: { select: { status: true } },
+      supportActions: {
+        where: { supportKey: { notIn: [...SOCIAL_USAGE_GUIDANCE_KEYS] } },
+        select: { status: true },
+      },
     },
   });
   const caseCounts = { suspected: 0, confirmed: 0, resolved: 0, dismissed: 0 };
   const supportCounts = { offered: 0, accepted: 0, completed: 0, skipped: 0 };
   const categoryCounts = new Map<SocialActivityBarrierCategory, number>();
   for (const item of cases) {
+    if (isSocialUsageGuidance(item.evidenceSnapshots?.[0]?.evidenceCode ?? '')) continue;
     caseCounts[item.status.toLowerCase() as keyof typeof caseCounts] += 1;
     if (item.status === 'CONFIRMED')
       categoryCounts.set(item.category, (categoryCounts.get(item.category) ?? 0) + 1);

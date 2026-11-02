@@ -9,6 +9,10 @@ test('answers, accepts, opens a manual action and saves the decline reason', asy
   const commands: Record<string, unknown>[] = [];
   const exposure: string[] = [];
   await browser.route('**/api/synthetic/activity-support**', async (route) => {
+    if (route.request.url.endsWith('/question-exposure')) {
+      await route.fulfill({ json: { data: { recorded: true } } });
+      return;
+    }
     if (route.request.url.endsWith('/exposure')) {
       exposure.push((JSON.parse(route.request.postData ?? '{}') as { kind: string }).kind);
       await route.fulfill({ json: { data: { recorded: true } } });

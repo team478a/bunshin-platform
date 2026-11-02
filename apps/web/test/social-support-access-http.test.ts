@@ -9,6 +9,7 @@ const m = vi.hoisted(() => ({
   answer: vi.fn(),
   transition: vi.fn(),
   exposure: vi.fn(),
+  questionExposure: vi.fn(),
   reserve: vi.fn(),
   release: vi.fn(),
 }));
@@ -30,10 +31,12 @@ vi.mock('@bunshin/database', () => ({
     answer = m.answer;
     transitionSupport = m.transition;
     recordExposure = m.exposure;
+    recordQuestionExposure = m.questionExposure;
   },
 }));
 import {
   recordServiceSocialActivitySupportExposureResponse as expose,
+  recordServiceSocialActivityQuestionExposureResponse as exposeQuestion,
   getServiceSocialActivityBarrierResponse as read,
   answerServiceSocialActivityBarrierResponse as answer,
   transitionServiceSocialActivitySupportResponse as transition,
@@ -54,6 +57,7 @@ beforeEach(() => {
   m.member.mockResolvedValue({ id: id(4) });
   m.bunshin.mockResolvedValue({ id: id(5) });
   m.exposure.mockResolvedValue(true);
+  m.questionExposure.mockResolvedValue(true);
   m.question.mockResolvedValue(null);
   m.support.mockResolvedValue(null);
   m.answer.mockResolvedValue({ response: 'NONE_OF_THESE', support: null });
@@ -200,5 +204,48 @@ describe('SOCIAL support exposure HTTP', () => {
     expect(
       (await expose(request({ supportId: id(8), kind: 'DISPLAY' }), 'synthetic', id(5))).status,
     ).toBe(409);
+  });
+});
+
+describe('question visibility receipt HTTP', () => {
+  it('uses only the authenticated scope and server timestamp', async () => {
+    const response = await exposeQuestion(request({ caseIds: [id(6)] }), 'synthetic', id(5));
+    expect(response.status).toBe(200);
+    expect(m.questionExposure).toHaveBeenCalledWith({
+      scope: {
+        workspaceId: id(2),
+        serviceId: id(3),
+        groupMembershipId: id(4),
+        userId: id(1),
+        bunshinId: id(5),
+      },
+      caseIds: [id(6)],
+    });
+    expect(response.headers.get('cache-control')).toBe('private, no-store');
+  });
+  it.each([
+    { caseIds: [] },
+    { caseIds: [id(6)], workspaceId: id(9) },
+    { caseIds: [id(6)], displayedAt: '2026-11-01Z' },
+    { caseIds: ['invalid'] },
+  ])('rejects surplus or invalid receipt %j', async (value) => {
+    expect((await exposeQuestion(request(value), 'synthetic', id(5))).status).toBe(400);
+    expect(m.questionExposure).not.toHaveBeenCalled();
+  });
+  it('rejects foreign origins and current ownership revocation', async () => {
+    expect(
+      (
+        await exposeQuestion(
+          request({ caseIds: [id(6)] }, 'POST', 'https://foreign.test'),
+          'synthetic',
+          id(5),
+        )
+      ).status,
+    ).toBe(403);
+    m.member.mockResolvedValue(null);
+    expect((await exposeQuestion(request({ caseIds: [id(6)] }), 'synthetic', id(5))).status).toBe(
+      404,
+    );
+    expect(m.questionExposure).not.toHaveBeenCalled();
   });
 });

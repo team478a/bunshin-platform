@@ -2,7 +2,10 @@ import 'server-only';
 
 import { createHash } from 'node:crypto';
 import { EnqueueJob, type JobEnvironment } from '@bunshin/application';
-import { buildSocialActivityBarrierLineMessage } from '@bunshin/capability-social';
+import {
+  isSocialUsageGuidance,
+  buildSocialActivityBarrierLineMessage,
+} from '@bunshin/capability-social';
 import { getServerEnvironment } from '@bunshin/config';
 import { resolveServiceLineBroadcastRecipientIds } from '../jobs/service-line-broadcast-eligibility';
 
@@ -52,6 +55,7 @@ export async function scheduleSocialActivityBarrierLineNotifications(input: {
   const rows = await db.prisma.socialActivityBarrierCase.findMany({
     where: {
       status: 'SUSPECTED',
+      OR: [{ nextEligibleAt: null }, { nextEligibleAt: { lte: now } }],
       groupMembership: {
         status: 'ACTIVE',
         consentedAt: { not: null },
@@ -81,6 +85,11 @@ export async function scheduleSocialActivityBarrierLineNotifications(input: {
       userId: true,
       bunshinId: true,
       recurrenceCount: true,
+      evidenceSnapshots: {
+        orderBy: { detectedAt: 'desc' },
+        take: 1,
+        select: { evidenceCode: true },
+      },
       bunshin: { select: { ownerUserId: true } },
       groupMembership: {
         select: {
@@ -97,6 +106,10 @@ export async function scheduleSocialActivityBarrierLineNotifications(input: {
   });
   const grouped = new Map<string, (typeof rows)[number][]>();
   for (const row of rows) {
+    if (isSocialUsageGuidance(row.evidenceSnapshots?.[0]?.evidenceCode ?? '')) {
+      summary.skipped += 1;
+      continue;
+    }
     if (row.bunshin.ownerUserId !== row.userId || !row.groupMembership.group.serviceConfiguration) {
       summary.skipped += 1;
       continue;

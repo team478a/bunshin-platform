@@ -12,6 +12,7 @@ const answerSchema = z
   .object({
     caseIds: z.array(z.string().uuid()).min(1).max(5),
     selectedCaseId: z.string().uuid().nullable(),
+    evidenceKey: z.string().min(1).max(1000).optional(),
     idempotencyKey: z.string().trim().min(8).max(200),
   })
   .strict();
@@ -139,6 +140,7 @@ export function answerServiceSocialActivityBarrierResponse(
       scope,
       caseIds: parsed.data.caseIds,
       selectedCaseId: parsed.data.selectedCaseId,
+      ...(parsed.data.evidenceKey !== undefined ? { evidenceKey: parsed.data.evidenceKey } : {}),
       idempotencyKey: parsed.data.idempotencyKey,
       answeredAt: new Date(),
     });
@@ -184,6 +186,28 @@ export function recordServiceSocialActivitySupportExposureResponse(
     const { repository, scope } = await resolveScope(serviceSlug, bunshinId, actorUserId);
     const recorded = await repository.recordExposure({ scope, ...parsed.data });
     if (!recorded) throw new ApplicationError('CONFLICT', 'support unavailable');
+    return { recorded: true };
+  });
+}
+
+export function recordServiceSocialActivityQuestionExposureResponse(
+  request: Request,
+  serviceSlug: string,
+  bunshinId: string,
+) {
+  return respond(request, async (actorUserId) => {
+    requireSameOrigin(request);
+    const parsed = z
+      .object({
+        caseIds: z.array(z.uuid()).min(1).max(5),
+        evidenceKey: z.string().min(1).max(1000).optional(),
+      })
+      .strict()
+      .safeParse(await json(request));
+    if (!parsed.success) throw new ApplicationError('VALIDATION_ERROR', 'invalid body');
+    const { repository, scope } = await resolveScope(serviceSlug, bunshinId, actorUserId);
+    if (!(await repository.recordQuestionExposure({ scope, ...parsed.data })))
+      throw new ApplicationError('CONFLICT', 'question unavailable');
     return { recorded: true };
   });
 }

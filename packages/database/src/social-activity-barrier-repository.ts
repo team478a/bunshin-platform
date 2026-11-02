@@ -1,9 +1,15 @@
+import { PrismaGroupFeatureEntitlementRepository } from './group-feature-entitlement';
+import { readConfirmedReferralCount } from './service-referral-count';
+import { readRuntimeUsageGuidancePolicy } from './social-usage-guidance-policy';
 import {
   lockRecommendationService,
   readRuntimeRecommendationPolicy,
 } from './social-recommendation-policy';
 import {
   SOCIAL_ACTIVITY_SUPPORT_FEATURE_KEY,
+  isSocialUsageGuidance,
+  usageGuidanceAllowed,
+  socialUsageGuidanceDefinition,
   recommendationEvidenceAllowed,
   buildSocialActivityBarrierGoalAttribution,
   buildSocialActivityBarrierGoalMetrics,
@@ -233,6 +239,73 @@ export class PrismaSocialActivityBarrierObservationRepository implements SocialA
       }),
     ]);
 
+    const [imageRequests, platforms, postPlatforms, referralEnabled] = await Promise.all([
+      this.client.socialImageGenerationRequest.count({
+        where: {
+          workspaceId: input.scope.workspaceId,
+          groupId,
+          groupMembershipId: input.scope.groupMembershipId,
+          ownerUserId: input.scope.userId,
+          bunshinId: input.scope.bunshinId,
+          status: 'READY_FOR_REVIEW',
+          media: { some: { createdAt: { gte: input.from, lt: input.to } } },
+        },
+      }),
+      this.client.socialProfile.groupBy({
+        by: ['platform'],
+        where: {
+          workspaceId: input.scope.workspaceId,
+          bunshinId: input.scope.bunshinId,
+          status: 'ACTIVE',
+          bunshin: {
+            workspaceId: input.scope.workspaceId,
+            groupId,
+            ownerUserId: input.scope.userId,
+          },
+          dailyMissions: {
+            some: {
+              workspaceId: input.scope.workspaceId,
+              bunshinId: input.scope.bunshinId,
+              OR: [
+                {
+                  decision: { decision: 'ACCEPTED', decidedAt: { gte: input.from, lt: input.to } },
+                },
+                {
+                  activities: {
+                    some: {
+                      actorUserId: input.scope.userId,
+                      occurredAt: { gte: input.from, lt: input.to },
+                      type: { in: ['ACCEPTED', 'POSTED', ...COPY_TYPES] },
+                    },
+                  },
+                },
+              ],
+            },
+          },
+        },
+      }),
+      this.client.postRecord.groupBy({
+        by: ['platform'],
+        where: {
+          workspaceId: input.scope.workspaceId,
+          bunshinId: input.scope.bunshinId,
+          actorUserId: input.scope.userId,
+          createdAt: { gte: input.from, lt: input.to },
+          dailyMission: {
+            workspaceId: input.scope.workspaceId,
+            bunshinId: input.scope.bunshinId,
+            bunshin: { groupId, ownerUserId: input.scope.userId },
+          },
+        },
+      }),
+      this.client.serviceRegistrationPolicy.findFirst({
+        where: { workspaceId: input.scope.workspaceId, groupId, referralEnabled: true },
+        select: { id: true },
+      }),
+    ]);
+    const referrals = referralEnabled
+      ? await readConfirmedReferralCount(this.client, input.scope, input.to)
+      : null;
     const incidentDays = new Set(failedGenerations.map((value) => dayKey(value.missionDate)));
     for (const mission of missions) {
       if (mission.lineMessageDeliveries.some((delivery) => delivery.status === 'FAILED')) {
@@ -297,6 +370,11 @@ export class PrismaSocialActivityBarrierObservationRepository implements SocialA
       },
       goalAttribution,
       goalMetrics,
+      usageGuidance: {
+        successfulImageRequests: imageRequests,
+        usedPlatforms: new Set([...platforms, ...postPlatforms].map((row) => row.platform)).size,
+        confirmedReferrals: referrals,
+      },
     };
   }
 }
@@ -314,6 +392,7 @@ export class PrismaSocialActivityBarrierCaseRepository implements SocialActivity
     return this.client.$transaction(async (tx) => {
       await lockRecommendationService(tx, input.scope);
       const { policy, settings } = await readRuntimeRecommendationPolicy(tx, input.scope);
+      const guidance = await readRuntimeUsageGuidancePolicy(tx, input.scope);
       const [membership, bunshin] = await Promise.all([
         tx.groupMembership.findFirst({
           where: {
@@ -338,6 +417,42 @@ export class PrismaSocialActivityBarrierCaseRepository implements SocialActivity
       if (!membership || !bunshin) return null;
       if (!policy || !settings.enabled) return [];
 
+      const current = new Date();
+      const hasUsage = input.candidates.some((candidate) =>
+        isSocialUsageGuidance(candidate.evidence.evidenceCode),
+      );
+      const usageAccess = hasUsage
+        ? await new PrismaGroupFeatureEntitlementRepository(this.client).resolveAccessInTransaction(
+            tx,
+            {
+              workspaceId: input.scope.workspaceId,
+              groupId: input.scope.serviceId,
+              actorUserId: input.scope.userId,
+              featureKey: SOCIAL_ACTIVITY_SUPPORT_FEATURE_KEY,
+              now: current,
+            },
+          )
+        : null;
+      const activeUsageBunshin = hasUsage
+        ? await tx.bunshin.findFirst({
+            where: {
+              id: input.scope.bunshinId,
+              workspaceId: input.scope.workspaceId,
+              groupId: input.scope.serviceId,
+              ownerUserId: input.scope.userId,
+              status: 'ACTIVE',
+              capabilityAssignments: {
+                some: {
+                  workspaceId: input.scope.workspaceId,
+                  capabilityType: 'SOCIAL',
+                  status: 'ACTIVE',
+                  activatedAt: { lte: current },
+                },
+              },
+            },
+            select: { id: true },
+          })
+        : null;
       const saved: SocialActivityBarrierCase[] = [];
       for (const candidate of input.candidates) {
         if (!recommendationEvidenceAllowed(settings, candidate.category, candidate.evidence))
@@ -349,6 +464,41 @@ export class PrismaSocialActivityBarrierCaseRepository implements SocialActivity
             ? { minimumAccepted: settings.minimumAccepted }
             : {}),
         };
+        if (isSocialUsageGuidance(candidate.evidence.evidenceCode)) {
+          if (
+            !usageAccess?.allowed ||
+            usageAccess.dailyLimit === 0 ||
+            usageAccess.monthlyLimit === 0 ||
+            !activeUsageBunshin
+          )
+            continue;
+          if (
+            !guidance.valid ||
+            !usageGuidanceAllowed(guidance.settings, candidate.evidence, candidate.category)
+          )
+            continue;
+          const definition = socialUsageGuidanceDefinition(candidate.evidence.evidenceCode)!;
+          const done = await tx.socialActivitySupportIntervention.findFirst({
+            where: {
+              supportKey: definition.support.key,
+              status: 'COMPLETED',
+              barrierCase: {
+                workspaceId: input.scope.workspaceId,
+                groupId: input.scope.serviceId,
+                groupMembershipId: input.scope.groupMembershipId,
+                userId: input.scope.userId,
+                bunshinId: input.scope.bunshinId,
+              },
+            },
+            select: { id: true },
+          });
+          if (done) continue;
+          candidate.evidence.thresholds = {
+            ...candidate.evidence.thresholds,
+            usageGuidancePolicyRevision: guidance.policy?.revision ?? 0,
+            [definition.minimum]: guidance.settings[definition.minimum],
+          };
+        }
         const unique = {
           workspaceId: input.scope.workspaceId,
           groupId: input.scope.serviceId,
@@ -360,6 +510,24 @@ export class PrismaSocialActivityBarrierCaseRepository implements SocialActivity
         let barrierCase = await tx.socialActivityBarrierCase.findUnique({
           where: { workspaceId_groupId_groupMembershipId_userId_bunshinId_category: unique },
         });
+
+        if (
+          barrierCase &&
+          isSocialUsageGuidance(candidate.evidence.evidenceCode) &&
+          ['SUSPECTED', 'CONFIRMED'].includes(barrierCase.status)
+        ) {
+          const latest = await tx.socialActivityBarrierEvidence.findFirst({
+            where: { caseId: barrierCase.id },
+            orderBy: { detectedAt: 'desc' },
+            select: { evidenceCode: true },
+          });
+          if (
+            !latest ||
+            !isSocialUsageGuidance(latest.evidenceCode) ||
+            barrierCase.status === 'CONFIRMED'
+          )
+            continue;
+        }
 
         if (
           barrierCase &&
@@ -384,7 +552,10 @@ export class PrismaSocialActivityBarrierCaseRepository implements SocialActivity
 
         const evidenceKey =
           socialActivityBarrierEvidenceKey(candidate) +
-          (policy.revision ? `:recommendation-policy:${policy.revision}` : '');
+          (policy.revision ? `:recommendation-policy:${policy.revision}` : '') +
+          (isSocialUsageGuidance(candidate.evidence.evidenceCode)
+            ? `:usage-guidance:${guidance.policy?.revision ?? 0}`
+            : '');
         const existingEvidence = await tx.socialActivityBarrierEvidence.findUnique({
           where: {
             caseId_evidenceKey: {

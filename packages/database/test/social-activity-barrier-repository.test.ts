@@ -13,6 +13,12 @@ const scope = {
 describe('PrismaSocialActivityBarrierObservationRepository', () => {
   it('collects only eligible scoped mission activity and excludes incident days', async () => {
     const client = {
+      socialImageGenerationRequest: { count: vi.fn().mockResolvedValue(5) },
+      socialProfile: { groupBy: vi.fn().mockResolvedValue([{ platform: 'INSTAGRAM' }]) },
+      postRecord: {
+        groupBy: vi.fn().mockResolvedValue([{ platform: 'INSTAGRAM' }, { platform: 'X' }]),
+      },
+      serviceRegistrationPolicy: { findFirst: vi.fn().mockResolvedValue(null) },
       groupMembership: { findFirst: vi.fn().mockResolvedValue({ id: scope.groupMembershipId }) },
       bunshin: { findFirst: vi.fn().mockResolvedValue({ id: scope.bunshinId }) },
       dailyMission: {
@@ -68,6 +74,33 @@ describe('PrismaSocialActivityBarrierObservationRepository', () => {
       to: new Date('2026-09-08T00:00:00.000Z'),
     });
 
+    expect(result?.usageGuidance).toEqual({
+      successfulImageRequests: 5,
+      usedPlatforms: 2,
+      confirmedReferrals: null,
+    });
+    expect(client.socialImageGenerationRequest.count).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          workspaceId: scope.workspaceId,
+          groupId: scope.serviceId,
+          groupMembershipId: scope.groupMembershipId,
+          ownerUserId: scope.userId,
+          bunshinId: scope.bunshinId,
+          status: 'READY_FOR_REVIEW',
+        }),
+      }),
+    );
+    expect(client.postRecord.groupBy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        by: ['platform'],
+        where: expect.objectContaining({
+          workspaceId: scope.workspaceId,
+          bunshinId: scope.bunshinId,
+          actorUserId: scope.userId,
+        }),
+      }),
+    );
     expect(client.groupMembership.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
@@ -144,6 +177,10 @@ describe('PrismaSocialActivityBarrierObservationRepository', () => {
       lineMessageDeliveries: [],
     });
     const client = {
+      socialImageGenerationRequest: { count: vi.fn().mockResolvedValue(0) },
+      socialProfile: { groupBy: vi.fn().mockResolvedValue([]) },
+      postRecord: { groupBy: vi.fn().mockResolvedValue([]) },
+      serviceRegistrationPolicy: { findFirst: vi.fn().mockResolvedValue(null) },
       groupMembership: { findFirst: vi.fn().mockResolvedValue({ id: scope.groupMembershipId }) },
       bunshin: { findFirst: vi.fn().mockResolvedValue({ id: scope.bunshinId }) },
       dailyMission: {
@@ -206,6 +243,10 @@ describe('PrismaSocialActivityBarrierObservationRepository', () => {
     ['orders', 1],
   ])('counts nested %s as a conversion action', async (key, count) => {
     const client = {
+      socialImageGenerationRequest: { count: vi.fn().mockResolvedValue(0) },
+      socialProfile: { groupBy: vi.fn().mockResolvedValue([]) },
+      postRecord: { groupBy: vi.fn().mockResolvedValue([]) },
+      serviceRegistrationPolicy: { findFirst: vi.fn().mockResolvedValue(null) },
       groupMembership: { findFirst: vi.fn().mockResolvedValue({ id: scope.groupMembershipId }) },
       bunshin: { findFirst: vi.fn().mockResolvedValue({ id: scope.bunshinId }) },
       dailyMission: {
@@ -238,6 +279,10 @@ describe('PrismaSocialActivityBarrierObservationRepository', () => {
 
   it('counts a nested inquiry as a positive response without treating it as a generic conversion', async () => {
     const client = {
+      socialImageGenerationRequest: { count: vi.fn().mockResolvedValue(0) },
+      socialProfile: { groupBy: vi.fn().mockResolvedValue([]) },
+      postRecord: { groupBy: vi.fn().mockResolvedValue([]) },
+      serviceRegistrationPolicy: { findFirst: vi.fn().mockResolvedValue(null) },
       groupMembership: { findFirst: vi.fn().mockResolvedValue({ id: scope.groupMembershipId }) },
       bunshin: { findFirst: vi.fn().mockResolvedValue({ id: scope.bunshinId }) },
       dailyMission: {
@@ -274,6 +319,10 @@ describe('PrismaSocialActivityBarrierObservationRepository', () => {
   it('fails closed before reading activity when membership or bunshin scope does not match', async () => {
     const dailyMission = { findMany: vi.fn() };
     const client = {
+      socialImageGenerationRequest: { count: vi.fn().mockResolvedValue(0) },
+      socialProfile: { groupBy: vi.fn().mockResolvedValue([]) },
+      postRecord: { groupBy: vi.fn().mockResolvedValue([]) },
+      serviceRegistrationPolicy: { findFirst: vi.fn().mockResolvedValue(null) },
       groupMembership: { findFirst: vi.fn().mockResolvedValue(null) },
       bunshin: { findFirst: vi.fn().mockResolvedValue(null) },
       dailyMission,

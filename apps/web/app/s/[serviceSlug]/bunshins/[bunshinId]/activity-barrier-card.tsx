@@ -31,6 +31,8 @@ export function ActivityBarrierCard({
   photoFirstHref,
   postingHref,
   metricsHref,
+  creditsHref,
+  referralHref,
 }: {
   endpoint: string;
   initialQuestion: SocialActivityBarrierQuestion | null;
@@ -38,6 +40,8 @@ export function ActivityBarrierCard({
   photoFirstHref?: string;
   postingHref?: string;
   metricsHref?: string;
+  creditsHref?: string;
+  referralHref?: string;
 }) {
   const [question, setQuestion] = useState(initialSupport ? null : initialQuestion);
   const [selectedCaseId, setSelectedCaseId] = useState<string | null | undefined>(undefined);
@@ -47,6 +51,8 @@ export function ActivityBarrierCard({
   const [message, setMessage] = useState<string | null>(null);
   const idempotencyKey = useRef<string | null>(null);
   const supportElement = useRef<HTMLDivElement | null>(null);
+  const questionElement = useRef<HTMLElement | null>(null);
+  const questionAttempts = useRef(new Set<string>());
   const exposureAttempts = useRef(new Set<string>());
   const recordExposure = useCallback(
     async (id: string, kind: 'DISPLAY' | 'DETAILS') => {
@@ -79,6 +85,52 @@ export function ActivityBarrierCard({
     },
     [endpoint],
   );
+  const questionIds = question?.caseIds.join(',') ?? '';
+  const questionEvidenceKey = question?.evidenceKey;
+  useEffect(() => {
+    const element = questionElement.current;
+    if (!element || !questionIds || support) return;
+    const key = `${endpoint}:${questionIds}:${questionEvidenceKey ?? 'legacy'}`;
+    if (questionAttempts.current.has(key)) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((entry) => entry.isIntersecting && entry.intersectionRatio >= 0.1))
+          return;
+        questionAttempts.current.add(key);
+        observer.disconnect();
+        void fetch(`${endpoint}/question-exposure`, {
+          method: 'POST',
+          credentials: 'same-origin',
+          cache: 'no-store',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            caseIds: questionIds.split(','),
+            ...(questionEvidenceKey ? { evidenceKey: questionEvidenceKey } : {}),
+          }),
+        })
+          .then(async (response) => {
+            if (!response.ok) throw new Error('question exposure not recorded');
+            const value: unknown = await response.json();
+            if (
+              !value ||
+              typeof value !== 'object' ||
+              !('data' in value) ||
+              !value.data ||
+              typeof value.data !== 'object' ||
+              !('recorded' in value.data) ||
+              value.data.recorded !== true
+            )
+              throw new Error('invalid question exposure receipt');
+          })
+          .catch(() => {
+            console.warn('質問の表示記録を保存できませんでした。');
+          });
+      },
+      { threshold: 0.1 },
+    );
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [endpoint, questionIds, questionEvidenceKey, support]);
   const supportId = support?.id;
   useEffect(() => {
     const element = supportElement.current;
@@ -111,17 +163,33 @@ export function ActivityBarrierCard({
       'MEDIA_PREPARATION',
       'LOW_RISK_PUBLISHING',
     ].includes(support.support.key);
-  const nextHref = photoFirstActionLabel
-    ? photoFirstHref
-    : measurement
-      ? metricsHref
-      : posting
-        ? postingHref
-        : undefined;
-  const nextLabel =
-    photoFirstActionLabel ?? (measurement ? '投稿結果を手動で記録する' : '投稿の準備を進める');
+  const usageHref =
+    support?.support.key === 'IMAGE_CREDIT_REVIEW'
+      ? creditsHref
+      : support?.support.key === 'REFERRAL_BENEFIT_REVIEW'
+        ? referralHref
+        : support?.support.key === 'MULTI_PLATFORM_PREPARATION'
+          ? postingHref
+          : undefined;
+  const nextHref =
+    usageHref ??
+    (photoFirstActionLabel
+      ? photoFirstHref
+      : measurement
+        ? metricsHref
+        : posting
+          ? postingHref
+          : undefined);
+  const nextLabel = usageHref
+    ? support?.support.key === 'IMAGE_CREDIT_REVIEW'
+      ? '画像作成回数を確認する'
+      : support?.support.key === 'REFERRAL_BENEFIT_REVIEW'
+        ? '紹介状況を確認する'
+        : '投稿の準備を進める'
+    : (photoFirstActionLabel ?? (measurement ? '投稿結果を手動で記録する' : '投稿の準備を進める'));
 
   function openPhotoFirstSection(event: MouseEvent<HTMLAnchorElement>) {
+    if (!event.currentTarget.hash) return;
     const target = document.querySelector(event.currentTarget.hash);
     const drawer = target?.closest('details');
     if (drawer instanceof HTMLDetailsElement) drawer.open = true;
@@ -139,6 +207,7 @@ export function ActivityBarrierCard({
         body: JSON.stringify({
           caseIds: question.caseIds,
           selectedCaseId,
+          ...(question.evidenceKey ? { evidenceKey: question.evidenceKey } : {}),
           idempotencyKey: idempotencyKey.current,
         }),
       });
@@ -267,7 +336,11 @@ export function ActivityBarrierCard({
   }
 
   return (
-    <section className="activity-barrier-card" aria-labelledby="activity-barrier-title">
+    <section
+      ref={questionElement}
+      className="activity-barrier-card"
+      aria-labelledby="activity-barrier-title"
+    >
       <p className="eyebrow">続けやすくするための確認</p>
       <h2 id="activity-barrier-title">{question.title}</h2>
       <p>{question.description}</p>

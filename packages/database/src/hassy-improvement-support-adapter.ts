@@ -1,3 +1,4 @@
+import { SOCIAL_USAGE_GUIDANCE_KEYS } from '@bunshin/capability-social';
 import {
   CollectImprovementObservations,
   validateImprovementReadRequest,
@@ -61,6 +62,7 @@ export class PrismaHassySupportImprovementAdapter implements ImprovementObservat
         if (!manager) throw new ApplicationError('NOT_FOUND', 'improvement scope not found');
         const rows = await tx.socialActivitySupportIntervention.findMany({
           where: {
+            supportKey: { notIn: [...SOCIAL_USAGE_GUIDANCE_KEYS] },
             offeredAt: { gte: input.fromInclusive, lt: input.toExclusive },
             barrierCase: {
               workspaceId: input.scope.workspaceId,
