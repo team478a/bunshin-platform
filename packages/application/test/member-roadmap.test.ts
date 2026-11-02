@@ -73,6 +73,30 @@ function setup() {
 }
 
 describe('explicit member roadmap policy evaluation', () => {
+  it('returns the same authorized usage used by the roadmap with one read', async () => {
+    const s = setup();
+    const execute = vi.fn().mockResolvedValue(s.usage);
+    const read = vi.fn().mockResolvedValue(s.context);
+    const result = await new GetMemberRoadmap({ execute }, { read }, s.policy).executeWithUsage(
+      s.request,
+    );
+    expect(execute).toHaveBeenCalledExactlyOnceWith(s.request);
+    expect(read).toHaveBeenCalledExactlyOnceWith(s.request);
+    expect(result.usage).toBe(s.usage);
+    expect(result.roadmap).toEqual(s.evaluate());
+    expect(result.roadmap.asOf).toBe(result.usage.asOf);
+    expect(result.roadmap.timezone).toBe(result.usage.timezone);
+  });
+  it('does not return usage when the later evidence read fails', async () => {
+    const s = setup();
+    const execute = vi.fn().mockResolvedValue(s.usage);
+    const read = vi.fn().mockResolvedValue(null);
+    await expect(
+      new GetMemberRoadmap({ execute }, { read }, s.policy).executeWithUsage(s.request),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    expect(execute).toHaveBeenCalledOnce();
+    expect(read).toHaveBeenCalledOnce();
+  });
   it('evaluates a one-stage policy without fixed product, stage or fact names', () => {
     const s = setup();
     const before = structuredClone(s.context);

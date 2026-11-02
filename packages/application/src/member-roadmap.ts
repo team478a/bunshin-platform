@@ -334,6 +334,13 @@ export class GetMemberRoadmap {
   ) {}
 
   async execute(input: MemberUsageRequest): Promise<MemberRoadmap> {
+    return (await this.executeWithUsage(input)).roadmap;
+  }
+
+  /** One authorized usage read feeds both the evaluation and the caller's display. */
+  async executeWithUsage(
+    input: MemberUsageRequest,
+  ): Promise<{ roadmap: MemberRoadmap; usage: MemberUsageSummary }> {
     if (
       !this.policy ||
       typeof this.policy.createDefinition !== 'function' ||
@@ -357,6 +364,7 @@ export class GetMemberRoadmap {
     const usage = await this.usage.execute(copy());
     const context = await this.context.read(copy());
     if (!context) throw new ApplicationError('NOT_FOUND', 'member roadmap unavailable');
-    return evaluateMemberRoadmap(request, usage, { ...context, definition }, this.policy);
+    const roadmap = evaluateMemberRoadmap(request, usage, { ...context, definition }, this.policy);
+    return { roadmap, usage };
   }
 }

@@ -81,7 +81,7 @@ export function growthRoadmap(): RoadmapDisplay {
 }
 export const growthUsage = () => ({
   version: 'member-usage-api-v1',
-  asOf: '2026-11-02T00:00:01Z',
+  asOf: '2026-11-02T00:00:00Z',
   timezone: 'Asia/Tokyo',
   allTime: {
     generated: 4,
@@ -93,4 +93,9 @@ export const growthUsage = () => ({
   },
   last7Days: { activeDays: 2 },
   last30Days: { activeDays: 3 },
+});
+export const growthSnapshot = (roadmap = growthRoadmap(), usage = growthUsage()) => ({
+  version: 'member-growth-api-v1',
+  roadmap,
+  usage,
 });
