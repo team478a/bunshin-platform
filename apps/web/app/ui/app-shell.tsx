@@ -68,9 +68,9 @@ export function isNavigationItemActive(pathname: string, href: string): boolean 
 
 export function getActiveAdminNavigationHref(pathname: string): string | undefined {
   return adminNavigationGroups
-    .flatMap((group) => group.items)
-    .filter((item) => isNavigationItemActive(pathname, item.href))
-    .sort((a, b) => b.href.length - a.href.length)[0]?.href;
+    .flatMap((group) => group.items.map((item) => item.href))
+    .filter((href) => isNavigationItemActive(pathname, href))
+    .sort((a, b) => b.length - a.length)[0];
 }
 
 export function isAdminNavigationGroupActive(
