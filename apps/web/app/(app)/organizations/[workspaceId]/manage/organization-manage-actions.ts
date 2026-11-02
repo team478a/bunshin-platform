@@ -17,7 +17,6 @@ const profileSchema = z.object({
   contactPhone: z.string().trim().max(40).optional(),
   websiteUrl: z.string().trim().url().max(2048).or(z.literal('')).optional(),
   address: z.string().trim().max(500).optional(),
-  reason: z.string().trim().min(5).max(1000),
 });
 const invitationSchema = z.object({
   workspaceId: z.uuid(),

@@ -26,7 +26,6 @@ export function WeeklyReportDeliveryEditor({
   lineReady: boolean;
 }) {
   const [setting, setSetting] = useState(initialSetting);
-  const [reason, setReason] = useState('週次レポートの配信設定を更新');
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
 
@@ -40,7 +39,7 @@ export function WeeklyReportDeliveryEditor({
         {
           method: 'PUT',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ ...setting, reason }),
+          body: JSON.stringify(setting),
         },
       );
       const body = (await response.json()) as {
@@ -100,15 +99,6 @@ export function WeeklyReportDeliveryEditor({
           />
         </label>
       </div>
-      <label>
-        変更理由
-        <input
-          value={reason}
-          maxLength={1000}
-          required
-          onChange={(event) => setReason(event.target.value)}
-        />
-      </label>
       {!lineReady ? (
         <p className="notice notice--warning">
           LINE設定の接続確認が完了すると配信できます。設定は先に保存できます。
