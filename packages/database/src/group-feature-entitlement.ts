@@ -1,3 +1,5 @@
+import { ApplicationError } from '@bunshin/shared';
+
 import type {
   EffectiveGroupFeatureAccess,
   GroupFeatureEntitlementRepository,
@@ -21,6 +23,30 @@ const lowestLimit = (values: Array<number | null>) => {
   const limits = values.filter((value): value is number => value !== null);
   return limits.length === 0 ? null : Math.min(...limits);
 };
+
+/** Reserved for independently authorized, versioned policies. Generic feature forms must preserve it. */
+export const MANAGED_FEATURE_POLICY_CONFIG_KEY = '_managedPolicies';
+const configRecord = (value: unknown): value is Record<string, unknown> =>
+  value !== null && typeof value === 'object' && !Array.isArray(value);
+export async function lockFeaturePolicyGroup(
+  tx: Prisma.TransactionClient,
+  scope: { workspaceId: string; groupId: string },
+) {
+  await tx.$queryRaw`SELECT id FROM groups WHERE id=${scope.groupId}::uuid AND workspace_id=${scope.workspaceId}::uuid FOR UPDATE`;
+}
+export function preserveManagedFeatureConfig(before: unknown, next: unknown): unknown {
+  if (next === undefined) return before;
+  if (configRecord(next) && Object.hasOwn(next, MANAGED_FEATURE_POLICY_CONFIG_KEY))
+    throw new ApplicationError('VALIDATION_ERROR', '専用の設定画面を使用してください。');
+  if (!configRecord(before) || !Object.hasOwn(before, MANAGED_FEATURE_POLICY_CONFIG_KEY))
+    return next;
+  if (!configRecord(next))
+    throw new ApplicationError('VALIDATION_ERROR', 'invalid feature configuration');
+  return {
+    ...next,
+    [MANAGED_FEATURE_POLICY_CONFIG_KEY]: before[MANAGED_FEATURE_POLICY_CONFIG_KEY],
+  };
+}
 
 export class PrismaGroupFeatureEntitlementRepository implements GroupFeatureEntitlementRepository {
   constructor(private readonly client: PrismaClient = prisma) {}
@@ -58,9 +84,12 @@ export class PrismaGroupFeatureEntitlementRepository implements GroupFeatureEnti
     ]);
     if (!admin || !group || !feature) return null;
     return this.client.$transaction(async (tx) => {
+      await lockFeaturePolicyGroup(tx, { workspaceId: input.workspaceId, groupId: input.groupId });
       const before = await tx.groupFeaturePolicy.findUnique({
         where: { groupId_featureKey: { groupId: input.groupId, featureKey: input.featureKey } },
       });
+      if (before && before.workspaceId !== input.workspaceId) return null;
+      const config = preserveManagedFeatureConfig(before?.config, input.config);
       const policy = await tx.groupFeaturePolicy.upsert({
         where: { groupId_featureKey: { groupId: input.groupId, featureKey: input.featureKey } },
         create: {
@@ -70,7 +99,7 @@ export class PrismaGroupFeatureEntitlementRepository implements GroupFeatureEnti
           status: input.status,
           dailyLimit: input.dailyLimit ?? null,
           monthlyLimit: input.monthlyLimit ?? null,
-          config: input.config as Prisma.InputJsonValue,
+          config: config as Prisma.InputJsonValue,
           startsAt: input.startsAt ?? null,
           endsAt: input.endsAt ?? null,
           setByUserId: input.actorUserId,
@@ -79,7 +108,7 @@ export class PrismaGroupFeatureEntitlementRepository implements GroupFeatureEnti
           status: input.status,
           dailyLimit: input.dailyLimit ?? null,
           monthlyLimit: input.monthlyLimit ?? null,
-          config: input.config as Prisma.InputJsonValue,
+          config: config as Prisma.InputJsonValue,
           startsAt: input.startsAt ?? null,
           endsAt: input.endsAt ?? null,
           setByUserId: input.actorUserId,

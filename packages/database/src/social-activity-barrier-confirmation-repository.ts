@@ -1,5 +1,11 @@
 import {
-  SOCIAL_ACTIVITY_BARRIER_DISMISSAL_DAYS,
+  lockRecommendationService,
+  readRuntimeRecommendationPolicy,
+} from './social-recommendation-policy';
+import {
+  recommendationEvidenceAllowed,
+  socialSupportCooldownDays,
+  SOCIAL_RECOMMENDATION_POLICY_VERSION,
   SOCIAL_ACTIVITY_SUPPORT_FEATURE_KEY,
   SOCIAL_ACTIVITY_SUPPORT_KEYS,
   SOCIAL_ACTIVITY_SUPPORT_RULE_VERSION,
@@ -197,6 +203,8 @@ export class PrismaSocialActivityBarrierConfirmationRepository implements Social
       async (tx) => {
         await tx.$executeRaw`SET TRANSACTION READ ONLY`;
         if (!(await this.permitted(tx, scope, at))) return null;
+        const settings = (await readRuntimeRecommendationPolicy(tx, scope)).settings;
+        if (!settings.enabled) return null;
         const active = await tx.socialActivitySupportIntervention.findFirst({
           where: { status: { in: ['OFFERED', 'ACCEPTED'] }, barrierCase: scopeWhere(scope) },
           select: { id: true },
@@ -206,6 +214,7 @@ export class PrismaSocialActivityBarrierConfirmationRepository implements Social
           where: {
             ...scopeWhere(scope),
             status: 'SUSPECTED',
+            category: { in: settings.categories },
             OR: [{ nextEligibleAt: null }, { nextEligibleAt: { lte: at } }],
           },
           take: 50,
@@ -214,7 +223,11 @@ export class PrismaSocialActivityBarrierConfirmationRepository implements Social
         });
         const cases = rows
           .map((row) => caseValue(scope, row))
-          .filter((value): value is SocialActivityBarrierCase => value !== null);
+          .filter(
+            (value): value is SocialActivityBarrierCase =>
+              value !== null &&
+              recommendationEvidenceAllowed(settings, value.category, value.evidence),
+          );
         const first = cases[0];
         if (!first) return null;
         return buildSocialActivityBarrierQuestion(
@@ -243,6 +256,8 @@ export class PrismaSocialActivityBarrierConfirmationRepository implements Social
     }
 
     return this.client.$transaction(async (tx) => {
+      if (!this.validScope(input.scope)) return null;
+      await lockRecommendationService(tx, input.scope);
       if (!(await this.lock(tx, input.scope))) return null;
       if (!(await this.permitted(tx, input.scope, this.now()))) return null;
       const existing = await tx.socialActivityBarrierConfirmation.findUnique({
@@ -283,6 +298,8 @@ export class PrismaSocialActivityBarrierConfirmationRepository implements Social
         };
       }
 
+      const { policy, settings } = await readRuntimeRecommendationPolicy(tx, input.scope);
+      if (!policy || !settings.enabled) return null;
       const active = await tx.socialActivitySupportIntervention.findFirst({
         where: { status: { in: ['OFFERED', 'ACCEPTED'] }, barrierCase: scopeWhere(input.scope) },
         select: { id: true },
@@ -323,6 +340,12 @@ export class PrismaSocialActivityBarrierConfirmationRepository implements Social
         .map((row) => caseValue(input.scope, row))
         .filter((value): value is SocialActivityBarrierCase => value !== null);
       if (cases.length !== uniqueCaseIds.length) return null;
+      if (
+        cases.some(
+          (value) => !recommendationEvidenceAllowed(settings, value.category, value.evidence),
+        )
+      )
+        return null;
       buildSocialActivityBarrierQuestion(cases);
 
       const selected =
@@ -332,9 +355,7 @@ export class PrismaSocialActivityBarrierConfirmationRepository implements Social
       if (input.selectedCaseId !== null && !selected) return null;
 
       const nextEligibleAt = new Date(input.answeredAt);
-      nextEligibleAt.setUTCDate(
-        nextEligibleAt.getUTCDate() + SOCIAL_ACTIVITY_BARRIER_DISMISSAL_DAYS,
-      );
+      nextEligibleAt.setUTCDate(nextEligibleAt.getUTCDate() + settings.cooldownDays);
       const primary = selected ?? cases[0]!;
 
       if (selected) {
@@ -386,6 +407,11 @@ export class PrismaSocialActivityBarrierConfirmationRepository implements Social
             definitionSnapshot: {
               ...selection.support,
               exposureTracking: 'social-support-exposure-v1',
+              recommendationPolicy: {
+                version: SOCIAL_RECOMMENDATION_POLICY_VERSION,
+                revision: policy.revision,
+                cooldownDays: settings.cooldownDays,
+              },
               steps: [...selection.support.steps],
               selection: {
                 mode: selection.mode,
@@ -447,9 +473,10 @@ export class PrismaSocialActivityBarrierConfirmationRepository implements Social
       async (tx) => {
         await tx.$executeRaw`SET TRANSACTION READ ONLY`;
         if (!(await this.permitted(tx, scope, at))) return null;
+        const settings = (await readRuntimeRecommendationPolicy(tx, scope)).settings;
         const row = await tx.socialActivitySupportIntervention.findFirst({
           where: {
-            status: { in: ['OFFERED', 'ACCEPTED'] },
+            status: { in: settings.enabled ? ['OFFERED', 'ACCEPTED'] : ['ACCEPTED'] },
             barrierCase: scopeWhere(scope),
           },
           orderBy: { offeredAt: 'desc' },
@@ -474,8 +501,15 @@ export class PrismaSocialActivityBarrierConfirmationRepository implements Social
       return null;
     if (input.reason !== undefined) input.reason = input.reason.trim();
     return this.client.$transaction(async (tx) => {
+      if (!this.validScope(input.scope)) return null;
+      await lockRecommendationService(tx, input.scope);
       if (!(await this.lock(tx, input.scope))) return null;
       if (!(await this.permitted(tx, input.scope, this.now(), input.action === 'ACCEPT')))
+        return null;
+      if (
+        input.action === 'ACCEPT' &&
+        !(await readRuntimeRecommendationPolicy(tx, input.scope)).settings.enabled
+      )
         return null;
       const row = await tx.socialActivitySupportIntervention.findFirst({
         where: { id: input.supportId, barrierCase: scopeWhere(input.scope) },
@@ -522,7 +556,8 @@ export class PrismaSocialActivityBarrierConfirmationRepository implements Social
       }
       if (desired === 'SKIPPED') {
         const nextEligibleAt = new Date(
-          input.occurredAt.getTime() + SOCIAL_ACTIVITY_BARRIER_DISMISSAL_DAYS * 86_400_000,
+          input.occurredAt.getTime() +
+            socialSupportCooldownDays(row.definitionSnapshot) * 86_400_000,
         );
         await tx.socialActivityBarrierCase.updateMany({
           where: { ...scopeWhere(input.scope), id: row.caseId },

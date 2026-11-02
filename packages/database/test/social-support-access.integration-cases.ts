@@ -1,7 +1,17 @@
+import {
+  defaultSocialRecommendationSettings,
+  SOCIAL_RECOMMENDATION_POLICY_CONFIG_KEY,
+} from '@bunshin/capability-social';
+import { PrismaSocialRecommendationPolicyRepository } from '../src/social-recommendation-policy';
+import {
+  PrismaGroupFeatureEntitlementRepository,
+  MANAGED_FEATURE_POLICY_CONFIG_KEY,
+} from '../src/group-feature-entitlement';
+import { PrismaSocialActivityBarrierCaseRepository } from '../src/social-activity-barrier-repository';
 import { PrismaHassySupportImprovementAdapter } from '../src/hassy-improvement-support-adapter';
 import { randomUUID } from 'node:crypto';
 import type { PrismaClient, SocialActivityBarrierCategory } from '@prisma/client';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PrismaSocialSupportBehaviorAdapter } from '../src/social-support-behavior-adapter';
 import { PrismaSocialActivityBarrierConfirmationRepository } from '../src/social-activity-barrier-confirmation-repository';
 
@@ -168,6 +178,332 @@ export function registerSocialSupportAccessIntegrationCases(client: PrismaClient
         });
       return { scope, row, repo, answer, stop, addCase };
     }
+    async function policyFixture() {
+      const f = await fixture();
+      await client.groupMembership.update({
+        where: { id: f.scope.groupMembershipId },
+        data: { serviceRole: 'SERVICE_OWNER' },
+      });
+      const hq = await client.user.create({
+        data: { displayName: 'Synthetic HQ policy operator' },
+      });
+      users.push(hq.id);
+      await client.platformAdmin.create({ data: { userId: hq.id, role: 'SUPER_ADMIN' } });
+      const target = {
+        workspaceId: f.scope.workspaceId,
+        serviceId: f.scope.serviceId,
+        actorUserId: hq.id,
+      };
+      const owner = { ...target, actorUserId: f.scope.userId };
+      const policies = new PrismaSocialRecommendationPolicyRepository(client);
+      const command = (expectedRevision = 0, settings = defaultSocialRecommendationSettings()) => ({
+        ...target,
+        commandId: randomUUID(),
+        expectedRevision,
+        authority: 'HEADQUARTERS' as const,
+        settings,
+        reason: 'Synthetic policy verification',
+      });
+      return { ...f, target, owner, policies, command };
+    }
+    it('saves versioned policy once, preserves other config and rejects payload collisions or stale writes', async () => {
+      const f = await policyFixture();
+      await client.groupFeaturePolicy.update({
+        where: {
+          groupId_featureKey: { groupId: f.scope.serviceId, featureKey: 'SOCIAL.ACTIVITY_SUPPORT' },
+        },
+        data: { config: { legacySetting: 'preserved' } },
+      });
+      const cmd = f.command();
+      const saved = await f.policies.save(cmd);
+      expect(saved.revision).toBe(1);
+      expect(
+        await f.policies.save({
+          ...cmd,
+          settings: { ...cmd.settings, categories: [...cmd.settings.categories].reverse() },
+        }),
+      ).toEqual(saved);
+      await expect(f.policies.save({ ...cmd, reason: 'Different reason' })).rejects.toMatchObject({
+        code: 'CONFLICT',
+      });
+      await expect(f.policies.save(f.command())).rejects.toMatchObject({ code: 'CONFLICT' });
+      expect(
+        await client.groupFeatureAuditLog.count({ where: { groupId: f.scope.serviceId } }),
+      ).toBe(1);
+      expect(
+        await client.groupFeaturePolicy.findUniqueOrThrow({
+          where: {
+            groupId_featureKey: {
+              groupId: f.scope.serviceId,
+              featureKey: 'SOCIAL.ACTIVITY_SUPPORT',
+            },
+          },
+        }),
+      ).toMatchObject({ status: 'ENABLED', config: { legacySetting: 'preserved' } });
+    });
+    it('permits only one concurrent update at the same revision', async () => {
+      const f = await policyFixture();
+      const results = await Promise.allSettled([
+        f.policies.save(f.command()),
+        f.policies.save(f.command()),
+      ]);
+      expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+      expect(results.filter((result) => result.status === 'rejected')).toHaveLength(1);
+      expect(
+        await client.groupFeatureAuditLog.count({ where: { groupId: f.scope.serviceId } }),
+      ).toBe(1);
+    });
+    it('requires headquarters before OEM changes and enforces bounds after headquarters tightens them', async () => {
+      const f = await policyFixture();
+      await expect(
+        f.policies.save({ ...f.command(), ...f.owner, authority: 'SERVICE' }),
+      ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+      await expect(f.policies.save({ ...f.command(), ...f.owner })).rejects.toMatchObject({
+        code: 'FORBIDDEN',
+      });
+      const hq = {
+        ...defaultSocialRecommendationSettings(),
+        minimumAccepted: 4,
+        cooldownDays: 60,
+        categories: ['TIME' as const],
+      };
+      await f.policies.save(f.command(0, hq));
+      await expect(
+        f.policies.save({ ...f.command(1), ...f.owner, authority: 'SERVICE' }),
+      ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+      const service = await f.policies.save({
+        ...f.command(1, { ...hq, minimumAccepted: 5, cooldownDays: 90 }),
+        ...f.owner,
+        authority: 'SERVICE',
+      });
+      expect(service.effective.minimumAccepted).toBe(5);
+      const tightened = await f.policies.save(
+        f.command(2, { ...hq, minimumAccepted: 6, cooldownDays: 120, enabled: false }),
+      );
+      expect(tightened.effective).toMatchObject({
+        enabled: false,
+        minimumAccepted: 6,
+        cooldownDays: 120,
+        categories: ['TIME'],
+      });
+      expect(tightened.service?.minimumAccepted).toBe(5);
+    });
+    it('rejects participants, other OEMs and revoked management roles', async () => {
+      const f = await policyFixture();
+      const other = await policyFixture();
+      await expect(
+        f.policies.read({ ...other.target, actorUserId: f.scope.userId }),
+      ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+      await client.groupMembership.update({
+        where: { id: f.scope.groupMembershipId },
+        data: { serviceRole: 'PARTICIPANT' },
+      });
+      await expect(f.policies.read(f.owner)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+      await expect(f.policies.save({ ...f.command(), ...f.owner })).rejects.toMatchObject({
+        code: 'NOT_FOUND',
+      });
+    });
+    it('rechecks persisted evidence at projection, display and answer against current settings', async () => {
+      const f = await policyFixture();
+      await f.policies.save(
+        f.command(0, {
+          ...defaultSocialRecommendationSettings(),
+          minimumAccepted: 4,
+          categories: ['TIME'],
+        }),
+      );
+      expect(await f.repo.getPendingQuestion({ scope: f.scope })).toBeNull();
+      expect(await f.repo.answer(f.answer)).toBeNull();
+      const cases = new PrismaSocialActivityBarrierCaseRepository(client);
+      const candidate = {
+        scope: f.scope,
+        category: 'TIME' as const,
+        status: 'SUSPECTED' as const,
+        priority: 1,
+        evidence: {
+          evidenceCode: 'ACCEPTED_WITHOUT_POST_REPORT' as const,
+          observationWindow: {
+            from: at.toISOString(),
+            to: now.toISOString(),
+            eligibleDays: 2,
+            excludedSystemIncidentDays: 0,
+          },
+          metrics: { missionAccepted: 3, postCompleted: 0 },
+          goalAttribution: null,
+          goalMetrics: null,
+          thresholds: { minimumAccepted: 2 },
+          ruleVersion: 'social-activity-barrier-v4' as const,
+        },
+      };
+      expect(
+        await cases.saveSuspicions({ scope: f.scope, candidates: [candidate], detectedAt: now }),
+      ).toEqual([]);
+      candidate.evidence.metrics.missionAccepted = 4;
+      const saved = await cases.saveSuspicions({
+        scope: f.scope,
+        candidates: [candidate],
+        detectedAt: now,
+      });
+      expect(saved?.[0]?.evidence.thresholds).toMatchObject({
+        minimumAccepted: 4,
+        recommendationPolicyRevision: 1,
+      });
+      expect((await f.repo.getPendingQuestion({ scope: f.scope }))?.caseIds).toEqual([f.row.id]);
+      const media = await f.addCase('MEDIA');
+      expect(
+        await f.repo.answer({ ...f.answer, caseIds: [media.id], selectedCaseId: media.id }),
+      ).toBeNull();
+      expect(await f.repo.answer(f.answer)).not.toBeNull();
+    });
+    it('freezes offered cooldowns, stops new starts and preserves accepted work after policy stop', async () => {
+      const f = await policyFixture();
+      await f.policies.save(
+        f.command(0, { ...defaultSocialRecommendationSettings(), cooldownDays: 60 }),
+      );
+      await f.repo.answer(f.answer);
+      const support = await f.repo.getActiveSupport({ scope: f.scope });
+      await f.repo.transitionSupport({
+        scope: f.scope,
+        supportId: support!.id,
+        action: 'ACCEPT',
+        occurredAt: now,
+      });
+      await f.policies.save(
+        f.command(1, {
+          ...defaultSocialRecommendationSettings(),
+          enabled: false,
+          cooldownDays: 90,
+        }),
+      );
+      expect((await f.repo.getActiveSupport({ scope: f.scope }))?.status).toBe('ACCEPTED');
+      expect(await f.repo.getPendingQuestion({ scope: f.scope })).toBeNull();
+      expect(
+        await f.repo.transitionSupport({
+          scope: f.scope,
+          supportId: support!.id,
+          action: 'ACCEPT',
+          occurredAt: now,
+        }),
+      ).toBeNull();
+      expect(
+        (
+          await f.repo.transitionSupport({
+            scope: f.scope,
+            supportId: support!.id,
+            action: 'SKIP',
+            occurredAt: now,
+          })
+        )?.status,
+      ).toBe('SKIPPED');
+      expect(
+        (await client.socialActivityBarrierCase.findUniqueOrThrow({ where: { id: f.row.id } }))
+          .nextEligibleAt,
+      ).toEqual(new Date(now.getTime() + 60 * 86_400_000));
+    });
+    it('suppresses unstarted support after stop and applies configured dismissal days to none-of-these', async () => {
+      const f = await policyFixture();
+      await f.policies.save(
+        f.command(0, { ...defaultSocialRecommendationSettings(), cooldownDays: 45 }),
+      );
+      await f.repo.answer({ ...f.answer, selectedCaseId: null });
+      expect(
+        (await client.socialActivityBarrierCase.findUniqueOrThrow({ where: { id: f.row.id } }))
+          .nextEligibleAt,
+      ).toEqual(new Date(now.getTime() + 45 * 86_400_000));
+      const other = await policyFixture();
+      await other.policies.save(other.command());
+      await other.repo.answer(other.answer);
+      const offered = await other.repo.getActiveSupport({ scope: other.scope });
+      await other.policies.save(
+        other.command(1, { ...defaultSocialRecommendationSettings(), enabled: false }),
+      );
+      expect(await other.repo.getActiveSupport({ scope: other.scope })).toBeNull();
+      expect(
+        await other.repo.transitionSupport({
+          scope: other.scope,
+          supportId: offered!.id,
+          action: 'ACCEPT',
+          occurredAt: now,
+        }),
+      ).toBeNull();
+    });
+    it('fails closed on invalid stored config while preserving completion of already accepted work', async () => {
+      const f = await policyFixture();
+      await f.policies.save(f.command());
+      await f.repo.answer(f.answer);
+      const support = await f.repo.getActiveSupport({ scope: f.scope });
+      await f.repo.transitionSupport({
+        scope: f.scope,
+        supportId: support!.id,
+        action: 'ACCEPT',
+        occurredAt: now,
+      });
+      await client.groupFeaturePolicy.update({
+        where: {
+          groupId_featureKey: { groupId: f.scope.serviceId, featureKey: 'SOCIAL.ACTIVITY_SUPPORT' },
+        },
+        data: {
+          config: {
+            [MANAGED_FEATURE_POLICY_CONFIG_KEY]: {
+              [SOCIAL_RECOMMENDATION_POLICY_CONFIG_KEY]: { version: 'invalid' },
+            },
+          },
+        },
+      });
+      const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+      try {
+        expect(await f.repo.getPendingQuestion({ scope: f.scope })).toBeNull();
+        expect((await f.repo.getActiveSupport({ scope: f.scope }))?.status).toBe('ACCEPTED');
+        expect(
+          (
+            await f.repo.transitionSupport({
+              scope: f.scope,
+              supportId: support!.id,
+              action: 'COMPLETE',
+              occurredAt: now,
+            })
+          )?.status,
+        ).toBe('COMPLETED');
+        await expect(f.policies.read(f.target)).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+        expect(log).toHaveBeenCalled();
+      } finally {
+        log.mockRestore();
+      }
+    });
+    it('preserves managed settings through generic feature writes and rejects namespace injection', async () => {
+      const f = await policyFixture();
+      await f.policies.save(f.command());
+      const generic = new PrismaGroupFeatureEntitlementRepository(client);
+      const command = {
+        workspaceId: f.scope.workspaceId,
+        groupId: f.scope.serviceId,
+        actorUserId: f.target.actorUserId,
+        featureKey: 'SOCIAL.ACTIVITY_SUPPORT',
+        status: 'ENABLED' as const,
+        dailyLimit: 5,
+        monthlyLimit: 10,
+        config: {},
+        reason: 'Synthetic generic feature update',
+      };
+      await generic.setGroupPolicy(command);
+      expect((await f.policies.read(f.target)).revision).toBe(1);
+      await expect(
+        generic.setGroupPolicy({
+          ...command,
+          config: {
+            [MANAGED_FEATURE_POLICY_CONFIG_KEY]: { [SOCIAL_RECOMMENDATION_POLICY_CONFIG_KEY]: {} },
+          },
+        }),
+      ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+      await Promise.all([
+        generic.setGroupPolicy(command),
+        f.policies.save(
+          f.command(1, { ...defaultSocialRecommendationSettings(), minimumAccepted: 5 }),
+        ),
+      ]);
+      expect((await f.policies.read(f.target)).effective.minimumAccepted).toBe(5);
+      expect((await f.policies.read(f.target)).revision).toBe(2);
+    });
     it('serializes concurrent first display/detail receipts and preserves lifecycle and first timestamps', async () => {
       const f = await fixture();
       await f.repo.answer(f.answer);
