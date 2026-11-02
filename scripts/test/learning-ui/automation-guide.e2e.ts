@@ -22,6 +22,7 @@ test('mobile guide opens on request and copies only the static planning template
         },
       },
     });
+    return null;
   });
   await screen.getByText('ハッシーだけで投稿を準備する', { exact: true }).tap();
   await expect(
@@ -30,7 +31,9 @@ test('mobile guide opens on request and copies only the static planning template
   await screen.getByText('相談用の指示文をコピーする', { exact: true }).tap();
   await screen.getByRole('button', '相談用の指示文をコピー').tap();
   await expect(screen.getByRole('status')).toContainText('指示文をコピーしました');
-  const copied = await browser.evaluate(() => document.documentElement.dataset['copiedPrompt']);
+  const copied = await browser.evaluate(
+    () => document.documentElement.dataset['copiedPrompt'] ?? null,
+  );
   expect(copied).toContain('投稿先：[自分で入力]');
   expect(copied).toContain('提案だけにしてください');
   expect(calls).toBe(0);
@@ -51,6 +54,7 @@ test('clipboard denial keeps a selectable template and Zapier actions are descri
       configurable: true,
       value: { writeText: () => Promise.reject(new Error('denied')) },
     });
+    return null;
   });
   await screen.getByText('相談用の指示文をコピーする', { exact: true }).tap();
   await screen.getByRole('button', '相談用の指示文をコピー').tap();
