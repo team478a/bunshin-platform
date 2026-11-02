@@ -39,6 +39,8 @@ function setup() {
     socialProfiles: [{ id: id(7) }],
   };
   const tx = {
+    serviceReferralQualificationPolicyVersion: { findFirst: vi.fn().mockResolvedValue(null) },
+    serviceReferral: { count: vi.fn().mockResolvedValue(0) },
     $executeRaw: vi.fn().mockResolvedValue(0),
     groupMembership: { findFirst: vi.fn().mockResolvedValue({ id: id(4) }) },
     bunshin: { findFirst: vi.fn().mockResolvedValue(current) },

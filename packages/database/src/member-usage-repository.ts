@@ -42,7 +42,7 @@ export class PrismaMemberUsageRepository
 /** Internal query reuse. Caller must revalidate owner/service/consent in this transaction. */
 export async function readMemberUsageSources(
   tx: Prisma.TransactionClient,
-  request: MemberUsageRequest,
+  request: Omit<MemberUsageRequest, 'actorUserId'>,
 ): Promise<MemberUsageSources> {
   const scope = request.scope;
   const owned = {

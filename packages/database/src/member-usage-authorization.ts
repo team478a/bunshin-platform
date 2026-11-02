@@ -38,7 +38,36 @@ export async function isMemberUsagePermitted(
   now: Date,
 ) {
   if (request.actorUserId !== request.scope.userId) return false;
-  const scope = request.scope;
+  return isMemberUsageScopePermitted(tx, request.scope, now);
+}
+
+/** Target scope checks shared by owner reads and explicitly authorized management reads. */
+export async function isMemberUsageScopePermitted(
+  tx: Prisma.TransactionClient,
+  scope: MemberUsageRequest['scope'],
+  now: Date,
+) {
+  if (!(await isServiceUsageMemberPermitted(tx, scope, now))) return false;
+  return Boolean(
+    await tx.bunshin.findFirst({
+      where: {
+        id: scope.bunshinId,
+        workspaceId: scope.workspaceId,
+        groupId: scope.serviceId,
+        ownerUserId: scope.userId,
+        status: { not: 'ARCHIVED' },
+      },
+      select: { id: true },
+    }),
+  );
+}
+
+/** Membership and consent only: registration evidence must not invent a Bunshin identity. */
+export async function isServiceUsageMemberPermitted(
+  tx: Prisma.TransactionClient,
+  scope: Omit<MemberUsageRequest['scope'], 'bunshinId'>,
+  now: Date,
+) {
   const member = await tx.groupMembership.findFirst({
     where: {
       id: scope.groupMembershipId,
@@ -69,17 +98,6 @@ export async function isMemberUsagePermitted(
     select: { id: true },
   });
   if (!member) return false;
-  const bunshin = await tx.bunshin.findFirst({
-    where: {
-      id: scope.bunshinId,
-      workspaceId: scope.workspaceId,
-      groupId: scope.serviceId,
-      ownerUserId: scope.userId,
-      status: { not: 'ARCHIVED' },
-    },
-    select: { id: true },
-  });
-  if (!bunshin) return false;
   const required = latestServiceLegalDocuments(
     await tx.serviceLegalDocument.findMany({
       where: {

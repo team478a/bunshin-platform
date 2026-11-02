@@ -153,7 +153,16 @@ function Snapshot({ value }: { value: GrowthSnapshot }) {
       </section>
       <section aria-label="紹介と特典" className="member-growth__referral">
         <h3>紹介と特典</h3>
-        <p>有効紹介人数・ロードマップ特典は集計準備中です。</p>
+        <p>
+          {roadmap.validReferrals === null
+            ? '有効紹介人数・ロードマップ特典は集計準備中です。'
+            : `有効紹介：${roadmap.validReferrals}人（審査・確定済み）`}
+        </p>
+        {roadmap.validReferrals !== null && (
+          <p>
+            画像クレジットはサービスの特典条件と実際の成果に応じて付与されます。追加機能の人数特典は準備中です。
+          </p>
+        )}
         <p className="member-growth__note">紹介をしなくても、SNSの基本機能を利用できます。</p>
       </section>
       <p className="member-growth__note">

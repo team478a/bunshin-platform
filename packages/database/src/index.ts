@@ -359,3 +359,5 @@ export type {
   OpsMorningDigestRunStatus,
 } from './ops-morning-digest-runs';
 export { PrismaSocialServiceReferralEvidenceRepository } from './social-service-referral-evidence';
+
+export { PrismaServiceReferralManagementRepository } from './service-referral-management';

@@ -70,6 +70,7 @@ export interface MemberRoadmapMilestone {
   progress: { current: number | null; target: number };
 }
 export interface MemberRoadmap {
+  validReferrals: number | null;
   version: typeof MEMBER_ROADMAP_VERSION;
   definitionVersion: string;
   scope: MemberUsageScope;
@@ -321,6 +322,7 @@ export function evaluateMemberRoadmap(
     asOf: usage.asOf,
     timezone: usage.timezone,
     stages,
+    validReferrals: context.validReferrals,
     currentStageId: stages.find((stage) => stage.status !== 'COMPLETED')?.id ?? null,
     nextRecommended: nextStage && next ? { stageId: nextStage.id, milestoneId: next.id } : null,
   };
