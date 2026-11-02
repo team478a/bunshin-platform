@@ -64,9 +64,11 @@ export function ReferralManagementEditor({
       });
       if (!response.ok)
         throw new Error(
-          response.status === 409
-            ? '条件未達・証拠不足・他の操作との競合があります。再読み込みして確認してください。'
-            : '保存できませんでした。権限・入力を確認してから再読み込みしてください。',
+          response.status === 429
+            ? '少し時間をおいてから、再読み込みしてお試しください。'
+            : response.status === 409
+              ? '条件未達・証拠不足・他の操作との競合があります。再読み込みして確認してください。'
+              : '保存できませんでした。権限・入力を確認してから再読み込みしてください。',
         );
       const fresh = await fetch(url, { cache: 'no-store' });
       if (!fresh.ok) throw new Error('保存後の状態を確認できません。再読み込みしてください。');
@@ -85,6 +87,9 @@ export function ReferralManagementEditor({
       <section className="settings-card">
         <h2>有効紹介の条件</h2>
         <p>本部の承認があるサービスだけで確定できます。OEMは本部の条件を緩和できません。</p>
+        <p>
+          条件を保存すると、既存の画像特典も今後の付与には審査・確定が必要になります。停止中は新しい付与を行いません。
+        </p>
         <p>
           現在：
           {value.policy

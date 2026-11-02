@@ -13,7 +13,7 @@ const m = vi.hoisted(() => ({
   release: vi.fn(),
 }));
 vi.mock('../src/auth/current-user', () => ({
-  currentUserProvider: async () => ({ getCurrentUser: m.actor }),
+  currentUserProvider: () => Promise.resolve({ getCurrentUser: m.actor }),
 }));
 vi.mock('../src/http/member-usage-read-limit', () => ({
   memberUsageReadLimit: { reserve: m.reserve },
