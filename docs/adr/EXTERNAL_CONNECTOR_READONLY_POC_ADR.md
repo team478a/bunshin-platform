@@ -48,3 +48,12 @@ Proposed。読取PoCの設計判断。外部公開・接続成功・本番提供
 - 発行commandIdを不変のgrant識別子とし、同じ内容の再送は同じ状態を返す。異なる内容は競合。解除はrevisionを照合し、同じ解除の再送は状態を維持する。Groupの既存排他を再利用し、既存GroupFeatureAuditLogを同じtransactionで保存する。
 - 解除は機能停止・Capability停止・退会・規約未同意後でも本人の現所有scopeが一致すれば許可する。新規発行/読取とは許可条件を分け、停止中に解除不能にしない。
 - この段階はApplication/DBの本人向け操作とSQL検証。公開HTTP、UI、OAuth、外部token認証、分散read admissionは別の品質ゲートとする。
+
+## 2026-11-03: 本人の許可管理HTTP/UI
+
+- 本人認証のCookieを使う管理APIだけを追加する。外部Agentからの読取APIではなく、接続IDを認証資格情報にしない。
+- scopeはslug・対象Bunshin・認証済みactorからサーバーで解決する。停止・退会後の解除を維持するため、管理対象の解決にACTIVE会員用Read APIを流用しない。発行権限は既存DB Adapterで毎回検証する。
+- APIはGET一覧/POST発行/DELETE解除、更新はSame Origin・JSON・厳密schema・小さいbody上限・本人単位の負荷制限を要求する。scope/environment/同意内容をリクエストで差し替えない。
+- 正式な接続先はコード管理のcatalogで定義し、初期値は空。Museを未検証のまま登録しない。発行UIの対象候補も既存DB認可を再利用して絞る。
+- 既存DBが扱わないstagingは別環境へ読み替えず、許可管理を停止する。production/developmentだけを明示的に使用する。
+- UIは接続先・対象Bunshin・利用実績の読取範囲・期限を示して明示同意を要求する。許可保存と実接続の完了を区別し、失敗時に成功表示しない。解除は確認後にrevision付きで送る。

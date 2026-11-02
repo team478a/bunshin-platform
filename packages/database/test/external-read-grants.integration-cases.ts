@@ -161,6 +161,18 @@ export function registerExternalReadGrantIntegrationCases(client: PrismaClient) 
         },
       };
     }
+    it('checks issuance eligibility with no probe grant or audit write', async () => {
+      const f = await fixture();
+      expect(await f.repository.issuanceAllowed(f.owner, principal.clientId)).toBe(true);
+      expect(await client.externalReadGrant.count({ where: { workspaceId: f.workspace.id } })).toBe(
+        0,
+      );
+      expect(
+        await client.groupFeatureAuditLog.count({ where: { workspaceId: f.workspace.id } }),
+      ).toBe(0);
+      f.setPolicy({ enabled: false, clients: [principal.clientId] });
+      expect(await f.repository.issuanceAllowed(f.owner, principal.clientId)).toBe(false);
+    });
     it('persists exactly one immutable scope and audit for concurrent identical issue retries', async () => {
       const f = await fixture();
       const grants = await Promise.all([
