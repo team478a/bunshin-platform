@@ -21,6 +21,7 @@ export default {
     'roadmap-policy.e2e.ts',
     'usage-guidance.e2e.ts',
     'external-grants.e2e.ts',
+    'routine-settings.e2e.ts',
   ],
   workers: 1,
   actionTimeout: 10_000,
