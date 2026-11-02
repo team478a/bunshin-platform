@@ -112,18 +112,10 @@ export default async function OperationsAdminPage() {
   return (
     <main className="app-page">
       <header className="app-page__heading">
-        <p className="eyebrow">管理者専用</p>
-        <h1>運用設定</h1>
-        <p>サービスを動かすための設定と、現在の状態をここで確認できます。</p>
+        <p className="eyebrow">ワタシワークス 本部管理</p>
+        <h1>ダッシュボード</h1>
+        <p>今日の対応事項と稼働状況を確認し、会員対応や配信・設定へ進めます。</p>
       </header>
-
-      <section className="settings-card" aria-labelledby="environment-title">
-        <h2 id="environment-title">現在の環境</h2>
-        <p>
-          <strong>{currentLineEnvironment()}</strong>
-        </p>
-        <p>別の環境に登録した秘密情報は、この環境から使用できません。</p>
-      </section>
 
       <section className="settings-card" aria-labelledby="alert-center-title">
         <h2 id="alert-center-title">運用通知</h2>
@@ -142,6 +134,28 @@ export default async function OperationsAdminPage() {
         <Link href="/admin/alerts" className="button button--secondary">
           運用通知を確認する
         </Link>
+      </section>
+
+      <section className="settings-card" aria-labelledby="daily-operations-title">
+        <h2 id="daily-operations-title">日常の操作</h2>
+        <nav className="settings-list" aria-label="日常の操作">
+          <Link href="/admin/users" className="settings-row">
+            <strong>会員と利用状況を確認する</strong>
+            <span aria-hidden="true">›</span>
+          </Link>
+          <Link href="/admin/support" className="settings-row">
+            <strong>問い合わせに対応する</strong>
+            <span aria-hidden="true">›</span>
+          </Link>
+          <Link href="/admin/line" className="settings-row">
+            <strong>LINEの配信・メニューを管理する</strong>
+            <span aria-hidden="true">›</span>
+          </Link>
+          <Link href="/admin/services" className="settings-row">
+            <strong>サービスの公開設定を開く</strong>
+            <span aria-hidden="true">›</span>
+          </Link>
+        </nav>
       </section>
 
       <section className="settings-card" aria-labelledby="readiness-title">
@@ -182,40 +196,43 @@ export default async function OperationsAdminPage() {
             ? '機械で確認できる設定はそろっています。人が確認する項目を完了してください。'
             : `自動確認で${productionGate.actionRequired}件の対応が必要です。`}
         </p>
-        <h3>自動で確認した項目</h3>
-        <ul>
-          {productionGate.automatic.map((item) => (
-            <li key={item.code}>
-              <strong className={item.status === 'READY' ? 'status-success' : 'status-warning'}>
-                {item.status === 'READY' ? '確認済み：' : '対応が必要：'}
-                {item.title}
-              </strong>
-              <p>{item.guidance}</p>
-              {item.status !== 'READY' ? <Link href={item.href}>確認する</Link> : null}
-            </li>
-          ))}
-        </ul>
-        <h3>人が確認して記録する項目</h3>
-        <p>安全のため、この画面を開いただけでは完了になりません。</p>
-        <ol>
-          {productionGate.manual.map((item) => (
-            <li key={item.code}>
-              <strong>{item.title}</strong>
-              <p>{item.guidance}</p>
-            </li>
-          ))}
-        </ol>
         <p>
           <strong className={productionGate.launchReady ? 'status-success' : 'status-warning'}>
             現在の開始判定：{productionGate.launchReady ? '開始できます' : '確認待ち'}
           </strong>
         </p>
-        <Link href="/admin/guide#production-gate" className="button button--secondary">
-          本番開始の確認手順を見る
-        </Link>{' '}
-        <Link href="/admin/production-gate" className="button button--secondary">
-          確認結果を記録する
-        </Link>
+        <details className="admin-operation-details">
+          <summary>公開前の確認項目・証跡を開く</summary>
+          <h3>自動で確認した項目</h3>
+          <ul>
+            {productionGate.automatic.map((item) => (
+              <li key={item.code}>
+                <strong className={item.status === 'READY' ? 'status-success' : 'status-warning'}>
+                  {item.status === 'READY' ? '確認済み：' : '対応が必要：'}
+                  {item.title}
+                </strong>
+                <p>{item.guidance}</p>
+                {item.status !== 'READY' ? <Link href={item.href}>確認する</Link> : null}
+              </li>
+            ))}
+          </ul>
+          <h3>人が確認して記録する項目</h3>
+          <p>安全のため、この画面を開いただけでは完了になりません。</p>
+          <ol>
+            {productionGate.manual.map((item) => (
+              <li key={item.code}>
+                <strong>{item.title}</strong>
+                <p>{item.guidance}</p>
+              </li>
+            ))}
+          </ol>
+          <Link href="/admin/guide#production-gate" className="button button--secondary">
+            本番開始の確認手順を見る
+          </Link>{' '}
+          <Link href="/admin/production-gate" className="button button--secondary">
+            確認結果を記録する
+          </Link>
+        </details>
       </section>
 
       <section className="settings-card" aria-labelledby="ai-settings-title">
@@ -328,13 +345,22 @@ export default async function OperationsAdminPage() {
       </section>
 
       <section className="settings-card" aria-labelledby="system-settings-title">
-        <h2 id="system-settings-title">初回だけ必要な設定</h2>
-        <p>
-          暗号化の親鍵：{statusLabel(Boolean(environment.ENCRYPTION_KEY))}
-          <br />
-          定期処理の鍵：{statusLabel(Boolean(environment.CRON_SECRET))}
-        </p>
-        <p>これらの値そのものは、安全のため管理画面に表示・保存しません。</p>
+        <h2 id="system-settings-title">詳細管理</h2>
+        <details className="admin-operation-details">
+          <summary>実行環境と初期設定を確認する</summary>
+          <h3>現在の環境</h3>
+          <p>
+            <strong>{currentLineEnvironment()}</strong>
+          </p>
+          <p>別の環境に登録した秘密情報は、この環境から使用できません。</p>
+          <h3>初回だけ必要な設定</h3>
+          <p>
+            暗号化の親鍵：{statusLabel(Boolean(environment.ENCRYPTION_KEY))}
+            <br />
+            定期処理の鍵：{statusLabel(Boolean(environment.CRON_SECRET))}
+          </p>
+          <p>これらの値そのものは、安全のため管理画面に表示・保存しません。</p>
+        </details>
       </section>
 
       <section className="settings-card" aria-labelledby="other-operations-title">
