@@ -178,7 +178,10 @@ describe('single-read member growth API', () => {
     expect(response.status).toBe(200);
     expect(response.headers.get('cache-control')).toBe('private, no-store');
     expect(response.headers.get('vary')).toBe('Cookie, Authorization');
-    const body = await response.json();
+    const body = (await response.json()) as {
+      requestId: string;
+      data: { version: string; roadmap: unknown; usage: unknown };
+    };
     expect(body).toMatchObject({
       requestId: 'request-usage-1',
       data: {
