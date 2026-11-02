@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import {
   EXTERNAL_READ_FEATURE_KEY,
   EXTERNAL_READ_CONSENT_VERSION,
@@ -12,6 +13,7 @@ import {
   type ExternalReadGrant,
   type ExternalReadPrincipal,
   type ExternalReadEnvironment,
+  type VerifiedExternalReadCredential,
 } from '@bunshin/application';
 import { ApplicationError } from '@bunshin/shared';
 import type { Prisma, PrismaClient, ExternalReadGrant as GrantRow } from '@prisma/client';
@@ -68,6 +70,7 @@ function metadata(row: GrantRow) {
     operation: 'member-usage:read',
     revision: row.revision,
     consentVersion: row.consentVersion,
+    credentialBound: row.credentialBoundAt !== null,
     grantedAt: row.grantedAt.toISOString(),
     expiresAt: row.expiresAt.toISOString(),
     revokedAt: row.revokedAt?.toISOString() ?? null,
@@ -86,6 +89,7 @@ export class PrismaExternalReadGrantRepository implements ExternalGrantManagemen
       clients: [],
     }),
     private readonly now: () => Date = () => new Date(),
+    private readonly credentialIssuer: string | null = null,
   ) {
     if (!['test', 'development', 'production'].includes(environment))
       throw new ApplicationError('CONFIGURATION_ERROR', 'invalid grant environment');
@@ -125,7 +129,7 @@ export class PrismaExternalReadGrantRepository implements ExternalGrantManagemen
   }
   private async canRead(
     tx: Prisma.TransactionClient,
-    row: Omit<GrantRow, 'id' | 'revision'>,
+    row: Omit<GrantRow, 'id' | 'revision' | 'credentialBindingHash' | 'credentialBoundAt'>,
     at: Date,
   ) {
     if (
@@ -202,6 +206,128 @@ export class PrismaExternalReadGrantRepository implements ExternalGrantManagemen
         at,
       );
     }, txOptions);
+  }
+  private credentialValid(credential: VerifiedExternalReadCredential, at: Date) {
+    return (
+      this.credentialIssuer !== null &&
+      credential.issuer === this.credentialIssuer &&
+      credential.environment === this.environment &&
+      uuid.test(credential.subject) &&
+      uuid.test(credential.sessionId) &&
+      this.clientEnabled(credential.clientId) &&
+      Number.isFinite(credential.expiresAt.getTime()) &&
+      credential.expiresAt > at
+    );
+  }
+  private bindingHash(id: string, credential: VerifiedExternalReadCredential) {
+    return createHash('sha256')
+      .update(
+        JSON.stringify([
+          'external-credential-v1',
+          this.environment,
+          id,
+          credential.issuer,
+          credential.subject,
+          credential.clientId,
+          credential.sessionId,
+        ]),
+      )
+      .digest('hex');
+  }
+  private async credentialRow(
+    tx: Prisma.TransactionClient,
+    id: string,
+    credential: VerifiedExternalReadCredential,
+  ) {
+    if (!this.credentialValid(credential, this.at()) || !uuid.test(id)) return null;
+    const row = await tx.externalReadGrant.findFirst({
+      where: { id, clientId: credential.clientId, environment: this.environment },
+    });
+    if (!row || !(await this.canRead(tx, row, this.at()))) return null;
+    const identity = await tx.authIdentity.findFirst({
+      where: {
+        provider: 'EMAIL',
+        providerUserId: credential.subject,
+        userId: row.userId,
+        user: { status: 'ACTIVE' },
+      },
+      select: { id: true },
+    });
+    return identity && this.credentialValid(credential, this.at()) ? row : null;
+  }
+  async bind(
+    connectionId: string,
+    input: VerifiedExternalReadCredential,
+    signal: AbortSignal,
+  ): Promise<ExternalReadGrant> {
+    running(signal);
+    const credential = { ...input, expiresAt: new Date(input.expiresAt) };
+    return this.client.$transaction(async (tx) => {
+      const initial = await this.credentialRow(tx, connectionId, credential);
+      if (!initial) unavailable();
+      await lockFeaturePolicyGroup(tx, {
+        workspaceId: initial.workspaceId,
+        groupId: initial.groupId,
+      });
+      const row = await this.credentialRow(tx, connectionId, credential);
+      if (!row) unavailable();
+      const hash = this.bindingHash(row.id, credential);
+      if (row.credentialBindingHash !== null) {
+        if (row.credentialBindingHash !== hash) conflict();
+        return projection(row);
+      }
+      running(signal);
+      const at = this.at();
+      const result = await tx.externalReadGrant.updateMany({
+        where: { id: row.id, revision: row.revision, revokedAt: null, credentialBindingHash: null },
+        data: { credentialBindingHash: hash, credentialBoundAt: at, revision: { increment: 1 } },
+      });
+      if (result.count !== 1) conflict();
+      const after = await tx.externalReadGrant.findUniqueOrThrow({ where: { id: row.id } });
+      await tx.groupFeatureAuditLog.create({
+        data: {
+          workspaceId: row.workspaceId,
+          groupId: row.groupId,
+          groupMembershipId: row.groupMembershipId,
+          featureKey: EXTERNAL_READ_FEATURE_KEY,
+          action: 'EXTERNAL_READ_BOUND',
+          beforeData: metadata(row),
+          afterData: metadata(after),
+          reason: '署名検証済みの本人接続資格を許可へ結合',
+          performedByUserId: row.userId,
+          occurredAt: at,
+        },
+      });
+      running(signal);
+      if (
+        !this.credentialValid(credential, this.at()) ||
+        !(await this.canRead(tx, after, this.at()))
+      )
+        unavailable();
+      running(signal);
+      if (!this.credentialValid(credential, this.at()) || after.expiresAt <= this.at())
+        unavailable();
+      return projection(after);
+    }, txOptions);
+  }
+  async resolve(
+    connectionId: string,
+    input: VerifiedExternalReadCredential,
+    signal: AbortSignal,
+  ): Promise<ExternalReadGrant | null> {
+    running(signal);
+    const credential = { ...input, expiresAt: new Date(input.expiresAt) };
+    const result = await this.client.$transaction(async (tx) => {
+      await tx.$executeRaw`SET TRANSACTION READ ONLY`;
+      const row = await this.credentialRow(tx, connectionId, credential);
+      return row &&
+        row.credentialBindingHash === this.bindingHash(row.id, credential) &&
+        this.credentialValid(credential, this.at())
+        ? projection(row)
+        : null;
+    }, txOptions);
+    running(signal);
+    return this.credentialValid(credential, this.at()) ? result : null;
   }
   async issue(
     inputOwner: ExternalGrantOwner,

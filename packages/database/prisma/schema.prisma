@@ -1420,6 +1420,7 @@ enum GroupFeatureAccessStatus {
 }
 
 enum GroupFeatureAuditAction {
+  EXTERNAL_READ_BOUND
   EXTERNAL_READ_GRANTED
   EXTERNAL_READ_REVOKED
   GROUP_POLICY_SET
@@ -8788,6 +8789,8 @@ model ExternalReadGrant {
   environment       String @db.VarChar(16)
   operations        String[] @db.VarChar(80)
   consentVersion    String @map("consent_version") @db.VarChar(80)
+  credentialBindingHash String? @map("credential_binding_hash") @db.Char(64)
+  credentialBoundAt DateTime? @map("credential_bound_at") @db.Timestamptz(6)
   revision          Int @default(1)
   grantedAt         DateTime @map("granted_at") @db.Timestamptz(6)
   expiresAt         DateTime @map("expires_at") @db.Timestamptz(6)

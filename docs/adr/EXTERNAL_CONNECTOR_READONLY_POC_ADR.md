@@ -57,3 +57,14 @@ Proposed。読取PoCの設計判断。外部公開・接続成功・本番提供
 - 正式な接続先はコード管理のcatalogで定義し、初期値は空。Museを未検証のまま登録しない。発行UIの対象候補も既存DB認可を再利用して絞る。
 - 既存DBが扱わないstagingは別環境へ読み替えず、許可管理を停止する。production/developmentだけを明示的に使用する。
 - UIは接続先・対象Bunshin・利用実績の読取範囲・期限を示して明示同意を要求する。許可保存と実接続の完了を区別し、失敗時に成功表示しない。解除は確認後にrevision付きで送る。
+
+## 2026-11-03: 署名検証済みOAuth資格とgrantの結合
+
+- 既存Supabase Auth SDKのgetClaims/getUserを使う、Cookieを扱わない外部資格検証Adapterを実装する。独自OAuth server、JWT署名器、APIキー発行器は作らない。公式OAuth Serverのclient_id付きtokenを前提とし、first-party token・ID token・service roleを拒否する。
+- issuer/audience/subject/client/session/期限を照合し、既存AuthIdentityのEMAIL providerUserIdで本人を解決する。email/user_metadataで紐付けず、自動アカウント作成しない。
+- 新規tableを作らず既存grantへ結合hash/結合日時を追加する。hashは環境・接続ID・issuer・本人subject・client・sessionの正規化tupleから計算し、token本文・refresh tokenは保存しない。
+- 結合は一度だけ。同じ資格contextの再送は冪等、別sessionやsubjectへの付替えは拒否する。同一sessionのrefresh後tokenは毎回署名・期限を検証し、元のgrant期限内だけ認める。
+- 結合と既存監査を同一transactionで保存し、grant revisionを進める。解除は既存の失効状態を正本とし、資格が有効でもDB照合で拒否する。token失効とProviderのログアウトを同一視しない。
+- catalogは空、公開read/bind routeとOAuth Server設定は未追加。Supabase OAuth Server有効化前にはfirst-party session境界でOAuth tokenを拒否する対策、RLS、client登録/審査、分散admission/監査が必要。Muse互換は未検証。
+
+- 同じissuerのOAuth tokenを通常会員sessionへ読み替えると既存APIの権限拡大につながるため、今回current-user境界でも署名検証済みclient_idが非nullなら拒否する。正常なfirst-party session（client_idなし/null）は維持し、検証済みsubとgetUserのid一致を要求する。
