@@ -398,6 +398,9 @@ export function ServiceBunshinDetailView({ model }: { model: ServiceBunshinDetai
             </div>
           </MemberHomeDrawer>
         </section>
+        <a href={`/s/${service.configuration.slug}/bunshins/${bunshin.id}/connections`}>
+          外部サービスの読取許可を確認する
+        </a>
         <Link href={`/s/${service.configuration.slug}/bunshins` as Route}>一覧へ戻る</Link>
       </article>
     </PublicShell>

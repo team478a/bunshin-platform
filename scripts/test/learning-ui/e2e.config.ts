@@ -20,6 +20,7 @@ export default {
     'recommendation-policy.e2e.ts',
     'roadmap-policy.e2e.ts',
     'usage-guidance.e2e.ts',
+    'external-grants.e2e.ts',
   ],
   workers: 1,
   actionTimeout: 10_000,

@@ -1,3 +1,4 @@
+import { ExternalGrantsHarness } from './external-grants-harness';
 import { UsagePolicyHarness } from './usage-guidance-policy-harness';
 import { RoadmapPolicyHarness } from './roadmap-policy-harness';
 import { RecommendationPolicyHarness } from './recommendation-policy-harness';
@@ -23,7 +24,9 @@ import '../../../apps/web/app/styles.css';
 import { PersonalLearningRequestCard } from '../../../apps/web/app/s/[serviceSlug]/programs/[programEnrollmentId]/learning-request/card';
 
 createRoot(document.getElementById('root')!).render(
-  new URLSearchParams(window.location.search).has('usage-guidance-policy') ? (
+  new URLSearchParams(window.location.search).has('external-grants') ? (
+    <ExternalGrantsHarness />
+  ) : new URLSearchParams(window.location.search).has('usage-guidance-policy') ? (
     <UsagePolicyHarness />
   ) : new URLSearchParams(window.location.search).has('roadmap-policy') ? (
     <RoadmapPolicyHarness />

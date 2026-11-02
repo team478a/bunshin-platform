@@ -123,7 +123,11 @@ export class PrismaExternalReadGrantRepository implements ExternalGrantManagemen
     ]);
     return Boolean(member && bunshin);
   }
-  private async canRead(tx: Prisma.TransactionClient, row: GrantRow, at: Date) {
+  private async canRead(
+    tx: Prisma.TransactionClient,
+    row: Omit<GrantRow, 'id' | 'revision'>,
+    at: Date,
+  ) {
     if (
       !this.clientEnabled(row.clientId) ||
       row.environment !== this.environment ||
@@ -135,7 +139,13 @@ export class PrismaExternalReadGrantRepository implements ExternalGrantManagemen
       row.operations[0] !== 'member-usage:read'
     )
       return false;
-    const scope = projection(row).scope;
+    const scope = {
+      workspaceId: row.workspaceId,
+      serviceId: row.groupId,
+      groupMembershipId: row.groupMembershipId,
+      userId: row.userId,
+      bunshinId: row.bunshinId,
+    };
     if (!(await isMemberUsageScopePermitted(tx, scope, at))) return false;
     if (
       !(await tx.bunshin.findFirst({
@@ -170,6 +180,28 @@ export class PrismaExternalReadGrantRepository implements ExternalGrantManagemen
       if (!access?.allowed || access.dailyLimit === 0 || access.monthlyLimit === 0) return false;
     }
     return true;
+  }
+  /** Same current checks as issue, without persisting a probe grant or audit. */
+  async issuanceAllowed(inputOwner: ExternalGrantOwner, clientId: string): Promise<boolean> {
+    const owner = normalizeExternalGrantOwner(inputOwner);
+    return this.client.$transaction(async (tx) => {
+      await tx.$executeRaw`SET TRANSACTION READ ONLY`;
+      const at = this.at();
+      return this.canRead(
+        tx,
+        {
+          ...ownerWhere(owner),
+          clientId,
+          environment: this.environment,
+          operations: ['member-usage:read'],
+          consentVersion: EXTERNAL_READ_CONSENT_VERSION,
+          grantedAt: at,
+          expiresAt: new Date(at.getTime() + 300_000),
+          revokedAt: null,
+        },
+        at,
+      );
+    }, txOptions);
   }
   async issue(
     inputOwner: ExternalGrantOwner,
