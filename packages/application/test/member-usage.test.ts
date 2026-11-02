@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   aggregateMemberUsage,
+  projectMemberUsageEvidence,
   GetMemberUsageSummary,
   type MemberUsageRequest,
   type MemberUsageSources,
@@ -41,6 +42,35 @@ const summarize = (changes: Partial<MemberUsageSources> = {}, input = request) =
   aggregateMemberUsage(input, { ...empty(), ...changes });
 
 describe('member usage read model', () => {
+  it('shares canonical earliest decisions and reports with referral evidence across dates', () => {
+    const source = {
+      ...empty(),
+      activities: [
+        activity('first', 'ACCEPTED', '2026-10-30T00:00:00Z'),
+        activity('view', 'VIEWED'),
+        activity('copy', 'COPIED_TEXT'),
+      ],
+      decisions: [{ ...row('later'), dailyMissionId: 'mission', decision: 'ACCEPTED' as const }],
+      postRecords: [{ ...row('post'), dailyMissionId: 'mission' }],
+    };
+    const result = projectMemberUsageEvidence(request, source);
+    expect(result.decisions.map((item) => item.id)).toEqual(['first']);
+    expect(result.postRecords.map((item) => item.id)).toEqual(['post']);
+    expect(result.copies.map((item) => item.id)).toEqual(['copy']);
+    expect(aggregateMemberUsage(request, source).allTime.activeDays).toBe(2);
+  });
+  it('retains generation origins for the capability binding without treating failures as successful', () => {
+    const result = projectMemberUsageEvidence(request, {
+      ...empty(),
+      generations: [
+        { ...row('user'), status: 'SUCCESS', trigger: 'USER' },
+        { ...row('scheduled'), status: 'SUCCESS', trigger: 'SCHEDULER' },
+        { ...row('legacy'), status: 'SUCCESS', trigger: 'UNKNOWN' },
+        { ...row('failed'), status: 'FAILED', trigger: 'USER' },
+      ],
+    });
+    expect(result.generations.map((entry) => entry.id)).toEqual(['user', 'scheduled', 'legacy']);
+  });
   it('returns reproducible empty metrics for a new member', () => {
     const result = summarize();
     expect(result.allTime).toMatchObject({
