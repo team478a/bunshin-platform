@@ -67,6 +67,9 @@ export class PrismaServiceReferralRewardRuleRepository implements ServiceReferra
           createdByUserId: input.actorUserId,
         },
       });
+      // Invalidate snapshots waiting on the service lock, including qualification
+      // transactions which will grant against these credit limits and amounts.
+      await tx.group.update({ where: { id: input.groupId }, data: { updatedAt: input.now } });
       return {
         id: created.id,
         ruleKey: created.ruleKey,

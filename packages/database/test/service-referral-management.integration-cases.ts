@@ -505,6 +505,100 @@ export function registerReferralManagementIntegrationCases(client: PrismaClient)
       const f = await fixture();
       const p = await policy(f);
       await review(f);
+      const waiting = pausedSnapshotClient();
+      const pending = new PrismaServiceReferralManagementRepository(
+        waiting.client,
+        () => now,
+      ).execute(f.scope, {
+        kind: 'CONFIRM',
+        commandId: randomUUID(),
+        referralId: f.referral.id,
+        expectedRevision: 1,
+        expectedPolicyVersionId: p.id,
+        reason: 'Stale snapshot',
+      });
+      await waiting.ready;
+      try {
+        await policy(f, p.id, 'SUSPENDED');
+      } finally {
+        waiting.resume();
+      }
+      await expect(pending).rejects.toMatchObject({ code: 'CONFLICT' });
+      expect(waiting.attempts()).toBeGreaterThanOrEqual(2);
+      expect(
+        (await client.serviceReferral.findUniqueOrThrow({ where: { id: f.referral.id } }))
+          .qualificationState,
+      ).toBe('UNASSESSED');
+    });
+    it('a waiting confirmation uses the latest credit amount and cap after a reward-rule change', async () => {
+      const f = await fixture();
+      const p = await policy(f);
+      await new PrismaServiceReferralRewardRepository(client).completeMilestone({
+        workspaceId: f.workspace.id,
+        groupId: f.group.id,
+        referredUserId: f.owner.id,
+        milestone: 'ONBOARDING_COMPLETED',
+        now,
+      });
+      const rules = new PrismaServiceReferralRewardRuleRepository(client);
+      const input = {
+        workspaceId: f.workspace.id,
+        groupId: f.group.id,
+        actorUserId: f.referrer.id,
+        now,
+        status: 'ACTIVE' as const,
+        rule: {
+          ruleKey: 'onboarding-completed',
+          milestone: 'ONBOARDING_COMPLETED' as const,
+          recipient: 'REFERRER' as const,
+          creditAmount: 10,
+          monthlyGrantLimit: 10,
+          expiresAfterDays: 30,
+        },
+      };
+      await rules.saveVersion(input);
+      await review(f);
+      const waiting = pausedSnapshotClient();
+      const pending = new PrismaServiceReferralManagementRepository(
+        waiting.client,
+        () => now,
+      ).execute(f.scope, {
+        kind: 'CONFIRM',
+        commandId: randomUUID(),
+        referralId: f.referral.id,
+        expectedRevision: 1,
+        expectedPolicyVersionId: p.id,
+        reason: 'Wait for current credit settings',
+      });
+      await waiting.ready;
+      let currentRuleId: string | undefined;
+      try {
+        const currentRule = await rules.saveVersion({
+          ...input,
+          rule: { ...input.rule, creditAmount: 1, monthlyGrantLimit: 1 },
+        });
+        currentRuleId = currentRule.id;
+      } finally {
+        waiting.resume();
+      }
+      expect((await pending).state).toBe('CONFIRMED');
+      expect(waiting.attempts()).toBeGreaterThanOrEqual(2);
+      expect(
+        (
+          await client.serviceCreditAccount.findFirstOrThrow({
+            where: { workspaceId: f.workspace.id },
+          })
+        ).availableCredits,
+      ).toBe(1);
+      expect(
+        (
+          await client.serviceReferralReward.findFirstOrThrow({
+            where: { referralId: f.referral.id },
+          })
+        ).ruleId,
+      ).toBe(currentRuleId);
+    });
+    function pausedSnapshotClient() {
       let ready!: () => void;
       let resume!: () => void;
       let attempts = 0;
@@ -528,30 +622,8 @@ export function registerReferralManagementIntegrationCases(client: PrismaClient)
             return run(tx);
           }, options),
       } as unknown as PrismaClient;
-      const pending = new PrismaServiceReferralManagementRepository(
-        waitingClient,
-        () => now,
-      ).execute(f.scope, {
-        kind: 'CONFIRM',
-        commandId: randomUUID(),
-        referralId: f.referral.id,
-        expectedRevision: 1,
-        expectedPolicyVersionId: p.id,
-        reason: 'Stale snapshot',
-      });
-      await snapshotReady;
-      try {
-        await policy(f, p.id, 'SUSPENDED');
-      } finally {
-        resume();
-      }
-      await expect(pending).rejects.toMatchObject({ code: 'CONFLICT' });
-      expect(attempts).toBeGreaterThanOrEqual(2);
-      expect(
-        (await client.serviceReferral.findUniqueOrThrow({ where: { id: f.referral.id } }))
-          .qualificationState,
-      ).toBe('UNASSESSED');
-    });
+      return { client: waitingClient, ready: snapshotReady, resume, attempts: () => attempts };
+    }
     async function fixture() {
       const owner = await client.user.create({ data: { displayName: 'Synthetic referred' } });
       const referrer = await client.user.create({ data: { displayName: 'Synthetic referrer' } });
