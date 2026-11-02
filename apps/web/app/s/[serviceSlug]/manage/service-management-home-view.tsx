@@ -1,13 +1,21 @@
+import { groupServiceManagementSections } from '../../../../src/services/service-management-navigation';
 import { selectServiceMemberRoadmapPolicy } from '../../../../src/services/service-growth-policy';
 import type { Route } from 'next';
 import Link from 'next/link';
 import { PublicShell } from '../../../ui/public-shell';
 import type { ServiceManagementHomeModel } from './service-management-home-data';
 
-export function ServiceManagementHomeView({ model }: { model: ServiceManagementHomeModel }) {
+function ServiceManagementHomeSummary({
+  model,
+}: {
+  model: Omit<ServiceManagementHomeModel, 'summary'> &
+    NonNullable<ServiceManagementHomeModel['summary']>;
+}) {
   const {
     configuration,
     isBusinessDailyService,
+    isAiTrainingService,
+    socialOperations,
     participantCount,
     readyCount,
     readiness,
@@ -25,38 +33,30 @@ export function ServiceManagementHomeView({ model }: { model: ServiceManagementH
     businessOutcomes,
     sideHustleFunnel,
     feedbackSummary,
-    operationActions,
-    visibleSections,
   } = model;
 
   return (
-    <PublicShell showPlatformBrand={false}>
-      <main className="app-page">
-        <header className="app-page__heading">
-          <p className="eyebrow">サービス管理者</p>
-          <h1>{configuration.displayName}の開始準備と運営</h1>
-          <p>開始準備の確認と、日々の運営に必要な設定をまとめました。</p>
-          <Link href={`/s/${configuration.slug}/help` as Route}>運営マニュアル・ヘルプを見る</Link>
-        </header>
-        {isBusinessDailyService ? (
-          <section className="settings-card">
-            <h2>企業向け無料の限定運用</h2>
-            <p>
-              初期運用では、完成した投稿文章を1日1件LINEで届けます。画像・動画の自動生成、商品配布、紹介報酬は使用しません。
-            </p>
-            <ol>
-              <li>
-                開始準備：{readyCount} / {readiness.length}項目完了
-              </li>
-              <li>社内受信：直近7日間にLINE送信 {sentLineDeliveries}件</li>
-              <li>投稿確認：直近7日間に投稿完了 {postedMissions}件</li>
-              <li>限定テスト：現在の参加者 {participantCount}名（最初の目安は3〜5社）</li>
-            </ol>
-            <p>
-              開始準備をすべて完了し、社内アカウントで受信と投稿を確認してから、3〜5社の7日間テストへ進みます。
-            </p>
-          </section>
-        ) : null}
+    <>
+      {isBusinessDailyService ? (
+        <section className="settings-card">
+          <h2>企業向け無料の限定運用</h2>
+          <p>
+            初期運用では、完成した投稿文章を1日1件LINEで届けます。画像・動画の自動生成、商品配布、紹介報酬は使用しません。
+          </p>
+          <ol>
+            <li>
+              開始準備：{readyCount} / {readiness.length}項目完了
+            </li>
+            <li>社内受信：直近7日間にLINE送信 {sentLineDeliveries}件</li>
+            <li>投稿確認：直近7日間に投稿完了 {postedMissions}件</li>
+            <li>限定テスト：現在の参加者 {participantCount}名（最初の目安は3〜5社）</li>
+          </ol>
+          <p>
+            開始準備をすべて完了し、社内アカウントで受信と投稿を確認してから、3〜5社の7日間テストへ進みます。
+          </p>
+        </section>
+      ) : null}
+      {socialOperations ? (
         <section className="settings-card">
           <h2>直近7日間の活動</h2>
           <p>参加者の本文や個別の利用履歴は表示せず、サービス全体の件数だけを確認できます。</p>
@@ -106,103 +106,105 @@ export function ServiceManagementHomeView({ model }: { model: ServiceManagementH
             この集計をCSVでダウンロード
           </a>
         </section>
-        {isBusinessDailyService ? (
-          <section className="settings-card">
-            <h2>無料運用の利用率・継続率</h2>
-            <p>個人名や投稿本文を表示せず、サービス全体の割合だけを確認できます。</p>
-            <dl className="settings-status-list">
-              <div className="settings-status-item">
-                <dt>LINEを開いた割合</dt>
-                <dd>
-                  {businessMetrics.openRate === null ? '集計前' : `${businessMetrics.openRate}%`}
-                </dd>
+      ) : null}
+      {isBusinessDailyService ? (
+        <section className="settings-card">
+          <h2>無料運用の利用率・継続率</h2>
+          <p>個人名や投稿本文を表示せず、サービス全体の割合だけを確認できます。</p>
+          <dl className="settings-status-list">
+            <div className="settings-status-item">
+              <dt>LINEを開いた割合</dt>
+              <dd>
+                {businessMetrics.openRate === null ? '集計前' : `${businessMetrics.openRate}%`}
+              </dd>
+            </div>
+            <div className="settings-status-item">
+              <dt>投稿案を見た割合</dt>
+              <dd>
+                {businessMetrics.viewRate === null ? '集計前' : `${businessMetrics.viewRate}%`}
+              </dd>
+            </div>
+            <div className="settings-status-item">
+              <dt>採用 / コピー / 投稿完了</dt>
+              <dd>
+                {businessMetrics.acceptanceRate ?? 0}% / {businessMetrics.copyRate ?? 0}% /{' '}
+                {businessMetrics.postRate ?? 0}%
+              </dd>
+            </div>
+            <div className="settings-status-item">
+              <dt>7日後も利用</dt>
+              <dd>
+                {businessMetrics.sevenDayRetention.percent === null
+                  ? '対象者がまだいません'
+                  : `${businessMetrics.sevenDayRetention.percent}%（${businessMetrics.sevenDayRetention.retained}/${businessMetrics.sevenDayRetention.eligible}名）`}
+              </dd>
+            </div>
+            <div className="settings-status-item">
+              <dt>30日後も利用</dt>
+              <dd>
+                {businessMetrics.thirtyDayRetention.percent === null
+                  ? '対象者がまだいません'
+                  : `${businessMetrics.thirtyDayRetention.percent}%（${businessMetrics.thirtyDayRetention.retained}/${businessMetrics.thirtyDayRetention.eligible}名）`}
+              </dd>
+            </div>
+            <div className="settings-status-item">
+              <dt>直近7日で3日以上利用</dt>
+              <dd>{businessMetrics.threeDayActiveUsers}名</dd>
+            </div>
+          </dl>
+        </section>
+      ) : null}
+      {isBusinessDailyService ? (
+        <section className="settings-card">
+          <h2>投稿から生まれたお客様の反応</h2>
+          <p>参加者が投稿後に自己申告した、直近30日間の合計です。</p>
+          <dl className="settings-status-list">
+            <div className="settings-status-item">
+              <dt>問い合わせ</dt>
+              <dd>{businessOutcomes.inquiries}件</dd>
+            </div>
+            <div className="settings-status-item">
+              <dt>予約</dt>
+              <dd>{businessOutcomes.reservations}件</dd>
+            </div>
+            <div className="settings-status-item">
+              <dt>来店</dt>
+              <dd>{businessOutcomes.visits}件</dd>
+            </div>
+            <div className="settings-status-item">
+              <dt>再予約</dt>
+              <dd>{businessOutcomes.repeatReservations}件</dd>
+            </div>
+            <div className="settings-status-item">
+              <dt>再来店</dt>
+              <dd>{businessOutcomes.repeatVisits}件</dd>
+            </div>
+            <div className="settings-status-item">
+              <dt>購入・申込</dt>
+              <dd>{businessOutcomes.orders}件</dd>
+            </div>
+            <div className="settings-status-item">
+              <dt>その他</dt>
+              <dd>{businessOutcomes.other}件</dd>
+            </div>
+          </dl>
+        </section>
+      ) : null}
+      {socialOperations && configuration.registration.referralEnabled ? (
+        <section className="settings-card">
+          <h2>直近7日間の商品投稿の流れ</h2>
+          <p>投稿本文は表示せず、専用URLが入った投稿案の進み方だけを確認します。</p>
+          <dl className="settings-status-list">
+            {sideHustleFunnel.stages.map((stage) => (
+              <div className="settings-status-item" key={stage.key}>
+                <dt>{stage.label}</dt>
+                <dd>{stage.count}件</dd>
               </div>
-              <div className="settings-status-item">
-                <dt>投稿案を見た割合</dt>
-                <dd>
-                  {businessMetrics.viewRate === null ? '集計前' : `${businessMetrics.viewRate}%`}
-                </dd>
-              </div>
-              <div className="settings-status-item">
-                <dt>採用 / コピー / 投稿完了</dt>
-                <dd>
-                  {businessMetrics.acceptanceRate ?? 0}% / {businessMetrics.copyRate ?? 0}% /{' '}
-                  {businessMetrics.postRate ?? 0}%
-                </dd>
-              </div>
-              <div className="settings-status-item">
-                <dt>7日後も利用</dt>
-                <dd>
-                  {businessMetrics.sevenDayRetention.percent === null
-                    ? '対象者がまだいません'
-                    : `${businessMetrics.sevenDayRetention.percent}%（${businessMetrics.sevenDayRetention.retained}/${businessMetrics.sevenDayRetention.eligible}名）`}
-                </dd>
-              </div>
-              <div className="settings-status-item">
-                <dt>30日後も利用</dt>
-                <dd>
-                  {businessMetrics.thirtyDayRetention.percent === null
-                    ? '対象者がまだいません'
-                    : `${businessMetrics.thirtyDayRetention.percent}%（${businessMetrics.thirtyDayRetention.retained}/${businessMetrics.thirtyDayRetention.eligible}名）`}
-                </dd>
-              </div>
-              <div className="settings-status-item">
-                <dt>直近7日で3日以上利用</dt>
-                <dd>{businessMetrics.threeDayActiveUsers}名</dd>
-              </div>
-            </dl>
-          </section>
-        ) : null}
-        {isBusinessDailyService ? (
-          <section className="settings-card">
-            <h2>投稿から生まれたお客様の反応</h2>
-            <p>参加者が投稿後に自己申告した、直近30日間の合計です。</p>
-            <dl className="settings-status-list">
-              <div className="settings-status-item">
-                <dt>問い合わせ</dt>
-                <dd>{businessOutcomes.inquiries}件</dd>
-              </div>
-              <div className="settings-status-item">
-                <dt>予約</dt>
-                <dd>{businessOutcomes.reservations}件</dd>
-              </div>
-              <div className="settings-status-item">
-                <dt>来店</dt>
-                <dd>{businessOutcomes.visits}件</dd>
-              </div>
-              <div className="settings-status-item">
-                <dt>再予約</dt>
-                <dd>{businessOutcomes.repeatReservations}件</dd>
-              </div>
-              <div className="settings-status-item">
-                <dt>再来店</dt>
-                <dd>{businessOutcomes.repeatVisits}件</dd>
-              </div>
-              <div className="settings-status-item">
-                <dt>購入・申込</dt>
-                <dd>{businessOutcomes.orders}件</dd>
-              </div>
-              <div className="settings-status-item">
-                <dt>その他</dt>
-                <dd>{businessOutcomes.other}件</dd>
-              </div>
-            </dl>
-          </section>
-        ) : null}
-        {configuration.registration.referralEnabled ? (
-          <section className="settings-card">
-            <h2>直近7日間の商品投稿の流れ</h2>
-            <p>投稿本文は表示せず、専用URLが入った投稿案の進み方だけを確認します。</p>
-            <dl className="settings-status-list">
-              {sideHustleFunnel.stages.map((stage) => (
-                <div className="settings-status-item" key={stage.key}>
-                  <dt>{stage.label}</dt>
-                  <dd>{stage.count}件</dd>
-                </div>
-              ))}
-            </dl>
-          </section>
-        ) : null}
+            ))}
+          </dl>
+        </section>
+      ) : null}
+      {socialOperations ? (
         <section className="settings-card">
           <h2>次週の投稿改善に使える感想</h2>
           <p>直近28日間の投稿完了に対する集計です。投稿本文や参加者ごとの回答は表示しません。</p>
@@ -224,39 +226,18 @@ export function ServiceManagementHomeView({ model }: { model: ServiceManagementH
           </dl>
           <p>入力された集計は、次に作る週間計画の形式と切り口の改善に使われます。</p>
         </section>
-        {operationActions.length > 0 ? (
-          <section className="settings-card">
-            <h2>いま確認すること</h2>
-            <p>止まっている作業や、確認が必要なものだけを表示しています。</p>
-            <ul className="settings-status-list">
-              {operationActions.map((item) => (
-                <li className="settings-status-item" key={item.title}>
-                  <div>
-                    <h3>{item.title}</h3>
-                    <p>{item.detail}</p>
-                  </div>
-                  {item.href && item.label ? (
-                    <Link className="button button--secondary" href={item.href as Route}>
-                      {item.label}
-                    </Link>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
-          </section>
-        ) : null}
-        <section className="settings-card">
-          <h2>
-            {readyCount} / {readiness.length} 項目が準備できています
-          </h2>
-          <p>
-            {readyCount === readiness.length
-              ? '必要な設定がそろいました。参加者のテストを始められます。'
-              : '「設定する」と表示されている項目を確認してください。'}
-          </p>
-        </section>
-        <section className="settings-card">
-          <h2>開始準備</h2>
+      ) : null}
+      <section className="settings-card">
+        <details className="admin-operation-details" open={readyCount !== readiness.length}>
+          <summary>
+            {socialOperations ? '開始準備' : '登録・連絡の準備'}：{readyCount} / {readiness.length}
+            項目完了
+          </summary>
+          {isAiTrainingService && !socialOperations ? (
+            <p>
+              共通の登録・連絡設定を確認します。研修内容の承認やAI利用・開始条件は「実践プログラム」で別に確認してください。
+            </p>
+          ) : null}
           <div className="settings-status-list">
             {readiness.map((item) => (
               <article className="settings-status-item" key={item.key}>
@@ -271,7 +252,43 @@ export function ServiceManagementHomeView({ model }: { model: ServiceManagementH
               </article>
             ))}
           </div>
+        </details>
+      </section>
+    </>
+  );
+}
+
+export function ServiceManagementHomeView({ model }: { model: ServiceManagementHomeModel }) {
+  const { configuration, participantCount, visibleSections } = model;
+  return (
+    <PublicShell showPlatformBrand={false}>
+      <main className="app-page">
+        <header className="app-page__heading">
+          <p className="eyebrow">サービス管理</p>
+          <h1>{configuration.displayName}の運営</h1>
+          <p>今日の対応事項と、会員・配信・サービス設定を確認できます。</p>
+          <Link href={`/s/${configuration.slug}/help` as Route}>運営マニュアル・ヘルプを見る</Link>
+        </header>
+        <section className="settings-card" aria-label="サービスの状況">
+          <h2>ダッシュボード</h2>
+          <p>利用中の参加者：{participantCount}名</p>
+          {model.summary ? (
+            <p>
+              直近7日間のLINE通知：送信{model.summary.sentLineDeliveries}件 / 要確認
+              {model.summary.failedLineDeliveries}件
+            </p>
+          ) : (
+            <div role="status">
+              <p>
+                運用集計を取得できませんでした。0件や正常とは判定していません。設定メニューは引き続き利用できます。
+              </p>
+              <a href={`/s/${configuration.slug}/manage`}>集計を再読み込み</a>
+            </div>
+          )}
         </section>
+        {model.summary ? (
+          <ServiceOperationActions actions={model.summary.operationActions} />
+        ) : null}
         <section className="settings-card">
           <h2>運営メニュー</h2>
           {selectServiceMemberRoadmapPolicy({
@@ -285,23 +302,66 @@ export function ServiceManagementHomeView({ model }: { model: ServiceManagementH
               </Link>
             </p>
           )}
+          {groupServiceManagementSections(visibleSections).map((category) => (
+            <details
+              className="admin-operation-details"
+              key={category.label}
+              open={category.label === '会員・契約管理'}
+            >
+              <summary>{category.label}</summary>
+              <nav className="settings-list" aria-label={category.label}>
+                {category.items.map((section) => (
+                  <Link
+                    className="settings-row"
+                    key={section.href}
+                    href={`/s/${configuration.slug}/manage/${section.href}` as Route}
+                  >
+                    <strong>{section.title}</strong>
+                    <span aria-hidden="true">›</span>
+                  </Link>
+                ))}
+              </nav>
+            </details>
+          ))}
+        </section>
+
+        {model.summary ? (
+          <ServiceManagementHomeSummary model={{ ...model, ...model.summary }} />
+        ) : null}
+        <Link href={`/s/${configuration.slug}/home` as Route}>← 参加者向けのホームを見る</Link>
+      </main>
+    </PublicShell>
+  );
+}
+
+function ServiceOperationActions({
+  actions,
+}: {
+  actions: NonNullable<ServiceManagementHomeModel['summary']>['operationActions'];
+}) {
+  return (
+    <>
+      {actions.length > 0 ? (
+        <section className="settings-card">
+          <h2>いま確認すること</h2>
+          <p>止まっている作業や、確認が必要なものだけを表示しています。</p>
           <ul className="settings-status-list">
-            {visibleSections.map((section) => (
-              <li className="settings-status-item" key={section.href}>
-                <h3>{section.title}</h3>
-                <p>{section.description}</p>
-                <Link
-                  className="button button--secondary"
-                  href={`/s/${configuration.slug}/manage/${section.href}` as Route}
-                >
-                  開く
-                </Link>
+            {actions.map((item) => (
+              <li className="settings-status-item" key={item.title}>
+                <div>
+                  <h3>{item.title}</h3>
+                  <p>{item.detail}</p>
+                </div>
+                {item.href && item.label ? (
+                  <Link className="button button--secondary" href={item.href as Route}>
+                    {item.label}
+                  </Link>
+                ) : null}
               </li>
             ))}
           </ul>
         </section>
-        <Link href={`/s/${configuration.slug}/home` as Route}>← 参加者向けのホームを見る</Link>
-      </main>
-    </PublicShell>
+      ) : null}
+    </>
   );
 }

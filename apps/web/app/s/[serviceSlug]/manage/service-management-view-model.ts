@@ -31,7 +31,7 @@ export const serviceManagementSections = [
   },
   {
     title: '公式情報・ナレッジ',
-    description: 'PDF、動画、URL、よくある質問などを登録し、投稿づくりに使います。',
+    description: 'PDF、動画、URL、よくある質問など、サービスで使う公式情報を登録します。',
     href: 'knowledge',
   },
   {
@@ -297,7 +297,7 @@ export function buildServiceOperationActions(input: {
       ? [
           {
             title: '公式情報の確認待ち',
-            detail: `${knowledgeReviewCount}件の公式情報が、投稿づくりに使う前の確認を待っています。`,
+            detail: `${knowledgeReviewCount}件の公式情報が、利用する前の確認を待っています。`,
             href: `/s/${serviceSlug}/manage/knowledge`,
             label: '公式情報を確認する',
           },

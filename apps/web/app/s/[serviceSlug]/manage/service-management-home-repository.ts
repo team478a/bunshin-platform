@@ -1,3 +1,4 @@
+import { createLogger } from '@bunshin/observability';
 import { currentAiProviderEnvironment } from '../../../../src/ai/secure-provider-configuration';
 import { currentLineEnvironment } from '../../../../src/line/secure-configuration';
 import { hasServiceSocialFeedbackSurface } from '../../../../src/services/improvement-feedback-admin-data';
@@ -6,9 +7,17 @@ import { hasTrainingOverviewSurface } from '../../../../src/services/service-imp
 export async function readServiceManagementHomeRecords({
   workspaceId,
   serviceId,
+  aiTraining = false,
+  fortunePackage = false,
+  commercialContent = false,
+  trendResearch = false,
 }: {
   workspaceId: string;
   serviceId: string;
+  aiTraining?: boolean;
+  fortunePackage?: boolean;
+  commercialContent?: boolean;
+  trendResearch?: boolean;
 }) {
   const db = await import('@bunshin/database');
   const group = await db.prisma.group.findFirst({
@@ -59,278 +68,363 @@ export async function readServiceManagementHomeRecords({
     workspaceId: workspaceId,
     bunshin: { is: { groupId: serviceId } },
   };
-  const [
-    activeProductPackCount,
-    activeCampaignCount,
-    activeTrackingLinkCount,
-    trendProviderReadyCount,
-    productMissions,
-    linkedProductMissions,
-    copiedProductMissionRows,
-    postedProductMissions,
-    recentPostedForFeedback,
-    recentFeedback,
-    pendingPostApprovalCount,
-    missionsCreated,
-    acceptedMissions,
-    rejectedMissions,
-    copiedMissionRows,
-    postedMissions,
-    trendMissions,
-    successfulAiCalls,
-    failedAiCalls,
-    knowledgeReviewCount,
-    knowledgeFailedCount,
-    failedVideoRenders,
-    sentLineDeliveries,
-    failedLineDeliveries,
-    overdueLineDeliveries,
-    generationProviderReadyCount,
-    sharedLineReadyCount,
-    dedicatedRichMenuPublishCount,
-  ] = await Promise.all([
-    db.prisma.productPack.count({
-      where: {
-        workspaceId: workspaceId,
-        groupId: serviceId,
-        status: 'ACTIVE',
-        versions: {
-          some: {
-            status: 'PUBLISHED',
-            AND: [
-              { OR: [{ validFrom: null }, { validFrom: { lte: now } }] },
-              { OR: [{ validUntil: null }, { validUntil: { gt: now } }] },
-            ],
-          },
+  const socialOperations =
+    !fortunePackage && !group.fortuneServiceSetting && (!aiTraining || socialFeedback);
+  const commercialOperations = socialOperations && commercialContent;
+  // Only derived counters are optional. Core scope and capability reads above must fail closed.
+  const summary = await (async () => {
+    const [
+      activeProductPackCount,
+      activeCampaignCount,
+      activeTrackingLinkCount,
+      trendProviderReadyCount,
+      productMissions,
+      linkedProductMissions,
+      copiedProductMissionRows,
+      postedProductMissions,
+      recentPostedForFeedback,
+      recentFeedback,
+      pendingPostApprovalCount,
+      missionsCreated,
+      acceptedMissions,
+      rejectedMissions,
+      copiedMissionRows,
+      postedMissions,
+      trendMissions,
+      successfulAiCalls,
+      failedAiCalls,
+      knowledgeReviewCount,
+      knowledgeFailedCount,
+      failedVideoRenders,
+      sentLineDeliveries,
+      failedLineDeliveries,
+      overdueLineDeliveries,
+      generationProviderReadyCount,
+      sharedLineReadyCount,
+      dedicatedRichMenuPublishCount,
+    ] = await Promise.all([
+      commercialOperations
+        ? db.prisma.productPack.count({
+            where: {
+              workspaceId: workspaceId,
+              groupId: serviceId,
+              status: 'ACTIVE',
+              versions: {
+                some: {
+                  status: 'PUBLISHED',
+                  AND: [
+                    { OR: [{ validFrom: null }, { validFrom: { lte: now } }] },
+                    { OR: [{ validUntil: null }, { validUntil: { gt: now } }] },
+                  ],
+                },
+              },
+            },
+          })
+        : Promise.resolve(0),
+      commercialOperations
+        ? db.prisma.campaign.count({
+            where: {
+              workspaceId: workspaceId,
+              groupId: serviceId,
+              status: 'OPEN',
+              startsAt: { lte: now },
+              endsAt: { gt: now },
+            },
+          })
+        : Promise.resolve(0),
+      commercialOperations
+        ? db.prisma.externalTrackingLink.count({
+            where: {
+              workspaceId: workspaceId,
+              groupId: serviceId,
+              status: 'ACTIVE',
+              AND: [
+                { OR: [{ startsAt: null }, { startsAt: { lte: now } }] },
+                { OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] },
+              ],
+            },
+          })
+        : Promise.resolve(0),
+      socialOperations && trendResearch
+        ? db.prisma.aiProviderConfiguration.count({
+            where: {
+              environment: currentAiProviderEnvironment(),
+              provider: { in: ['GROK', 'EXA', 'FIRECRAWL'] },
+              status: 'ACTIVE',
+              globallyPaused: false,
+              lastVerifiedAt: { not: null },
+              lastErrorCategory: null,
+            },
+          })
+        : Promise.resolve(0),
+      socialOperations
+        ? db.prisma.dailyMission.count({
+            where: {
+              ...missionScope,
+              campaignId: { not: null },
+              createdAt: { gte: sevenDaysAgo },
+            },
+          })
+        : Promise.resolve(0),
+      socialOperations
+        ? db.prisma.contentLinkUsage.count({
+            where: {
+              workspaceId: workspaceId,
+              groupId: serviceId,
+              createdAt: { gte: sevenDaysAgo },
+            },
+          })
+        : Promise.resolve(0),
+      socialOperations
+        ? db.prisma.missionActivity.findMany({
+            where: {
+              ...missionScope,
+              occurredAt: { gte: sevenDaysAgo },
+              type: {
+                in: [
+                  'COPIED_TEXT',
+                  'COPIED_SLIDE',
+                  'COPIED_IMAGE_INSTRUCTION',
+                  'COPIED_VIDEO_PROMPT',
+                  'COPIED_SCRIPT',
+                ],
+              },
+              dailyMission: { is: { contentLinkUsage: { isNot: null } } },
+            },
+            select: { dailyMissionId: true },
+            distinct: ['dailyMissionId'],
+          })
+        : Promise.resolve([]),
+      socialOperations
+        ? db.prisma.postRecord.count({
+            where: {
+              ...missionScope,
+              postedAt: { gte: sevenDaysAgo },
+              dailyMission: { is: { contentLinkUsage: { isNot: null } } },
+            },
+          })
+        : Promise.resolve(0),
+      socialOperations
+        ? db.prisma.postRecord.count({
+            where: { ...missionScope, postedAt: { gte: twentyEightDaysAgo } },
+          })
+        : Promise.resolve(0),
+      socialOperations
+        ? db.prisma.missionFeedback.findMany({
+            where: {
+              ...missionScope,
+              dailyMission: {
+                is: { postRecord: { is: { postedAt: { gte: twentyEightDaysAgo } } } },
+              },
+            },
+            select: { rating: true },
+          })
+        : Promise.resolve([]),
+      socialOperations
+        ? db.prisma.campaignPostingApprovalRequest.count({
+            where: {
+              workspaceId: workspaceId,
+              groupId: serviceId,
+              status: 'PENDING',
+            },
+          })
+        : Promise.resolve(0),
+      socialOperations
+        ? db.prisma.dailyMission.count({
+            where: { ...missionScope, createdAt: { gte: sevenDaysAgo } },
+          })
+        : Promise.resolve(0),
+      socialOperations
+        ? db.prisma.missionDecision.count({
+            where: {
+              ...missionScope,
+              decision: 'ACCEPTED',
+              decidedAt: { gte: sevenDaysAgo },
+            },
+          })
+        : Promise.resolve(0),
+      socialOperations
+        ? db.prisma.missionDecision.count({
+            where: {
+              ...missionScope,
+              decision: 'REJECTED',
+              decidedAt: { gte: sevenDaysAgo },
+            },
+          })
+        : Promise.resolve(0),
+      socialOperations
+        ? db.prisma.missionActivity.findMany({
+            where: {
+              ...missionScope,
+              occurredAt: { gte: sevenDaysAgo },
+              type: {
+                in: [
+                  'COPIED_TEXT',
+                  'COPIED_SLIDE',
+                  'COPIED_IMAGE_INSTRUCTION',
+                  'COPIED_VIDEO_PROMPT',
+                  'COPIED_SCRIPT',
+                ],
+              },
+            },
+            select: { dailyMissionId: true },
+            distinct: ['dailyMissionId'],
+          })
+        : Promise.resolve([]),
+      socialOperations
+        ? db.prisma.postRecord.count({
+            where: { ...missionScope, postedAt: { gte: sevenDaysAgo } },
+          })
+        : Promise.resolve(0),
+      socialOperations
+        ? db.prisma.missionTrendContext.count({
+            where: {
+              createdAt: { gte: sevenDaysAgo },
+              dailyMission: { is: missionScope },
+            },
+          })
+        : Promise.resolve(0),
+      socialOperations
+        ? db.prisma.aiUsageEvent.count({
+            where: {
+              workspaceId: workspaceId,
+              occurredAt: { gte: sevenDaysAgo },
+              status: 'SUCCESS',
+              bunshin: { is: { groupId: serviceId } },
+            },
+          })
+        : Promise.resolve(0),
+      socialOperations
+        ? db.prisma.aiUsageEvent.count({
+            where: {
+              workspaceId: workspaceId,
+              occurredAt: { gte: sevenDaysAgo },
+              status: 'FAILED',
+              bunshin: { is: { groupId: serviceId } },
+            },
+          })
+        : Promise.resolve(0),
+      db.prisma.groupKnowledgeSource.count({
+        where: {
+          workspaceId: workspaceId,
+          groupId: serviceId,
+          status: 'REVIEW_REQUIRED',
         },
-      },
-    }),
-    db.prisma.campaign.count({
-      where: {
-        workspaceId: workspaceId,
-        groupId: serviceId,
-        status: 'OPEN',
-        startsAt: { lte: now },
-        endsAt: { gt: now },
-      },
-    }),
-    db.prisma.externalTrackingLink.count({
-      where: {
-        workspaceId: workspaceId,
-        groupId: serviceId,
-        status: 'ACTIVE',
-        AND: [
-          { OR: [{ startsAt: null }, { startsAt: { lte: now } }] },
-          { OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] },
-        ],
-      },
-    }),
-    db.prisma.aiProviderConfiguration.count({
-      where: {
-        environment: currentAiProviderEnvironment(),
-        provider: { in: ['GROK', 'EXA', 'FIRECRAWL'] },
-        status: 'ACTIVE',
-        globallyPaused: false,
-        lastVerifiedAt: { not: null },
-        lastErrorCategory: null,
-      },
-    }),
-    db.prisma.dailyMission.count({
-      where: {
-        ...missionScope,
-        campaignId: { not: null },
-        createdAt: { gte: sevenDaysAgo },
-      },
-    }),
-    db.prisma.contentLinkUsage.count({
-      where: {
-        workspaceId: workspaceId,
-        groupId: serviceId,
-        createdAt: { gte: sevenDaysAgo },
-      },
-    }),
-    db.prisma.missionActivity.findMany({
-      where: {
-        ...missionScope,
-        occurredAt: { gte: sevenDaysAgo },
-        type: {
-          in: [
-            'COPIED_TEXT',
-            'COPIED_SLIDE',
-            'COPIED_IMAGE_INSTRUCTION',
-            'COPIED_VIDEO_PROMPT',
-            'COPIED_SCRIPT',
-          ],
+      }),
+      db.prisma.groupKnowledgeSource.count({
+        where: {
+          workspaceId: workspaceId,
+          groupId: serviceId,
+          status: 'FAILED',
         },
-        dailyMission: { is: { contentLinkUsage: { isNot: null } } },
-      },
-      select: { dailyMissionId: true },
-      distinct: ['dailyMissionId'],
-    }),
-    db.prisma.postRecord.count({
-      where: {
-        ...missionScope,
-        postedAt: { gte: sevenDaysAgo },
-        dailyMission: { is: { contentLinkUsage: { isNot: null } } },
-      },
-    }),
-    db.prisma.postRecord.count({
-      where: { ...missionScope, postedAt: { gte: twentyEightDaysAgo } },
-    }),
-    db.prisma.missionFeedback.findMany({
-      where: {
-        ...missionScope,
-        dailyMission: {
-          is: { postRecord: { is: { postedAt: { gte: twentyEightDaysAgo } } } },
+      }),
+      socialOperations
+        ? db.prisma.videoRender.count({
+            where: {
+              workspaceId: workspaceId,
+              groupId: serviceId,
+              status: 'FAILED',
+            },
+          })
+        : Promise.resolve(0),
+      db.prisma.lineMessageDelivery.count({
+        where: {
+          workspaceId: workspaceId,
+          groupId: serviceId,
+          environment: currentLineEnvironment(),
+          status: 'SENT',
+          sentAt: { gte: sevenDaysAgo },
         },
-      },
-      select: { rating: true },
-    }),
-    db.prisma.campaignPostingApprovalRequest.count({
-      where: {
-        workspaceId: workspaceId,
-        groupId: serviceId,
-        status: 'PENDING',
-      },
-    }),
-    db.prisma.dailyMission.count({
-      where: { ...missionScope, createdAt: { gte: sevenDaysAgo } },
-    }),
-    db.prisma.missionDecision.count({
-      where: {
-        ...missionScope,
-        decision: 'ACCEPTED',
-        decidedAt: { gte: sevenDaysAgo },
-      },
-    }),
-    db.prisma.missionDecision.count({
-      where: {
-        ...missionScope,
-        decision: 'REJECTED',
-        decidedAt: { gte: sevenDaysAgo },
-      },
-    }),
-    db.prisma.missionActivity.findMany({
-      where: {
-        ...missionScope,
-        occurredAt: { gte: sevenDaysAgo },
-        type: {
-          in: [
-            'COPIED_TEXT',
-            'COPIED_SLIDE',
-            'COPIED_IMAGE_INSTRUCTION',
-            'COPIED_VIDEO_PROMPT',
-            'COPIED_SCRIPT',
-          ],
+      }),
+      db.prisma.lineMessageDelivery.count({
+        where: {
+          workspaceId: workspaceId,
+          groupId: serviceId,
+          environment: currentLineEnvironment(),
+          status: 'FAILED',
+          updatedAt: { gte: sevenDaysAgo },
         },
-      },
-      select: { dailyMissionId: true },
-      distinct: ['dailyMissionId'],
-    }),
-    db.prisma.postRecord.count({
-      where: { ...missionScope, postedAt: { gte: sevenDaysAgo } },
-    }),
-    db.prisma.missionTrendContext.count({
-      where: {
-        createdAt: { gte: sevenDaysAgo },
-        dailyMission: { is: missionScope },
-      },
-    }),
-    db.prisma.aiUsageEvent.count({
-      where: {
-        workspaceId: workspaceId,
-        occurredAt: { gte: sevenDaysAgo },
-        status: 'SUCCESS',
-        bunshin: { is: { groupId: serviceId } },
-      },
-    }),
-    db.prisma.aiUsageEvent.count({
-      where: {
-        workspaceId: workspaceId,
-        occurredAt: { gte: sevenDaysAgo },
-        status: 'FAILED',
-        bunshin: { is: { groupId: serviceId } },
-      },
-    }),
-    db.prisma.groupKnowledgeSource.count({
-      where: {
-        workspaceId: workspaceId,
-        groupId: serviceId,
-        status: 'REVIEW_REQUIRED',
-      },
-    }),
-    db.prisma.groupKnowledgeSource.count({
-      where: {
-        workspaceId: workspaceId,
-        groupId: serviceId,
-        status: 'FAILED',
-      },
-    }),
-    db.prisma.videoRender.count({
-      where: {
-        workspaceId: workspaceId,
-        groupId: serviceId,
-        status: 'FAILED',
-      },
-    }),
-    db.prisma.lineMessageDelivery.count({
-      where: {
-        workspaceId: workspaceId,
-        groupId: serviceId,
-        environment: currentLineEnvironment(),
-        status: 'SENT',
-        sentAt: { gte: sevenDaysAgo },
-      },
-    }),
-    db.prisma.lineMessageDelivery.count({
-      where: {
-        workspaceId: workspaceId,
-        groupId: serviceId,
-        environment: currentLineEnvironment(),
-        status: 'FAILED',
-        updatedAt: { gte: sevenDaysAgo },
-      },
-    }),
-    db.prisma.lineMessageDelivery.count({
-      where: {
-        workspaceId: workspaceId,
-        groupId: serviceId,
-        environment: currentLineEnvironment(),
-        status: 'PENDING',
-        scheduledAt: { lt: now },
-      },
-    }),
-    db.prisma.aiProviderConfiguration.count({
-      where: {
-        environment: currentAiProviderEnvironment(),
-        provider: 'OPENAI',
-        status: 'ACTIVE',
-        globallyPaused: false,
-        lastVerifiedAt: { not: null },
-        lastErrorCategory: null,
-      },
-    }),
-    db.prisma.lineChannelConfiguration.count({
-      where: {
-        environment: currentLineEnvironment(),
-        status: 'ACTIVE',
-        globallyPaused: false,
-        lastVerifiedAt: { not: null },
-        lastErrorCategory: null,
-      },
-    }),
-    line
-      ? db.prisma.groupLineConfigurationAudit.count({
-          where: {
-            workspaceId: workspaceId,
-            groupId: serviceId,
-            configurationId: line.id,
-            environment: currentLineEnvironment(),
-            action: 'RICH_MENU_PUBLISH',
-          },
-        })
-      : Promise.resolve(0),
-  ]);
+      }),
+      db.prisma.lineMessageDelivery.count({
+        where: {
+          workspaceId: workspaceId,
+          groupId: serviceId,
+          environment: currentLineEnvironment(),
+          status: 'PENDING',
+          scheduledAt: { lt: now },
+        },
+      }),
+      socialOperations
+        ? db.prisma.aiProviderConfiguration.count({
+            where: {
+              environment: currentAiProviderEnvironment(),
+              provider: 'OPENAI',
+              status: 'ACTIVE',
+              globallyPaused: false,
+              lastVerifiedAt: { not: null },
+              lastErrorCategory: null,
+            },
+          })
+        : Promise.resolve(0),
+      db.prisma.lineChannelConfiguration.count({
+        where: {
+          environment: currentLineEnvironment(),
+          status: 'ACTIVE',
+          globallyPaused: false,
+          lastVerifiedAt: { not: null },
+          lastErrorCategory: null,
+        },
+      }),
+      line
+        ? db.prisma.groupLineConfigurationAudit.count({
+            where: {
+              workspaceId: workspaceId,
+              groupId: serviceId,
+              configurationId: line.id,
+              environment: currentLineEnvironment(),
+              action: 'RICH_MENU_PUBLISH',
+            },
+          })
+        : Promise.resolve(0),
+    ]);
+    return {
+      activeProductPackCount,
+      activeCampaignCount,
+      activeTrackingLinkCount,
+      trendProviderReadyCount,
+      productMissions,
+      linkedProductMissions,
+      copiedProductMissions: copiedProductMissionRows.length,
+      postedProductMissions,
+      recentPostedForFeedback,
+      recentFeedback,
+      pendingPostApprovalCount,
+      missionsCreated,
+      acceptedMissions,
+      rejectedMissions,
+      copiedMissions: copiedMissionRows.length,
+      postedMissions,
+      trendMissions,
+      successfulAiCalls,
+      failedAiCalls,
+      knowledgeReviewCount,
+      knowledgeFailedCount,
+      failedVideoRenders,
+      sentLineDeliveries,
+      failedLineDeliveries,
+      overdueLineDeliveries,
+      generationProviderReadyCount,
+      sharedLineReadyCount,
+      dedicatedRichMenuPublishCount,
+    };
+  })().catch(() => {
+    createLogger().error('Service management summary unavailable', {
+      errorCode: 'SUMMARY_UNAVAILABLE',
+      workspaceId,
+      serviceId,
+    });
+    return null;
+  });
   return {
     group,
     socialFeedback,
@@ -339,34 +433,8 @@ export async function readServiceManagementHomeRecords({
     linePolicy,
     now,
     sevenDaysAgo,
-    activeProductPackCount,
-    activeCampaignCount,
-    activeTrackingLinkCount,
-    trendProviderReadyCount,
-    productMissions,
-    linkedProductMissions,
-    copiedProductMissions: copiedProductMissionRows.length,
-    postedProductMissions,
-    recentPostedForFeedback,
-    recentFeedback,
-    pendingPostApprovalCount,
-    missionsCreated,
-    acceptedMissions,
-    rejectedMissions,
-    copiedMissions: copiedMissionRows.length,
-    postedMissions,
-    trendMissions,
-    successfulAiCalls,
-    failedAiCalls,
-    knowledgeReviewCount,
-    knowledgeFailedCount,
-    failedVideoRenders,
-    sentLineDeliveries,
-    failedLineDeliveries,
-    overdueLineDeliveries,
-    generationProviderReadyCount,
-    sharedLineReadyCount,
-    dedicatedRichMenuPublishCount,
+    socialOperations,
+    summary,
   };
 }
 

@@ -16,6 +16,7 @@ export interface ServiceLaunchReadinessInput {
   lineEnabled: boolean;
   onboardingQuestionCount: number;
   isAiTrainingService?: boolean;
+  socialOperations?: boolean;
   publishedLegalTypes: string[];
   activeFeatureCount: number;
   activeParticipantCount: number;
@@ -174,6 +175,21 @@ export function buildServiceLaunchReadiness(
             : '今日やることなど4つのボタンを専用LINEへ公開済みです。',
       path: `${base}/line`,
     });
+  }
+  if (
+    input.socialOperations === false ||
+    (input.isAiTrainingService && input.socialOperations !== true)
+  ) {
+    const commonKeys = new Set([
+      'BASIC',
+      'REGISTRATION',
+      'LEGAL',
+      'LINE',
+      'LINE_RICH_MENU',
+      'PARTICIPANTS',
+    ]);
+    if (input.isAiTrainingService) commonKeys.add('ONBOARDING');
+    return items.filter(({ key }) => commonKeys.has(key));
   }
   if (!input.commercialContentRequired) return items;
   items.splice(
