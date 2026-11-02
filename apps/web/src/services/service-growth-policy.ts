@@ -1,15 +1,17 @@
 import 'server-only';
 import type { MemberRoadmapPolicy, MemberUsageScope } from '@bunshin/application';
+import {
+  createConfiguredHassyRoadmapDefinition,
+  type HassyRoadmapPolicy,
+} from './hassy-roadmap-settings';
 import { ApplicationError } from '@bunshin/shared';
 import type { PublicServiceContext } from './public-service';
-import {
-  createHassyMemberRoadmapDefinition,
-  HASSY_MEMBER_ROADMAP_POLICY,
-} from './hassy-growth-policy';
+import { HASSY_MEMBER_ROADMAP_POLICY } from './hassy-growth-policy';
 
 /** Only a resolved, owner-authorized ServiceContext may select a product policy. */
 export function selectServiceMemberRoadmapPolicy(
   service: PublicServiceContext,
+  managedPolicy?: HassyRoadmapPolicy,
 ): MemberRoadmapPolicy | null {
   const configuration = service.configuration;
   if (
@@ -29,6 +31,7 @@ export function selectServiceMemberRoadmapPolicy(
     (settings as Record<string, unknown>)['templateKey'] !== 'HASSY'
   )
     return null;
+  const snapshot = managedPolicy ? structuredClone(managedPolicy) : undefined;
   const workspaceId = service.workspaceId;
   const serviceId = service.serviceId;
   const checkScope = (scope: MemberUsageScope) => {
@@ -38,7 +41,15 @@ export function selectServiceMemberRoadmapPolicy(
   return {
     createDefinition(scope) {
       checkScope(scope);
-      const definition = createHassyMemberRoadmapDefinition();
+      const definition = createConfiguredHassyRoadmapDefinition(
+        snapshot ?? {
+          version: 'hassy-roadmap-policy-v1',
+          revision: 0,
+          headquarters: null,
+          service: null,
+        },
+        scope,
+      );
       definition.scope = { workspaceId, serviceId };
       return definition;
     },

@@ -1,3 +1,10 @@
+import { PrismaManagedFeaturePolicyRepository } from '../src/managed-feature-policy';
+import {
+  readSocialRecommendationPolicy,
+  normalizeSocialRecommendationSettings,
+  effectiveSocialRecommendationSettings,
+  assertServiceRecommendationSettings,
+} from '@bunshin/capability-social';
 import {
   defaultSocialRecommendationSettings,
   SOCIAL_RECOMMENDATION_POLICY_CONFIG_KEY,
@@ -206,6 +213,104 @@ export function registerSocialSupportAccessIntegrationCases(client: PrismaClient
       });
       return { ...f, target, owner, policies, command };
     }
+    // A second managed namespace exercises the common storage transaction, independently of product semantics.
+    function secondPolicy() {
+      return new PrismaManagedFeaturePolicyRepository(
+        {
+          featureKey: 'SOCIAL.ACTIVITY_SUPPORT',
+          configKey: 'syntheticPolicy',
+          requiredOnboardingTemplate: 'HASSY',
+          read: readSocialRecommendationPolicy,
+          normalize: normalizeSocialRecommendationSettings,
+          effective: effectiveSocialRecommendationSettings,
+          assertService: assertServiceRecommendationSettings,
+        },
+        client,
+      );
+    }
+    async function selectTemplate(serviceId: string, workspaceId: string, templateKey: string) {
+      const configuration = await client.serviceConfiguration.findUniqueOrThrow({
+        where: { groupId: serviceId },
+      });
+      await client.serviceRegistrationPolicy.upsert({
+        where: { groupId: serviceId },
+        create: {
+          workspaceId,
+          groupId: serviceId,
+          configurationId: configuration.id,
+          onboardingConfig: { templateKey },
+        },
+        update: { onboardingConfig: { templateKey } },
+      });
+    }
+    it('checks the current explicit product template on reads, writes and replays', async () => {
+      const f = await policyFixture(),
+        repo = secondPolicy(),
+        cmd = f.command();
+      await expect(repo.read(f.target)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+      await expect(repo.save(cmd)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+      await selectTemplate(f.scope.serviceId, f.scope.workspaceId, 'HASSY');
+      await repo.save(cmd);
+      await expect(repo.save(cmd)).resolves.toMatchObject({ revision: 1 });
+      await selectTemplate(f.scope.serviceId, f.scope.workspaceId, 'CUSTOM');
+      await expect(repo.read(f.target)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+      await expect(repo.save(cmd)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+      expect(
+        await client.groupFeatureAuditLog.count({ where: { groupId: f.scope.serviceId } }),
+      ).toBe(1);
+    });
+    it('preserves independently versioned policies during concurrent saves on the same row', async () => {
+      const f = await policyFixture(),
+        repo = secondPolicy();
+      await selectTemplate(f.scope.serviceId, f.scope.workspaceId, 'HASSY');
+      const results = await Promise.all([f.policies.save(f.command()), repo.save(f.command())]);
+      expect(results.map((result) => result.revision)).toEqual([1, 1]);
+      expect((await f.policies.read(f.target)).revision).toBe(1);
+      expect((await repo.read(f.target)).revision).toBe(1);
+      const row = await client.groupFeaturePolicy.findUniqueOrThrow({
+        where: {
+          groupId_featureKey: { groupId: f.scope.serviceId, featureKey: 'SOCIAL.ACTIVITY_SUPPORT' },
+        },
+      });
+      expect(row).toMatchObject({
+        status: 'ENABLED',
+        config: {
+          _managedPolicies: {
+            syntheticPolicy: { revision: 1 },
+            socialRecommendationPolicy: { revision: 1 },
+          },
+        },
+      });
+      const audits = await client.groupFeatureAuditLog.findMany({
+        where: { groupId: f.scope.serviceId },
+      });
+      expect(audits).toHaveLength(2);
+      expect(audits.some((row) => JSON.stringify(row.afterData).includes('syntheticPolicy'))).toBe(
+        true,
+      );
+      expect(
+        audits.some((row) => JSON.stringify(row.afterData).includes('recommendationPolicy')),
+      ).toBe(true);
+      expect(JSON.stringify(audits)).not.toContain('fingerprint');
+    });
+    it('does not let a second namespace bypass tenant or actor boundaries', async () => {
+      const f = await policyFixture(),
+        other = await policyFixture(),
+        repo = secondPolicy();
+      await selectTemplate(f.scope.serviceId, f.scope.workspaceId, 'HASSY');
+      await repo.save(f.command());
+      await expect(
+        repo.read({ ...f.owner, actorUserId: other.owner.actorUserId }),
+      ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+      await expect(
+        repo.save({ ...f.command(1), workspaceId: other.scope.workspaceId }),
+      ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+      await client.groupMembership.update({
+        where: { id: f.scope.groupMembershipId },
+        data: { status: 'REVOKED', revokedAt: now },
+      });
+      await expect(repo.read(f.owner)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    });
     it('saves versioned policy once, preserves other config and rejects payload collisions or stale writes', async () => {
       const f = await policyFixture();
       await client.groupFeaturePolicy.update({

@@ -1,5 +1,5 @@
 'use client';
-import { useRef, useState, type FormEvent } from 'react';
+import { useManagedPolicyEditor } from '../../../../ui/use-managed-policy-editor';
 import {
   SOCIAL_ACTIVITY_BARRIER_CATEGORIES,
   socialActivityBarrierLabel,
@@ -49,107 +49,30 @@ function PolicyEditor({
   endpoint: string;
   initial: SocialRecommendationPolicyView;
 }) {
-  const [value, setValue] = useState(initial);
-  const [authority, setAuthority] = useState<'HEADQUARTERS' | 'SERVICE'>(
-    initial.permissions.headquarters ? 'HEADQUARTERS' : 'SERVICE',
-  );
-  const [settings, setSettings] = useState(
-    initial.permissions.headquarters
-      ? (initial.headquarters ?? defaultSocialRecommendationSettings())
-      : initial.effective,
-  );
-  const [reason, setReason] = useState('');
-  const [message, setMessage] = useState('');
-  const [pending, setPending] = useState(false);
-  const [denied, setDenied] = useState(false);
-  const receipt = useRef<{ body: string; commandId: string } | null>(null);
+  const {
+    value,
+    authority,
+    setAuthority,
+    settings,
+    setSettings,
+    reason,
+    setReason,
+    message,
+    setMessage,
+    pending,
+    denied,
+    canSave,
+    read,
+    save,
+  } = useManagedPolicyEditor({
+    endpoint,
+    initial,
+    defaults: defaultSocialRecommendationSettings,
+    normalize: normalizeSocialRecommendationSettings,
+    parseResponse: parsePolicyResponse,
+  });
   const minimumAccepted = authority === 'SERVICE' ? (value.headquarters?.minimumAccepted ?? 2) : 2;
   const minimumDays = authority === 'SERVICE' ? (value.headquarters?.cooldownDays ?? 30) : 30;
-  const canSave =
-    !denied &&
-    (authority === 'HEADQUARTERS'
-      ? value.permissions.headquarters
-      : value.permissions.service && value.headquarters !== null);
-  async function read() {
-    if (pending) return;
-    setPending(true);
-    setMessage('');
-    try {
-      const response = await fetch(endpoint, { cache: 'no-store', credentials: 'same-origin' });
-      if ([401, 403, 404].includes(response.status)) {
-        setDenied(true);
-        throw new Error('現在の管理権限を確認してください。');
-      }
-      if (!response.ok) throw new Error('設定を取得できませんでした。');
-      const parsed = await parsePolicyResponse(response);
-      setValue(parsed);
-      setSettings(
-        authority === 'HEADQUARTERS'
-          ? (parsed.headquarters ?? defaultSocialRecommendationSettings())
-          : parsed.effective,
-      );
-      receipt.current = null;
-      setMessage('最新の設定を取得しました。');
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : '設定を取得できませんでした。');
-    } finally {
-      setPending(false);
-    }
-  }
-  async function save(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (pending || !canSave) return;
-    setPending(true);
-    setMessage('');
-    try {
-      const normalized = normalizeSocialRecommendationSettings(settings);
-      const body = JSON.stringify({
-        expectedRevision: value.revision,
-        authority,
-        settings: normalized,
-        reason: reason.trim(),
-      });
-      if (receipt.current?.body !== body)
-        receipt.current = { body, commandId: crypto.randomUUID() };
-      const response = await fetch(endpoint, {
-        method: 'PUT',
-        credentials: 'same-origin',
-        cache: 'no-store',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          ...(JSON.parse(body) as object),
-          commandId: receipt.current.commandId,
-        }),
-      });
-      if ([401, 403, 404].includes(response.status)) {
-        setDenied(true);
-        throw new Error('管理権限または本部の許可条件を確認し、ページを開き直してください。');
-      }
-      if (response.status === 409)
-        throw new Error(
-          '他の変更が反映されています。「最新の設定を取得」で確認してから保存してください。',
-        );
-      if (!response.ok) throw new Error('保存できませんでした。条件を確認して再度お試しください。');
-      const parsed = await parsePolicyResponse(response);
-      if (parsed.revision !== value.revision + 1)
-        throw new Error('保存した版を確認できません。最新の設定を取得してください。');
-      const savedSettings = authority === 'HEADQUARTERS' ? parsed.headquarters : parsed.service;
-      if (
-        !savedSettings ||
-        JSON.stringify(normalizeSocialRecommendationSettings(savedSettings)) !==
-          JSON.stringify(normalized)
-      )
-        throw new Error('保存した条件を確認できません。最新の設定を取得してください。');
-      setValue(parsed);
-      receipt.current = null;
-      setReason('');
-      setMessage('設定を保存しました。変更は監査記録に残しました。');
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : '設定を保存できませんでした。');
-    } finally {
-      setPending(false);
-    }
-  }
   if (denied)
     return <p role="alert">設定を表示できません。管理権限を確認し、ページを開き直してください。</p>;
   return (
