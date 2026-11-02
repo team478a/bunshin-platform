@@ -16,6 +16,7 @@ export default {
     'member-growth.e2e.ts',
     'referral-management.e2e.ts',
     'activity-support.e2e.ts',
+    'automation-guide.e2e.ts',
   ],
   workers: 1,
   actionTimeout: 10_000,

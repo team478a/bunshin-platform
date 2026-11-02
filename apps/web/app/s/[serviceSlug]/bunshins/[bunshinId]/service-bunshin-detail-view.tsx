@@ -1,3 +1,4 @@
+import { HassyAutomationGuide } from '../../../../ui/hassy-automation-guide/card';
 import type { Route } from 'next';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
@@ -198,6 +199,19 @@ export function ServiceBunshinDetailView({ model }: { model: ServiceBunshinDetai
                 <HassyMemberGrowthRoadmap
                   endpointBase={`/api/services/${encodeURIComponent(service.configuration.slug)}/bunshins/${encodeURIComponent(bunshin.id)}`}
                 />
+              </MemberHomeDrawer>
+            ) : null}
+          </HassyGrowthPolicyGate>
+          <HassyGrowthPolicyGate service={service}>
+            {bunshin.ownerUserId === actor.userId &&
+            capabilities.some(
+              ({ capabilityType, status }) => capabilityType === 'SOCIAL' && status === 'ACTIVE',
+            ) ? (
+              <MemberHomeDrawer
+                title="投稿準備と自動化のガイド"
+                description="手動の進め方、Zapierの基本、相談用の指示文を確認できます。"
+              >
+                <HassyAutomationGuide />
               </MemberHomeDrawer>
             ) : null}
           </HassyGrowthPolicyGate>
