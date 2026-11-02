@@ -23,7 +23,7 @@
 2026-11-03に[Supabase OAuth Server概要](https://supabase.com/docs/guides/auth/oauth-server)と[Getting Started](https://supabase.com/docs/guides/auth/oauth-server/getting-started)を再確認した。OAuth Serverの有効化、Authorization Path、client登録はProvider側の準備である。
 
 - Authorization PathはSite URLと組み合わされる。認可画面ではSDKの`auth.oauth.getAuthorizationDetails`、`approveAuthorization`、`denyAuthorization`を使う。未ログイン時は認可要求を保持して既存ログインへ戻す。独自のcode/token発行serverを作らない。
-- **bunshin側のProvider認可画面は未実装**。ダッシュボードへ存在しない`/oauth/consent`を設定するだけでは接続できない。次の実装単位でSDKと既存ログインを接続する必要がある。OAuth同意は外部SNS投稿や採否操作の包括承認にはしない。
+- **bunshin側のProvider認可画面は`/oauth/consent`へ実装済み**（[実装報告](EXTERNAL_OAUTH_CONSENT_IMPLEMENTATION_REPORT.md)）。隔離環境へ反映した後、ProviderのAuthorization Pathをこのpathへ設定する。確認済みclientの`oauthRedirectUris`をProvider登録済みcallbackと一致させる必要がある。空catalogのままでは有効にならない。OAuth同意は外部SNS投稿や採否操作の包括承認にはしない。
 - clientの登録済みredirect URI・Public/Confidential区分・PKCE等は公式仕様に合わせて決める。Museの実際の要求を確認してから、確認済みclient IDとアプリcatalogのIDを一致させる。秘密鍵やclient secretをチャット・PR・通常ログへ貼らない。
 - API URLは本アプリの`/api/external/connections/{connectionId}/usage`。資格結合POSTは`.../{connectionId}/bind`でbodyなし。これらは限定resource APIであり、MCP discovery/transportを実装済みとは説明しない。
 
@@ -75,4 +75,4 @@ CLIの60秒待機はアプリrouteの実行上限に合わせたもの。無限r
 
 schema/DB/migration、Web/Domain/Application、Feature、catalog、環境変数定義、本番設定は変更しない。CLI専用envは上記3項目で、アプリの設定項目を増やさない。
 
-残る作業は隔離環境・テスト本人の確認、公式SDKのProvider認可画面、client/redirect登録、実OAuthとMuseの実機試験、費用/OEM/規約の判断。実測記録には対象のtest deployment SHAと観測結果だけを残し、tokenやユーザー素材を含めない。新たな監査台帳・追加の承認手続きは作らない。
+残る作業は隔離環境・テスト本人の確認、実装済み認可画面のtest反映とProvider設定、client/redirect登録、実OAuthとMuseの実機試験、費用/OEM/規約の判断。実測記録には対象のtest deployment SHAと観測結果だけを残し、tokenやユーザー素材を含めない。新たな監査台帳・追加の承認手続きは作らない。

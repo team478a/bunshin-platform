@@ -1,4 +1,5 @@
 import { ExternalGrantsHarness } from './external-grants-harness';
+import { OAuthConsentCard } from '../../../apps/web/app/oauth/consent/card';
 import { ServiceSettingsEditor } from '../../../apps/web/app/s/[serviceSlug]/manage/settings/service-settings-editor';
 import { WeeklyReportDeliveryEditor } from '../../../apps/web/app/s/[serviceSlug]/manage/weekly-report/weekly-report-delivery-editor';
 import { serviceSettingsFixture } from '../../../apps/web/test/service-settings-fixture';
@@ -27,7 +28,21 @@ import '../../../apps/web/app/styles.css';
 import { PersonalLearningRequestCard } from '../../../apps/web/app/s/[serviceSlug]/programs/[programEnrollmentId]/learning-request/card';
 
 createRoot(document.getElementById('root')!).render(
-  new URLSearchParams(window.location.search).has('routine-service-settings') ? (
+  new URLSearchParams(window.location.search).has('oauth-consent') ? (
+    <main className="public-shell">
+      <div className="public-shell__content public-shell__content--narrow">
+        <OAuthConsentCard
+          view={{
+            authorizationId: 'synthetic-authorization',
+            clientName: 'テスト用アプリ',
+            account: 'synthetic@example.invalid',
+            scopes: ['openid', 'email', 'profile'],
+            callbackOrigin: 'https://client.example.invalid',
+          }}
+        />
+      </div>
+    </main>
+  ) : new URLSearchParams(window.location.search).has('routine-service-settings') ? (
     <main className="app-page">
       <ServiceSettingsEditor
         serviceSlug="social-a"
