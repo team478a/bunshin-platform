@@ -99,9 +99,15 @@ export async function readGrowthSnapshot(
     const body: unknown = await response.json();
     return z.object({ data: z.unknown() }).parse(body).data;
   }
-  const roadmap = roadmapSchema.parse(await read('member-roadmap'));
-  const usage = usageSchema.parse(await read('member-usage'));
-  if (roadmap.timezone !== usage.timezone) throw new GrowthReadError(503);
+  const { roadmap, usage } = z
+    .object({
+      version: z.literal('member-growth-api-v1'),
+      roadmap: roadmapSchema,
+      usage: usageSchema,
+    })
+    .parse(await read('member-growth'));
+  if (roadmap.timezone !== usage.timezone || roadmap.asOf !== usage.asOf)
+    throw new GrowthReadError(503);
   const next = roadmap.nextRecommended;
   if (next) {
     const item = roadmap.stages

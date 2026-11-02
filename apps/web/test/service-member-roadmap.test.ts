@@ -39,6 +39,12 @@ vi.mock('@bunshin/database', () => ({
 }));
 import { getServiceMemberRoadmapResponse } from '../src/http/service-member-roadmap';
 import { getServiceMemberUsageResponse } from '../src/http/service-member-usage';
+import { getServiceMemberGrowthResponse } from '../src/http/service-member-growth';
+import {
+  GET as growthGET,
+  dynamic as growthDynamic,
+  runtime as growthRuntime,
+} from '../app/api/services/[serviceSlug]/bunshins/[bunshinId]/member-growth/route';
 import {
   GET,
   dynamic,
@@ -118,6 +124,230 @@ beforeEach(() => {
   m.reserve.mockReturnValue({ allowed: true, release: m.release });
 });
 afterEach(() => vi.useRealTimers());
+
+const runGrowth = (query = '') =>
+  getServiceMemberGrowthResponse(request(query), 'hassy', scope.bunshinId);
+
+describe('single-read member growth API', () => {
+  it.each([
+    ['Asia/Tokyo', '2026-11-01T14:59:59Z', '2026-11-01T15:00:00Z', 2],
+    ['America/Los_Angeles', '2026-11-01T08:30:00Z', '2026-11-01T09:30:00Z', 1],
+  ])(
+    'preserves actual local activity days at midnight/DST in %s',
+    async (timezone, first, last, days) => {
+      const asOf = new Date(last);
+      vi.setSystemTime(asOf);
+      m.bunshin.mockResolvedValue({
+        id: scope.bunshinId,
+        lineNotificationPreferences: [{ timezone }],
+      });
+      m.context.mockResolvedValue({ ...context(), asOf: asOf.toISOString(), timezone });
+      const value = source();
+      value.generations = [first, last].map((date, index) => ({
+        id: `generation-${index}`,
+        scope: { ...scope },
+        occurredAt: new Date(date),
+        status: 'SUCCESS' as const,
+        trigger: 'USER' as const,
+      }));
+      value.aiUsage = [];
+      m.read.mockResolvedValue(value);
+      const response = await runGrowth();
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({
+        data: {
+          usage: {
+            asOf: asOf.toISOString(),
+            timezone,
+            allTime: { generated: 2, activeDays: days },
+            last7Days: { activeDays: days },
+            last30Days: { activeDays: days },
+          },
+          roadmap: { asOf: asOf.toISOString(), timezone },
+        },
+      });
+      expect(m.read).toHaveBeenCalledOnce();
+    },
+  );
+  it('returns both existing DTOs with one usage read, one context read and one guard reservation', async () => {
+    expect(growthRuntime).toBe('nodejs');
+    expect(growthDynamic).toBe('force-dynamic');
+    const response = await growthGET(request(), {
+      params: Promise.resolve({ serviceSlug: 'hassy', bunshinId: scope.bunshinId }),
+    });
+    expect(response.status).toBe(200);
+    expect(response.headers.get('cache-control')).toBe('private, no-store');
+    expect(response.headers.get('vary')).toBe('Cookie, Authorization');
+    const body = (await response.json()) as {
+      requestId: string;
+      data: { version: string; roadmap: unknown; usage: unknown };
+    };
+    expect(body).toMatchObject({
+      requestId: 'request-usage-1',
+      data: {
+        version: 'member-growth-api-v1',
+        roadmap: {
+          version: 'member-roadmap-api-v1',
+          asOf: now.toISOString(),
+          timezone: 'Asia/Tokyo',
+        },
+        usage: {
+          version: 'member-usage-api-v1',
+          asOf: now.toISOString(),
+          timezone: 'Asia/Tokyo',
+          allTime: { generated: 1, activeDays: 1 },
+        },
+      },
+    });
+    expect(Object.keys(body.data).sort()).toEqual(['roadmap', 'usage', 'version']);
+    expect(m.authorize).toHaveBeenCalledOnce();
+    expect(m.read).toHaveBeenCalledOnce();
+    expect(m.context).toHaveBeenCalledOnce();
+    expect(m.reserve).toHaveBeenCalledOnce();
+    expect(m.release).toHaveBeenCalledOnce();
+    expect(m.read.mock.calls[0]).toEqual(m.context.mock.calls[0]);
+    for (const privateValue of [
+      ...Object.values(scope),
+      'scope',
+      'aiCost',
+      '123456789',
+      'features',
+      'facts',
+      'actorUserId',
+    ])
+      expect(JSON.stringify(body)).not.toContain(privateValue);
+    // Existing contracts remain exact projections, not silently extended v1 responses.
+    expect(body.data.roadmap).toEqual((await (await run()).json()).data);
+    expect(body.data.usage).toEqual(
+      (await (await getServiceMemberUsageResponse(request(), 'hassy', scope.bunshinId)).json())
+        .data,
+    );
+  });
+
+  it.each(['CUSTOM', 'MANABERU_STYLE', null])(
+    'does not select Hassy for %s',
+    async (templateKey) => {
+      const service = await m.member();
+      service.configuration.registration.onboardingConfig.templateKey = templateKey;
+      m.member.mockResolvedValue(service);
+      expect((await runGrowth()).status).toBe(404);
+      expect(m.read).not.toHaveBeenCalled();
+      expect(m.context).not.toHaveBeenCalled();
+    },
+  );
+
+  it('requires authentication before reserving or resolving a service', async () => {
+    m.actor.mockResolvedValue(null);
+    expect((await runGrowth()).status).toBe(401);
+    expect(m.reserve).not.toHaveBeenCalled();
+    expect(m.member).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    'workspaceId',
+    'serviceId',
+    'userId',
+    'bunshinId',
+    'groupMembershipId',
+    'asOf',
+    'timezone',
+    'limit',
+  ])('rejects injected %s', async (key) => {
+    expect((await runGrowth(`?${key}=override`)).status).toBe(400);
+    expect(m.member).not.toHaveBeenCalled();
+    expect(m.read).not.toHaveBeenCalled();
+  });
+
+  it.each(['membership', 'bunshin', 'authorize', 'read', 'context'] as const)(
+    'fails closed for revoked/missing %s without partial data',
+    async (key) => {
+      m[key].mockResolvedValue(key === 'authorize' ? false : null);
+      const response = await runGrowth();
+      expect(response.status).toBe(404);
+      expect(await response.json()).not.toHaveProperty('data');
+      expect(m.release).toHaveBeenCalledOnce();
+    },
+  );
+
+  it.each(['workspaceId', 'serviceId', 'groupMembershipId', 'userId', 'bunshinId'] as const)(
+    'rejects foreign evidence in %s',
+    async (key) => {
+      m.context.mockResolvedValue({ ...context(), scope: { ...scope, [key]: id(99) } });
+      const response = await runGrowth();
+      expect(response.status).toBe(503);
+      expect(await response.json()).not.toHaveProperty('data');
+      expect(m.release).toHaveBeenCalledOnce();
+    },
+  );
+
+  it.each(['asOf', 'timezone'] as const)('rejects inconsistent context %s', async (key) => {
+    m.context.mockResolvedValue({
+      ...context(),
+      [key]: key === 'asOf' ? '2026-10-31T00:00:00Z' : 'UTC',
+    });
+    const response = await runGrowth();
+    expect(response.status).toBe(503);
+    expect(await response.json()).not.toHaveProperty('data');
+  });
+
+  it.each(['denied', 'stopped', 'budget', 'unresolved'] as const)(
+    'does not recommend a %s feature',
+    async (state) => {
+      const value = context();
+      if (state === 'denied')
+        value.features.FIRST_DECISION!.access = {
+          ...value.features.FIRST_DECISION!.access,
+          allowed: false,
+          reason: 'MEMBER_NOT_ALLOWED',
+        };
+      if (state === 'stopped') value.features.FIRST_DECISION!.enabled = false;
+      if (state === 'budget') value.features.FIRST_DECISION!.budgetAllowed = false;
+      if (state === 'unresolved') delete value.features.FIRST_DECISION;
+      m.context.mockResolvedValue(value);
+      expect(await (await runGrowth()).json()).toMatchObject({
+        data: { roadmap: { nextRecommended: null } },
+      });
+    },
+  );
+
+  it('keeps legacy unknown-trigger generations without inventing activity', async () => {
+    const value = source();
+    value.generations[0]!.trigger = 'UNKNOWN';
+    m.read.mockResolvedValue(value);
+    expect(await (await runGrowth()).json()).toMatchObject({
+      data: {
+        usage: { allTime: { unknownTriggerGenerations: 1, activeDays: 0 } },
+        roadmap: {
+          stages: [{ milestones: [{}, { achievement: 'COMPLETED' }, {}] }, {}, {}, {}, {}],
+        },
+      },
+    });
+  });
+
+  it.each(['read', 'context'] as const)('redacts %s failure and releases capacity', async (key) => {
+    m[key].mockRejectedValue(new Error('secret database information'));
+    const response = await runGrowth();
+    expect(response.status).toBe(500);
+    const body = await response.json();
+    expect(body).not.toHaveProperty('data');
+    expect(JSON.stringify(body)).not.toContain('secret');
+    expect(m.release).toHaveBeenCalledOnce();
+  });
+
+  it('shares the real rate window with both existing endpoints', async () => {
+    const { MemberUsageReadLimit } = await vi.importActual<typeof ReadLimitModule>(
+      '../src/http/member-usage-read-limit',
+    );
+    const guard = new MemberUsageReadLimit(2);
+    m.reserve.mockImplementation((userId: string) => guard.reserve(userId));
+    expect((await runGrowth()).status).toBe(200);
+    expect((await run()).status).toBe(200);
+    const response = await getServiceMemberUsageResponse(request(), 'hassy', scope.bunshinId);
+    expect(response.status).toBe(429);
+    expect(response.headers.get('retry-after')).toBe('60');
+    expect(m.read).toHaveBeenCalledTimes(2);
+  });
+});
 
 describe('member roadmap authenticated API', () => {
   it.each(['CUSTOM', 'MANABERU_STYLE', null])(

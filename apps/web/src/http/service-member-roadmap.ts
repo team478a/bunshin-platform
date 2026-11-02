@@ -1,11 +1,17 @@
 import 'server-only';
-import { GetMemberRoadmap, GetMemberUsageSummary, type MemberRoadmap } from '@bunshin/application';
+import {
+  GetMemberRoadmap,
+  GetMemberUsageSummary,
+  type MemberRoadmap,
+  type MemberUsageRequest,
+} from '@bunshin/application';
 import { getServiceMemberReadResponse } from './service-member-read';
 import { ApplicationError } from '@bunshin/shared';
 import { selectServiceMemberRoadmapPolicy } from '../services/service-growth-policy';
+import type { PublicServiceContext } from '../services/public-service';
 
 // Explicit allowlist: never serialize internal scope, feature policy or source records.
-function memberDto(value: MemberRoadmap) {
+export function memberRoadmapDto(value: MemberRoadmap) {
   return {
     version: 'member-roadmap-api-v1' as const,
     definitionVersion: value.definitionVersion,
@@ -43,16 +49,23 @@ export function getServiceMemberRoadmapResponse(
   bunshinId: string,
 ) {
   return getServiceMemberReadResponse(request, serviceSlug, bunshinId, async (input, service) => {
-    const policy = selectServiceMemberRoadmapPolicy(service);
-    if (!policy) throw new ApplicationError('NOT_FOUND', 'member roadmap unavailable');
-    const db = await import('@bunshin/database');
-    const usage = new db.PrismaMemberUsageRepository(db.prisma);
-    const context = new db.PrismaMemberRoadmapContextRepository(db.prisma);
-    const roadmap = await new GetMemberRoadmap(
-      new GetMemberUsageSummary(usage, usage),
-      context,
-      policy,
-    ).execute(input);
-    return memberDto(roadmap);
+    return memberRoadmapDto((await readServiceMemberGrowth(input, service)).roadmap);
   });
+}
+
+/** Internal composition only: caller must use the authenticated member-read boundary. */
+export async function readServiceMemberGrowth(
+  input: MemberUsageRequest,
+  service: PublicServiceContext,
+) {
+  const policy = selectServiceMemberRoadmapPolicy(service);
+  if (!policy) throw new ApplicationError('NOT_FOUND', 'member roadmap unavailable');
+  const db = await import('@bunshin/database');
+  const usage = new db.PrismaMemberUsageRepository(db.prisma);
+  const context = new db.PrismaMemberRoadmapContextRepository(db.prisma);
+  return new GetMemberRoadmap(
+    new GetMemberUsageSummary(usage, usage),
+    context,
+    policy,
+  ).executeWithUsage(input);
 }

@@ -18,7 +18,7 @@ function metrics(value: MemberUsageMetrics) {
   };
 }
 
-function memberDto(value: MemberUsageSummary) {
+export function memberUsageDto(value: MemberUsageSummary) {
   return {
     version: 'member-usage-api-v1' as const,
     asOf: value.asOf,
@@ -45,6 +45,6 @@ export function getServiceMemberUsageResponse(
   return getServiceMemberReadResponse(request, serviceSlug, bunshinId, async (input) => {
     const db = await import('@bunshin/database');
     const adapter = new db.PrismaMemberUsageRepository(db.prisma);
-    return memberDto(await new GetMemberUsageSummary(adapter, adapter).execute(input));
+    return memberUsageDto(await new GetMemberUsageSummary(adapter, adapter).execute(input));
   });
 }

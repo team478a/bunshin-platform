@@ -1,8 +1,8 @@
 import { test } from '@e2e-dev/web';
 import { expect } from 'e2e';
-import { growthBase, growthRoadmap, growthUsage } from './growth-fixture';
+import { growthBase, growthRoadmap, growthUsage, growthSnapshot } from './growth-fixture';
 
-test('mobile roadmap loads only on request, reads sequentially and shows one safe next step', async ({
+test('mobile roadmap loads only on request, reads once and shows one safe next step', async ({
   app,
   screen,
   browser,
@@ -12,7 +12,7 @@ test('mobile roadmap loads only on request, reads sequentially and shows one saf
     calls.push({ url: route.request.url, method: route.request.method });
     await route.fulfill({
       json: {
-        data: route.request.url.endsWith('member-roadmap') ? growthRoadmap() : growthUsage(),
+        data: growthSnapshot(),
       },
     });
   });
@@ -21,10 +21,7 @@ test('mobile roadmap loads only on request, reads sequentially and shows one saf
   expect(calls).toHaveLength(0);
   await screen.getByRole('button', '成長ロードマップを見る').tap();
   await expect(screen.getByRole('heading', '5つのステップ')).toBeVisible();
-  expect(calls.map((call) => new URL(call.url).pathname)).toEqual([
-    growthBase + '/member-roadmap',
-    growthBase + '/member-usage',
-  ]);
+  expect(calls.map((call) => new URL(call.url).pathname)).toEqual([growthBase + '/member-growth']);
   expect(calls.every((call) => call.method === 'GET' && !new URL(call.url).search)).toBe(true);
   await expect(screen.getByText('15項目中3項目を達成')).toBeVisible();
   await expect(screen.getByRole('link', '投稿案を確認する')).toHaveCount(1);
@@ -64,13 +61,12 @@ test('loading blocks duplicate reads and never renders partial progress', async 
   let calls = 0;
   await browser.route('**/api/services/**', async (route) => {
     calls += 1;
-    if (route.request.url.endsWith('member-roadmap'))
-      await new Promise<void>((resolve) => {
-        finish = resolve;
-      });
+    await new Promise<void>((resolve) => {
+      finish = resolve;
+    });
     await route.fulfill({
       json: {
-        data: route.request.url.endsWith('member-roadmap') ? growthRoadmap() : growthUsage(),
+        data: growthSnapshot(),
       },
     });
   });
@@ -86,7 +82,7 @@ test('loading blocks duplicate reads and never renders partial progress', async 
   await expect(screen.getByRole('heading', '5つのステップ')).toHaveCount(0);
   finish!();
   await expect(screen.getByRole('heading', '5つのステップ')).toBeVisible();
-  expect(calls).toBe(2);
+  expect(calls).toBe(1);
 });
 
 for (const status of [401, 404, 429, 503]) {
@@ -117,9 +113,8 @@ test('a failed refresh clears earlier success and does not retain a stale action
 }) => {
   let fail = false;
   await browser.route('**/api/services/**', async (route) => {
-    const roadmap = route.request.url.endsWith('member-roadmap');
-    if (fail && !roadmap) await route.fulfill({ status: 503, json: {} });
-    else await route.fulfill({ json: { data: roadmap ? growthRoadmap() : growthUsage() } });
+    if (fail) await route.fulfill({ status: 503, json: {} });
+    else await route.fulfill({ json: { data: growthSnapshot() } });
   });
   await app.open('/?member-growth');
   await screen.getByRole('button', '成長ロードマップを見る').tap();
@@ -137,13 +132,34 @@ test('unknown version or corrupt response does not become a successful empty roa
   browser,
 }) => {
   await browser.route('**/api/services/**', async (route) => {
-    await route.fulfill({ json: { data: { ...growthRoadmap(), version: 'future-version' } } });
+    await route.fulfill({ json: { data: { ...growthSnapshot(), version: 'future-version' } } });
   });
   await app.open('/?member-growth');
   await screen.getByRole('button', '成長ロードマップを見る').tap();
   await expect(screen.getByRole('alert')).toBeVisible();
   await expect(screen.getByRole('heading', '5つのステップ')).toHaveCount(0);
 });
+
+for (const mismatch of ['asOf', 'timezone', 'missing-usage'] as const) {
+  test(`inconsistent snapshot ${mismatch} never shows partial progress`, async ({
+    app,
+    screen,
+    browser,
+  }) => {
+    const data = growthSnapshot();
+    if (mismatch === 'asOf') data.usage.asOf = '2026-11-02T00:00:01Z';
+    if (mismatch === 'timezone') data.usage.timezone = 'UTC';
+    if (mismatch === 'missing-usage') Reflect.deleteProperty(data, 'usage');
+    await browser.route('**/api/services/**', async (route) => {
+      await route.fulfill({ json: { data } });
+    });
+    await app.open('/?member-growth');
+    await screen.getByRole('button', '成長ロードマップを見る').tap();
+    await expect(screen.getByRole('alert')).toBeVisible();
+    await expect(screen.getByRole('heading', '5つのステップ')).toHaveCount(0);
+    await expect(screen.getByRole('heading', 'これまでの活動')).toHaveCount(0);
+  });
+}
 
 test('no candidate preserves achievements and preparing evidence without inventing a link', async ({
   app,
@@ -156,7 +172,7 @@ test('no candidate preserves achievements and preparing evidence without inventi
   data.stages[0]!.milestones[2]!.availability.state = 'UNAVAILABLE';
   await browser.route('**/api/services/**', async (route) => {
     await route.fulfill({
-      json: { data: route.request.url.endsWith('member-roadmap') ? data : growthUsage() },
+      json: { data: growthSnapshot(data) },
     });
   });
   await app.open('/?member-growth');
@@ -180,7 +196,7 @@ test('legacy generations remain visible without claiming verified activity days'
   usage.last30Days.activeDays = 0;
   await browser.route('**/api/services/**', async (route) => {
     await route.fulfill({
-      json: { data: route.request.url.endsWith('member-roadmap') ? growthRoadmap() : usage },
+      json: { data: growthSnapshot(growthRoadmap(), usage) },
     });
   });
   await app.open('/?member-growth');
@@ -206,7 +222,7 @@ test('switching Bunshin aborts previous work and never shows its late response',
       });
     await route.fulfill({
       json: {
-        data: route.request.url.endsWith('member-roadmap') ? growthRoadmap() : growthUsage(),
+        data: growthSnapshot(),
       },
     });
   });
