@@ -138,6 +138,7 @@ describe('roadmap context DB projection', () => {
     ]);
     expect(await s.repository.read(request)).toBeNull();
     expect(s.tx.socialProfile.findFirst).not.toHaveBeenCalled();
+    expect(s.tx.bunshin.findFirst).not.toHaveBeenCalled();
     expect(s.tx.serviceLegalDocument.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
@@ -147,6 +148,8 @@ describe('roadmap context DB projection', () => {
         }),
       }),
     );
+    s.tx.serviceLegalConsent.count.mockResolvedValue(1);
+    expect(await s.repository.read(request)).not.toBeNull();
     expect(s.tx.bunshin.findFirst).toHaveBeenCalledWith({
       where: {
         id: id(5),
