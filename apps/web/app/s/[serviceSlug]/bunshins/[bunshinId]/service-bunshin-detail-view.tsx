@@ -118,6 +118,10 @@ export function ServiceBunshinDetailView({ model }: { model: ServiceBunshinDetai
             initialQuestion={activityBarrierQuestion}
             initialSupport={activityBarrierSupport}
             postingHref="#today-post"
+            creditsHref={`/s/${encodeURIComponent(service.configuration.slug)}/credits`}
+            {...(service.configuration.registration.referralEnabled
+              ? { referralHref: `/s/${encodeURIComponent(service.configuration.slug)}/activity` }
+              : {})}
             {...(isBusinessDailyService &&
             socialProfiles.some((profile) => profile.status === 'ACTIVE')
               ? { metricsHref: '#sns-numbers' }

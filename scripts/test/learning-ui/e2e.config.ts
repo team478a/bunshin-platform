@@ -19,6 +19,7 @@ export default {
     'automation-guide.e2e.ts',
     'recommendation-policy.e2e.ts',
     'roadmap-policy.e2e.ts',
+    'usage-guidance.e2e.ts',
   ],
   workers: 1,
   actionTimeout: 10_000,

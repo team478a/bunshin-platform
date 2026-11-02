@@ -9,6 +9,7 @@ export type SocialActivityBarrierRuleVersion =
   | 'social-activity-barrier-v1'
   | 'social-activity-barrier-v2'
   | 'social-activity-barrier-v3'
+  | 'social-usage-guidance-v1'
   | typeof SOCIAL_ACTIVITY_BARRIER_RULE_VERSION;
 
 export const SOCIAL_ACTIVITY_BARRIER_GOAL_KEYS = [
@@ -65,6 +66,9 @@ export type SocialActivityBarrierScope = {
 };
 
 export type SocialActivityBarrierMetrics = {
+  successfulImageRequests?: number;
+  usedPlatforms?: number;
+  confirmedReferrals?: number;
   onboardingCompleted: boolean;
   lineDelivered: number;
   missionViewed: number;
@@ -87,6 +91,11 @@ export type InferSocialActivityBarriersInput = {
   metrics: SocialActivityBarrierMetrics;
   goalAttribution: SocialActivityBarrierGoalAttribution;
   goalMetrics: SocialActivityBarrierGoalMetrics;
+  usageGuidance?: {
+    successfulImageRequests: number;
+    usedPlatforms: number;
+    confirmedReferrals: number | null;
+  };
 };
 
 export type SocialActivityBarrierEvidence = {
@@ -113,6 +122,9 @@ export type SocialActivityBarrierCandidate = {
 };
 
 type SocialActivityBarrierEvidenceCode =
+  | 'USAGE_IMAGE_CREDITS'
+  | 'USAGE_MULTIPLE_PLATFORMS'
+  | 'USAGE_REFERRAL_REVIEW'
   | 'ACCEPTED_WITHOUT_POST_REPORT'
   | 'ONBOARDING_INCOMPLETE'
   | 'DELIVERED_WITHOUT_VIEW'

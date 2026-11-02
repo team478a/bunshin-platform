@@ -366,3 +366,5 @@ export { PrismaServiceReferralManagementRepository } from './service-referral-ma
 export { PrismaSocialRecommendationPolicyRepository } from './social-recommendation-policy';
 
 export * from './managed-feature-policy';
+
+export * from './social-usage-guidance-policy';

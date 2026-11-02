@@ -1,3 +1,4 @@
+import { isSocialUsageGuidance } from '@bunshin/capability-social';
 import { FORTUNE_WEEKLY_NOTIFICATION_TOPIC } from '@bunshin/capability-fortune';
 import { isPersonalLearningPilotProgram } from '@bunshin/capability-training';
 import type { LineConfigurationEnvironment } from '@bunshin/application';
@@ -53,15 +54,28 @@ export async function resolveServiceLineBroadcastRecipientIds(input: {
           groupId: input.broadcast.groupId,
           bunshinId: criteria.bunshinId,
           status: 'SUSPECTED',
+          OR: [{ nextEligibleAt: null }, { nextEligibleAt: { lte: input.now ?? new Date() } }],
         },
-        select: { id: true, groupMembershipId: true, userId: true },
+        select: {
+          id: true,
+          groupMembershipId: true,
+          userId: true,
+          evidenceSnapshots: {
+            orderBy: { detectedAt: 'desc' },
+            take: 1,
+            select: { evidenceCode: true },
+          },
+        },
       });
       for (const membershipId of [...eligibleMembershipIds]) {
         const recipient = input.recipients.find((item) => item.groupMembershipId === membershipId);
         if (
           !recipient ||
           !cases.some(
-            (item) => item.groupMembershipId === membershipId && item.userId === recipient.userId,
+            (item) =>
+              item.groupMembershipId === membershipId &&
+              item.userId === recipient.userId &&
+              !isSocialUsageGuidance(item.evidenceSnapshots?.[0]?.evidenceCode ?? ''),
           )
         )
           eligibleMembershipIds.delete(membershipId);

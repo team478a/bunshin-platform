@@ -1,3 +1,4 @@
+import { SOCIAL_USAGE_GUIDANCE_KEYS } from '@bunshin/capability-social';
 import { inferSocialActivityBarriers } from '@bunshin/capability-social';
 import type { SocialActivityBarrierCategory } from '@bunshin/capability-social';
 import type { PrismaClient } from '@prisma/client';
@@ -39,6 +40,7 @@ export async function resolveImprovedSocialActivityBarriers(
   const limit = Math.min(Math.max(input.limit ?? 200, 1), 500);
   const rows = await client.socialActivitySupportIntervention.findMany({
     where: {
+      supportKey: { notIn: [...SOCIAL_USAGE_GUIDANCE_KEYS] },
       status: 'COMPLETED',
       completedAt: { not: null, lte: new Date(at.getTime() - 14 * DAY) },
       oemSupportCandidate: null,

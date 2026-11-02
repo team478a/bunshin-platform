@@ -1,3 +1,4 @@
+import { SOCIAL_USAGE_GUIDANCE_KEYS } from '@bunshin/capability-social';
 import {
   validateImprovementReadRequest,
   type ImprovementObservationAdapter,
@@ -73,6 +74,7 @@ export class PrismaSocialSupportBehaviorAdapter implements ImprovementObservatio
         };
         const supports = await tx.socialActivitySupportIntervention.findMany({
           where: {
+            supportKey: { notIn: [...SOCIAL_USAGE_GUIDANCE_KEYS] },
             acceptedAt: { gte: request.fromInclusive, lt: request.toExclusive },
             barrierCase: parentScope,
           },

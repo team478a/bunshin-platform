@@ -1,3 +1,11 @@
+import { PrismaSocialUsageGuidancePolicyRepository } from '../src/social-usage-guidance-policy';
+import { getSocialActivityBarrierServiceSummary } from '../src/social-activity-barrier-summary';
+import {
+  inferSocialUsageGuidance,
+  defaultSocialUsageGuidanceSettings,
+  buildSocialActivityBarrierGoalAttribution,
+  buildSocialActivityBarrierGoalMetrics,
+} from '@bunshin/capability-social';
 import { PrismaManagedFeaturePolicyRepository } from '../src/managed-feature-policy';
 import {
   readSocialRecommendationPolicy,
@@ -213,6 +221,372 @@ export function registerSocialSupportAccessIntegrationCases(client: PrismaClient
       });
       return { ...f, target, owner, policies, command };
     }
+    async function usageFixture() {
+      const f = await policyFixture();
+      await client.socialActivityBarrierCase.delete({ where: { id: f.row.id } });
+      const source = {
+        scope: f.scope,
+        observationWindow: {
+          from: new Date(now.getTime() - 28 * 86_400_000),
+          to: now,
+          eligibleDays: 28,
+          excludedSystemIncidentDays: 0,
+        },
+        metrics: {
+          onboardingCompleted: true,
+          lineDelivered: 0,
+          missionViewed: 0,
+          missionAccepted: 0,
+          contentCopied: 0,
+          postCompleted: 0,
+          insightRecorded: 0,
+          positiveResponseRecorded: 0,
+          conversionActionRecorded: 0,
+        },
+        goalAttribution: buildSocialActivityBarrierGoalAttribution([]),
+        goalMetrics: buildSocialActivityBarrierGoalMetrics([], {
+          insightRecorded: 0,
+          positiveResponseRecorded: 0,
+        }),
+        usageGuidance: { successfulImageRequests: 5, usedPlatforms: 2, confirmedReferrals: null },
+      };
+      const candidates = inferSocialUsageGuidance(source);
+      const cases = new PrismaSocialActivityBarrierCaseRepository(client);
+      await cases.saveSuspicions({ scope: f.scope, candidates, detectedAt: now });
+      const question = (await f.repo.getPendingQuestion({ scope: f.scope }))!;
+      expect(question.title).toBe('今の利用状況に合わせた案内を確認しますか？');
+      expect(question.options[0]!.label).toContain('画像');
+      return {
+        ...f,
+        source,
+        candidates,
+        cases,
+        question,
+        answerUsage: {
+          scope: f.scope,
+          caseIds: question.caseIds,
+          evidenceKey: question.evidenceKey,
+          selectedCaseId: question.caseIds[0]!,
+          idempotencyKey: randomUUID(),
+          answeredAt: now,
+        },
+      };
+    }
+    it('records only visible questions, suppresses repeat questions and accepts an already displayed answer', async () => {
+      const f = await usageFixture();
+      const before = await client.socialActivityBarrierCase.findUniqueOrThrow({
+        where: { id: f.question.caseIds[0]! },
+      });
+      expect(before.nextEligibleAt).toBeNull();
+      expect(
+        await f.repo.recordQuestionExposure({
+          scope: f.scope,
+          caseIds: f.question.caseIds,
+          evidenceKey: f.question.evidenceKey,
+        }),
+      ).toBe(true);
+      expect(await f.repo.getPendingQuestion({ scope: f.scope })).toBeNull();
+      const saved = await client.socialActivityBarrierCase.findUniqueOrThrow({
+        where: { id: f.question.caseIds[0]! },
+      });
+      expect(saved.nextEligibleAt).toEqual(new Date(now.getTime() + 7 * 86_400_000));
+      const later = new PrismaSocialActivityBarrierConfirmationRepository(
+        client,
+        () => new Date(now.getTime() + 3600_000),
+      );
+      expect(
+        await later.recordQuestionExposure({
+          scope: f.scope,
+          caseIds: f.question.caseIds,
+          evidenceKey: f.question.evidenceKey,
+        }),
+      ).toBe(true);
+      expect(
+        (await client.socialActivityBarrierCase.findUniqueOrThrow({ where: { id: saved.id } }))
+          .nextEligibleAt,
+      ).toEqual(saved.nextEligibleAt);
+      expect(await f.repo.answer(f.answerUsage)).toMatchObject({
+        response: 'CONFIRMED',
+        support: { key: 'IMAGE_CREDIT_REVIEW' },
+      });
+    });
+    it('reopens an unanswered question only after the interval with fresh evidence, and respects feature stop', async () => {
+      const f = await usageFixture();
+      await f.repo.recordQuestionExposure({
+        scope: f.scope,
+        caseIds: f.question.caseIds,
+        evidenceKey: f.question.evidenceKey,
+      });
+      const later = new Date(now.getTime() + 7 * 86_400_000 + 1);
+      const source = {
+        ...f.source,
+        observationWindow: {
+          ...f.source.observationWindow,
+          from: new Date(later.getTime() - 28 * 86_400_000),
+          to: later,
+        },
+      };
+      await f.cases.saveSuspicions({
+        scope: f.scope,
+        candidates: inferSocialUsageGuidance(source),
+        detectedAt: later,
+      });
+      const repo = new PrismaSocialActivityBarrierConfirmationRepository(client, () => later);
+      expect((await repo.getPendingQuestion({ scope: f.scope }))?.options[0]!.label).toContain(
+        '画像',
+      );
+      await f.stop();
+      const evidenceCount = await client.socialActivityBarrierEvidence.count({
+        where: { barrierCase: { bunshinId: f.scope.bunshinId } },
+      });
+      expect(
+        await f.cases.saveSuspicions({
+          scope: f.scope,
+          candidates: inferSocialUsageGuidance(source),
+          detectedAt: later,
+        }),
+      ).toEqual([]);
+      expect(
+        await client.socialActivityBarrierEvidence.count({
+          where: { barrierCase: { bunshinId: f.scope.bunshinId } },
+        }),
+      ).toBe(evidenceCount);
+      expect(
+        await repo.recordQuestionExposure({
+          scope: f.scope,
+          caseIds: f.question.caseIds,
+          evidenceKey: f.question.evidenceKey,
+        }),
+      ).toBe(false);
+      expect(await repo.getPendingQuestion({ scope: f.scope })).toBeNull();
+    });
+    it('does not offer referral guidance from an unverified or currently unavailable referral program', async () => {
+      const f = await usageFixture();
+      await client.socialActivityBarrierCase.deleteMany({
+        where: { bunshinId: f.scope.bunshinId },
+      });
+      await f.cases.saveSuspicions({
+        scope: f.scope,
+        candidates: inferSocialUsageGuidance({
+          ...f.source,
+          usageGuidance: { successfulImageRequests: 0, usedPlatforms: 0, confirmedReferrals: 3 },
+        }),
+        detectedAt: now,
+      });
+      expect(await f.repo.getPendingQuestion({ scope: f.scope })).toBeNull();
+    });
+    it('completion is retained once and never counted as a barrier or re-offered as the same guide', async () => {
+      const f = await usageFixture();
+      await f.repo.answer(f.answerUsage);
+      const support = (await f.repo.getActiveSupport({ scope: f.scope }))!;
+      await f.repo.transitionSupport({
+        scope: f.scope,
+        supportId: support.id,
+        action: 'ACCEPT',
+        occurredAt: now,
+      });
+      await f.repo.transitionSupport({
+        scope: f.scope,
+        supportId: support.id,
+        action: 'COMPLETE',
+        occurredAt: now,
+      });
+      expect(
+        (
+          await client.socialActivityBarrierCase.findUniqueOrThrow({
+            where: { id: f.question.caseIds[0]! },
+          })
+        ).status,
+      ).toBe('RESOLVED');
+      const saved = await f.cases.saveSuspicions({
+        scope: f.scope,
+        candidates: f.candidates,
+        detectedAt: new Date(now.getTime() + 1000),
+      });
+      expect(saved?.some((row) => row.category === 'MEDIA')).toBe(false);
+      expect((await f.repo.getPendingQuestion({ scope: f.scope }))?.options[0]!.label).toContain(
+        '複数SNS',
+      );
+      const summary = await getSocialActivityBarrierServiceSummary(client, {
+        workspaceId: f.scope.workspaceId,
+        groupId: f.scope.serviceId,
+      });
+      expect(summary).toMatchObject({
+        cases: { suspected: 0, confirmed: 0, resolved: 0, dismissed: 0 },
+        support: { completed: 0 },
+        confirmedCategories: [],
+      });
+      expect(
+        await client.socialActivitySupportIntervention.count({
+          where: { caseId: f.question.caseIds[0]! },
+        }),
+      ).toBe(1);
+    });
+    it('applies current settings, preserves the original SNS policy and enforces OEM headquarters bounds', async () => {
+      const f = await usageFixture();
+      const policies = new PrismaSocialUsageGuidancePolicyRepository(client);
+      await f.policies.save(f.command());
+      const command = {
+        ...f.command(),
+        settings: {
+          ...defaultSocialUsageGuidanceSettings(),
+          imageMinimum: 9,
+          platformMinimum: 3,
+          questionIntervalDays: 14,
+        },
+      };
+      await policies.save(command);
+      expect(await f.repo.getPendingQuestion({ scope: f.scope })).toBeNull();
+      expect((await f.policies.read(f.target)).revision).toBe(1);
+      await expect(
+        policies.save({
+          ...command,
+          ...f.owner,
+          commandId: randomUUID(),
+          expectedRevision: 1,
+          authority: 'SERVICE',
+          settings: defaultSocialUsageGuidanceSettings(),
+        }),
+      ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+      expect((await policies.save(command)).revision).toBe(1);
+      expect(
+        await client.groupFeatureAuditLog.count({ where: { groupId: f.scope.serviceId } }),
+      ).toBe(2);
+    });
+    it('protects pending barriers, rejects foreign exposure and expires stale usage evidence', async () => {
+      const f = await usageFixture();
+      const other = await fixture();
+      expect(
+        await f.repo.recordQuestionExposure({
+          scope: other.scope,
+          caseIds: f.question.caseIds,
+          evidenceKey: f.question.evidenceKey,
+        }),
+      ).toBe(false);
+      expect(
+        (
+          await client.socialActivityBarrierCase.findUniqueOrThrow({
+            where: { id: f.question.caseIds[0]! },
+          })
+        ).nextEligibleAt,
+      ).toBeNull();
+      const stale = new PrismaSocialActivityBarrierConfirmationRepository(
+        client,
+        () => new Date(now.getTime() + 3 * 86_400_000),
+      );
+      expect(await stale.getPendingQuestion({ scope: f.scope })).toBeNull();
+      const media = f.candidates.find((c) => c.category === 'MEDIA')!;
+      const old = await client.socialActivityBarrierCase.findFirstOrThrow({
+        where: { bunshinId: f.scope.bunshinId, category: 'MEDIA' },
+      });
+      await client.socialActivityBarrierEvidence.create({
+        data: {
+          caseId: old.id,
+          evidenceKey: randomUUID(),
+          evidenceCode: 'COPIED_WITHOUT_POSTING',
+          observationFrom: at,
+          observationTo: now,
+          eligibleDays: 2,
+          excludedSystemIncidentDays: 0,
+          metrics: { contentCopied: 3 },
+          thresholds: {},
+          ruleVersion: 'social-activity-barrier-v4',
+          detectedAt: new Date(now.getTime() + 1000),
+        },
+      });
+      await f.cases.saveSuspicions({
+        scope: f.scope,
+        candidates: [media],
+        detectedAt: new Date(now.getTime() + 2000),
+      });
+      const latest = await client.socialActivityBarrierEvidence.findFirstOrThrow({
+        where: { caseId: old.id },
+        orderBy: { detectedAt: 'desc' },
+      });
+      expect(latest.evidenceCode).toBe('COPIED_WITHOUT_POSTING');
+    });
+    it('does not let a disabled unstarted guide block legacy barrier support', async () => {
+      const f = await usageFixture();
+      await f.repo.answer(f.answerUsage);
+      const policies = new PrismaSocialUsageGuidancePolicyRepository(client);
+      await policies.save({
+        ...f.command(),
+        settings: { ...defaultSocialUsageGuidanceSettings(), enabled: false },
+      });
+      const legacy = await f.addCase('TIME');
+      const question = (await f.repo.getPendingQuestion({ scope: f.scope }))!;
+      expect(question.title).toContain('困っている');
+      expect(question.caseIds).toContain(legacy.id);
+      await f.repo.answer({
+        scope: f.scope,
+        caseIds: question.caseIds,
+        evidenceKey: question.evidenceKey,
+        selectedCaseId: legacy.id,
+        idempotencyKey: randomUUID(),
+        answeredAt: now,
+      });
+      expect(await f.repo.getActiveSupport({ scope: f.scope })).toMatchObject({
+        support: { key: 'FIVE_MINUTE_ACTION' },
+      });
+    });
+    it('rejects stale question evidence for answers and exposure without storing a confirmation', async () => {
+      const f = await usageFixture();
+      expect(
+        await f.repo.recordQuestionExposure({
+          scope: f.scope,
+          caseIds: f.question.caseIds,
+          evidenceKey: 'stale',
+        }),
+      ).toBe(false);
+      expect(await f.repo.answer({ ...f.answerUsage, evidenceKey: 'stale' })).toBeNull();
+      expect(await f.repo.answer({ ...f.answerUsage, evidenceKey: undefined })).toBeNull();
+      expect(
+        await client.socialActivityBarrierConfirmation.count({
+          where: { caseId: f.question.caseIds[0]! },
+        }),
+      ).toBe(0);
+    });
+    it('stops unstarted guides under a disabled usage policy while preserving accepted completion', async () => {
+      const f = await usageFixture();
+      await f.repo.answer(f.answerUsage);
+      const support = (await f.repo.getActiveSupport({ scope: f.scope }))!;
+      const policies = new PrismaSocialUsageGuidancePolicyRepository(client);
+      const command = {
+        ...f.command(),
+        settings: { ...defaultSocialUsageGuidanceSettings(), enabled: false },
+      };
+      await policies.save(command);
+      expect(await f.repo.getActiveSupport({ scope: f.scope })).toBeNull();
+      expect(
+        await f.repo.transitionSupport({
+          scope: f.scope,
+          supportId: support.id,
+          action: 'ACCEPT',
+          occurredAt: now,
+        }),
+      ).toBeNull();
+      await policies.save({
+        ...command,
+        commandId: randomUUID(),
+        expectedRevision: 1,
+        settings: defaultSocialUsageGuidanceSettings(),
+      });
+      await f.repo.transitionSupport({
+        scope: f.scope,
+        supportId: support.id,
+        action: 'ACCEPT',
+        occurredAt: now,
+      });
+      await policies.save({ ...command, commandId: randomUUID(), expectedRevision: 2 });
+      expect(
+        await f.repo.transitionSupport({
+          scope: f.scope,
+          supportId: support.id,
+          action: 'COMPLETE',
+          occurredAt: now,
+        }),
+      ).toMatchObject({ status: 'COMPLETED' });
+    });
     // A second managed namespace exercises the common storage transaction, independently of product semantics.
     function secondPolicy() {
       return new PrismaManagedFeaturePolicyRepository(

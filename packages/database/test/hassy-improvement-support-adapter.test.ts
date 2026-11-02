@@ -108,6 +108,9 @@ describe('Hassy support improvement read adapter', () => {
     expect(findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {
+          supportKey: {
+            notIn: ['IMAGE_CREDIT_REVIEW', 'MULTI_PLATFORM_PREPARATION', 'REFERRAL_BENEFIT_REVIEW'],
+          },
           offeredAt: { gte: input.fromInclusive, lt: input.toExclusive },
           barrierCase: { workspaceId: scope.workspaceId, groupId: scope.serviceId },
         },
