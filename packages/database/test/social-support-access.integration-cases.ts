@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { PrismaClient, SocialActivityBarrierCategory } from '@prisma/client';
 import { afterEach, describe, expect, it } from 'vitest';
+import { PrismaSocialSupportBehaviorAdapter } from '../src/social-support-behavior-adapter';
 import { PrismaSocialActivityBarrierConfirmationRepository } from '../src/social-activity-barrier-confirmation-repository';
 
 const at = new Date('2026-11-01T00:00:00Z');
@@ -12,6 +13,7 @@ export function registerSocialSupportAccessIntegrationCases(client: PrismaClient
     afterEach(async () => {
       const where = { workspaceId: { in: workspaces } };
       await client.socialActivityBarrierCase.deleteMany({ where });
+      await client.dailyMission.deleteMany({ where });
       await client.bunshinCapabilityAssignment.deleteMany({ where });
       await client.bunshin.deleteMany({ where });
       await client.workspace.deleteMany({ where: { id: { in: workspaces } } });
@@ -165,6 +167,93 @@ export function registerSocialSupportAccessIntegrationCases(client: PrismaClient
         });
       return { scope, row, repo, answer, stop, addCase };
     }
+    it('compares fixed behavior windows through real scoped queries and rejects revoked managers', async () => {
+      const f = await fixture();
+      await client.groupMembership.update({
+        where: { id: f.scope.groupMembershipId },
+        data: { serviceRole: 'SERVICE_OWNER' },
+      });
+      await f.repo.answer(f.answer);
+      const support = await f.repo.getActiveSupport({ scope: f.scope });
+      await f.repo.transitionSupport({
+        scope: f.scope,
+        supportId: support!.id,
+        action: 'ACCEPT',
+        occurredAt: now,
+      });
+      const actionAt = new Date('2026-11-04T00:00:00Z');
+      const mission = await client.dailyMission.create({
+        data: {
+          workspaceId: f.scope.workspaceId,
+          bunshinId: f.scope.bunshinId,
+          missionDate: actionAt,
+          format: 'TEXT',
+          estimatedMinutes: 5,
+          topic: 'PRIVATE_SYNTHETIC',
+          angle: 'Synthetic',
+          reason: 'Synthetic',
+          createdAt: actionAt,
+        },
+      });
+      await client.missionDecision.create({
+        data: {
+          workspaceId: f.scope.workspaceId,
+          bunshinId: f.scope.bunshinId,
+          dailyMissionId: mission.id,
+          decision: 'ACCEPTED',
+          decidedAt: actionAt,
+          updatedAt: actionAt,
+        },
+      });
+      await client.postRecord.create({
+        data: {
+          workspaceId: f.scope.workspaceId,
+          bunshinId: f.scope.bunshinId,
+          dailyMissionId: mission.id,
+          actorUserId: f.scope.userId,
+          platform: 'INSTAGRAM',
+          postedAt: actionAt,
+          createdAt: actionAt,
+          idempotencyKey: randomUUID(),
+        },
+      });
+      const scope = {
+        tenantRef: f.scope.workspaceId,
+        workspaceId: f.scope.workspaceId,
+        serviceId: f.scope.serviceId,
+        packageKey: 'SOCIAL',
+        adapterKey: 'SOCIAL_SUPPORT_BEHAVIOR',
+        environment: 'DEVELOPMENT' as const,
+      };
+      const reader = new PrismaSocialSupportBehaviorAdapter(
+        client,
+        scope,
+        () => new Date('2026-11-12T00:00:00Z'),
+      );
+      const request = {
+        scope,
+        actorUserId: f.scope.userId,
+        fromInclusive: now,
+        toExclusive: new Date('2026-11-04T00:00:00Z'),
+        limit: 100,
+        subject: null,
+      };
+      const result = await reader.readObservations(request);
+      expect(result.observations[0]?.metadata).toEqual({
+        beforeAccepted: false,
+        afterAccepted: true,
+        beforePosted: false,
+        afterPosted: true,
+        uncertain: false,
+        pattern: 'P10',
+      });
+      expect(JSON.stringify(result)).not.toContain('PRIVATE_SYNTHETIC');
+      await client.groupMembership.update({
+        where: { id: f.scope.groupMembershipId },
+        data: { status: 'LEFT' },
+      });
+      await expect(reader.readObservations(request)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    });
     it('offers one support, suppresses new questions and replays only the same answer', async () => {
       const f = await fixture();
       expect(await f.repo.getPendingQuestion({ scope: f.scope })).not.toBeNull();

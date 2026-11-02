@@ -298,6 +298,7 @@ export {
   PrismaServiceReferralRewardRuleRepository,
 } from './service-commercial-credit';
 export { PrismaHassySupportImprovementAdapter } from './hassy-improvement-support-adapter';
+export { PrismaSocialSupportBehaviorAdapter } from './social-support-behavior-adapter';
 export { PrismaServiceImprovementOverviewReader } from './service-improvement-overview';
 export {
   PrismaSocialProgressImprovementAdapter,

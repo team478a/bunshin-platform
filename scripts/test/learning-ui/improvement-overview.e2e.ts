@@ -161,3 +161,45 @@ test('foreign selection and surplus private response fields are rejected before 
   await expect(screen.getByText('DO_NOT_EXPORT')).toHaveCount(0);
   await expect(screen.getByRole('heading', '投稿案の採否と実投稿')).toHaveCount(0);
 });
+
+test('fixed support comparison is legible on mobile and explains the paired cohort', async ({
+  app,
+  screen,
+  browser,
+}) => {
+  await browser.route('**/api/services/**', async (route) => {
+    await route.fulfill({
+      json: {
+        data: {
+          ...data(),
+          sections: [
+            {
+              key: 'SOCIAL_SUPPORT_BEHAVIOR',
+              title: '支援開始前後7日間の行動記録',
+              sourceVersion: 'social-support-behavior-v1',
+              state: 'VISIBLE',
+              reasons: [],
+              records: '10〜19',
+              subjects: '10〜19',
+              metrics: [
+                { label: '開始前7日間に採用があった支援', value: '5〜9' },
+                { label: '開始後7日間に採用があった支援', value: '10〜19' },
+                { label: '開始前7日間に投稿完了報告があった支援', value: '該当記録なし' },
+                { label: '開始後7日間に投稿完了報告があった支援', value: '5〜9' },
+              ],
+            },
+          ],
+        },
+      },
+    });
+  });
+  await app.open('/?improvement-overview');
+  await screen.getByRole('button', '集計を確認').tap();
+  await expect(screen.getByRole('heading', '支援開始前後7日間の行動記録')).toBeVisible();
+  await expect(screen.getByText('開始後7日間に投稿完了報告があった支援')).toBeVisible();
+  await expect(screen.getByText('選択週に開始した支援ごとに', { exact: false })).toBeVisible();
+  expect(
+    await browser.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+  ).toBe(true);
+  await app.screenshot('support-behavior-comparison-mobile');
+});

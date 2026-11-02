@@ -37,3 +37,8 @@ export {
 } from './improvement-photo-quality';
 export * from './service-referral-qualification';
 export * from './service-referral-evidence';
+
+export {
+  SOCIAL_SUPPORT_BEHAVIOR_DEFINITION,
+  SOCIAL_SUPPORT_COMPARISON_DAYS,
+} from './improvement-support-outcomes';
