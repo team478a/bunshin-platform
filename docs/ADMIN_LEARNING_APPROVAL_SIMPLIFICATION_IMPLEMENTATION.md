@@ -1,6 +1,6 @@
 # 学習設計承認の来歴自動化（PR-2B）
 
-作成日：2026-11-03。基準main：`1bdae6f4`（PR #1453マージ後）。実装・検証・本番反映を区別し、本PRは本番設定・migration・deployment・承認登録・送信を実行しない。
+作成日：2026-11-03。基準main：`2321d21d`（PR #1453および外部API認証PR #1446マージ後）。実装・検証・本番反映を区別し、本PRは本番設定・migration・deployment・承認登録・送信を実行しない。
 
 ## 1. 調査した内容
 
@@ -43,7 +43,7 @@ receipt受信後のGET失敗は読取だけ再試行できる。5xx・切断・�
 
 ## 4. 検証
 
-ローカルの全体`pnpm test`は25 task成功。Webは560ファイル・4,137件成功（実AIの3件は既存のskip）、Database単体は230ファイル・1,345件成功。新旧HTTP契約、画面/pageの既存認可、command検証を含む。
+初期基準`1bdae6f4`でローカルの全体`pnpm test`は25 task成功。Webは560ファイル・4,137件成功（実AIの3件は既存のskip）、Database単体は230ファイル・1,345件成功。新旧HTTP契約、画面/pageの既存認可、command検証を含む。全packageとlearning-uiの型検査・lintも成功した。その後mainへ外部API認証PR #1446が入ったため、`2321d21d`へrebaseし、標準CIを改めて実行する。初期基準の件数をrebase後の最終結果とは扱わない。
 
 既存e2e harnessで7件成功。1280/390/320pxの初回自動GET→7項目の本人確認→1 POST→自動GET、入力欄0、横overflowなしを検証した。結果不明時の同一body再送、receipt後の読取失敗、現在状態がreceiptと異なる場合、来歴欠落、対象切替と競合も確認した。390pxのスクリーンショットを確認した。合成データであり、本番や外部Providerを呼ばない。
 
