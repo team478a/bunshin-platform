@@ -6,7 +6,7 @@ import type {
   SocialActivitySupportKey,
   SocialActivitySupportProgress,
 } from '@bunshin/capability-social';
-import { useRef, useState, type MouseEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type MouseEvent } from 'react';
 import './activity-support.css';
 
 type AnswerResponse = {
@@ -46,6 +46,55 @@ export function ActivityBarrierCard({
   const [skipReason, setSkipReason] = useState('');
   const [message, setMessage] = useState<string | null>(null);
   const idempotencyKey = useRef<string | null>(null);
+  const supportElement = useRef<HTMLDivElement | null>(null);
+  const exposureAttempts = useRef(new Set<string>());
+  const recordExposure = useCallback(
+    async (id: string, kind: 'DISPLAY' | 'DETAILS') => {
+      const key = `${endpoint}:${id}:${kind}`;
+      if (exposureAttempts.current.has(key)) return;
+      exposureAttempts.current.add(key);
+      try {
+        const response = await fetch(`${endpoint}/exposure`, {
+          method: 'POST',
+          credentials: 'same-origin',
+          cache: 'no-store',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ supportId: id, kind }),
+        });
+        if (!response.ok) throw new Error('exposure not recorded');
+        const result: unknown = await response.json();
+        if (
+          !result ||
+          typeof result !== 'object' ||
+          !('data' in result) ||
+          !result.data ||
+          typeof result.data !== 'object' ||
+          !('recorded' in result.data) ||
+          result.data.recorded !== true
+        )
+          throw new Error('invalid exposure receipt');
+      } catch {
+        console.warn('サポートの閲覧記録を保存できませんでした。');
+      }
+    },
+    [endpoint],
+  );
+  const supportId = support?.id;
+  useEffect(() => {
+    const element = supportElement.current;
+    if (!supportId || !element) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting && entry.intersectionRatio >= 0.1)) {
+          void recordExposure(supportId, 'DISPLAY');
+          observer.disconnect();
+        }
+      },
+      { threshold: 0.1 },
+    );
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [recordExposure, supportId]);
   const photoFirstActionLabel =
     support && photoFirstHref ? photoFirstActionLabels[support.support.key] : undefined;
   const measurement =
@@ -148,15 +197,22 @@ export function ActivityBarrierCard({
       <section className="activity-barrier-card" aria-live="polite">
         {message ? <p className="success-message">{message}</p> : null}
         {support ? (
-          <div className="activity-barrier-support">
+          <div className="activity-barrier-support" ref={supportElement}>
             <p className="eyebrow">今日のサポート</p>
             <h2>{support.support.title}</h2>
-            <p>{support.support.reason}</p>
-            <ol>
-              {support.support.steps.map((step) => (
-                <li key={step}>{step}</li>
-              ))}
-            </ol>
+            <details
+              onToggle={(event) => {
+                if (event.currentTarget.open) void recordExposure(support.id, 'DETAILS');
+              }}
+            >
+              <summary>サポートの詳しい進め方</summary>
+              <p>{support.support.reason}</p>
+              <ol>
+                {support.support.steps.map((step) => (
+                  <li key={step}>{step}</li>
+                ))}
+              </ol>
+            </details>
             <div className="activity-barrier-support__actions">
               {support.status === 'OFFERED' ? (
                 <button

@@ -34,6 +34,8 @@ function row(id = 'support-a') {
     completedAt: new Date('2026-09-04Z') as Date | null,
     skippedAt: null as Date | null,
     updatedAt: new Date('2026-09-04Z'),
+    firstDisplayedAt: null as Date | null,
+    firstDetailsViewedAt: null as Date | null,
     barrierCase: {
       id: 'case-a',
       workspaceId: scope.workspaceId,
@@ -53,6 +55,7 @@ function setup(rows = [row()], allowed = true) {
   const findMany = vi.fn().mockResolvedValue(rows);
   const manager = vi.fn().mockResolvedValue(allowed ? { id: 'admin-membership' } : null);
   const tx = {
+    $executeRaw: vi.fn(),
     groupMembership: { findFirst: manager },
     socialActivitySupportIntervention: { findMany },
   };
@@ -61,6 +64,10 @@ function setup(rows = [row()], allowed = true) {
   );
   const client = { $transaction: transaction } as unknown as PrismaClient;
   return {
+    exposure: new PrismaHassySupportImprovementAdapter(client, {
+      ...scope,
+      adapterKey: 'SOCIAL_SUPPORT_EXPOSURE',
+    }),
     adapter: new PrismaHassySupportImprovementAdapter(client, scope),
     findMany,
     manager,
@@ -255,5 +262,66 @@ describe('Hassy support improvement read adapter', () => {
       code: 'VALIDATION_ERROR',
     });
     expect(transaction).not.toHaveBeenCalled();
+  });
+});
+
+describe('support exposure observations', () => {
+  const request = { ...input, scope: { ...scope, adapterKey: 'SOCIAL_SUPPORT_EXPOSURE' } };
+  it('shares one authorized source snapshot for lifecycle and exposure without a cross-request cache', async () => {
+    const s = setup();
+    const pair = await s.adapter.readPairedObservations(input);
+    expect(pair.outcomes.observations).toHaveLength(1);
+    expect(pair.exposure.observations).toHaveLength(1);
+    expect(s.findMany).toHaveBeenCalledOnce();
+    expect(s.manager).toHaveBeenCalledOnce();
+    await s.adapter.readPairedObservations(input);
+    expect(s.manager).toHaveBeenCalledTimes(2);
+  });
+  it('does not invent historical zero impressions; original completion summary stays intact', async () => {
+    const s = setup();
+    expect(
+      (await s.exposure.readExposureObservations(request)).observations[0]?.metadata,
+    ).toMatchObject({ uncertain: true });
+    expect((await s.adapter.summarize(input)).buckets[0]?.completed).toBe(1);
+  });
+  it('tracks two first receipts with an exclusive cutoff and no private snapshot', async () => {
+    const value = row();
+    value.definitionSnapshot = { ...goal(), exposureTracking: 'social-support-exposure-v1' };
+    value.firstDisplayedAt = new Date('2026-09-03Z');
+    value.firstDetailsViewedAt = input.toExclusive;
+    const result = await setup([value]).exposure.readExposureObservations(request);
+    expect(result.observations[0]?.metadata).toEqual({
+      displayedByCutoff: true,
+      detailsViewedByCutoff: false,
+      uncertain: false,
+      pattern: 'P1',
+    });
+    expect(JSON.stringify(result)).not.toContain('private title');
+  });
+  it('distinguishes tracked but unreceived from legacy and rejects an unauthorized manager', async () => {
+    const value = row();
+    value.definitionSnapshot = { ...goal(), exposureTracking: 'social-support-exposure-v1' };
+    expect(
+      (await setup([value]).exposure.readExposureObservations(request)).observations[0]?.metadata,
+    ).toMatchObject({ displayedByCutoff: false, detailsViewedByCutoff: false, uncertain: false });
+    await expect(
+      setup([value], false).exposure.readExposureObservations(request),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+  it('marks malformed order uncertain and prevents cross-service exposure reads', async () => {
+    const value = row();
+    value.definitionSnapshot = { ...goal(), exposureTracking: 'social-support-exposure-v1' };
+    value.firstDetailsViewedAt = new Date('2026-09-03Z');
+    expect(
+      (await setup([value]).exposure.readExposureObservations(request)).observations[0]?.metadata[
+        'uncertain'
+      ],
+    ).toBe(true);
+    await expect(
+      setup([value]).exposure.readExposureObservations({
+        ...request,
+        scope: { ...request.scope, serviceId: 'other' },
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 });

@@ -48,6 +48,11 @@ export function OverviewSummary({ preview }: { preview: OverviewPreview }) {
               選択週に開始した支援ごとに、開始時刻の前後7日間で行動が1回以上あったかを比べます。同じ人の複数支援は別記録です。開始後7日未満や記録不足は保留します。投稿完了報告は本人の記録で、SNS公開や支援の効果を証明するものではありません。
             </p>
           )}
+          {section.key === 'SOCIAL_SUPPORT_EXPOSURE' && (
+            <p>
+              選択週に用意した支援のうち、締切までに初回の表示・詳細閲覧の記録が届いた件数です。実際に読んだことや、すべての閲覧を捕捉したことの証明ではありません。計測前の支援が含まれる場合は保留します。
+            </p>
+          )}
           <p>記録定義：{section.sourceVersion}</p>
         </section>
       ))}

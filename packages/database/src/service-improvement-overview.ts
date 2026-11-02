@@ -7,6 +7,7 @@ import {
   type ServiceImprovementSource,
 } from '@bunshin/application';
 import {
+  SOCIAL_SUPPORT_EXPOSURE_DEFINITION,
   SOCIAL_SUPPORT_BEHAVIOR_DEFINITION,
   HASSY_SUPPORT_IMPROVEMENT_DEFINITION,
   HASSY_PHOTO_QUALITY_DEFINITION,
@@ -33,6 +34,7 @@ export class PrismaServiceImprovementOverviewReader {
     this.scope = { ...scope };
   }
   async read(input: ServiceImprovementReadRequest, packageKey: 'SOCIAL' | 'TRAINING') {
+    input = structuredClone(input);
     if (
       !['SOCIAL', 'TRAINING'].includes(packageKey) ||
       (['tenantRef', 'workspaceId', 'serviceId', 'environment'] as const).some(
@@ -50,6 +52,15 @@ export class PrismaServiceImprovementOverviewReader {
     const feedback = IMPROVEMENT_FEEDBACK_OBSERVATION_DEFINITION;
     const support = HASSY_SUPPORT_IMPROVEMENT_DEFINITION;
     const photo = HASSY_PHOTO_QUALITY_DEFINITION;
+    const supportReader = new PrismaHassySupportImprovementAdapter(this.client, scoped(support));
+    let supportPair: ReturnType<typeof supportReader.readPairedObservations> | undefined;
+    const readSupportPair = () =>
+      (supportPair ??= supportReader.readPairedObservations({
+        ...input,
+        scope: scoped(support),
+        subject: null,
+      }));
+
     const sources: ServiceImprovementSource[] =
       packageKey === 'SOCIAL'
         ? [
@@ -71,7 +82,10 @@ export class PrismaServiceImprovementOverviewReader {
             },
             {
               definition: support,
-              adapter: new PrismaHassySupportImprovementAdapter(this.client, scoped(support)),
+              adapter: {
+                definition: support,
+                readObservations: async () => (await readSupportPair()).outcomes,
+              },
               metrics: ['acceptedByCutoff', 'completedByCutoff', 'skippedByCutoff'].map((key) => ({
                 key,
                 flag: key,
@@ -112,6 +126,19 @@ export class PrismaServiceImprovementOverviewReader {
               metrics: ['beforeAccepted', 'afterAccepted', 'beforePosted', 'afterPosted'].map(
                 (key) => ({ key, flag: key }),
               ),
+              uncertainFlags: ['uncertain'],
+              privacyDimensions: ['pattern'],
+            },
+            {
+              definition: SOCIAL_SUPPORT_EXPOSURE_DEFINITION,
+              adapter: {
+                definition: SOCIAL_SUPPORT_EXPOSURE_DEFINITION,
+                readObservations: async () => (await readSupportPair()).exposure,
+              },
+              metrics: ['displayedByCutoff', 'detailsViewedByCutoff'].map((key) => ({
+                key,
+                flag: key,
+              })),
               uncertainFlags: ['uncertain'],
               privacyDimensions: ['pattern'],
             },

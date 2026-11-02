@@ -8007,6 +8007,8 @@ model SocialActivitySupportIntervention {
   acceptedAt         DateTime?                   @map("accepted_at") @db.Timestamptz(6)
   completedAt        DateTime?                   @map("completed_at") @db.Timestamptz(6)
   skippedAt          DateTime?                   @map("skipped_at") @db.Timestamptz(6)
+  firstDisplayedAt   DateTime?                   @map("first_displayed_at") @db.Timestamptz(6)
+  firstDetailsViewedAt DateTime?                 @map("first_details_viewed_at") @db.Timestamptz(6)
   createdAt          DateTime                    @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt          DateTime                    @updatedAt @map("updated_at") @db.Timestamptz(6)
   barrierCase        SocialActivityBarrierCase   @relation(fields: [caseId], references: [id], onDelete: Cascade)

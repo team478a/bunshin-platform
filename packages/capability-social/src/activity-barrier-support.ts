@@ -97,6 +97,11 @@ export interface SocialActivityBarrierConfirmationRepository {
     response: 'CONFIRMED' | 'NONE_OF_THESE';
     support: SocialActivitySupport | null;
   } | null>;
+  recordExposure(input: {
+    scope: SocialActivityBarrierScope;
+    supportId: string;
+    kind: 'DISPLAY' | 'DETAILS';
+  }): Promise<boolean>;
   getActiveSupport(input: {
     scope: SocialActivityBarrierScope;
   }): Promise<SocialActivitySupportProgress | null>;

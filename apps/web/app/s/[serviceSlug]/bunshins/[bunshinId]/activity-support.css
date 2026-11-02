@@ -16,3 +16,10 @@
 .activity-barrier-support__actions > button {
   min-height: 44px;
 }
+
+.activity-barrier-support summary {
+  min-height: 44px;
+  padding: 0.5rem 0;
+  cursor: pointer;
+  font-weight: 700;
+}

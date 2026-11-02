@@ -168,3 +168,22 @@ export function transitionServiceSocialActivitySupportResponse(
     return result;
   });
 }
+
+export function recordServiceSocialActivitySupportExposureResponse(
+  request: Request,
+  serviceSlug: string,
+  bunshinId: string,
+) {
+  return respond(request, async (actorUserId) => {
+    requireSameOrigin(request);
+    const parsed = z
+      .object({ supportId: z.uuid(), kind: z.enum(['DISPLAY', 'DETAILS']) })
+      .strict()
+      .safeParse(await json(request));
+    if (!parsed.success) throw new ApplicationError('VALIDATION_ERROR', 'invalid body');
+    const { repository, scope } = await resolveScope(serviceSlug, bunshinId, actorUserId);
+    const recorded = await repository.recordExposure({ scope, ...parsed.data });
+    if (!recorded) throw new ApplicationError('CONFLICT', 'support unavailable');
+    return { recorded: true };
+  });
+}
