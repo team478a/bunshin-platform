@@ -175,6 +175,48 @@ export function registerExternalReadGrantIntegrationCases(client: PrismaClient) 
         },
       };
     }
+    it('blocks direct reads and writes by a non-privileged DB role while server operations remain usable', async () => {
+      const f = await fixture();
+      const grant = await f.manager.issue(f.owner, f.command);
+      await f.repository.bind(grant.connectionId, f.credential, signal());
+      const row = await client.externalReadGrant.findUniqueOrThrow({
+        where: { id: grant.connectionId },
+      });
+      // Generated test identifier only, never derived from a caller or production config.
+      const role = `external_read_${randomUUID().replaceAll('-', '')}`;
+      await client.$executeRawUnsafe(`CREATE ROLE "${role}" NOLOGIN NOSUPERUSER NOBYPASSRLS`);
+      try {
+        await client.$executeRawUnsafe(`GRANT USAGE ON SCHEMA public TO "${role}"`);
+        await client.$executeRawUnsafe(
+          `GRANT SELECT, INSERT, UPDATE, DELETE ON external_read_grants TO "${role}"`,
+        );
+        const result = await client.$transaction(async (tx) => {
+          await tx.$executeRawUnsafe(`SET LOCAL ROLE "${role}"`);
+          const rows = await tx.externalReadGrant.findMany();
+          const changed = await tx.externalReadGrant.updateMany({
+            where: { id: grant.connectionId },
+            data: { revision: { increment: 1 } },
+          });
+          const removed = await tx.externalReadGrant.deleteMany({
+            where: { id: grant.connectionId },
+          });
+          return { rows, changed: changed.count, removed: removed.count };
+        });
+        expect(result).toEqual({ rows: [], changed: 0, removed: 0 });
+        await expect(
+          client.$transaction(async (tx) => {
+            await tx.$executeRawUnsafe(`SET LOCAL ROLE "${role}"`);
+            return tx.externalReadGrant.create({ data: { ...row, id: randomUUID() } });
+          }),
+        ).rejects.toThrow(/row-level security/);
+        expect(
+          await f.repository.resolve(grant.connectionId, f.credential, signal()),
+        ).not.toBeNull();
+      } finally {
+        await client.$executeRawUnsafe(`DROP OWNED BY "${role}"`);
+        await client.$executeRawUnsafe(`DROP ROLE "${role}"`);
+      }
+    });
     it('requires a binding, stores only a hash, and revokes it through the existing owner grant', async () => {
       const f = await fixture();
       const grant = await f.manager.issue(f.owner, f.command);

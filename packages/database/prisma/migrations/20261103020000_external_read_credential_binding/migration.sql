@@ -9,3 +9,6 @@ ALTER TABLE external_read_grants
       AND credential_binding_hash ~ '^[a-f0-9]{64}$'
       AND credential_bound_at >= granted_at AND credential_bound_at < expires_at)
   );
+
+-- Match the platform's server-only table policy; no browser DB access policies.
+ALTER TABLE external_read_grants ENABLE ROW LEVEL SECURITY;

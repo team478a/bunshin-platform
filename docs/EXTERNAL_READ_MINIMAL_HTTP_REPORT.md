@@ -13,7 +13,7 @@
 - Web `http/external-read.ts`と`app/api/external/connections/[connectionId]/{usage,bind}/route.ts`: Bearer専用の限定HTTP。
 - 新HTTP/組立/通常待機/制御なしでの失効テスト、既存資格timeoutテスト、ADR、初回報告への追記、本書。
 
-今回の追加でDB/schema/migration、package依存、環境変数、Cron、Feature、接続先catalog、UIは変更しない。#1446が元から含む資格結合migrationとApplication公開exportは同PRに残る。原本の利用実績や会員・紹介・権限台帳を作り直さない。
+package依存、環境変数、Cron、Feature、接続先catalog、UIは変更しない。#1446が元から含む未マージの資格結合migrationへ、既存方針どおりgrant tableのRLS有効化を補った。新しいschema/table/migrationは追加せず、既存のApplication公開exportも同PRに残る。原本の利用実績や会員・紹介・権限台帳を作り直さない。
 
 ## 3. 主要な設計判断
 
@@ -50,6 +50,7 @@ catalogは空のまま。empty catalogまたはstagingでは認証設定やDBへ
 - HTTP/route: Bearer専用、Cookieだけの拒否、空catalog、scope/query/body/方法の拒否、既存DTO/結合ack、固定error、ログ障害でも成功、ログの最小投影、複数同時readに新たなquotaを加えていないこと。
 - Web composition: 空catalogで既存DB Adapterを作らず、enabled時は既存利用集計と資格Use Caseだけを組み立てる。
 - 既存のSDK署名/first-party認証分離、資格結合の実DB/解除/read再照合も同PRの標準CIで再検証する。
+- RLS: disposable DBで一時的な非特権roleへ明示的にCRUDをgrantしても直接SELECT/UPDATE/DELETEは0件、INSERTは拒否する。一方、serverの既存Adapterでは資格結合・本人読取を維持する。
 
 最終HEADの標準CI、全SQL、各件数はPR本文へ記録する。追加のHTTPテストは合成Adapter/入力を使い、実Providerへのログインや本番データ送信は行わない。
 
