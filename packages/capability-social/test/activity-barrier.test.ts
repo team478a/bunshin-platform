@@ -61,6 +61,20 @@ function input(
 }
 
 describe('inferSocialActivityBarriers', () => {
+  it('asks about adopted drafts without claiming an actual SNS publication', () => {
+    expect(inferSocialActivityBarriers(input({ missionAccepted: 1 }))).toEqual([]);
+    const candidates = inferSocialActivityBarriers(input({ missionAccepted: 2 }));
+    expect(candidates.map((candidate) => candidate.category)).toEqual([
+      'TIME',
+      'HOW_TO',
+      'CONTENT',
+      'CONFIDENCE',
+    ]);
+    expect(candidates[0]?.evidence.evidenceCode).toBe('ACCEPTED_WITHOUT_POST_REPORT');
+    expect(inferSocialActivityBarriers(input({ missionAccepted: 2, postCompleted: 1 }))).toEqual(
+      [],
+    );
+  });
   it('returns only suspected candidates with auditable evidence', () => {
     const result = inferSocialActivityBarriers(input({ lineDelivered: 7, missionViewed: 1 }));
 
@@ -71,7 +85,7 @@ describe('inferSocialActivityBarriers', () => {
       evidence: {
         evidenceCode: 'DELIVERED_WITHOUT_VIEW',
         observationWindow: { eligibleDays: 6, excludedSystemIncidentDays: 1 },
-        ruleVersion: 'social-activity-barrier-v3',
+        ruleVersion: 'social-activity-barrier-v4',
         goalAttribution: expect.objectContaining({
           observedMissionCount: 2,
           attributedMissionCount: 1,
@@ -130,7 +144,7 @@ describe('inferSocialActivityBarriers', () => {
     const candidate = inferSocialActivityBarriers(input({ missionViewed: 4 }))[0]!;
 
     expect(socialActivityBarrierEvidenceKey(candidate)).toBe(
-      'social-activity-barrier-v3:VIEWED_WITHOUT_SELECTION:CONTENT:2026-09-01T00:00:00.000Z:2026-09-08T00:00:00.000Z',
+      'social-activity-barrier-v4:VIEWED_WITHOUT_SELECTION:CONTENT:2026-09-01T00:00:00.000Z:2026-09-08T00:00:00.000Z',
     );
   });
 

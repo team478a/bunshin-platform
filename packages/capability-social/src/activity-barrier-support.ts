@@ -103,6 +103,8 @@ export interface SocialActivityBarrierConfirmationRepository {
   transitionSupport(input: {
     scope: SocialActivityBarrierScope;
     supportId: string;
+    /** Optional user-authored reason, accepted only for SKIP. */
+    reason?: string;
     action: SocialActivitySupportAction;
     occurredAt: Date;
   }): Promise<SocialActivitySupportProgress | null>;

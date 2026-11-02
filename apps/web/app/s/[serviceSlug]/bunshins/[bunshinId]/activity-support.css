@@ -1,0 +1,18 @@
+.activity-barrier-card .activity-barrier-support__reason {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  min-width: 0;
+  text-align: left;
+}
+
+.activity-barrier-card .activity-barrier-support__reason input {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+}
+
+.activity-barrier-support__actions > button {
+  min-height: 44px;
+}

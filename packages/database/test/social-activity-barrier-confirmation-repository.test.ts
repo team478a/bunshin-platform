@@ -1,4 +1,4 @@
-import type { PrismaClient } from '@prisma/client';
+import type { Prisma, PrismaClient } from '@prisma/client';
 import {
   buildSocialActivityBarrierGoalAttribution,
   buildSocialActivityBarrierGoalMetrics,
@@ -88,7 +88,84 @@ function barrierCaseWithMixedGoals(id: string, category: 'TIME' | 'EFFORT') {
   return value;
 }
 
+// Existing transition tests use a valid authorization fixture; PostgreSQL cases exercise real denial paths.
+function withAuthorization<T extends object>(tx: T) {
+  const supplied = tx as {
+    bunshin?: object;
+    groupMembership?: object;
+    socialActivitySupportIntervention?: object;
+  };
+  const policy = {
+    featureKey: 'SOCIAL.ACTIVITY_SUPPORT',
+    status: 'ENABLED',
+    dailyLimit: null,
+    monthlyLimit: null,
+    startsAt: null,
+    endsAt: null,
+  };
+  return {
+    ...tx,
+    $executeRaw: vi.fn().mockResolvedValue(0),
+    $queryRaw: vi.fn().mockResolvedValue([]),
+    groupMembership: {
+      findFirst: vi.fn().mockResolvedValue({ id: scope.groupMembershipId }),
+      ...supplied.groupMembership,
+    },
+    bunshin: { findFirst: vi.fn().mockResolvedValue({ id: scope.bunshinId }), ...supplied.bunshin },
+    serviceLegalDocument: { findMany: vi.fn().mockResolvedValue([]) },
+    serviceLegalConsent: { count: vi.fn().mockResolvedValue(0) },
+    featureDefinition: {
+      findUnique: vi
+        .fn()
+        .mockResolvedValue({ key: policy.featureKey, parentKey: null, status: 'ACTIVE' }),
+    },
+    groupFeaturePolicy: { findMany: vi.fn().mockResolvedValue([policy]) },
+    groupMemberFeatureAssignment: { findMany: vi.fn().mockResolvedValue([policy]) },
+    socialActivitySupportIntervention: {
+      findFirst: vi.fn().mockResolvedValue(null),
+      ...supplied.socialActivitySupportIntervention,
+    },
+  };
+}
+function withClientTransaction(client: Partial<PrismaClient>): PrismaClient {
+  const run = (work: (tx: Prisma.TransactionClient) => Promise<unknown>) =>
+    client.$transaction
+      ? client.$transaction((tx) =>
+          work(withAuthorization(tx) as unknown as Prisma.TransactionClient),
+        )
+      : work(withAuthorization(client) as unknown as Prisma.TransactionClient);
+  return { $transaction: run } as unknown as PrismaClient;
+}
+
 describe('PrismaSocialActivityBarrierConfirmationRepository', () => {
+  it('does not transition an unknown or malformed stored support definition', async () => {
+    const updateMany = vi.fn();
+    const client = {
+      socialActivitySupportIntervention: {
+        findFirst: vi.fn().mockResolvedValue({
+          id: 'support_unknown',
+          status: 'OFFERED',
+          definitionSnapshot: {
+            key: 'PUBLISH_EXTERNALLY',
+            title: 'Unknown',
+            reason: 'Unknown',
+            steps: [],
+          },
+        }),
+        updateMany,
+      },
+    } as unknown as PrismaClient;
+    const result = await new PrismaSocialActivityBarrierConfirmationRepository(
+      withClientTransaction(client),
+    ).transitionSupport({
+      scope,
+      supportId: 'support_unknown',
+      action: 'ACCEPT',
+      occurredAt: new Date(),
+    });
+    expect(result).toBeNull();
+    expect(updateMany).not.toHaveBeenCalled();
+  });
   it('confirms only the selected case, dismisses siblings, and offers one support action', async () => {
     const updateMany = vi.fn().mockResolvedValue({ count: 1 });
     const confirmationCreate = vi.fn().mockResolvedValue({ id: 'confirmation_1' });
@@ -114,7 +191,9 @@ describe('PrismaSocialActivityBarrierConfirmationRepository', () => {
     const client = {
       $transaction: vi.fn(async (work: (transaction: typeof tx) => Promise<unknown>) => work(tx)),
     } as unknown as PrismaClient;
-    const repository = new PrismaSocialActivityBarrierConfirmationRepository(client);
+    const repository = new PrismaSocialActivityBarrierConfirmationRepository(
+      withClientTransaction(client),
+    );
 
     const result = await repository.answer({
       scope,
@@ -166,7 +245,9 @@ describe('PrismaSocialActivityBarrierConfirmationRepository', () => {
     const client = {
       $transaction: vi.fn(async (work: (transaction: typeof tx) => Promise<unknown>) => work(tx)),
     } as unknown as PrismaClient;
-    const repository = new PrismaSocialActivityBarrierConfirmationRepository(client);
+    const repository = new PrismaSocialActivityBarrierConfirmationRepository(
+      withClientTransaction(client),
+    );
 
     await expect(
       repository.answer({
@@ -199,7 +280,7 @@ describe('PrismaSocialActivityBarrierConfirmationRepository', () => {
     } as unknown as PrismaClient;
 
     await expect(
-      new PrismaSocialActivityBarrierConfirmationRepository(client).answer({
+      new PrismaSocialActivityBarrierConfirmationRepository(withClientTransaction(client)).answer({
         scope,
         caseIds: ['case_lead'],
         selectedCaseId: 'case_lead',
@@ -239,7 +320,9 @@ describe('PrismaSocialActivityBarrierConfirmationRepository', () => {
     const client = {
       socialActivitySupportIntervention: { findFirst },
     } as unknown as PrismaClient;
-    const repository = new PrismaSocialActivityBarrierConfirmationRepository(client);
+    const repository = new PrismaSocialActivityBarrierConfirmationRepository(
+      withClientTransaction(client),
+    );
 
     await expect(repository.getActiveSupport({ scope })).resolves.toMatchObject({
       status: 'OFFERED',
@@ -279,7 +362,9 @@ describe('PrismaSocialActivityBarrierConfirmationRepository', () => {
     const client = {
       socialActivitySupportIntervention: { findFirst, updateMany },
     } as unknown as PrismaClient;
-    const repository = new PrismaSocialActivityBarrierConfirmationRepository(client);
+    const repository = new PrismaSocialActivityBarrierConfirmationRepository(
+      withClientTransaction(client),
+    );
     const input = {
       scope,
       supportId: 'support_1',

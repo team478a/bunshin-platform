@@ -7978,6 +7978,7 @@ model SocialActivityBarrierEvidence {
 
 /// 本人が1問確認へ回答した監査履歴。回答本文は保持しない。
 model SocialActivityBarrierConfirmation {
+  requestSnapshot Json? @map("request_snapshot")
   id               String                                    @id @default(uuid()) @db.Uuid
   caseId           String                                    @map("case_id") @db.Uuid
   response         SocialActivityBarrierConfirmationResponse

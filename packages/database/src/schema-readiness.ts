@@ -1,1 +1,1 @@
-export const LATEST_DATABASE_MIGRATION = '20261102120000_service_referral_qualification';
+export const LATEST_DATABASE_MIGRATION = '20261102180000_social_support_confirmation_receipt';
