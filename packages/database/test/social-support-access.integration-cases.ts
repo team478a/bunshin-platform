@@ -181,6 +181,10 @@ export function registerSocialSupportAccessIntegrationCases(client: PrismaClient
         action: 'ACCEPT',
         occurredAt: now,
       });
+      await client.socialActivitySupportIntervention.update({
+        where: { id: support!.id },
+        data: { updatedAt: now },
+      });
       const actionAt = new Date('2026-11-04T00:00:00Z');
       const mission = await client.dailyMission.create({
         data: {
@@ -250,7 +254,7 @@ export function registerSocialSupportAccessIntegrationCases(client: PrismaClient
       expect(JSON.stringify(result)).not.toContain('PRIVATE_SYNTHETIC');
       await client.groupMembership.update({
         where: { id: f.scope.groupMembershipId },
-        data: { status: 'REVOKED' },
+        data: { status: 'REVOKED', revokedAt: now },
       });
       await expect(reader.readObservations(request)).rejects.toMatchObject({ code: 'NOT_FOUND' });
     });
