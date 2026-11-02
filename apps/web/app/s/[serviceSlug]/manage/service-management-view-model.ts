@@ -124,6 +124,11 @@ export const serviceManagementSections = [
     description: 'カード解釈の完全性と安全性を確認し、占い機能の公開・停止を管理します。',
     href: 'fortune',
   },
+  {
+    title: 'SNS支援提案の設定',
+    description: '本部の許可範囲で、提案対象・判定件数・見送り後の抑制日数を管理します。',
+    href: 'recommendations',
+  },
 ] as const;
 
 export type OperationAction = {

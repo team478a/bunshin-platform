@@ -44,3 +44,5 @@ export {
 } from './improvement-support-outcomes';
 
 export { SOCIAL_SUPPORT_EXPOSURE_DEFINITION } from './improvement-support-outcomes';
+
+export * from './recommendation-policy';

@@ -1,0 +1,17 @@
+# SNS支援提案の本部・サービス設定
+
+2026-11-02 / main 4d332ca3（#1437）
+
+既存GroupFeaturePolicyのSOCIAL.ACTIVITY_SUPPORT.configとGroupFeatureAuditLogを再利用する。新規table・migration・Cronは不要。SNS固有の設定契約はSOCIAL、認可と保存はDB、管理UIと組立はWebへ置き、共通ApplicationへHassy固有条件を固定しない。
+
+今回編集するのは新規支援提案のenabled、採用後未報告のminimumAccepted（2〜100）、見送り後cooldownDays（30〜365）、対象困りごとのcategories。既存28日観測・他判定の閾値・ロードマップ成長条件は変えない。閾値は既存判定器の候補保存と本人表示/回答で現在値へ照合する。
+
+本部SUPER_ADMINがサービス単位で本部条件を保存し、同サービスのACTIVE SERVICE_OWNER/ADMINは本部設定済みの場合だけ同等以上の件数/日数とカテゴリの部分集合、停止のみを保存できる。本部が後から厳しくした場合もeffective値はmax/AND/共通集合で制約する。機能権限や予算・外部操作の許可を付与しない。
+
+config._managedPolicies.socialRecommendationPolicyに版・revisionと最後の要求receiptを保存し、Group行ロック、expectedRevision、同一commandId/payloadだけの再送成功を使う。設定変更は既存監査ログへbefore/afterと理由を追記する。通常の機能設定更新も同じGroupロックを取り、共通の保護領域_managedPoliciesを保持して無意識の消去や本部条件の迂回を防ぐ。
+
+未設定は従来の2件/30日/全カテゴリを維持し、OEMが本部設定前に変更することは許さない。不正な保存値はfail closedとする。提供済み支援の内容と抑制日数は既存snapshotへ固定し、後の設定変更で上書きしない。停止は新規質問/回答/支援開始を止め、開始済み支援の表示と本人の完了/見送りを維持する。過去特典やCreditは変更しない。
+
+既存の提案履歴・確定特典を作り直さない。今回の管理UIはSNS共通で、Hassy以外でも明示SOCIAL機能があるサービスに適用する。ロードマップ定義編集、他ルール閾値、人数体験権限は次の作業とする。本番設定・有効化・デプロイは実行しない。
+
+共通のFeature保存処理はSNS実装へ依存させない。Groupロックと保護領域の保持は既存group-feature-entitlement.tsに置き、SNSの保存Adapterがそれを利用する。純粋なSNS設定パーサーはDBのconfig配置を知らず、版付き設定値だけを読む。

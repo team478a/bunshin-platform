@@ -119,7 +119,10 @@ function withAuthorization<T extends object>(tx: T) {
         .fn()
         .mockResolvedValue({ key: policy.featureKey, parentKey: null, status: 'ACTIVE' }),
     },
-    groupFeaturePolicy: { findMany: vi.fn().mockResolvedValue([policy]) },
+    groupFeaturePolicy: {
+      findMany: vi.fn().mockResolvedValue([policy]),
+      findUnique: vi.fn().mockResolvedValue(null),
+    },
     groupMemberFeatureAssignment: { findMany: vi.fn().mockResolvedValue([policy]) },
     socialActivitySupportIntervention: {
       findFirst: vi.fn().mockResolvedValue(null),

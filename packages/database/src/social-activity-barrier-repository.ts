@@ -1,5 +1,10 @@
 import {
+  lockRecommendationService,
+  readRuntimeRecommendationPolicy,
+} from './social-recommendation-policy';
+import {
   SOCIAL_ACTIVITY_SUPPORT_FEATURE_KEY,
+  recommendationEvidenceAllowed,
   buildSocialActivityBarrierGoalAttribution,
   buildSocialActivityBarrierGoalMetrics,
   readSocialActivityBarrierMissionGoal,
@@ -302,10 +307,13 @@ export class PrismaSocialActivityBarrierCaseRepository implements SocialActivity
   async saveSuspicions(
     input: Parameters<SocialActivityBarrierCaseRepository['saveSuspicions']>[0],
   ) {
+    input = structuredClone(input);
     if (input.candidates.some((candidate) => !sameScope(candidate.scope, input.scope))) return null;
     if (input.candidates.some((candidate) => candidate.status !== 'SUSPECTED')) return null;
 
     return this.client.$transaction(async (tx) => {
+      await lockRecommendationService(tx, input.scope);
+      const { policy, settings } = await readRuntimeRecommendationPolicy(tx, input.scope);
       const [membership, bunshin] = await Promise.all([
         tx.groupMembership.findFirst({
           where: {
@@ -328,9 +336,19 @@ export class PrismaSocialActivityBarrierCaseRepository implements SocialActivity
         }),
       ]);
       if (!membership || !bunshin) return null;
+      if (!policy || !settings.enabled) return [];
 
       const saved: SocialActivityBarrierCase[] = [];
       for (const candidate of input.candidates) {
+        if (!recommendationEvidenceAllowed(settings, candidate.category, candidate.evidence))
+          continue;
+        candidate.evidence.thresholds = {
+          ...candidate.evidence.thresholds,
+          recommendationPolicyRevision: policy.revision,
+          ...(candidate.evidence.evidenceCode === 'ACCEPTED_WITHOUT_POST_REPORT'
+            ? { minimumAccepted: settings.minimumAccepted }
+            : {}),
+        };
         const unique = {
           workspaceId: input.scope.workspaceId,
           groupId: input.scope.serviceId,
@@ -364,7 +382,9 @@ export class PrismaSocialActivityBarrierCaseRepository implements SocialActivity
           });
         }
 
-        const evidenceKey = socialActivityBarrierEvidenceKey(candidate);
+        const evidenceKey =
+          socialActivityBarrierEvidenceKey(candidate) +
+          (policy.revision ? `:recommendation-policy:${policy.revision}` : '');
         const existingEvidence = await tx.socialActivityBarrierEvidence.findUnique({
           where: {
             caseId_evidenceKey: {

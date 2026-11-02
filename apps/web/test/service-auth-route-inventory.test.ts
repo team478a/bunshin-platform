@@ -27,6 +27,15 @@ describe('service authentication route inventory', () => {
     expect(safeLineAuthReturnPath(path)).toBeNull();
   });
   it.each([
+    '/s/service-a/manage/recommendations?enabled=true',
+    '/s/service-a/manage/recommendations/extra',
+    '/s/service-a/manage/recommendations#settings',
+    '/s/service-a/manage/%72ecommendations',
+    '//example.com/s/service-a/manage/recommendations',
+  ])('rejects recommendation settings aliases and unapproved extensions: %s', (path) => {
+    expect(safeLineAuthReturnPath(path)).toBeNull();
+  });
+  it.each([
     '/s/service-a/manage/improvement-overview?week=2026-10-05',
     '/s/service-a/manage/improvement-overview/extra',
     '/s/service-a/manage/improvement-overview#details',
