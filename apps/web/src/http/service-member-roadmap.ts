@@ -1,6 +1,8 @@
 import 'server-only';
 import { GetMemberRoadmap, GetMemberUsageSummary, type MemberRoadmap } from '@bunshin/application';
 import { getServiceMemberReadResponse } from './service-member-read';
+import { ApplicationError } from '@bunshin/shared';
+import { selectServiceMemberRoadmapPolicy } from '../services/service-growth-policy';
 
 // Explicit allowlist: never serialize internal scope, feature policy or source records.
 function memberDto(value: MemberRoadmap) {
@@ -40,13 +42,16 @@ export function getServiceMemberRoadmapResponse(
   serviceSlug: string,
   bunshinId: string,
 ) {
-  return getServiceMemberReadResponse(request, serviceSlug, bunshinId, async (input) => {
+  return getServiceMemberReadResponse(request, serviceSlug, bunshinId, async (input, service) => {
+    const policy = selectServiceMemberRoadmapPolicy(service);
+    if (!policy) throw new ApplicationError('NOT_FOUND', 'member roadmap unavailable');
     const db = await import('@bunshin/database');
     const usage = new db.PrismaMemberUsageRepository(db.prisma);
     const context = new db.PrismaMemberRoadmapContextRepository(db.prisma);
     const roadmap = await new GetMemberRoadmap(
       new GetMemberUsageSummary(usage, usage),
       context,
+      policy,
     ).execute(input);
     return memberDto(roadmap);
   });

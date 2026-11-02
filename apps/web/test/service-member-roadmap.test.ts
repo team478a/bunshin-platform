@@ -1,11 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-  createDefaultMemberRoadmapDefinition,
-  type MemberRoadmap,
-  type MemberRoadmapContext,
-  type MemberUsageSources,
-} from '@bunshin/application';
+import type { MemberRoadmap, MemberRoadmapContext, MemberUsageSources } from '@bunshin/application';
 import { ApplicationError } from '@bunshin/shared';
+import { createHassyMemberRoadmapDefinition as createDefaultMemberRoadmapDefinition } from '../src/services/hassy-growth-policy';
 import type * as ReadLimitModule from '../src/http/member-usage-read-limit';
 
 type RoadmapBody = {
@@ -102,7 +98,16 @@ beforeEach(() => {
   vi.useFakeTimers();
   vi.setSystemTime(now);
   m.actor.mockResolvedValue({ userId: scope.userId });
-  m.member.mockResolvedValue({ workspaceId: scope.workspaceId, serviceId: scope.serviceId });
+  m.member.mockResolvedValue({
+    workspaceId: scope.workspaceId,
+    serviceId: scope.serviceId,
+    configuration: {
+      id: id(6),
+      workspaceId: scope.workspaceId,
+      groupId: scope.serviceId,
+      registration: { onboardingConfig: { templateKey: 'HASSY' } },
+    },
+  });
   m.membership.mockResolvedValue({ id: scope.groupMembershipId });
   m.bunshin.mockResolvedValue({ id: scope.bunshinId, lineNotificationPreferences: [] });
   m.authorize.mockResolvedValue(true);
@@ -115,6 +120,44 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers());
 
 describe('member roadmap authenticated API', () => {
+  it.each(['CUSTOM', 'MANABERU_STYLE', null])(
+    'does not read usage or return a Hassy roadmap for template %s',
+    async (templateKey) => {
+      m.member.mockResolvedValue({
+        workspaceId: scope.workspaceId,
+        serviceId: scope.serviceId,
+        configuration: {
+          id: id(6),
+          workspaceId: scope.workspaceId,
+          groupId: scope.serviceId,
+          slug: 'hassy',
+          displayName: 'ハッシー',
+          registration: { onboardingConfig: { templateKey } },
+        },
+      });
+      const response = await run();
+      expect(response.status).toBe(404);
+      expect(response.headers.get('cache-control')).toBe('private, no-store');
+      expect(m.authorize).not.toHaveBeenCalled();
+      expect(m.context).not.toHaveBeenCalled();
+      expect(m.release).toHaveBeenCalledOnce();
+      // Product selection applies only to the roadmap, never to basic usage access.
+      expect(
+        (await getServiceMemberUsageResponse(request(), 'hassy', scope.bunshinId)).status,
+      ).toBe(200);
+    },
+  );
+
+  it('does not trust a product definition returned by the evidence adapter', async () => {
+    const value = context();
+    value.definition.version = 'untrusted-evidence-definition';
+    value.definition.stages = [];
+    m.context.mockResolvedValue(value);
+    expect(await (await run()).json()).toMatchObject({
+      data: { definitionVersion: 'hassy-roadmap-v1' },
+    });
+  });
+
   it('shares the real per-user request window with the usage endpoint', async () => {
     const { MemberUsageReadLimit } = await vi.importActual<typeof ReadLimitModule>(
       '../src/http/member-usage-read-limit',
@@ -415,14 +458,13 @@ describe('member roadmap authenticated API', () => {
       },
     });
   });
-  it.each(['scope', 'asOf', 'timezone', 'definition'] as const)(
+  it.each(['scope', 'asOf', 'timezone'] as const)(
     'rejects mismatched context %s as unavailable',
     async (key) => {
       const value = context();
       if (key === 'scope') value.scope = { ...scope, serviceId: id(99) };
       if (key === 'asOf') value.asOf = new Date(now.getTime() - 1).toISOString();
       if (key === 'timezone') value.timezone = 'UTC';
-      if (key === 'definition') value.definition.scope = { workspaceId: id(99), serviceId: id(98) };
       m.context.mockResolvedValue(value);
       const response = await run();
       expect(response.status).toBe(503);

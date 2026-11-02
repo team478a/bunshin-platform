@@ -5,6 +5,7 @@ import { ApplicationError, toApiError } from '@bunshin/shared';
 import { z } from 'zod';
 import { currentUserProvider } from '../auth/current-user';
 import { resolveMemberServiceContext } from '../services/public-service';
+import type { PublicServiceContext } from '../services/public-service';
 import { memberUsageReadLimit } from './member-usage-read-limit';
 
 const headers = { 'cache-control': 'private, no-store', vary: 'Cookie, Authorization' };
@@ -25,7 +26,7 @@ export async function getServiceMemberReadResponse(
   request: Request,
   serviceSlug: string,
   bunshinId: string,
-  read: (input: MemberUsageRequest) => Promise<unknown>,
+  read: (input: MemberUsageRequest, service: PublicServiceContext) => Promise<unknown>,
 ) {
   const requestId = requestIdFromHeader(request.headers.get('x-request-id'));
   let release: (() => void) | undefined;
@@ -82,18 +83,21 @@ export async function getServiceMemberReadResponse(
     const timezone = storedTimezone(bunshin.lineNotificationPreferences[0]?.timezone);
     let data: unknown;
     try {
-      data = await read({
-        actorUserId: actor.userId,
-        scope: {
-          workspaceId: service.workspaceId,
-          serviceId: service.serviceId,
-          groupMembershipId: membership.id,
-          userId: actor.userId,
-          bunshinId,
+      data = await read(
+        {
+          actorUserId: actor.userId,
+          scope: {
+            workspaceId: service.workspaceId,
+            serviceId: service.serviceId,
+            groupMembershipId: membership.id,
+            userId: actor.userId,
+            bunshinId,
+          },
+          asOf: new Date(),
+          timezone,
         },
-        asOf: new Date(),
-        timezone,
-      });
+        service,
+      );
     } catch (error) {
       if (error instanceof ApplicationError && error.code === 'VALIDATION_ERROR')
         throw new ApplicationError('DATABASE_UNAVAILABLE', 'member read source unavailable');

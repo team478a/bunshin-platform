@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { evidenceTestPolicy } from './member-roadmap-policy-fixture';
 import type { PrismaClient } from '@prisma/client';
 import {
   GetMemberRoadmap,
@@ -140,9 +141,11 @@ export function registerMemberRoadmapContextIntegrationCases(client: PrismaClien
         repository,
         read: () => repository.read(request),
         roadmap: () =>
-          new GetMemberRoadmap(new GetMemberUsageSummary(usage, usage), repository).execute(
-            request,
-          ),
+          new GetMemberRoadmap(
+            new GetMemberUsageSummary(usage, usage),
+            repository,
+            evidenceTestPolicy,
+          ).execute(request),
       };
     }
     async function evidence(f: Awaited<ReturnType<typeof fixture>>, date = at) {

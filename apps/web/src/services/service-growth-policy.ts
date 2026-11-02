@@ -1,0 +1,52 @@
+import 'server-only';
+import type { MemberRoadmapPolicy, MemberUsageScope } from '@bunshin/application';
+import { ApplicationError } from '@bunshin/shared';
+import type { PublicServiceContext } from './public-service';
+import {
+  createHassyMemberRoadmapDefinition,
+  HASSY_MEMBER_ROADMAP_POLICY,
+} from './hassy-growth-policy';
+
+/** Only a resolved, owner-authorized ServiceContext may select a product policy. */
+export function selectServiceMemberRoadmapPolicy(
+  service: PublicServiceContext,
+): MemberRoadmapPolicy | null {
+  const configuration = service.configuration;
+  if (
+    !configuration ||
+    !service.workspaceId ||
+    !service.serviceId ||
+    configuration.workspaceId !== service.workspaceId ||
+    configuration.groupId !== service.serviceId
+  )
+    return null;
+  const settings: unknown = configuration.registration?.onboardingConfig;
+  if (
+    !settings ||
+    typeof settings !== 'object' ||
+    Array.isArray(settings) ||
+    !Object.hasOwn(settings, 'templateKey') ||
+    (settings as Record<string, unknown>)['templateKey'] !== 'HASSY'
+  )
+    return null;
+  const workspaceId = service.workspaceId;
+  const serviceId = service.serviceId;
+  const checkScope = (scope: MemberUsageScope) => {
+    if (scope.workspaceId !== workspaceId || scope.serviceId !== serviceId)
+      throw new ApplicationError('VALIDATION_ERROR', 'roadmap policy scope mismatch');
+  };
+  return {
+    createDefinition(scope) {
+      checkScope(scope);
+      const definition = createHassyMemberRoadmapDefinition();
+      definition.scope = { workspaceId, serviceId };
+      return definition;
+    },
+    validateDefinition(definition, scope) {
+      checkScope(scope);
+      if (definition.scope?.workspaceId !== workspaceId || definition.scope.serviceId !== serviceId)
+        throw new ApplicationError('VALIDATION_ERROR', 'roadmap definition scope mismatch');
+      HASSY_MEMBER_ROADMAP_POLICY.validateDefinition(definition, scope);
+    },
+  };
+}

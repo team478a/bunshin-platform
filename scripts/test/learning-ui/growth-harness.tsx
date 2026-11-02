@@ -1,6 +1,6 @@
 // Synthetic browser fixture only. Uses the production component; never authenticates or calls a DB.
 import { useState } from 'react';
-import { MemberGrowthRoadmap } from '../../../apps/web/app/ui/member-growth-roadmap/card';
+import { HassyMemberGrowthRoadmap } from '../../../apps/web/app/ui/member-growth-roadmap/card';
 import { growthBase } from './growth-fixture';
 
 export function GrowthHarness() {
@@ -13,7 +13,7 @@ export function GrowthHarness() {
       <button type="button" onClick={() => setOther((value) => !value)}>
         テスト用Bunshin切替
       </button>
-      <MemberGrowthRoadmap
+      <HassyMemberGrowthRoadmap
         endpointBase={
           other
             ? growthBase.replace(

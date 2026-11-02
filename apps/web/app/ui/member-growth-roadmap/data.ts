@@ -1,25 +1,9 @@
 import { z } from 'zod';
+import { HASSY_MEMBER_ROADMAP_MILESTONES } from '../../../src/services/hassy-growth-policy';
 
 const count = z.number().int().nonnegative().safe();
 const stageId = z.enum(['STEP_1', 'STEP_2', 'STEP_3', 'STEP_4', 'STEP_5']);
-const milestoneId = z.enum([
-  'INITIAL_SETUP',
-  'FIRST_GENERATION',
-  'FIRST_DECISION',
-  'POST_HISTORY',
-  'WEEKLY_PLAN',
-  'CONTINUED_ACTIVITY',
-  'SNS_CONNECTION_GUIDE',
-  'POST_PREPARATION',
-  'SCHEDULED_POSTING',
-  'SNS_METRICS',
-  'POST_ANALYSIS',
-  'APPLY_IMPROVEMENT',
-  'MUSE_GUIDE',
-  'ZAPIER_GUIDE',
-  'EXTERNAL_AI',
-  'REFERRAL_MILESTONE',
-]);
+const milestoneId = z.enum(HASSY_MEMBER_ROADMAP_MILESTONES);
 const display = z.enum(['COMPLETED', 'AVAILABLE', 'PREPARING']);
 const timestamp = z.iso.datetime();
 const timezone = z

@@ -1,8 +1,7 @@
-import {
-  createDefaultMemberRoadmapDefinition,
-  type MemberRoadmapContext,
-  type MemberRoadmapContextRepository,
-  type MemberUsageRequest,
+import type {
+  MemberRoadmapEvidenceContext,
+  MemberRoadmapContextRepository,
+  MemberUsageRequest,
 } from '@bunshin/application';
 import { ApplicationError } from '@bunshin/shared';
 import type { PrismaClient } from '@prisma/client';
@@ -13,14 +12,14 @@ import {
   isMemberUsagePermitted,
 } from './member-usage-authorization';
 
-/** Owner-only evidence projection. Never generates content, grants access or consumes quota. */
+/** Owner-only SOCIAL evidence. Web selects the product policy; this adapter never grants access. */
 export class PrismaMemberRoadmapContextRepository implements MemberRoadmapContextRepository {
   constructor(
     private readonly client: PrismaClient,
     private readonly now = () => new Date(),
   ) {}
 
-  read(input: MemberUsageRequest): Promise<MemberRoadmapContext | null> {
+  read(input: MemberUsageRequest): Promise<MemberRoadmapEvidenceContext | null> {
     const request = snapshotMemberUsageRequest(input);
     try {
       if (!request.timezone || request.timezone.length > 64) throw new Error('invalid timezone');
@@ -145,7 +144,6 @@ export class PrismaMemberRoadmapContextRepository implements MemberRoadmapContex
         scope: { ...s },
         asOf: request.asOf.toISOString(),
         timezone: request.timezone,
-        definition: createDefaultMemberRoadmapDefinition(),
         facts: {
           INITIAL_SETUP: onboarding && profile ? true : null,
           WEEKLY_PLAN: plan ? true : null,
