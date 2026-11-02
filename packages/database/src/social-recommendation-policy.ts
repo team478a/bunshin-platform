@@ -204,8 +204,12 @@ export class PrismaSocialRecommendationPolicyRepository implements SocialRecomme
           select: { key: true },
         });
         if (!feature) throw new ApplicationError('NOT_FOUND', 'support feature unavailable');
-        if (row && !isPolicyRecord(row.config))
+        const rootConfig = row ? row.config : {};
+        if (!isPolicyRecord(rootConfig))
           throw new ApplicationError('VALIDATION_ERROR', '既存の機能設定を確認してください。');
+        const managedConfig = rootConfig[MANAGED_FEATURE_POLICY_CONFIG_KEY];
+        if (managedConfig !== undefined && !isPolicyRecord(managedConfig))
+          throw new ApplicationError('VALIDATION_ERROR', 'invalid managed feature configuration');
         const after: SocialRecommendationPolicy = {
           ...before,
           revision: before.revision + 1,
@@ -214,12 +218,9 @@ export class PrismaSocialRecommendationPolicyRepository implements SocialRecomme
           lastRequest: { commandId: command.commandId, fingerprint },
         };
         const config = {
-          ...(row?.config ?? {}),
+          ...rootConfig,
           [MANAGED_FEATURE_POLICY_CONFIG_KEY]: {
-            ...(isPolicyRecord(row?.config) &&
-            isPolicyRecord(row.config[MANAGED_FEATURE_POLICY_CONFIG_KEY])
-              ? row.config[MANAGED_FEATURE_POLICY_CONFIG_KEY]
-              : {}),
+            ...(managedConfig ?? {}),
             [SOCIAL_RECOMMENDATION_POLICY_CONFIG_KEY]: after,
           },
         } as unknown as Prisma.InputJsonValue;
