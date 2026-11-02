@@ -144,6 +144,11 @@ function Snapshot({ value }: { value: GrowthSnapshot }) {
                       </span>
                     </div>
                     <p>{evidence(item)}</p>
+                    {item.progress.target > 1 && (
+                      <p>
+                        目標：{item.progress.target} ／ 現在：{item.progress.current ?? '未確認'}
+                      </p>
+                    )}
                   </li>
                 ))}
               </ul>

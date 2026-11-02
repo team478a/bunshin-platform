@@ -255,3 +255,37 @@ test('switching Bunshin aborts previous work and never shows its late response',
   await screen.getByRole('button', '成長ロードマップを見る').tap();
   await expect(screen.getByRole('heading', '5つのステップ')).toBeVisible();
 });
+
+test('managed targets remain visible separately from current feature availability', async ({
+  app,
+  browser,
+  screen,
+}) => {
+  const roadmap = growthRoadmap();
+  roadmap.definitionVersion = 'hassy-roadmap-managed-v1-r2';
+  const first = roadmap.stages[0]!,
+    generated = first.milestones.find((item) => item.id === 'FIRST_GENERATION')!;
+  generated.progress = { current: 4, target: 10 };
+  generated.achievement = 'INCOMPLETE';
+  generated.status = 'PREPARING';
+  first.progress.completed = 1;
+  const last = roadmap.stages[4]!;
+  last.milestones.push({
+    id: 'REFERRAL_MILESTONE',
+    title: '紹介の達成目標（任意）',
+    status: 'PREPARING',
+    achievement: 'INCOMPLETE',
+    availability: { state: 'PREPARING' },
+    progress: { current: 3, target: 5 },
+  });
+  last.progress.total = 4;
+  roadmap.validReferrals = 3;
+  await browser.route('**/api/services/**', async (route) => {
+    await route.fulfill({ json: { data: growthSnapshot(roadmap) } });
+  });
+  await app.open('/?member-growth');
+  await screen.getByRole('button', '成長ロードマップを見る').tap();
+  await expect(screen.getByText('目標：10 ／ 現在：4')).toBeVisible();
+  await expect(screen.getByText('目標：5 ／ 現在：3')).toBeVisible();
+  await expect(screen.getByText('紹介をしなくても、SNSの基本機能を利用できます。')).toBeVisible();
+});

@@ -22,7 +22,7 @@
 - `apps/web/src/http/managed-feature-policy.ts` / `hassy-roadmap-policy.ts`: 既存HTTP境界の再利用。
 - `/s/[serviceSlug]/manage/roadmap`、`/api/services/[serviceSlug]/roadmap-policy`: 本部/OEM管理画面・API。
 - `app/ui/use-managed-policy-editor.ts`: 既存SNSフォームとロードマップの取得・revision確認・再送receiptを共通化。
-- 管理メニュー、本部機能設定ページ、認証戻り先、関連テスト、ブラウザ検証harness。
+- 会員ロードマップでは利用可否と別に変更した複数回/日の目標と現在値を表示。管理メニュー、本部機能設定ページ、認証戻り先、関連テスト、ブラウザ検証harness。
 
 共有ファイルの変更: database `src/index.ts`に公開exportを追加。ブラウザ検証の入口・設定にケースを追加。schema、migration、Cron、環境変数、Feature Flagは追加・変更していない。
 
