@@ -224,6 +224,6 @@ function GrowthCard({ endpointBase }: { endpointBase: string }) {
   );
 }
 
-export function MemberGrowthRoadmap({ endpointBase }: { endpointBase: string }) {
+export function HassyMemberGrowthRoadmap({ endpointBase }: { endpointBase: string }) {
   return <GrowthCard key={endpointBase} endpointBase={endpointBase} />;
 }

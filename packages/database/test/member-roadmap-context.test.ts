@@ -5,6 +5,7 @@ import {
   type MemberUsageRequest,
 } from '@bunshin/application';
 import { describe, expect, it, vi } from 'vitest';
+import { evidenceTestPolicy } from './member-roadmap-policy-fixture';
 import { PrismaMemberRoadmapContextRepository } from '../src/member-roadmap-context';
 
 const id = (n: number) => `00000000-0000-4000-8000-${n.toString().padStart(12, '0')}`;
@@ -279,7 +280,18 @@ describe('roadmap context DB projection', () => {
       postRecords: [],
       aiUsage: [],
     });
-    expect(evaluateMemberRoadmap(request, usage, context).nextRecommended).toEqual({
+    expect(context).not.toHaveProperty('definition');
+    expect(
+      evaluateMemberRoadmap(
+        request,
+        usage,
+        {
+          ...context,
+          definition: evidenceTestPolicy.createDefinition(request.scope),
+        },
+        evidenceTestPolicy,
+      ).nextRecommended,
+    ).toEqual({
       stageId: 'STEP_1',
       milestoneId: 'FIRST_DECISION',
     });
