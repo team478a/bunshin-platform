@@ -220,17 +220,6 @@ export function OrganizationManageView({ model }: { model: OrganizationManagePag
               maxLength={500}
             />
           </label>
-          <label className="field">
-            <span className="field__label">変更理由</span>
-            <input
-              className="field__control"
-              name="reason"
-              required
-              minLength={5}
-              maxLength={1000}
-              placeholder="例：クライアント情報を更新"
-            />
-          </label>
           <button className="button" type="submit">
             団体情報を保存する
           </button>

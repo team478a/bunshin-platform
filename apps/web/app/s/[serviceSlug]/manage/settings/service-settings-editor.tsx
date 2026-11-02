@@ -5,7 +5,11 @@ import {
   readServiceAnnouncement,
   readServiceOnboardingSettings,
 } from '../../../../../src/services/service-onboarding-settings';
-import { enforceBusinessDailyServiceSettings } from '../../../../../src/services/business-daily-service-settings';
+import {
+  enforceBusinessDailyServiceSettings,
+  enforceBusinessFreeRegistrationSettings,
+} from '../../../../../src/services/business-daily-service-settings';
+import { serviceSettingsChangesRequiringReason } from '../../../../../src/services/service-settings-reason';
 import {
   serviceRegistrationModeFromPolicy,
   serviceRegistrationPolicyFromMode,
@@ -38,12 +42,23 @@ export function ServiceSettingsEditor({
   audioTracks: AudioTrackOption[];
 }) {
   const [saving, setSaving] = useState(false);
+  const [savedValue, setSavedValue] = useState(value);
   const [message, setMessage] = useState('');
+  const [hasError, setHasError] = useState(false);
   const onboarding = readServiceOnboardingSettings(
     value.registration.onboardingConfig,
     value.registration.surveyConfig,
   );
   const businessFreeSettingsLocked = onboarding.businessProfileEnabled;
+  const [basicPolicy, setBasicPolicy] = useState({
+    termsUrl: value.termsUrl,
+    privacyUrl: value.privacyUrl,
+    emailEnabled: value.registration.emailEnabled,
+    lineEnabled: value.registration.lineEnabled,
+    inviteCodeEnabled: !businessFreeSettingsLocked && value.registration.inviteCodeEnabled,
+    referralEnabled: !businessFreeSettingsLocked && value.registration.referralEnabled,
+    trendResearchEnabled: value.trendResearchEnabled ?? true,
+  });
   const initialRegistrationPolicy = serviceRegistrationPolicyFromMode(value.registration.mode);
   const [registrationAccess, setRegistrationAccess] = useState<ServiceRegistrationAccess>(
     initialRegistrationPolicy.access,
@@ -74,6 +89,23 @@ export function ServiceSettingsEditor({
   const [welcomeMessage, setWelcomeMessage] = useState(onboarding.welcomeMessage);
   const [onboardingQuestions, setOnboardingQuestions] = useState(onboarding.questions.join('\n'));
   const announcement = readServiceAnnouncement(value.registration.onboardingConfig);
+  const reasonChanges = serviceSettingsChangesRequiringReason(
+    savedValue,
+    enforceBusinessFreeRegistrationSettings(
+      enforceBusinessDailyServiceSettings({
+        ...basicPolicy,
+        registrationMode: serviceRegistrationModeFromPolicy(
+          registrationAccess,
+          registrationApproval,
+        ),
+        profileQuestions,
+        businessProfileEnabled,
+        businessProfileInputMode,
+        dailyIdeaDelivery,
+      }),
+    ),
+  );
+  const requiresReason = reasonChanges.length > 0;
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -83,6 +115,7 @@ export function ServiceSettingsEditor({
       return typeof field === 'string' ? field : '';
     };
     setSaving(true);
+    setHasError(false);
     setMessage('保存しています…');
     try {
       const response = await fetch(`/api/services/${encodeURIComponent(serviceSlug)}/settings`, {
@@ -125,10 +158,11 @@ export function ServiceSettingsEditor({
           businessProfileEnabled,
           businessProfileInputMode,
           dailyIdeaDelivery,
-          reason: text('reason'),
+          ...(requiresReason ? { reason: text('reason') } : {}),
         }),
       });
       const result = (await response.json()) as {
+        data?: ServiceSettingsValue;
         error?: { message?: string; requestId?: string };
       };
       if (!response.ok) {
@@ -139,8 +173,10 @@ export function ServiceSettingsEditor({
             : message,
         );
       }
+      if (result.data) setSavedValue(result.data);
       setMessage('設定を保存しました。サービス画面にも反映されます。');
     } catch (error) {
+      setHasError(true);
       setMessage(error instanceof Error ? error.message : '設定を保存できませんでした。');
     } finally {
       setSaving(false);
@@ -151,6 +187,22 @@ export function ServiceSettingsEditor({
     <form
       className="admin-form-grid service-settings-form"
       onSubmit={(event) => void submit(event)}
+      onChange={(event) => {
+        const fields = new FormData(event.currentTarget);
+        const text = (name: string) => {
+          const field = fields.get(name);
+          return typeof field === 'string' ? field : '';
+        };
+        setBasicPolicy({
+          termsUrl: text('termsUrl') || null,
+          privacyUrl: text('privacyUrl') || null,
+          emailEnabled: fields.has('emailEnabled'),
+          lineEnabled: fields.has('lineEnabled'),
+          inviteCodeEnabled: businessFreeSettingsLocked ? false : fields.has('inviteCodeEnabled'),
+          referralEnabled: businessFreeSettingsLocked ? false : fields.has('referralEnabled'),
+          trendResearchEnabled: fields.has('trendResearchEnabled'),
+        });
+      }}
     >
       <ServiceBasicsFields
         value={value}
@@ -188,15 +240,31 @@ export function ServiceSettingsEditor({
         visualCharacters={visualCharacters}
         audioTracks={audioTracks}
       />
-      <label>
-        変更した理由
-        <input name="reason" required maxLength={1000} placeholder="例：新しいロゴへ変更" />
-      </label>
+      {requiresReason ? (
+        <label>
+          変更した理由
+          <small id="service-settings-reason-help">
+            {reasonChanges.join('、')}を変更する場合は理由を残します。
+          </small>
+          <input
+            name="reason"
+            aria-label="変更した理由"
+            aria-describedby="service-settings-reason-help"
+            required
+            maxLength={1000}
+            placeholder="変更の目的を入力"
+          />
+        </label>
+      ) : null}
       <button className="button button--primary" type="submit" disabled={saving}>
         {saving ? '保存中…' : '設定を保存する'}
       </button>
       {message ? (
-        <p className="notice notice--success" role="status" aria-live="polite">
+        <p
+          className={hasError ? 'notice notice--danger' : 'notice notice--success'}
+          role={hasError ? 'alert' : 'status'}
+          aria-live="polite"
+        >
           {message}
         </p>
       ) : null}
