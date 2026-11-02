@@ -128,12 +128,13 @@ test('missing code provenance never enables approval and never asks for a replac
   await browser.route('**/api/services/**', async (route) => {
     if (route.request.method !== 'GET') writes++;
     await route.fulfill({
-      json: {
+      contentType: 'application/json',
+      body: JSON.stringify({
         data: data().map((i) => ({
           ...i,
           provenance: { mode: 'SERVER_V1', reviewedCommitSha: null },
         })),
-      },
+      }),
     });
   });
   await app.open('/?definition-review');
@@ -161,7 +162,14 @@ test('receipt followed by failed GET offers read recovery without resending appr
   await browser.route('**/api/services/**', async (route) => {
     if (route.request.method === 'GET') {
       reads++;
-      await route.fulfill(reads === 2 ? { status: 503, json: {} } : { json: { data: items } });
+      await route.fulfill(
+        reads === 2
+          ? { status: 503, json: {} }
+          : {
+              contentType: 'application/json',
+              body: JSON.stringify({ data: items }),
+            },
+      );
       return;
     }
     writes++;
