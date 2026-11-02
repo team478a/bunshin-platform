@@ -250,7 +250,7 @@ export function registerSocialSupportAccessIntegrationCases(client: PrismaClient
       expect(JSON.stringify(result)).not.toContain('PRIVATE_SYNTHETIC');
       await client.groupMembership.update({
         where: { id: f.scope.groupMembershipId },
-        data: { status: 'LEFT' },
+        data: { status: 'REVOKED' },
       });
       await expect(reader.readObservations(request)).rejects.toMatchObject({ code: 'NOT_FOUND' });
     });

@@ -67,7 +67,7 @@ function setup(rows = [support()]) {
     postRecord: { findMany: vi.fn().mockResolvedValue([]) },
   };
   const client = {
-    $transaction: vi.fn(async (fn: (value: typeof tx) => unknown) => fn(tx)),
+    $transaction: vi.fn((fn: (value: typeof tx) => unknown) => Promise.resolve(fn(tx))),
   } as unknown as PrismaClient;
   return {
     tx,
