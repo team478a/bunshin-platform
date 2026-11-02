@@ -17,7 +17,8 @@
 - `apps/web/src/http/learning-definition-approval-admin.ts`：GETへ検証済みSHAまたはnullを付加。新モードの証跡キーをoperationIdから生成。旧API形式は従来の人間申告として受理する。
 - `packages/database/src/learning-definition-approval-admin.ts`：自動来歴区分と証跡参照を検証・既存監査へ保存。新規操作のSHAをサーバー値へ照合し、同一操作のreceiptはdeploy後も再取得できる。
 - Webの既存HTTP/UIテスト、DBの既存command/integrationテスト、既存`definition-review.e2e.ts`：新旧互換、失敗・競合・認可・来歴・再送・端末幅の検証。
-- 新ADRと本報告、旧UI ADRへの更新先案内。共有ファイル（package公開入口、環境定義、DECISION_LOG、IMPLEMENTATION_ROADMAP、共通e2e config等）は変更しない。
+- 新ADRと本報告、旧UI ADRへの更新先案内。
+- 共有ファイルの変更：`apps/web/app/styles.css`へ本画面専用classの折り返しと最小幅解除を追加。既存のselectorは変更しない。package公開入口、環境定義、DECISION_LOG、IMPLEMENTATION_ROADMAP、共通e2e configは変更しない。
 
 ## 3. 設計判断と操作比較
 
@@ -46,6 +47,8 @@ receipt受信後のGET失敗は読取だけ再試行できる。5xx・切断・�
 初期基準`1bdae6f4`でローカルの全体`pnpm test`は25 task成功。Webは560ファイル・4,137件成功（実AIの3件は既存のskip）、Database単体は230ファイル・1,345件成功。新旧HTTP契約、画面/pageの既存認可、command検証を含む。全packageとlearning-uiの型検査・lintも成功した。その後mainへ外部API認証PR #1446が入ったため、`2321d21d`へrebaseし、標準CIを改めて実行する。初期基準の件数をrebase後の最終結果とは扱わない。
 
 既存e2e harnessで7件成功。1280/390/320pxの初回自動GET→7項目の本人確認→1 POST→自動GET、入力欄0、横overflowなしを検証した。結果不明時の同一body再送、receipt後の読取失敗、現在状態がreceiptと異なる場合、来歴欠落、対象切替と競合も確認した。390pxのスクリーンショットを確認した。合成データであり、本番や外部Providerを呼ばない。
+
+CIのLinuxフォントでは320pxに長い版名が収まらないことを検出したため、本画面の長い文字列の折り返しとfieldset/入力の最小幅を修正する。テストの幅条件を緩めず、320pxでは20px文字サイズも適用して確認する。他画面への一括overflow非表示で隠さない。
 
 整形・型検査・lint・全体テスト・既存画面テスト全体・ビルド、および使い捨てPostgreSQLでの統合テストは標準CIの必須確認とする。最終実行結果と対象head SHAはPRのチェック/本文に記録する。DB統合には、新規操作のSHA欠落/不正/不一致、deploy後の同一操作再送、digest競合、別scope・失効、監査故障時の業務rollbackと監査1件だけの保存を含める。実装が存在することと、統合テストが成功したことを混同しない。
 

@@ -126,7 +126,7 @@ function DefinitionReviewSession({ serviceSlug }: { serviceSlug: string }) {
     }
   }
   return (
-    <section className="card stack">
+    <section className="card stack learning-definition-review">
       <h2>学習設計の人間レビュー</h2>
       <p>
         マナベルスタイル by

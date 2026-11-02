@@ -52,6 +52,11 @@ for (const width of [1280, 390, 320]) {
       });
     });
     await app.open('/?definition-review');
+    if (width === 320)
+      await browser.evaluate(() => {
+        document.body.style.fontSize = '20px';
+        return true;
+      });
     expect(bodies).toHaveLength(0);
     await screen.getByLabel('レビューする学習設計').selectOption({ value: 'PROMPT_STRUCTURE' });
     await expect(screen.getByRole('button', 'この1件の承認を登録')).toBeDisabled();
