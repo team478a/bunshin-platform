@@ -22,6 +22,13 @@ const ref = z.object({ packageKey: z.literal('AI_TRAINING'), definitionKey: key,
 const texts = z.array(z.string().min(1).max(2000)).min(1).max(20);
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
 const itemSchema = z.object({
+  provenance: z.object({
+    mode: z.literal('SERVER_V1'),
+    reviewedCommitSha: z
+      .string()
+      .regex(/^[a-f0-9]{40}$/)
+      .nullable(),
+  }),
   revision: digest,
   reviewDigest: digest,
   current: z
@@ -99,7 +106,7 @@ const commandSchema = z
     expectedRevision: digest,
     reviewDigest: digest,
     reviewedCommitSha: z.string().regex(/^[a-f0-9]{40}$/),
-    reviewEvidenceKey: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/),
+    provenanceMode: z.literal('SERVER_V1'),
     reviewChecklist: z
       .object({
         objective: z.literal(true),
@@ -117,11 +124,8 @@ export type DefinitionApprovalCommand = z.infer<typeof commandSchema>;
 export function approvalCommand(
   item: DefinitionReview | null,
   checks: Partial<Record<ReviewKey, boolean>>,
-  sha: string,
-  evidence: string,
-  confirmed: boolean,
 ): DefinitionApprovalCommand | null {
-  if (!item || !confirmed || item.current?.approvalStatus === 'APPROVED') return null;
+  if (!reviewReady(item, checks) || !item) return null;
   const parsed = commandSchema.safeParse({
     action: 'APPROVE',
     confirmation: 'CONFIRM_DEFINITION_APPROVAL',
@@ -130,8 +134,8 @@ export function approvalCommand(
     version: item.definition.reference.version,
     expectedRevision: item.revision,
     reviewDigest: item.reviewDigest,
-    reviewedCommitSha: sha,
-    reviewEvidenceKey: evidence,
+    reviewedCommitSha: item.provenance.reviewedCommitSha,
+    provenanceMode: 'SERVER_V1',
     reviewChecklist: checks,
   });
   return parsed.success ? parsed.data : null;
@@ -139,18 +143,13 @@ export function approvalCommand(
 export function reviewReady(
   item: DefinitionReview | null,
   checks: Partial<Record<ReviewKey, boolean>>,
-  sha: string,
-  evidence: string,
-  confirmed: boolean,
 ) {
   return (
     !!item &&
     item.current?.approvalStatus !== 'APPROVED' &&
-    confirmed &&
     reviewKeys.every((k) => checks[k] === true) &&
     Object.keys(checks).length === 7 &&
-    /^[a-f0-9]{40}$/.test(sha) &&
-    /^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/.test(evidence)
+    item.provenance.reviewedCommitSha !== null
   );
 }
 const endpoint = (slug: string) =>

@@ -1,5 +1,5 @@
 'use client';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   approvalCommand,
   definitionTitles,
@@ -23,23 +23,40 @@ function Points({ values }: { values: readonly string[] }) {
   );
 }
 export function DefinitionReviewCard({ serviceSlug }: { serviceSlug: string }) {
+  return <DefinitionReviewSession key={serviceSlug} serviceSlug={serviceSlug} />;
+}
+function DefinitionReviewSession({ serviceSlug }: { serviceSlug: string }) {
   const [items, setItems] = useState<DefinitionReview[] | null>(null);
   const [selected, setSelected] = useState('');
   const [checks, setChecks] = useState<Partial<Record<ReviewKey, boolean>>>({});
-  const [sha, setSha] = useState('');
-  const [evidence, setEvidence] = useState('');
-  const [confirmed, setConfirmed] = useState(false);
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState(true);
   const [retry, setRetry] = useState(false);
-  const [message, setMessage] = useState('まず現在の定義と承認状態を確認してください。');
+  const [message, setMessage] = useState('現在の定義と承認状態を取得しています。');
   const lock = useRef(false);
   const pending = useRef<DefinitionApprovalCommand | null>(null);
+  useEffect(() => {
+    let active = true;
+    void loadDefinitionReviews(serviceSlug)
+      .then((current) => {
+        if (!active) return;
+        if (!current) throw new Error('unavailable');
+        setItems(current);
+        setMessage('現在の状態を取得しました。1件ずつ内容を確認してください。');
+      })
+      .catch(() => {
+        if (active)
+          setMessage('状態を取得できませんでした。再取得するか、担当者に確認してください。');
+      })
+      .finally(() => {
+        if (active) setBusy(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [serviceSlug]);
   const item = items?.find((i) => i.definition.reference.definitionKey === selected) ?? null;
   function resetReview() {
     setChecks({});
-    setConfirmed(false);
-    setSha('');
-    setEvidence('');
   }
   async function refresh() {
     if (lock.current || pending.current) return;
@@ -64,29 +81,49 @@ export function DefinitionReviewCard({ serviceSlug }: { serviceSlug: string }) {
   }
   async function submit() {
     if (lock.current) return;
-    const command = pending.current ?? approvalCommand(item, checks, sha, evidence, confirmed);
+    if (busy) return;
+    const command = pending.current ?? approvalCommand(item, checks);
     if (!command) return;
     pending.current = command;
     lock.current = true;
     setBusy(true);
     setRetry(false);
     const result = await submitDefinitionApproval(serviceSlug, command);
-    lock.current = false;
-    setBusy(false);
     if (result === 'RETRY') {
+      lock.current = false;
+      setBusy(false);
       setRetry(true);
       setMessage('結果が不明です。同じ操作だけを再送して確認してください。');
       return;
     }
     pending.current = null;
     setItems(null);
-    setSelected('');
+    setSelected(result === 'RECEIVED' ? command.definitionKey : '');
     resetReview();
-    setMessage(
-      result === 'RECEIVED'
-        ? '承認登録の応答を受信しました。現在の状態を再取得し、承認済みであることを確認してください。Pilotは開始しません。'
-        : '登録は受理されませんでした。現在の状態を再取得し、内容を改めてレビューしてください。',
-    );
+    try {
+      const current = await loadDefinitionReviews(serviceSlug);
+      if (!current) throw new Error('unavailable');
+      setItems(current);
+      const approved =
+        current.find((i) => i.definition.reference.definitionKey === command.definitionKey)?.current
+          ?.approvalStatus === 'APPROVED';
+      setMessage(
+        result === 'RECEIVED'
+          ? approved
+            ? '承認登録の応答を受信し、現在も承認済みであることを確認しました。Pilotは開始しません。'
+            : '承認登録の応答を受信しましたが、現在は承認済みではありません。現在の状態を確認してください。'
+          : '登録は受理されませんでした。現在の状態を取得しました。内容を改めてレビューしてください。',
+      );
+    } catch {
+      setMessage(
+        result === 'RECEIVED'
+          ? '承認登録の応答は受信しましたが、現在の状態を確認できません。状態を再取得してください。承認を再送する必要はありません。'
+          : '登録は受理されませんでした。現在の状態も取得できません。状態を再取得してください。',
+      );
+    } finally {
+      lock.current = false;
+      setBusy(false);
+    }
   }
   return (
     <section className="card stack">
@@ -97,8 +134,13 @@ export function DefinitionReviewCard({ serviceSlug }: { serviceSlug: string }) {
       </p>
       <p>この操作はPilot開始、参加者登録、通知、AI呼び出しの承認ではありません。</p>
       <p role="status">{message}</p>
-      <button type="button" disabled={busy || retry} onClick={() => void refresh()}>
-        現在の定義と承認状態を確認
+      <button
+        className="button button--secondary"
+        type="button"
+        disabled={busy || retry}
+        onClick={() => void refresh()}
+      >
+        状態を再取得
       </button>
       {items && !retry && (
         <>
@@ -115,9 +157,10 @@ export function DefinitionReviewCard({ serviceSlug }: { serviceSlug: string }) {
               </li>
             ))}
           </ul>
-          <label>
+          <label className="field">
             レビューする学習設計
             <select
+              className="field__control"
               value={selected}
               disabled={busy}
               onChange={(e) => {
@@ -188,52 +231,27 @@ export function DefinitionReviewCard({ serviceSlug }: { serviceSlug: string }) {
               <fieldset disabled={busy} className="stack">
                 <legend>7項目を本人が確認してください</legend>
                 {reviewKeys.map((k) => (
-                  <label key={k}>
+                  <label key={k} className="check-row">
                     <input
                       type="checkbox"
                       checked={checks[k] === true}
                       onChange={(e) => {
                         setChecks({ ...checks, [k]: e.target.checked });
-                        setConfirmed(false);
                       }}
                     />
                     {reviewLabels[k]}を確認した
                   </label>
                 ))}
-                <label>
-                  レビュー対象の公開commit SHA（40桁）
-                  <input
-                    value={sha}
-                    maxLength={40}
-                    onChange={(e) => {
-                      setSha(e.target.value);
-                      setConfirmed(false);
-                    }}
-                  />
-                </label>
-                <label>
-                  人間レビュー証跡キー（本文・秘密情報は入力しない）
-                  <input
-                    value={evidence}
-                    maxLength={80}
-                    onChange={(e) => {
-                      setEvidence(e.target.value);
-                      setConfirmed(false);
-                    }}
-                  />
-                </label>
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={confirmed}
-                    onChange={(e) => setConfirmed(e.target.checked)}
-                  />
-                  この1件・対象版の承認登録を確認しました
-                </label>
               </fieldset>
+              <p>
+                {item.provenance.reviewedCommitSha
+                  ? '対象版とシステムの来歴を自動記録します。内容を確認したら、この1件を承認してください。'
+                  : 'システムの来歴を取得できないため承認できません。環境担当者に公開コード情報の確認を依頼してください。'}
+              </p>
               <button
+                className="button button--primary"
                 type="button"
-                disabled={busy || !reviewReady(item, checks, sha, evidence, confirmed)}
+                disabled={busy || !reviewReady(item, checks)}
                 onClick={() => void submit()}
               >
                 この1件の承認を登録
@@ -244,7 +262,12 @@ export function DefinitionReviewCard({ serviceSlug }: { serviceSlug: string }) {
       )}
       {retry && (
         <>
-          <button type="button" disabled={busy} onClick={() => void submit()}>
+          <button
+            className="button button--secondary"
+            type="button"
+            disabled={busy}
+            onClick={() => void submit()}
+          >
             同じ操作を再送して確認
           </button>
           <p>

@@ -1,5 +1,7 @@
 # 2026-10-10: Learning Definition承認UIは既存APIへ1件ずつ接続する
 
+2026-11-03追記：手動取得、SHA・証跡キー入力、最終確認チェック、登録後の手動再取得の方針は[来歴自動化ADR](../adr/LEARNING_APPROVAL_AUTOMATIC_PROVENANCE_ADR.md)で更新する。以下は従来判断の履歴。認可・CAS・冪等性・内容承認とPilot開始の分離は維持する。
+
 状態: Proposed（実装PRの人間レビュー待ち。本番操作は未実施）
 
 3件の教育設計への人間承認と、本番の承認登録・Pilot開始を区別する。直接SQLやCookie転記ではなく、既存管理者sessionと同originの承認APIを利用する最小画面を追加する。

@@ -4680,6 +4680,98 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
       });
       await expect(repository.change(scope, command)).rejects.toMatchObject({ code: 'FORBIDDEN' });
     });
+    it('Definition admin: automatic provenance rejects new stale code but replays across deployments', async () => {
+      const f = await fixture(false);
+      const repository = new PrismaLearningDefinitionApprovalAdminRepository(client, () => now);
+      const scope = {
+        workspaceId: f.scope.workspaceId,
+        groupId: f.scope.groupId,
+        actorUserId: f.owner.id,
+      };
+      const first = (await repository.list(scope))[0]!;
+      const operationId = randomUUID();
+      const command = {
+        operationId,
+        action: 'APPROVE' as const,
+        confirmation: 'CONFIRM_DEFINITION_APPROVAL' as const,
+        definitionKey: first.definition.reference.definitionKey,
+        version: first.definition.reference.version,
+        expectedRevision: first.revision,
+        reviewDigest: first.reviewDigest,
+        reviewedCommitSha: 'a'.repeat(40),
+        provenanceMode: 'SERVER_V1' as const,
+        reviewEvidenceKey: `definition-review:${operationId}`,
+        reviewChecklist: {
+          objective: true as const,
+          prerequisites: true as const,
+          concepts: true as const,
+          safety: true as const,
+          mistakes: true as const,
+          practice: true as const,
+          rubricAndMission: true as const,
+        },
+      };
+      for (const sha of [undefined, null, '', 'invalid'])
+        await expect(repository.change(scope, command, sha)).rejects.toMatchObject({
+          code: 'CONFIGURATION_ERROR',
+        });
+      await expect(repository.change(scope, command, 'b'.repeat(40))).rejects.toMatchObject({
+        code: 'CONFLICT',
+      });
+      expect((await repository.list(scope))[0]!.current).toBeNull();
+      await expect(
+        repository.change(
+          scope,
+          { ...command, reviewDigest: 'f'.repeat(64) },
+          command.reviewedCommitSha,
+        ),
+      ).rejects.toMatchObject({ code: 'CONFLICT' });
+      const broken = client.$extends({
+        query: {
+          programAuditLog: {
+            create() {
+              throw new Error('synthetic audit unavailable');
+            },
+          },
+        },
+      }) as unknown as PrismaClient;
+      await expect(
+        new PrismaLearningDefinitionApprovalAdminRepository(broken, () => now).change(
+          scope,
+          command,
+          command.reviewedCommitSha,
+        ),
+      ).rejects.toThrow('synthetic audit unavailable');
+      expect((await repository.list(scope))[0]!.current).toBeNull();
+      expect(await client.programAuditLog.count({ where: { id: operationId } })).toBe(0);
+      const receipt = await repository.change(scope, command, command.reviewedCommitSha);
+      expect(receipt.replayed).toBe(false);
+      expect((await repository.change(scope, command, 'b'.repeat(40))).replayed).toBe(true);
+      expect((await repository.change(scope, command, null)).replayed).toBe(true);
+      await expect(
+        repository.change(scope, { ...command, reviewedCommitSha: 'b'.repeat(40) }, 'b'.repeat(40)),
+      ).rejects.toMatchObject({ code: 'CONFLICT' });
+      await expect(
+        repository.change({ ...scope, groupId: randomUUID() }, command, command.reviewedCommitSha),
+      ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+      const audit = await client.programAuditLog.findUniqueOrThrow({ where: { id: operationId } });
+      expect(audit.afterData).toMatchObject({
+        provenanceMode: 'SERVER_V1',
+        reviewedCommitSha: command.reviewedCommitSha,
+        reviewEvidenceKey: `definition-review:${operationId}`,
+        reviewDigest: first.reviewDigest,
+        expectedRevision: first.revision,
+      });
+      expect(audit.performedByUserId).toBe(f.owner.id);
+      expect(await client.programAuditLog.count({ where: { id: operationId } })).toBe(1);
+      await client.groupMembership.updateMany({
+        where: { workspaceId: scope.workspaceId, groupId: scope.groupId, userId: f.owner.id },
+        data: { status: 'REVOKED', revokedAt: now },
+      });
+      await expect(
+        repository.change(scope, command, command.reviewedCommitSha),
+      ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    });
     it('Definition admin: concurrent first approvals create only one state/audit', async () => {
       const f = await fixture(false);
       const repository = new PrismaLearningDefinitionApprovalAdminRepository(client, () => now);
