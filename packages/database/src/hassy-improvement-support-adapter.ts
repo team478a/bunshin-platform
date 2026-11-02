@@ -5,6 +5,7 @@ import {
   type ImprovementReadRequest,
 } from '@bunshin/application';
 import {
+  SOCIAL_SUPPORT_EXPOSURE_DEFINITION,
   HASSY_SUPPORT_IMPROVEMENT_DEFINITION,
   supportGoalAtOffer,
   summarizeHassySupportOutcomes,
@@ -21,13 +22,30 @@ export class PrismaHassySupportImprovementAdapter implements ImprovementObservat
     private readonly configuredScope: ImprovementScope,
   ) {}
 
-  async readObservations(input: ImprovementReadRequest) {
+  readObservations(input: ImprovementReadRequest) {
+    return this.read(input, false).then((result) => result.outcomes);
+  }
+  readExposureObservations(input: ImprovementReadRequest) {
+    return this.read(input, true).then((result) => result.exposure);
+  }
+  /** Request-local composition can reuse one authorized source snapshot for both projections. */
+  readPairedObservations(input: ImprovementReadRequest) {
+    return this.read(input, false);
+  }
+  private async read(input: ImprovementReadRequest, exposure: boolean) {
+    input = structuredClone(input);
+    const definition = exposure ? SOCIAL_SUPPORT_EXPOSURE_DEFINITION : this.definition;
     // Use the common validation before any DB read, including calls outside the collector.
     validateImprovementReadRequest(input);
-    if (!sameImprovementScope(input.scope, this.configuredScope))
+    if (
+      !sameImprovementScope(input.scope, this.configuredScope) ||
+      input.scope.adapterKey !== definition.key ||
+      input.scope.packageKey !== definition.packageKey
+    )
       throw new ApplicationError('NOT_FOUND', 'improvement scope not found');
     return this.client.$transaction(
       async (tx) => {
+        await tx.$executeRaw`SET TRANSACTION READ ONLY`;
         const manager = await tx.groupMembership.findFirst({
           where: {
             workspaceId: input.scope.workspaceId,
@@ -66,6 +84,8 @@ export class PrismaHassySupportImprovementAdapter implements ImprovementObservat
             completedAt: true,
             skippedAt: true,
             updatedAt: true,
+            firstDisplayedAt: true,
+            firstDetailsViewedAt: true,
             barrierCase: {
               select: {
                 id: true,
@@ -81,7 +101,7 @@ export class PrismaHassySupportImprovementAdapter implements ImprovementObservat
           },
         });
         const truncated = rows.length > input.limit;
-        const observations = rows.slice(0, input.limit).map((row) => {
+        const pairs = rows.slice(0, input.limit).map((row) => {
           const parent = row.barrierCase;
           if (
             parent.workspaceId !== input.scope.workspaceId ||
@@ -111,8 +131,23 @@ export class PrismaHassySupportImprovementAdapter implements ImprovementObservat
             (row.status === 'ACCEPTED' && row.acceptedAt === null) ||
             (row.status === 'COMPLETED' && row.completedAt === null) ||
             (row.status === 'SKIPPED' && row.skippedAt === null);
-          return {
-            scope: input.scope,
+          const firstDisplayedAt = row.firstDisplayedAt ?? null;
+          const firstDetailsViewedAt = row.firstDetailsViewedAt ?? null;
+          const trackingKnown =
+            row.definitionSnapshot !== null &&
+            typeof row.definitionSnapshot === 'object' &&
+            !Array.isArray(row.definitionSnapshot) &&
+            row.definitionSnapshot['exposureTracking'] ===
+              SOCIAL_SUPPORT_EXPOSURE_DEFINITION.version;
+          const exposureUncertain =
+            !trackingKnown ||
+            (firstDisplayedAt !== null && firstDisplayedAt < row.offeredAt) ||
+            (firstDetailsViewedAt !== null &&
+              (firstDisplayedAt === null || firstDetailsViewedAt < firstDisplayedAt));
+          const displayed = byCutoff(firstDisplayedAt),
+            detailsViewed = byCutoff(firstDetailsViewedAt);
+          const observation = {
+            scope: { ...input.scope, adapterKey: HASSY_SUPPORT_IMPROVEMENT_DEFINITION.key },
             source: {
               kind: 'SUPPORT_INTERVENTION',
               id: row.id,
@@ -140,14 +175,30 @@ export class PrismaHassySupportImprovementAdapter implements ImprovementObservat
               timestampMissing,
             },
           };
+          return {
+            outcomes: observation,
+            exposure: {
+              ...observation,
+              scope: { ...input.scope, adapterKey: SOCIAL_SUPPORT_EXPOSURE_DEFINITION.key },
+              eventType: 'SUPPORT_EXPOSURE',
+              subtype: 'SUPPORT_EXPOSURE',
+              metadata: {
+                displayedByCutoff: displayed,
+                detailsViewedByCutoff: detailsViewed,
+                uncertain: exposureUncertain,
+                pattern: `P${Number(displayed) + Number(detailsViewed) * 2}`,
+              },
+            },
+          };
         });
+        const coverage = {
+          completeness: truncated ? ('PARTIAL' as const) : ('COMPLETE' as const),
+          missingCount: truncated ? null : 0,
+          truncated,
+        };
         return {
-          observations,
-          coverage: {
-            completeness: truncated ? ('PARTIAL' as const) : ('COMPLETE' as const),
-            missingCount: truncated ? null : 0,
-            truncated,
-          },
+          outcomes: { observations: pairs.map((pair) => pair.outcomes), coverage: { ...coverage } },
+          exposure: { observations: pairs.map((pair) => pair.exposure), coverage: { ...coverage } },
         };
       },
       { isolationLevel: 'RepeatableRead', timeout: 20_000 },

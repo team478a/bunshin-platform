@@ -1,3 +1,4 @@
+import { PrismaHassySupportImprovementAdapter } from '../src/hassy-improvement-support-adapter';
 import { randomUUID } from 'node:crypto';
 import type { PrismaClient, SocialActivityBarrierCategory } from '@prisma/client';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -167,6 +168,92 @@ export function registerSocialSupportAccessIntegrationCases(client: PrismaClient
         });
       return { scope, row, repo, answer, stop, addCase };
     }
+    it('serializes concurrent first display/detail receipts and preserves lifecycle and first timestamps', async () => {
+      const f = await fixture();
+      await f.repo.answer(f.answer);
+      const support = await f.repo.getActiveSupport({ scope: f.scope });
+      const request = { scope: f.scope, supportId: support!.id };
+      expect(
+        await Promise.all([
+          f.repo.recordExposure({ ...request, kind: 'DISPLAY' }),
+          f.repo.recordExposure({ ...request, kind: 'DETAILS' }),
+        ]),
+      ).toEqual([true, true]);
+      const stored = await client.socialActivitySupportIntervention.findUniqueOrThrow({
+        where: { id: support!.id },
+      });
+      expect(stored).toMatchObject({
+        status: 'OFFERED',
+        firstDisplayedAt: now,
+        firstDetailsViewedAt: now,
+      });
+      expect((stored.definitionSnapshot as { exposureTracking: string }).exposureTracking).toBe(
+        'social-support-exposure-v1',
+      );
+      await client.groupMembership.update({
+        where: { id: f.scope.groupMembershipId },
+        data: { serviceRole: 'SERVICE_OWNER' },
+      });
+      const observationScope = {
+        tenantRef: f.scope.workspaceId,
+        workspaceId: f.scope.workspaceId,
+        serviceId: f.scope.serviceId,
+        packageKey: 'SOCIAL',
+        adapterKey: 'HASSY_SUPPORT_OUTCOMES',
+        environment: 'DEVELOPMENT' as const,
+      };
+      const observer = new PrismaHassySupportImprovementAdapter(client, observationScope);
+      const observed = await observer.readPairedObservations({
+        actorUserId: f.scope.userId,
+        scope: observationScope,
+        fromInclusive: at,
+        toExclusive: new Date('2026-11-04T00:00:00Z'),
+        limit: 100,
+        subject: null,
+      });
+      expect(observed.exposure.observations[0]?.metadata).toEqual({
+        displayedByCutoff: true,
+        detailsViewedByCutoff: true,
+        uncertain: false,
+        pattern: 'P3',
+      });
+      expect(observed.outcomes.observations[0]?.metadata['acceptedByCutoff']).toBe(false);
+      const later = new PrismaSocialActivityBarrierConfirmationRepository(
+        client,
+        () => new Date(now.getTime() + 60_000),
+      );
+      expect(await later.recordExposure({ ...request, kind: 'DETAILS' })).toBe(true);
+      expect(
+        await client.socialActivitySupportIntervention.findUniqueOrThrow({
+          where: { id: support!.id },
+        }),
+      ).toMatchObject({ firstDisplayedAt: now, firstDetailsViewedAt: now, acceptedAt: null });
+    });
+    it('handles details arriving first and denies foreign scopes or stopped features without writing', async () => {
+      const f = await fixture();
+      const other = await fixture();
+      await f.repo.answer(f.answer);
+      const support = await f.repo.getActiveSupport({ scope: f.scope });
+      expect(
+        await f.repo.recordExposure({
+          scope: other.scope,
+          supportId: support!.id,
+          kind: 'DETAILS',
+        }),
+      ).toBe(false);
+      expect(
+        await f.repo.recordExposure({ scope: f.scope, supportId: support!.id, kind: 'DETAILS' }),
+      ).toBe(true);
+      await f.stop();
+      expect(
+        await f.repo.recordExposure({ scope: f.scope, supportId: support!.id, kind: 'DISPLAY' }),
+      ).toBe(false);
+      expect(
+        await client.socialActivitySupportIntervention.findUniqueOrThrow({
+          where: { id: support!.id },
+        }),
+      ).toMatchObject({ firstDisplayedAt: now, firstDetailsViewedAt: now, status: 'OFFERED' });
+    });
     it('compares fixed behavior windows through real scoped queries and rejects revoked managers', async () => {
       const f = await fixture();
       await client.groupMembership.update({

@@ -153,3 +153,16 @@ export const SOCIAL_SUPPORT_BEHAVIOR_DEFINITION: ImprovementAdapterDefinition = 
   },
 };
 export const SOCIAL_SUPPORT_COMPARISON_DAYS = 7;
+
+export const SOCIAL_SUPPORT_EXPOSURE_DEFINITION: ImprovementAdapterDefinition = {
+  key: 'SOCIAL_SUPPORT_EXPOSURE',
+  version: 'social-support-exposure-v1',
+  packageKey: 'SOCIAL',
+  subtypes: ['SUPPORT_EXPOSURE'],
+  metadataRules: {
+    displayedByCutoff: { kind: 'BOOLEAN' },
+    detailsViewedByCutoff: { kind: 'BOOLEAN' },
+    uncertain: { kind: 'BOOLEAN' },
+    pattern: { kind: 'CODE', values: ['P0', 'P1', 'P2', 'P3'] },
+  },
+};

@@ -8,6 +8,7 @@ const m = vi.hoisted(() => ({
   support: vi.fn(),
   answer: vi.fn(),
   transition: vi.fn(),
+  exposure: vi.fn(),
   reserve: vi.fn(),
   release: vi.fn(),
 }));
@@ -28,9 +29,11 @@ vi.mock('@bunshin/database', () => ({
     getActiveSupport = m.support;
     answer = m.answer;
     transitionSupport = m.transition;
+    recordExposure = m.exposure;
   },
 }));
 import {
+  recordServiceSocialActivitySupportExposureResponse as expose,
   getServiceSocialActivityBarrierResponse as read,
   answerServiceSocialActivityBarrierResponse as answer,
   transitionServiceSocialActivitySupportResponse as transition,
@@ -50,6 +53,7 @@ beforeEach(() => {
   m.service.mockResolvedValue({ workspaceId: id(2), serviceId: id(3) });
   m.member.mockResolvedValue({ id: id(4) });
   m.bunshin.mockResolvedValue({ id: id(5) });
+  m.exposure.mockResolvedValue(true);
   m.question.mockResolvedValue(null);
   m.support.mockResolvedValue(null);
   m.answer.mockResolvedValue({ response: 'NONE_OF_THESE', support: null });
@@ -144,5 +148,57 @@ describe('SOCIAL support HTTP access', () => {
     const response = await read(new Request(url), 'synthetic', id(5));
     expect(response.status).toBe(429);
     expect(m.service).not.toHaveBeenCalled();
+  });
+});
+
+describe('SOCIAL support exposure HTTP', () => {
+  it('uses authenticated ownership, strict inputs, origin, limit and private response', async () => {
+    const response = await expose(
+      request({ supportId: id(8), kind: 'DETAILS' }),
+      'synthetic',
+      id(5),
+    );
+    expect(response.status).toBe(200);
+    expect(response.headers.get('cache-control')).toBe('private, no-store');
+    expect(m.exposure).toHaveBeenCalledWith({
+      supportId: id(8),
+      kind: 'DETAILS',
+      scope: {
+        workspaceId: id(2),
+        serviceId: id(3),
+        groupMembershipId: id(4),
+        userId: id(1),
+        bunshinId: id(5),
+      },
+    });
+    expect(m.transition).not.toHaveBeenCalled();
+  });
+  it.each([
+    { supportId: id(8), kind: 'DISPLAY', occurredAt: 'invented' },
+    { supportId: id(8), kind: 'ACCEPT' },
+  ])('rejects surplus or unsupported exposure payloads', async (value) => {
+    expect((await expose(request(value), 'synthetic', id(5))).status).toBe(400);
+    expect(m.exposure).not.toHaveBeenCalled();
+  });
+  it('rejects cross-origin, unauthenticated and unavailable supports', async () => {
+    expect(
+      (
+        await expose(
+          request({ supportId: id(8), kind: 'DISPLAY' }, 'POST', 'https://foreign.test'),
+          'synthetic',
+          id(5),
+        )
+      ).status,
+    ).toBe(403);
+    m.actor.mockResolvedValue(null);
+    expect(
+      (await expose(request({ supportId: id(8), kind: 'DISPLAY' }), 'synthetic', id(5))).status,
+    ).toBe(401);
+    expect(m.exposure).not.toHaveBeenCalled();
+    m.actor.mockResolvedValue({ userId: id(1) });
+    m.exposure.mockResolvedValue(false);
+    expect(
+      (await expose(request({ supportId: id(8), kind: 'DISPLAY' }), 'synthetic', id(5))).status,
+    ).toBe(409);
   });
 });

@@ -7,7 +7,13 @@ test('answers, accepts, opens a manual action and saves the decline reason', asy
   browser,
 }) => {
   const commands: Record<string, unknown>[] = [];
-  await browser.route('**/api/synthetic/activity-support', async (route) => {
+  const exposure: string[] = [];
+  await browser.route('**/api/synthetic/activity-support**', async (route) => {
+    if (route.request.url.endsWith('/exposure')) {
+      exposure.push((JSON.parse(route.request.postData ?? '{}') as { kind: string }).kind);
+      await route.fulfill({ json: { data: { recorded: true } } });
+      return;
+    }
     const command = JSON.parse(route.request.postData ?? '{}') as Record<string, unknown>;
     commands.push(command);
     const status = command['action'] === 'ACCEPT' ? 'ACCEPTED' : 'SKIPPED';
@@ -24,6 +30,7 @@ test('answers, accepts, opens a manual action and saves the decline reason', asy
   await screen.getByRole('radio', '投稿する時間がない').tap();
   await screen.getByRole('button', '回答してサポートを見る').tap();
   await expect(screen.getByRole('heading', '5分で終わる内容にする')).toBeVisible();
+  await screen.getByText('サポートの詳しい進め方', { exact: true }).tap();
   await expect(screen.getByRole('link', '投稿の準備を進める')).toHaveCount(0);
   await screen.getByRole('button', 'このサポートを始める').tap();
   await screen.getByRole('link', '投稿の準備を進める').tap();
@@ -40,6 +47,8 @@ test('answers, accepts, opens a manual action and saves the decline reason', asy
   await screen.getByRole('textbox', '見送る理由（任意）').fill('投稿はすでに済んでいます');
   await screen.getByRole('button', '今回は見送る').tap();
   await expect(screen.getByText('今回は見送りました。')).toBeVisible();
+  expect(exposure.filter((kind) => kind === 'DISPLAY')).toHaveLength(1);
+  expect(exposure.filter((kind) => kind === 'DETAILS')).toHaveLength(1);
   expect(commands[2]?.['reason']).toBe('投稿はすでに済んでいます');
   expect(commands.map((command) => command['action'] ?? 'ANSWER')).toEqual([
     'ANSWER',
@@ -69,4 +78,42 @@ test('malformed success never starts guidance', async ({ app, screen, browser })
   ).toBeVisible();
   await expect(screen.getByRole('link', '投稿の準備を進める')).toHaveCount(0);
   await expect(screen.getByRole('button', 'このサポートを始める')).toBeVisible();
+});
+
+test('closed drawer is not counted; opening and reopening records first exposure only', async ({
+  app,
+  screen,
+  browser,
+}) => {
+  const events: string[] = [];
+  await browser.route('**/api/synthetic/activity-support/exposure', async (route) => {
+    events.push((JSON.parse(route.request.postData ?? '{}') as { kind: string }).kind);
+    await route.fulfill({ json: { data: { recorded: true } } });
+  });
+  await app.open('/?activity-support&offered&hidden');
+  await expect(screen.getByRole('heading', '5分で終わる内容にする')).not.toBeVisible();
+  expect(events).toEqual([]);
+  await screen.getByText('サポートを開く', { exact: true }).tap();
+  await expect(screen.getByRole('heading', '5分で終わる内容にする')).toBeVisible();
+  await screen.getByText('サポートの詳しい進め方', { exact: true }).tap();
+  await expect(screen.getByText('作業を小さく分けます。')).toBeVisible();
+  await screen.getByText('サポートの詳しい進め方', { exact: true }).tap();
+  await screen.getByText('サポートの詳しい進め方', { exact: true }).tap();
+  expect(events.filter((kind) => kind === 'DISPLAY')).toHaveLength(1);
+  expect(events.filter((kind) => kind === 'DETAILS')).toHaveLength(1);
+});
+
+test('exposure API failure does not prevent accepting support', async ({
+  app,
+  screen,
+  browser,
+}) => {
+  await browser.route('**/api/synthetic/activity-support**', async (route) => {
+    if (route.request.url.endsWith('/exposure'))
+      await route.fulfill({ status: 500, json: { error: {} } });
+    else await route.fulfill({ json: { data: { ...supportFixture, status: 'ACCEPTED' } } });
+  });
+  await app.open('/?activity-support&offered');
+  await screen.getByRole('button', 'このサポートを始める').tap();
+  await expect(screen.getByRole('link', '投稿の準備を進める')).toBeVisible();
 });

@@ -385,6 +385,7 @@ export class PrismaSocialActivityBarrierConfirmationRepository implements Social
             supportKey: selection.support.key,
             definitionSnapshot: {
               ...selection.support,
+              exposureTracking: 'social-support-exposure-v1',
               steps: [...selection.support.steps],
               selection: {
                 mode: selection.mode,
@@ -400,6 +401,40 @@ export class PrismaSocialActivityBarrierConfirmationRepository implements Social
       }
 
       return { response, support };
+    });
+  }
+
+  async recordExposure(
+    input: Parameters<SocialActivityBarrierConfirmationRepository['recordExposure']>[0],
+  ) {
+    const request = structuredClone(input);
+    if (!['DISPLAY', 'DETAILS'].includes(request.kind)) return false;
+    return this.client.$transaction(async (tx) => {
+      if (!(await this.lock(tx, request.scope))) return false;
+      const at = this.now();
+      if (!(await this.permitted(tx, request.scope, at))) return false;
+      const row = await tx.socialActivitySupportIntervention.findFirst({
+        where: { id: request.supportId, barrierCase: scopeWhere(request.scope) },
+        select: {
+          id: true,
+          status: true,
+          definitionSnapshot: true,
+          offeredAt: true,
+          firstDisplayedAt: true,
+          firstDetailsViewedAt: true,
+        },
+      });
+      if (!row || !supportProgress(row) || row.offeredAt > at) return false;
+      if (request.kind === 'DISPLAY' && row.firstDisplayedAt) return true;
+      if (request.kind === 'DETAILS' && row.firstDetailsViewedAt) return true;
+      await tx.socialActivitySupportIntervention.update({
+        where: { id: row.id },
+        data: {
+          ...(!row.firstDisplayedAt ? { firstDisplayedAt: at } : {}),
+          ...(request.kind === 'DETAILS' ? { firstDetailsViewedAt: at } : {}),
+        },
+      });
+      return true;
     });
   }
 
