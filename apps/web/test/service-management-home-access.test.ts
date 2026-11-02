@@ -10,7 +10,7 @@ const mocks = vi.hoisted(() => ({
   resolve: vi.fn(),
   records: vi.fn(),
   business: vi.fn(),
-  training: vi.fn(async () => true),
+  training: vi.fn(() => Promise.resolve(true)),
 }));
 vi.mock('next/navigation', () => ({
   redirect: () => {
@@ -21,7 +21,7 @@ vi.mock('next/navigation', () => ({
   },
 }));
 vi.mock('../src/auth/current-user', () => ({
-  currentUserProvider: async () => ({ getCurrentUser: mocks.actor }),
+  currentUserProvider: () => Promise.resolve({ getCurrentUser: mocks.actor }),
 }));
 vi.mock('../src/services/public-service', () => ({ resolveManagedServiceContext: mocks.resolve }));
 vi.mock('../src/services/service-ai-training-mode', () => ({

@@ -59,6 +59,21 @@ export async function readServiceManagementHomeRecords({
   if (!group) return null;
   const socialFeedback = await hasServiceSocialFeedbackSurface({ workspaceId, serviceId });
   const trainingOverview = await hasTrainingOverviewSurface({ workspaceId, serviceId });
+  // A removed SOCIAL assignment must not hide existing posts or pending approvals.
+  const socialHistory =
+    aiTraining && !socialFeedback
+      ? await db.prisma.bunshin.findFirst({
+          where: {
+            workspaceId,
+            groupId: serviceId,
+            OR: [
+              { postRecords: { some: { workspaceId } } },
+              { campaignPostingApprovalRequests: { some: { workspaceId, groupId: serviceId } } },
+            ],
+          },
+          select: { id: true },
+        })
+      : null;
   const line = group.lineChannelConfigurations[0];
   const linePolicy = group.lineRoutingPolicies[0];
   const now = new Date();
@@ -69,7 +84,9 @@ export async function readServiceManagementHomeRecords({
     bunshin: { is: { groupId: serviceId } },
   };
   const socialOperations =
-    !fortunePackage && !group.fortuneServiceSetting && (!aiTraining || socialFeedback);
+    !fortunePackage &&
+    !group.fortuneServiceSetting &&
+    (!aiTraining || socialFeedback || Boolean(socialHistory));
   const commercialOperations = socialOperations && commercialContent;
   // Only derived counters are optional. Core scope and capability reads above must fail closed.
   const summary = await (async () => {

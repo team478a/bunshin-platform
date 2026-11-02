@@ -26,8 +26,8 @@ const mocks = vi.hoisted(() => {
     names.map((name) => [
       name,
       {
-        count: vi.fn(async () => 0),
-        findMany: vi.fn(async () => []),
+        count: vi.fn(() => Promise.resolve(0)),
+        findMany: vi.fn(() => Promise.resolve([])),
       },
     ]),
   ) as Record<
@@ -48,14 +48,19 @@ const mocks = vi.hoisted(() => {
   };
   return {
     counters,
-    group: vi.fn<() => Promise<typeof group | null>>(async () => group),
-    social: vi.fn(async () => false),
-    training: vi.fn(async () => true),
+    group: vi.fn<() => Promise<typeof group | null>>(() => Promise.resolve(group)),
+    social: vi.fn(() => Promise.resolve(false)),
+    training: vi.fn(() => Promise.resolve(true)),
+    history: vi.fn<() => Promise<{ id: string } | null>>(() => Promise.resolve(null)),
     log: vi.fn(),
   };
 });
 vi.mock('@bunshin/database', () => ({
-  prisma: { ...mocks.counters, group: { findFirst: mocks.group } },
+  prisma: {
+    ...mocks.counters,
+    group: { findFirst: mocks.group },
+    bunshin: { findFirst: mocks.history },
+  },
 }));
 vi.mock('@bunshin/observability', () => ({ createLogger: () => ({ error: mocks.log }) }));
 vi.mock('../src/ai/secure-provider-configuration', () => ({
@@ -124,6 +129,22 @@ describe('service management home scoped summaries', () => {
       }),
     );
     expect(mocks.counters.productPack.count).toHaveBeenCalled();
+  });
+
+  it('retains SNS history and pending approvals after a SOCIAL assignment has been removed', async () => {
+    mocks.history.mockResolvedValueOnce({ id: 'historical-bunshin' });
+    const result = await readServiceManagementHomeRecords({ ...scope, aiTraining: true });
+    expect(result?.socialOperations).toBe(true);
+    expect(mocks.counters.postRecord.count).toHaveBeenCalled();
+    expect(mocks.counters.campaignPostingApprovalRequest.count).toHaveBeenCalled();
+    expect(mocks.history).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          workspaceId: scope.workspaceId,
+          groupId: scope.serviceId,
+        }),
+      }),
+    );
   });
 
   it('skips unused commercial readiness counts while retaining approval history when referrals are disabled', async () => {
