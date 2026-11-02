@@ -476,6 +476,7 @@ describe('member roadmap authenticated API', () => {
       [
         'version',
         'definitionVersion',
+        'validReferrals',
         'asOf',
         'timezone',
         'currentStageId',

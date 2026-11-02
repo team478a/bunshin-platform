@@ -6,6 +6,7 @@ import type {
 import { ApplicationError } from '@bunshin/shared';
 import type { PrismaClient } from '@prisma/client';
 import { PrismaGroupFeatureEntitlementRepository } from './group-feature-entitlement';
+import { readConfirmedReferralCount } from './service-referral-count';
 import {
   memberUsageReadOptions,
   snapshotMemberUsageRequest,
@@ -173,7 +174,7 @@ export class PrismaMemberRoadmapContextRepository implements MemberRoadmapContex
             readyForRecommendation: current.socialProfiles.length > 0,
           },
         },
-        validReferrals: null,
+        validReferrals: await readConfirmedReferralCount(tx, s, request.asOf),
       };
     }, memberUsageReadOptions);
   }

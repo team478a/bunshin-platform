@@ -29,6 +29,7 @@ const milestone = z.object({
 const roadmapSchema = z
   .object({
     version: z.literal('member-roadmap-api-v1'),
+    validReferrals: count.nullable().optional().default(null),
     definitionVersion: z.string().min(1).max(120),
     asOf: timestamp,
     timezone,

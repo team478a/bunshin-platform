@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { projectSocialServiceReferralActivities } from '../src/index';
+import {
+  projectSocialServiceReferralActivities,
+  projectScopedSocialReferralActivities,
+} from '../src/index';
 import type { MemberUsageRequest, MemberUsageSources } from '@bunshin/application';
 const request: MemberUsageRequest = {
   actorUserId: 'owner',
@@ -42,6 +45,29 @@ describe('SOCIAL referral activity binding', () => {
     ];
     const before = structuredClone(source);
     const value = projectSocialServiceReferralActivities(request, source);
+    expect(
+      projectScopedSocialReferralActivities(
+        {
+          scope: request.scope,
+          asOf: request.asOf,
+          timezone: request.timezone,
+        },
+        source,
+      ),
+    ).toEqual(value);
+    expect(() =>
+      projectSocialServiceReferralActivities({ ...request, actorUserId: 'administrator' }, source),
+    ).toThrow('referral owner required');
+    expect(() =>
+      projectScopedSocialReferralActivities(
+        {
+          scope: { ...request.scope, userId: 'other' },
+          asOf: request.asOf,
+          timezone: request.timezone,
+        },
+        source,
+      ),
+    ).toThrow();
     expect(value.hasUnknownGenerationTrigger).toBe(true);
     expect(value.activities.map((item) => [item.id, item.kind])).toEqual([
       ['USER', 'USER_GENERATION'],

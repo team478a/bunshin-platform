@@ -144,3 +144,4 @@ export * from './member-roadmap';
 export * from './service-referral-qualification';
 export * from './service-referral-registration-evidence';
 export * from './service-referral-confirmation';
+export * from './service-referral-management';

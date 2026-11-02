@@ -15,6 +15,7 @@ export function memberRoadmapDto(value: MemberRoadmap) {
   return {
     version: 'member-roadmap-api-v1' as const,
     definitionVersion: value.definitionVersion,
+    validReferrals: value.validReferrals,
     asOf: value.asOf,
     timezone: value.timezone,
     currentStageId: value.currentStageId,

@@ -32,6 +32,7 @@ export default async function ServiceReferralRewardsPage({
         <header className="app-page__heading">
           <p className="eyebrow">サービス管理者</p>
           <h1>紹介特典</h1>
+          <a href={`/s/${serviceSlug}/manage/referrals`}>紹介の審査・有効紹介の条件</a>
           <p>紹介で参加した人が行動した時に、画像作成に使える回数を渡す条件を設定します。</p>
           <a href={`/s/${serviceSlug}/manage`}>← 管理メニューへ戻る</a>
         </header>
@@ -41,6 +42,10 @@ export default async function ServiceReferralRewardsPage({
             参加登録だけでは渡されません。
           </p>
           <p>特典を止めても、すでに渡した回数は変わりません。</p>
+          <p>月間の上限はUTCの暦月で数え、同じ特典の版を変えてもリセットしません。</p>
+          <p>
+            有効紹介の条件を設定したサービスでは、審査と確定も必要です。条件を満たして確定すると、すでに記録された成果の特典も照合します。ルールの版を変えても同じ紹介への同じ種類の特典は再付与しません。
+          </p>
         </section>
         <ReferralRewardRuleEditor
           serviceSlug={serviceSlug}

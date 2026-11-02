@@ -3,14 +3,18 @@ import {
   type MemberUsageRequest,
 } from '@bunshin/application';
 import {
-  projectSocialServiceReferralActivities,
+  projectScopedSocialReferralActivities,
   type SocialServiceReferralEvidenceRequest,
   type SocialServiceReferralEvidenceRepository,
   type SocialServiceReferralQualificationEvidence,
 } from '@bunshin/capability-social';
 import { ApplicationError } from '@bunshin/shared';
-import type { PrismaClient } from '@prisma/client';
-import { isMemberUsagePermitted, memberUsageReadOptions } from './member-usage-authorization';
+import type { Prisma, PrismaClient } from '@prisma/client';
+import {
+  isMemberUsageScopePermitted,
+  isServiceUsageMemberPermitted,
+  memberUsageReadOptions,
+} from './member-usage-authorization';
 import { readMemberUsageSources } from './member-usage-repository';
 
 const BUNSHIN_LIMIT = 20;
@@ -62,100 +66,117 @@ export class PrismaSocialServiceReferralEvidenceRepository implements SocialServ
     }
     return this.client.$transaction(async (tx) => {
       await tx.$executeRaw`SET TRANSACTION READ ONLY`;
-      const owned = {
-        workspaceId: scope.workspaceId,
-        groupId: scope.serviceId,
-        ownerUserId: scope.userId,
-        status: { not: 'ARCHIVED' as const },
-      };
-      const bunshins = await tx.bunshin.findMany({
-        where: owned,
-        take: BUNSHIN_LIMIT + 1,
-        orderBy: { id: 'asc' },
-        select: { id: true },
-      });
-      if (!bunshins.length) return null;
-      const requests: MemberUsageRequest[] = bunshins.slice(0, BUNSHIN_LIMIT).map(({ id }) => ({
-        ...request,
-        scope: { ...scope, bunshinId: id },
-      }));
-      const now = this.now();
-      for (const item of requests) if (!(await isMemberUsagePermitted(tx, item, now))) return null;
-      const referral = await tx.serviceReferral.findFirst({
-        where: {
-          workspaceId: scope.workspaceId,
-          groupId: scope.serviceId,
-          referredMembershipId: scope.groupMembershipId,
-          referredUserId: scope.userId,
-          createdAt: { lte: request.asOf },
-        },
-        select: {
-          id: true,
-          status: true,
-          registeredAt: true,
-          onboardingCompletedAt: true,
-          referralCode: { select: { groupMembershipId: true, userId: true } },
-        },
-      });
-      if (!referral) return null;
-      const audits = await tx.groupMembershipAuditLog.findMany({
-        where: {
-          workspaceId: scope.workspaceId,
-          groupId: scope.serviceId,
-          groupMembershipId: scope.groupMembershipId,
-          occurredAt: { lte: request.asOf },
-        },
-        select: {
-          workspaceId: true,
-          groupId: true,
-          groupMembershipId: true,
-          performedByUserId: true,
-          occurredAt: true,
-          action: true,
-          reason: true,
-          beforeData: true,
-          afterData: true,
-        },
-        orderBy: [{ occurredAt: 'asc' }, { id: 'asc' }],
-        take: AUDIT_LIMIT + 1,
-      });
-      const activities: SocialServiceReferralQualificationEvidence['activities'][number][] = [];
-      let partial = bunshins.length > BUNSHIN_LIMIT || audits.length > AUDIT_LIMIT;
-      let hasUnknownGenerationTrigger = false;
-      for (const item of requests) {
-        const sources = await readMemberUsageSources(tx, item);
-        if (sources.completeness !== 'COMPLETE') {
-          partial = true;
-          continue;
-        }
-        const projected = projectSocialServiceReferralActivities(item, sources);
-        hasUnknownGenerationTrigger ||= projected.hasUnknownGenerationTrigger;
-        if (activities.length + projected.activities.length > ACTIVITY_LIMIT) {
-          partial = true;
-          continue;
-        }
-        activities.push(...projected.activities);
-      }
-      return {
-        scope,
-        referralId: referral.id,
-        status: referral.status,
-        referrer: { ...referral.referralCode },
-        referred: { groupMembershipId: scope.groupMembershipId, userId: scope.userId },
-        registeredAt: referral.registeredAt,
-        onboardingCompletedAt: referral.onboardingCompletedAt,
-        newRegistration: projectServiceReferralRegistrationOrigin(
-          scope,
-          referral.registeredAt,
-          audits,
-          audits.length <= AUDIT_LIMIT,
-        ),
-        uniqueAttribution: true,
-        review: 'UNKNOWN',
-        completeness: partial ? 'PARTIAL' : 'COMPLETE',
-        activities,
-        hasUnknownGenerationTrigger,
-      };
+      return readSocialReferralEvidenceInTransaction(tx, request, this.now());
     }, memberUsageReadOptions);
   }
+}
+
+/** Package-internal: caller must first authorize owner or management access in this transaction. */
+export async function readSocialReferralEvidenceInTransaction(
+  tx: Prisma.TransactionClient,
+  request: Omit<SocialServiceReferralEvidenceRequest, 'actorUserId'>,
+  now: Date,
+  allowMemberOnly = false,
+): Promise<SocialServiceReferralQualificationEvidence | null> {
+  const scope = request.scope;
+  const owned = {
+    workspaceId: scope.workspaceId,
+    groupId: scope.serviceId,
+    ownerUserId: scope.userId,
+    status: { not: 'ARCHIVED' as const },
+  };
+  const bunshins = await tx.bunshin.findMany({
+    where: owned,
+    take: BUNSHIN_LIMIT + 1,
+    orderBy: { id: 'asc' },
+    select: { id: true },
+  });
+  if (
+    !bunshins.length &&
+    (!allowMemberOnly || !(await isServiceUsageMemberPermitted(tx, scope, now)))
+  )
+    return null;
+  const requests: Omit<MemberUsageRequest, 'actorUserId'>[] = bunshins
+    .slice(0, BUNSHIN_LIMIT)
+    .map(({ id }) => ({
+      ...request,
+      scope: { ...scope, bunshinId: id },
+    }));
+  for (const item of requests)
+    if (!(await isMemberUsageScopePermitted(tx, item.scope, now))) return null;
+  const referral = await tx.serviceReferral.findFirst({
+    where: {
+      workspaceId: scope.workspaceId,
+      groupId: scope.serviceId,
+      referredMembershipId: scope.groupMembershipId,
+      referredUserId: scope.userId,
+      createdAt: { lte: request.asOf },
+    },
+    select: {
+      id: true,
+      status: true,
+      registeredAt: true,
+      onboardingCompletedAt: true,
+      referralCode: { select: { groupMembershipId: true, userId: true } },
+    },
+  });
+  if (!referral) return null;
+  const audits = await tx.groupMembershipAuditLog.findMany({
+    where: {
+      workspaceId: scope.workspaceId,
+      groupId: scope.serviceId,
+      groupMembershipId: scope.groupMembershipId,
+      occurredAt: { lte: request.asOf },
+    },
+    select: {
+      workspaceId: true,
+      groupId: true,
+      groupMembershipId: true,
+      performedByUserId: true,
+      occurredAt: true,
+      action: true,
+      reason: true,
+      beforeData: true,
+      afterData: true,
+    },
+    orderBy: [{ occurredAt: 'asc' }, { id: 'asc' }],
+    take: AUDIT_LIMIT + 1,
+  });
+  const activities: SocialServiceReferralQualificationEvidence['activities'][number][] = [];
+  let partial = bunshins.length > BUNSHIN_LIMIT || audits.length > AUDIT_LIMIT;
+  let hasUnknownGenerationTrigger = false;
+  for (const item of requests) {
+    const sources = await readMemberUsageSources(tx, item);
+    if (sources.completeness !== 'COMPLETE') {
+      partial = true;
+      continue;
+    }
+    const projected = projectScopedSocialReferralActivities(item, sources);
+    hasUnknownGenerationTrigger ||= projected.hasUnknownGenerationTrigger;
+    if (activities.length + projected.activities.length > ACTIVITY_LIMIT) {
+      partial = true;
+      continue;
+    }
+    activities.push(...projected.activities);
+  }
+  return {
+    scope,
+    referralId: referral.id,
+    status: referral.status,
+    referrer: { ...referral.referralCode },
+    referred: { groupMembershipId: scope.groupMembershipId, userId: scope.userId },
+    registeredAt: referral.registeredAt,
+    onboardingCompletedAt: referral.onboardingCompletedAt,
+    newRegistration: projectServiceReferralRegistrationOrigin(
+      scope,
+      referral.registeredAt,
+      audits,
+      audits.length <= AUDIT_LIMIT,
+    ),
+    uniqueAttribution: true,
+    review: 'UNKNOWN',
+    completeness: partial ? 'PARTIAL' : 'COMPLETE',
+    activities,
+    hasUnknownGenerationTrigger,
+  };
 }

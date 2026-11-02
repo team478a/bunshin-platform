@@ -50,6 +50,7 @@ const entries = [
 export function growthRoadmap(): RoadmapDisplay {
   return {
     version: 'member-roadmap-api-v1',
+    validReferrals: null,
     definitionVersion: 'hassy-roadmap-v1',
     asOf: '2026-11-02T00:00:00Z',
     timezone: 'Asia/Tokyo',

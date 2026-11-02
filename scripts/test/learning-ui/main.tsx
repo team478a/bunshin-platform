@@ -1,3 +1,4 @@
+import { ReferralManagementHarness } from './referral-management-harness';
 // Local browser harness only. No production route, credentials, DB or Provider.
 import { createRoot } from 'react-dom/client';
 import { GrowthHarness } from './growth-harness';
@@ -17,7 +18,9 @@ import '../../../apps/web/app/styles.css';
 import { PersonalLearningRequestCard } from '../../../apps/web/app/s/[serviceSlug]/programs/[programEnrollmentId]/learning-request/card';
 
 createRoot(document.getElementById('root')!).render(
-  new URLSearchParams(window.location.search).has('member-growth') ? (
+  new URLSearchParams(window.location.search).has('referral-management') ? (
+    <ReferralManagementHarness />
+  ) : new URLSearchParams(window.location.search).has('member-growth') ? (
     <GrowthHarness />
   ) : new URLSearchParams(window.location.search).has('practice') ? (
     <PersonalLearningRequestCard

@@ -2,6 +2,25 @@ import { test } from '@e2e-dev/web';
 import { expect } from 'e2e';
 import { growthBase, growthRoadmap, growthUsage, growthSnapshot } from './growth-fixture';
 
+test('confirmed referral aggregate is shown in the owner roadmap without another request', async ({
+  app,
+  screen,
+  browser,
+}) => {
+  let reads = 0;
+  const roadmap = growthRoadmap();
+  roadmap.validReferrals = 3;
+  await browser.route('**/api/services/**', async (route) => {
+    reads += 1;
+    await route.fulfill({ json: { data: growthSnapshot(roadmap) } });
+  });
+  await app.open('/?member-growth');
+  await screen.getByRole('button', '成長ロードマップを見る').tap();
+  await expect(screen.getByText('有効紹介：3人（審査・確定済み）')).toBeVisible();
+  await expect(screen.getByText('紹介をしなくても、SNSの基本機能を利用できます。')).toBeVisible();
+  expect(reads).toBe(1);
+});
+
 test('mobile roadmap loads only on request, reads once and shows one safe next step', async ({
   app,
   screen,

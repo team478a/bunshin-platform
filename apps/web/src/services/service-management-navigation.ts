@@ -1,4 +1,5 @@
 const BUSINESS_DAILY_SECTION_HREFS = new Set([
+  'referrals',
   '90-day-report',
   'weekly-report',
   'personalization',

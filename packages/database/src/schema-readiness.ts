@@ -1,1 +1,1 @@
-export const LATEST_DATABASE_MIGRATION = '20261102000000_generation_trigger_provenance';
+export const LATEST_DATABASE_MIGRATION = '20261102120000_service_referral_qualification';

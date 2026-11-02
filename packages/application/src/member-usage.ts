@@ -84,10 +84,9 @@ const invalid = () => new ApplicationError('VALIDATION_ERROR', 'invalid member u
 const sameScope = (a: MemberUsageScope, b: MemberUsageScope) =>
   scopeKeys.every((key) => a[key] === b[key]);
 
-function validateRequest(request: MemberUsageRequest) {
+function validateScopeRequest(request: Omit<MemberUsageRequest, 'actorUserId'>) {
   if (
     scopeKeys.some((key) => !request.scope[key]?.trim()) ||
-    request.actorUserId !== request.scope.userId ||
     !Number.isFinite(request.asOf.getTime())
   )
     throw new ApplicationError('VALIDATION_ERROR', 'invalid member usage request');
@@ -103,6 +102,12 @@ function validateRequest(request: MemberUsageRequest) {
   }
 }
 
+function validateRequest(request: MemberUsageRequest) {
+  if (request.actorUserId !== request.scope.userId)
+    throw new ApplicationError('VALIDATION_ERROR', 'invalid member usage request');
+  return validateScopeRequest(request);
+}
+
 function daysBefore(date: string, days: number) {
   const value = new Date(`${date}T00:00:00.000Z`);
   value.setUTCDate(value.getUTCDate() - days);
@@ -110,8 +115,11 @@ function daysBefore(date: string, days: number) {
 }
 
 /** In-memory projection only. Does not authorize access or persist duplicate events. */
-function usageProjection(request: MemberUsageRequest, sources: MemberUsageSources) {
-  const formatter = validateRequest(request);
+function usageProjection(
+  request: Omit<MemberUsageRequest, 'actorUserId'>,
+  sources: MemberUsageSources,
+) {
+  const formatter = validateScopeRequest(request);
   if (!sameScope(request.scope, sources.scope) || sources.completeness !== 'COMPLETE')
     throw invalid();
 
@@ -192,6 +200,15 @@ export function projectMemberUsageEvidence(
   request: MemberUsageRequest,
   sources: MemberUsageSources,
 ) {
+  validateRequest(request);
+  return projectScopedUsageEvidence(request, sources);
+}
+
+/** Pure metadata projection after external authorization; never represents an acting user. */
+export function projectScopedUsageEvidence(
+  request: Omit<MemberUsageRequest, 'actorUserId'>,
+  sources: MemberUsageSources,
+) {
   const { generated, selected, reported, copied } = usageProjection(request, sources);
   return { generations: generated, decisions: selected, postRecords: reported, copies: copied };
 }
@@ -201,6 +218,7 @@ export function aggregateMemberUsage(
   request: MemberUsageRequest,
   sources: MemberUsageSources,
 ): MemberUsageSummary {
+  validateRequest(request);
   const { formatter, generated, selected, reported, active, ai } = usageProjection(
     request,
     sources,
