@@ -4614,3 +4614,10 @@
 - SUSPENDEDなサービスは公開設定が残っていても認証フォールバックを表示しない。停止案内または未解決案内へ進め、停止中サービスをログイン可能に見せない。
 - マナベルスタイルは既存のPUBLIC登録ポリシーを変更せず、公開文言だけを実際の提供範囲（無料Pilot、本人がAIを使って学ぶサービス）へ合わせる。業務代行・完成品制作と誤認させる説明は追加しない。
 - 修復migrationは対象設定が空の使い捨てDBでは通知してスキップし、対象slugが存在する本番相当DBではID・Workspace・Group・Group名の不一致や欠落を停止する。登録ポリシーは更新せず、変更時は監査証跡を残す。
+
+## 2026-11-02: ハッシー固有PolicyとSNS共通・全サービス共通を分離する
+
+- ユーザーの再確認指示を受け、[責務分離・再監査](HASSY_SHARED_CAPABILITY_BOUNDARY_DESIGN.md)と[ADR](adr/HASSY_SHARED_CAPABILITY_BOUNDARY_ADR.md)を追加した。固定の5段階・SNS項目・ガイドが共通に見えるApplicationへ混在している現状を修正対象とする。
+- 既存のBarrier質問・回答別支援・採用/完了/見送り・30日抑制・Scheduler・OEM支援と、共通Improvement / Hassy観測Adapterを再利用する。以前の「未実装」という広い扱いを訂正する。
+- 固有定義・認可済みprofile選択と集計の重複整理を先に行い、その後で有効紹介の保存・支援拡張へ進む。習慣進捗と実操作日を混同せず、別ServiceへHassy既定値を適用しない。
+- 今回は文書のみ。Runtime / DB / migration / API / UI / Flag / 本番設定の変更・移動は未実施。
