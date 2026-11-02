@@ -20,7 +20,7 @@
 | 本部/OEM画面                     | /s/[serviceSlug]/manage/recommendationsのpage / editor / CSS、既存管理メニューと本部の機能詳細ページのリンク |
 | 検証                             | policy純粋関数、API、既存SQL fixture、既存支援テスト、実コンポーネントのスマホharness                        |
 
-共有ファイル: capability-social / databaseの公開indexへexportを追記。既存管理メニュー、e2e main/configへ項目を追加。DB schema・migration・Cron・環境変数は変更しない。通常の機能設定の保存処理は、専用namespaceの保護と同じGroupロックが必要なため変更した。
+共有ファイル: capability-social / databaseの公開indexへexportを追記。既存管理メニュー、e2e main/configへ項目を追加。認証戻り先の既存allowlistに管理画面の正規パスだけを追加し、クエリ・別名・外部URL拒否を維持した。DB schema・migration・Cron・環境変数は変更しない。通常の機能設定の保存処理は、専用namespaceの保護と同じGroupロックが必要なため変更した。
 
 ## 3. 設計判断
 
