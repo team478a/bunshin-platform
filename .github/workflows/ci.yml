@@ -36,6 +36,7 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm lint
       - run: pnpm test
+      - run: pnpm test:external-read-poc
       - run: pnpm exec e2e-web install chromium --with-deps
       - run: pnpm test:learning-ui
         env:
