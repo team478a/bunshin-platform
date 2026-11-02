@@ -72,6 +72,19 @@ function setup() {
 }
 afterEach(() => vi.useRealTimers());
 describe('verified external credential use cases', () => {
+  it('allows a normal authentication response beyond the previous two-second cutoff', async () => {
+    vi.useFakeTimers();
+    const s = setup();
+    s.verify.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          setTimeout(() => resolve(s.credential), 3_000);
+        }),
+    );
+    const pending = expect(s.binding.execute('Bearer synthetic', id)).resolves.toEqual(grant);
+    await vi.advanceTimersByTimeAsync(3_001);
+    await pending;
+  });
   it('binds only after verification and never receives a claimed principal', async () => {
     const s = setup();
     await s.binding.execute('Bearer synthetic', id);
@@ -134,7 +147,7 @@ describe('verified external credential use cases', () => {
     const pending = expect(s.binding.execute('Bearer synthetic', id)).rejects.toMatchObject({
       code: 'TIMEOUT',
     });
-    await vi.advanceTimersByTimeAsync(2001);
+    await vi.advanceTimersByTimeAsync(10001);
     await pending;
     expect(s.bind).not.toHaveBeenCalled();
   });

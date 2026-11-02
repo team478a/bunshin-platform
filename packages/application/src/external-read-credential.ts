@@ -2,7 +2,7 @@ import {
   ExternalReadError,
   type ExternalReadEnvironment,
   type ExternalReadGrant,
-  type ExternalReadPorts,
+  type ExternalReadDependencies,
 } from './external-connection-read';
 import { ReadExternalMemberUsage } from './external-member-usage';
 import type { MemberUsageAuthorizationPort, MemberUsageSourceRepository } from './member-usage';
@@ -43,7 +43,7 @@ async function verified(verifier: ExternalReadCredentialVerifier, header: string
         timer = setTimeout(() => {
           controller.abort();
           reject(new ExternalReadError('TIMEOUT'));
-        }, 2_000);
+        }, 10_000);
       }),
     ]);
     if (!credential) throw new ExternalReadError('DENIED');
@@ -75,7 +75,7 @@ export class BindExternalReadCredential {
           timer = setTimeout(() => {
             controller.abort();
             reject(new ExternalReadError('TIMEOUT'));
-          }, 3_000);
+          }, 10_000);
         }),
       ]);
     } finally {
@@ -88,7 +88,7 @@ export class ReadAuthenticatedExternalMemberUsage {
   constructor(
     private readonly verifier: ExternalReadCredentialVerifier,
     private readonly bindings: ExternalReadCredentialBindings,
-    private readonly ports: Omit<ExternalReadPorts, 'grants'>,
+    private readonly ports: Omit<ExternalReadDependencies, 'grants'>,
     private readonly memberAuthorization: MemberUsageAuthorizationPort,
     private readonly sources: MemberUsageSourceRepository,
     private readonly now: () => Date = () => new Date(),

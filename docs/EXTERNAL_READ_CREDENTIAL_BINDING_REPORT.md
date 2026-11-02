@@ -1,5 +1,7 @@
 # 外部読取資格: 既存認証基盤の再利用と接続許可への結合
 
+最新のHTTP追加と使いやすさ方針への対応は[最小HTTP実装報告](EXTERNAL_READ_MINIMAL_HTTP_REPORT.md)を参照。本書は資格結合の初回実装記録であり、下記の2/3/5秒上限と公開route未実装の記述は後続変更前の状態。専用の分散制限/read監査台帳は公開の必須条件から外す。
+
 ## 1. 調査した内容
 
 基準mainは`7d397821`（PR #1445）。AGENTS、仕様正本、Architecture Principles、Roadmap、Decision Log、外部読取ADR/実装報告、既存Supabase SDK/本人認証・AuthIdentity・grant・監査を確認した。
