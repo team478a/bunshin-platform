@@ -11,25 +11,38 @@ const navigation = [
   { href: '/account', label: 'アカウント', icon: 'account' },
 ] as const;
 
-const adminNavigationGroups = [
+export const adminNavigationGroups = [
   {
-    label: '日々の運用',
+    label: 'ダッシュボード',
     items: [
-      { href: '/admin', label: '運用設定' },
+      { href: '/admin', label: '運用の概要' },
       { href: '/admin/alerts', label: '運用通知' },
-      { href: '/admin/users', label: 'ユーザーと利用状況' },
       { href: '/admin/reports', label: '運用レポート' },
-      { href: '/admin/support', label: '問い合わせ対応' },
     ],
   },
   {
-    label: '運営団体・プロジェクト',
+    label: '会員・契約管理',
     items: [
+      { href: '/admin/users', label: 'ユーザーと利用状況' },
+      { href: '/admin/support', label: '問い合わせ対応' },
       { href: '/admin/organizations', label: '運営団体' },
       { href: '/admin/commercial-billing', label: '請求・入金管理' },
-      { href: '/admin/commercial-profitability', label: 'OEM採算確認' },
       { href: '/admin/groups', label: 'プロジェクト管理' },
-      { href: '/admin/services', label: '公開設定' },
+    ],
+  },
+  {
+    label: '配信・コンテンツ管理',
+    items: [
+      { href: '/admin/line', label: 'LINE運用' },
+      { href: '/admin/trends', label: 'トレンド企画' },
+      { href: '/admin/images', label: '画像生成の試験運用' },
+      { href: '/admin/videos', label: '動画生成の状況' },
+    ],
+  },
+  {
+    label: 'サービス設定',
+    items: [
+      { href: '/admin/services', label: 'サービスと公開設定' },
       { href: '/admin/fortune', label: '占いパッケージ' },
       { href: '/admin/activity-rules', label: '続けやすさのルール' },
       { href: '/admin/badges', label: 'グループバッジ確認' },
@@ -37,18 +50,10 @@ const adminNavigationGroups = [
     ],
   },
   {
-    label: '企画・コンテンツ',
-    items: [
-      { href: '/admin/trends', label: 'トレンド企画' },
-      { href: '/admin/images', label: '画像生成の試験運用' },
-      { href: '/admin/videos', label: '動画生成の状況' },
-    ],
-  },
-  {
-    label: '接続・システム設定',
+    label: '詳細管理',
     items: [
       { href: '/admin/connections', label: 'APIキーと接続確認' },
-      { href: '/admin/line', label: 'LINE運用' },
+      { href: '/admin/commercial-profitability', label: 'OEM採算確認' },
       { href: '/admin/access', label: '管理者と権限' },
       { href: '/admin/audits', label: '変更履歴' },
       { href: '/admin/legal', label: '法務文書' },
@@ -58,14 +63,22 @@ const adminNavigationGroups = [
 ] as const;
 
 export function isNavigationItemActive(pathname: string, href: string): boolean {
-  return pathname === href || pathname.startsWith(`${href}/`);
+  return pathname === href || (href !== '/admin' && pathname.startsWith(`${href}/`));
+}
+
+export function getActiveAdminNavigationHref(pathname: string): string | undefined {
+  return adminNavigationGroups
+    .flatMap((group) => group.items)
+    .filter((item) => isNavigationItemActive(pathname, item.href))
+    .sort((a, b) => b.href.length - a.href.length)[0]?.href;
 }
 
 export function isAdminNavigationGroupActive(
   pathname: string,
   group: (typeof adminNavigationGroups)[number],
 ): boolean {
-  return group.items.some((item) => isNavigationItemActive(pathname, item.href));
+  const activeHref = getActiveAdminNavigationHref(pathname);
+  return group.items.some((item) => item.href === activeHref);
 }
 
 function NavigationIcon({ name }: { name: (typeof navigation)[number]['icon'] }) {
@@ -100,7 +113,8 @@ function NavigationIcon({ name }: { name: (typeof navigation)[number]['icon'] })
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const isAdmin = pathname.startsWith('/admin');
+  const isAdmin = pathname === '/admin' || pathname.startsWith('/admin/');
+  const activeAdminHref = isAdmin ? getActiveAdminNavigationHref(pathname) : undefined;
 
   return (
     <div className={`app-shell${isAdmin ? ' app-shell--admin' : ''}`}>
@@ -109,7 +123,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <BrandMark />
         </Link>
         {isAdmin ? (
-          <span className="app-header__context">管理画面</span>
+          <span className="app-header__context">本部管理</span>
         ) : (
           <Link href="/account" className="app-header__account" aria-label="アカウント設定">
             <NavigationIcon name="account" />
@@ -121,7 +135,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <aside className="admin-sidebar">
             <div className="admin-sidebar__heading">
               <strong>ワタシワークス全体</strong>
-              <span>システム管理</span>
+              <span>本部管理</span>
             </div>
             <nav aria-label="管理画面ナビゲーション">
               {adminNavigationGroups.map((group) => {
@@ -131,7 +145,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     <summary>{group.label}</summary>
                     <div className="admin-sidebar__links">
                       {group.items.map((item) => {
-                        const active = isNavigationItemActive(pathname, item.href);
+                        const active = item.href === activeAdminHref;
                         return (
                           <Link
                             key={item.href}
