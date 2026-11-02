@@ -57,3 +57,13 @@ Proposed。読取PoCの設計判断。外部公開・接続成功・本番提供
 - 正式な接続先はコード管理のcatalogで定義し、初期値は空。Museを未検証のまま登録しない。発行UIの対象候補も既存DB認可を再利用して絞る。
 - 既存DBが扱わないstagingは別環境へ読み替えず、許可管理を停止する。production/developmentだけを明示的に使用する。
 - UIは接続先・対象Bunshin・利用実績の読取範囲・期限を示して明示同意を要求する。許可保存と実接続の完了を区別し、失敗時に成功表示しない。解除は確認後にrevision付きで送る。
+
+## 2026-11-03: 分散read admission・読取監査の独立実装
+
+- [監査計画](../EXTERNAL_READ_ADMISSION_AUDIT_PLAN.md)に沿って、認証結合PR未マージでも既存grant契約だけで検証できる内部Adapterを先行する。公開route・認証組立・catalog登録は行わない。原指示のDB変更要件と今回の分散制限/監査作業に必要な最小migrationを含める。
+- 既存のProvider原価予約、研修Program、Job台帳は意味とFKが異なるため流用しない。既存PostgreSQLの短いtransaction・advisory lock・DB時刻の手法を使い、grantに結びつくrate/TTL leaseと、未解決接続も記録できる固定メタデータ監査だけを保存する。
+- environment/client、environment/connection、environment/userを決まった順で排他し、全軸のrate/並行数を原子的に検証する。設定は必須で、不在・停止時は予約不可。期間は最大24時間、rate最大1000、並行最大20、leaseは10～30秒の内部安全上限を設ける。実運用値は公開前に別途決定する。
+- CoreのreleaseをAbortSignal付き非同期対応にし、500msで待機を打ち切って応答を閉じる。release後にもgrant/認可・期限を再確認し、解放待機中の解除や期限切れからデータを返さない。worker停止時はTTLで回復するが、非協調read処理の終了はTTLだけでは保証しない。
+- timeout後も処理が未終了ならleaseを早期解放せず、処理の終了時に解放する。永久停止はTTLで回復する。遅延処理・遅延releaseのPromiseはraceで観測され、失敗を未処理rejectionや成功応答へ変換しない。
+- requestIdは外部の相関IDに限定し、Coreが毎回UUIDのattemptIdを作る。監査はattempt/outcomeごとに冪等、内容不一致は拒否する。READ_COMPLETEDは配信成功の証明にしない。本文・資格・raw errorは保存しない。
+- rate履歴はreleaseで消さず、DB時刻で2日を超えた期限切れ予約、30日を超えた監査だけを最大1000件ずつ消す内部保守関数を用意する。環境を限定し、Cronや外部APIへ自動接続しない。保持ジョブの運用接続と入口の未認証負荷制限は公開前の別ゲートとする。

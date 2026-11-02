@@ -66,6 +66,60 @@ function setup() {
 }
 afterEach(() => vi.useRealTimers());
 describe('external read grant enforcement', () => {
+  it('waits for async release and rechecks revocation during release before delivery', async () => {
+    const s = setup();
+    let finish!: () => void;
+    s.reserve.mockResolvedValue({
+      release: () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+    });
+    const pending = expect(s.reader.execute(principal, input)).rejects.toMatchObject({
+      code: 'DENIED',
+    });
+    await vi.waitFor(() => expect(finish).toBeTypeOf('function'));
+    s.grant.revokedAt = epoch;
+    finish();
+    await pending;
+  });
+  it('closes on async release rejection without leaking its error', async () => {
+    const s = setup();
+    s.reserve.mockResolvedValue({
+      release: () => Promise.reject(new Error('private database error')),
+    });
+    await expect(s.reader.execute(principal, input)).rejects.toMatchObject({
+      code: 'UNAVAILABLE',
+      message: 'external read unavailable',
+    });
+    expect(s.record.mock.calls.at(-1)?.[0]).toMatchObject({ outcome: 'UNAVAILABLE', count: 0 });
+  });
+  it('bounds hung async release and aborts its own cleanup signal', async () => {
+    vi.useFakeTimers();
+    const s = setup();
+    let cleanupSignal: AbortSignal | undefined;
+    s.reserve.mockResolvedValue({
+      release: (signal) => {
+        cleanupSignal = signal;
+        return new Promise(() => {});
+      },
+    });
+    const pending = expect(s.reader.execute(principal, input)).rejects.toMatchObject({
+      code: 'TIMEOUT',
+    });
+    await vi.advanceTimersByTimeAsync(101);
+    await pending;
+    await vi.advanceTimersByTimeAsync(500);
+    expect(cleanupSignal?.aborted).toBe(true);
+  });
+  it('assigns a distinct server attempt for every reuse of an external request ID', async () => {
+    const s = setup();
+    await s.reader.execute(principal, input);
+    await s.reader.execute(principal, input);
+    const attempts = s.record.mock.calls.map(([event]) => event.attemptId);
+    expect(new Set(attempts).size).toBe(2);
+    expect(attempts.every((id) => /^[0-9a-f-]{36}$/.test(id))).toBe(true);
+  });
   it('resolves server scope and checks current access before and after a read', async () => {
     const s = setup();
     await expect(s.reader.execute(principal, input)).resolves.toEqual({ answer: 'safe' });
@@ -75,6 +129,7 @@ describe('external read grant enforcement', () => {
     expect(s.release).toHaveBeenCalledOnce();
     expect(s.record.mock.calls[0]?.[0]).toEqual({
       version: 'external-read-v1',
+      attemptId: expect.any(String),
       ...input,
       ...principal,
       operation: 'member-usage:read',
@@ -210,9 +265,10 @@ describe('external read grant enforcement', () => {
     });
     await vi.advanceTimersByTimeAsync(101);
     await pending;
-    expect(s.release).toHaveBeenCalledOnce();
+    expect(s.release).not.toHaveBeenCalled();
     finish({ data: { answer: 'late' }, count: 1 });
     await vi.advanceTimersByTimeAsync(1);
+    expect(s.release).toHaveBeenCalledOnce();
     expect(s.record).toHaveBeenCalledOnce();
     expect(s.read).toHaveBeenCalledOnce();
   });
@@ -273,7 +329,7 @@ describe('external read grant enforcement', () => {
     });
     await vi.advanceTimersByTimeAsync(601);
     await pending;
-    expect(s.release).toHaveBeenCalledOnce();
+    expect(s.release).not.toHaveBeenCalled();
   });
 });
 

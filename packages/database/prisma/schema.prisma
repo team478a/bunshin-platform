@@ -8794,7 +8794,45 @@ model ExternalReadGrant {
   revokedAt         DateTime? @map("revoked_at") @db.Timestamptz(6)
   membership GroupMembership @relation(fields: [workspaceId, groupId, groupMembershipId, userId], references: [workspaceId, groupId, id, userId], onDelete: Cascade, onUpdate: Restrict, map: "external_read_grants_membership_fkey")
   bunshin Bunshin @relation(fields: [workspaceId, groupId, userId, bunshinId], references: [workspaceId, groupId, ownerUserId, id], onDelete: Cascade, onUpdate: Restrict, map: "external_read_grants_bunshin_fkey")
+  admissions ExternalReadAdmission[]
 
+  @@unique([id, environment, clientId, userId], map: "external_read_grants_admission_scope_key")
   @@index([workspaceId, groupId, groupMembershipId, userId, grantedAt], map: "external_read_grants_owner_idx")
   @@map("external_read_grants")
+}
+
+/// Sliding-window history and bounded lease. Release never refunds the request count.
+model ExternalReadAdmission {
+  id String @id @db.Uuid
+  connectionId String @map("connection_id") @db.Uuid
+  clientId String @map("client_id") @db.VarChar(128)
+  environment String @db.VarChar(16)
+  userId String @map("user_id") @db.Uuid
+  admittedAt DateTime @map("admitted_at") @db.Timestamptz(6)
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(6)
+  releasedAt DateTime? @map("released_at") @db.Timestamptz(6)
+  grant ExternalReadGrant @relation(fields: [connectionId, environment, clientId, userId], references: [id, environment, clientId, userId], onDelete: Cascade, onUpdate: Restrict, map: "external_read_admissions_grant_fkey")
+  @@index([environment, clientId, admittedAt], map: "external_read_admissions_client_idx")
+  @@index([environment, connectionId, admittedAt], map: "external_read_admissions_connection_idx")
+  @@index([environment, userId, admittedAt], map: "external_read_admissions_user_idx")
+  @@index([environment, admittedAt, id], map: "external_read_admissions_retention_idx")
+  @@map("external_read_admissions")
+}
+
+/// Fixed read receipts, including unresolved grants. No payload or external credentials.
+model ExternalReadAudit {
+  id String @id @default(uuid()) @db.Uuid
+  attemptId String @map("attempt_id") @db.Uuid
+  version String @db.VarChar(40)
+  requestId String @map("request_id") @db.VarChar(128)
+  connectionId String @map("connection_id") @db.VarChar(128)
+  clientId String @map("client_id") @db.VarChar(128)
+  environment String @db.VarChar(16)
+  operation String @db.VarChar(80)
+  outcome String @db.VarChar(20)
+  count Int
+  occurredAt DateTime @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  @@unique([attemptId, outcome], map: "external_read_audits_attempt_outcome_key")
+  @@index([environment, occurredAt, id], map: "external_read_audits_retention_idx")
+  @@map("external_read_audits")
 }

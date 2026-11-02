@@ -50,13 +50,17 @@ export interface ExternalReadPorts {
   };
   admission: {
     /** Atomically enforce per-client/connection/user rate and concurrency limits. No permit means deny. */
-    reserve(grant: ExternalReadGrant, signal: AbortSignal): Promise<{ release(): void } | null>;
+    reserve(
+      grant: ExternalReadGrant,
+      signal: AbortSignal,
+    ): Promise<{ release(signal: AbortSignal): void | Promise<void> } | null>;
   };
   audit: {
     /** No payload, credentials, raw error or response. Must fail closed if unavailable. */
     record(
       event: {
         version: typeof EXTERNAL_READ_VERSION;
+        attemptId: string;
         requestId: string;
         connectionId: string;
         clientId: string;
@@ -72,6 +76,21 @@ export interface ExternalReadPorts {
 const scopeKeys = ['workspaceId', 'serviceId', 'groupMembershipId', 'userId', 'bunshinId'] as const;
 function fail(code: ExternalReadFailure): never {
   throw new ExternalReadError(code);
+}
+async function releaseWithinLimit(release: (signal: AbortSignal) => void | Promise<void>) {
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      Promise.resolve().then(() => release(controller.signal)),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new ExternalReadError('UNAVAILABLE')), 500);
+      }),
+    ]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+    controller.abort();
+  }
 }
 const identifier = (v: unknown): v is string =>
   typeof v === 'string' && /^[a-zA-Z0-9_-]{1,128}$/.test(v);
@@ -144,10 +163,16 @@ export class ExternalConnectionRead<T> {
       fail('INVALID');
     const connectionId = body.connectionId;
     const requestId = body.requestId;
+    const attemptId = crypto.randomUUID();
     const actor = { clientId: principal.clientId, environment: principal.environment };
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
-    let release: (() => void) | undefined;
+    let release: ((signal: AbortSignal) => void | Promise<void>) | undefined;
+    const releasePermit = async () => {
+      const pending = release;
+      release = undefined;
+      if (pending) await releaseWithinLimit(pending);
+    };
     const assertRunning = () => {
       if (controller.signal.aborted) fail('TIMEOUT');
     };
@@ -159,6 +184,7 @@ export class ExternalConnectionRead<T> {
       this.ports.audit.record(
         {
           version: EXTERNAL_READ_VERSION,
+          attemptId,
           requestId,
           connectionId,
           ...actor,
@@ -194,10 +220,10 @@ export class ExternalConnectionRead<T> {
       if (!permit) fail('LIMITED');
       // A slow adapter may return after timeout; release its lease without starting a read.
       if (controller.signal.aborted) {
-        permit.release();
+        await releaseWithinLimit((signal) => permit.release(signal));
         fail('TIMEOUT');
       }
-      release = () => permit.release();
+      release = (signal) => permit.release(signal);
       const result = await this.read({
         scope: { ...grant.scope },
         asOf: new Date(startedAt),
@@ -211,6 +237,8 @@ export class ExternalConnectionRead<T> {
       if (json === undefined || new TextEncoder().encode(json).byteLength > 16_384)
         fail('UNAVAILABLE');
       await receipt('READ_COMPLETED', result.count, controller.signal);
+      assertRunning();
+      await releasePermit();
       assertRunning();
       const current = await this.ports.grants.find(connectionId, { ...actor }, controller.signal);
       const finishedAt = at();
@@ -238,7 +266,9 @@ export class ExternalConnectionRead<T> {
     let failure: ExternalReadFailure | undefined;
     try {
       data = await Promise.race([
-        work(),
+        // Keep the lease while timed-out work is still running. Its eventual settlement
+        // releases it; a dead worker or a non-cooperating adapter relies on bounded TTL.
+        work().finally(releasePermit),
         new Promise<never>((_, reject) => {
           timer = setTimeout(() => {
             controller.abort();
@@ -251,11 +281,6 @@ export class ExternalConnectionRead<T> {
     } finally {
       if (timer !== undefined) clearTimeout(timer);
       controller.abort();
-      try {
-        release?.();
-      } catch {
-        failure = 'UNAVAILABLE';
-      }
     }
     // READ_COMPLETED is a read receipt, not proof that authorization allowed delivery.
     // On failure append a fixed denial/error receipt; never include raw exception text.

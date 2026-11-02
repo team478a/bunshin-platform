@@ -372,3 +372,7 @@ export {
   PrismaExternalReadGrantRepository,
   type ExternalGrantServerPolicy,
 } from './external-read-grants';
+export {
+  PrismaExternalReadRuntime,
+  type ExternalReadAdmissionPolicy,
+} from './external-read-runtime';
