@@ -47,6 +47,7 @@ APIは認証、同一origin、strict入力、server側scope確定、private/no-s
 - PostgreSQL関連28件成功。同一行の別namespace同時保存、template変更後のread/write/replay拒否、他tenant/actor拒否、既存SNSの冪等性・認可・判定を検証した。初回の全体360件中359件成功で見つけた新規fixtureのrevokedAt不足は、既存DB制約に合わせて修正し関連ケースを再実行した。
 - スマートフォン390pxで新規3件、既存SNS設定3件成功。保存・revision競合・明示refresh・権限取消・本部初回設定を確認し、スクリーンショットを目視した。
 - 全packageの型検査25タスク成功後、ブラウザテストのJSON応答の型を修正してUI型検査も成功した。
+- CIで再取得完了前の値を読んだ新規UIテストを、完了表示を待つ条件へ修正した。時間固定sleepやassertion緩和はせず、キャッシュ無効の3回反復（計9件）で成功。会員ロードマップ16件も成功。
 - 標準CIの最終HEADに対するformat/typecheck/lint/test/UI/build/databaseの結果はPR本文へ記録する。
 
 ## 5. 未解決事項と運用状況

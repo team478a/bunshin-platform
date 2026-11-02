@@ -75,6 +75,7 @@ test('conflict refreshes current conditions and revoked access clears the editor
   await screen.getByRole('button', '条件を保存').tap();
   await expect(screen.getByRole('status')).toContainText('他の変更が反映されています');
   await screen.getByRole('button', '最新の設定を取得').tap();
+  await expect(screen.getByRole('status')).toContainText('最新の設定を取得しました');
   expect(
     await browser.evaluate(
       () =>
