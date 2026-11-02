@@ -7,6 +7,7 @@ import {
   PrismaTrainingProgressImprovementAdapter,
 } from '../src/service-improvement-progress';
 import { PrismaImprovementFeedbackObservationAdapter } from '../src/improvement-feedback-observation-adapter';
+import { PrismaSocialSupportBehaviorAdapter } from '../src/social-support-behavior-adapter';
 import { PrismaHassySupportImprovementAdapter } from '../src/hassy-improvement-support-adapter';
 import { PrismaHassyPhotoQualityImprovementAdapter } from '../src/hassy-improvement-photo-quality-adapter';
 
@@ -28,6 +29,7 @@ function setup() {
     PrismaImprovementFeedbackObservationAdapter,
     PrismaHassySupportImprovementAdapter,
     PrismaHassyPhotoQualityImprovementAdapter,
+    PrismaSocialSupportBehaviorAdapter,
     PrismaTrainingProgressImprovementAdapter,
   ];
   const reads = adapters.map((adapter) =>
@@ -44,13 +46,13 @@ describe('explicit service overview composition', () => {
   it('reuses feedback, support and photo readers for SOCIAL without TRAINING reads', async () => {
     const s = setup();
     const result = await s.reader.read(input, 'SOCIAL');
-    expect(result.sections).toHaveLength(4);
+    expect(result.sections).toHaveLength(5);
     expect(
       result.sections.every(
         (section) => section.visibility === 'WITHHELD' && section.observedRecords === null,
       ),
     ).toBe(true);
-    for (const read of s.reads.slice(0, 4))
+    for (const read of s.reads.slice(0, 5))
       expect(read).toHaveBeenCalledWith(
         expect.objectContaining({
           actorUserId: 'admin',
@@ -59,15 +61,15 @@ describe('explicit service overview composition', () => {
           limit: 100,
         }),
       );
-    expect(s.reads[4]).not.toHaveBeenCalled();
+    expect(s.reads[5]).not.toHaveBeenCalled();
   });
   it('reads TRAINING without SOCIAL sources and without inventing successful learning', async () => {
     const s = setup();
     const result = await s.reader.read(input, 'TRAINING');
     expect(result.sections).toHaveLength(1);
     expect(result.sections[0]?.adapterKey).toBe('TRAINING_PROGRESS');
-    for (const read of s.reads.slice(0, 4)) expect(read).not.toHaveBeenCalled();
-    expect(s.reads[4]).toHaveBeenCalledOnce();
+    for (const read of s.reads.slice(0, 5)) expect(read).not.toHaveBeenCalled();
+    expect(s.reads[5]).toHaveBeenCalledOnce();
     expect(JSON.stringify(result)).not.toContain('PASS');
   });
   it('rejects another service or unsupported package before any source read', async () => {

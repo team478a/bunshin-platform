@@ -43,6 +43,11 @@ export function OverviewSummary({ preview }: { preview: OverviewPreview }) {
               ))}
             </dl>
           )}
+          {section.key === 'SOCIAL_SUPPORT_BEHAVIOR' && (
+            <p>
+              選択週に開始した支援ごとに、開始時刻の前後7日間で行動が1回以上あったかを比べます。同じ人の複数支援は別記録です。開始後7日未満や記録不足は保留します。投稿完了報告は本人の記録で、SNS公開や支援の効果を証明するものではありません。
+            </p>
+          )}
           <p>記録定義：{section.sourceVersion}</p>
         </section>
       ))}

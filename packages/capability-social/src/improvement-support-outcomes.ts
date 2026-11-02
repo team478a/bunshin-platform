@@ -136,3 +136,20 @@ export function summarizeHassySupportOutcomes(
       };
     });
 }
+
+/** Paired seven-day observations; counts describe behavior, never causal improvement. */
+export const SOCIAL_SUPPORT_BEHAVIOR_DEFINITION: ImprovementAdapterDefinition = {
+  key: 'SOCIAL_SUPPORT_BEHAVIOR',
+  version: 'social-support-behavior-v1',
+  packageKey: 'SOCIAL',
+  subtypes: ['SUPPORT_BEHAVIOR'],
+  metadataRules: {
+    beforeAccepted: { kind: 'BOOLEAN' },
+    afterAccepted: { kind: 'BOOLEAN' },
+    beforePosted: { kind: 'BOOLEAN' },
+    afterPosted: { kind: 'BOOLEAN' },
+    uncertain: { kind: 'BOOLEAN' },
+    pattern: { kind: 'CODE', values: Array.from({ length: 16 }, (_, i) => `P${i}`) },
+  },
+};
+export const SOCIAL_SUPPORT_COMPARISON_DAYS = 7;

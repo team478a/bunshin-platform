@@ -7,6 +7,7 @@ import {
   type ServiceImprovementSource,
 } from '@bunshin/application';
 import {
+  SOCIAL_SUPPORT_BEHAVIOR_DEFINITION,
   HASSY_SUPPORT_IMPROVEMENT_DEFINITION,
   HASSY_PHOTO_QUALITY_DEFINITION,
 } from '@bunshin/capability-social';
@@ -14,6 +15,7 @@ import type { ImprovementAdapterDefinition } from '@bunshin/platform-domain';
 import { ApplicationError } from '@bunshin/shared';
 import type { PrismaClient } from '@prisma/client';
 import { PrismaImprovementFeedbackObservationAdapter } from './improvement-feedback-observation-adapter';
+import { PrismaSocialSupportBehaviorAdapter } from './social-support-behavior-adapter';
 import { PrismaHassySupportImprovementAdapter } from './hassy-improvement-support-adapter';
 import { PrismaHassyPhotoQualityImprovementAdapter } from './hassy-improvement-photo-quality-adapter';
 import {
@@ -100,6 +102,18 @@ export class PrismaServiceImprovementOverviewReader {
                   known: ['PASS', 'REPAIRED_PASS', 'FINAL_REVISE', 'FINAL_REJECT'],
                 },
               ],
+            },
+            {
+              definition: SOCIAL_SUPPORT_BEHAVIOR_DEFINITION,
+              adapter: new PrismaSocialSupportBehaviorAdapter(
+                this.client,
+                scoped(SOCIAL_SUPPORT_BEHAVIOR_DEFINITION),
+              ),
+              metrics: ['beforeAccepted', 'afterAccepted', 'beforePosted', 'afterPosted'].map(
+                (key) => ({ key, flag: key }),
+              ),
+              uncertainFlags: ['uncertain'],
+              privacyDimensions: ['pattern'],
             },
           ]
         : [

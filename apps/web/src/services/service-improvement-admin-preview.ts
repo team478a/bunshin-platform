@@ -51,7 +51,7 @@ export const overviewPreviewSchema = z
           .strict(),
       )
       .min(1)
-      .max(4),
+      .max(5),
   })
   .strict();
 export type OverviewPreview = z.infer<typeof overviewPreviewSchema>;
@@ -92,6 +92,17 @@ const specs: Record<
       version: 'hassy-photo-quality-v2',
       title: '写真品質の固定判定',
       metrics: { unconfirmedFact: '未確認の事実', hadIssues: '品質上の問題記録' },
+    },
+    {
+      key: 'SOCIAL_SUPPORT_BEHAVIOR',
+      version: 'social-support-behavior-v1',
+      title: '支援開始前後7日間の行動記録',
+      metrics: {
+        beforeAccepted: '開始前7日間に採用があった支援',
+        afterAccepted: '開始後7日間に採用があった支援',
+        beforePosted: '開始前7日間に投稿完了報告があった支援',
+        afterPosted: '開始後7日間に投稿完了報告があった支援',
+      },
     },
   ],
   TRAINING: [
