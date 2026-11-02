@@ -28,20 +28,48 @@ export function ActivityBarrierCard({
   initialQuestion,
   initialSupport,
   photoFirstHref,
+  postingHref,
+  metricsHref,
 }: {
   endpoint: string;
   initialQuestion: SocialActivityBarrierQuestion | null;
   initialSupport: SocialActivitySupportProgress | null;
   photoFirstHref?: string;
+  postingHref?: string;
+  metricsHref?: string;
 }) {
-  const [question, setQuestion] = useState(initialQuestion);
+  const [question, setQuestion] = useState(initialSupport ? null : initialQuestion);
   const [selectedCaseId, setSelectedCaseId] = useState<string | null | undefined>(undefined);
   const [support, setSupport] = useState(initialSupport);
   const [pending, setPending] = useState(false);
+  const [skipReason, setSkipReason] = useState('');
   const [message, setMessage] = useState<string | null>(null);
   const idempotencyKey = useRef<string | null>(null);
   const photoFirstActionLabel =
     support && photoFirstHref ? photoFirstActionLabels[support.support.key] : undefined;
+  const measurement =
+    support &&
+    ['PERFORMANCE_REVIEW', 'MEASUREMENT_SETUP', 'AWARENESS_MEASUREMENT_SETUP'].includes(
+      support.support.key,
+    );
+  const posting =
+    support &&
+    [
+      'STEP_BY_STEP_GUIDE',
+      'FIVE_MINUTE_ACTION',
+      'CONTENT_REVIEW',
+      'MEDIA_PREPARATION',
+      'LOW_RISK_PUBLISHING',
+    ].includes(support.support.key);
+  const nextHref = photoFirstActionLabel
+    ? photoFirstHref
+    : measurement
+      ? metricsHref
+      : posting
+        ? postingHref
+        : undefined;
+  const nextLabel =
+    photoFirstActionLabel ?? (measurement ? '投稿結果を手動で記録する' : '投稿の準備を進める');
 
   function openPhotoFirstSection(event: MouseEvent<HTMLAnchorElement>) {
     const target = document.querySelector(event.currentTarget.hash);
@@ -88,10 +116,18 @@ export function ActivityBarrierCard({
       const response = await fetch(endpoint, {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ supportId: support.id, action }),
+        body: JSON.stringify({
+          supportId: support.id,
+          action,
+          ...(action === 'SKIP' && skipReason.trim() ? { reason: skipReason.trim() } : {}),
+        }),
       });
       const payload = (await response.json()) as SupportResponse;
       if (!response.ok) throw new Error(payload.error?.message ?? '状態を保存できませんでした。');
+      const expectedStatus =
+        action === 'ACCEPT' ? 'ACCEPTED' : action === 'COMPLETE' ? 'COMPLETED' : 'SKIPPED';
+      if (!payload.data || payload.data.id !== support.id || payload.data.status !== expectedStatus)
+        throw new Error('保存した状態を確認できません。画面を更新してください。');
       if (payload.data?.status === 'ACCEPTED') {
         setSupport(payload.data);
         setMessage('始めたことを記録しました。終わったら「できました」を押してください。');
@@ -131,13 +167,13 @@ export function ActivityBarrierCard({
                 </button>
               ) : (
                 <>
-                  {photoFirstActionLabel && photoFirstHref ? (
+                  {nextHref ? (
                     <a
                       className="button button--primary button--full"
-                      href={photoFirstHref}
+                      href={nextHref}
                       onClick={openPhotoFirstSection}
                     >
-                      {photoFirstActionLabel}
+                      {nextLabel}
                     </a>
                   ) : null}
                   <button
@@ -149,6 +185,15 @@ export function ActivityBarrierCard({
                   </button>
                 </>
               )}
+              <label>
+                見送る理由（任意）
+                <input
+                  value={skipReason}
+                  maxLength={500}
+                  disabled={pending}
+                  onChange={(event) => setSkipReason(event.target.value)}
+                />
+              </label>
               <button
                 className="button button--secondary"
                 type="button"

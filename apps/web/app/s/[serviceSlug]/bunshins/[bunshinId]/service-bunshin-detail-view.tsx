@@ -112,9 +112,15 @@ export function ServiceBunshinDetailView({ model }: { model: ServiceBunshinDetai
         ) : null}
         {activityBarrierQuestion || activityBarrierSupport ? (
           <ActivityBarrierCard
+            key={`${service.serviceId}:${bunshin.id}`}
             endpoint={`/api/services/${encodeURIComponent(service.configuration.slug)}/bunshins/${encodeURIComponent(bunshin.id)}/activity-barrier`}
             initialQuestion={activityBarrierQuestion}
             initialSupport={activityBarrierSupport}
+            postingHref="#today-post"
+            {...(isBusinessDailyService &&
+            socialProfiles.some((profile) => profile.status === 'ACTIVE')
+              ? { metricsHref: '#sns-numbers' }
+              : {})}
             {...(isBusinessDailyService && bunshin.ownerUserId === actor.userId
               ? { photoFirstHref: '#daily-action' }
               : {})}
