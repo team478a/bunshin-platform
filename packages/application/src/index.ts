@@ -145,3 +145,5 @@ export * from './service-referral-qualification';
 export * from './service-referral-registration-evidence';
 export * from './service-referral-confirmation';
 export * from './service-referral-management';
+export * from './external-connection-read';
+export * from './external-member-usage';

@@ -30,3 +30,11 @@ Proposed。読取PoCの設計判断。外部公開・接続成功・本番提供
 - [責務分離](HASSY_SHARED_CAPABILITY_BOUNDARY_ADR.md)
 - [Muse公式ガイド](https://platform.muse.ai/docs)
 - [Muse公式ヘルプ](https://www.meta.com/help/superintelligence/1687253048996149/)
+
+## 2026-11-03: 認証方式に依存しないCoreの先行検証
+
+- 初回実装は公開routeを持たないApplicationの接続grant照合・失効反映・読取制御と、既存利用集計への接続に限定する。DB保存・OAuth・接続発行UIは未実装と明示する。
+- 認証済みclient/environmentは将来Adapterが与える。外部入力はconnectionId/requestIdのみで、対象scopeは保存済みgrantから解決する。
+- grantは一つのMemberUsageScope、version、環境、client、有効期限、失効日時、明示許可operationを持つ。読取前後の再取得でversionを含む全項目の一致と現時点の所有権・機能権限を検証する。
+- rate/concurrency制限と監査を必須Portにし、失敗時は閉じる。readにはAbortSignalを渡し、timeout後の結果は破棄する。合成Adapterはtest内だけに置き、本番保存の代用にしない。
+- SNSの投稿案/ミッション投影は後続。今回の縦断対象は利用状況で、7/30日集計を再利用し、原価・scope・累計・最終利用時刻を外部応答へ含めない。
