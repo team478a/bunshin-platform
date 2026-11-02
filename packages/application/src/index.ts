@@ -147,3 +147,4 @@ export * from './service-referral-confirmation';
 export * from './service-referral-management';
 export * from './external-connection-read';
 export * from './external-member-usage';
+export * from './external-read-grant-management';

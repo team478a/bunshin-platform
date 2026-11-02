@@ -38,3 +38,13 @@ Proposed。読取PoCの設計判断。外部公開・接続成功・本番提供
 - grantは一つのMemberUsageScope、version、環境、client、有効期限、失効日時、明示許可operationを持つ。読取前後の再取得でversionを含む全項目の一致と現時点の所有権・機能権限を検証する。
 - rate/concurrency制限と監査を必須Portにし、失敗時は閉じる。readにはAbortSignalを渡し、timeout後の結果は破棄する。合成Adapterはtest内だけに置き、本番保存の代用にしない。
 - SNSの投稿案/ミッション投影は後続。今回の縦断対象は利用状況で、7/30日集計を再利用し、原価・scope・累計・最終利用時刻を外部応答へ含めない。
+
+## 2026-11-03: 接続許可の永続化と本人解除
+
+- 外部接続grantだけを新規保存する。会員・Bunshin・利用原本・監査台帳は重複作成しない。今回の作業指示に含まれるDB保存のためmigrationを追加する。
+- grantは既存会員の全scopeとBunshinの所有scopeに複合FKで結びつける。主体やscopeの変更・再有効化APIは作らない。
+- 発行は本人actor一致、現時点の会員/規約/所有/Capability、既存Feature EntitlementによるEXTERNAL.READとSOCIALの許可、サーバー指定のclient allowlist、version付き明示同意を要求する。認証tokenは発行しない。
+- EXTERNAL.READの定義だけを追加し、既存サービス/会員への権限付与は行わない。server側allowlistも初期空であり、feature設定だけで未検証clientを有効にしない。
+- 発行commandIdを不変のgrant識別子とし、同じ内容の再送は同じ状態を返す。異なる内容は競合。解除はrevisionを照合し、同じ解除の再送は状態を維持する。Groupの既存排他を再利用し、既存GroupFeatureAuditLogを同じtransactionで保存する。
+- 解除は機能停止・Capability停止・退会・規約未同意後でも本人の現所有scopeが一致すれば許可する。新規発行/読取とは許可条件を分け、停止中に解除不能にしない。
+- この段階はApplication/DBの本人向け操作とSQL検証。公開HTTP、UI、OAuth、外部token認証、分散read admissionは別の品質ゲートとする。

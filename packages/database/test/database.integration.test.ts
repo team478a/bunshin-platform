@@ -1,3 +1,4 @@
+import { registerExternalReadGrantIntegrationCases } from './external-read-grants.integration-cases';
 import { registerReferralManagementIntegrationCases } from './service-referral-management.integration-cases';
 import { registerSocialSupportAccessIntegrationCases } from './social-support-access.integration-cases';
 import { reserveVideoMedia, finishVideoMedia } from '../src/video-media-quota';
@@ -240,6 +241,7 @@ describe('database ownership boundaries', () => {
   registerAiProviderCallAdmissionIntegrationCases(client);
   registerServiceImprovementProgressIntegrationCases(client);
   registerMemberUsageIntegrationCases(client);
+  registerExternalReadGrantIntegrationCases(client);
   registerMemberRoadmapContextIntegrationCases(client);
   registerSocialServiceReferralEvidenceIntegrationCases(client);
   registerReferralManagementIntegrationCases(client);
