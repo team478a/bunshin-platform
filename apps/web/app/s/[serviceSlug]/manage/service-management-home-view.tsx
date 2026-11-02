@@ -1,3 +1,4 @@
+import { selectServiceMemberRoadmapPolicy } from '../../../../src/services/service-growth-policy';
 import type { Route } from 'next';
 import Link from 'next/link';
 import { PublicShell } from '../../../ui/public-shell';
@@ -273,6 +274,17 @@ export function ServiceManagementHomeView({ model }: { model: ServiceManagementH
         </section>
         <section className="settings-card">
           <h2>運営メニュー</h2>
+          {selectServiceMemberRoadmapPolicy({
+            workspaceId: configuration.workspaceId,
+            serviceId: configuration.groupId,
+            configuration,
+          }) && (
+            <p>
+              <Link href={`/s/${configuration.slug}/manage/roadmap` as Route}>
+                成長ロードマップの達成条件
+              </Link>
+            </p>
+          )}
           <ul className="settings-status-list">
             {visibleSections.map((section) => (
               <li className="settings-status-item" key={section.href}>

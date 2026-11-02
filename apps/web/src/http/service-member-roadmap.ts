@@ -59,8 +59,11 @@ export async function readServiceMemberGrowth(
   input: MemberUsageRequest,
   service: PublicServiceContext,
 ) {
-  const policy = selectServiceMemberRoadmapPolicy(service);
-  if (!policy) throw new ApplicationError('NOT_FOUND', 'member roadmap unavailable');
+  if (!selectServiceMemberRoadmapPolicy(service))
+    throw new ApplicationError('NOT_FOUND', 'member roadmap unavailable');
+  const { readRuntimeHassyRoadmapPolicy } = await import('../services/hassy-roadmap-policy-store');
+  const settings = await readRuntimeHassyRoadmapPolicy(service);
+  const policy = selectServiceMemberRoadmapPolicy(service, settings)!;
   const db = await import('@bunshin/database');
   const usage = new db.PrismaMemberUsageRepository(db.prisma);
   const context = new db.PrismaMemberRoadmapContextRepository(db.prisma);

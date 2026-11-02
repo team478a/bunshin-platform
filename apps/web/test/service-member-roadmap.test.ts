@@ -17,6 +17,7 @@ const m = vi.hoisted(() => ({
   authorize: vi.fn(),
   read: vi.fn(),
   context: vi.fn(),
+  managed: vi.fn(),
   reserve: vi.fn(),
   release: vi.fn(),
 }));
@@ -28,6 +29,7 @@ vi.mock('../src/http/member-usage-read-limit', () => ({
   memberUsageReadLimit: { reserve: m.reserve },
 }));
 vi.mock('@bunshin/database', () => ({
+  readManagedFeaturePolicyValue: m.managed,
   prisma: { groupMembership: { findFirst: m.membership }, bunshin: { findFirst: m.bunshin } },
   PrismaMemberRoadmapContextRepository: class {
     read = m.context;
@@ -103,6 +105,7 @@ beforeEach(() => {
   vi.resetAllMocks();
   vi.useFakeTimers();
   vi.setSystemTime(now);
+  m.managed.mockResolvedValue(undefined);
   m.actor.mockResolvedValue({ userId: scope.userId });
   m.member.mockResolvedValue({
     workspaceId: scope.workspaceId,
@@ -745,5 +748,39 @@ describe('member roadmap authenticated API', () => {
     expect(response.status).toBe(500);
     expect(JSON.stringify(await response.json())).not.toContain('private policy');
     expect(m.release).toHaveBeenCalledOnce();
+  });
+});
+
+describe('managed Hassy roadmap runtime', () => {
+  it('reads saved conditions and changes the actual member projection without exposing settings', async () => {
+    m.managed.mockResolvedValue({
+      version: 'hassy-roadmap-policy-v1',
+      revision: 2,
+      headquarters: { generated: 5, decisions: 2, activeDays: 7, validReferrals: 3 },
+      service: null,
+      lastRequest: { commandId: id(90), fingerprint: 'a'.repeat(64) },
+    });
+    const response = await run();
+    expect(response.status).toBe(200);
+    const result = (await response.json()) as RoadmapBody;
+    expect(result.data.definitionVersion).toBe('hassy-roadmap-managed-v1-r2');
+    expect(
+      result.data.stages[0]!.milestones.find((m) => m.id === 'FIRST_GENERATION')!.progress,
+    ).toEqual({ current: 1, target: 5 });
+    expect(
+      result.data.stages[4]!.milestones.find((m) => m.id === 'REFERRAL_MILESTONE')!.progress,
+    ).toEqual({ current: null, target: 3 });
+    expect(JSON.stringify(result)).not.toContain('lastRequest');
+    expect(JSON.stringify(result)).not.toContain('headquarters');
+    expect(m.managed).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ workspaceId: scope.workspaceId, serviceId: scope.serviceId }),
+      { featureKey: 'SOCIAL.ACTIVITY_SUPPORT', configKey: 'hassyRoadmapPolicy' },
+    );
+  });
+  it('does not replace corrupt settings with a misleading default', async () => {
+    m.managed.mockResolvedValue({ version: 'unknown' });
+    expect((await run()).status).toBe(503);
+    expect(m.read).not.toHaveBeenCalled();
   });
 });

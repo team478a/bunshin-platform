@@ -27,6 +27,11 @@ describe('service authentication route inventory', () => {
     expect(safeLineAuthReturnPath(path)).toBeNull();
   });
   it.each([
+    '/s/service-a/manage/roadmap?target=1',
+    '/s/service-a/manage/roadmap/extra',
+    '/s/service-a/manage/roadmap#settings',
+    '/s/service-a/manage/%72oadmap',
+    '//example.com/s/service-a/manage/roadmap',
     '/s/service-a/manage/recommendations?enabled=true',
     '/s/service-a/manage/recommendations/extra',
     '/s/service-a/manage/recommendations#settings',

@@ -1,3 +1,4 @@
+import type { HassyRoadmapPolicy } from '../src/services/hassy-roadmap-settings';
 import { describe, expect, it } from 'vitest';
 import type { ServiceFoundationRecord } from '@bunshin/application';
 import { selectServiceMemberRoadmapPolicy } from '../src/services/service-growth-policy';
@@ -95,4 +96,24 @@ describe('trusted service growth policy selection', () => {
     def.scope = null;
     expect(() => policy.validateDefinition(def, scope)).toThrow('definition scope mismatch');
   });
+});
+
+it('binds a fresh managed definition snapshot only to the explicitly selected Hassy service', () => {
+  const settings: HassyRoadmapPolicy = {
+    version: 'hassy-roadmap-policy-v1',
+    revision: 2,
+    headquarters: { generated: 5, decisions: 3, activeDays: 7, validReferrals: 3 },
+    service: null,
+  };
+  expect(selectServiceMemberRoadmapPolicy(service('CUSTOM'), settings)).toBeNull();
+  const selected = selectServiceMemberRoadmapPolicy(service(), settings)!;
+  settings.headquarters!.generated = 20;
+  const definition = selected.createDefinition(scope);
+  expect(definition.stages[0]!.milestones[1]!.criterion).toEqual({
+    kind: 'USAGE',
+    metric: 'generated',
+    target: 5,
+  });
+  definition.stages[0]!.title = 'mutated';
+  expect(selected.createDefinition(scope).stages[0]!.title).toBe('SNS運用を始める');
 });

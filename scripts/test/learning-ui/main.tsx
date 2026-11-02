@@ -1,3 +1,4 @@
+import { RoadmapPolicyHarness } from './roadmap-policy-harness';
 import { RecommendationPolicyHarness } from './recommendation-policy-harness';
 import { HassyAutomationGuide } from '../../../apps/web/app/ui/hassy-automation-guide/card';
 import { ActivitySupportHarness } from './activity-support-harness';
@@ -21,7 +22,9 @@ import '../../../apps/web/app/styles.css';
 import { PersonalLearningRequestCard } from '../../../apps/web/app/s/[serviceSlug]/programs/[programEnrollmentId]/learning-request/card';
 
 createRoot(document.getElementById('root')!).render(
-  new URLSearchParams(window.location.search).has('recommendation-policy') ? (
+  new URLSearchParams(window.location.search).has('roadmap-policy') ? (
+    <RoadmapPolicyHarness />
+  ) : new URLSearchParams(window.location.search).has('recommendation-policy') ? (
     <RecommendationPolicyHarness />
   ) : new URLSearchParams(window.location.search).has('automation-guide') ? (
     <main style={{ maxWidth: 720, margin: 'auto', padding: 16 }}>
