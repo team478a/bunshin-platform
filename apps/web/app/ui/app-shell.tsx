@@ -42,7 +42,7 @@ export const adminNavigationGroups = [
   {
     label: 'サービス設定',
     items: [
-      { href: '/admin/services', label: 'サービスと公開設定' },
+      { href: '/admin/services', label: '公開設定' },
       { href: '/admin/fortune', label: '占いパッケージ' },
       { href: '/admin/activity-rules', label: '続けやすさのルール' },
       { href: '/admin/badges', label: 'グループバッジ確認' },

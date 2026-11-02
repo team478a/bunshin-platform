@@ -152,7 +152,7 @@ export default async function OperationsAdminPage() {
             <span aria-hidden="true">›</span>
           </Link>
           <Link href="/admin/services" className="settings-row">
-            <strong>サービスの設定を変更する</strong>
+            <strong>サービスの公開設定を開く</strong>
             <span aria-hidden="true">›</span>
           </Link>
         </nav>
