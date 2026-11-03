@@ -1,11 +1,26 @@
+import { readConfirmedReferralCount } from './service-referral-count';
+import { readRuntimeUsageGuidancePolicy } from './social-usage-guidance-policy';
 import {
-  SOCIAL_ACTIVITY_BARRIER_DISMISSAL_DAYS,
+  lockRecommendationService,
+  readRuntimeRecommendationPolicy,
+} from './social-recommendation-policy';
+import {
+  recommendationEvidenceAllowed,
+  isSocialUsageGuidance,
+  usageGuidanceAllowed,
+  socialUsageGuidanceDefinition,
+  SOCIAL_USAGE_GUIDANCE_KEYS,
+  SOCIAL_USAGE_GUIDANCE_CODES,
+  type SocialUsageGuidanceSettings,
+  socialSupportCooldownDays,
+  SOCIAL_RECOMMENDATION_POLICY_VERSION,
+  SOCIAL_ACTIVITY_SUPPORT_FEATURE_KEY,
+  SOCIAL_ACTIVITY_SUPPORT_KEYS,
   SOCIAL_ACTIVITY_SUPPORT_RULE_VERSION,
   buildSocialActivityBarrierQuestion,
   readSocialActivityBarrierGoalAttribution,
   readSocialActivityBarrierGoalMetrics,
   selectSocialActivitySupport,
-  socialActivitySupportFor,
   type SocialActivityBarrierCase,
   type SocialActivityBarrierConfirmationRepository,
   type SocialActivityBarrierEvidence,
@@ -14,6 +29,8 @@ import {
   type SocialActivitySupportProgress,
 } from '@bunshin/capability-social';
 import type { Prisma, PrismaClient } from '@prisma/client';
+import { isMemberUsageScopePermitted } from './member-usage-authorization';
+import { PrismaGroupFeatureEntitlementRepository } from './group-feature-entitlement';
 
 function evidence(row: {
   evidenceCode: string;
@@ -106,7 +123,7 @@ function supportProgress(row: {
   if (!row.definitionSnapshot || typeof row.definitionSnapshot !== 'object') return null;
   const snapshot = row.definitionSnapshot as Record<string, unknown>;
   if (
-    typeof snapshot['key'] !== 'string' ||
+    !SOCIAL_ACTIVITY_SUPPORT_KEYS.some((key) => key === snapshot['key']) ||
     typeof snapshot['title'] !== 'string' ||
     typeof snapshot['reason'] !== 'string' ||
     !Array.isArray(snapshot['steps']) ||
@@ -116,33 +133,245 @@ function supportProgress(row: {
   return {
     id: row.id,
     status: row.status,
-    support: snapshot as SocialActivitySupport,
+    support: {
+      key: snapshot['key'] as SocialActivitySupport['key'],
+      title: snapshot['title'],
+      reason: snapshot['reason'],
+      steps: [...snapshot['steps']],
+    },
   };
 }
 
 export class PrismaSocialActivityBarrierConfirmationRepository implements SocialActivityBarrierConfirmationRepository {
-  constructor(private readonly client: PrismaClient) {}
+  constructor(
+    private readonly client: PrismaClient,
+    private readonly now = () => new Date(),
+  ) {}
+
+  private validScope(scope: SocialActivityBarrierScope) {
+    const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    return ['workspaceId', 'serviceId', 'groupMembershipId', 'userId', 'bunshinId'].every((key) => {
+      const id = scope[key as keyof SocialActivityBarrierScope];
+      return typeof id === 'string' && uuid.test(id);
+    });
+  }
+
+  private async permitted(
+    tx: Prisma.TransactionClient,
+    scope: SocialActivityBarrierScope,
+    at: Date,
+    feature = true,
+  ) {
+    if (!this.validScope(scope) || !Number.isFinite(at.getTime())) return false;
+    if (!(await isMemberUsageScopePermitted(tx, scope, at))) return false;
+    const enabled = await tx.bunshin.findFirst({
+      where: {
+        id: scope.bunshinId,
+        workspaceId: scope.workspaceId,
+        groupId: scope.serviceId,
+        ownerUserId: scope.userId,
+        status: 'ACTIVE',
+        capabilityAssignments: {
+          some: {
+            workspaceId: scope.workspaceId,
+            capabilityType: 'SOCIAL',
+            status: 'ACTIVE',
+            activatedAt: { lte: at },
+          },
+        },
+      },
+      select: { id: true },
+    });
+    if (!enabled) return false;
+    if (!feature) return true;
+    const access = await new PrismaGroupFeatureEntitlementRepository(
+      this.client,
+    ).resolveAccessInTransaction(tx, {
+      workspaceId: scope.workspaceId,
+      groupId: scope.serviceId,
+      actorUserId: scope.userId,
+      featureKey: SOCIAL_ACTIVITY_SUPPORT_FEATURE_KEY,
+      now: at,
+    });
+    return Boolean(access?.allowed && access.dailyLimit !== 0 && access.monthlyLimit !== 0);
+  }
+
+  private async lock(tx: Prisma.TransactionClient, scope: SocialActivityBarrierScope) {
+    if (!this.validScope(scope)) return false;
+    await tx.$queryRaw`SELECT id FROM bunshins WHERE id=${scope.bunshinId}::uuid AND workspace_id=${scope.workspaceId}::uuid AND group_id=${scope.serviceId}::uuid AND owner_user_id=${scope.userId}::uuid FOR UPDATE`;
+    return true;
+  }
+
+  private async guidanceAllowed(
+    tx: Prisma.TransactionClient,
+    scope: SocialActivityBarrierScope,
+    value: SocialActivityBarrierCase,
+    settings: SocialUsageGuidanceSettings,
+  ) {
+    if (!isSocialUsageGuidance(value.evidence.evidenceCode)) return true;
+    const at = this.now(),
+      cutoff = new Date(value.evidence.observationWindow.to);
+    if (
+      !Number.isFinite(cutoff.getTime()) ||
+      cutoff > at ||
+      at.getTime() - cutoff.getTime() > 2 * 86_400_000
+    )
+      return false;
+    if (!usageGuidanceAllowed(settings, value.evidence, value.category)) return false;
+    if (
+      value.evidence.evidenceCode === 'USAGE_REFERRAL_REVIEW' &&
+      !(await tx.serviceRegistrationPolicy.findFirst({
+        where: { workspaceId: scope.workspaceId, groupId: scope.serviceId, referralEnabled: true },
+        select: { id: true },
+      }))
+    )
+      return false;
+    if (value.evidence.evidenceCode === 'USAGE_REFERRAL_REVIEW') {
+      const current = await readConfirmedReferralCount(tx, scope, at);
+      if (current === null || current < settings.referralMinimum) return false;
+    }
+    const def = socialUsageGuidanceDefinition(value.evidence.evidenceCode)!;
+    return !(await tx.socialActivitySupportIntervention.findFirst({
+      where: { barrierCase: scopeWhere(scope), status: 'COMPLETED', supportKey: def.support.key },
+      select: { id: true },
+    }));
+  }
+
+  async recordQuestionExposure(
+    input: Parameters<SocialActivityBarrierConfirmationRepository['recordQuestionExposure']>[0],
+  ) {
+    const request = structuredClone(input),
+      ids = [...new Set(request.caseIds)];
+    if (ids.length < 1 || ids.length > 5) return false;
+    return this.client.$transaction(async (tx) => {
+      if (!this.validScope(request.scope)) return false;
+      await lockRecommendationService(tx, request.scope);
+      if (!(await this.lock(tx, request.scope))) return false;
+      const at = this.now();
+      if (!(await this.permitted(tx, request.scope, at))) return false;
+      const parent = (await readRuntimeRecommendationPolicy(tx, request.scope)).settings;
+      const guidance = await readRuntimeUsageGuidancePolicy(tx, request.scope);
+      if (!parent.enabled || !guidance.valid) return false;
+      const rows = await tx.socialActivityBarrierCase.findMany({
+        where: { ...scopeWhere(request.scope), id: { in: ids }, status: 'SUSPECTED' },
+        include: { evidenceSnapshots: { orderBy: { detectedAt: 'desc' }, take: 1 } },
+      });
+      const cases = rows
+        .map((row) => caseValue(request.scope, row))
+        .filter((row): row is SocialActivityBarrierCase => row !== null);
+      if (cases.length !== ids.length) return false;
+      const question = buildSocialActivityBarrierQuestion(cases);
+      if (
+        (request.evidenceKey !== undefined && request.evidenceKey !== question.evidenceKey) ||
+        (request.evidenceKey === undefined &&
+          cases.some((value) => isSocialUsageGuidance(value.evidence.evidenceCode)))
+      )
+        return false;
+      for (const value of cases)
+        if (
+          !recommendationEvidenceAllowed(parent, value.category, value.evidence) ||
+          !(await this.guidanceAllowed(tx, request.scope, value, guidance.settings))
+        )
+          return false;
+      await tx.socialActivityBarrierCase.updateMany({
+        where: {
+          ...scopeWhere(request.scope),
+          id: { in: ids },
+          status: 'SUSPECTED',
+          OR: [{ nextEligibleAt: null }, { nextEligibleAt: { lte: at } }],
+        },
+        data: {
+          nextEligibleAt: new Date(
+            at.getTime() + guidance.settings.questionIntervalDays * 86_400_000,
+          ),
+        },
+      });
+      return true;
+    });
+  }
 
   async getPendingQuestion(
     input: Parameters<SocialActivityBarrierConfirmationRepository['getPendingQuestion']>[0],
   ) {
-    const rows = await this.client.socialActivityBarrierCase.findMany({
-      where: { ...scopeWhere(input.scope), status: 'SUSPECTED' },
-      orderBy: [{ lastDetectedAt: 'desc' }, { category: 'asc' }],
-      include: { evidenceSnapshots: { orderBy: { detectedAt: 'desc' }, take: 1 } },
-    });
-    const cases = rows
-      .map((row) => caseValue(input.scope, row))
-      .filter((value): value is SocialActivityBarrierCase => value !== null);
-    const first = cases[0];
-    if (!first) return null;
-    return buildSocialActivityBarrierQuestion(
-      cases.filter((value) => sameEvidence(value.evidence, first.evidence)),
+    const scope = { ...input.scope };
+    const at = this.now();
+    return this.client.$transaction(
+      async (tx) => {
+        await tx.$executeRaw`SET TRANSACTION READ ONLY`;
+        if (!(await this.permitted(tx, scope, at))) return null;
+        const settings = (await readRuntimeRecommendationPolicy(tx, scope)).settings;
+        if (!settings.enabled) return null;
+        const guidance = await readRuntimeUsageGuidancePolicy(tx, scope);
+        if (!guidance.valid) return null;
+        const recentlyShown = await tx.socialActivityBarrierCase.findFirst({
+          where: { ...scopeWhere(scope), status: 'SUSPECTED', nextEligibleAt: { gt: at } },
+          select: { id: true },
+        });
+        if (recentlyShown) return null;
+        const active = await tx.socialActivitySupportIntervention.findFirst({
+          where: {
+            barrierCase: scopeWhere(scope),
+            OR: [
+              { status: 'ACCEPTED' },
+              {
+                status: 'OFFERED',
+                ...(guidance.settings.enabled
+                  ? {}
+                  : { supportKey: { notIn: [...SOCIAL_USAGE_GUIDANCE_KEYS] } }),
+              },
+            ],
+          },
+          select: { id: true },
+        });
+        if (active) return null;
+        const rows = await tx.socialActivityBarrierCase.findMany({
+          where: {
+            ...scopeWhere(scope),
+            status: 'SUSPECTED',
+            category: { in: settings.categories },
+            OR: [{ nextEligibleAt: null }, { nextEligibleAt: { lte: at } }],
+          },
+          take: 50,
+          orderBy: [{ lastDetectedAt: 'desc' }, { category: 'asc' }],
+          include: { evidenceSnapshots: { orderBy: { detectedAt: 'desc' }, take: 1 } },
+        });
+        const potential = rows
+          .map((row) => caseValue(scope, row))
+          .filter(
+            (value): value is SocialActivityBarrierCase =>
+              value !== null &&
+              recommendationEvidenceAllowed(settings, value.category, value.evidence),
+          );
+        const cases: SocialActivityBarrierCase[] = [];
+        for (const value of potential)
+          if (await this.guidanceAllowed(tx, scope, value, guidance.settings)) cases.push(value);
+        cases.sort((a, b) => {
+          const left = SOCIAL_USAGE_GUIDANCE_CODES.indexOf(
+            a.evidence.evidenceCode as (typeof SOCIAL_USAGE_GUIDANCE_CODES)[number],
+          );
+          const right = SOCIAL_USAGE_GUIDANCE_CODES.indexOf(
+            b.evidence.evidenceCode as (typeof SOCIAL_USAGE_GUIDANCE_CODES)[number],
+          );
+          return left - right;
+        });
+        const first = cases[0];
+        if (!first) return null;
+        return buildSocialActivityBarrierQuestion(
+          cases.filter((value) => sameEvidence(value.evidence, first.evidence)).slice(0, 5),
+        );
+      },
+      { isolationLevel: 'RepeatableRead', timeout: 20_000 },
     );
   }
 
   async answer(input: Parameters<SocialActivityBarrierConfirmationRepository['answer']>[0]) {
+    input = structuredClone(input);
     const uniqueCaseIds = [...new Set(input.caseIds)];
+    const requestSnapshot = {
+      caseIds: [...uniqueCaseIds].sort(),
+      selectedCaseId: input.selectedCaseId,
+      ...(input.evidenceKey !== undefined ? { evidenceKey: input.evidenceKey } : {}),
+    };
     if (
       uniqueCaseIds.length === 0 ||
       uniqueCaseIds.length > 5 ||
@@ -154,6 +383,10 @@ export class PrismaSocialActivityBarrierConfirmationRepository implements Social
     }
 
     return this.client.$transaction(async (tx) => {
+      if (!this.validScope(input.scope)) return null;
+      await lockRecommendationService(tx, input.scope);
+      if (!(await this.lock(tx, input.scope))) return null;
+      if (!(await this.permitted(tx, input.scope, this.now()))) return null;
       const existing = await tx.socialActivityBarrierConfirmation.findUnique({
         where: { idempotencyKey: input.idempotencyKey },
         include: { barrierCase: true },
@@ -169,14 +402,51 @@ export class PrismaSocialActivityBarrierConfirmationRepository implements Social
         ) {
           return null;
         }
+        const receipt = existing.requestSnapshot as {
+          caseIds?: unknown;
+          selectedCaseId?: unknown;
+          evidenceKey?: unknown;
+        } | null;
+        if (
+          !receipt ||
+          JSON.stringify(receipt.caseIds) !== JSON.stringify(requestSnapshot.caseIds) ||
+          receipt.selectedCaseId !== requestSnapshot.selectedCaseId ||
+          (receipt.evidenceKey ?? null) !== (requestSnapshot.evidenceKey ?? null)
+        )
+          return null;
+        const stored = await tx.socialActivitySupportIntervention.findFirst({
+          where: {
+            idempotencyKey: `${input.idempotencyKey}:support`,
+            barrierCase: scopeWhere(input.scope),
+          },
+          select: { id: true, status: true, definitionSnapshot: true },
+        });
         return {
           response: existing.response,
-          support: existing.selectedCategory
-            ? socialActivitySupportFor(existing.selectedCategory)
-            : null,
+          support: stored ? (supportProgress(stored)?.support ?? null) : null,
         };
       }
 
+      const { policy, settings } = await readRuntimeRecommendationPolicy(tx, input.scope);
+      if (!policy || !settings.enabled) return null;
+      const guidance = await readRuntimeUsageGuidancePolicy(tx, input.scope);
+      if (!guidance.valid) return null;
+      const active = await tx.socialActivitySupportIntervention.findFirst({
+        where: {
+          barrierCase: scopeWhere(input.scope),
+          OR: [
+            { status: 'ACCEPTED' },
+            {
+              status: 'OFFERED',
+              ...(guidance.settings.enabled
+                ? {}
+                : { supportKey: { notIn: [...SOCIAL_USAGE_GUIDANCE_KEYS] } }),
+            },
+          ],
+        },
+        select: { id: true },
+      });
+      if (active) return null;
       const [membership, bunshin, rows] = await Promise.all([
         tx.groupMembership.findFirst({
           where: {
@@ -212,7 +482,21 @@ export class PrismaSocialActivityBarrierConfirmationRepository implements Social
         .map((row) => caseValue(input.scope, row))
         .filter((value): value is SocialActivityBarrierCase => value !== null);
       if (cases.length !== uniqueCaseIds.length) return null;
-      buildSocialActivityBarrierQuestion(cases);
+      if (
+        cases.some(
+          (value) => !recommendationEvidenceAllowed(settings, value.category, value.evidence),
+        )
+      )
+        return null;
+      for (const value of cases)
+        if (!(await this.guidanceAllowed(tx, input.scope, value, guidance.settings))) return null;
+      const shownQuestion = buildSocialActivityBarrierQuestion(cases);
+      if (
+        (input.evidenceKey !== undefined && input.evidenceKey !== shownQuestion.evidenceKey) ||
+        (input.evidenceKey === undefined &&
+          cases.some((value) => isSocialUsageGuidance(value.evidence.evidenceCode)))
+      )
+        return null;
 
       const selected =
         input.selectedCaseId === null
@@ -221,9 +505,7 @@ export class PrismaSocialActivityBarrierConfirmationRepository implements Social
       if (input.selectedCaseId !== null && !selected) return null;
 
       const nextEligibleAt = new Date(input.answeredAt);
-      nextEligibleAt.setUTCDate(
-        nextEligibleAt.getUTCDate() + SOCIAL_ACTIVITY_BARRIER_DISMISSAL_DAYS,
-      );
+      nextEligibleAt.setUTCDate(nextEligibleAt.getUTCDate() + settings.cooldownDays);
       const primary = selected ?? cases[0]!;
 
       if (selected) {
@@ -255,6 +537,7 @@ export class PrismaSocialActivityBarrierConfirmationRepository implements Social
         data: {
           caseId: primary.id,
           response,
+          requestSnapshot,
           selectedCategory: selected?.category ?? null,
           actorUserId: input.scope.userId,
           idempotencyKey: input.idempotencyKey,
@@ -273,6 +556,12 @@ export class PrismaSocialActivityBarrierConfirmationRepository implements Social
             supportKey: selection.support.key,
             definitionSnapshot: {
               ...selection.support,
+              exposureTracking: 'social-support-exposure-v1',
+              recommendationPolicy: {
+                version: SOCIAL_RECOMMENDATION_POLICY_VERSION,
+                revision: policy.revision,
+                cooldownDays: settings.cooldownDays,
+              },
               steps: [...selection.support.steps],
               selection: {
                 mode: selection.mode,
@@ -291,58 +580,214 @@ export class PrismaSocialActivityBarrierConfirmationRepository implements Social
     });
   }
 
+  async recordExposure(
+    input: Parameters<SocialActivityBarrierConfirmationRepository['recordExposure']>[0],
+  ) {
+    const request = structuredClone(input);
+    if (!['DISPLAY', 'DETAILS'].includes(request.kind)) return false;
+    return this.client.$transaction(async (tx) => {
+      if (!(await this.lock(tx, request.scope))) return false;
+      const at = this.now();
+      if (!(await this.permitted(tx, request.scope, at))) return false;
+      const row = await tx.socialActivitySupportIntervention.findFirst({
+        where: { id: request.supportId, barrierCase: scopeWhere(request.scope) },
+        select: {
+          id: true,
+          status: true,
+          definitionSnapshot: true,
+          offeredAt: true,
+          firstDisplayedAt: true,
+          firstDetailsViewedAt: true,
+        },
+      });
+      if (!row || !supportProgress(row) || row.offeredAt > at) return false;
+      if (request.kind === 'DISPLAY' && row.firstDisplayedAt) return true;
+      if (request.kind === 'DETAILS' && row.firstDetailsViewedAt) return true;
+      await tx.socialActivitySupportIntervention.update({
+        where: { id: row.id },
+        data: {
+          ...(!row.firstDisplayedAt ? { firstDisplayedAt: at } : {}),
+          ...(request.kind === 'DETAILS' ? { firstDetailsViewedAt: at } : {}),
+        },
+      });
+      return true;
+    });
+  }
+
   async getActiveSupport(
     input: Parameters<SocialActivityBarrierConfirmationRepository['getActiveSupport']>[0],
   ) {
-    const row = await this.client.socialActivitySupportIntervention.findFirst({
-      where: {
-        status: { in: ['OFFERED', 'ACCEPTED'] },
-        barrierCase: scopeWhere(input.scope),
+    const scope = { ...input.scope };
+    const at = this.now();
+    return this.client.$transaction(
+      async (tx) => {
+        await tx.$executeRaw`SET TRANSACTION READ ONLY`;
+        if (!(await this.permitted(tx, scope, at))) return null;
+        const settings = (await readRuntimeRecommendationPolicy(tx, scope)).settings;
+        const usagePolicy = await readRuntimeUsageGuidancePolicy(tx, scope);
+        const row = await tx.socialActivitySupportIntervention.findFirst({
+          where: {
+            OR: [
+              { status: 'ACCEPTED' },
+              ...(settings.enabled
+                ? [
+                    {
+                      status: 'OFFERED' as const,
+                      ...(!usagePolicy.valid || !usagePolicy.settings.enabled
+                        ? { supportKey: { notIn: [...SOCIAL_USAGE_GUIDANCE_KEYS] } }
+                        : {}),
+                    },
+                  ]
+                : []),
+            ],
+            barrierCase: scopeWhere(scope),
+          },
+          orderBy: { offeredAt: 'desc' },
+          select: { id: true, status: true, definitionSnapshot: true },
+        });
+        const progress = row ? supportProgress(row) : null;
+        if (
+          progress?.status === 'OFFERED' &&
+          SOCIAL_USAGE_GUIDANCE_KEYS.some((key) => key === progress.support.key)
+        ) {
+          const current = await readRuntimeUsageGuidancePolicy(tx, scope);
+          if (!current.valid || !current.settings.enabled) return null;
+          if (
+            progress.support.key === 'REFERRAL_BENEFIT_REVIEW' &&
+            !(await tx.serviceRegistrationPolicy.findFirst({
+              where: {
+                workspaceId: scope.workspaceId,
+                groupId: scope.serviceId,
+                referralEnabled: true,
+              },
+              select: { id: true },
+            }))
+          )
+            return null;
+        }
+        return progress;
       },
-      orderBy: { offeredAt: 'desc' },
-      select: { id: true, status: true, definitionSnapshot: true },
-    });
-    return row ? supportProgress(row) : null;
+      { isolationLevel: 'RepeatableRead', timeout: 20_000 },
+    );
   }
 
   async transitionSupport(
     input: Parameters<SocialActivityBarrierConfirmationRepository['transitionSupport']>[0],
   ) {
-    const row = await this.client.socialActivitySupportIntervention.findFirst({
-      where: { id: input.supportId, barrierCase: scopeWhere(input.scope) },
-      select: { id: true, status: true, definitionSnapshot: true },
-    });
-    if (!row) return null;
-    const desired =
-      input.action === 'ACCEPT'
-        ? 'ACCEPTED'
-        : input.action === 'COMPLETE'
-          ? 'COMPLETED'
-          : 'SKIPPED';
-    if (row.status === desired) return supportProgress(row);
-    if (row.status === 'COMPLETED' || row.status === 'SKIPPED') return null;
-
-    const data: Prisma.SocialActivitySupportInterventionUpdateManyMutationInput =
-      desired === 'ACCEPTED'
-        ? { status: 'ACCEPTED', acceptedAt: input.occurredAt }
-        : desired === 'COMPLETED'
-          ? { status: 'COMPLETED', completedAt: input.occurredAt }
-          : { status: 'SKIPPED', skippedAt: input.occurredAt };
-    const updated = await this.client.socialActivitySupportIntervention.updateMany({
-      where: {
-        id: input.supportId,
-        status: row.status,
-        barrierCase: scopeWhere(input.scope),
-      },
-      data,
-    });
-    if (updated.count !== 1) {
-      const concurrent = await this.client.socialActivitySupportIntervention.findFirst({
-        where: { id: input.supportId, status: desired, barrierCase: scopeWhere(input.scope) },
-        select: { id: true, status: true, definitionSnapshot: true },
+    input = structuredClone(input);
+    if (
+      !['ACCEPT', 'COMPLETE', 'SKIP'].includes(input.action) ||
+      !Number.isFinite(input.occurredAt.getTime()) ||
+      (input.reason !== undefined &&
+        (input.action !== 'SKIP' || typeof input.reason !== 'string' || input.reason.length > 500))
+    )
+      return null;
+    if (input.reason !== undefined) input.reason = input.reason.trim();
+    return this.client.$transaction(async (tx) => {
+      if (!this.validScope(input.scope)) return null;
+      await lockRecommendationService(tx, input.scope);
+      if (!(await this.lock(tx, input.scope))) return null;
+      if (!(await this.permitted(tx, input.scope, this.now(), input.action === 'ACCEPT')))
+        return null;
+      if (
+        input.action === 'ACCEPT' &&
+        !(await readRuntimeRecommendationPolicy(tx, input.scope)).settings.enabled
+      )
+        return null;
+      const row = await tx.socialActivitySupportIntervention.findFirst({
+        where: { id: input.supportId, barrierCase: scopeWhere(input.scope) },
+        select: { id: true, caseId: true, status: true, definitionSnapshot: true },
       });
-      return concurrent ? supportProgress(concurrent) : null;
-    }
-    return supportProgress({ ...row, status: desired });
+      if (!row) return null;
+      if (!supportProgress(row)) return null;
+      if (
+        input.action === 'ACCEPT' &&
+        SOCIAL_USAGE_GUIDANCE_KEYS.some((key) => key === supportProgress(row)?.support.key)
+      ) {
+        const current = await readRuntimeUsageGuidancePolicy(tx, input.scope);
+        if (!current.valid || !current.settings.enabled) return null;
+        if (
+          supportProgress(row)?.support.key === 'REFERRAL_BENEFIT_REVIEW' &&
+          !(await tx.serviceRegistrationPolicy.findFirst({
+            where: {
+              workspaceId: input.scope.workspaceId,
+              groupId: input.scope.serviceId,
+              referralEnabled: true,
+            },
+            select: { id: true },
+          }))
+        )
+          return null;
+      }
+      const desired =
+        input.action === 'ACCEPT'
+          ? 'ACCEPTED'
+          : input.action === 'COMPLETE'
+            ? 'COMPLETED'
+            : 'SKIPPED';
+      if (row.status === desired) {
+        if (desired === 'SKIPPED') {
+          const snapshot = row.definitionSnapshot as Record<string, Prisma.JsonValue>;
+          const feedback = snapshot['feedback'] as Record<string, Prisma.JsonValue> | undefined;
+          if ((feedback?.['reason'] ?? '') !== (input.reason ?? '')) return null;
+        }
+        return supportProgress(row);
+      }
+      if (row.status === 'COMPLETED' || row.status === 'SKIPPED') return null;
+
+      const data: Prisma.SocialActivitySupportInterventionUpdateManyMutationInput =
+        desired === 'ACCEPTED'
+          ? { status: 'ACCEPTED', acceptedAt: input.occurredAt }
+          : desired === 'COMPLETED'
+            ? { status: 'COMPLETED', completedAt: input.occurredAt }
+            : { status: 'SKIPPED', skippedAt: input.occurredAt };
+      const updated = await tx.socialActivitySupportIntervention.updateMany({
+        where: {
+          id: input.supportId,
+          status: row.status,
+          barrierCase: scopeWhere(input.scope),
+        },
+        data,
+      });
+      if (updated.count !== 1) {
+        const concurrent = await tx.socialActivitySupportIntervention.findFirst({
+          where: { id: input.supportId, status: desired, barrierCase: scopeWhere(input.scope) },
+          select: { id: true, caseId: true, status: true, definitionSnapshot: true },
+        });
+        return concurrent ? supportProgress(concurrent) : null;
+      }
+      if (
+        desired === 'COMPLETED' &&
+        SOCIAL_USAGE_GUIDANCE_KEYS.some((key) => key === supportProgress(row)?.support.key)
+      ) {
+        await tx.socialActivityBarrierCase.updateMany({
+          where: { ...scopeWhere(input.scope), id: row.caseId },
+          data: { status: 'RESOLVED', resolvedAt: input.occurredAt, nextEligibleAt: null },
+        });
+      }
+      if (desired === 'SKIPPED') {
+        const nextEligibleAt = new Date(
+          input.occurredAt.getTime() +
+            socialSupportCooldownDays(row.definitionSnapshot) * 86_400_000,
+        );
+        await tx.socialActivityBarrierCase.updateMany({
+          where: { ...scopeWhere(input.scope), id: row.caseId },
+          data: { status: 'DISMISSED', dismissedAt: input.occurredAt, nextEligibleAt },
+        });
+        await tx.socialActivitySupportIntervention.update({
+          where: { id: row.id },
+          data: {
+            definitionSnapshot: {
+              ...(row.definitionSnapshot as Prisma.JsonObject),
+              feedback: {
+                reason: input.reason ?? '',
+                recordedAt: input.occurredAt.toISOString(),
+              },
+            },
+          },
+        });
+      }
+      return supportProgress({ ...row, status: desired });
+    });
   }
 }

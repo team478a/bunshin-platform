@@ -36,6 +36,17 @@ export function OrganizationManageView({ model }: { model: OrganizationManagePag
         <br />
         <Link href={`/organizations/${organization.id}/payment`}>自社の決済先を設定する →</Link>
       </header>
+      <nav className="settings-list" aria-label="団体管理メニュー">
+        <Link className="settings-row" href="#organization-projects">
+          配信・コンテンツ管理（プロジェクトを選択）
+        </Link>
+        <Link className="settings-row" href="#organization-operators">
+          会員・運営者管理
+        </Link>
+        <Link className="settings-row" href="#organization-settings">
+          団体設定
+        </Link>
+      </nav>
       <section className="operations-overview" aria-label="団体の設定状況">
         <div>
           <span>運営者</span>
@@ -93,7 +104,35 @@ export function OrganizationManageView({ model }: { model: OrganizationManagePag
               : '団体の新規設定は現在停止されています。システム管理者へお問い合わせください。'}
         </p>
       ) : null}
-      <section className="settings-card">
+      <section
+        className="settings-card"
+        id="organization-projects"
+        style={{ scrollMarginTop: '8rem' }}
+      >
+        <h2>運用中のプロジェクト</h2>
+        {organization.groups.length ? (
+          <ul className="organization-group-list">
+            {organization.groups.map((group) => (
+              <li key={group.id}>
+                <div>
+                  <strong>{group.name}</strong>
+                  <span>参加者・公式情報・LINE設定を管理</span>
+                </div>
+                <Link className="button button--secondary" href={`/groups/${group.id}/members`}>
+                  開く
+                </Link>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p>まだプロジェクトはありません。</p>
+        )}
+      </section>
+      <section
+        className="settings-card"
+        id="organization-settings"
+        style={{ scrollMarginTop: '8rem' }}
+      >
         <div className="management-section__heading">
           <div>
             <p className="management-section__eyebrow">1. 基本情報</p>
@@ -181,23 +220,16 @@ export function OrganizationManageView({ model }: { model: OrganizationManagePag
               maxLength={500}
             />
           </label>
-          <label className="field">
-            <span className="field__label">変更理由</span>
-            <input
-              className="field__control"
-              name="reason"
-              required
-              minLength={5}
-              maxLength={1000}
-              placeholder="例：クライアント情報を更新"
-            />
-          </label>
           <button className="button" type="submit">
             団体情報を保存する
           </button>
         </form>
       </section>
-      <section className="settings-card">
+      <section
+        className="settings-card"
+        id="organization-operators"
+        style={{ scrollMarginTop: '8rem' }}
+      >
         <div className="management-section__heading">
           <div>
             <p className="management-section__eyebrow">2. 運営する人</p>
@@ -315,23 +347,6 @@ export function OrganizationManageView({ model }: { model: OrganizationManagePag
             プロジェクトを作成する
           </button>
         </form>
-        {organization.groups.length ? (
-          <ul className="organization-group-list">
-            {organization.groups.map((group) => (
-              <li key={group.id}>
-                <div>
-                  <strong>{group.name}</strong>
-                  <span>参加者・公式情報・LINE設定を管理</span>
-                </div>
-                <Link className="button button--secondary" href={`/groups/${group.id}/members`}>
-                  開く
-                </Link>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p>まだプロジェクトはありません。</p>
-        )}
       </section>
     </main>
   );

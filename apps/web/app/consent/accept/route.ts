@@ -9,18 +9,34 @@ import {
   clearAuthReturnCookie,
   authReturnDestination,
   authConsentPath,
+  authReturnAttemptsEnabled,
   AuthReturnContextError,
   type AuthReturnContext,
 } from '../../../src/auth/auth-return-attempt';
 import { loginErrorResponse } from '../../../src/auth/login-error';
+import { safeLineAuthReturnPath } from '../../../src/auth/line-return';
 
 export async function POST(request: Request) {
   let context: AuthReturnContext | null = null;
+  let legacyReturnTo: string | null = null;
   try {
     requireSameOrigin(request);
-    const user = await (await currentUserProvider()).getCurrentUser();
-    if (!user) return NextResponse.redirect(new URL('/login', request.url), 303);
     const form = await request.formData();
+    const submittedReturnTo = form.get('returnTo');
+    const candidateReturnTo =
+      typeof submittedReturnTo === 'string' ? safeLineAuthReturnPath(submittedReturnTo) : null;
+    if (submittedReturnTo !== null && (!candidateReturnTo || authReturnAttemptsEnabled()))
+      throw new AuthReturnContextError();
+    legacyReturnTo = candidateReturnTo;
+    const user = await (await currentUserProvider()).getCurrentUser();
+    if (!user)
+      return NextResponse.redirect(
+        new URL(
+          legacyReturnTo ? `/login?returnTo=${encodeURIComponent(legacyReturnTo)}` : '/login',
+          request.url,
+        ),
+        303,
+      );
     context = await readAuthReturnContext(
       request,
       singleAuthAttemptId(form.getAll('authAttempt')),
@@ -40,17 +56,21 @@ export async function POST(request: Request) {
     await consumeAuthReturnAttempt(context, user.userId);
     return clearAuthReturnCookie(
       NextResponse.redirect(
-        new URL(authReturnDestination(context, registration?.status), request.url),
+        new URL(authReturnDestination(context, registration?.status, legacyReturnTo), request.url),
         303,
       ),
       context,
     );
   } catch (error) {
     if (error instanceof AuthReturnContextError)
-      return loginErrorResponse(request, 'auth-context', context?.returnTo ?? null);
+      return loginErrorResponse(
+        request,
+        'auth-context',
+        legacyReturnTo ?? context?.returnTo ?? null,
+      );
     return NextResponse.redirect(
       new URL(
-        `${context ? authConsentPath(context) : '/consent'}${context?.attempt ? '&' : '?'}error=1`,
+        `${context ? authConsentPath(context, legacyReturnTo) : legacyReturnTo ? `/consent?returnTo=${encodeURIComponent(legacyReturnTo)}` : '/consent'}${context?.attempt || legacyReturnTo ? '&' : '?'}error=1`,
         request.url,
       ),
       303,

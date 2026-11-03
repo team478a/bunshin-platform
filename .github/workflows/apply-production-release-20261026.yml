@@ -1,0 +1,99 @@
+name: Apply approved service identity migrations (2026-10-26)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type APPLY_RELEASE_20261026_SERVICE_IDENTITY_TO_vtkzinaudznwbsjoyszk to proceed
+        required: true
+        type: string
+      project_ref:
+        description: Approved 20-character Supabase project reference
+        required: true
+        type: string
+      mode:
+        description: Preview first; apply executes only the two approved service identity migrations
+        required: true
+        type: choice
+        default: preview
+        options: [preview, apply]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-migration-apply
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: production
+    steps:
+      - name: Require main and exact target confirmation
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+          EXPECTED_PROJECT_REF: ${{ inputs.project_ref }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$CONFIRMATION" = "APPLY_RELEASE_20261026_SERVICE_IDENTITY_TO_vtkzinaudznwbsjoyszk"
+          test "$EXPECTED_PROJECT_REF" = "vtkzinaudznwbsjoyszk"
+
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.10.0
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install native PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client-16
+
+      - name: Apply only the approved service identity migrations through the session pooler
+        env:
+          VERCEL_ENV: production
+          MIGRATION_APPLY_EXPECTED_PROJECT_REF: ${{ inputs.project_ref }}
+          MIGRATION_APPLY_CONFIRMATION: ${{ inputs.confirmation }}
+          MIGRATION_APPLY_MODE: ${{ inputs.mode }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+          SUPABASE_SESSION_POOLER_HOST: ${{ vars.SUPABASE_SESSION_POOLER_HOST || secrets.SUPABASE_SESSION_POOLER_HOST }}
+        run: |
+          set -euo pipefail
+          pnpm db:migration:apply:release-20261026 | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Verify release schema readiness through the transaction pooler after apply
+        if: inputs.mode == 'apply'
+        env:
+          VERCEL_ENV: production
+          RELEASE_READINESS_EXPECTED_PROJECT_REF: ${{ inputs.project_ref }}
+          RELEASE_READINESS_CONFIRMATION: VERIFY_RELEASE_20261026_SCHEMA_TO_vtkzinaudznwbsjoyszk
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          SUPABASE_SESSION_POOLER_HOST: ${{ vars.SUPABASE_SESSION_POOLER_HOST || secrets.SUPABASE_SESSION_POOLER_HOST }}
+        run: |
+          set -euo pipefail
+          node packages/database/scripts/verify-release-readiness-20261026.mjs | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Record outcome
+        if: success()
+        env:
+          RELEASE_MODE: ${{ inputs.mode }}
+        run: |
+          {
+            echo "## Service identity production migration release 2026-10-26"
+            echo ""
+            echo "- Mode: $RELEASE_MODE"
+            echo "- Result: successful; Preview does not execute DDL or record migrations"
+            echo "- Scope: exactly the two approved service identity migrations"
+            echo "- Database credentials: not recorded"
+          } >> "$GITHUB_STEP_SUMMARY"

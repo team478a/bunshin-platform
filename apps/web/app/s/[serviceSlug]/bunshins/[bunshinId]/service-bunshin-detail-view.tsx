@@ -1,3 +1,4 @@
+import { HassyAutomationGuide } from '../../../../ui/hassy-automation-guide/card';
 import type { Route } from 'next';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
@@ -19,6 +20,8 @@ import { SocialInsightRecorder } from './social-insight-recorder';
 import type { ServiceBunshinDetailModel } from './service-bunshin-detail-data';
 import { ActivityBarrierCard } from './activity-barrier-card';
 import { ImprovementFeedbackForm } from '../../../../ui/improvement-feedback-form';
+import { HassyMemberGrowthRoadmap } from '../../../../ui/member-growth-roadmap/card';
+import { HassyGrowthPolicyGate } from '../../../../ui/member-growth-roadmap/policy-gate';
 
 function MemberHomeDrawer({
   title,
@@ -110,9 +113,19 @@ export function ServiceBunshinDetailView({ model }: { model: ServiceBunshinDetai
         ) : null}
         {activityBarrierQuestion || activityBarrierSupport ? (
           <ActivityBarrierCard
+            key={`${service.serviceId}:${bunshin.id}`}
             endpoint={`/api/services/${encodeURIComponent(service.configuration.slug)}/bunshins/${encodeURIComponent(bunshin.id)}/activity-barrier`}
             initialQuestion={activityBarrierQuestion}
             initialSupport={activityBarrierSupport}
+            postingHref="#today-post"
+            creditsHref={`/s/${encodeURIComponent(service.configuration.slug)}/credits`}
+            {...(service.configuration.registration.referralEnabled
+              ? { referralHref: `/s/${encodeURIComponent(service.configuration.slug)}/activity` }
+              : {})}
+            {...(isBusinessDailyService &&
+            socialProfiles.some((profile) => profile.status === 'ACTIVE')
+              ? { metricsHref: '#sns-numbers' }
+              : {})}
             {...(isBusinessDailyService && bunshin.ownerUserId === actor.userId
               ? { photoFirstHref: '#daily-action' }
               : {})}
@@ -180,6 +193,32 @@ export function ServiceBunshinDetailView({ model }: { model: ServiceBunshinDetai
             <h2 id="service-member-tools-title">その他のメニュー</h2>
             <p>普段は開かなくても大丈夫です。確認したい項目だけ選んでください。</p>
           </header>
+          <HassyGrowthPolicyGate service={service}>
+            {bunshin.ownerUserId === actor.userId &&
+            capabilities.some(({ capabilityType }) => capabilityType === 'SOCIAL') ? (
+              <MemberHomeDrawer
+                title="成長ロードマップを確認する"
+                description="活動日数、できたこと、次のおすすめを確認できます。"
+              >
+                <HassyMemberGrowthRoadmap
+                  endpointBase={`/api/services/${encodeURIComponent(service.configuration.slug)}/bunshins/${encodeURIComponent(bunshin.id)}`}
+                />
+              </MemberHomeDrawer>
+            ) : null}
+          </HassyGrowthPolicyGate>
+          <HassyGrowthPolicyGate service={service}>
+            {bunshin.ownerUserId === actor.userId &&
+            capabilities.some(
+              ({ capabilityType, status }) => capabilityType === 'SOCIAL' && status === 'ACTIVE',
+            ) ? (
+              <MemberHomeDrawer
+                title="投稿準備と自動化のガイド"
+                description="手動の進め方、Zapierの基本、相談用の指示文を確認できます。"
+              >
+                <HassyAutomationGuide />
+              </MemberHomeDrawer>
+            ) : null}
+          </HassyGrowthPolicyGate>
           {approvedBusinessStrategy ? (
             <MemberHomeDrawer
               label="最初に1回"
@@ -359,6 +398,9 @@ export function ServiceBunshinDetailView({ model }: { model: ServiceBunshinDetai
             </div>
           </MemberHomeDrawer>
         </section>
+        <a href={`/s/${service.configuration.slug}/bunshins/${bunshin.id}/connections`}>
+          外部サービスの読取許可を確認する
+        </a>
         <Link href={`/s/${service.configuration.slug}/bunshins` as Route}>一覧へ戻る</Link>
       </article>
     </PublicShell>

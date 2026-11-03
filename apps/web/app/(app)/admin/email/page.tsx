@@ -19,8 +19,10 @@ export default async function AdminEmailPage() {
     <main className="app-page">
       <header className="app-page__heading">
         <p className="eyebrow">管理者専用</p>
-        <h1>障害メールの設定</h1>
-        <p>大切な障害をResendから管理者へ知らせます。</p>
+        <h1>障害通知メール（Resend）の設定</h1>
+        <p>
+          大切な障害をResendから管理者へ知らせます。ユーザーのログインメールはここでは設定しません。
+        </p>
       </header>
       <section className="settings-card">
         <h2>現在の環境</h2>

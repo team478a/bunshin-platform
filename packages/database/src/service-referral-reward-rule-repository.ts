@@ -34,6 +34,7 @@ export class PrismaServiceReferralRewardRuleRepository implements ServiceReferra
     input: Parameters<ServiceReferralRewardRuleRepository['saveVersion']>[0],
   ): Promise<ServiceReferralRewardRuleRecord> {
     return this.client.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM groups WHERE workspace_id=${input.workspaceId}::uuid AND id=${input.groupId}::uuid FOR UPDATE`;
       const latest = await tx.serviceReferralRewardRule.aggregate({
         where: {
           workspaceId: input.workspaceId,
@@ -66,6 +67,9 @@ export class PrismaServiceReferralRewardRuleRepository implements ServiceReferra
           createdByUserId: input.actorUserId,
         },
       });
+      // Invalidate snapshots waiting on the service lock, including qualification
+      // transactions which will grant against these credit limits and amounts.
+      await tx.group.update({ where: { id: input.groupId }, data: { updatedAt: input.now } });
       return {
         id: created.id,
         ruleKey: created.ruleKey,

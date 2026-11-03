@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
 type Item = {
   id: string;
@@ -40,6 +40,7 @@ export function GroupLineEditor(props: {
   initialConfigurations: Item[];
   endpoint?: string;
   scopeLabel?: string;
+  targetName: string;
 }) {
   const [mode, setMode] = useState(props.initialMode);
   const [items, setItems] = useState(props.initialConfigurations);
@@ -86,24 +87,105 @@ export function GroupLineEditor(props: {
       if (data && isMode(data['mode'])) setMode(data['mode']);
     }
   }
-  async function publishDefaultRichMenu() {
-    if (!window.confirm(`この${scopeLabel}専用LINEへ標準リッチメニューを公開します。`)) return;
-    const reason = window.prompt('公開する理由を入力してください', '標準リッチメニューを公開');
-    if (!reason) return;
-    const result = await call(`/api/admin/groups/${props.groupId}/line-rich-menu/default`, 'POST', {
-      workspaceId: props.workspaceId,
-      reason,
-    });
-    if (result) {
-      setMessage('専用LINEへ標準リッチメニューを公開しました。');
-      setMessageKind('success');
+  const [publication, setPublication] = useState<{
+    configuration: Item;
+    operationId: string;
+  } | null>(null);
+  const [publicationUnknown, setPublicationUnknown] = useState(false);
+  const [publicationMessage, setPublicationMessage] = useState('');
+  const publishing = useRef(false);
+  const publicationUrl = `/api/admin/groups/${props.groupId}/line-rich-menu/default`;
+  const activeDedicated =
+    mode === 'DEDICATED'
+      ? items.find(
+          (item) =>
+            item.status === 'ACTIVE' && item.lastVerifiedAt && item.lastErrorCategory === null,
+        )
+      : undefined;
+
+  async function publishDefaultRichMenu(reason: string) {
+    if (
+      !publication ||
+      publicationUnknown ||
+      publishing.current ||
+      busy ||
+      activeDedicated?.id !== publication.configuration.id
+    )
+      return;
+    publishing.current = true;
+    setBusy(true);
+    setPublicationMessage('公開しています…');
+    try {
+      const response = await fetch(publicationUrl, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          workspaceId: props.workspaceId,
+          reason,
+          target: {
+            configurationId: publication.configuration.id,
+            operationId: publication.operationId,
+          },
+        }),
+      });
+      if ([400, 401, 403, 404].includes(response.status)) {
+        setPublication(null);
+        setPublicationMessage('公開要求が拒否されました。対象と権限を確認してください。');
+        return;
+      }
+      const data = (await responsePayload(response))['data'];
+      if (
+        !response.ok ||
+        !isRecord(data) ||
+        typeof data['lineRichMenuId'] !== 'string' ||
+        !Array.isArray(data['cleanupFailedIds'])
+      )
+        throw new Error('unconfirmed publication');
+      setPublication(null);
+      setPublicationMessage(
+        data['cleanupFailedIds'].length
+          ? '既定メニューを公開しました。一部の旧メニューを整理できませんでした。'
+          : '専用LINEへ標準リッチメニューを公開しました。',
+      );
+    } catch {
+      setPublicationUnknown(true);
+      setPublicationMessage('公開結果が不明です。LINE上の現在の状態を確認してください。');
+    } finally {
+      publishing.current = false;
+      setBusy(false);
     }
   }
-  const activeDedicated =
-    mode === 'DEDICATED' &&
-    items.some(
-      (item) => item.status === 'ACTIVE' && item.lastVerifiedAt && item.lastErrorCategory === null,
-    );
+
+  async function inspectPublication() {
+    if (!publication || publishing.current || busy) return;
+    publishing.current = true;
+    setBusy(true);
+    try {
+      const query = new URLSearchParams({
+        workspaceId: props.workspaceId,
+        configurationId: publication.configuration.id,
+        operationId: publication.operationId,
+      });
+      const response = await fetch(`${publicationUrl}?${query}`, { cache: 'no-store' });
+      const data = (await responsePayload(response))['data'];
+      if (!response.ok || !isRecord(data) || typeof data['active'] !== 'boolean')
+        throw new Error('unconfirmed status');
+      setPublicationMessage(
+        data['active']
+          ? '今回のメニューがLINEの既定に設定されています。監査記録と旧メニューの整理は別途確認してください。'
+          : '今回のメニューが現在の既定であることは確認できません。公開処理が完了していない可能性があります。',
+      );
+      if (data['active']) {
+        setPublication(null);
+        setPublicationUnknown(false);
+      }
+    } catch {
+      setPublicationMessage('LINEの現在の状態を取得できませんでした。状態の確認をお試しください。');
+    } finally {
+      publishing.current = false;
+      setBusy(false);
+    }
+  }
   return (
     <>
       <section className="settings-card line-settings-card">
@@ -316,14 +398,85 @@ export function GroupLineEditor(props: {
           今日やること、投稿パートナーを見る、お知らせ設定、アカウントの4ボタンを、この{scopeLabel}
           専用LINEへ自動で設定します。
         </p>
-        <button
-          className="button button--primary"
-          type="button"
-          disabled={busy || !activeDedicated}
-          onClick={() => void publishDefaultRichMenu()}
-        >
-          標準リッチメニューを公開
-        </button>
+        {publication ? (
+          <section aria-label="リッチメニュー公開の確認">
+            <h3>公開先と変更内容</h3>
+            <p>
+              {props.targetName}の専用LINE（{props.environment}）
+            </p>
+            <p>Messaging APIチャネル {publication.configuration.messagingChannelId}</p>
+            <p>このチャネルの既定メニューを標準リッチメニューに切り替えます。</p>
+            {publicationUnknown ? (
+              <button
+                type="button"
+                className="button button--secondary"
+                disabled={busy}
+                onClick={() => void inspectPublication()}
+              >
+                LINEの公開状態を確認する
+              </button>
+            ) : (
+              <form
+                className="form-stack"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  const reason = stringValue(
+                    new FormData(event.currentTarget).get('reason'),
+                  ).trim();
+                  if (reason.length < 3 || reason.length > 500) {
+                    setPublicationMessage('公開理由を3〜500文字で入力してください。');
+                    return;
+                  }
+                  void publishDefaultRichMenu(reason);
+                }}
+              >
+                <label className="field">
+                  <span className="field__label">公開する理由</span>
+                  <textarea
+                    className="field__control"
+                    name="reason"
+                    minLength={3}
+                    maxLength={500}
+                    required
+                    disabled={busy}
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="button button--secondary"
+                  disabled={busy}
+                  onClick={() => {
+                    setPublication(null);
+                    setPublicationMessage('');
+                  }}
+                >
+                  戻る
+                </button>
+                <button
+                  type="submit"
+                  className="button button--primary"
+                  disabled={busy || activeDedicated?.id !== publication.configuration.id}
+                >
+                  このLINEに公開する
+                </button>
+              </form>
+            )}
+          </section>
+        ) : (
+          <button
+            className="button button--primary"
+            type="button"
+            disabled={busy || !activeDedicated}
+            onClick={() => {
+              if (!activeDedicated) return;
+              setPublicationMessage('');
+              setPublication({ configuration: activeDedicated, operationId: crypto.randomUUID() });
+            }}
+          >
+            公開内容を確認する
+          </button>
+        )}
+        <p role="status">{publicationMessage}</p>
         {!activeDedicated ? <p>先に専用LINEの接続確認と使用開始を完了してください。</p> : null}
       </section>
     </>

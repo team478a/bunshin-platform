@@ -66,6 +66,62 @@ describe('Definition human approval HTTP', () => {
     fake.change.mockResolvedValue({ replayed: false });
   });
   afterEach(() => vi.unstubAllEnvs());
+  it.each(['a'.repeat(40), 'A'.repeat(40), '', 'not-a-sha'])(
+    'GET adds server code provenance without manufacturing identity (%s)',
+    async (sha) => {
+      vi.stubEnv('VERCEL_GIT_COMMIT_SHA', sha);
+      fake.list.mockResolvedValue([{ revision: 'revision', reviewDigest: 'digest' }]);
+      const response = await learningDefinitionApprovalAdminResponse(
+        new Request('https://app.example.com/api'),
+        'training',
+      );
+      expect(await response.json()).toMatchObject({
+        data: [
+          {
+            revision: 'revision',
+            reviewDigest: 'digest',
+            provenance: {
+              mode: 'SERVER_V1',
+              reviewedCommitSha: /^[a-f0-9]{40}$/i.test(sha) ? sha.toLowerCase() : null,
+            },
+          },
+        ],
+      });
+      expect(fake.change).not.toHaveBeenCalled();
+    },
+  );
+  it('automatic review derives evidence from operation ID and passes trusted identity separately', async () => {
+    vi.stubEnv('VERCEL_GIT_COMMIT_SHA', 'd'.repeat(40));
+    const { reviewEvidenceKey, ...fields } = command;
+    expect(reviewEvidenceKey).toBe('review-123');
+    const automatic = { ...fields, provenanceMode: 'SERVER_V1' };
+    expect((await learningDefinitionApprovalAdminResponse(req(automatic), 'training')).status).toBe(
+      200,
+    );
+    expect(fake.change).toHaveBeenCalledWith(
+      { workspaceId: 'server-workspace', groupId: 'server-group', actorUserId: 'manager' },
+      { ...automatic, reviewEvidenceKey: `definition-review:${command.operationId}` },
+      'd'.repeat(40),
+    );
+    fake.change.mockClear();
+    expect(
+      (
+        await learningDefinitionApprovalAdminResponse(
+          req({ ...automatic, reviewEvidenceKey }),
+          'training',
+        )
+      ).status,
+    ).toBe(400);
+    expect((await learningDefinitionApprovalAdminResponse(req(fields), 'training')).status).toBe(
+      400,
+    );
+    expect(fake.change).not.toHaveBeenCalled();
+    // Missing deployment identity reaches the repository so a previously committed operation
+    // can still return its receipt; the repository refuses new writes without identity.
+    vi.stubEnv('VERCEL_GIT_COMMIT_SHA', '');
+    await learningDefinitionApprovalAdminResponse(req(automatic), 'training');
+    expect(fake.change.mock.calls[0]?.[2]).toBeNull();
+  });
   it('production uses only explicit server authority without manufacturing human review', async () => {
     const authority = {
       workspaceId: '11111111-1111-4111-8111-111111111111',

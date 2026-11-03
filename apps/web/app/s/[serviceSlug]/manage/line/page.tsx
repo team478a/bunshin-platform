@@ -117,6 +117,7 @@ export default async function ServiceLinePage({
         <GroupLineEditor
           workspaceId={service.workspaceId}
           groupId={service.serviceId}
+          targetName={service.configuration.displayName}
           environment={environment}
           webhookOrigin={new URL(urls.webhookUrl).origin}
           initialMode={result.mode}
@@ -131,6 +132,7 @@ export default async function ServiceLinePage({
         />
         <ServiceLineBroadcastEditor
           serviceSlug={service.configuration.slug}
+          serviceName={service.configuration.displayName}
           initialTitle={weeklyReportTemplate ? '今週のふり返りができました' : ''}
           initialMessage={
             weeklyReportTemplate

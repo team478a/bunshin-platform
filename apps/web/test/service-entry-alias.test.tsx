@@ -1,0 +1,80 @@
+import { renderToStaticMarkup } from 'react-dom/server';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ApplicationError } from '@bunshin/shared';
+
+const mocks = vi.hoisted(() => ({
+  actor: vi.fn(),
+  publicService: vi.fn(),
+}));
+
+vi.mock('next/navigation', () => ({
+  notFound: () => {
+    throw new Error('ROUTE_NOT_FOUND');
+  },
+}));
+vi.mock('../src/auth/current-user', () => ({
+  currentUserProvider: () => Promise.resolve({ getCurrentUser: mocks.actor }),
+}));
+vi.mock('../src/services/public-service', () => ({
+  resolvePublicServiceContext: mocks.publicService,
+}));
+
+import ServiceEntryPage, { generateMetadata } from '../app/s/[serviceSlug]/page';
+
+const params = (serviceSlug: string) => Promise.resolve({ serviceSlug });
+const searchParams = Promise.resolve({});
+
+beforeEach(() => {
+  vi.resetAllMocks();
+  mocks.actor.mockResolvedValue(null);
+  mocks.publicService.mockRejectedValue(new ApplicationError('NOT_FOUND', 'service not found'));
+});
+
+describe('service entry aliases', () => {
+  it.each([['hassy', 'ハッシー']])(
+    'keeps the approved %s direct URL usable when public settings are unavailable',
+    async (slug, name) => {
+      const html = renderToStaticMarkup(
+        await ServiceEntryPage({ params: params(slug), searchParams }),
+      );
+
+      expect(html).toContain(name);
+      expect(html).toContain('ログインして続ける');
+      expect(html).toContain(`/login?returnTo=%2Fs%2F${slug}%2Fhome`);
+      expect(html).toContain('ワタシワークスを利用しています');
+    },
+  );
+
+  it('shows the unavailable-state guidance to an already signed-in user', async () => {
+    mocks.actor.mockResolvedValue({ userId: 'user-a' });
+
+    const html = renderToStaticMarkup(
+      await ServiceEntryPage({ params: params('hassy'), searchParams }),
+    );
+
+    expect(html).toContain('ハッシーの利用設定を確認できません');
+    expect(html).toContain('何度もログインし直さず');
+    expect(html).toContain('メールとLINEのアカウントは別の認証方法です');
+    expect(html).toContain('サービスの案内を確認する');
+    expect(html).not.toContain('ログインして続ける');
+  });
+
+  it('keeps unknown service slugs as 404', async () => {
+    await expect(
+      ServiceEntryPage({ params: params('unknown-service'), searchParams }),
+    ).rejects.toThrow('ROUTE_NOT_FOUND');
+  });
+
+  it('does not turn the suspended Sennokuni service into a login fallback', async () => {
+    await expect(
+      ServiceEntryPage({ params: params('sennokuni-media'), searchParams }),
+    ).rejects.toThrow('ROUTE_NOT_FOUND');
+  });
+
+  it('provides metadata for the approved HASSY fallback without inventing service settings', async () => {
+    await expect(generateMetadata({ params: params('hassy') })).resolves.toMatchObject({
+      title: 'ハッシー',
+      description: 'ハッシーの利用案内',
+    });
+  });
+});

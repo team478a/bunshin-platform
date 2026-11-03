@@ -162,6 +162,27 @@ export default async function ConnectionsPage() {
         </div>
       </section>
 
+      <section className="settings-card" aria-labelledby="auth-email-title">
+        <h2 id="auth-email-title">ログインメール（Supabase Auth）</h2>
+        <p>
+          ユーザーの登録・ログイン用Magic Linkは、管理者向けの障害メールとは別の経路で送信します。
+          この画面へResend APIキーを登録しても、ログインメールの送信元は変わりません。
+        </p>
+        <ol>
+          <li>Resendで認証専用の送信ドメインを認証する</li>
+          <li>SPF・DKIM・DMARCを確認する</li>
+          <li>Supabase AuthのSMTP SettingsへResendのSMTP情報を登録する</li>
+          <li>Magic Linkを本番テストアカウントへ送り、受信とログイン完了を確認する</li>
+        </ol>
+        <p>
+          SMTPパスワード（Resend
+          APIキー）やSupabase管理者キーは、このアプリの管理画面・チャット・ログへ入力しません。
+        </p>
+        <Link href="/admin/guide#auth-email-smtp" className="button button--secondary">
+          ログインメールの設定手順を見る
+        </Link>
+      </section>
+
       {!allConfiguredServicesReady ? (
         <section className="settings-card">
           <h2>まだ設定が終わっていないサービスがあります</h2>

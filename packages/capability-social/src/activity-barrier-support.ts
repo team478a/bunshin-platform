@@ -1,3 +1,4 @@
+import { socialUsageGuidanceDefinition, usageGuidanceSupport } from './usage-guidance';
 import { ApplicationError } from '@bunshin/shared';
 
 import type { SocialActivityBarrierCase } from './activity-barrier-persistence';
@@ -9,10 +10,13 @@ import {
 } from './activity-barrier';
 import type { SocialAccountStrategyGoal } from './social-account-strategy';
 
-export const SOCIAL_ACTIVITY_SUPPORT_RULE_VERSION = 'social-activity-support-v3' as const;
+export const SOCIAL_ACTIVITY_SUPPORT_RULE_VERSION = 'social-activity-support-v4' as const;
 export const SOCIAL_ACTIVITY_BARRIER_DISMISSAL_DAYS = 30;
 
 export const SOCIAL_ACTIVITY_SUPPORT_KEYS = [
+  'IMAGE_CREDIT_REVIEW',
+  'MULTI_PLATFORM_PREPARATION',
+  'REFERRAL_BENEFIT_REVIEW',
   'PROFILE_REVIEW',
   'STEP_BY_STEP_GUIDE',
   'FIVE_MINUTE_ACTION',
@@ -31,6 +35,7 @@ export type SocialActivitySupportKey = (typeof SOCIAL_ACTIVITY_SUPPORT_KEYS)[num
 
 export type SocialActivityBarrierQuestion = {
   caseIds: string[];
+  evidenceKey?: string;
   title: string;
   description: string;
   options: Array<{ caseId: string; category: SocialActivityBarrierCategory; label: string }>;
@@ -64,6 +69,12 @@ export type SocialActivitySupportGoalFallbackReason =
 export type SocialActivitySupportSelection =
   | {
       support: SocialActivitySupport;
+      mode: 'USAGE_GUIDANCE';
+      eligibleGoal: null;
+      fallbackReason: null;
+    }
+  | {
+      support: SocialActivitySupport;
       mode: 'COMMON';
       eligibleGoal: SocialAccountStrategyGoal | null;
       fallbackReason: SocialActivitySupportGoalFallbackReason;
@@ -91,18 +102,31 @@ export interface SocialActivityBarrierConfirmationRepository {
     scope: SocialActivityBarrierScope;
     caseIds: string[];
     selectedCaseId: string | null;
+    evidenceKey?: string | undefined;
     idempotencyKey: string;
     answeredAt: Date;
   }): Promise<{
     response: 'CONFIRMED' | 'NONE_OF_THESE';
     support: SocialActivitySupport | null;
   } | null>;
+  recordQuestionExposure(input: {
+    scope: SocialActivityBarrierScope;
+    caseIds: string[];
+    evidenceKey?: string | undefined;
+  }): Promise<boolean>;
+  recordExposure(input: {
+    scope: SocialActivityBarrierScope;
+    supportId: string;
+    kind: 'DISPLAY' | 'DETAILS';
+  }): Promise<boolean>;
   getActiveSupport(input: {
     scope: SocialActivityBarrierScope;
   }): Promise<SocialActivitySupportProgress | null>;
   transitionSupport(input: {
     scope: SocialActivityBarrierScope;
     supportId: string;
+    /** Optional user-authored reason, accepted only for SKIP. */
+    reason?: string;
     action: SocialActivitySupportAction;
     occurredAt: Date;
   }): Promise<SocialActivitySupportProgress | null>;
@@ -289,16 +313,30 @@ export function buildSocialActivityBarrierQuestion(
     throw new ApplicationError('VALIDATION_ERROR', 'barrier cases must share one evidence scope');
   }
 
+  const guidance = socialUsageGuidanceDefinition(evidence.evidenceCode);
+  if (guidance && cases.some((value) => value.category !== guidance.category))
+    throw new ApplicationError('VALIDATION_ERROR', 'usage guidance category mismatch');
   return {
     caseIds: cases.map((value) => value.id),
-    title: 'いま、SNSの取り組みで困っていることはありますか？',
-    description: '当てはまるものを一つ選んでください。次に進みやすい方法をご案内します。',
+    evidenceKey: [
+      evidence.ruleVersion,
+      evidence.evidenceCode,
+      evidence.observationWindow.from,
+      evidence.observationWindow.to,
+      ...cases.map((value) => value.id).sort(),
+    ].join('|'),
+    title: guidance
+      ? '今の利用状況に合わせた案内を確認しますか？'
+      : 'いま、SNSの取り組みで困っていることはありますか？',
+    description: guidance
+      ? '必要な案内を選んでください。追加費用の発生や外部操作はありません。'
+      : '当てはまるものを一つ選んでください。次に進みやすい方法をご案内します。',
     options: cases.map((value) => ({
       caseId: value.id,
       category: value.category,
-      label: labels[value.category],
+      label: guidance?.label ?? labels[value.category],
     })),
-    noneLabel: '今はどれにも当てはまらない',
+    noneLabel: guidance ? '今は案内を必要としていない' : '今はどれにも当てはまらない',
   };
 }
 
@@ -363,6 +401,12 @@ export function selectSocialActivitySupport(input: {
   category: SocialActivityBarrierCategory;
   evidence: SocialActivityBarrierEvidence;
 }): SocialActivitySupportSelection {
+  const definition = socialUsageGuidanceDefinition(input.evidence.evidenceCode);
+  if (definition && definition.category !== input.category)
+    throw new ApplicationError('VALIDATION_ERROR', 'usage guidance category mismatch');
+  const guidance = usageGuidanceSupport(input.evidence.evidenceCode);
+  if (guidance)
+    return { support: guidance, mode: 'USAGE_GUIDANCE', eligibleGoal: null, fallbackReason: null };
   const support = socialActivitySupportFor(input.category);
   const attribution = input.evidence.goalAttribution;
   if (attribution === null) {

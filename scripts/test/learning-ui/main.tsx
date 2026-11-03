@@ -1,5 +1,18 @@
+import { ExternalGrantsHarness } from './external-grants-harness';
+import { OAuthConsentCard } from '../../../apps/web/app/oauth/consent/card';
+import { ServiceLineBroadcastEditor } from '../../../apps/web/app/s/[serviceSlug]/manage/line/service-line-broadcast-editor';
+import { ServiceSettingsEditor } from '../../../apps/web/app/s/[serviceSlug]/manage/settings/service-settings-editor';
+import { WeeklyReportDeliveryEditor } from '../../../apps/web/app/s/[serviceSlug]/manage/weekly-report/weekly-report-delivery-editor';
+import { serviceSettingsFixture } from '../../../apps/web/test/service-settings-fixture';
+import { UsagePolicyHarness } from './usage-guidance-policy-harness';
+import { RoadmapPolicyHarness } from './roadmap-policy-harness';
+import { RecommendationPolicyHarness } from './recommendation-policy-harness';
+import { HassyAutomationGuide } from '../../../apps/web/app/ui/hassy-automation-guide/card';
+import { ActivitySupportHarness } from './activity-support-harness';
+import { ReferralManagementHarness } from './referral-management-harness';
 // Local browser harness only. No production route, credentials, DB or Provider.
 import { createRoot } from 'react-dom/client';
+import { GrowthHarness } from './growth-harness';
 import { LearningCandidateCard } from '../../../apps/web/app/s/[serviceSlug]/programs/[programEnrollmentId]/learning-request/candidate-card';
 import { lessonWish, lessonCandidate } from './lesson-fixture';
 import {
@@ -16,7 +29,64 @@ import '../../../apps/web/app/styles.css';
 import { PersonalLearningRequestCard } from '../../../apps/web/app/s/[serviceSlug]/programs/[programEnrollmentId]/learning-request/card';
 
 createRoot(document.getElementById('root')!).render(
-  new URLSearchParams(window.location.search).has('practice') ? (
+  new URLSearchParams(window.location.search).has('oauth-consent') ? (
+    <main className="public-shell">
+      <div className="public-shell__content public-shell__content--narrow">
+        <OAuthConsentCard
+          view={{
+            authorizationId: 'synthetic-authorization',
+            clientName: 'テスト用アプリ',
+            account: 'synthetic@example.invalid',
+            scopes: ['openid', 'email', 'profile'],
+            callbackOrigin: 'https://client.example.invalid',
+          }}
+        />
+      </div>
+    </main>
+  ) : new URLSearchParams(window.location.search).has('line-broadcast') ? (
+    <main className="app-page">
+      <ServiceLineBroadcastEditor serviceSlug="social-a" serviceName="テスト用ハッシー" />
+    </main>
+  ) : new URLSearchParams(window.location.search).has('routine-service-settings') ? (
+    <main className="app-page">
+      <ServiceSettingsEditor
+        serviceSlug="social-a"
+        value={
+          serviceSettingsFixture(
+            new URLSearchParams(window.location.search).has('routine-business-free'),
+          ).configuration
+        }
+        visualCharacters={[]}
+        audioTracks={[]}
+      />
+    </main>
+  ) : new URLSearchParams(window.location.search).has('routine-weekly-settings') ? (
+    <main className="app-page">
+      <WeeklyReportDeliveryEditor
+        serviceSlug="social-a"
+        initialSetting={{ enabled: false, weekday: 'MONDAY', localTime: '09:00' }}
+        lineReady={false}
+      />
+    </main>
+  ) : new URLSearchParams(window.location.search).has('external-grants') ? (
+    <ExternalGrantsHarness />
+  ) : new URLSearchParams(window.location.search).has('usage-guidance-policy') ? (
+    <UsagePolicyHarness />
+  ) : new URLSearchParams(window.location.search).has('roadmap-policy') ? (
+    <RoadmapPolicyHarness />
+  ) : new URLSearchParams(window.location.search).has('recommendation-policy') ? (
+    <RecommendationPolicyHarness />
+  ) : new URLSearchParams(window.location.search).has('automation-guide') ? (
+    <main style={{ maxWidth: 720, margin: 'auto', padding: 16 }}>
+      <HassyAutomationGuide />
+    </main>
+  ) : new URLSearchParams(window.location.search).has('activity-support') ? (
+    <ActivitySupportHarness />
+  ) : new URLSearchParams(window.location.search).has('referral-management') ? (
+    <ReferralManagementHarness />
+  ) : new URLSearchParams(window.location.search).has('member-growth') ? (
+    <GrowthHarness />
+  ) : new URLSearchParams(window.location.search).has('practice') ? (
     <PersonalLearningRequestCard
       endpoint="/api/synthetic/wish"
       initial={lessonWish}

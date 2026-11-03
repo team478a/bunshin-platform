@@ -278,6 +278,40 @@
   box-sizing: border-box;
 }
 
+.learning-definition-review {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.learning-definition-review fieldset,
+.learning-definition-review .field,
+.learning-definition-review .field__control {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.line-broadcast-editor,
+.line-broadcast-editor fieldset,
+.line-broadcast-editor .field,
+.line-broadcast-editor .field__control {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.line-broadcast-draft {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 1rem;
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+
+.line-broadcast-confirmation__body {
+  white-space: pre-wrap;
+}
+
 html {
   min-width: 320px;
   background: var(--color-canvas);
@@ -2110,6 +2144,7 @@ a {
   font-size: 0.82rem;
   font-weight: 800;
   list-style: none;
+  min-height: 44px;
 }
 .admin-sidebar__group summary::-webkit-details-marker {
   display: none;
@@ -2133,6 +2168,9 @@ a {
   padding: 5px 0 2px;
 }
 .admin-sidebar nav a {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
   padding: 9px 12px 9px 20px;
   color: var(--color-text-muted);
   border-radius: 10px;
@@ -2154,6 +2192,18 @@ a {
 }
 .admin-content {
   min-width: 0;
+}
+.admin-operation-details > summary {
+  padding: 12px 0;
+  cursor: pointer;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.admin-operation-details > summary:focus-visible,
+.admin-sidebar summary:focus-visible,
+.admin-sidebar nav a:focus-visible {
+  outline: 2px solid var(--color-primary-strong);
+  outline-offset: -2px;
 }
 .admin-content > main {
   width: min(100%, 1180px);

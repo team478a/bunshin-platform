@@ -1,5 +1,35 @@
 # BUNSHIN Platform Decision Log
 
+## 2026-11-03: 最新main公開前の6件のProduction migrationを限定適用する
+
+- 状態: 未実行。Production Migration History Probe run `41577813391`で、対象project `vtkzinaudznwbsjoyszk`に未適用6件、migration history変更なしを確認した。
+- `20261102000000_generation_trigger_provenance`から`20261103020000_external_read_credential_binding`までの連続6件だけをallowlistした専用workflowを使う。Previewでpending集合とDB identityを照合し、同じ履歴状態の場合だけapplyする。
+- Production Environment承認、project/role/database照合、TLS検証、transaction内timeout、適用後のschema readinessを必須とする。未知・追加・欠落migration、failed history、認証/接続/timeout異常では適用せず、自動retry・`migrate resolve`・rollbackを行わない。
+- apply後の読み取り専用Probeが`pending=0`、`db:assert-ready`がPASSした後にのみmainをproductionへマージする。
+
+## 2026-10-26: ログインメールのResend設定を管理者通知と分離する
+
+- 状態: 実装中。SMTP資格情報の本番設定と実メールの確認は未実施。
+- `/admin/email` のResend設定は障害発生時の管理者通知専用とし、Supabase Authのログイン・登録メールへ流用しない。
+- ログインメールはSupabase AuthのCustom SMTPとしてResendを設定する。Resend APIキー、SMTPパスワード、Supabase管理者キーはアプリ管理画面・DB・チャットへ保存しない。
+- 管理画面には設定経路と確認手順だけを表示し、Supabase Dashboardで設定したあとに本番テストアカウントで送信・callback・ログアウトを確認する。
+- 既存のMagic Link callback、PKCE、サービス別returnTo、認証失敗時のfail-closed挙動は変更しない。
+
+## 2026-10-26: サービス識別情報migrationの本番反映経路を分離する
+
+- 状態: 本番migrationは未実行。main CI成功後、読み取り専用履歴確認で対象pendingが2件に限定されることを確認した。
+- 既存のHASSY seed releaseは対象を混在させず、`20261025130000_repair_official_service_identity` と `20261025131000_align_manaberu_public_registration_copy` だけを許可する専用release workflowを追加する。
+- PreviewはDDLとmigration historyを変更しない。ApplyはProduction environment approval、Supabase session pooler、TLS/CA、厳密なpending集合、適用後readiness確認を必須とする。
+- 接続probeが`migration-bounds-not-active`で停止する場合は、poolerがmigration timeout boundsを保持しない安全ガードであり、直接SQLやmigration resolveで迂回しない。
+
+## 2026-10-25: HASSY本番サービス設定の限定migration経路
+
+- 状態: 専用allowlist・本番環境保護・read-only readiness検証を追加。Production migrationは未実行。
+- 本番の`service_configurations`と`groups`を読み取り専用で確認した結果、HASSYのmigration履歴がなく、アプリ側の公開入口だけが先にデプロイされた状態だった。これが`/s/hassy`の参加状態確認がfail-closedになる根本原因である。
+- `20261025120000_seed_hassy_public_service`だけを対象にした専用workflowをmain限定で用意する。専用確認語、Production environment approval、Supabase session pooler、TLS/CA、厳密なpending集合、適用後のread-only schema readinessを必須とする。既存の別migration用workflowは変更しない。
+- 実行前に同名HASSY設定またはGroupが既に存在する場合は、未知の本番状態を上書きせず停止する。手動SQL、migration resolve、他サービス設定の流用は行わない。
+- PreviewはDDL・migration historyを変更しない。Applyは承認済みmigration 1件のみに限定し、適用後にreadinessと`/s/hassy` smokeを再確認してから公開運用へ進む。
+
 ## 2026-10-19: AI研修の未精算費用予約を運用通知センターに表示する
 
 - 状態: Proposed（Draft PRのレビュー待ち。本番反映・設定変更は未承認）
@@ -4565,3 +4595,45 @@
 - SUPER_ADMINが課金証跡または承認済み価格表、価格版、理由を指定した場合だけ、当月・Provider・原価NULLのイベントを最大100件ずつ精算する。正の原価だけを受け付け、同じ値での再実行を冪等に許可する。
 - 自動バックフィル、0円化、原価不明の失敗記録の解放、既存fail-closedガードの緩和は行わない。migrationとschemaは追加しない。
 - 精算後のAI再開、本番POST、Provider設定変更、デプロイは田中の別承認を待つ。
+
+## 2026-10-24: サービスメール認証は共通アンケートへフォールバックしない
+
+- 状態: 本番でマナベルの新規登録を確認中、サービスから開始したメール認証後にハッシー用の共通 `/onboarding` が表示された。Draft PRで修正・検証し、本番変更は行わない。
+- 原因は、試行単位認証を無効にしている旧来経路でブラウザCookieが失われたとき、callbackに含まれる検証済みのサービス戻り先を成功後の遷移に使わず、未完了Userを共通アンケートへ送っていたこと。サービス付き `/onboarding` 自体は既存の境界でサービス画面へ戻すが、戻り先が遷移から失われると判定できなかった。
+- `AUTH_RETURN_ATTEMPTS_ENABLED=true` の試行単位経路では、従来どおり `AuthReturnAttempt.returnPath` だけを成功後の正本とする。旧来経路に限り、同一callbackから取得した `safeLineAuthReturnPath` 済みの戻り先をfallbackとして使い、外部URLや未許可queryは受け付けない。
+- サービス戻り先が存在する場合は、未完了Userでも共通の業種・SNS目的アンケートを表示しない。認証後のサービス側で本人・所属・参加状態を再確認する。migration、DB、機能flag、本番設定、デプロイは変更しない。
+
+## 2026-10-25: ハッシーの本番公開サービス設定を専用migrationで復元する
+
+- 本番DBの読み取り専用確認で、ハッシーの画面・コードは存在する一方、`service_configurations` に `hassy` がなく、認証後の参加状態確認がサービス未解決で停止していたことを確認した。マナベルスタイルや他ServiceのGroupを流用しない。
+- `20261025120000_seed_hassy_public_service` は、ワタシワークス運営Workspace配下の専用Group・ServiceConfiguration・RegistrationPolicy・CommercialSetting・FeaturePolicyを同じscopeで冪等に作成／補完する。公開登録、メール／LINE、有効な100人の無料テスト枠、最小事業者プロフィールを明示する。
+- migrationはアクティブなSUPER_ADMINを監査主体として解決し、別Workspaceの同名設定や不一致Groupは停止する。Supabase Authの標準メール本文を動的に変更するものではなく、Send Email Hookは別タスクとする。
+
+## 2026-10-25: migration追加漏れを本番公開前に止める運用ゲートを強化する
+
+- `verify` と `database` をmainの必須Status Checkとして維持し、migration追加時の最新migration定数不一致をmerge前に停止する。今回のHASSY PRでこのゲートが実際に不一致を検出した。
+- PRテンプレートに `LATEST_DATABASE_MIGRATION` 更新、disposable DBでのmigration/readiness、ProductionのPreview→承認→適用→readiness→アプリデプロイ順序を必須確認として追加する。
+- Production定期SmokeにHASSY公開入口の確認を追加し、サービス名・公開登録文言が表示され、サービス設定不在の案内が出ていないことを検査する。認証・参加登録の変更やメール送信は行わない。
+
+## 2026-10-25: 全サービス監査では停止中サービスとサービス別ブランドを混在させない
+
+- `service_configurations` はslugだけでなく、Workspace・Group・Configurationの組み合わせを境界として扱う。公式サービスの表示名・説明・ブランド資産は専用IDへ限定して復元し、HASSYやマナベルの設定を流用しない。
+- SUSPENDEDなサービスは公開設定が残っていても認証フォールバックを表示しない。停止案内または未解決案内へ進め、停止中サービスをログイン可能に見せない。
+- マナベルスタイルは既存のPUBLIC登録ポリシーを変更せず、公開文言だけを実際の提供範囲（無料Pilot、本人がAIを使って学ぶサービス）へ合わせる。業務代行・完成品制作と誤認させる説明は追加しない。
+- 修復migrationは対象設定が空の使い捨てDBでは通知してスキップし、対象slugが存在する本番相当DBではID・Workspace・Group・Group名の不一致や欠落を停止する。登録ポリシーは更新せず、変更時は監査証跡を残す。
+
+## 2026-11-02: ハッシー固有PolicyとSNS共通・全サービス共通を分離する
+
+- ユーザーの再確認指示を受け、[責務分離・再監査](HASSY_SHARED_CAPABILITY_BOUNDARY_DESIGN.md)と[ADR](adr/HASSY_SHARED_CAPABILITY_BOUNDARY_ADR.md)を追加した。固定の5段階・SNS項目・ガイドが共通に見えるApplicationへ混在している現状を修正対象とする。
+- 既存のBarrier質問・回答別支援・採用/完了/見送り・30日抑制・Scheduler・OEM支援と、共通Improvement / Hassy観測Adapterを再利用する。以前の「未実装」という広い扱いを訂正する。
+- 固有定義・認可済みprofile選択と集計の重複整理を先に行い、その後で有効紹介の保存・支援拡張へ進む。習慣進捗と実操作日を混同せず、別ServiceへHassy既定値を適用しない。
+- 今回は文書のみ。Runtime / DB / migration / API / UI / Flag / 本番設定の変更・移動は未実施。
+
+## 2026-11-03: 使いやすさと必要最小限の制御
+
+- ユーザーが「無駄な監査機能や極端な制限などは入れない」「使いにくい」と指摘し、方針の明文化を指示した。通常利用の使いやすさを優先し、既存の認証・所有権・接続解除・運用ログを基本とする。
+- 未マージのPR #1450は取り下げ済み。そこで提案した200msのDBタイムアウト、三軸の一律制限、専用read監査台帳はmainへ未反映で、採用済み仕様として再実装しない。
+- 新しい監査・制限は具体的な障害、不正利用、実測負荷、公式上限、費用予算等の必要性に見合う範囲に限定する。既存機能を先に検討し、根拠・不足・通常利用への影響をPRで簡潔に説明する。追加の承認手続きやチェック画面は求めない。
+- 利用計測・分析ログと、認可・権限変更・特典付与・外部書込みに必要な証跡を区別する。分析ログの失敗を理由に通常の閲覧を止めない。データ分離、所有権検証、本人解除、必要な外部操作承認、冪等性は維持する。
+- `AGENTS.md`第11節を共通の開発ルールとする。旧`EXTERNAL_READ_ADMISSION_AUDIT_PLAN.md`と外部読取ADRにある三軸制限・専用read監査の先行必須化は、この決定で見直す。古い計画を根拠に同じ機能を自動的に復活させない。
+- 今回は文書のみ。既存Coreの監査Portや停止条件を含むruntime、DB、Feature、本番設定は変更していない。既存の過剰な制御の修正は、必要な保護を確認しながら対象を絞って行う。

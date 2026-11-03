@@ -1,0 +1,66 @@
+.external-connections {
+  max-width: 42rem;
+  margin: auto;
+  color: #17202b;
+  background: #fff;
+  font-family: 'Noto Sans JP', sans-serif;
+  font-weight: 600;
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+}
+.external-connections h1 {
+  font-size: 1.65rem;
+  font-weight: 800;
+  line-height: 1.5;
+}
+.external-connections h2 {
+  font-size: 1.25rem;
+  font-weight: 800;
+}
+.external-connections section {
+  border-top: 1px solid #dce2e8;
+  padding: 1rem 0;
+}
+.external-connections label {
+  display: grid;
+  gap: 0.4rem;
+  margin: 1rem 0;
+}
+.external-connections select {
+  width: 100%;
+  min-height: 3rem;
+  padding: 0.5rem;
+  border: 1px solid #7b8794;
+  border-radius: 0.5rem;
+  background: white;
+  color: #17202b;
+  font: inherit;
+}
+.external-connections .external-connections__consent {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+.external-connections__consent input {
+  margin-top: 0.4rem;
+  min-width: 1.5rem;
+  min-height: 1.5rem;
+}
+.external-connections button {
+  min-height: 2.75rem;
+  margin: 0.3rem 0.4rem 0.3rem 0;
+  white-space: normal;
+}
+.external-connections ul {
+  padding: 0;
+  list-style: none;
+}
+.external-connections li {
+  border: 1px solid #dce2e8;
+  border-radius: 0.75rem;
+  margin-top: 1rem;
+  padding: 1rem;
+}
+.external-connections [role='alert'] {
+  color: #8c2222;
+}

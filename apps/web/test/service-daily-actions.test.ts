@@ -363,6 +363,7 @@ describe('service Daily Action HTTP', () => {
     expect(response.status).toBe(201);
     expect(state.member).toHaveBeenCalledWith(serviceSlug, state.actor?.userId);
     expect(state.executePhotoFirst).toHaveBeenCalledWith({
+      generationTrigger: 'USER',
       workspaceId: '22222222-2222-4222-8222-222222222222',
       groupId: '33333333-3333-4333-8333-333333333333',
       bunshinId,
@@ -478,6 +479,7 @@ describe('service Daily Action HTTP', () => {
       actorUserId: state.actor?.userId,
     });
     expect(state.executeDailyMission).toHaveBeenCalledWith({
+      generationTrigger: 'USER',
       workspaceId: '22222222-2222-4222-8222-222222222222',
       groupId: '33333333-3333-4333-8333-333333333333',
       bunshinId,

@@ -8,7 +8,14 @@ const recipient = {
   message: null,
 };
 
-function database(cases: Array<{ id: string; groupMembershipId: string; userId: string }>) {
+function database(
+  cases: Array<{
+    id: string;
+    groupMembershipId: string;
+    userId: string;
+    evidenceSnapshots?: { evidenceCode: string }[];
+  }>,
+) {
   return {
     prisma: {
       groupMembership: {
@@ -39,6 +46,7 @@ const input = (db: ReturnType<typeof database>) => ({
   configuration: { id: 'line-config-1', encryptedAccessToken: 'encrypted' },
   environment: 'PRODUCTION' as const,
   mode: 'SHARED' as const,
+  now: new Date('2026-11-03T00:00:00Z'),
   recipients: [recipient],
 });
 
@@ -55,8 +63,21 @@ describe('social activity barrier broadcast eligibility', () => {
         groupId: 'group-1',
         bunshinId: 'bunshin-1',
         status: 'SUSPECTED',
+        OR: [
+          { nextEligibleAt: null },
+          { nextEligibleAt: { lte: new Date('2026-11-03T00:00:00Z') } },
+        ],
       },
-      select: { id: true, groupMembershipId: true, userId: true },
+      select: {
+        id: true,
+        groupMembershipId: true,
+        userId: true,
+        evidenceSnapshots: {
+          orderBy: { detectedAt: 'desc' },
+          take: 1,
+          select: { evidenceCode: true },
+        },
+      },
     });
   });
 
@@ -64,4 +85,16 @@ describe('social activity barrier broadcast eligibility', () => {
     const db = database([]);
     await expect(resolveServiceLineBroadcastRecipientIds(input(db))).resolves.toEqual(new Map());
   });
+});
+
+it('does not repurpose existing barrier broadcasts for usage guidance', async () => {
+  const db = database([
+    {
+      id: 'case-1',
+      groupMembershipId: 'membership-1',
+      userId: 'user-1',
+      evidenceSnapshots: [{ evidenceCode: 'USAGE_REFERRAL_REVIEW' }],
+    },
+  ]);
+  await expect(resolveServiceLineBroadcastRecipientIds(input(db))).resolves.toEqual(new Map());
 });

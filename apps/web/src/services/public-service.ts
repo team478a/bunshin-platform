@@ -143,7 +143,12 @@ export async function resolveManagedServiceContext(
     throw new Error('SERVICE_NOT_FOUND');
   const storedConfiguration = await new ServiceFoundationService(
     new db.PrismaServiceFoundationRepository(),
-  ).findByGroup({ ...target, actorUserId });
+  ).findByGroup({
+    workspaceId: target.workspaceId,
+    groupId: target.groupId,
+    actorUserId,
+    serviceAccess: permission,
+  });
   const configuration = effectiveServiceConfiguration(storedConfiguration);
   return {
     workspaceId: configuration.workspaceId,

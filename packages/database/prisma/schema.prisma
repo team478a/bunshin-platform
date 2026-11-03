@@ -1420,6 +1420,9 @@ enum GroupFeatureAccessStatus {
 }
 
 enum GroupFeatureAuditAction {
+  EXTERNAL_READ_BOUND
+  EXTERNAL_READ_GRANTED
+  EXTERNAL_READ_REVOKED
   GROUP_POLICY_SET
   MEMBER_ASSIGNMENT_SET
 }
@@ -2669,6 +2672,8 @@ model User {
   serviceCommercialSettingsUpdated  ServiceCommercialSetting[]          @relation("ServiceCommercialSettingUpdater")
   serviceConfigurationAudits        ServiceConfigurationAudit[]         @relation("ServiceConfigurationAuditActor")
   serviceReferralRewardRulesCreated ServiceReferralRewardRule[]         @relation("ServiceReferralRewardRuleCreator")
+  referralQualificationPoliciesCreated ServiceReferralQualificationPolicyVersion[] @relation("ReferralQualificationPolicyCreator")
+  referralQualificationAudits ServiceReferralQualificationAudit[] @relation("ReferralQualificationAuditActor")
   fortuneParticipations             FortuneParticipant[]                @relation("FortuneParticipantUser")
   fortuneReadings                   FortuneReading[]                    @relation("FortuneReadingUser")
   fortuneFeedback                   FortuneFeedback[]                   @relation("FortuneFeedbackUser")
@@ -3067,6 +3072,7 @@ model OrganizationEntitlementAudit {
 }
 
 model Group {
+  referralQualificationPolicies ServiceReferralQualificationPolicyVersion[]
   oemOfferingPeriods OemOfferingPeriod[]
   learningDefinitionApprovals     LearningDefinitionApproval[]
   id                              String                           @id @default(uuid()) @db.Uuid
@@ -3688,6 +3694,7 @@ model ServiceMemberBusinessProfile {
 }
 
 model GroupMembership {
+  externalReadGrants ExternalReadGrant[]
   oemRegistrationPeriods OemRegistrationPeriod[]
   id                           String                           @id @default(uuid()) @db.Uuid
   personalLearningGoalConfirmations PersonalLearningGoalConfirmation[]
@@ -6932,6 +6939,7 @@ model AccountDeletionOperationAudit {
 }
 
 model Bunshin {
+  externalReadGrants ExternalReadGrant[]
   id                              String                           @id @default(uuid()) @db.Uuid
   improvementFeedback             ImprovementFeedback[]
   workspaceId                     String                           @map("workspace_id") @db.Uuid
@@ -6996,6 +7004,7 @@ model Bunshin {
   socialActivityBarrierCases      SocialActivityBarrierCase[]
   fortunePersonalizationParticipants FortuneParticipant[]              @relation("FortuneParticipantPersonalizationBunshin")
 
+  @@unique([workspaceId, groupId, ownerUserId, id], map: "bunshin_external_read_owner_scope_key")
   @@unique([workspaceId, slug])
   @@unique([workspaceId, id])
   @@index([workspaceId, status, updatedAt])
@@ -7663,6 +7672,7 @@ model GenerationContextSnapshot {
 }
 
 model DailyMissionGeneration {
+  generationTrigger String @default("UNKNOWN") @map("generation_trigger") @db.VarChar(20)
   id             String   @id @default(uuid()) @db.Uuid
   workspaceId    String   @map("workspace_id") @db.Uuid
   bunshinId      String   @map("bunshin_id") @db.Uuid
@@ -7735,6 +7745,7 @@ model MissionContentVariantPhotoFirstMetadata {
 
 /// 別案生成のclaim/成功/失敗を冪等に記録する。失敗時にもAI観測値を残す。
 model MissionContentVariantGeneration {
+  generationTrigger String @default("UNKNOWN") @map("generation_trigger") @db.VarChar(20)
   id                  String                                @id @default(uuid()) @db.Uuid
   workspaceId         String                                @map("workspace_id") @db.Uuid
   bunshinId           String                                @map("bunshin_id") @db.Uuid
@@ -7973,6 +7984,7 @@ model SocialActivityBarrierEvidence {
 
 /// 本人が1問確認へ回答した監査履歴。回答本文は保持しない。
 model SocialActivityBarrierConfirmation {
+  requestSnapshot Json? @map("request_snapshot")
   id               String                                    @id @default(uuid()) @db.Uuid
   caseId           String                                    @map("case_id") @db.Uuid
   response         SocialActivityBarrierConfirmationResponse
@@ -8001,6 +8013,8 @@ model SocialActivitySupportIntervention {
   acceptedAt         DateTime?                   @map("accepted_at") @db.Timestamptz(6)
   completedAt        DateTime?                   @map("completed_at") @db.Timestamptz(6)
   skippedAt          DateTime?                   @map("skipped_at") @db.Timestamptz(6)
+  firstDisplayedAt   DateTime?                   @map("first_displayed_at") @db.Timestamptz(6)
+  firstDetailsViewedAt DateTime?                 @map("first_details_viewed_at") @db.Timestamptz(6)
   createdAt          DateTime                    @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt          DateTime                    @updatedAt @map("updated_at") @db.Timestamptz(6)
   barrierCase        SocialActivityBarrierCase   @relation(fields: [caseId], references: [id], onDelete: Cascade)
@@ -8359,6 +8373,14 @@ model ServiceReferral {
   referredMembershipId  String                  @map("referred_membership_id") @db.Uuid
   referredUserId        String                  @map("referred_user_id") @db.Uuid
   status                ServiceReferralStatus   @default(REGISTERED)
+  qualificationState       String                                     @default("UNASSESSED") @map("qualification_state") @db.VarChar(20)
+  qualificationReview      String                                     @default("UNKNOWN") @map("qualification_review") @db.VarChar(20)
+  qualificationRevision    Int                                        @default(0) @map("qualification_revision")
+  confirmedPolicyVersionId String?                                    @map("confirmed_policy_version_id") @db.Uuid
+  confirmedAt              DateTime?                                  @map("confirmed_at") @db.Timestamptz(6)
+  revokedAt                DateTime?                                  @map("revoked_at") @db.Timestamptz(6)
+  confirmedPolicy          ServiceReferralQualificationPolicyVersion? @relation(fields: [workspaceId, groupId, confirmedPolicyVersionId], references: [workspaceId, groupId, id], onDelete: Restrict, onUpdate: NoAction, map: "service_referral_qualification_policy_fk")
+  qualificationAudits      ServiceReferralQualificationAudit[]
   registeredAt          DateTime?               @map("registered_at") @db.Timestamptz(6)
   onboardingCompletedAt DateTime?               @map("onboarding_completed_at") @db.Timestamptz(6)
   firstContentViewedAt  DateTime?               @map("first_content_viewed_at") @db.Timestamptz(6)
@@ -8379,7 +8401,55 @@ model ServiceReferral {
   @@unique([workspaceId, groupId, id])
   @@index([workspaceId, groupId, status, createdAt])
   @@index([referralCodeId, status])
+  @@index([workspaceId, groupId, qualificationState, referralCodeId], map: "service_referral_qualification_count")
   @@map("service_referrals")
+}
+
+/// Append-only eligibility versions, separate from existing credit award rules.
+model ServiceReferralQualificationPolicyVersion {
+  id                 String            @id @default(uuid()) @db.Uuid
+  workspaceId        String            @map("workspace_id") @db.Uuid
+  groupId            String            @map("group_id") @db.Uuid
+  policyKey          String            @default("social-referral") @map("policy_key") @db.VarChar(100)
+  version            Int
+  authority          String            @db.VarChar(20)
+  status             String            @db.VarChar(20)
+  profileKey         String            @map("profile_key") @db.VarChar(40)
+  profileRevision    String            @map("profile_revision") @db.VarChar(100)
+  conditions         Json
+  timezone           String            @db.VarChar(64)
+  reason             String            @db.VarChar(1000)
+  createdByUserId    String            @map("created_by_user_id") @db.Uuid
+  createdAt          DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  confirmedReferrals ServiceReferral[]
+  group Group @relation(fields: [workspaceId, groupId], references: [workspaceId, id], onDelete: Restrict, onUpdate: NoAction, map: "service_referral_qualification_polic_workspace_id_group_id_fkey")
+  createdBy User @relation("ReferralQualificationPolicyCreator", fields: [createdByUserId], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "service_referral_qualification_policy_v_created_by_user_id_fkey")
+
+  @@unique([workspaceId, groupId, id], map: "referral_qualification_policy_scope")
+  @@unique([workspaceId, groupId, policyKey, version], map: "referral_qualification_policy_version")
+  @@map("service_referral_qualification_policy_versions")
+}
+
+/// Exact command replay and irreconstructible review decisions. No content copies.
+model ServiceReferralQualificationAudit {
+  id             String          @id @default(uuid()) @db.Uuid
+  workspaceId    String          @map("workspace_id") @db.Uuid
+  groupId        String          @map("group_id") @db.Uuid
+  referralId     String          @map("referral_id") @db.Uuid
+  commandId      String          @map("command_id") @db.Uuid
+  actorUserId    String          @map("actor_user_id") @db.Uuid
+  kind           String          @db.VarChar(20)
+  reason         String          @db.VarChar(1000)
+  fingerprint    String          @db.VarChar(64)
+  beforeRevision Int             @map("before_revision")
+  result         Json
+  occurredAt     DateTime        @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  referral       ServiceReferral @relation(fields: [workspaceId, groupId, referralId], references: [workspaceId, groupId, id], onDelete: Restrict, onUpdate: NoAction, map: "service_referral_qualificatio_workspace_id_group_id_referr_fkey")
+  actor User @relation("ReferralQualificationAuditActor", fields: [actorUserId], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "service_referral_qualification_audits_actor_user_id_fkey")
+
+  @@unique([workspaceId, groupId, commandId], map: "referral_qualification_command")
+  @@index([workspaceId, groupId, referralId, occurredAt], map: "service_referral_qualification_audit_lookup")
+  @@map("service_referral_qualification_audits")
 }
 
 model ServiceReferralRewardRule {
@@ -8705,4 +8775,29 @@ model OpsMorningDigestRun {
   @@unique([environment, targetDate], map: "ops_morning_digest_runs_environment_target_date_key")
   @@index([environment, createdAt])
   @@map("ops_morning_digest_runs")
+}
+
+/// Explicit owner-approved scope. Not a credential or authentication token.
+model ExternalReadGrant {
+  id                String @id @db.Uuid
+  workspaceId       String @map("workspace_id") @db.Uuid
+  groupId           String @map("group_id") @db.Uuid
+  groupMembershipId String @map("group_membership_id") @db.Uuid
+  userId            String @map("user_id") @db.Uuid
+  bunshinId         String @map("bunshin_id") @db.Uuid
+  clientId          String @map("client_id") @db.VarChar(128)
+  environment       String @db.VarChar(16)
+  operations        String[] @db.VarChar(80)
+  consentVersion    String @map("consent_version") @db.VarChar(80)
+  credentialBindingHash String? @map("credential_binding_hash") @db.Char(64)
+  credentialBoundAt DateTime? @map("credential_bound_at") @db.Timestamptz(6)
+  revision          Int @default(1)
+  grantedAt         DateTime @map("granted_at") @db.Timestamptz(6)
+  expiresAt         DateTime @map("expires_at") @db.Timestamptz(6)
+  revokedAt         DateTime? @map("revoked_at") @db.Timestamptz(6)
+  membership GroupMembership @relation(fields: [workspaceId, groupId, groupMembershipId, userId], references: [workspaceId, groupId, id, userId], onDelete: Cascade, onUpdate: Restrict, map: "external_read_grants_membership_fkey")
+  bunshin Bunshin @relation(fields: [workspaceId, groupId, userId, bunshinId], references: [workspaceId, groupId, ownerUserId, id], onDelete: Cascade, onUpdate: Restrict, map: "external_read_grants_bunshin_fkey")
+
+  @@index([workspaceId, groupId, groupMembershipId, userId, grantedAt], map: "external_read_grants_owner_idx")
+  @@map("external_read_grants")
 }

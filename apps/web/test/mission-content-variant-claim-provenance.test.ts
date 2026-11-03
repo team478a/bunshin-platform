@@ -78,6 +78,7 @@ vi.mock('../src/services/mission-content-variant-ai-runtime', () => ({
 }));
 import { MissionContentVariantGenerationService } from '../src/services/mission-content-variant-generation';
 const input = {
+  generationTrigger: 'USER' as const,
   workspaceId: 'workspace',
   groupId: 'hassy',
   bunshinId: 'bunshin',
@@ -110,7 +111,7 @@ describe('variant orchestration provenance (fake persistence/authorization bound
           : service.execute(input),
       ).rejects.toThrow('synthetic context failure');
       expect(state.claim).toHaveBeenCalledWith(
-        expect.objectContaining({ initiatingSource: source }),
+        expect.objectContaining({ initiatingSource: source, generationTrigger: 'USER' }),
       );
       expect(state.record).toHaveBeenCalledWith(
         expect.objectContaining({

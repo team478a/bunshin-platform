@@ -4,6 +4,7 @@ import {
   type GenerationContextSnapshotPayload,
 } from '@bunshin/application';
 import { ApplicationError } from '@bunshin/shared';
+import { GENERATION_TRIGGERS, type GenerationTrigger } from '@bunshin/platform-domain';
 
 import { DailyMissionMutation } from './daily-mission-authorization';
 import {
@@ -252,6 +253,7 @@ export interface MissionContentVariantRepository {
       idempotencyKey: string;
       sourceVariantId?: string;
       initiatingSource?: 'STANDARD' | 'PHOTO_FIRST';
+      generationTrigger?: GenerationTrigger;
     },
   ): Promise<{ acquired: boolean; generation: MissionContentVariantGeneration } | null>;
   complete(
@@ -317,6 +319,7 @@ export class ClaimMissionContentVariantGeneration {
       idempotencyKey: string;
       sourceVariantId?: string;
       initiatingSource?: 'STANDARD' | 'PHOTO_FIRST';
+      generationTrigger?: GenerationTrigger;
     },
   ) {
     if (
@@ -324,6 +327,11 @@ export class ClaimMissionContentVariantGeneration {
       !['STANDARD', 'PHOTO_FIRST'].includes(input.initiatingSource)
     )
       throw new ApplicationError('VALIDATION_ERROR', 'invalid generation source');
+    if (
+      input.generationTrigger !== undefined &&
+      !GENERATION_TRIGGERS.includes(input.generationTrigger)
+    )
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid generation trigger');
     const result = await this.repository.claim({
       ...input,
       idempotencyKey: variantIdempotencyKey(input.idempotencyKey),

@@ -1,0 +1,161 @@
+import { createRequire } from 'node:module';
+import { pathToFileURL, fileURLToPath } from 'node:url';
+import { runMigrationProcess } from './migration-process.mjs';
+import { releaseCaPath } from './release-ca.mjs';
+import { readReleasePrismaDiagnostic } from './release-prisma-command.mjs';
+import {
+  matchesExpectedProject,
+  resolveMigrationBounds,
+  resolveMigrationDirectUrl,
+} from './deploy-migrations-for-vercel.mjs';
+import {
+  buildPsqlReleaseScript,
+  loadReleaseMigrations,
+  psqlArguments,
+  psqlEnvironment,
+} from './release-psql.mjs';
+
+const requireModule = createRequire(import.meta.url);
+const expectedProjectRef = 'vtkzinaudznwbsjoyszk';
+const expectedConfirmation = `APPLY_RELEASE_20261026_SERVICE_IDENTITY_TO_${expectedProjectRef}`;
+const approvedNames = [
+  '20261025130000_repair_official_service_identity',
+  '20261025131000_align_manaberu_public_registration_copy',
+];
+const preconditionSql = '';
+
+export async function runRelease20261026Migration(
+  execute = runMigrationProcess,
+  environment = process.env,
+) {
+  if (environment.VERCEL_ENV !== 'production') {
+    console.error('[database] RELEASE_MIGRATION_ENVIRONMENT_INVALID: production context required.');
+    return 1;
+  }
+  if (environment.MIGRATION_APPLY_CONFIRMATION !== expectedConfirmation) {
+    console.error('[database] RELEASE_MIGRATION_CONFIRMATION_INVALID: no migration started.');
+    return 1;
+  }
+  let configurationDiagnostic = 'unclassified';
+  let childEnvironment;
+  let script;
+  let bounds;
+  let mode;
+  try {
+    configurationDiagnostic = 'mode-invalid';
+    mode = environment.MIGRATION_APPLY_MODE ?? 'preview';
+    if (!['preview', 'apply'].includes(mode)) throw new Error('INVALID_MODE');
+    configurationDiagnostic = 'project-ref-invalid';
+    if (environment.MIGRATION_APPLY_EXPECTED_PROJECT_REF !== expectedProjectRef)
+      throw new Error('INVALID_PROJECT');
+    configurationDiagnostic = 'connection-url-missing';
+    if (!environment.DATABASE_URL || !environment.DIRECT_URL) throw new Error('MISSING_CONNECTION');
+    configurationDiagnostic = 'connection-target-invalid';
+    if (
+      !matchesExpectedProject(environment.DATABASE_URL, expectedProjectRef) ||
+      !matchesExpectedProject(environment.DIRECT_URL, expectedProjectRef)
+    )
+      throw new Error('INVALID_TARGET');
+    const host = environment.SUPABASE_SESSION_POOLER_HOST;
+    configurationDiagnostic = 'session-pooler-host-invalid';
+    if (!host || !/^[a-z0-9.-]+\.pooler\.supabase\.com$/.test(host))
+      throw new Error('INVALID_HOST');
+    const session = new URL(resolveMigrationDirectUrl(environment.DIRECT_URL, host));
+    configurationDiagnostic = 'session-pooler-target-invalid';
+    if (
+      session.hostname !== host ||
+      session.port !== '5432' ||
+      !matchesExpectedProject(session.toString(), expectedProjectRef) ||
+      !session.password ||
+      session.searchParams.has('options')
+    )
+      throw new Error('INVALID_SESSION');
+    configurationDiagnostic = 'tls-mode-invalid';
+    if (
+      ![null, 'prefer', 'require', 'verify-ca', 'verify-full'].includes(
+        session.searchParams.get('sslmode'),
+      )
+    )
+      throw new Error('INVALID_TLS');
+    if ([null, 'prefer'].includes(session.searchParams.get('sslmode')))
+      session.searchParams.set('sslmode', 'require');
+    configurationDiagnostic = 'release-ca-certificate-invalid';
+    const caPath = releaseCaPath();
+    session.searchParams.set('sslmode', 'verify-full');
+    session.searchParams.set('sslrootcert', caPath);
+    const resolver = new URL(session);
+    // libpq environment and Prisma must address the same validated endpoint.
+    // In particular, Prisma's query-string host/schema overrides must not
+    // redirect the metadata connection away from the native psql target.
+    resolver.search = '';
+    resolver.searchParams.set('schema', 'public');
+    resolver.searchParams.set('sslmode', 'require');
+    resolver.searchParams.set('sslaccept', 'strict');
+    resolver.searchParams.set('connect_timeout', '10');
+    resolver.searchParams.set('socket_timeout', '60');
+    resolver.searchParams.set('sslcert', caPath);
+    configurationDiagnostic = 'migration-timeout-settings-invalid';
+    bounds = resolveMigrationBounds(environment);
+    configurationDiagnostic = 'release-source-invalid';
+    const migrations = loadReleaseMigrations(new URL('../prisma/migrations/', import.meta.url));
+    script = buildPsqlReleaseScript({
+      migrations,
+      approvedNames,
+      bounds,
+      mode,
+      preconditionSql,
+      resolveExecutable: process.execPath,
+      prismaCli: requireModule.resolve('prisma/build/index.js'),
+      schemaPath: fileURLToPath(new URL('../prisma/schema.prisma', import.meta.url)),
+    });
+    childEnvironment = psqlEnvironment(session.toString(), {
+      ...environment,
+      DATABASE_URL: resolver.toString(),
+      DIRECT_URL: resolver.toString(),
+    });
+  } catch {
+    console.error(
+      `[database] RELEASE_MIGRATION_CONFIGURATION_INVALID (${configurationDiagnostic}): values are not logged.`,
+    );
+    return 1;
+  }
+  const result = await execute('psql', psqlArguments, {
+    cwd: new URL('../', import.meta.url),
+    env: childEnvironment,
+    input: script,
+    captureOutput: true,
+    timeoutMs: bounds.processTimeoutMs,
+  });
+  const marker =
+    mode === 'preview'
+      ? 'RELEASE_PSQL_PREVIEW_VERIFIED'
+      : 'RELEASE_MIGRATIONS_APPLIED_AND_VERIFIED';
+  if (
+    result.reason !== 'EXITED' ||
+    result.status !== 0 ||
+    !result.capturedOutput?.split(/\r?\n/).includes(marker)
+  ) {
+    const detail = readReleasePrismaDiagnostic(result.capturedOutput ?? '');
+    if (detail)
+      console.error(
+        `[database] RELEASE_PRISMA_FAILURE phase=${detail.phase}; reason=${detail.diagnostic}.`,
+      );
+    console.error(
+      `[database] RELEASE_PSQL_FAILED_OR_UNCONFIRMED (${result.diagnostic ?? result.reason.toLowerCase()}): stop; inspect schema/history before retrying.`,
+    );
+    return 1;
+  }
+  console.log(
+    `[database] ${marker}: target ${expectedProjectRef}; approved migration count 2; mode ${mode}.`,
+  );
+  return 0;
+}
+
+if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
+  if (process.platform !== 'linux') {
+    console.error(
+      '[database] RELEASE_PSQL_LINUX_RUNNER_REQUIRED: use the approved GitHub workflow.',
+    );
+    process.exitCode = 1;
+  } else process.exitCode = await runRelease20261026Migration();
+}

@@ -400,17 +400,37 @@ export function clearAuthReturnCookie(
   return response;
 }
 
-export function authConsentPath(context: AuthReturnContext): string {
-  return context.attempt ? `/consent?authAttempt=${context.attempt.id}` : '/consent';
+export function authConsentPath(
+  context: AuthReturnContext,
+  legacyReturnTo: string | null = null,
+): string {
+  if (context.attempt) return `/consent?authAttempt=${context.attempt.id}`;
+  if (!authReturnAttemptsEnabled()) {
+    const safe = safeLineAuthReturnPath(legacyReturnTo);
+    if (safe) return `/consent?returnTo=${encodeURIComponent(safe)}`;
+  }
+  return '/consent';
 }
 
 export function authReturnDestination(
   context: AuthReturnContext,
   registrationStatus: string | null | undefined,
+  legacyReturnTo: string | null = null,
 ): string {
-  if (!requiresPlatformOnboarding(registrationStatus, context.returnTo))
-    return context.returnTo ?? '/bunshins';
-  return `/onboarding${context.returnTo ? `?returnTo=${encodeURIComponent(context.returnTo)}` : ''}`;
+  // Attempt-scoped authentication keeps the database record as the only
+  // successful destination. Legacy authentication has no record to read, so
+  // retain the already-validated service path carried by the callback. This
+  // prevents a service login from falling into the platform questionnaire.
+  // The legacy cookie can belong to another service. When the current email
+  // callback carries a validated return path, it is the current transaction
+  // and must win over that stale cookie.
+  const returnTo = context.attempt
+    ? context.returnTo
+    : !authReturnAttemptsEnabled()
+      ? (safeLineAuthReturnPath(legacyReturnTo) ?? context.returnTo)
+      : null;
+  if (!requiresPlatformOnboarding(registrationStatus, returnTo)) return returnTo ?? '/bunshins';
+  return `/onboarding${returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : ''}`;
 }
 
 export function authReturnPageRequest(path: string, headers: Headers, id: string | null): Request {

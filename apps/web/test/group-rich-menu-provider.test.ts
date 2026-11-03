@@ -4,12 +4,37 @@ import {
   createPersonalLearningGroupRichMenu,
   deleteGroupRichMenu,
   linkGroupRichMenuToUser,
+  isGroupRichMenuPublicationActive,
   publishDefaultGroupRichMenu,
   unlinkGroupRichMenuFromUser,
   uploadPersonalLearningGroupRichMenuImage,
 } from '../src/line/group-rich-menu-provider';
 
 describe('dedicated group LINE rich menu', () => {
+  it.each([true, false])('checks the exact publication using only reads (%s)', async (matches) => {
+    const request = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(Response.json({ richMenuId: 'menu-id' }))
+      .mockResolvedValueOnce(
+        Response.json({
+          richMenuId: 'menu-id',
+          name: `bunshin-group:group-1:default:v4:${matches ? 'attempt-1' : 'other-attempt'}`,
+        }),
+      );
+    await expect(
+      isGroupRichMenuPublicationActive({
+        request,
+        accessToken: 'synthetic',
+        groupId: 'group-1',
+        operationId: 'attempt-1',
+      }),
+    ).resolves.toBe(matches);
+    expect(request.mock.calls.map(([url, options]) => [url, options?.method])).toEqual([
+      ['https://api.line.me/v2/bot/user/all/richmenu', 'GET'],
+      ['https://api.line.me/v2/bot/richmenu/menu-id', 'GET'],
+    ]);
+  });
+
   it('creates and activates the default menu with service-scoped links', async () => {
     const request = vi
       .fn<typeof fetch>()
@@ -26,12 +51,15 @@ describe('dedicated group LINE rich menu', () => {
         appUrl: 'https://app.example.com',
         serviceSlug: 'sennokuni',
         image: Buffer.from([1, 2, 3]),
+        operationId: 'attempt-1',
       }),
     ).resolves.toEqual({ lineRichMenuId: 'richmenu-group', cleanupFailedIds: [] });
     const definition = JSON.parse(request.mock.calls[1]?.[1]?.body as string) as {
+      name: string;
       chatBarText: string;
       areas: Array<{ action: { uri: string } }>;
     };
+    expect(definition.name).toBe('bunshin-group:group-1:default:v4:attempt-1');
     expect(definition.chatBarText).toBe('千ノ国メディアメニュー');
     expect(definition.areas.map((area) => area.action.uri)).toEqual([
       'https://app.example.com/s/sennokuni/home',

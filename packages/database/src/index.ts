@@ -1,4 +1,5 @@
 export { PrismaBunshinRepository } from './bunshin-core';
+export { PrismaMemberUsageRepository, MEMBER_USAGE_SOURCE_LIMIT } from './member-usage-repository';
 export {
   checkDatabaseReadiness,
   PrismaPersonalityLearningProposalRepository,
@@ -297,6 +298,7 @@ export {
   PrismaServiceReferralRewardRuleRepository,
 } from './service-commercial-credit';
 export { PrismaHassySupportImprovementAdapter } from './hassy-improvement-support-adapter';
+export { PrismaSocialSupportBehaviorAdapter } from './social-support-behavior-adapter';
 export { PrismaServiceImprovementOverviewReader } from './service-improvement-overview';
 export {
   PrismaSocialProgressImprovementAdapter,
@@ -351,8 +353,22 @@ export * from './side-hustle-hearing';
 export { purgeExpiredSupportCases, SUPPORT_CASE_RETENTION_DAYS } from './support-case-retention';
 export { PrismaOpsMorningDigestCollector } from './ops-morning-digest';
 export { PrismaOpsMorningDigestRunRepository } from './ops-morning-digest-runs';
+export { PrismaMemberRoadmapContextRepository } from './member-roadmap-context';
 export type {
   OpsMorningDigestClaim,
   OpsMorningDigestEnvironment,
   OpsMorningDigestRunStatus,
 } from './ops-morning-digest-runs';
+export { PrismaSocialServiceReferralEvidenceRepository } from './social-service-referral-evidence';
+
+export { PrismaServiceReferralManagementRepository } from './service-referral-management';
+
+export { PrismaSocialRecommendationPolicyRepository } from './social-recommendation-policy';
+
+export * from './managed-feature-policy';
+
+export * from './social-usage-guidance-policy';
+export {
+  PrismaExternalReadGrantRepository,
+  type ExternalGrantServerPolicy,
+} from './external-read-grants';

@@ -52,6 +52,7 @@ export function generateServiceMissionContentVariantResponse(
       const value = await serviceDailyMissionScope(serviceSlug, bunshinId);
       const variant = await generatePointFundedMissionContentVariant({
         ...value,
+        generationTrigger: 'USER',
         dailyMissionId: uuidSchema.parse(dailyMissionId),
         generationIdempotencyKey: parsed.data.idempotencyKey,
         usageIdempotencyPrefix: requestId,

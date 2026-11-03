@@ -40,6 +40,9 @@
 
 - [ ] 変更なし
 - [ ] migrationあり
+- [ ] migration追加時は `packages/database/src/schema-readiness.ts` の `LATEST_DATABASE_MIGRATION` を更新した
+- [ ] disposable DBで `db:migrate:deploy` と `db:assert-ready` を実行した
+- [ ] Production適用は Preview → 承認 → migration適用 → readiness確認 → アプリデプロイの順序を確認した
 - [ ] rollback方法を確認済み
 
 ## Security / Privacy

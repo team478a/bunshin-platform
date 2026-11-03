@@ -6,6 +6,8 @@ import {
   type ServiceImprovementSource,
 } from '@bunshin/application';
 import {
+  SOCIAL_SUPPORT_EXPOSURE_DEFINITION,
+  SOCIAL_SUPPORT_BEHAVIOR_DEFINITION,
   HASSY_SUPPORT_IMPROVEMENT_DEFINITION,
   HASSY_PHOTO_QUALITY_DEFINITION,
 } from '@bunshin/capability-social';
@@ -35,6 +37,14 @@ export async function fixtureOverview(
             flags: ['acceptedByCutoff', 'completedByCutoff', 'skippedByCutoff'],
           },
           { definition: HASSY_PHOTO_QUALITY_DEFINITION, flags: ['unconfirmedFact', 'hadIssues'] },
+          {
+            definition: SOCIAL_SUPPORT_BEHAVIOR_DEFINITION,
+            flags: ['beforeAccepted', 'afterAccepted', 'beforePosted', 'afterPosted'],
+          },
+          {
+            definition: SOCIAL_SUPPORT_EXPOSURE_DEFINITION,
+            flags: ['displayedByCutoff', 'detailsViewedByCutoff'],
+          },
         ]
       : [
           {

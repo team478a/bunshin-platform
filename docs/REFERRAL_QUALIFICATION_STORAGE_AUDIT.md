@@ -1,0 +1,49 @@
+# B3 有効紹介の保存先・既存資産監査
+
+日付: 2026-11-02  
+基点: origin/main `8d8f81b7`（#1429マージ後）
+
+## 結論
+
+紹介関係・Credit口座・報酬・台帳は既に存在する。これらと同じ役割のテーブルを作らない。
+今回の資格ルール・資格の確定版・調査状態は未保存。新規参加については既存会員監査に証拠候補があるが、資格への投影は未接続である。
+既存のREGISTEREDやGRANTEDを新しい有効紹介の確定件数へ読み替えない。
+今回の変更は純粋判定の責務分離と本監査までで、DBの新設・更新や特典付与は行わない。
+
+## 監査表
+
+ファイルはリポジトリ相対。schemaは`packages/database/prisma/schema.prisma`。
+「コードあり」は本番稼働の証拠ではない。本番DB・production SHA・設定は今回確認していない。
+
+| 既存機能 / 現在の実装ファイル                                                                                                                                                                                                                | 実装済み / 設計状態                                                                                                                       | 未実装・注意点                                                                                                                                      | 再利用方法 / 必要な変更                                                                                                              | テスト状況                                                                                                            | 本番運用状況 |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- | ------------ |
+| 紹介コード・クリック・参加帰属: schemaのServiceReferralCode / Click / Referral、database/src/service-participation-registration-repository.ts                                                                                                | コード・DB定義あり。紹介先Membershipの一意制約、自己紹介除外、Service境界、クリック再検証                                                 | Membership upsert後に紹介を作る。既存会員の再参加でもREGISTEREDを保存し得るため、新規登録の証明にはならない                                         | 紹介関係の正本を維持。既存会員監査から新規作成を再構築できる範囲を先に検証。証明できない場合のみ追加保存を検討。日時差から推定しない | database/test/service-referral-credit-schema.test.tsが制約を静的検査。登録監査から資格用証拠を投影するSQL検証は未実装 | 未確認       |
+| 会員登録監査・参加イベント: GroupMembershipAuditLog / ServiceMembershipEvent、database/src/service-participation-registration-repository.ts / service-participation-membership-repository.ts、OemRegistrationPeriod / oem-billing-history.ts | 登録transactionにbeforeData（新規時{}、既存時status）/ afterData、操作者、scope、日時を記録。REGISTRATION_COMPLETEDはMembership単位で冪等 | 新規作成の証拠候補は既にある。再参加・承認・他writerや旧記録との照合が必要。イベントや課金登録期間だけでは初回参加と断定できない                    | この監査を先に再利用し、資格専用の登録イベントを重複保存しない。起点を証明できない記録はUNKNOWN                                      | 既存参加処理あり。資格用の証拠再構築・欠測/矛盾を含むSQL検証は後続                                                    | 未確認       |
+| 紹介成果: 同ServiceReferral、database/src/service-referral-reward-repository.ts                                                                                                                                                              | 登録・初期設定・閲覧・本人の初投稿報告・拒否の状態と日時あり                                                                              | 初回本人生成・活動日資格の版付き確定ではない。FIRST_POST_REPORTEDはSNS公開の公式証明ではない                                                        | 旧statusと日時は維持。新資格の確定・取消・版固定は別の意味の属性として設計する                                                       | 既存Applicationの紹介Credit / rewardテストあり。新資格の永続化・並行確定SQLは未実装                                   | 未確認       |
+| 特典ルール: ServiceReferralRewardRule、application/src/service-referral-reward-rules.ts、database/src/service-referral-reward-rule-repository.ts、web/src/http/service-referral-reward-rules.ts                                              | 初期設定 / 投稿報告のCredit、受取人・期限・上限・版・作成者・SUPERSEDED、管理者scope認可あり                                              | 有効紹介の条件、Hassy人数閾値・機能体験を格納する契約ではない。保存先の2種類のmilestoneだけを扱う                                                   | 既存Creditルールを再利用。資格PolicyをCredit数やmilestone欄へ詰め込まない。immutableな資格Policy版の保存は追加設計が必要             | application/test/service-referral-reward-rules.test.tsあり。資格Policy保存のSQL・監査は未実装                         | 未確認       |
+| 特典付与: ServiceReferralReward、database/src/service-referral-reward-repository.ts                                                                                                                                                          | 付与・残高更新・台帳を同一transactionで保存。紹介 / ruleId / 受益者Membershipで重複拒否                                                   | PENDING / GRANTED / REVOKEDのenumと取消列はあるが、今回確認した付与処理は直接GRANTEDを作る。新資格の予定→確定→取消フローはない                      | 同じ報酬正本を維持。新資格確定と付与を分離し、必要なフローだけ追加。報酬件数を有効紹介人数としない                                   | application/test/service-referral-reward.test.ts、schema静的検査あり。新資格との接続・並行再試行のSQL検証は未実装     | 未確認       |
+| Credit口座・台帳: ServiceCreditAccount / Ledger、database/src/service-credit-consumption-repository.ts / adjustment / expiration                                                                                                             | Service・Membership・User別口座、追記台帳、account / idempotencyKeyの一意性、消費・返却・失効あり                                         | 資格条件や資格の確定を記録する場所ではない                                                                                                          | 残高・履歴の新テーブルを作らない。既存の付与・消費境界を利用する                                                                     | Applicationのcredit consumption / expiration / adjustment、schemaテストあり。今回runtime変更なし                      | 未確認       |
+| 審査・設定監査: ServiceReferral.rejectionReason、Rewardの取消列、ルールcreatedByUserId / version                                                                                                                                             | 拒否・取消の保存列とルール作成者記録は存在                                                                                                | review CLEAR / REQUIRED / UNKNOWNの永続化、管理者の調査操作、資格取消、理由付き設定変更監査の通し処理は未実装。作成者列だけで監査要件完了とはしない | 既存の認可・監査パターンを調べ、再構築できない操作事実だけ追加する。多重登録の疑いを自動不正認定しない                               | 今回の共通gate / SOCIAL純粋評価でUNKNOWN・審査待ちを検証。管理操作の通し検証は後続                                    | 未確認       |
+| SNS利用証拠: application/src/member-usage.ts、database/src/member-usage-repository.ts、SOCIALの新資格binding                                                                                                                                 | 本人操作、起動元、採否・コピー・本人報告、timezone暦日union・重複検査あり                                                                 | 既存Usage Adapterは単一Bunshin所有者用。紹介資格の会員scopeで、複数本人Bunshinの証拠を認可付き取得するAdapterは未接続                               | 正本からメタデータだけ投影。別Service / 他Userを排除し、現在の同意・所有権を再検証。本文・Memoryを集約しない                         | 既存usage unit / SQL、移設した資格66件あり。紹介資格Adapter用SQLは後続                                                | 未確認       |
+| ロードマップ: application/src/member-roadmap.ts、database/src/member-roadmap-context.ts                                                                                                                                                      | VALID_REFERRALS条件あり。現在validReferrals=null                                                                                          | 確定件数の供給なし                                                                                                                                  | 確定資格を一人一度だけ集計できるまでnull / 集計準備中を維持。GETで付与しない                                                         | 既存roadmap / Context / APIテストが未確認状態を検証                                                                   | 未確認       |
+| 他のルール基盤: CommercialServiceProductPolicyVersion、PointRuleVersion、ActivityContinuityRule                                                                                                                                              | 商用契約・ポイント・習慣継続それぞれの専用契約あり                                                                                        | 資格ルールとはscope・権限・意味・版管理対象が異なる                                                                                                 | 名前がPolicy / Ruleでも紹介資格を上書き保存しない。新保存先の設計で混同しない                                                        | 各既存機能のテストあり。今回変更なし                                                                                  | 未確認       |
+
+## 後続接続で必要な保護
+
+1. **登録の確証**: 既存GroupMembershipAuditLogのbeforeData / afterData、操作者・scope・操作種別と登録処理を照合し、既存記録から再構築できる事実を優先する。REGISTRATION_COMPLETEDやOemRegistrationPeriodの開始だけで新規会員と判定しない。監査ログの欠落・矛盾・発生元を証明できない旧記録はUNKNOWNとする。再構築不能な事実だけ追加保存を検討し、登録イベントを二重保存しない。
+2. **資格Policyの版**: Workspace / Service、明示されたサービスprofile、key / revision、条件・timezone・有効状態・操作者・理由を固定する。編集で既存版を上書きしない。現行schemaにこの契約の保存先はない。
+3. **確定の正本**: 既存ServiceReferralに資格の確定版・確定日時・取消/審査を結び付ける案を優先する。新しい紹介関係やUser間リンクを作らない。評価のたびに全イベントを複製保存しない。
+4. **一度限りの集計**: 同Workspace / Service / 被紹介Membershipの紹介関係を正本に、確定した資格だけを一度数える。停止・退会・取消時の扱いを明示し、旧Credit付与の件数から推定しない。
+5. **非遡及**: 現行の報酬の一意性はruleId単位である。新rule版を保存した後に同milestoneを再実行すると別の付与が成立し得る。既存の確定報酬を変更しないことと、後日の再付与を防ぐことは別条件であり、新資格接続では双方のSQL検証が必要。
+6. **上限**: 現行monthlyGrantLimitはUTC月・当該ruleId・受益者の付与レコード件数を数える。資格のtimezone、全ルールのCredit合計、無料ユーザーのAI原価上限とは異なる。並行付与時の厳格な上限保証も別途確認する。
+7. **監査・取消**: 資格取消とCredit返却・補償を別操作として扱い、既存の追記台帳を壊さない。調査待ちは自動取消や不正認定へ置換しない。
+
+これらは後続DB PRの設計条件。今回、新テーブル・列・migrationは確定も追加もしていない。
+必要な保存は既存データから再構築できない資格Policy版・確定・操作事実だけに限定する。
+
+## ハッシー有効化の追加Gate
+
+`apps/web/src/services/business-daily-service-settings.ts`はbusinessProfileEnabled時にreferralEnabled=falseへ補正する。
+Hassy seedの`20261025120000_seed_hassy_public_service`もreferral_enabled=falseを保存する。
+現在の本番値は未確認。今回これを変更したり、紹介機能が利用可能だと表示したりしない。
+将来の有効化はHassy Policy・管理画面・規約・既存基本機能への影響を確認する別の作業とする。

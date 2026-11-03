@@ -183,6 +183,25 @@ export default async function ServiceMemberActivityPage({
         };
       })()
     : null;
+  const qualificationPolicy = await db.prisma.serviceReferralQualificationPolicyVersion.findFirst({
+    where: { workspaceId: service.workspaceId, groupId: service.serviceId },
+    select: { id: true },
+  });
+  const confirmedReferrals = qualificationPolicy
+    ? await db.prisma.serviceReferral.count({
+        where: {
+          workspaceId: service.workspaceId,
+          groupId: service.serviceId,
+          qualificationState: 'CONFIRMED',
+          referralCode: {
+            workspaceId: service.workspaceId,
+            groupId: service.serviceId,
+            groupMembershipId: membership.id,
+            userId: actor.userId,
+          },
+        },
+      })
+    : null;
   const successfulReferrals = referralCounts
     .filter(({ status }) => status !== 'REJECTED')
     .reduce((total, value) => total + value._count, 0);
@@ -225,6 +244,12 @@ export default async function ServiceMemberActivityPage({
               initialValue={referralValue}
             />
             <div className="service-activity-dashboard__stats" aria-label="紹介の状況">
+              <div>
+                <small>有効紹介（審査・確定済み）</small>
+                <strong>
+                  {confirmedReferrals === null ? '集計準備中' : `${confirmedReferrals}人`}
+                </strong>
+              </div>
               <div>
                 <small>URLを開いた回数</small>
                 <strong>{referralCode?._count.clicks ?? 0}回</strong>

@@ -4,10 +4,12 @@ import {
   type SocialAccountStrategyGoal,
 } from './social-account-strategy';
 
-export const SOCIAL_ACTIVITY_BARRIER_RULE_VERSION = 'social-activity-barrier-v3' as const;
+export const SOCIAL_ACTIVITY_BARRIER_RULE_VERSION = 'social-activity-barrier-v4' as const;
 export type SocialActivityBarrierRuleVersion =
   | 'social-activity-barrier-v1'
   | 'social-activity-barrier-v2'
+  | 'social-activity-barrier-v3'
+  | 'social-usage-guidance-v1'
   | typeof SOCIAL_ACTIVITY_BARRIER_RULE_VERSION;
 
 export const SOCIAL_ACTIVITY_BARRIER_GOAL_KEYS = [
@@ -64,6 +66,9 @@ export type SocialActivityBarrierScope = {
 };
 
 export type SocialActivityBarrierMetrics = {
+  successfulImageRequests?: number;
+  usedPlatforms?: number;
+  confirmedReferrals?: number;
   onboardingCompleted: boolean;
   lineDelivered: number;
   missionViewed: number;
@@ -86,6 +91,11 @@ export type InferSocialActivityBarriersInput = {
   metrics: SocialActivityBarrierMetrics;
   goalAttribution: SocialActivityBarrierGoalAttribution;
   goalMetrics: SocialActivityBarrierGoalMetrics;
+  usageGuidance?: {
+    successfulImageRequests: number;
+    usedPlatforms: number;
+    confirmedReferrals: number | null;
+  };
 };
 
 export type SocialActivityBarrierEvidence = {
@@ -112,6 +122,10 @@ export type SocialActivityBarrierCandidate = {
 };
 
 type SocialActivityBarrierEvidenceCode =
+  | 'USAGE_IMAGE_CREDITS'
+  | 'USAGE_MULTIPLE_PLATFORMS'
+  | 'USAGE_REFERRAL_REVIEW'
+  | 'ACCEPTED_WITHOUT_POST_REPORT'
   | 'ONBOARDING_INCOMPLETE'
   | 'DELIVERED_WITHOUT_VIEW'
   | 'VIEWED_WITHOUT_SELECTION'
@@ -121,6 +135,7 @@ type SocialActivityBarrierEvidenceCode =
   | 'RESPONSE_WITHOUT_NEXT_STEP';
 
 const THRESHOLDS = {
+  accepted: 2,
   delivered: 5,
   maximumViewsAfterDelivery: 1,
   viewed: 4,
@@ -463,6 +478,16 @@ export function inferSocialActivityBarriers(
       ['TIME', 'EFFORT', 'MEDIA', 'CONFIDENCE'],
       { contentCopied: metrics.contentCopied, postCompleted: metrics.postCompleted },
       { minimumCopied: THRESHOLDS.copied, maximumPosted: 0 },
+    );
+  }
+
+  if (metrics.missionAccepted >= THRESHOLDS.accepted && metrics.postCompleted === 0) {
+    return createCandidates(
+      input,
+      'ACCEPTED_WITHOUT_POST_REPORT',
+      ['TIME', 'HOW_TO', 'CONTENT', 'CONFIDENCE'],
+      { missionAccepted: metrics.missionAccepted, postCompleted: metrics.postCompleted },
+      { minimumAccepted: THRESHOLDS.accepted, maximumPostReports: 0 },
     );
   }
 

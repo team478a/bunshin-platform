@@ -1,4 +1,5 @@
 import type { Route } from 'next';
+import { safeOAuthConsentReturn } from './oauth-consent-path';
 
 export const LINE_AUTH_RETURN_COOKIE = 'bunshin_line_auth_return';
 export const LINE_AUTH_RETURN_MAX_AGE_SECONDS = 10 * 60;
@@ -8,7 +9,7 @@ const MAX_STATE_LENGTH = 2048;
 const serviceSlugPattern = '[a-z0-9]+(?:-[a-z0-9]+)*';
 const uuidPattern = '[0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}';
 const servicePagePattern = new RegExp(
-  `^/s/${serviceSlugPattern}/(?:home|line|legal-consent|onboarding|training|bunshins(?:/new|/${uuidPattern}(?:/line)?)?|programs(?:/${uuidPattern}(?:/toolkit|/growth|/persona|/examples|/side-hustle)?)?|today|activity|history|images|videos(?:/${uuidPattern})?|video-assets|settings|credits|commerce|roadmap|diagnosis|readings/${uuidPattern}|manual|help|tracking-link|90-day-report|manage(?:/(?:settings|members|legal|line|email|templates|campaigns|badges|points|credits|knowledge|characters|product-packs|external-tracking|referral-rewards|programs|program-goals|personalization|post-approvals|weekly-report|90-day-report|video-operations|video-deliveries|image-operations|improvement-feedback|training(?:/(?:expiry|retention|skills))?|fortune(?:/manual)?))?)$`,
+  `^/s/${serviceSlugPattern}/(?:home|line|legal-consent|onboarding|training|bunshins(?:/new|/${uuidPattern}(?:/(?:line|connections))?)?|programs(?:/${uuidPattern}(?:/toolkit|/growth|/persona|/examples|/side-hustle)?)?|today|activity|history|images|videos(?:/${uuidPattern})?|video-assets|settings|credits|commerce|roadmap|diagnosis|readings/${uuidPattern}|manual|help|tracking-link|90-day-report|manage(?:/(?:settings|members|legal|line|email|templates|campaigns|badges|points|credits|knowledge|characters|product-packs|external-tracking|referral-rewards|referrals|recommendations|roadmap|programs|program-goals|personalization|post-approvals|weekly-report|90-day-report|video-operations|video-deliveries|image-operations|improvement-feedback|training(?:/(?:expiry|retention|skills))?|fortune(?:/manual)?))?)$`,
 );
 const learningProgramAdminPagePattern = new RegExp(
   `^/s/${serviceSlugPattern}/manage/programs/(?:personal-learning-preparation|learning-definition-review|learning-conversations(?:/${uuidPattern})?)$`,
@@ -44,6 +45,7 @@ export function requiresPlatformOnboarding(
 ): boolean {
   return (
     registrationStatus !== 'COMPLETED' &&
+    !safeOAuthConsentReturn(returnTo) &&
     !serviceAuthReturnSlug(returnTo) &&
     !videoAuthReturnProjectId(returnTo) &&
     !imageAuthReturnSampleId(returnTo)
@@ -83,6 +85,8 @@ export function safeLineAuthReturnPath(value: string | null | undefined): string
     if (url.origin !== 'https://bunshin.invalid' || url.hash) return null;
     // Reject encoded separators, dot segments and other normalization aliases.
     if (value.split('?')[0] !== url.pathname || url.pathname.includes('%')) return null;
+    const oauth = safeOAuthConsentReturn(value);
+    if (oauth) return oauth;
     if (url.pathname === '/account') {
       const slug = url.searchParams.get('service');
       const lineNotifications = url.searchParams.getAll('lineNotifications');

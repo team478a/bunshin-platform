@@ -17,6 +17,7 @@ const state = vi.hoisted(() => ({
   identityOwner: '11111111-1111-4111-8111-111111111111',
   lineIdentityOwner: null as string | null,
   required: false,
+  registrationStatus: 'COMPLETED',
   cookie: '',
 }));
 vi.mock('server-only', () => ({}));
@@ -100,7 +101,9 @@ vi.mock('@bunshin/database', () => ({
           create: () => Promise.resolve({}),
         },
       }),
-    userRegistrationProfile: { findUnique: () => Promise.resolve({ status: 'COMPLETED' }) },
+    userRegistrationProfile: {
+      findUnique: () => Promise.resolve({ status: state.registrationStatus }),
+    },
     registrationFunnelEvent: { upsert: () => Promise.resolve({}) },
   },
   listActiveWorkspacesForUser: () => Promise.resolve([]),
@@ -166,6 +169,7 @@ describe('attempt-scoped route contracts', () => {
     state.identityOwner = state.actor;
     state.lineIdentityOwner = null;
     state.required = false;
+    state.registrationStatus = 'COMPLETED';
     state.cookie = '';
     state.oauth.mockImplementation(() =>
       Promise.resolve({
@@ -462,12 +466,9 @@ describe('attempt-scoped route contracts', () => {
       'redirect_to',
       `${origin}/auth/confirm?authAttempt=${a.id}&returnTo=%2Fs%2Ftraining%2Fhome`,
     );
-    expect(location(emailLanding(new Request(callback))).searchParams.get('authAttempt')).toBe(
-      a.id,
-    );
-    expect(location(emailLanding(new Request(callback))).searchParams.get('returnTo')).toBe(
-      '/s/training/home',
-    );
+    const landing = await emailLanding(new Request(callback));
+    expect(location(landing).searchParams.get('authAttempt')).toBe(a.id);
+    expect(location(landing).searchParams.get('returnTo')).toBe('/s/training/home');
     state.otp.mockResolvedValue({ data: { user: { email: 'other@example.com' } }, error: null });
     const response = await finishEmail(
       post('/auth/confirm', { token_hash: 'token', type: 'email', authAttempt: a.id }, a.cookie),
@@ -496,6 +497,61 @@ describe('attempt-scoped route contracts', () => {
     expect(callback.searchParams.get('authAttempt')).toBe(attempt.id);
     expect(callback.searchParams.get('returnTo')).toBe('/s/manaberu-style/home');
     expect(attemptRows.get(attempt.id)?.returnPath).toBe('/s/manaberu-style/home');
+  });
+
+  it('returns legacy email auth to the service instead of the platform questionnaire', async () => {
+    vi.stubEnv('AUTH_RETURN_ATTEMPTS_ENABLED', 'false');
+    state.registrationStatus = 'IN_PROGRESS';
+    const response = await finishEmail(
+      post('/auth/confirm', {
+        token_hash: 'token',
+        type: 'email',
+        returnTo: '/s/manaberu-style/home',
+      }),
+    );
+
+    expect(location(response).pathname).toBe('/s/manaberu-style/home');
+    expect(location(response).pathname).not.toBe('/onboarding');
+  });
+
+  it('exchanges a PKCE email callback code and returns legacy auth to the service', async () => {
+    vi.stubEnv('AUTH_RETURN_ATTEMPTS_ENABLED', 'false');
+    state.registrationStatus = 'IN_PROGRESS';
+    state.exchange.mockResolvedValue({
+      data: { user: { email: 'member@example.com' } },
+      error: null,
+    });
+
+    const response = await emailLanding(
+      new Request(`${origin}/auth/confirm?code=pkce-code&returnTo=%2Fs%2Fmanaberu-style`),
+    );
+
+    expect(state.exchange).toHaveBeenCalledWith('pkce-code');
+    expect(location(response).pathname).toBe('/s/manaberu-style');
+    expect(location(response).pathname).not.toBe('/onboarding');
+  });
+
+  it('completes a PKCE email callback within its auth attempt and preserves the service', async () => {
+    const a = proof(
+      await startEmail(
+        post('/auth/email', { email: 'member@example.com', returnTo: '/s/manaberu-style/home' }),
+      ),
+    );
+    state.exchange.mockResolvedValue({
+      data: { user: { email: 'member@example.com' } },
+      error: null,
+    });
+
+    const response = await emailLanding(
+      new Request(
+        `${origin}/auth/confirm?code=pkce-code&authAttempt=${a.id}&returnTo=%2Fs%2Fmanaberu-style%2Fhome`,
+        { headers: { cookie: a.cookie } },
+      ),
+    );
+
+    expect(state.exchange).toHaveBeenCalledWith('pkce-code');
+    expect(location(response).pathname).toBe('/s/manaberu-style/home');
+    expect(attemptRows.get(a.id)?.stage).toBe('CONSUMED');
   });
 
   it('explains a different email browser and keeps the service on the retry screen', async () => {

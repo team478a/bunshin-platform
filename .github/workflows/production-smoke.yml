@@ -38,3 +38,12 @@ jobs:
           curl --fail --silent --show-error --retry 3 \
             https://www.watashi-works.com/api/health/ready \
             | jq -e '.status == "ready" and .environment == "production" and .checks.configuration == "ok" and .checks.authentication == "ok" and .checks.database == "ok" and .checks.databaseSchema == "current"'
+      - name: Check HASSY public service entry
+        run: |
+          page="$(curl --fail --silent --show-error --retry 3 https://www.watashi-works.com/s/hassy)"
+          printf '%s' "$page" | grep -Fq 'ハッシー'
+          printf '%s' "$page" | grep -Fq 'どなたでも参加できます'
+          if printf '%s' "$page" | grep -Fq '利用設定を確認できません'; then
+            echo 'HASSY public service configuration is unavailable.' >&2
+            exit 1
+          fi

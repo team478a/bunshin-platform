@@ -1,3 +1,4 @@
+import { SOCIAL_USAGE_GUIDANCE_KEYS } from '@bunshin/capability-social';
 import { selectSocialActivityOemSupportRecommendation } from '@bunshin/capability-social';
 import type { PrismaClient } from '@prisma/client';
 
@@ -17,6 +18,7 @@ export async function projectSocialActivityOemSupportCandidates(
   const detectedAt = input.detectedAt ?? new Date();
   const rows = await client.socialActivitySupportIntervention.findMany({
     where: {
+      supportKey: { notIn: [...SOCIAL_USAGE_GUIDANCE_KEYS] },
       status: 'COMPLETED',
       completedAt: { not: null, lt: detectedAt },
       oemSupportCandidate: null,

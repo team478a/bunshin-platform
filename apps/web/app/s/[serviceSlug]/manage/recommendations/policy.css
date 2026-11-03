@@ -1,0 +1,46 @@
+.recommendation-policy {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+.recommendation-policy form,
+.recommendation-policy fieldset {
+  display: grid;
+  gap: 0.8rem;
+  min-width: 0;
+}
+.recommendation-policy label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  min-height: 44px;
+  font-weight: 700;
+}
+.recommendation-policy input[type='number'],
+.recommendation-policy select,
+.recommendation-policy textarea {
+  width: 100%;
+  min-height: 44px;
+  box-sizing: border-box;
+  font: inherit;
+}
+.recommendation-policy input[type='checkbox'] {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+}
+.recommendation-policy button {
+  min-height: 44px;
+}
+
+.recommendation-policy fieldset {
+  border: 1px solid #d9deeb;
+  border-radius: 16px;
+  padding: 1rem;
+  background: #fff;
+}
+.recommendation-policy label:has(input[type='checkbox']) {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+}

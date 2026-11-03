@@ -105,6 +105,7 @@ describe('daily mission job handler', () => {
       },
     });
     expect(execute).toHaveBeenCalledWith({
+      generationTrigger: 'SCHEDULER',
       workspaceId: 'workspace-1',
       bunshinId: 'bunshin-1',
       actorUserId: 'user-1',

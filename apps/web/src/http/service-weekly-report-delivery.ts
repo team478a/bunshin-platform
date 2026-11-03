@@ -16,7 +16,7 @@ const updateSchema = z
     enabled: z.boolean(),
     weekday: z.enum(['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY']),
     localTime: z.string().regex(/^(0[7-9]|1\d|20):[0-5]\d$/),
-    reason: z.string().trim().min(1).max(1000),
+    reason: z.string().trim().max(1000).optional(),
   })
   .strict();
 
@@ -31,16 +31,22 @@ export async function updateServiceWeeklyReportDeliveryResponse(
     if (!actor) throw new ApplicationError('UNAUTHENTICATED', 'session required');
     const [service, value] = await Promise.all([
       resolveManagedServiceContext(serviceSlug, actor.userId),
-      updateSchema.parseAsync(request.json()),
+      request.json().then((input: unknown) => {
+        const parsed = updateSchema.safeParse(input);
+        if (!parsed.success)
+          throw new ApplicationError('VALIDATION_ERROR', '週次配信の設定が不正です。');
+        return parsed.data;
+      }),
     ]);
     const db = await import('@bunshin/database');
     const configuration = await new ServiceFoundationService(
       new db.PrismaServiceFoundationRepository(),
     ).save({
+      serviceAccess: 'ADMINISTRATION',
       workspaceId: service.workspaceId,
       groupId: service.serviceId,
       actorUserId: actor.userId,
-      reason: value.reason,
+      reason: value.reason || '週次レポートの配信設定を更新',
       configuration: {
         ...service.configuration,
         registration: {

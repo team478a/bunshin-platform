@@ -113,6 +113,13 @@ export default async function GroupFeatureSettingPage({
     },
   });
   if (!group) notFound();
+  const recommendationService =
+    admin.role === 'SUPER_ADMIN' && definition.key === 'SOCIAL.ACTIVITY_SUPPORT'
+      ? await db.prisma.serviceConfiguration.findUnique({
+          where: { workspaceId_groupId: { workspaceId: group.workspaceId, groupId: group.id } },
+          select: { slug: true, registration: { select: { onboardingConfig: true } } },
+        })
+      : null;
   const policy = group.featurePolicies[0] ?? null;
   const canChange = admin.role === 'SUPER_ADMIN' || admin.role === 'OPERATOR';
   const query = await searchParams;
@@ -124,6 +131,20 @@ export default async function GroupFeatureSettingPage({
         <h1>{definition.name}</h1>
         <p>{definition.description}</p>
         <Link href={listPath(group.id)}>← 設定一覧へ戻る</Link>
+        {recommendationService &&
+          typeof recommendationService.registration?.onboardingConfig === 'object' &&
+          recommendationService.registration.onboardingConfig !== null &&
+          !Array.isArray(recommendationService.registration.onboardingConfig) &&
+          recommendationService.registration.onboardingConfig['templateKey'] === 'HASSY' && (
+            <a href={`/s/${recommendationService.slug}/manage/roadmap`}>
+              ロードマップの本部条件を設定する
+            </a>
+          )}
+        {recommendationService && (
+          <a href={`/s/${recommendationService.slug}/manage/recommendations`}>
+            SNS支援提案の本部条件を設定する
+          </a>
+        )}
       </header>
       {query.error ? (
         <p className="notice notice--danger" role="alert">

@@ -54,6 +54,33 @@ export default async function OperationsGuidePage() {
         <Link href="/admin">本番開始の確認画面へ戻る</Link>
       </section>
 
+      <section className="settings-card" id="auth-email-smtp">
+        <h2>ログインメールをResendで送る</h2>
+        <p>
+          ログイン・新規登録のMagic LinkはSupabase
+          Authが生成・送信します。管理者向けのResend障害通知設定（
+          <Link href="/admin/email">障害通知メールの設定</Link>
+          ）とは別物です。
+        </p>
+        <ol>
+          <li>Resendで認証専用サブドメインを追加し、ドメイン認証を完了する</li>
+          <li>表示されたSPF・DKIMレコードをDNSへ追加し、DMARC方針も確認する</li>
+          <li>Supabase Dashboardの対象プロジェクトで、Authentication → SMTP Settingsを開く</li>
+          <li>
+            SMTP Hostを<code>smtp.resend.com</code>、Portを<code>465</code>、Usernameを
+            <code>resend</code>に設定する
+          </li>
+          <li>SMTP PasswordへResend APIキーを入力し、認証済みドメインのFrom addressを設定する</li>
+          <li>Magic Linkテンプレートのリンク追跡を無効にし、token hashを本番callbackへ渡す</li>
+          <li>本番テストアカウントでメール送信、リンク押下、ログイン完了、ログアウトを確認する</li>
+        </ol>
+        <p>
+          Resend APIキー、SMTPパスワード、Supabase Service Role
+          Keyはこのアプリの管理画面へ保存しません。設定後も送信元ドメイン、受信、ログイン完了を実機で確認してください。
+        </p>
+        <Link href="/admin/connections">接続設定の一覧へ戻る</Link>
+      </section>
+
       <section className="settings-card" id="external-tracking-smoke">
         <h2>専用URLの本番確認</h2>
         <ol>

@@ -1,3 +1,4 @@
+import { inferSocialUsageGuidance } from './usage-guidance';
 import { inferSocialActivityBarriers } from './activity-barrier';
 import type {
   SocialActivityBarrierCaseRepository,
@@ -66,7 +67,8 @@ export class RunSocialActivityBarrierProjectionBatch {
           continue;
         }
         summary.evaluated += 1;
-        const inferred = inferSocialActivityBarriers(observation);
+        const barriers = inferSocialActivityBarriers(observation);
+        const inferred = barriers.length ? barriers : inferSocialUsageGuidance(observation);
         if (inferred.length === 0) {
           summary.noSignals += 1;
           continue;

@@ -49,6 +49,7 @@ export function generateServiceDailyMissionResponse(
       const value = await serviceDailyMissionScope(serviceSlug, bunshinId);
       const mission = await createDailyMissionGenerationService().execute({
         ...value,
+        generationTrigger: 'USER',
         missionDate: parsed.data.missionDate,
         timezone: parsed.data.timezone,
         socialProfileId: parsed.data.socialProfileId,

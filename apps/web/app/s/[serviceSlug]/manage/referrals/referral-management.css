@@ -1,0 +1,59 @@
+.referral-management {
+  display: grid;
+  gap: 24px;
+  min-width: 0;
+  background: #fff;
+  font-family: 'Noto Sans JP', sans-serif;
+  font-weight: 600;
+}
+
+.referral-management fieldset {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 12px;
+}
+
+.referral-management label {
+  display: grid;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.referral-management label:has(input[type='checkbox']) {
+  display: flex;
+  align-items: center;
+}
+
+.referral-management input:not([type='checkbox']),
+.referral-management select,
+.referral-management textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: 8px;
+  font: inherit;
+}
+
+.referral-management input[type='checkbox'] {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+}
+
+.referral-management button,
+.referral-management a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid #d4d8df;
+  border-radius: 8px;
+  font: inherit;
+}
+
+.referral-management button:disabled {
+  opacity: 0.55;
+}

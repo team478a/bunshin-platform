@@ -42,14 +42,14 @@ describe('social activity barrier participant UI', () => {
     expect(card).toContain('idempotencyKey: idempotencyKey.current');
     expect(http).toContain('requireSameOrigin(request)');
     expect(http).toContain('transitionSupport');
-    expect(http).toContain('resolveMemberServiceContext(serviceSlug, actor.userId)');
+    expect(http).toContain('resolveMemberServiceContext(serviceSlug, actorUserId)');
   });
 
   it('scopes both page and API reads to membership, user, and bunshin ownership', () => {
     expect(detail).toContain('PrismaSocialActivityBarrierConfirmationRepository');
     expect(detail).toContain('groupMembershipId: membership.id');
     expect(detail).toContain('getActiveSupport');
-    expect(http).toContain('ownerUserId: actor.userId');
+    expect(http).toContain('ownerUserId: actorUserId');
     expect(http).toContain('groupMembershipId: membership.id');
   });
 

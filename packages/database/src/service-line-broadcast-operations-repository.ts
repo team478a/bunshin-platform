@@ -1,9 +1,11 @@
-import type {
-  ServiceLineBroadcastOperationsRepository,
-  ServiceLineBroadcastRecipientStatus,
+import {
+  EnqueueJob,
+  type ServiceLineBroadcastOperationsRepository,
+  type ServiceLineBroadcastRecipientStatus,
 } from '@bunshin/application';
 import { type PrismaClient, prisma } from './client';
 import { canManageServiceLineBroadcast } from './service-line-broadcast-scope';
+import { PrismaJobRepository } from './automation-jobs';
 
 class OperationAbort extends Error {
   constructor(readonly kind: 'CANNOT_RETRY' | 'NO_FAILED_RECIPIENTS') {
@@ -136,6 +138,18 @@ export class PrismaServiceLineBroadcastOperationsRepository implements ServiceLi
             reason: input.reason,
             performedByUserId: input.actorUserId,
           },
+        });
+        await new EnqueueJob(new PrismaJobRepository(tx)).enqueue({
+          environment: input.environment,
+          workspaceId: input.workspaceId,
+          correlationId: `service-line-broadcast:${input.broadcastId}`,
+          requestedBy: input.actorUserId,
+          jobType: 'SERVICE_LINE_BROADCAST_DELIVER',
+          payloadReference: `service-line-broadcast:${input.broadcastId}`,
+          idempotencyKey: `service-line-broadcast:${input.broadcastId}:attempt:${input.scheduledAt.getTime()}`,
+          priority: 40,
+          maxAttempts: 3,
+          scheduledAt: input.scheduledAt,
         });
         return {
           kind: 'SCHEDULED' as const,

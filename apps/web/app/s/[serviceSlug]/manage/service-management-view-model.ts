@@ -31,7 +31,7 @@ export const serviceManagementSections = [
   },
   {
     title: '公式情報・ナレッジ',
-    description: 'PDF、動画、URL、よくある質問などを登録し、投稿づくりに使います。',
+    description: 'PDF、動画、URL、よくある質問など、サービスで使う公式情報を登録します。',
     href: 'knowledge',
   },
   {
@@ -73,6 +73,11 @@ export const serviceManagementSections = [
     title: '紹介特典',
     description: '紹介で参加した人の行動に応じて、画像作成回数を渡す条件を設定します。',
     href: 'referral-rewards',
+  },
+  {
+    title: '紹介の審査・確定',
+    description: '有効紹介の条件、重複などの審査、確定と取消を管理します。',
+    href: 'referrals',
   },
   {
     title: '画像作成回数',
@@ -118,6 +123,11 @@ export const serviceManagementSections = [
     title: '占いの公開準備',
     description: 'カード解釈の完全性と安全性を確認し、占い機能の公開・停止を管理します。',
     href: 'fortune',
+  },
+  {
+    title: 'SNS支援提案の設定',
+    description: '本部の許可範囲で、提案対象・判定件数・見送り後の抑制日数を管理します。',
+    href: 'recommendations',
   },
 ] as const;
 
@@ -287,7 +297,7 @@ export function buildServiceOperationActions(input: {
       ? [
           {
             title: '公式情報の確認待ち',
-            detail: `${knowledgeReviewCount}件の公式情報が、投稿づくりに使う前の確認を待っています。`,
+            detail: `${knowledgeReviewCount}件の公式情報が、利用する前の確認を待っています。`,
             href: `/s/${serviceSlug}/manage/knowledge`,
             label: '公式情報を確認する',
           },

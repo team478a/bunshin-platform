@@ -1,3 +1,4 @@
+import { SOCIAL_USAGE_GUIDANCE_KEYS } from '@bunshin/capability-social';
 import type { PrismaClient } from '@prisma/client';
 import { describe, expect, it, vi } from 'vitest';
 import { getSocialActivityBarrierServiceSummary } from '../src/social-activity-barrier-summary';
@@ -16,6 +17,12 @@ describe('social activity barrier service summary', () => {
         supportActions: [{ status: 'OFFERED' }],
       },
       { category: 'CONTENT', status: 'SUSPECTED', supportActions: [] },
+      {
+        category: 'EFFECT',
+        status: 'CONFIRMED',
+        supportActions: [{ status: 'COMPLETED' }],
+        evidenceSnapshots: [{ evidenceCode: 'USAGE_REFERRAL_REVIEW' }],
+      },
       {
         category: 'HOW_TO',
         status: 'RESOLVED',
@@ -43,9 +50,17 @@ describe('social activity barrier service summary', () => {
         groupMembership: { status: 'ACTIVE' },
       },
       select: {
+        evidenceSnapshots: {
+          orderBy: { detectedAt: 'desc' },
+          take: 1,
+          select: { evidenceCode: true },
+        },
         category: true,
         status: true,
-        supportActions: { select: { status: true } },
+        supportActions: {
+          where: { supportKey: { notIn: [...SOCIAL_USAGE_GUIDANCE_KEYS] } },
+          select: { status: true },
+        },
       },
     });
     expect(JSON.stringify(result)).not.toContain('userId');

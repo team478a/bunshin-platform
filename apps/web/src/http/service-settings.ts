@@ -11,6 +11,7 @@ import {
 } from '../services/business-daily-service-settings';
 import { resolveManagedServiceContext } from '../services/public-service';
 import { readServiceOnboardingSettings } from '../services/service-onboarding-settings';
+import { serviceSettingsChangesRequiringReason } from '../services/service-settings-reason';
 
 const logger = createLogger();
 
@@ -146,7 +147,7 @@ export const serviceSettingsUpdateSchema = z
         videoNarration: { enabled: false, voice: 'marin', speed: 'SLOW' },
         visualCharacter: { enabled: false, profileVersionId: null },
       }),
-    reason: z.string().min(1).max(1000),
+    reason: z.string().trim().max(1000).optional(),
   })
   .strict()
   .superRefine((value, context) => {
@@ -264,6 +265,13 @@ export async function updateServiceSettingsResponse(request: Request, serviceSlu
       enforceBusinessDailyServiceSettings(parsedValue),
     );
     const current = service.configuration;
+    const importantChanges = serviceSettingsChangesRequiringReason(current, value);
+    if (importantChanges.length > 0 && !value.reason) {
+      throw new ApplicationError(
+        'VALIDATION_ERROR',
+        `${importantChanges.join('、')}の変更には理由を入力してください。`,
+      );
+    }
     const db = await import('@bunshin/database');
     if (value.dailyIdeaDelivery.videoBgm.enabled) {
       const track = await db.prisma.videoAsset.findFirst({
@@ -284,10 +292,11 @@ export async function updateServiceSettingsResponse(request: Request, serviceSlu
     const saved = await new ServiceFoundationService(
       new db.PrismaServiceFoundationRepository(),
     ).save({
+      serviceAccess: 'ADMINISTRATION',
       workspaceId: service.workspaceId,
       groupId: service.serviceId,
       actorUserId: actor.userId,
-      reason: value.reason,
+      reason: value.reason || 'サービスの基本設定を更新',
       configuration: {
         ...current,
         displayName: value.displayName,

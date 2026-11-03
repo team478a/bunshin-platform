@@ -109,6 +109,33 @@ function repository(overrides: Partial<MissionContentVariantRepository> = {}) {
 }
 
 describe('mission content variants', () => {
+  it('passes origin independently of the photo operation type', async () => {
+    const repo = repository();
+    await new ClaimMissionContentVariantGeneration(repo).execute({
+      ...scope,
+      idempotencyKey: 'photo',
+      initiatingSource: 'PHOTO_FIRST',
+      generationTrigger: 'USER',
+    });
+    expect(repo.claim).toHaveBeenCalledWith(
+      expect.objectContaining({
+        initiatingSource: 'PHOTO_FIRST',
+        generationTrigger: 'USER',
+      }),
+    );
+  });
+
+  it('rejects an invalid origin without calling the repository', async () => {
+    const repo = repository();
+    await expect(
+      new ClaimMissionContentVariantGeneration(repo).execute({
+        ...scope,
+        idempotencyKey: 'invalid',
+        generationTrigger: 'PHOTO_FIRST' as 'USER',
+      }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+    expect(repo.claim).not.toHaveBeenCalled();
+  });
   it('claims generation with a bounded idempotency key', async () => {
     const repo = repository();
     await new ClaimMissionContentVariantGeneration(repo).execute({

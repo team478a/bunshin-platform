@@ -22,6 +22,7 @@ export interface LearningDefinitionApprovalAdminCommand {
   reviewDigest: string;
   reviewEvidenceKey: string;
   reviewedCommitSha: string;
+  provenanceMode?: 'SERVER_V1';
   action: 'APPROVE' | 'DEPRECATE';
   confirmation: 'CONFIRM_DEFINITION_APPROVAL' | 'CONFIRM_DEFINITION_WITHDRAWAL';
   reviewChecklist?: {
@@ -67,6 +68,7 @@ export function validateLearningDefinitionApprovalCommand(
     'action',
     'confirmation',
     'reviewChecklist',
+    'provenanceMode',
   ];
   if (
     !c ||
@@ -75,6 +77,9 @@ export function validateLearningDefinitionApprovalCommand(
     !/^[a-f0-9]{64}$/.test(c.expectedRevision) ||
     !/^[a-f0-9]{64}$/.test(c.reviewDigest) ||
     !/^[a-f0-9]{40}$/.test(c.reviewedCommitSha) ||
+    (c.provenanceMode !== undefined &&
+      (c.provenanceMode !== 'SERVER_V1' ||
+        c.reviewEvidenceKey !== `definition-review:${c.operationId}`)) ||
     typeof c.reviewEvidenceKey !== 'string' ||
     !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/.test(c.reviewEvidenceKey) ||
     !['APPROVE', 'DEPRECATE'].includes(c.action) ||
@@ -101,6 +106,7 @@ export function validateLearningDefinitionApprovalCommand(
     reviewedCommitSha: c.reviewedCommitSha,
     action: c.action,
     confirmation: c.confirmation,
+    ...(c.provenanceMode ? { provenanceMode: c.provenanceMode } : {}),
     ...(c.reviewChecklist
       ? { reviewChecklist: Object.fromEntries(checklist.map((k) => [k, true])) }
       : {}),
@@ -216,7 +222,11 @@ export class PrismaLearningDefinitionApprovalAdminRepository {
       return items;
     });
   }
-  change(s: LearningDefinitionApprovalAdminScope, command: LearningDefinitionApprovalAdminCommand) {
+  change(
+    s: LearningDefinitionApprovalAdminScope,
+    command: LearningDefinitionApprovalAdminCommand,
+    serverCommitSha?: string | null,
+  ) {
     const c = validateLearningDefinitionApprovalCommand(command);
     return this.authorized(s, true, async (tx) => {
       const fingerprint = hash({
@@ -235,6 +245,13 @@ export class PrismaLearningDefinitionApprovalAdminRepository {
         )
           conflict();
         return { replayed: true, operationId: c.operationId, stateAtOperation: data.state };
+      }
+      // A committed retry remains recoverable after deployment changes. New writes must match
+      // the code identity that supplied the review, independently of the content digest/CAS.
+      if (c.provenanceMode === 'SERVER_V1') {
+        if (!serverCommitSha || !/^[a-f0-9]{40}$/.test(serverCommitSha))
+          throw new ApplicationError('CONFIGURATION_ERROR', 'review code identity unavailable');
+        if (c.reviewedCommitSha !== serverCommitSha) conflict();
       }
       const before = await this.read(tx, s, c.definitionKey, c.version);
       if (before.revision !== c.expectedRevision || before.reviewDigest !== c.reviewDigest)

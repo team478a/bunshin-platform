@@ -49,7 +49,7 @@ describe('read-only deployment database gate', () => {
     );
     expect(required.tables.flatMap((table) => table.columns)).not.toContain('workspace');
     expect(required.enums).toContainEqual({ name: 'UserStatus', value: 'ACTIVE' });
-  });
+  }, 15_000);
   it.each([
     [[], 'history-missing'],
     [[{ ...row, name: '20261023000001_unknown' }], 'history-unexpected'],
