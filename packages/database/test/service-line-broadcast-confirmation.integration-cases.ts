@@ -202,7 +202,7 @@ export function registerBroadcastConfirmationIntegrationCases(client: PrismaClie
           groupId: f.scope.groupId,
           userId: f.scope.actorUserId,
         },
-        data: { status: 'REVOKED' },
+        data: { status: 'REVOKED', revokedAt: new Date('2026-11-03T01:01:00Z') },
       });
       await expect(f.repo.schedule(f.command)).resolves.toEqual({ kind: 'ACCESS_DENIED' });
     });
