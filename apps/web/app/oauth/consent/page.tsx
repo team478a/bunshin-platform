@@ -1,4 +1,4 @@
-import type { Metadata, Route } from 'next';
+import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { PublicShell } from '../../ui/public-shell';
 import { loadOAuthConsent } from '../../../src/services/oauth-consent';
@@ -26,7 +26,10 @@ export default async function OAuthConsentPage({
           <h1>接続を完了できませんでした</h1>
           <p>接続元のアプリからやり直すか、もう一度接続内容をご確認ください。</p>
           {retryPath && (
-            <Link className="button" href={retryPath as Route}>
+            <Link
+              className="button"
+              href={{ pathname: '/oauth/consent', query: { authorization_id: id } }}
+            >
               もう一度確認する
             </Link>
           )}
@@ -48,8 +51,7 @@ export default async function OAuthConsentPage({
       </PublicShell>
     );
   }
-  if (value.kind === 'login')
-    redirect(`/login?returnTo=${encodeURIComponent(value.returnTo)}` as Route);
+  if (value.kind === 'login') redirect(`/login?returnTo=${encodeURIComponent(value.returnTo)}`);
   if (value.kind === 'redirect') redirect(value.url);
   return (
     <PublicShell narrow>
