@@ -73,5 +73,3 @@ describe('approval-gated platform schema production migrations', () => {
     expect(workflow).not.toContain('apply-release-20261020');
   });
 });
-
-

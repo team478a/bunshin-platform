@@ -97,7 +97,3 @@ jobs:
             echo "- Scope: exactly the six approved platform schema migrations"
             echo "- Database credentials: not recorded"
           } >> "$GITHUB_STEP_SUMMARY"
-
-
-
-
