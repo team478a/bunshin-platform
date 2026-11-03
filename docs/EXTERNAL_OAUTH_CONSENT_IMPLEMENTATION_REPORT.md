@@ -40,7 +40,7 @@ OAuthで認可しても、既存Bunshin/Serviceのread grant、Feature、期間�
 
 SDKが既認可redirectを返すGETでは、確認済みcallbackへ照合して戻し、確認を繰り返さない。POST時に既に処理済みとなった要求は、新たに承認したことにせず再開案内へ戻す。接続先URLはHTTPS、開発環境のloopbackだけHTTPを許可する。登録済みqueryの変更、別host/path/fragment、credentials付きURL、未知の追加queryを拒否する。
 
-Nextの既存anti-framing headerを維持し、新OAuth pathはprivate/no-store、no-referrerにする。Providerの生error・code・tokenをerror表示やログへ出さない。ブラウザのform失敗は読みやすいページと再確認リンクへ戻し、JSON利用者には既存の固定error形式を使う。
+Nextの既存anti-framing headerを維持し、新OAuth pathはprivate/no-storeにする。認可ページはsame-originのreferrer policy、decision応答はno-referrerとする。ページをno-referrerにするとnative formのOriginもnullとなり通常操作が拒否されることを実ブラウザで再現し、外部へ参照元を送らず内部POSTのOriginを維持する設定へ修正した（[Fetch仕様](https://fetch.spec.whatwg.org/#append-a-request-origin-header)）。Origin検証は緩めない。Providerの生error・code・tokenをerror表示やログへ出さない。ブラウザのform失敗は読みやすいページと再確認リンクへ戻し、JSON利用者には既存の固定error形式を使う。
 
 ### 画面と初期状態
 

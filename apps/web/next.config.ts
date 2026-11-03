@@ -46,7 +46,10 @@ const config: NextConfig = {
         source,
         headers: [
           { key: 'Cache-Control', value: 'private, no-store' },
-          { key: 'Referrer-Policy', value: 'no-referrer' },
+          {
+            key: 'Referrer-Policy',
+            value: source.startsWith('/api/') ? 'no-referrer' : 'same-origin',
+          },
         ],
       })),
     ]);

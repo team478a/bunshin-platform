@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 const m = vi.hoisted(() => ({ load: vi.fn(), redirect: vi.fn() }));
 vi.mock('../src/services/oauth-consent', () => ({ loadOAuthConsent: m.load }));
 vi.mock('next/navigation', () => ({ redirect: m.redirect }));
-import Page from '../app/oauth/consent/page';
+import Page, { metadata } from '../app/oauth/consent/page';
 beforeEach(() => {
   vi.resetAllMocks();
   m.redirect.mockImplementation((url: string) => {
@@ -11,6 +11,9 @@ beforeEach(() => {
   });
 });
 describe('OAuth consent page', () => {
+  it('preserves same-origin form Origin without sharing referrers externally', () => {
+    expect(metadata.referrer).toBe('same-origin');
+  });
   it('keeps the empty catalog readable without creating login or consent prompts', async () => {
     m.load.mockResolvedValue({ kind: 'unavailable' });
     const html = renderToStaticMarkup(

@@ -91,6 +91,10 @@ describe('OAuth decision HTTP and existing login return', () => {
       key: 'Cache-Control',
       value: 'private, no-store',
     });
+    expect(rules.find((r) => r.source === '/oauth/:path*')?.headers).toContainEqual({
+      key: 'Referrer-Policy',
+      value: 'same-origin',
+    });
     expect(rules.find((r) => r.source === '/(.*)')?.headers).toContainEqual({
       key: 'X-Frame-Options',
       value: 'DENY',

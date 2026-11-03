@@ -8,7 +8,7 @@ import { oauthConsentPath } from '../../../src/auth/oauth-consent-path';
 export const dynamic = 'force-dynamic';
 export const metadata: Metadata = {
   title: '外部アプリとの接続 | ワタシワークス',
-  referrer: 'no-referrer',
+  referrer: 'same-origin',
   robots: { index: false, follow: false },
 };
 export default async function OAuthConsentPage({
