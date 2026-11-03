@@ -6,6 +6,32 @@ export async function findServiceFoundationByGroup(
   client: PrismaClient,
   input: Parameters<ServiceFoundationRepository['findByGroup']>[0],
 ) {
+  if (input.serviceAccess) {
+    const value = await client.serviceConfiguration.findFirst({
+      where: {
+        workspaceId: input.workspaceId,
+        groupId: input.groupId,
+        group: {
+          status: 'ACTIVE',
+          workspace: { status: 'ACTIVE' },
+          memberships: {
+            some: {
+              userId: input.actorUserId,
+              status: 'ACTIVE',
+              serviceRole: {
+                in:
+                  input.serviceAccess === 'CONTENT'
+                    ? ['SERVICE_OWNER', 'SERVICE_ADMIN', 'CONTENT_EDITOR']
+                    : ['SERVICE_OWNER', 'SERVICE_ADMIN'],
+              },
+            },
+          },
+        },
+      },
+      include: { brand: true, registration: true },
+    });
+    return value === null ? null : serviceFoundationRecord(value);
+  }
   const [platformAdmin, access] = await Promise.all([
     client.platformAdmin.findFirst({
       where: { userId: input.actorUserId, status: 'ACTIVE' },

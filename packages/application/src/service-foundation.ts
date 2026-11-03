@@ -62,9 +62,11 @@ export interface ServiceFoundationRepository {
     groupId: string;
     actorUserId: string;
     reason: string;
+    serviceAccess?: 'ADMINISTRATION';
     configuration: Omit<ServiceFoundationRecord, 'id' | 'workspaceId' | 'groupId'>;
   }): Promise<ServiceFoundationRecord | null>;
   findByGroup(input: {
+    serviceAccess?: 'ADMINISTRATION' | 'CONTENT';
     workspaceId: string;
     groupId: string;
     actorUserId: string;
