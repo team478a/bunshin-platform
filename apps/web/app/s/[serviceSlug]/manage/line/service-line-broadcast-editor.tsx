@@ -88,7 +88,7 @@ function BroadcastSession({
         options?: { industries?: Industry[] };
       };
       if (!Array.isArray(result.data)) throw new Error('invalid history');
-      if (generation !== historyGeneration.current) return true;
+      if (generation !== historyGeneration.current) return false;
       setBroadcasts(result.data);
       setHealth(result.health ?? emptyHealth);
       setIndustries(result.options?.industries ?? []);
@@ -97,15 +97,12 @@ function BroadcastSession({
       return true;
     } catch {
       if (generation === historyGeneration.current) {
-        setHistoryReady(false);
         setHistoryUnavailable(true);
       }
       return false;
     }
   };
-  const reload = async () => {
-    await load();
-  };
+  const reload = load;
   useEffect(() => {
     void reload();
   }, [serviceSlug]);
@@ -417,7 +414,9 @@ function BroadcastSession({
       </p>
       {historyUnavailable ? (
         <p role="alert">
-          履歴を取得できません。
+          {historyReady
+            ? '最新の履歴を取得できません。以前の履歴を表示しています。'
+            : '履歴を取得できません。'}
           <button
             type="button"
             className="button button--secondary"
@@ -431,6 +430,8 @@ function BroadcastSession({
       {historyReady ? (
         <ServiceLineBroadcastHistory
           serviceSlug={serviceSlug}
+          serviceName={serviceName}
+          unavailable={historyUnavailable}
           broadcasts={broadcasts}
           health={health}
           reload={reload}

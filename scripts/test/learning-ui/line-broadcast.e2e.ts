@@ -26,6 +26,174 @@ const receipt = (c: Record<string, unknown>) => ({
   },
 });
 
+const completedBroadcast = {
+  id: '33333333-3333-4333-8333-333333333333',
+  title: '前回のお知らせ',
+  status: 'COMPLETED',
+  scheduledAt: '2026-11-03T00:00:00.000Z',
+  recipients: { SENT: 3, FAILED: 2 },
+  operationalStatus: 'NEEDS_ATTENTION',
+  failureRate: 40,
+  totalRecipients: 5,
+  recoveryAttempts: 0,
+};
+const scheduledBroadcast = {
+  ...completedBroadcast,
+  id: '44444444-4444-4444-8444-444444444444',
+  title: '予約中のお知らせ',
+  status: 'SCHEDULED',
+  recipients: { SENT: 1, PENDING: 3, FAILED: 1 },
+  operationalStatus: 'SCHEDULED',
+};
+
+test('reviews only the completed failed broadcast and confirms retry once on mobile', async ({
+  app,
+  screen,
+  browser,
+}) => {
+  await browser.setViewport({ width: 390, height: 844 });
+  const writes: Array<{ url: string; body: string | null }> = [];
+  await browser.route('**/api/services/social-a/line-broadcasts**', async (route) => {
+    if (route.request.method === 'GET') {
+      await route.fulfill({
+        json: {
+          data: [
+            writes.length ? { ...completedBroadcast, status: 'SCHEDULED' } : completedBroadcast,
+            scheduledBroadcast,
+          ],
+        },
+      });
+      return;
+    }
+    writes.push({ url: route.request.url, body: route.request.postData ?? null });
+    await route.fulfill({ json: { data: { broadcastId: completedBroadcast.id, retried: 2 } } });
+  });
+  await app.open('/?line-broadcast');
+  const retry = screen.getByRole('button', '失敗分を再送する', { exact: true });
+  await expect(retry).toHaveCount(1);
+  await retry.tap();
+  const review = screen.getByRole('region', '配信操作の最終確認');
+  await expect(review).toContainText('テスト用ハッシー');
+  await expect(review).toContainText('前回のお知らせ');
+  await expect(review).toContainText('2件');
+  await screen.getByLabel('再送する理由').fill('理由の下書き');
+  await screen.getByRole('button', '実行せず戻る').tap();
+  expect(writes).toHaveLength(0);
+  await retry.tap();
+  await expect(screen.getByLabel('再送する理由')).toHaveValue('');
+  await screen.getByLabel('再送する理由').fill('  一時障害から復旧  ');
+  await app.screenshot('retry-confirmation-390');
+  expect(await browser.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+    true,
+  );
+  await browser.evaluate(() => {
+    const button = Array.from(document.querySelectorAll('button')).find(
+      (item) => item.textContent === '失敗分だけ再送を予約する',
+    );
+    button?.click();
+    button?.click();
+    return true;
+  });
+  await expect(screen.getByRole('status')).toContainText('再送予約が完了しました');
+  expect(writes).toHaveLength(1);
+  expect(writes[0]?.url).toContain(`/${completedBroadcast.id}/retry`);
+  expect(writes[0]?.body).toBe(JSON.stringify({ reason: '一時障害から復旧' }));
+  await expect(retry).toHaveCount(0);
+});
+
+test('confirms cancellation and preserves the result when the history read fails', async ({
+  app,
+  screen,
+  browser,
+}) => {
+  await browser.setViewport({ width: 1280, height: 844 });
+  const posts: string[] = [];
+  let failRead = true;
+  await browser.route('**/api/services/social-a/line-broadcasts**', async (route) => {
+    if (route.request.method === 'GET') {
+      if (posts.length && failRead) {
+        failRead = false;
+        await route.fulfill({ status: 503, json: {} });
+        return;
+      }
+      await route.fulfill({
+        json: {
+          data: [
+            posts.length
+              ? { ...scheduledBroadcast, status: 'CANCELLED', operationalStatus: 'CANCELLED' }
+              : scheduledBroadcast,
+          ],
+        },
+      });
+      return;
+    }
+    posts.push(route.request.url);
+    await route.fulfill({
+      json: {
+        data: { broadcastId: scheduledBroadcast.id, cancelledAt: '2026-11-03T00:01:00.000Z' },
+      },
+    });
+  });
+  await app.open('/?line-broadcast');
+  const cancel = screen.getByRole('button', '配信を取り消す', { exact: true });
+  await cancel.tap();
+  const review = screen.getByRole('region', '配信操作の最終確認');
+  await expect(review).toContainText('予約中のお知らせ');
+  await expect(review).toContainText('3件');
+  await expect(review).toContainText('実行中の送信は停止できない場合があります');
+  await screen.getByLabel('取り消す理由').fill('日程の変更');
+  await screen.getByRole('button', '未送信の予約を取り消す').tap();
+  await expect(screen.getByRole('status')).toContainText(
+    '取消が完了しました。履歴を取得できませんでした',
+  );
+  await expect(cancel).toBeDisabled();
+  await screen.getByRole('button', '配信履歴を再取得する').tap();
+  await expect(cancel).toHaveCount(0);
+  expect(posts).toHaveLength(1);
+  expect(posts[0]).toContain(`/${scheduledBroadcast.id}/cancel`);
+});
+
+test('unknown retry result can only reload history, including after an unavailable read', async ({
+  app,
+  screen,
+  browser,
+}) => {
+  await browser.setViewport({ width: 320, height: 844 });
+  let posts = 0;
+  let reads = 0;
+  await browser.route('**/api/services/social-a/line-broadcasts**', async (route) => {
+    if (route.request.method === 'GET') {
+      reads++;
+      if (reads === 2) {
+        await route.fulfill({ status: 503, json: {} });
+        return;
+      }
+      await route.fulfill({ json: { data: [completedBroadcast] } });
+      return;
+    }
+    posts++;
+    await route.fulfill({ status: 503, json: {} });
+  });
+  await app.open('/?line-broadcast');
+  await screen.getByRole('button', '失敗分を再送する', { exact: true }).tap();
+  await screen.getByLabel('再送する理由').fill('障害から復旧');
+  await screen.getByRole('button', '失敗分だけ再送を予約する').tap();
+  const readOnly = screen.getByRole('button', '操作せず履歴だけを確認する');
+  await expect(readOnly).toBeVisible();
+  await expect(screen.getByRole('button', '失敗分だけ再送を予約する')).toHaveCount(0);
+  await readOnly.tap();
+  await expect(screen.getByRole('status')).toContainText('履歴を取得できません');
+  await expect(readOnly).toBeVisible();
+  await readOnly.tap();
+  await expect(screen.getByRole('status')).toContainText('最新の履歴を取得しました');
+  await expect(readOnly).toHaveCount(0);
+  expect(posts).toBe(1);
+  expect(reads).toBe(3);
+  expect(await browser.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+    true,
+  );
+});
+
 for (const width of [1280, 390, 320]) {
   test(`one final confirmation freezes content and sends one reservation at ${width}px`, async ({
     app,

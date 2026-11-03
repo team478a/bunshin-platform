@@ -13,6 +13,7 @@ const now = new Date('2026-09-26T03:30:00.000Z');
 
 function transaction() {
   return {
+    workspace: { findFirst: vi.fn().mockResolvedValue({ id: scope.workspaceId }) },
     groupMembership: { findFirst: vi.fn().mockResolvedValue({ id: 'manager-membership' }) },
     serviceLineBroadcast: {
       findFirst: vi.fn().mockResolvedValue({ id: scope.broadcastId }),
@@ -23,7 +24,17 @@ function transaction() {
       updateMany: vi.fn().mockResolvedValue({ count: 2 }),
     },
     serviceLineBroadcastAuditLog: { create: vi.fn().mockResolvedValue({ id: 'audit-a' }) },
-    job: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+    job: {
+      updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+      upsert: vi.fn().mockResolvedValue({
+        id: 'retry-job',
+        workspaceId: scope.workspaceId,
+        bunshinId: null,
+        requestedBy: scope.actorUserId,
+        jobType: 'SERVICE_LINE_BROADCAST_DELIVER',
+        payloadReference: `service-line-broadcast:${scope.broadcastId}`,
+      }),
+    },
   };
 }
 
@@ -142,6 +153,7 @@ describe('service LINE broadcast operations repository', () => {
         performedByUserId: scope.actorUserId,
       }),
     });
+    expect(tx.job.upsert).toHaveBeenCalledOnce();
   });
 
   it('fails a concurrent retry before changing recipients', async () => {
@@ -157,6 +169,7 @@ describe('service LINE broadcast operations repository', () => {
     ).resolves.toEqual({ kind: 'CANNOT_RETRY' });
     expect(tx.serviceLineBroadcastRecipient.updateMany).not.toHaveBeenCalled();
     expect(tx.serviceLineBroadcastAuditLog.create).not.toHaveBeenCalled();
+    expect(tx.job.upsert).not.toHaveBeenCalled();
   });
 
   it('cancels the broadcast, recipients and pending jobs under exact scopes', async () => {
