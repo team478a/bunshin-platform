@@ -45,7 +45,7 @@ jobs:
             test "$CONFIRMATION" = "INSPECT_PRODUCTION_MIGRATION_HISTORY"
           else
             test "$OPERATION" = "manaberu_registration"
-            test "$GITHUB_REF" = "refs/heads/codex/manaberu-public-training-audit"
+            test "$GITHUB_REF" = "refs/heads/main"
             test "$CONFIRMATION" = "INSPECT_MANABERU_REGISTRATION"
           fi
           [[ "$EXPECTED_PROJECT_REF" =~ ^[a-z0-9]{20}$ ]]
