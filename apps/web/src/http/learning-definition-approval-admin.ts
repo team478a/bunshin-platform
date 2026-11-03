@@ -17,7 +17,11 @@ const common = {
   expectedRevision: z.string().regex(/^[a-f0-9]{64}$/),
   reviewDigest: z.string().regex(/^[a-f0-9]{64}$/),
   reviewedCommitSha: z.string().regex(/^[a-f0-9]{40}$/),
-  reviewEvidenceKey: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/),
+  reviewEvidenceKey: z
+    .string()
+    .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/)
+    .optional(),
+  provenanceMode: z.literal('SERVER_V1').optional(),
 };
 const command = z.discriminatedUnion('action', [
   z
@@ -47,6 +51,10 @@ const command = z.discriminatedUnion('action', [
     .strict(),
 ]);
 const headers = { 'cache-control': 'private, no-store', 'x-content-type-options': 'nosniff' };
+function serverCommitSha() {
+  const sha = process.env['VERCEL_GIT_COMMIT_SHA']?.toLowerCase() ?? '';
+  return /^[a-f0-9]{40}$/.test(sha) ? sha : null;
+}
 export async function learningDefinitionApprovalAdminResponse(
   request: Request,
   serviceSlug: string,
@@ -86,8 +94,11 @@ export async function learningDefinitionApprovalAdminResponse(
       undefined,
       authority,
     );
-    if (request.method === 'GET')
-      return Response.json({ data: await repository.list(scope), requestId }, { headers });
+    if (request.method === 'GET') {
+      const provenance = { mode: 'SERVER_V1', reviewedCommitSha: serverCommitSha() };
+      const data = (await repository.list(scope)).map((item) => ({ ...item, provenance }));
+      return Response.json({ data, requestId }, { headers });
+    }
     if (!request.headers.get('content-type')?.startsWith('application/json') || !request.body)
       throw new ApplicationError('VALIDATION_ERROR', 'JSON required');
     const reader = request.body.getReader();
@@ -114,11 +125,32 @@ export async function learningDefinitionApprovalAdminResponse(
       throw new ApplicationError('VALIDATION_ERROR', 'valid JSON required');
     }
     const parsed = command.safeParse(json);
-    if (!parsed.success)
+    if (
+      !parsed.success ||
+      (parsed.data.provenanceMode === 'SERVER_V1'
+        ? parsed.data.reviewEvidenceKey !== undefined
+        : parsed.data.reviewEvidenceKey === undefined)
+    )
       throw new ApplicationError('VALIDATION_ERROR', 'valid review confirmation required');
     recheckPersonalLearningPreparationAccess('PERSONAL_LEARNING_DEFINITION_ADMIN', authority);
+    const input = parsed.data;
+    const { provenanceMode, ...fields } = input;
+    const normalized = {
+      ...fields,
+      ...(provenanceMode ? { provenanceMode } : {}),
+      reviewEvidenceKey:
+        input.provenanceMode === 'SERVER_V1'
+          ? `definition-review:${input.operationId}`
+          : input.reviewEvidenceKey!,
+    };
     return Response.json(
-      { data: await repository.change(scope, parsed.data), requestId },
+      {
+        data:
+          input.provenanceMode === 'SERVER_V1'
+            ? await repository.change(scope, normalized, serverCommitSha())
+            : await repository.change(scope, normalized),
+        requestId,
+      },
       { headers },
     );
   } catch (error) {

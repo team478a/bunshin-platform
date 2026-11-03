@@ -1,4 +1,5 @@
 import type { Route } from 'next';
+import { safeOAuthConsentReturn } from './oauth-consent-path';
 
 export const LINE_AUTH_RETURN_COOKIE = 'bunshin_line_auth_return';
 export const LINE_AUTH_RETURN_MAX_AGE_SECONDS = 10 * 60;
@@ -44,6 +45,7 @@ export function requiresPlatformOnboarding(
 ): boolean {
   return (
     registrationStatus !== 'COMPLETED' &&
+    !safeOAuthConsentReturn(returnTo) &&
     !serviceAuthReturnSlug(returnTo) &&
     !videoAuthReturnProjectId(returnTo) &&
     !imageAuthReturnSampleId(returnTo)
@@ -83,6 +85,8 @@ export function safeLineAuthReturnPath(value: string | null | undefined): string
     if (url.origin !== 'https://bunshin.invalid' || url.hash) return null;
     // Reject encoded separators, dot segments and other normalization aliases.
     if (value.split('?')[0] !== url.pathname || url.pathname.includes('%')) return null;
+    const oauth = safeOAuthConsentReturn(value);
+    if (oauth) return oauth;
     if (url.pathname === '/account') {
       const slug = url.searchParams.get('service');
       const lineNotifications = url.searchParams.getAll('lineNotifications');

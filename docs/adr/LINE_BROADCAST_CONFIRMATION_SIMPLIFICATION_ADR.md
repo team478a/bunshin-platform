@@ -1,0 +1,25 @@
+# LINE配信予約の確認を一画面へまとめる
+
+日付：2026-11-03。管理運用簡素化PR-2C-A。状態：実装判断・レビュー待ち。
+
+## 判断
+
+一斉配信の対象者確認ボタンとブラウザconfirmを、フォーム入力→対象者の自動preview→読取専用の確認画面→最終確定1回へ置き換える。確認画面にサービス名、業種・目的、人数、件名・本文、日時、理由をまとめる。編集へ戻ったら確認を破棄し、再previewする。理由は既存の重要操作として一度だけ入力する。予定日時は端末のローカル時刻をISOへ変換する。
+
+確認中の入力は固定する。previewの遅延応答、連打、別Serviceへの遷移で古い内容を送信しない。結果不明時は新しい配信を作らず、同一操作ID/bodyだけを再送する。確定応答後の履歴読取失敗はPOST失敗と区別する。
+
+既存ServiceLineBroadcastのUUIDを新クライアントのoperationIdとして使う。既存SCHEDULED監査のafterDataへ入力fingerprintを追加し、配信本体・宛先snapshot・監査を従来どおり同一transactionで保存する。新table、schema、migration、汎用承認層を作らない。同じ操作IDの作成をDB transaction lockで直列化し、同じscope/actor/入力なら既存の登録結果を返す。別内容・別actor・別scopeのID再利用は拒否する。
+
+即時配信のfingerprintは要求の「即時」を表し、毎回のサーバー現在時刻を含めない。再送時は初回に保存した日時を返す。日時を指定した操作はその日時へ固定する。過去日時の検証は新規保存時に行い、既存操作の結果取得を妨げない。旧operationIdなしAPIは互換性を維持する。
+
+既存PrismaJobRepositoryはTransactionClientを受け取れるため、新APIでは予約・宛先・監査・Jobを同じDB transactionで保存する。Jobの既存権限確認が拒否した場合もすべてrollbackし、未投入の予約だけを残さない。HTTPの追加enqueueは旧形式だけに残す。新形式の同一操作は初回日時と既存Job keyを再利用し、取消・完了済みの再送ではJobを追加しない。workerの宛先別冪等性・同意再確認・サービス分離は変更しない。
+
+新しい要求は既存confirmed欄に`SERVICE_LINE_BROADCAST_SCHEDULE_V1`を自動設定し、operationIdと対にする。旧true形式はoperationIdなしで維持する。旧サーバーは未知のoperationIdを捨てるため、trueのままでは再送のたびに新規作成する危険がある。この新literalなら旧サーバーは保存前に拒否する。previewにも同じcontract markerを付け、新UIは対応するサーバーでだけ最終確認へ進む。画面の入力項目は増えない。
+
+## 維持する制御と限界
+
+本人認証、同一Origin、Service管理権限のDB再確認、専用LINE・停止・接続確認、通知同意・友だち・在籍、500人上限、保存時の対象人数再計算、snapshot/監査の整合性は維持する。previewは条件と人数の確認であり、同人数での参加者入替を固定する名簿承認ではない。
+
+このPRは予約作成の再送を扱い、意図的に別IDで作る新規配信を重複本文だけで禁止しない。ページ離脱後の未確定操作を新tableへ永続保存しない。離脱後は履歴照合が必要。Providerのexactly-once保証を新設したと主張しない。
+
+リッチメニュー公開は別PRへ分ける。現在の専用メニュー公開は外部作成・画像upload・公開・監査が一連であり、その結果不明を配信予約のDB transactionと同一視しない。本番設定、migration、deployment、実LINE公開/配信は実行しない。

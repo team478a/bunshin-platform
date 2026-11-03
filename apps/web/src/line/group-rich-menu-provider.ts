@@ -27,6 +27,40 @@ function actionUrl(action: LineRichMenuAction, appUrl: string, serviceSlug: stri
   }[action];
 }
 
+function defaultMenuName(groupId: string, operationId: string) {
+  return `bunshin-group:${groupId}:default:v4:${operationId}`;
+}
+
+export async function isGroupRichMenuPublicationActive(input: {
+  request?: typeof fetch;
+  accessToken: string;
+  groupId: string;
+  operationId: string;
+}) {
+  const request = input.request ?? fetch;
+  const options = () => ({
+    method: 'GET',
+    headers: { authorization: `Bearer ${input.accessToken}` },
+    cache: 'no-store' as const,
+    signal: AbortSignal.timeout(10_000),
+  });
+  const current = await request(`${endpoint}/v2/bot/user/all/richmenu`, options());
+  if (current.status === 404) return false;
+  if (!current.ok) throw providerError(current.status);
+  const { richMenuId } = (await current.json()) as { richMenuId?: unknown };
+  if (typeof richMenuId !== 'string' || !richMenuId)
+    throw new ApplicationError('INTERNAL_ERROR', 'invalid default rich menu response');
+  const menu = await request(
+    `${endpoint}/v2/bot/richmenu/${encodeURIComponent(richMenuId)}`,
+    options(),
+  );
+  if (!menu.ok) throw providerError(menu.status);
+  const detail = (await menu.json()) as { richMenuId?: unknown; name?: unknown };
+  if (detail.richMenuId !== richMenuId || typeof detail.name !== 'string')
+    throw new ApplicationError('INTERNAL_ERROR', 'invalid rich menu response');
+  return detail.name === defaultMenuName(input.groupId, input.operationId);
+}
+
 export async function publishDefaultGroupRichMenu(input: {
   request?: typeof fetch;
   accessToken: string;
@@ -35,11 +69,12 @@ export async function publishDefaultGroupRichMenu(input: {
   appUrl: string;
   serviceSlug: string | null;
   image: Buffer;
+  operationId?: string;
 }) {
   const request = input.request ?? fetch;
   const headers = { authorization: `Bearer ${input.accessToken}` };
   const providerNamePrefix = `bunshin-group:${input.groupId}:default:`;
-  const providerName = `${providerNamePrefix}v4:${randomUUID()}`;
+  const providerName = defaultMenuName(input.groupId, input.operationId ?? randomUUID());
   const chatBarText = `${input.groupName.replace(/公式$/, '').trim()}メニュー`.slice(0, 14);
   const listed = await request(`${endpoint}/v2/bot/richmenu/list`, {
     headers,

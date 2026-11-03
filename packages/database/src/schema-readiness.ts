@@ -1,1 +1,1 @@
-export const LATEST_DATABASE_MIGRATION = '20261103010000_external_read_grants';
+export const LATEST_DATABASE_MIGRATION = '20261103020000_external_read_credential_binding';

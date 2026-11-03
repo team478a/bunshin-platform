@@ -15,6 +15,7 @@
     }
   },
   "scripts": {
+    "test:external-read-poc": "node --test scripts/test/external-read-poc.test.mjs",
     "test:ai-baseline": "pnpm --filter web exec vitest run test/ai-evolution-baseline.test.ts test/ai-evolution-report.test.ts",
     "evaluate:learning-model": "pnpm --filter web exec vitest run test/learning-model-evaluation.live.test.ts --reporter=verbose",
     "test:learning-ui": "e2e run --config scripts/test/learning-ui/e2e.config.ts",

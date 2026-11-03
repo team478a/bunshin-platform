@@ -66,6 +66,53 @@ function setup() {
 }
 afterEach(() => vi.useRealTimers());
 describe('external read grant enforcement', () => {
+  it('reads without optional quota/evidence adapters while retaining before/after authorization', async () => {
+    const s = setup();
+    const reader = new ExternalConnectionRead(
+      { grants: s.ports.grants, authorization: s.ports.authorization },
+      'member-usage:read',
+      s.read,
+      s.now,
+    );
+    await expect(reader.execute(principal, input)).resolves.toEqual({ answer: 'safe' });
+    expect(s.permitted).toHaveBeenCalledTimes(2);
+    expect(s.find).toHaveBeenCalledTimes(2);
+    expect(s.reserve).not.toHaveBeenCalled();
+    expect(s.record).not.toHaveBeenCalled();
+  });
+  it('does not impose the previous five-second cutoff on the default read', async () => {
+    vi.useFakeTimers();
+    const s = setup();
+    s.read.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          setTimeout(() => resolve({ data: { answer: 'safe' }, count: 1 }), 6_000);
+        }),
+    );
+    const reader = new ExternalConnectionRead(
+      { grants: s.ports.grants, authorization: s.ports.authorization },
+      'member-usage:read',
+      s.read,
+      s.now,
+    );
+    const pending = expect(reader.execute(principal, input)).resolves.toEqual({ answer: 'safe' });
+    await vi.advanceTimersByTimeAsync(6_001);
+    await pending;
+  });
+  it('still discards revoked output when optional controls are absent', async () => {
+    const s = setup();
+    s.read.mockImplementation(() => {
+      s.grant.revokedAt = epoch;
+      return Promise.resolve({ data: { answer: 'sensitive' }, count: 1 });
+    });
+    const reader = new ExternalConnectionRead(
+      { grants: s.ports.grants, authorization: s.ports.authorization },
+      'member-usage:read',
+      s.read,
+      s.now,
+    );
+    await expect(reader.execute(principal, input)).rejects.toMatchObject({ code: 'DENIED' });
+  });
   it('resolves server scope and checks current access before and after a read', async () => {
     const s = setup();
     await expect(s.reader.execute(principal, input)).resolves.toEqual({ answer: 'safe' });

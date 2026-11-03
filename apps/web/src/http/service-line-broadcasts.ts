@@ -23,17 +23,23 @@ const segmentSchema = z
   .strict();
 
 const createSchema = z.object({
+  operationId: z.uuid().optional(),
   title: z.string().trim().min(1).max(120),
   message: z.string().trim().min(1).max(5000),
   reason: z.string().trim().min(1).max(1000),
   scheduledAt: z.string().datetime().optional(),
-  confirmed: z.literal(true),
+  confirmed: z.union([z.literal(true), z.literal('SERVICE_LINE_BROADCAST_SCHEDULE_V1')]),
   expectedRecipientCount: z.number().int().positive().max(500),
   segment: segmentSchema,
 });
 
-const retrySchema = z.object({ reason: z.string().trim().min(1).max(1000) });
-const cancelSchema = z.object({ reason: z.string().trim().min(1).max(1000) });
+const historyActionSchema = z.object({ reason: z.string().trim().min(1).max(1000) });
+
+async function broadcastHistoryActionReason(request: Request) {
+  const parsed = historyActionSchema.safeParse(await request.json().catch(() => null));
+  if (!parsed.success) throw new ApplicationError('VALIDATION_ERROR', 'invalid reason');
+  return parsed.data.reason;
+}
 
 export async function previewServiceLineBroadcastResponse(request: Request, serviceSlug: string) {
   const requestId = requestIdFromHeader(request.headers.get('x-request-id'));
@@ -54,7 +60,11 @@ export async function previewServiceLineBroadcastResponse(request: Request, serv
     });
     return Response.json(
       {
-        data: { eligibleRecipientCount: preview.recipientCount, capped: preview.capped },
+        data: {
+          eligibleRecipientCount: preview.recipientCount,
+          capped: preview.capped,
+          reservationContract: 'SERVICE_LINE_BROADCAST_SCHEDULE_V1',
+        },
         requestId,
       },
       { headers: { 'cache-control': 'private, no-store' } },
@@ -134,7 +144,19 @@ export async function sendServiceLineBroadcastResponse(request: Request, service
     requireSameOrigin(request);
     const actor = await (await currentUserProvider()).getCurrentUser();
     if (!actor) throw new ApplicationError('UNAUTHENTICATED', 'session required');
-    const value = createSchema.parse(await request.json());
+    const parsed = createSchema.safeParse(
+      await request.json().catch(() => {
+        throw new ApplicationError('VALIDATION_ERROR', 'valid JSON required');
+      }),
+    );
+    if (!parsed.success)
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid broadcast confirmation');
+    const value = parsed.data;
+    if (
+      (value.operationId !== undefined) !==
+      (value.confirmed === 'SERVICE_LINE_BROADCAST_SCHEDULE_V1')
+    )
+      throw new ApplicationError('VALIDATION_ERROR', 'broadcast confirmation contract mismatch');
     const service = await resolveManagedServiceContext(serviceSlug, actor.userId);
     const db = await import('@bunshin/database');
     const environment = currentLineEnvironment();
@@ -152,19 +174,30 @@ export async function sendServiceLineBroadcastResponse(request: Request, service
       scheduledAt,
       expectedRecipientCount: value.expectedRecipientCount,
       segment: value.segment,
+      ...(value.operationId
+        ? {
+            operationId: value.operationId,
+            ...(value.scheduledAt === undefined ? { immediate: true as const } : {}),
+          }
+        : {}),
     });
-    await enqueueBroadcastJob({
-      workspaceId: service.workspaceId,
-      broadcastId: broadcast.broadcastId,
-      actorUserId: actor.userId,
-      scheduledAt,
-      attempt: 1,
-    });
+    // The versioned operation records its Job atomically in the repository.
+    // Keep the original enqueue path for legacy clients without an operation ID.
+    if (!value.operationId)
+      await enqueueBroadcastJob({
+        workspaceId: service.workspaceId,
+        broadcastId: broadcast.broadcastId,
+        actorUserId: actor.userId,
+        scheduledAt: broadcast.scheduledAt,
+        attempt: 1,
+      });
     return Response.json({
       data: {
         broadcastId: broadcast.broadcastId,
         requested: broadcast.recipientCount,
-        scheduledAt: scheduledAt.toISOString(),
+        scheduledAt: broadcast.scheduledAt.toISOString(),
+        replayed: broadcast.replayed ?? false,
+        status: broadcast.status ?? 'SCHEDULED',
       },
       requestId,
     });
@@ -184,7 +217,7 @@ export async function retryServiceLineBroadcastResponse(
     requireSameOrigin(request);
     const actor = await (await currentUserProvider()).getCurrentUser();
     if (!actor) throw new ApplicationError('UNAUTHENTICATED', 'session required');
-    const value = retrySchema.parse(await request.json());
+    const reason = await broadcastHistoryActionReason(request);
     const service = await resolveManagedServiceContext(serviceSlug, actor.userId);
     const db = await import('@bunshin/database');
     const retried = await new ServiceLineBroadcastOperationsService(
@@ -195,14 +228,7 @@ export async function retryServiceLineBroadcastResponse(
       groupId: service.serviceId,
       broadcastId,
       actorUserId: actor.userId,
-      reason: value.reason,
-    });
-    await enqueueBroadcastJob({
-      workspaceId: service.workspaceId,
-      broadcastId,
-      actorUserId: actor.userId,
-      scheduledAt: retried.scheduledAt,
-      attempt: retried.scheduledAt.getTime(),
+      reason,
     });
     return Response.json(
       { data: { broadcastId, retried: retried.recipientCount }, requestId },
@@ -224,7 +250,7 @@ export async function cancelServiceLineBroadcastResponse(
     requireSameOrigin(request);
     const actor = await (await currentUserProvider()).getCurrentUser();
     if (!actor) throw new ApplicationError('UNAUTHENTICATED', 'session required');
-    const value = cancelSchema.parse(await request.json());
+    const reason = await broadcastHistoryActionReason(request);
     const service = await resolveManagedServiceContext(serviceSlug, actor.userId);
     const db = await import('@bunshin/database');
     const cancelled = await new ServiceLineBroadcastOperationsService(
@@ -235,7 +261,7 @@ export async function cancelServiceLineBroadcastResponse(
       groupId: service.serviceId,
       broadcastId,
       actorUserId: actor.userId,
-      reason: value.reason,
+      reason,
     });
     return Response.json(
       { data: { broadcastId, cancelledAt: cancelled.cancelledAt.toISOString() }, requestId },
