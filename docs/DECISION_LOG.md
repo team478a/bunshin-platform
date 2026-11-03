@@ -4637,3 +4637,11 @@
 - 利用計測・分析ログと、認可・権限変更・特典付与・外部書込みに必要な証跡を区別する。分析ログの失敗を理由に通常の閲覧を止めない。データ分離、所有権検証、本人解除、必要な外部操作承認、冪等性は維持する。
 - `AGENTS.md`第11節を共通の開発ルールとする。旧`EXTERNAL_READ_ADMISSION_AUDIT_PLAN.md`と外部読取ADRにある三軸制限・専用read監査の先行必須化は、この決定で見直す。古い計画を根拠に同じ機能を自動的に復活させない。
 - 今回は文書のみ。既存Coreの監査Portや停止条件を含むruntime、DB、Feature、本番設定は変更していない。既存の過剰な制御の修正は、必要な保護を確認しながら対象を絞って行う。
+
+## 2026-11-03: 公開サービス登録後の研修参加はサービス設定で自動準備する
+
+- 本番の読み取り専用監査で、マナベルは公開登録だが、有効な一般参加者2名に有効な研修Enrollmentがないことを確認した。公開登録repositoryがMembership作成後にProgram参加を準備しないことが停止点である。
+- `ServiceRegistrationPolicy.onboardingConfig`の版付き設定で対象Program/Offeringを明示し、設定が有効なサービスだけ、公開登録と同じSerializable transactionでEnrollmentとINTERNAL seatを準備する。他サービスの既定値やslug判定は使わない。
+- Workspace/Group境界、Program/Offering状態、無料GUIDED提供、実行可能なPilot設定、projection、内部定員を更新前に検証する。Program行ロックと既存Enrollment/seat照合で重複登録・定員超過を防ぐ。
+- AI利用同意は本人操作のままとし、自動作成しない。Provider呼び出し・予算・原価記録も変更しない。参加準備だけではAI費用を発生させない。
+- 本決定の実装PRにはProduction設定、既存参加者backfill、migration、flag変更、デプロイを含めない。対象Program/Offeringと定員をレビューした別変更として扱う。

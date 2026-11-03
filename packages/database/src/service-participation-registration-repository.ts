@@ -6,6 +6,7 @@ import { enqueueRegistrationCompleteEmail } from './service-registration-email';
 import { groupMembershipRecord } from './service-records';
 import { latestServiceLegalDocuments } from './service-legal-latest';
 import { recordOemRegistration } from './oem-billing-history';
+import { admitServiceRegistrantToConfiguredTraining } from './service-registration-training-admission';
 
 export class PrismaServiceParticipationRegistrationRepository {
   constructor(private readonly client: PrismaClient = prisma) {}
@@ -293,6 +294,14 @@ export class PrismaServiceParticipationRegistrationRepository {
             now: input.now,
           });
           await autoEnrollAiResaleForRegistration(tx, { membership, now: input.now });
+          await admitServiceRegistrantToConfiguredTraining(tx, {
+            workspaceId: configuration.workspaceId,
+            groupId: configuration.groupId,
+            groupMembershipId: membership.id,
+            userId: input.actorUserId,
+            onboardingConfig: configuration.registration.onboardingConfig,
+            now: input.now,
+          });
         }
         return groupMembershipRecord(membership);
       },
