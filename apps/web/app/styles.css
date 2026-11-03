@@ -290,6 +290,28 @@
   max-width: 100%;
 }
 
+.line-broadcast-editor,
+.line-broadcast-editor fieldset,
+.line-broadcast-editor .field,
+.line-broadcast-editor .field__control {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.line-broadcast-draft {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 1rem;
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+
+.line-broadcast-confirmation__body {
+  white-space: pre-wrap;
+}
+
 html {
   min-width: 320px;
   background: var(--color-canvas);

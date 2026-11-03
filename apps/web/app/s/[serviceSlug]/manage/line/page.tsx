@@ -131,6 +131,7 @@ export default async function ServiceLinePage({
         />
         <ServiceLineBroadcastEditor
           serviceSlug={service.configuration.slug}
+          serviceName={service.configuration.displayName}
           initialTitle={weeklyReportTemplate ? '今週のふり返りができました' : ''}
           initialMessage={
             weeklyReportTemplate
