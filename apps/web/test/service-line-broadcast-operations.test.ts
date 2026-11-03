@@ -125,7 +125,7 @@ describe('service LINE broadcast operation HTTP boundaries', () => {
     });
   });
 
-  it('retries failed recipients and enqueues only after the atomic reset', async () => {
+  it('returns the committed retry receipt without a separate HTTP enqueue', async () => {
     const response = await retryServiceLineBroadcastResponse(
       request('POST', { reason: 'operator retry' }),
       'service',
@@ -141,12 +141,19 @@ describe('service LINE broadcast operation HTTP boundaries', () => {
         broadcastId: 'broadcast-1',
       }),
     );
-    expect(state.enqueue).toHaveBeenCalledWith(
-      expect.objectContaining({
-        workspaceId: 'workspace-1',
-        payloadReference: 'service-line-broadcast:broadcast-1',
-      }),
-    );
+    await expect(response.json()).resolves.toMatchObject({
+      data: { broadcastId: 'broadcast-1', retried: 2 },
+    });
+    expect(state.enqueue).not.toHaveBeenCalled();
+  });
+
+  it('rejects invalid reasons without writing to the repository', async () => {
+    for (const handler of [retryServiceLineBroadcastResponse, cancelServiceLineBroadcastResponse]) {
+      const response = await handler(request('POST', { reason: '  ' }), 'service', 'broadcast-1');
+      expect(response.status).toBe(400);
+    }
+    expect(state.retry).not.toHaveBeenCalled();
+    expect(state.cancel).not.toHaveBeenCalled();
   });
 
   it('cancels through the repository-owned transaction', async () => {

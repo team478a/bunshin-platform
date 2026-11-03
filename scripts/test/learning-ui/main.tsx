@@ -1,5 +1,6 @@
 import { ExternalGrantsHarness } from './external-grants-harness';
 import { OAuthConsentCard } from '../../../apps/web/app/oauth/consent/card';
+import { ServiceLineBroadcastEditor } from '../../../apps/web/app/s/[serviceSlug]/manage/line/service-line-broadcast-editor';
 import { ServiceSettingsEditor } from '../../../apps/web/app/s/[serviceSlug]/manage/settings/service-settings-editor';
 import { WeeklyReportDeliveryEditor } from '../../../apps/web/app/s/[serviceSlug]/manage/weekly-report/weekly-report-delivery-editor';
 import { serviceSettingsFixture } from '../../../apps/web/test/service-settings-fixture';
@@ -41,6 +42,10 @@ createRoot(document.getElementById('root')!).render(
           }}
         />
       </div>
+    </main>
+  ) : new URLSearchParams(window.location.search).has('line-broadcast') ? (
+    <main className="app-page">
+      <ServiceLineBroadcastEditor serviceSlug="social-a" serviceName="テスト用ハッシー" />
     </main>
   ) : new URLSearchParams(window.location.search).has('routine-service-settings') ? (
     <main className="app-page">

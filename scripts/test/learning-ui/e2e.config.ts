@@ -23,6 +23,7 @@ export default {
     'external-grants.e2e.ts',
     'routine-settings.e2e.ts',
     'oauth-consent.e2e.ts',
+    'line-broadcast.e2e.ts',
   ],
   workers: 1,
   actionTimeout: 10_000,
