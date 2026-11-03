@@ -3,6 +3,8 @@ export const SERVICE_CREATION_TEMPLATE_KEYS = [
   'ENTERPRISE_PROGRAM',
   'BUSINESS_DAILY_IDEAS',
   'FORTUNE_DAILY_GUIDANCE',
+  'LEARNING_REGISTRATION',
+  'MEDIA_REGISTRATION',
   'CUSTOM',
 ] as const;
 
@@ -109,6 +111,34 @@ export const SERVICE_CREATION_TEMPLATES = {
       welcomeTitle: '今日を考えるヒントを受け取る準備をします',
       welcomeMessage:
         '登録後に年齢を確認すると、恋愛・仕事・人間関係から1つ選んで、1日1回カードを引けます。',
+      questions: [],
+    },
+  },
+  LEARNING_REGISTRATION: {
+    label: '学習・研修向けの登録設定',
+    description: '参加登録の初期設定です。研修内容や参加枠は作成後に別途設定します。',
+    registrationMode: 'PUBLIC',
+    emailEnabled: true,
+    lineEnabled: true,
+    inviteCodeEnabled: false,
+    referralEnabled: false,
+    onboarding: {
+      welcomeTitle: '学びを始める準備をしましょう',
+      welcomeMessage: '登録後、研修の案内を確認できます。',
+      questions: [],
+    },
+  },
+  MEDIA_REGISTRATION: {
+    label: 'メディア向けの登録設定',
+    description: '招待制の登録設定です。コンテンツや配信は作成後に別途設定します。',
+    registrationMode: 'INVITATION_ONLY',
+    emailEnabled: true,
+    lineEnabled: false,
+    inviteCodeEnabled: false,
+    referralEnabled: false,
+    onboarding: {
+      welcomeTitle: 'メディアへようこそ',
+      welcomeMessage: '登録後、公開されているお知らせを確認できます。',
       questions: [],
     },
   },

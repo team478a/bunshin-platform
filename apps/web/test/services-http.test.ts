@@ -264,6 +264,38 @@ describe('service admin HTTP', () => {
     );
   });
 
+  it.each(['LEARNING_REGISTRATION', 'MEDIA_REGISTRATION'])(
+    'creates %s without social profile questions or automatic delivery',
+    async (templateKey) => {
+      const response = await createServiceResponse(request({ ...body, templateKey }));
+      expect(response.status).toBe(201);
+      expect(state.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          configuration: expect.objectContaining({
+            registration: expect.objectContaining({
+              onboardingConfig: expect.objectContaining({
+                templateKey,
+                businessProfileEnabled: false,
+                profileQuestions: {
+                  industry: false,
+                  purpose: false,
+                  activityName: false,
+                  businessName: false,
+                  region: false,
+                  productService: false,
+                  socialProfile: false,
+                  notificationConsent: false,
+                },
+                dailyIdeaDelivery: expect.objectContaining({ enabled: false }),
+              }),
+              surveyConfig: { questions: [] },
+            }),
+          }),
+        }),
+      );
+    },
+  );
+
   it('stores the versioned fortune package defaults without publishing fortune', async () => {
     const response = await createServiceResponse(
       request({
