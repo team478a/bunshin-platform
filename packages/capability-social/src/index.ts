@@ -48,3 +48,4 @@ export { SOCIAL_SUPPORT_EXPOSURE_DEFINITION } from './improvement-support-outcom
 export * from './recommendation-policy';
 
 export * from './usage-guidance';
+export * from './social-publishing';
