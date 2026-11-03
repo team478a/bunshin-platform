@@ -1,5 +1,12 @@
 # ADR: 外部Connectorの読取PoCとAgent実行を分離する
 
+## 2026-11-03: 公式SDKのOAuth認可画面
+
+- 既存Supabase SDKのgetAuthorizationDetails/approveAuthorization/denyAuthorizationを使い、code/token serverや新しい許可台帳を作らない。認可画面はProviderが要求する外部アプリへの同意であり、通常閲覧へ追加確認を挿入しない。
+- 既存のfirst-party session検証を再利用し、未ログイン時だけ既存ログインへ戻す。認可要求IDだけを厳密な内部returnToとして保持し、この経路に共通オンボーディングを強制しない。OAuth tokenを通常sessionへ読み替えない。
+- clientは既存catalogを再利用し、登録済みcallback URIを任意metadataとして追加する。認可画面では確認済みclient/callbackのみを扱い、Providerが返す認可済みredirectもcallbackへ照合する。catalogは空のまま。
+- 画面に要求scopeと本人のアカウントを明示し、許可/拒否はSame OriginのPOSTで現在の本人・client・scopeを再照合する。既存grantやFeatureを発行・延長せず、SNS投稿を承認しない。専用監査・回数制限は追加しない。
+
 ## 2026-11-03: 実機PoCの最小実行ツール
 
 - 既存bind/usage APIと本人解除画面を使う検証CLIを追加する。OAuth発行server、独自token、別台帳、特別な接続許可APIや本番向けclient設定は作らない。

@@ -40,7 +40,19 @@ const config: NextConfig = {
     '@bunshin/shared',
   ],
   headers() {
-    return Promise.resolve([{ source: '/(.*)', headers: securityHeaders }]);
+    return Promise.resolve([
+      { source: '/(.*)', headers: securityHeaders },
+      ...['/oauth/:path*', '/api/oauth/:path*'].map((source) => ({
+        source,
+        headers: [
+          { key: 'Cache-Control', value: 'private, no-store' },
+          {
+            key: 'Referrer-Policy',
+            value: source.startsWith('/api/') ? 'no-referrer' : 'same-origin',
+          },
+        ],
+      })),
+    ]);
   },
   redirects() {
     return Promise.resolve([
