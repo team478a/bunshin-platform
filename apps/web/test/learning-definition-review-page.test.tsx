@@ -67,12 +67,14 @@ describe('Definition review server gate', () => {
     expect(renderToStaticMarkup(await Page(props))).not.toContain('<button');
   });
   it.each(['SERVICE_OWNER', 'SERVICE_ADMIN'])(
-    '%s can explicitly read only, no automatic HTTP/DB mutation',
+    '%s renders initial loading without a server-side mutation',
     async (serviceRole) => {
       f.service.mockResolvedValue({ workspaceId: 'workspace', serviceId: 'service', serviceRole });
       const fetcher = vi.fn();
       vi.stubGlobal('fetch', fetcher);
-      expect(renderToStaticMarkup(await Page(props))).toContain('現在の定義と承認状態を確認');
+      expect(renderToStaticMarkup(await Page(props))).toContain(
+        '現在の定義と承認状態を取得しています',
+      );
       expect(fetcher).not.toHaveBeenCalled();
       expect(f.service).toHaveBeenCalledWith('synthetic', 'actor');
       expect(f.access).toHaveBeenCalledWith('PERSONAL_LEARNING_DEFINITION_ADMIN');
