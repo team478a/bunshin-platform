@@ -33,8 +33,13 @@ const createSchema = z.object({
   segment: segmentSchema,
 });
 
-const retrySchema = z.object({ reason: z.string().trim().min(1).max(1000) });
-const cancelSchema = z.object({ reason: z.string().trim().min(1).max(1000) });
+const historyActionSchema = z.object({ reason: z.string().trim().min(1).max(1000) });
+
+async function broadcastHistoryActionReason(request: Request) {
+  const parsed = historyActionSchema.safeParse(await request.json().catch(() => null));
+  if (!parsed.success) throw new ApplicationError('VALIDATION_ERROR', 'invalid reason');
+  return parsed.data.reason;
+}
 
 export async function previewServiceLineBroadcastResponse(request: Request, serviceSlug: string) {
   const requestId = requestIdFromHeader(request.headers.get('x-request-id'));
@@ -212,7 +217,7 @@ export async function retryServiceLineBroadcastResponse(
     requireSameOrigin(request);
     const actor = await (await currentUserProvider()).getCurrentUser();
     if (!actor) throw new ApplicationError('UNAUTHENTICATED', 'session required');
-    const value = retrySchema.parse(await request.json());
+    const reason = await broadcastHistoryActionReason(request);
     const service = await resolveManagedServiceContext(serviceSlug, actor.userId);
     const db = await import('@bunshin/database');
     const retried = await new ServiceLineBroadcastOperationsService(
@@ -223,14 +228,7 @@ export async function retryServiceLineBroadcastResponse(
       groupId: service.serviceId,
       broadcastId,
       actorUserId: actor.userId,
-      reason: value.reason,
-    });
-    await enqueueBroadcastJob({
-      workspaceId: service.workspaceId,
-      broadcastId,
-      actorUserId: actor.userId,
-      scheduledAt: retried.scheduledAt,
-      attempt: retried.scheduledAt.getTime(),
+      reason,
     });
     return Response.json(
       { data: { broadcastId, retried: retried.recipientCount }, requestId },
@@ -252,7 +250,7 @@ export async function cancelServiceLineBroadcastResponse(
     requireSameOrigin(request);
     const actor = await (await currentUserProvider()).getCurrentUser();
     if (!actor) throw new ApplicationError('UNAUTHENTICATED', 'session required');
-    const value = cancelSchema.parse(await request.json());
+    const reason = await broadcastHistoryActionReason(request);
     const service = await resolveManagedServiceContext(serviceSlug, actor.userId);
     const db = await import('@bunshin/database');
     const cancelled = await new ServiceLineBroadcastOperationsService(
@@ -263,7 +261,7 @@ export async function cancelServiceLineBroadcastResponse(
       groupId: service.serviceId,
       broadcastId,
       actorUserId: actor.userId,
-      reason: value.reason,
+      reason,
     });
     return Response.json(
       { data: { broadcastId, cancelledAt: cancelled.cancelledAt.toISOString() }, requestId },

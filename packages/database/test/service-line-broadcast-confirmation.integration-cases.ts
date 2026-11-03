@@ -3,6 +3,7 @@ import type { PrismaClient } from '@prisma/client';
 import { afterEach, describe, expect, it } from 'vitest';
 import { ServiceLineBroadcastAudienceService } from '@bunshin/application';
 import { PrismaServiceLineBroadcastAudienceRepository } from '../src/service-line-broadcast-audience-repository';
+import { PrismaServiceLineBroadcastOperationsRepository } from '../src/service-line-broadcast-operations-repository';
 import { PrismaJobRepository } from '../src/automation-jobs';
 
 /** Registered only inside the live disposable-database preflight in database.integration.test.ts. */
@@ -326,6 +327,152 @@ export function registerBroadcastConfirmationIntegrationCases(client: PrismaClie
       await expect(
         f.repo.schedule({ ...command, operationId: randomUUID() }),
       ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+    });
+
+    async function completedBroadcastFixture() {
+      const f = await fixture();
+      await f.repo.schedule(f.command);
+      const where = {
+        workspaceId: f.scope.workspaceId,
+        groupId: f.scope.groupId,
+        broadcastId: f.command.operationId,
+      };
+      const completedAt = new Date('2026-11-03T01:05:00Z');
+      const scheduledAt = new Date('2026-11-03T01:06:00Z');
+      await client.serviceLineBroadcast.update({
+        where: { id: where.broadcastId },
+        data: { status: 'COMPLETED', completedAt },
+      });
+      await client.serviceLineBroadcastRecipient.updateMany({
+        where,
+        data: { status: 'FAILED', errorCategory: 'SYNTHETIC_PROVIDER_ERROR' },
+      });
+      const sentMembership = await client.groupMembership.findFirstOrThrow({
+        where: {
+          workspaceId: f.scope.workspaceId,
+          groupId: f.scope.groupId,
+          userId: f.scope.actorUserId,
+        },
+      });
+      await client.serviceLineBroadcastRecipient.create({
+        data: {
+          ...where,
+          groupMembershipId: sentMembership.id,
+          userId: f.scope.actorUserId,
+          status: 'SENT',
+          deliveredAt: completedAt,
+        },
+      });
+      await client.job.updateMany({
+        where: { workspaceId: f.scope.workspaceId },
+        data: { status: 'SUCCEEDED', completedAt, attemptCount: 1 },
+      });
+      return {
+        ...f,
+        where,
+        retry: {
+          ...where,
+          actorUserId: f.scope.actorUserId,
+          environment: f.command.environment,
+          reason: 'Synthetic retry',
+          scheduledAt,
+        },
+      };
+    }
+
+    it('commits one retry Job under concurrent requests and leaves sent recipients unchanged through cancellation', async () => {
+      const f = await completedBroadcastFixture();
+      const other = await fixture();
+      const operations = new PrismaServiceLineBroadcastOperationsRepository(client);
+      await expect(operations.retry({ ...f.retry, ...other.scope })).resolves.toEqual({
+        kind: 'CANNOT_RETRY',
+      });
+      const results = await Promise.all([operations.retry(f.retry), operations.retry(f.retry)]);
+      expect(results.map((result) => result.kind).sort()).toEqual(['CANNOT_RETRY', 'SCHEDULED']);
+      expect(
+        await client.serviceLineBroadcastAuditLog.count({
+          where: { ...f.where, action: 'RETRY_REQUESTED' },
+        }),
+      ).toBe(1);
+      const retryJob = await client.job.findFirstOrThrow({
+        where: { workspaceId: f.scope.workspaceId, status: 'PENDING' },
+      });
+      expect(retryJob).toMatchObject({
+        scheduledAt: f.retry.scheduledAt,
+        payloadReference: `service-line-broadcast:${f.where.broadcastId}`,
+        idempotencyKey: `service-line-broadcast:${f.where.broadcastId}:attempt:${f.retry.scheduledAt.getTime()}`,
+        requestedBy: f.scope.actorUserId,
+        maxAttempts: 3,
+        priority: 40,
+      });
+      expect(await client.job.count({ where: { workspaceId: f.scope.workspaceId } })).toBe(2);
+      expect(
+        await client.serviceLineBroadcastRecipient.count({
+          where: { ...f.where, status: 'PENDING' },
+        }),
+      ).toBe(1);
+      await expect(
+        operations.cancel({ ...f.retry, cancelledAt: new Date('2026-11-03T01:07:00Z') }),
+      ).resolves.toMatchObject({ kind: 'CANCELLED' });
+      expect(
+        await client.serviceLineBroadcastRecipient.count({ where: { ...f.where, status: 'SENT' } }),
+      ).toBe(1);
+      expect(
+        await client.serviceLineBroadcastRecipient.count({
+          where: { ...f.where, status: 'CANCELLED' },
+        }),
+      ).toBe(1);
+      expect(await client.job.findUniqueOrThrow({ where: { id: retryJob.id } })).toMatchObject({
+        status: 'CANCELLED',
+      });
+    });
+
+    it('rolls back retry state when audit, job writing or job permission fails', async () => {
+      const f = await completedBroadcastFixture();
+      const brokenAudit = client.$extends({
+        query: {
+          serviceLineBroadcastAuditLog: {
+            create() {
+              throw new Error('synthetic retry audit unavailable');
+            },
+          },
+        },
+      }) as unknown as PrismaClient;
+      await expect(
+        new PrismaServiceLineBroadcastOperationsRepository(brokenAudit).retry(f.retry),
+      ).rejects.toThrow('synthetic retry audit unavailable');
+      const broken = client.$extends({
+        query: {
+          job: {
+            upsert() {
+              throw new Error('synthetic retry queue unavailable');
+            },
+          },
+        },
+      }) as unknown as PrismaClient;
+      const operations = new PrismaServiceLineBroadcastOperationsRepository(client);
+      await expect(
+        new PrismaServiceLineBroadcastOperationsRepository(broken).retry(f.retry),
+      ).rejects.toThrow('synthetic retry queue unavailable');
+      await client.workspaceMembership.updateMany({
+        where: { workspaceId: f.scope.workspaceId, userId: f.scope.actorUserId },
+        data: { status: 'REVOKED' },
+      });
+      await expect(operations.retry(f.retry)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+      expect(
+        await client.serviceLineBroadcast.findUniqueOrThrow({ where: { id: f.where.broadcastId } }),
+      ).toMatchObject({ status: 'COMPLETED' });
+      expect(
+        await client.serviceLineBroadcastRecipient.findFirstOrThrow({
+          where: { ...f.where, userId: f.member.id },
+        }),
+      ).toMatchObject({ status: 'FAILED', errorCategory: 'SYNTHETIC_PROVIDER_ERROR' });
+      expect(
+        await client.serviceLineBroadcastAuditLog.count({
+          where: { ...f.where, action: 'RETRY_REQUESTED' },
+        }),
+      ).toBe(0);
+      expect(await client.job.count({ where: { workspaceId: f.scope.workspaceId } })).toBe(1);
     });
   });
 }
