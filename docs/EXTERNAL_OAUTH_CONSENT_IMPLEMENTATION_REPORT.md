@@ -2,7 +2,7 @@
 
 ## 1. 調査した内容
 
-基準mainは`cd788c62`（PR #1455）。AGENTS、仕様正本、Architecture Principles、Roadmap、Decision Log、外部読取ADR・PoC手順、既存本人session/ログインreturnTo/SDK/catalog/HTTPを確認した。
+基準mainは`da63da42`。PR #1455の`cd788c62`で着手後、mainへマージされたPR #1454の学習承認画面簡素化も取り込んだ。AGENTS、仕様正本、Architecture Principles、Roadmap、Decision Log、外部読取ADR・PoC手順、既存本人session/ログインreturnTo/SDK/catalog/HTTPを確認した。
 
 [Supabase公式手順](https://supabase.com/docs/guides/auth/oauth-server/getting-started)と、lockfileで導入済みのauth-js 2.112.3の型を照合。`getAuthorizationDetails`は認可詳細または認可済みredirectを返し、approve/denyは`skipBrowserRedirect`を指定できる。code/tokenの発行・PKCE検証はProviderへ委ね、独自serverを作らない。
 
