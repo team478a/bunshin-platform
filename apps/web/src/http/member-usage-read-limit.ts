@@ -3,7 +3,7 @@ import 'server-only';
 interface Window {
   resetAt: number;
   count: number;
-  inFlight: boolean;
+  inFlight: Set<string>;
 }
 
 /** Per-process load guard, not a distributed quota. No usage data is cached. */
@@ -19,31 +19,32 @@ export class MemberUsageReadLimit {
   reserve(
     userId: string,
     now = Date.now(),
+    scope = 'default',
   ): { allowed: true; release: () => void } | { allowed: false; retryAfterSeconds: number } {
     for (const [key, row] of this.windows) {
-      if (!row.inFlight && row.resetAt <= now) this.windows.delete(key);
+      if (row.inFlight.size === 0 && row.resetAt <= now) this.windows.delete(key);
     }
     let row = this.windows.get(userId);
     if (!row) {
       if (this.windows.size >= this.capacity)
         return { allowed: false, retryAfterSeconds: Math.ceil(this.windowMs / 1_000) };
-      row = { resetAt: now + this.windowMs, count: 0, inFlight: false };
+      row = { resetAt: now + this.windowMs, count: 0, inFlight: new Set<string>() };
       this.windows.set(userId, row);
     }
-    if (row.inFlight) return { allowed: false, retryAfterSeconds: 1 };
+    if (row.inFlight.has(scope)) return { allowed: false, retryAfterSeconds: 1 };
     if (row.count >= this.limit)
       return {
         allowed: false,
         retryAfterSeconds: Math.max(1, Math.ceil((row.resetAt - now) / 1_000)),
       };
     row.count += 1;
-    row.inFlight = true;
+    row.inFlight.add(scope);
     let released = false;
     return {
       allowed: true,
       release: () => {
         if (!released) {
-          row.inFlight = false;
+          row.inFlight.delete(scope);
           released = true;
         }
       },

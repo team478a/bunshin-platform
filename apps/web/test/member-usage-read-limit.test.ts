@@ -17,6 +17,18 @@ describe('member usage process load guard', () => {
     expect(guard.reserve('owner', 4).allowed).toBe(true);
   });
 
+  it('separates active service and policy operations while keeping the user-wide limit', () => {
+    const guard = new MemberUsageReadLimit(3);
+    const first = guard.reserve('owner', 0, 'service-a:roadmap');
+    const second = guard.reserve('owner', 0, 'service-b:roadmap');
+    const third = guard.reserve('owner', 0, 'service-a:recommendations');
+    expect(first.allowed && second.allowed && third.allowed).toBe(true);
+    expect(guard.reserve('owner', 0, 'service-a:roadmap').allowed).toBe(false);
+    expect(guard.reserve('owner', 0, 'service-c:roadmap').allowed).toBe(false);
+    if (first.allowed) first.release();
+    expect(guard.reserve('owner', 0, 'service-a:roadmap').allowed).toBe(false);
+  });
+
   it('enforces ten reads per minute and resets at the exact boundary', () => {
     const guard = new MemberUsageReadLimit();
     for (let n = 0; n < 10; n++) {
