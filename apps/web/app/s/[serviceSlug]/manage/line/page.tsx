@@ -117,6 +117,7 @@ export default async function ServiceLinePage({
         <GroupLineEditor
           workspaceId={service.workspaceId}
           groupId={service.serviceId}
+          targetName={service.configuration.displayName}
           environment={environment}
           webhookOrigin={new URL(urls.webhookUrl).origin}
           initialMode={result.mode}
