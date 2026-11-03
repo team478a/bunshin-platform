@@ -1,0 +1,44 @@
+name: Temporary SNS Phase 1-A Prettier
+on:
+  push:
+    branches:
+      - codex/social-official-api-foundation-20261103
+    paths:
+      - .github/workflows/temp-sns-phase1-prettier.yml
+permissions:
+  contents: write
+jobs:
+  format:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: codex/social-official-api-foundation-20261103
+          persist-credentials: true
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.10.0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Format only Phase 1-A new files
+        run: |
+          pnpm exec prettier --write \
+            packages/capability-social/src/social-publishing.ts \
+            packages/capability-social/test/social-publishing.test.ts \
+            apps/web/src/providers/instagram-direct-publishing.ts \
+            apps/web/test/instagram-direct-publishing.test.ts \
+            docs/SNS_OFFICIAL_API_FOUNDATION_PHASE1_A_20261103.md \
+            docs/adr/SNS_OFFICIAL_API_DIRECT_OWNERSHIP_ADR.md
+      - name: Commit only formatting
+        run: |
+          if ! git diff --quiet; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add packages/capability-social/src/social-publishing.ts packages/capability-social/test/social-publishing.test.ts apps/web/src/providers/instagram-direct-publishing.ts apps/web/test/instagram-direct-publishing.test.ts docs/SNS_OFFICIAL_API_FOUNDATION_PHASE1_A_20261103.md docs/adr/SNS_OFFICIAL_API_DIRECT_OWNERSHIP_ADR.md
+            git commit -m "style: format SNS Phase 1-A implementation"
+            git push origin HEAD:codex/social-official-api-foundation-20261103
+          fi
