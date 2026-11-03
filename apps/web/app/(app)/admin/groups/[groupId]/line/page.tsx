@@ -82,6 +82,7 @@ export default async function GroupLinePage({ params }: { params: Promise<{ grou
       <GroupLineEditor
         workspaceId={group.workspaceId}
         groupId={group.id}
+        targetName={group.name}
         environment={currentLineEnvironment()}
         webhookOrigin={new URL(base.webhookUrl).origin}
         initialMode={result.mode}
