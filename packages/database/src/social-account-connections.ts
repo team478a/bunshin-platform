@@ -68,6 +68,32 @@ export class PrismaSocialAccountConnections {
     private readonly crypto: SocialAccountTokenCrypto,
   ) {}
 
+  /** Lists only credentials explicitly granted to this Bunshin. Token material is never selected. */
+  async list(actorUserId: string, owner: SocialAccountConnectionOwner) {
+    this.requireOwner(actorUserId, owner);
+    const now = new Date();
+    return this.serializableTransaction(async (tx) => {
+      await this.requireAuthorized(tx, actorUserId, owner, now);
+      await tx.socialAccountConnection.updateMany({
+        where: {
+          ...credentialOwnerWhere(owner),
+          status: 'CONNECTED',
+          tokenExpiresAt: { lte: now },
+          grants: { some: { ...ownerWhere(owner), bunshinId: owner.bunshinId } },
+        },
+        data: { status: 'RECONNECT_REQUIRED', encryptedToken: null, tokenExpiresAt: null },
+      });
+      return tx.socialAccountConnection.findMany({
+        where: {
+          ...credentialOwnerWhere(owner),
+          grants: { some: { ...ownerWhere(owner), bunshinId: owner.bunshinId } },
+        },
+        select: publicFields,
+        orderBy: [{ platform: 'asc' }, { displayName: 'asc' }, { id: 'asc' }],
+      });
+    });
+  }
+
   async save(
     actorUserId: string,
     owner: SocialAccountConnectionOwner,
