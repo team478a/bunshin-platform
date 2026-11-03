@@ -6,7 +6,7 @@ import type { DailyMissionRepository, DailyMissionScope } from './daily-mission-
 import type { MissionActivity } from './mission-engagement';
 import { missionIdempotencyKey } from './mission-engagement-validation';
 import { SOCIAL_PLATFORMS, type SocialPlatform } from './social-profile';
-export const POST_SOURCES = ['MANUAL'] as const;
+export const POST_SOURCES = ['MANUAL', 'OFFICIAL_API'] as const;
 export type PostSource = (typeof POST_SOURCES)[number];
 export const MISSION_FEEDBACK_RATINGS = ['GOOD', 'NEUTRAL', 'BAD'] as const;
 export type MissionFeedbackRating = (typeof MISSION_FEEDBACK_RATINGS)[number];

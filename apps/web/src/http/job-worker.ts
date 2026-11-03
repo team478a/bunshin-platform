@@ -8,6 +8,7 @@ import {
   ExecuteVideoAiSceneGenerationJob,
   ExecuteVideoRenderJob,
   ExecuteSocialImageGenerationJob,
+  ExecuteSocialPublicationJob,
   ExpireServiceCredits,
   ExecuteGroupKnowledgeExtractionJob,
   ExecuteServiceLineBroadcastJob,
@@ -78,6 +79,7 @@ async function configuredWorker(): Promise<JobWorkerPort> {
     { createVideoRenderJobHandler },
     { createVideoAiSceneGenerationJobHandler },
     { createSocialImageGenerationJobHandler },
+    { createSocialPublicationJobHandler },
     { createGroupKnowledgeExtractionJobHandler },
     { createServiceLineBroadcastJobHandler },
     { createTrainingAnswerEvaluationJobHandler },
@@ -91,6 +93,7 @@ async function configuredWorker(): Promise<JobWorkerPort> {
     import('../jobs/video-render-job-handler'),
     import('../jobs/video-ai-scene-generation-job-handler'),
     import('../jobs/social-image-generation-job-handler'),
+    import('../jobs/social-publication-job-handler'),
     import('../jobs/group-knowledge-extraction-job-handler'),
     import('../jobs/service-line-broadcast-job-handler'),
     import('../jobs/training-answer-evaluation-job-handler'),
@@ -180,6 +183,11 @@ async function configuredWorker(): Promise<JobWorkerPort> {
     complete,
     fail,
   );
+  const socialPublicationExecutor = new ExecuteSocialPublicationJob(
+    createSocialPublicationJobHandler(),
+    complete,
+    fail,
+  );
   const groupKnowledgeExecutor = new ExecuteGroupKnowledgeExtractionJob(
     createGroupKnowledgeExtractionJobHandler(),
     complete,
@@ -217,17 +225,19 @@ async function configuredWorker(): Promise<JobWorkerPort> {
                 ? videoAiSceneExecutor.execute(job, workerId)
                 : job.jobType === 'SOCIAL_IMAGE_GENERATE'
                   ? socialImageExecutor.execute(job, workerId)
-                  : job.jobType === 'GROUP_KNOWLEDGE_EXTRACT'
-                    ? groupKnowledgeExecutor.execute(job, workerId)
-                    : job.jobType === 'SERVICE_LINE_BROADCAST_DELIVER'
-                      ? serviceLineBroadcastExecutor.execute(job, workerId)
-                      : job.jobType === 'TRAINING_ANSWER_EVALUATE'
-                        ? trainingEvaluationExecutor.execute(job, workerId)
-                        : job.jobType === 'PERSONAL_LEARNING_LINE_PROCESS'
-                          ? personalLearningLineExecutor.execute(job, workerId)
-                          : job.jobType === 'FORTUNE_READING_GENERATE'
-                            ? fortuneExecutor.execute(job, workerId)
-                            : missionExecutor.execute(job, workerId),
+                  : job.jobType === 'SOCIAL_PUBLICATION_PUBLISH'
+                    ? socialPublicationExecutor.execute(job, workerId)
+                    : job.jobType === 'GROUP_KNOWLEDGE_EXTRACT'
+                      ? groupKnowledgeExecutor.execute(job, workerId)
+                      : job.jobType === 'SERVICE_LINE_BROADCAST_DELIVER'
+                        ? serviceLineBroadcastExecutor.execute(job, workerId)
+                        : job.jobType === 'TRAINING_ANSWER_EVALUATE'
+                          ? trainingEvaluationExecutor.execute(job, workerId)
+                          : job.jobType === 'PERSONAL_LEARNING_LINE_PROCESS'
+                            ? personalLearningLineExecutor.execute(job, workerId)
+                            : job.jobType === 'FORTUNE_READING_GENERATE'
+                              ? fortuneExecutor.execute(job, workerId)
+                              : missionExecutor.execute(job, workerId),
   });
 }
 

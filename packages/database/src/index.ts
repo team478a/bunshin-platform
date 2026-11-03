@@ -378,3 +378,7 @@ export {
   type SocialAccountConnectionOwner,
   type SocialAccountTokenCrypto,
 } from './social-account-connections';
+export {
+  PrismaSocialPublicationIntents,
+  type ApproveSocialPublicationInput,
+} from './social-publication-intents';

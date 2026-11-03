@@ -112,6 +112,30 @@ describe('social image private storage', () => {
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
 
+  it('converts the canonical PNG to a short-lived JPEG for Meta publishing', async () => {
+    const fake = storageClient();
+    const source = await png(1080, 1350);
+    fake.download.mockResolvedValue({
+      data: new Blob([source], { type: 'image/png' }),
+      error: null,
+    });
+    const key = `${Object.values(ids).join('/')}/completed.png`;
+    const intentId = '66666666-6666-4666-8666-666666666666';
+    await expect(
+      new SupabaseSocialImageStorage(fake.value as never).createPublishingJpegUrl(key, intentId),
+    ).resolves.toBe('https://storage.example/signed');
+    const publishingKey = `${Object.values(ids).join('/')}/publication/${intentId}.jpg`;
+    expect(fake.upload).toHaveBeenCalledWith(
+      publishingKey,
+      expect.any(Uint8Array),
+      expect.objectContaining({ contentType: 'image/jpeg', upsert: true }),
+    );
+    expect(fake.createSignedUrl).toHaveBeenCalledWith(publishingKey, 900);
+    const bytes = fake.upload.mock.calls[0]?.[1] as Uint8Array;
+    expect(bytes[0]).toBe(0xff);
+    expect(bytes[1]).toBe(0xd8);
+  });
+
   it('asks storage to download with the safe per-page filename', async () => {
     const fake = storageClient();
     await new SupabaseSocialImageStorage(fake.value as never).createReadUrl({
