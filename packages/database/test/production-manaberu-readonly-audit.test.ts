@@ -23,10 +23,14 @@ describe('production Manaberu read-only audit', () => {
   });
 
   it('starts a read-only transaction and returns only aggregate audit output', async () => {
-    const execute = vi.fn().mockResolvedValue(0);
-    const query = vi.fn().mockResolvedValue([]);
-    const disconnect = vi.fn().mockResolvedValue(undefined);
-    const transaction = vi.fn(async (callback) =>
+    type AuditTransaction = {
+      $executeRawUnsafe(sql: string): Promise<unknown>;
+      $queryRawUnsafe(sql: string): Promise<unknown>;
+    };
+    const execute = vi.fn<(sql: string) => Promise<unknown>>().mockResolvedValue(0);
+    const query = vi.fn<(sql: string) => Promise<unknown>>().mockResolvedValue([]);
+    const disconnect = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
+    const transaction = vi.fn(<T>(callback: (tx: AuditTransaction) => Promise<T>): Promise<T> =>
       callback({ $executeRawUnsafe: execute, $queryRawUnsafe: query }),
     );
     const connect = vi.fn().mockResolvedValue({
