@@ -121,6 +121,20 @@ export async function createServiceResponse(request: Request) {
             welcomeTitle: template.onboarding.welcomeTitle,
             welcomeMessage: template.onboarding.welcomeMessage,
             businessProfileEnabled,
+            ...(['LEARNING_REGISTRATION', 'MEDIA_REGISTRATION'].includes(value.templateKey)
+              ? {
+                  profileQuestions: {
+                    industry: false,
+                    purpose: false,
+                    activityName: false,
+                    businessName: false,
+                    region: false,
+                    productService: false,
+                    socialProfile: false,
+                    notificationConsent: false,
+                  },
+                }
+              : {}),
             dailyIdeaDelivery,
             ...(fortunePackage ? { fortunePackage } : {}),
           },
