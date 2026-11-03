@@ -34,6 +34,16 @@ const serverSchema = z
     PLATFORM_BILLING_STRIPE_WEBHOOK_SECRET: z.string().min(8).optional(),
     LINE_DEEP_LINK_KEY_VERSION: z.coerce.number().int().positive().default(1),
     LINE_OFFICIAL_ACCOUNT_URL: officialLineAccountUrlSchema.optional(),
+    INSTAGRAM_LOGIN_APP_ID: z
+      .string()
+      .regex(/^[0-9]{5,30}$/)
+      .optional(),
+    INSTAGRAM_LOGIN_APP_SECRET: z.string().min(16).max(256).optional(),
+    INSTAGRAM_LOGIN_REDIRECT_URI: z.url().optional(),
+    INSTAGRAM_GRAPH_API_VERSION: z
+      .string()
+      .regex(/^v[1-9][0-9]?\.0$/)
+      .optional(),
     VIDEO_RENDER_WEBHOOK_KEY_VERSION: z.coerce.number().int().positive().default(1),
     LINE_ADMIN_ALERT_WEBHOOK_URL: z.url().optional(),
     LINE_ADMIN_ALERT_WEBHOOK_TOKEN: z.string().min(16).optional(),
@@ -121,6 +131,39 @@ const serverSchema = z
         path: ['SUPABASE_AUTH_ADMIN_URL'],
         message: 'Enabled account deletion requires Auth administration configuration',
       });
+    }
+    const instagramValues = [
+      value.INSTAGRAM_LOGIN_APP_ID,
+      value.INSTAGRAM_LOGIN_APP_SECRET,
+      value.INSTAGRAM_LOGIN_REDIRECT_URI,
+      value.INSTAGRAM_GRAPH_API_VERSION,
+    ];
+    if (
+      instagramValues.some((item) => item !== undefined) &&
+      instagramValues.some((item) => item === undefined)
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['INSTAGRAM_LOGIN_APP_ID'],
+        message: 'Instagram Login configuration must be provided together',
+      });
+    }
+    if (value.INSTAGRAM_LOGIN_REDIRECT_URI !== undefined) {
+      const url = new URL(value.INSTAGRAM_LOGIN_REDIRECT_URI);
+      const localhost = url.hostname === 'localhost' || url.hostname === '127.0.0.1';
+      if (
+        url.username ||
+        url.password ||
+        url.hash ||
+        (url.protocol !== 'https:' && !(value.APP_ENV === 'development' && localhost)) ||
+        (localhost && value.APP_ENV !== 'development')
+      ) {
+        context.addIssue({
+          code: 'custom',
+          path: ['INSTAGRAM_LOGIN_REDIRECT_URI'],
+          message: 'Instagram Login redirect URI must be an environment-safe HTTPS URL',
+        });
+      }
     }
     const resendValues = [
       value.RESEND_ADMIN_ALERT_API_KEY,

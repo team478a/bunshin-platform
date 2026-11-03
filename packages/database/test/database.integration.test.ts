@@ -3,6 +3,7 @@ import { registerManaberuPublicTrainingMigrationIntegrationCases } from './manab
 import { registerBroadcastConfirmationIntegrationCases } from './service-line-broadcast-confirmation.integration-cases';
 import { registerReferralManagementIntegrationCases } from './service-referral-management.integration-cases';
 import { registerSocialSupportAccessIntegrationCases } from './social-support-access.integration-cases';
+import { registerSocialAccountConnectionIntegrationCases } from './social-account-connections.integration-cases';
 import { reserveVideoMedia, finishVideoMedia } from '../src/video-media-quota';
 import { registerOemBillingIntegrationCases } from './oem-billing.integration-cases';
 import { registerOpsMorningDigestIntegrationCases } from './ops-morning-digest.integration-cases';
@@ -250,6 +251,7 @@ describe('database ownership boundaries', () => {
   registerSocialServiceReferralEvidenceIntegrationCases(client);
   registerReferralManagementIntegrationCases(client);
   registerSocialSupportAccessIntegrationCases(client);
+  registerSocialAccountConnectionIntegrationCases(client);
 
   it('fixture cleanup regression: program and training residue is absent before new fixtures', async () => {
     expect(

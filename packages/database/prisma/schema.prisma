@@ -3694,6 +3694,8 @@ model ServiceMemberBusinessProfile {
 }
 
 model GroupMembership {
+  socialOAuthAttempts SocialOAuthAttempt[]
+  socialAccountConnections SocialAccountConnection[]
   externalReadGrants ExternalReadGrant[]
   oemRegistrationPeriods OemRegistrationPeriod[]
   id                           String                           @id @default(uuid()) @db.Uuid
@@ -6939,6 +6941,8 @@ model AccountDeletionOperationAudit {
 }
 
 model Bunshin {
+  socialOAuthAttempts SocialOAuthAttempt[]
+  socialAccountConnectionGrants SocialAccountConnectionGrant[]
   externalReadGrants ExternalReadGrant[]
   id                              String                           @id @default(uuid()) @db.Uuid
   improvementFeedback             ImprovementFeedback[]
@@ -8800,4 +8804,69 @@ model ExternalReadGrant {
 
   @@index([workspaceId, groupId, groupMembershipId, userId, grantedAt], map: "external_read_grants_owner_idx")
   @@map("external_read_grants")
+}
+
+/// An owner-authorized SNS account; SocialProfile remains an editorial setting.
+model SocialAccountConnection {
+  id                String @id @db.Uuid
+  workspaceId       String @map("workspace_id") @db.Uuid
+  groupId           String @map("group_id") @db.Uuid
+  groupMembershipId String @map("group_membership_id") @db.Uuid
+  userId            String @map("user_id") @db.Uuid
+  platform          String @db.VarChar(40)
+  externalAccountId String @map("external_account_id") @db.VarChar(255)
+  displayName       String @map("display_name") @db.VarChar(255)
+  status            String @db.VarChar(24)
+  scopes            String[] @db.VarChar(100)
+  encryptedToken    String? @map("encrypted_token") @db.Text
+  tokenExpiresAt    DateTime? @map("token_expires_at") @db.Timestamptz(6)
+  lastVerifiedAt    DateTime? @map("last_verified_at") @db.Timestamptz(6)
+  disconnectedAt    DateTime? @map("disconnected_at") @db.Timestamptz(6)
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  membership GroupMembership @relation(fields: [workspaceId, groupId, groupMembershipId, userId], references: [workspaceId, groupId, id, userId], onDelete: Cascade, onUpdate: Restrict, map: "social_connections_membership_fkey")
+  grants SocialAccountConnectionGrant[]
+
+  @@unique([workspaceId, groupId, userId, platform, externalAccountId], map: "social_connections_owner_account_key")
+  @@unique([workspaceId, groupId, groupMembershipId, userId, id], map: "social_connections_grant_scope_key")
+  @@index([workspaceId, groupId, groupMembershipId, userId], map: "social_connections_owner_idx")
+  @@map("social_account_connections")
+}
+
+/// Explicit Bunshin permission for a member-owned SNS credential.
+model SocialAccountConnectionGrant {
+  id                String @id @db.Uuid
+  workspaceId       String @map("workspace_id") @db.Uuid
+  groupId           String @map("group_id") @db.Uuid
+  groupMembershipId String @map("group_membership_id") @db.Uuid
+  userId            String @map("user_id") @db.Uuid
+  connectionId      String @map("connection_id") @db.Uuid
+  bunshinId         String @map("bunshin_id") @db.Uuid
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  connection SocialAccountConnection @relation(fields: [workspaceId, groupId, groupMembershipId, userId, connectionId], references: [workspaceId, groupId, groupMembershipId, userId, id], onDelete: Cascade, onUpdate: Restrict, map: "social_connection_grants_connection_fkey")
+  bunshin Bunshin @relation(fields: [workspaceId, groupId, userId, bunshinId], references: [workspaceId, groupId, ownerUserId, id], onDelete: Cascade, onUpdate: Restrict, map: "social_connection_grants_bunshin_fkey")
+
+  @@unique([connectionId, bunshinId], map: "social_connection_grants_connection_bunshin_key")
+  @@index([workspaceId, groupId, groupMembershipId, userId, bunshinId], map: "social_connection_grants_owner_idx")
+  @@map("social_account_connection_grants")
+}
+
+/// Short-lived, single-use transaction for an SNS provider authorization callback.
+model SocialOAuthAttempt {
+  stateHash         String @id @map("state_hash") @db.Char(64)
+  workspaceId       String @map("workspace_id") @db.Uuid
+  groupId           String @map("group_id") @db.Uuid
+  groupMembershipId String @map("group_membership_id") @db.Uuid
+  userId            String @map("user_id") @db.Uuid
+  bunshinId         String @map("bunshin_id") @db.Uuid
+  platform           String @db.VarChar(40)
+  expiresAt          DateTime @map("expires_at") @db.Timestamptz(6)
+  consumedAt         DateTime? @map("consumed_at") @db.Timestamptz(6)
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  membership GroupMembership @relation(fields: [workspaceId, groupId, groupMembershipId, userId], references: [workspaceId, groupId, id, userId], onDelete: Cascade, onUpdate: Restrict, map: "social_oauth_attempts_membership_fkey")
+  bunshin Bunshin @relation(fields: [workspaceId, groupId, userId, bunshinId], references: [workspaceId, groupId, ownerUserId, id], onDelete: Cascade, onUpdate: Restrict, map: "social_oauth_attempts_bunshin_fkey")
+
+  @@index([expiresAt], map: "social_oauth_attempts_expiry_idx")
+  @@index([workspaceId, groupId, groupMembershipId, userId, bunshinId, createdAt], map: "social_oauth_attempts_owner_idx")
+  @@map("social_oauth_attempts")
 }

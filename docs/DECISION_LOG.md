@@ -4638,6 +4638,12 @@
 - `AGENTS.md`第11節を共通の開発ルールとする。旧`EXTERNAL_READ_ADMISSION_AUDIT_PLAN.md`と外部読取ADRにある三軸制限・専用read監査の先行必須化は、この決定で見直す。古い計画を根拠に同じ機能を自動的に復活させない。
 - 今回は文書のみ。既存Coreの監査Portや停止条件を含むruntime、DB、Feature、本番設定は変更していない。既存の過剰な制御の修正は、必要な保護を確認しながら対象を絞って行う。
 
+## 2026-11-04: Instagram OAuth transactionと資格情報を分離する
+
+- OAuth `state` は資格情報テーブルへ保存せず、10分・single-useの `social_oauth_attempts` にハッシュだけを保存する。callbackはブラウザのHttpOnly cookie、現在のUser、Workspace・Service・Membership・Bunshin、SOCIAL権限を再確認してからstateを原子的に消費する。
+- Instagram資格情報は会員所有の `SocialAccountConnection` を正本とし、Bunshinごとの明示Grantで利用を許可する。同じInstagramアカウントを複数Bunshinで使ってもtokenを重複保存せず、最後のGrant解除時だけ暗号化tokenを破棄する。
+- 接続画面ではSNS資格情報、発信設定の `SocialProfile`、外部AI読取許可の `ExternalReadGrant` を別の責務として表示する。今回の画面は接続状態・解除・再接続だけを扱い、投稿、予約Job、Muse連携は含めない。
+
 ## 2026-11-03: 公開サービス登録後の研修参加はサービス設定で自動準備する
 
 - 本番の読み取り専用監査で、マナベルは公開登録だが、有効な一般参加者2名に有効な研修Enrollmentがないことを確認した。公開登録repositoryがMembership作成後にProgram参加を準備しないことが停止点である。

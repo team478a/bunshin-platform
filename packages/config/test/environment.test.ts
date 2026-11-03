@@ -172,4 +172,30 @@ describe('environment validation', () => {
       }),
     ).toThrow('PLATFORM_BILLING_STRIPE_SECRET_KEY');
   });
+
+  it('requires a complete, environment-safe Instagram Login configuration', () => {
+    expect(() => parseServerEnvironment({ ...valid, INSTAGRAM_LOGIN_APP_ID: '123456789' })).toThrow(
+      'INSTAGRAM_LOGIN_APP_ID',
+    );
+    expect(
+      parseServerEnvironment({
+        ...valid,
+        INSTAGRAM_LOGIN_APP_ID: '123456789',
+        INSTAGRAM_LOGIN_APP_SECRET: 'instagram-app-secret-value',
+        INSTAGRAM_LOGIN_REDIRECT_URI: 'http://localhost:3000/oauth/instagram/callback',
+        INSTAGRAM_GRAPH_API_VERSION: 'v26.0',
+      }).INSTAGRAM_GRAPH_API_VERSION,
+    ).toBe('v26.0');
+    expect(() =>
+      parseServerEnvironment({
+        ...valid,
+        APP_ENV: 'production',
+        NODE_ENV: 'production',
+        INSTAGRAM_LOGIN_APP_ID: '123456789',
+        INSTAGRAM_LOGIN_APP_SECRET: 'instagram-app-secret-value',
+        INSTAGRAM_LOGIN_REDIRECT_URI: 'http://localhost:3000/oauth/instagram/callback',
+        INSTAGRAM_GRAPH_API_VERSION: 'v26.0',
+      }),
+    ).toThrow('INSTAGRAM_LOGIN_REDIRECT_URI');
+  });
 });
