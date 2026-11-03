@@ -1,1 +1,1 @@
-export const LATEST_DATABASE_MIGRATION = '20261103020000_external_read_credential_binding';
+export const LATEST_DATABASE_MIGRATION = '20261104010000_enable_manaberu_public_training';
