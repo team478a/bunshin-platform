@@ -1,4 +1,5 @@
 import { registerExternalReadGrantIntegrationCases } from './external-read-grants.integration-cases';
+import { registerManaberuPublicTrainingMigrationIntegrationCases } from './manaberu-public-training-migration.integration-cases';
 import { registerBroadcastConfirmationIntegrationCases } from './service-line-broadcast-confirmation.integration-cases';
 import { registerReferralManagementIntegrationCases } from './service-referral-management.integration-cases';
 import { registerSocialSupportAccessIntegrationCases } from './social-support-access.integration-cases';
@@ -230,6 +231,7 @@ describe('database ownership boundaries', () => {
   });
 
   afterAll(async () => client.$disconnect());
+  registerManaberuPublicTrainingMigrationIntegrationCases(client);
   registerImprovementTriageIntegrationCases(client);
   registerImprovementRetentionJobIntegrationCases(client);
   registerTrainingSupportSkillLifecycleIntegrationCases(client);

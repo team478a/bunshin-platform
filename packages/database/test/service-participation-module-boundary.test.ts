@@ -33,4 +33,13 @@ describe('service participation repository modules', () => {
     expect(registration).toContain('enqueueRegistrationCompleteEmail(tx');
     expect(membership).toContain('enqueueRegistrationCompleteEmail(tx');
   });
+
+  it('prepares configured training inside public registration persistence', () => {
+    const registration = source('service-participation-registration-repository.ts');
+    const helper = source('service-registration-training-admission.ts');
+    expect(registration).toContain('admitServiceRegistrantToConfiguredTraining(tx');
+    expect(helper).toContain('SERVICE_TRAINING_AUTO_ADMISSION_V1');
+    expect(helper).toContain("kind: 'INTERNAL'");
+    expect(helper).not.toContain('aiTrainingUsageConsent.create');
+  });
 });

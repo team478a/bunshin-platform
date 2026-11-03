@@ -11,6 +11,14 @@ on:
         description: Approved 20-character Supabase project reference
         required: true
         type: string
+      operation:
+        description: Read-only inspection to run
+        required: true
+        default: migration_history
+        type: choice
+        options:
+          - migration_history
+          - manaberu_registration
 
 permissions:
   contents: read
@@ -29,10 +37,17 @@ jobs:
         env:
           CONFIRMATION: ${{ inputs.confirmation }}
           EXPECTED_PROJECT_REF: ${{ inputs.project_ref }}
+          OPERATION: ${{ inputs.operation }}
         run: |
           set -euo pipefail
-          test "$GITHUB_REF" = "refs/heads/main"
-          test "$CONFIRMATION" = "INSPECT_PRODUCTION_MIGRATION_HISTORY"
+          if [ "$OPERATION" = "migration_history" ]; then
+            test "$GITHUB_REF" = "refs/heads/main"
+            test "$CONFIRMATION" = "INSPECT_PRODUCTION_MIGRATION_HISTORY"
+          else
+            test "$OPERATION" = "manaberu_registration"
+            test "$GITHUB_REF" = "refs/heads/main"
+            test "$CONFIRMATION" = "INSPECT_MANABERU_REGISTRATION"
+          fi
           [[ "$EXPECTED_PROJECT_REF" =~ ^[a-z0-9]{20}$ ]]
 
       - uses: actions/checkout@v5
@@ -50,6 +65,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Read production migration history only
+        if: inputs.operation == 'migration_history'
         env:
           VERCEL_ENV: production
           MIGRATION_PROBE_EXPECTED_PROJECT_REF: ${{ inputs.project_ref }}
@@ -59,3 +75,16 @@ jobs:
         run: |
           set -euo pipefail
           pnpm db:migration:history:probe | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Read Manaberu registration and training readiness only
+        if: inputs.operation == 'manaberu_registration'
+        env:
+          VERCEL_ENV: production
+          MANABERU_AUDIT_EXPECTED_PROJECT_REF: ${{ inputs.project_ref }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+          SUPABASE_SESSION_POOLER_HOST: ${{ vars.SUPABASE_SESSION_POOLER_HOST || secrets.SUPABASE_SESSION_POOLER_HOST }}
+        run: |
+          set -euo pipefail
+          pnpm db:generate
+          pnpm db:manaberu:production:audit | tee -a "$GITHUB_STEP_SUMMARY"

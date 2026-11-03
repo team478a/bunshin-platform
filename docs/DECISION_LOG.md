@@ -4643,3 +4643,19 @@
 - OAuth `state` は資格情報テーブルへ保存せず、10分・single-useの `social_oauth_attempts` にハッシュだけを保存する。callbackはブラウザのHttpOnly cookie、現在のUser、Workspace・Service・Membership・Bunshin、SOCIAL権限を再確認してからstateを原子的に消費する。
 - Instagram資格情報は会員所有の `SocialAccountConnection` を正本とし、Bunshinごとの明示Grantで利用を許可する。同じInstagramアカウントを複数Bunshinで使ってもtokenを重複保存せず、最後のGrant解除時だけ暗号化tokenを破棄する。
 - 接続画面ではSNS資格情報、発信設定の `SocialProfile`、外部AI読取許可の `ExternalReadGrant` を別の責務として表示する。今回の画面は接続状態・解除・再接続だけを扱い、投稿、予約Job、Muse連携は含めない。
+
+## 2026-11-03: 公開サービス登録後の研修参加はサービス設定で自動準備する
+
+- 本番の読み取り専用監査で、マナベルは公開登録だが、有効な一般参加者2名に有効な研修Enrollmentがないことを確認した。公開登録repositoryがMembership作成後にProgram参加を準備しないことが停止点である。
+- `ServiceRegistrationPolicy.onboardingConfig`の版付き設定で対象Program/Offeringを明示し、設定が有効なサービスだけ、公開登録と同じSerializable transactionでEnrollmentとINTERNAL seatを準備する。他サービスの既定値やslug判定は使わない。
+- Workspace/Group境界、Program/Offering状態、無料GUIDED提供、実行可能なPilot設定、projection、内部定員を更新前に検証する。Program行ロックと既存Enrollment/seat照合で重複登録・定員超過を防ぐ。
+- AI利用同意は本人操作のままとし、自動作成しない。Provider呼び出し・予算・原価記録も変更しない。参加準備だけではAI費用を発生させない。
+- 本決定の実装PRにはProduction設定、既存参加者backfill、migration、flag変更、デプロイを含めない。対象Program/Offeringと定員をレビューした別変更として扱う。
+
+## 2026-11-04: マナベル一般登録は専用30日研修へ最大100名を自動準備する
+
+- PR #1467マージ後の本番読み取り専用再監査でも、ACTIVEな「マナベルスタイル AI研修30日」にPilot設定・Enrollment・seatはなく、一般参加者2名が研修未登録だった。
+- canonicalなマナベルscopeのACTIVEな30日研修Programと無料GUIDED Offeringを1件ずつ解決し、サービス設定へ版付き自動参加設定を追加する。INTERNAL定員100、EXTERNAL定員0、current wave 0とする。
+- 現在のACTIVE一般参加者2名にはEnrollmentとINTERNAL seatだけを補完する。AI利用同意は自動作成せず、本人操作を維持する。通知・延期リマインダーは停止する。
+- 停止中の既存内部テストProgram、他サービス、Offering条件、Provider予算は変更しない。対象不一致、部分設定、既存データ競合、100名超過はmigration全体を停止する。
+- 本番適用は今回のmigration 1件だけを許可するmain限定・Production承認付きworkflowを別PRで用意し、Previewを先に行う。このPRのマージ自体はPreview、Apply、デプロイを承認しない。
