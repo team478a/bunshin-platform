@@ -372,3 +372,9 @@ export {
   PrismaExternalReadGrantRepository,
   type ExternalGrantServerPolicy,
 } from './external-read-grants';
+
+export {
+  PrismaSocialAccountConnections,
+  type SocialAccountConnectionOwner,
+  type SocialAccountTokenCrypto,
+} from './social-account-connections';
