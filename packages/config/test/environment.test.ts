@@ -197,5 +197,14 @@ describe('environment validation', () => {
         INSTAGRAM_GRAPH_API_VERSION: 'v26.0',
       }),
     ).toThrow('INSTAGRAM_LOGIN_REDIRECT_URI');
+    expect(
+      parseServerEnvironment({
+        ...valid,
+        INSTAGRAM_PUBLISH_TEST_ACCOUNT_IDS: '17841400000000000,17841400000000001',
+      }).INSTAGRAM_PUBLISH_TEST_ACCOUNT_IDS,
+    ).toBe('17841400000000000,17841400000000001');
+    expect(() =>
+      parseServerEnvironment({ ...valid, INSTAGRAM_PUBLISH_TEST_ACCOUNT_IDS: 'all' }),
+    ).toThrow('INSTAGRAM_PUBLISH_TEST_ACCOUNT_IDS');
   });
 });

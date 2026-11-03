@@ -2375,6 +2375,7 @@ enum SocialActivityOemSupportCandidateStatus {
 
 enum PostSource {
   MANUAL
+  OFFICIAL_API
 }
 
 enum MissionFeedbackRating {
@@ -8869,4 +8870,44 @@ model SocialOAuthAttempt {
   @@index([expiresAt], map: "social_oauth_attempts_expiry_idx")
   @@index([workspaceId, groupId, groupMembershipId, userId, bunshinId, createdAt], map: "social_oauth_attempts_owner_idx")
   @@map("social_oauth_attempts")
+}
+
+/// Owner-approved, immutable publication snapshot. Credentials remain in SocialAccountConnection.
+/// UNKNOWN is terminal until an external reconciliation proves the outcome; it must never be resent.
+model SocialPublicationIntent {
+  id                String @id @db.Uuid
+  workspaceId       String @map("workspace_id") @db.Uuid
+  groupId           String @map("group_id") @db.Uuid
+  groupMembershipId String @map("group_membership_id") @db.Uuid
+  ownerUserId       String @map("owner_user_id") @db.Uuid
+  bunshinId         String @map("bunshin_id") @db.Uuid
+  socialProfileId   String @map("social_profile_id") @db.Uuid
+  dailyMissionId    String @map("daily_mission_id") @db.Uuid
+  contentVariantId  String @map("content_variant_id") @db.Uuid
+  contentRevision   Int @map("content_revision")
+  connectionId      String @map("connection_id") @db.Uuid
+  mediaId           String @map("media_id") @db.Uuid
+  mediaContentHash  String @map("media_content_hash") @db.Char(64)
+  platform          String @db.VarChar(40)
+  caption           String @db.VarChar(2200)
+  status            String @db.VarChar(24)
+  idempotencyKey    String @map("idempotency_key") @db.VarChar(200)
+  approvalHash      String @map("approval_hash") @db.Char(64)
+  approvedByUserId  String @map("approved_by_user_id") @db.Uuid
+  approvedAt        DateTime @map("approved_at") @db.Timestamptz(6)
+  approvalExpiresAt DateTime @map("approval_expires_at") @db.Timestamptz(6)
+  scheduledAt       DateTime @map("scheduled_at") @db.Timestamptz(6)
+  containerId       String? @map("container_id") @db.VarChar(255)
+  externalPostId    String? @map("external_post_id") @db.VarChar(255)
+  failureCategory   String? @map("failure_category") @db.VarChar(80)
+  lastAttemptAt     DateTime? @map("last_attempt_at") @db.Timestamptz(6)
+  publishedAt       DateTime? @map("published_at") @db.Timestamptz(6)
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([workspaceId, bunshinId, dailyMissionId], map: "social_publication_intents_mission_key")
+  @@unique([workspaceId, groupId, ownerUserId, idempotencyKey], map: "social_publication_intents_idempotency_key")
+  @@index([workspaceId, groupId, ownerUserId, bunshinId, status, scheduledAt], map: "social_publication_intents_owner_status_idx")
+  @@index([connectionId, status], map: "social_publication_intents_connection_idx")
+  @@map("social_publication_intents")
 }

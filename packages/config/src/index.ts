@@ -44,6 +44,10 @@ const serverSchema = z
       .string()
       .regex(/^v[1-9][0-9]?\.0$/)
       .optional(),
+    INSTAGRAM_PUBLISH_TEST_ACCOUNT_IDS: z
+      .string()
+      .regex(/^[0-9]{1,30}(?:,[0-9]{1,30})*$/)
+      .optional(),
     VIDEO_RENDER_WEBHOOK_KEY_VERSION: z.coerce.number().int().positive().default(1),
     LINE_ADMIN_ALERT_WEBHOOK_URL: z.url().optional(),
     LINE_ADMIN_ALERT_WEBHOOK_TOKEN: z.string().min(16).optional(),
