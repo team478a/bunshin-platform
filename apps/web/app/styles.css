@@ -278,6 +278,18 @@
   box-sizing: border-box;
 }
 
+.learning-definition-review {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.learning-definition-review fieldset,
+.learning-definition-review .field,
+.learning-definition-review .field__control {
+  min-width: 0;
+  max-width: 100%;
+}
+
 html {
   min-width: 320px;
   background: var(--color-canvas);

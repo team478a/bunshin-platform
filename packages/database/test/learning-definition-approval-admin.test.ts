@@ -45,6 +45,21 @@ describe('Definition approval command safety', () => {
       JSON.stringify(validateLearningDefinitionApprovalCommand(command)),
     );
   });
+  it('automatic provenance uses a bounded operation reference and cannot be relabelled', () => {
+    const automatic = {
+      ...command,
+      provenanceMode: 'SERVER_V1' as const,
+      reviewEvidenceKey: `definition-review:${command.operationId}`,
+    };
+    expect(validateLearningDefinitionApprovalCommand(automatic)).toEqual(automatic);
+    expect(() =>
+      validateLearningDefinitionApprovalCommand({ ...automatic, reviewEvidenceKey: 'human-key' }),
+    ).toThrow();
+    expect(() =>
+      validateLearningDefinitionApprovalCommand({ ...automatic, provenanceMode: 'fake' } as never),
+    ).toThrow();
+    expect(validateLearningDefinitionApprovalCommand(command)).not.toHaveProperty('provenanceMode');
+  });
   it('withdrawal must be explicit and cannot carry an approval checklist', () => {
     const { reviewChecklist, ...fields } = command;
     expect(reviewChecklist.safety).toBe(true);

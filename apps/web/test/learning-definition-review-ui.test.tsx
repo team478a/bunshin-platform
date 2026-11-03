@@ -18,6 +18,7 @@ import {
 const data = () =>
   AI_TRAINING_LEARNING_DEFINITION_FIXTURES.map((definition) => ({
     definition,
+    provenance: { mode: 'SERVER_V1', reviewedCommitSha: 'c'.repeat(40) },
     mission: getAiTrainingMissionQuality(definition.legacyMissionRef.actionKey),
     revision: 'a'.repeat(64),
     reviewDigest: 'b'.repeat(64),
@@ -25,17 +26,16 @@ const data = () =>
     routerRuleVersion: AI_TRAINING_LEARNING_ROUTER_VERSION,
   }));
 const allChecks = Object.fromEntries(reviewKeys.map((k) => [k, true]));
-const sha = 'c'.repeat(40);
 const item = () => parseDefinitionReviews(data())![0]!;
-const command = () => approvalCommand(item(), allChecks, sha, 'human-review', true)!;
+const command = () => approvalCommand(item(), allChecks)!;
 afterEach(() => vi.unstubAllGlobals());
 describe('Definition approval minimal UI and client', () => {
-  it('mount does not read/write; no preselected review or automatic/bulk operation', () => {
+  it('server render does not write; browser mount will load without preselected human checks', () => {
     const fetcher = vi.fn();
     vi.stubGlobal('fetch', fetcher);
     const html = renderToStaticMarkup(<DefinitionReviewCard serviceSlug="synthetic" />);
     expect(fetcher).not.toHaveBeenCalled();
-    expect(html).toContain('現在の定義と承認状態を確認');
+    expect(html).toContain('状態を再取得');
     expect(html).not.toContain('checked=""');
     expect(html).not.toContain('<select');
     expect(html).not.toContain('この1件の承認を登録</button>');
@@ -84,18 +84,19 @@ describe('Definition approval minimal UI and client', () => {
     ])
       expect(parseDefinitionReviews(value)).toBeNull();
   });
-  it('requires seven separate human checks, explicit confirmation, SHA and bounded evidence', () => {
+  it('requires seven separate human checks and available server provenance', () => {
     for (const k of reviewKeys) {
-      expect(approvalCommand(item(), { ...allChecks, [k]: false }, sha, 'review', true)).toBeNull();
-      expect(reviewReady(item(), { ...allChecks, [k]: false }, sha, 'review', true)).toBe(false);
+      expect(approvalCommand(item(), { ...allChecks, [k]: false })).toBeNull();
+      expect(reviewReady(item(), { ...allChecks, [k]: false })).toBe(false);
     }
-    expect(approvalCommand(item(), allChecks, sha, 'review', false)).toBeNull();
-    expect(approvalCommand(item(), allChecks, 'abc', 'review', true)).toBeNull();
-    expect(approvalCommand(item(), allChecks, sha, 'secret text', true)).toBeNull();
     expect(
-      approvalCommand(item(), { ...allChecks, extra: true } as never, sha, 'review', true),
+      approvalCommand(
+        { ...item(), provenance: { mode: 'SERVER_V1', reviewedCommitSha: null } },
+        allChecks,
+      ),
     ).toBeNull();
-    expect(reviewReady(item(), allChecks, sha, 'review', true)).toBe(true);
+    expect(approvalCommand(item(), { ...allChecks, extra: true } as never)).toBeNull();
+    expect(reviewReady(item(), allChecks)).toBe(true);
   });
   it('commands reference only the selected review, no tenant/actor input, and cannot reapprove APPROVED', () => {
     const c = command();
@@ -109,11 +110,10 @@ describe('Definition approval minimal UI and client', () => {
       approvalCommand(
         { ...item(), current: { approvalStatus: 'APPROVED', approvedAt: null } },
         allChecks,
-        sha,
-        'review',
-        true,
       ),
     ).toBeNull();
+    expect(c.provenanceMode).toBe('SERVER_V1');
+    expect(c).not.toHaveProperty('reviewEvidenceKey');
     expect(c).not.toHaveProperty('workspaceId');
     expect(c).not.toHaveProperty('userId');
   });
