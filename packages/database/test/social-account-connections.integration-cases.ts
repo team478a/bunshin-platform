@@ -16,6 +16,7 @@ export function registerSocialAccountConnectionIntegrationCases(client: PrismaCl
     const userIds: string[] = [];
 
     afterEach(async () => {
+      await client.socialOAuthAttempt.deleteMany({ where: { workspaceId: { in: workspaceIds } } });
       await client.socialAccountConnectionGrant.deleteMany({
         where: { workspaceId: { in: workspaceIds } },
       });
@@ -295,9 +296,9 @@ export function registerSocialAccountConnectionIntegrationCases(client: PrismaCl
         where: { id: connection.id },
         data: { tokenExpiresAt: new Date(Date.now() - 1_000) },
       });
-      await expect(
-        f.repository.getUsableAccessToken(f.user.id, f.owner, connection.id),
-      ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+      expect(await f.repository.list(f.user.id, f.owner)).toEqual([
+        expect.objectContaining({ id: connection.id, status: 'RECONNECT_REQUIRED' }),
+      ]);
       expect(
         await client.socialAccountConnection.findUniqueOrThrow({ where: { id: connection.id } }),
       ).toMatchObject({ status: 'RECONNECT_REQUIRED', encryptedToken: null, tokenExpiresAt: null });
@@ -306,15 +307,59 @@ export function registerSocialAccountConnectionIntegrationCases(client: PrismaCl
     it('enables RLS without adding broad database policies', async () => {
       const tables = await client.$queryRaw<
         Array<{ relname: string; relrowsecurity: boolean }>
-      >`SELECT relname, relrowsecurity FROM pg_class WHERE relname IN ('social_account_connections', 'social_account_connection_grants') ORDER BY relname`;
+      >`SELECT relname, relrowsecurity FROM pg_class WHERE relname IN ('social_account_connections', 'social_account_connection_grants', 'social_oauth_attempts') ORDER BY relname`;
       expect(tables).toEqual([
         { relname: 'social_account_connection_grants', relrowsecurity: true },
         { relname: 'social_account_connections', relrowsecurity: true },
+        { relname: 'social_oauth_attempts', relrowsecurity: true },
       ]);
       const policies = await client.$queryRaw<Array<{ tablename: string }>>`
         SELECT tablename FROM pg_policies
-        WHERE tablename IN ('social_account_connections', 'social_account_connection_grants')`;
+        WHERE tablename IN ('social_account_connections', 'social_account_connection_grants', 'social_oauth_attempts')`;
       expect(policies).toHaveLength(0);
+    });
+
+    it('binds OAuth attempts to the owner scope and allows only one atomic claim', async () => {
+      const f = await fixture();
+      const stateHash = 'a'.repeat(64);
+      await client.socialOAuthAttempt.create({
+        data: {
+          stateHash,
+          workspaceId: f.owner.workspaceId,
+          groupId: f.owner.serviceId,
+          groupMembershipId: f.owner.groupMembershipId,
+          userId: f.owner.userId,
+          bunshinId: f.owner.bunshinId,
+          platform: 'INSTAGRAM',
+          expiresAt: new Date(Date.now() + 60_000),
+        },
+      });
+      const now = new Date();
+      const claims = await Promise.all([
+        client.socialOAuthAttempt.updateMany({
+          where: { stateHash, consumedAt: null, expiresAt: { gt: now } },
+          data: { consumedAt: now },
+        }),
+        client.socialOAuthAttempt.updateMany({
+          where: { stateHash, consumedAt: null, expiresAt: { gt: now } },
+          data: { consumedAt: now },
+        }),
+      ]);
+      expect(claims.map((claim) => claim.count).sort()).toEqual([0, 1]);
+      await expect(
+        client.socialOAuthAttempt.create({
+          data: {
+            stateHash: 'b'.repeat(64),
+            workspaceId: f.owner.workspaceId,
+            groupId: f.owner.serviceId,
+            groupMembershipId: f.owner.groupMembershipId,
+            userId: f.owner.userId,
+            bunshinId: randomUUID(),
+            platform: 'INSTAGRAM',
+            expiresAt: new Date(Date.now() + 60_000),
+          },
+        }),
+      ).rejects.toMatchObject({ code: 'P2003' });
     });
   });
 }

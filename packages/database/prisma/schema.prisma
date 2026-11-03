@@ -3694,6 +3694,7 @@ model ServiceMemberBusinessProfile {
 }
 
 model GroupMembership {
+  socialOAuthAttempts SocialOAuthAttempt[]
   socialAccountConnections SocialAccountConnection[]
   externalReadGrants ExternalReadGrant[]
   oemRegistrationPeriods OemRegistrationPeriod[]
@@ -6940,6 +6941,7 @@ model AccountDeletionOperationAudit {
 }
 
 model Bunshin {
+  socialOAuthAttempts SocialOAuthAttempt[]
   socialAccountConnectionGrants SocialAccountConnectionGrant[]
   externalReadGrants ExternalReadGrant[]
   id                              String                           @id @default(uuid()) @db.Uuid
@@ -8847,4 +8849,24 @@ model SocialAccountConnectionGrant {
   @@unique([connectionId, bunshinId], map: "social_connection_grants_connection_bunshin_key")
   @@index([workspaceId, groupId, groupMembershipId, userId, bunshinId], map: "social_connection_grants_owner_idx")
   @@map("social_account_connection_grants")
+}
+
+/// Short-lived, single-use transaction for an SNS provider authorization callback.
+model SocialOAuthAttempt {
+  stateHash         String @id @map("state_hash") @db.Char(64)
+  workspaceId       String @map("workspace_id") @db.Uuid
+  groupId           String @map("group_id") @db.Uuid
+  groupMembershipId String @map("group_membership_id") @db.Uuid
+  userId            String @map("user_id") @db.Uuid
+  bunshinId         String @map("bunshin_id") @db.Uuid
+  platform           String @db.VarChar(40)
+  expiresAt          DateTime @map("expires_at") @db.Timestamptz(6)
+  consumedAt         DateTime? @map("consumed_at") @db.Timestamptz(6)
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  membership GroupMembership @relation(fields: [workspaceId, groupId, groupMembershipId, userId], references: [workspaceId, groupId, id, userId], onDelete: Cascade, onUpdate: Restrict, map: "social_oauth_attempts_membership_fkey")
+  bunshin Bunshin @relation(fields: [workspaceId, groupId, userId, bunshinId], references: [workspaceId, groupId, ownerUserId, id], onDelete: Cascade, onUpdate: Restrict, map: "social_oauth_attempts_bunshin_fkey")
+
+  @@index([expiresAt], map: "social_oauth_attempts_expiry_idx")
+  @@index([workspaceId, groupId, groupMembershipId, userId, bunshinId, createdAt], map: "social_oauth_attempts_owner_idx")
+  @@map("social_oauth_attempts")
 }
