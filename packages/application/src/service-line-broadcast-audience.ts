@@ -1,5 +1,6 @@
 import { ApplicationError } from '@bunshin/shared';
 import type { LineConfigurationEnvironment } from './configuration-environment';
+import type { ServiceLineBroadcastStatus } from './service-line-broadcast';
 
 export const SERVICE_LINE_BROADCAST_PURPOSES = [
   'ATTRACT',
@@ -18,7 +19,14 @@ export interface ServiceLineBroadcastSegment {
 }
 
 export type ScheduleServiceLineBroadcastResult =
-  | { kind: 'SCHEDULED'; broadcastId: string; recipientCount: number; scheduledAt: Date }
+  | {
+      kind: 'SCHEDULED';
+      broadcastId: string;
+      recipientCount: number;
+      scheduledAt: Date;
+      replayed?: boolean;
+      status?: ServiceLineBroadcastStatus;
+    }
   | {
       kind:
         'ACCESS_DENIED' | 'CONFIGURATION_UNAVAILABLE' | 'NO_RECIPIENTS' | 'RECIPIENT_COUNT_CHANGED';
@@ -42,6 +50,8 @@ export interface ServiceLineBroadcastAudienceRepository {
     scheduledAt: Date;
     expectedRecipientCount: number;
     segment: ServiceLineBroadcastSegment;
+    operationId?: string;
+    immediate?: true;
   }): Promise<ScheduleServiceLineBroadcastResult>;
 }
 
@@ -79,6 +89,13 @@ export class ServiceLineBroadcastAudienceService {
 
   async schedule(input: Parameters<ServiceLineBroadcastAudienceRepository['schedule']>[0]) {
     if (
+      input.operationId !== undefined &&
+      !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(input.operationId)
+    )
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid broadcast operation');
+    if (input.immediate !== undefined && (!input.operationId || input.immediate !== true))
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid immediate broadcast operation');
+    if (
       !Number.isInteger(input.expectedRecipientCount) ||
       input.expectedRecipientCount < 1 ||
       input.expectedRecipientCount > 500
@@ -86,7 +103,7 @@ export class ServiceLineBroadcastAudienceService {
       throw new ApplicationError('VALIDATION_ERROR', 'invalid expected recipient count');
     if (
       Number.isNaN(input.scheduledAt.getTime()) ||
-      input.scheduledAt.getTime() < this.now().getTime() - 5_000
+      (!input.operationId && input.scheduledAt.getTime() < this.now().getTime() - 5_000)
     )
       throw new ApplicationError('VALIDATION_ERROR', 'invalid scheduledAt');
 
