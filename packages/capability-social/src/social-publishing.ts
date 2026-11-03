@@ -73,7 +73,9 @@ function validIntent(intent: SocialPublicationIntent) {
     intent.connectedAccountId,
     intent.idempotencyKey,
   ];
-  if (ids.some((value) => typeof value !== 'string' || value.trim().length < 1 || value.length > 200))
+  if (
+    ids.some((value) => typeof value !== 'string' || value.trim().length < 1 || value.length > 200)
+  )
     invalid('invalid publishing scope');
   if (!SOCIAL_PLATFORMS.includes(intent.platform) || intent.platform === 'OTHER')
     invalid('invalid publishing platform');

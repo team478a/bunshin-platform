@@ -18,11 +18,7 @@ export class InstagramPublishingError extends Error {
 }
 
 export type InstagramContainerStatus =
-  | 'IN_PROGRESS'
-  | 'FINISHED'
-  | 'PUBLISHED'
-  | 'ERROR'
-  | 'EXPIRED';
+  'IN_PROGRESS' | 'FINISHED' | 'PUBLISHED' | 'ERROR' | 'EXPIRED';
 
 type Fetch = typeof fetch;
 const graphOrigin = 'https://graph.instagram.com';
@@ -119,9 +115,7 @@ export class InstagramDirectPublishingAdapter {
         method,
         headers: {
           Authorization: `Bearer ${accessToken}`,
-          ...(method === 'POST'
-            ? { 'Content-Type': 'application/x-www-form-urlencoded' }
-            : {}),
+          ...(method === 'POST' ? { 'Content-Type': 'application/x-www-form-urlencoded' } : {}),
         },
         ...(method === 'POST' ? { body: parameters.toString() } : {}),
         redirect: 'error',

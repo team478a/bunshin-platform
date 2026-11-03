@@ -42,10 +42,18 @@ describe('official SNS publishing approval preflight', () => {
     const value = intent();
     expect(() => assertApprovedSocialPublication(value, null, now)).toThrow();
     expect(() =>
-      assertApprovedSocialPublication(value, { ...approval(value), approvedByUserId: 'other-user' }, now),
+      assertApprovedSocialPublication(
+        value,
+        { ...approval(value), approvedByUserId: 'other-user' },
+        now,
+      ),
     ).toThrow();
     expect(() =>
-      assertApprovedSocialPublication(value, { ...approval(value), approvedAt: new Date('2026-11-04') }, now),
+      assertApprovedSocialPublication(
+        value,
+        { ...approval(value), approvedAt: new Date('2026-11-04') },
+        now,
+      ),
     ).toThrow();
     expect(() =>
       assertApprovedSocialPublication(value, { ...approval(value), expiresAt: new Date(now) }, now),

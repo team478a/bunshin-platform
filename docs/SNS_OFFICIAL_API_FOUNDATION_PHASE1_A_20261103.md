@@ -14,14 +14,14 @@
 
 ## 2. 既存資産と責務
 
-| 既存コード | 維持する役割 | 変更してはいけないもの |
-| --- | --- | --- |
-| `packages/capability-social/src/social-profile.ts` | SNS発信設定・媒体の選択 | 投稿認証済みアカウントであると誤表示しない |
-| `mission-generation.ts`、Daily Mission、Content Variant | 投稿内容の企画・生成・品質判定 | Muse/InstagramのProvider固有型を混ぜない |
-| `mission-outcomes.ts`、PostRecord | 本人の手動投稿・Feedback | `source=MANUAL`をAPI公開成功に変更しない |
-| `apps/web/src/providers/creatomate-video-render.ts`等 | 画像・動画の生成 | 新SNS機能のため全面作り直さない |
-| `packages/application/src/job-runtime.ts`、既存Job | 非同期処理・再試行の共通基盤 | Provider公開の重複を生む新Queueを作らない |
-| `external-read-*.ts`、Muse PoC | 外部AIから本人情報を読む認可 | SNSへ投稿するOAuthや接続Tokenを流用しない |
+| 既存コード                                              | 維持する役割                   | 変更してはいけないもの                     |
+| ------------------------------------------------------- | ------------------------------ | ------------------------------------------ |
+| `packages/capability-social/src/social-profile.ts`      | SNS発信設定・媒体の選択        | 投稿認証済みアカウントであると誤表示しない |
+| `mission-generation.ts`、Daily Mission、Content Variant | 投稿内容の企画・生成・品質判定 | Muse/InstagramのProvider固有型を混ぜない   |
+| `mission-outcomes.ts`、PostRecord                       | 本人の手動投稿・Feedback       | `source=MANUAL`をAPI公開成功に変更しない   |
+| `apps/web/src/providers/creatomate-video-render.ts`等   | 画像・動画の生成               | 新SNS機能のため全面作り直さない            |
+| `packages/application/src/job-runtime.ts`、既存Job      | 非同期処理・再試行の共通基盤   | Provider公開の重複を生む新Queueを作らない  |
+| `external-read-*.ts`、Muse PoC                          | 外部AIから本人情報を読む認可   | SNSへ投稿するOAuthや接続Tokenを流用しない  |
 
 ## 3. 今回追加したコード（Phase 1-A）
 
@@ -42,6 +42,7 @@
 - Reels、カルーセル、ストーリーズは後続の独立作業とする。
 
 参照:
+
 - Meta Instagram API公式Postmanコレクション: https://www.postman.com/meta/instagram/documentation/6yqw8pt/instagram-api
 - Instagram content publishing: https://developers.facebook.com/docs/instagram-platform/instagram-api-with-instagram-login/content-publishing
 - Instagram API with Instagram Login: https://developers.facebook.com/docs/instagram-platform/instagram-api-with-instagram-login
@@ -67,18 +68,21 @@ SocialPublishingProviderPort
 ## 6. 次のPR（段階的実装）
 
 ### P1-B: Instagram公式OAuth 接続
+
 - Meta Developersの本部所有アプリ/Instagram Loginの設定情報を確認。App ID、redirect URI、必要scope、審査状態を実測する。
 - OAuth state/PKCE等の公式要件を確認し、利用者本人の認可により接続する。接続Tokenの取得・暗号化・更新・失効、Service/OEM別管理、本人解除を既存秘密情報管理と認可へ接続する。
 - ユーザーごとのMeta開発者アプリ/APIキー登録を要求しない。
 - 接続の認可と投稿そのものの承認を別にする。初期OFF、ステージングの少数テストのみ。
 
 ### P1-C: 投稿Intentの保存・本人承認・公開Job
+
 - 既存DailyMission/MissionContentVariant/Media/Job/PostRecordを再監査して重複モデルを避ける。
 - 予約・公開・外部投稿ID・結果不明/失敗の最小正本と必要なmigrationを独立PRで設計。
 - 現時点の所有/Feature/接続/コンテンツrevision/素材権利を実行直前に再照合。
 - 画像1件、本人が明示承認した1投稿、テストアカウントでの公開のみ検証。公開が`UNKNOWN_RESULT`の場合は外部状態の照会を優先し、再送で二重投稿しない。
 
 ### P1-D: カルーセル/リール/実績同期
+
 - 実メディアのMeta対応条件、Container非同期処理、API quotaを確認して段階追加。
 - 既存の手動投稿/スクショ分析とAPI実績を区別し、外部投稿IDで同じ成果を重複計上しない。
 - 動画/画像生成原価とSNS公式APIの費用/許可上限を各Providerごとに計測し、OEM原価へ反映。
