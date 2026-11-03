@@ -29,6 +29,7 @@ export async function managedFeaturePolicyTarget(slug: string, actorUserId: stri
 export async function managedFeaturePolicyResponse(
   request: Request,
   slug: string,
+  policy: 'roadmap' | 'recommendations' | 'usage-guidance',
   createRepository: () => Promise<{
     read(scope: { workspaceId: string; serviceId: string; actorUserId: string }): Promise<unknown>;
     save(command: {
@@ -49,7 +50,13 @@ export async function managedFeaturePolicyResponse(
     if (!actor) throw new ApplicationError('UNAUTHENTICATED', 'session required');
     if (new URL(request.url).searchParams.size)
       throw new ApplicationError('VALIDATION_ERROR', 'invalid query');
-    const permit = memberUsageReadLimit.reserve(actor.userId);
+    if (!/^[a-z0-9][a-z0-9-]{0,79}$/.test(slug))
+      throw new ApplicationError('NOT_FOUND', 'service not found');
+    const permit = memberUsageReadLimit.reserve(
+      actor.userId,
+      Date.now(),
+      JSON.stringify(['managed-policy', slug, policy]),
+    );
     if (!permit.allowed)
       return Response.json(
         { error: { code: 'RATE_LIMITED', message: '時間をおいてお試しください。' } },
