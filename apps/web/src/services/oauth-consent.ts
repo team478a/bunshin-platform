@@ -55,7 +55,7 @@ function redirectTo(
   raw: string,
   clients: readonly ExternalReadClientDescriptor[],
   environment: string,
-) {
+): `https://${string}` | `http://${string}` {
   const target = callback(raw, environment);
   if (!target) throw unavailable();
   const valid = clients.some((client) =>
@@ -76,7 +76,9 @@ function redirectTo(
     }),
   );
   if (!valid) throw unavailable();
-  return target.toString();
+  return target.protocol === 'https:'
+    ? `https://${target.host}${target.pathname}${target.search}`
+    : `http://${target.host}${target.pathname}${target.search}`;
 }
 async function context(id: string) {
   if (!oauthConsentPath(id))

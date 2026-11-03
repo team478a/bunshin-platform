@@ -63,6 +63,11 @@ beforeEach(() => {
   });
 });
 describe('official OAuth consent service', () => {
+  it('preserves encoded OAuth code/state while returning a typed HTTP callback', async () => {
+    const url = 'https://client.example.invalid/callback?code=a%2Fb&state=a%2Bb%3Dc';
+    m.approve.mockResolvedValue({ data: { redirect_url: url }, error: null });
+    expect(await decideOAuthConsent(id, 'approve')).toEqual({ kind: 'redirect', url });
+  });
   it.each(['empty', 'staging', 'callback-missing'])(
     'does not load SDK/auth when %s',
     async (condition) => {

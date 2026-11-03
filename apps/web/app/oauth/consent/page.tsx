@@ -1,4 +1,4 @@
-import type { Metadata, Route } from 'next';
+import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { PublicShell } from '../../ui/public-shell';
 import { loadOAuthConsent } from '../../../src/services/oauth-consent';
@@ -52,7 +52,7 @@ export default async function OAuthConsentPage({
     );
   }
   if (value.kind === 'login') redirect(`/login?returnTo=${encodeURIComponent(value.returnTo)}`);
-  if (value.kind === 'redirect') redirect(value.url as Route);
+  if (value.kind === 'redirect') redirect(value.url);
   return (
     <PublicShell narrow>
       {value.kind === 'consent' ? (
