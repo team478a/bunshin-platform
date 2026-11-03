@@ -292,6 +292,7 @@ export async function updateServiceSettingsResponse(request: Request, serviceSlu
     const saved = await new ServiceFoundationService(
       new db.PrismaServiceFoundationRepository(),
     ).save({
+      serviceAccess: 'ADMINISTRATION',
       workspaceId: service.workspaceId,
       groupId: service.serviceId,
       actorUserId: actor.userId,
