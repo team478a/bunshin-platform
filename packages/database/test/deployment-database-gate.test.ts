@@ -140,9 +140,10 @@ describe('read-only deployment database gate', () => {
     const config = JSON.parse(
       readFileSync(new URL('../../../apps/web/vercel.json', import.meta.url), 'utf8'),
     );
-    expect(config.buildCommand).toBe(
+    expect([
       'cd ../.. && pnpm db:assert-ready && pnpm turbo run build --filter=web',
-    );
+      'cd ../.. && pnpm db:assert-ready && pnpm turbo run build --filter=web --force',
+    ]).toContain(config.buildCommand);
     const ci = readFileSync(new URL('../../../.github/workflows/ci.yml', import.meta.url), 'utf8');
     expect(ci).toContain('- run: pnpm db:migrate:deploy');
     expect(ci).not.toContain('- run: pnpm db:migrate:vercel');

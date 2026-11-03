@@ -6,7 +6,7 @@
 
 ## 実装
 
-- 有効なマナベル参加招待の受諾時、Membership作成と同じSerializable transaction内で、停止中のAI_TRAINING_V1 Pilot用Enrollmentと`INTERNAL` Seatを作る。
+- 有効なマナベル参加招待の受諾時、Membership作成と同じDB transaction内で、停止中のAI_TRAINING_V1 Pilot用Enrollmentと`INTERNAL` Seatを作る。Program行ロックで枠割当を直列化する。
 - 対象は`manaberu-style`、`INVITATION_ONLY`、参加者招待、自動承認に限定。LINE FOLLOW由来で招待作成者がnullの場合は、記録上の承認者としてACTIVEなService Ownerを使用する。
 - 有効なWave 0の内部上限1〜3名、現在Wave 0、停止中Program、無料・有効・招待限定・GUIDED Offeringがそれぞれ一意であることを検証する。Seatの履歴を含む残枠、失効済み枠、Projection、重複Enrollmentもtransaction内で確認する。
 - 前提不足・不整合・上限到達は例外にし、Invitationの消費、Membership、Enrollment、Seatの全てをrollbackする。上限を既定値で補ったり、別Offeringを推測選択したりしない。

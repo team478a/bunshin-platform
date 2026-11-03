@@ -1,5 +1,12 @@
 # BUNSHIN Platform Decision Log
 
+## 2026-11-03: 最新main公開前の6件のProduction migrationを限定適用する
+
+- 状態: 未実行。Production Migration History Probe run `41577813391`で、対象project `vtkzinaudznwbsjoyszk`に未適用6件、migration history変更なしを確認した。
+- `20261102000000_generation_trigger_provenance`から`20261103020000_external_read_credential_binding`までの連続6件だけをallowlistした専用workflowを使う。Previewでpending集合とDB identityを照合し、同じ履歴状態の場合だけapplyする。
+- Production Environment承認、project/role/database照合、TLS検証、transaction内timeout、適用後のschema readinessを必須とする。未知・追加・欠落migration、failed history、認証/接続/timeout異常では適用せず、自動retry・`migrate resolve`・rollbackを行わない。
+- apply後の読み取り専用Probeが`pending=0`、`db:assert-ready`がPASSした後にのみmainをproductionへマージする。
+
 ## 2026-10-26: ログインメールのResend設定を管理者通知と分離する
 
 - 状態: 実装中。SMTP資格情報の本番設定と実メールの確認は未実施。
