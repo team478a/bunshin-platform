@@ -10,7 +10,9 @@ describe('service manager settings boundary', () => {
     expect(resolver).toContain("SERVICE_MANAGEMENT_ROLES = ['SERVICE_OWNER', 'SERVICE_ADMIN']");
     expect(resolver).toContain("permission: ServiceManagementPermission = 'ADMINISTRATION'");
     expect(resolver).toContain('serviceRole: { in: allowedRoles }');
-    expect(resolver).toContain('findByGroup({ ...target, actorUserId })');
+    expect(resolver).toContain('workspaceId: target.workspaceId');
+    expect(resolver).toContain('groupId: target.groupId');
+    expect(resolver).toContain('serviceAccess: permission');
   });
 
   it('keeps platform-owned service controls unchanged in the manager endpoint', () => {

@@ -8,10 +8,12 @@ export async function saveServiceFoundation(
 ) {
   return client.$transaction(async (tx) => {
     const [admin, group, manager, existing, entitlement] = await Promise.all([
-      tx.platformAdmin.findFirst({
-        where: { userId: input.actorUserId, status: 'ACTIVE', role: 'SUPER_ADMIN' },
-        select: { id: true },
-      }),
+      input.serviceAccess
+        ? Promise.resolve(null)
+        : tx.platformAdmin.findFirst({
+            where: { userId: input.actorUserId, status: 'ACTIVE', role: 'SUPER_ADMIN' },
+            select: { id: true },
+          }),
       tx.group.findFirst({
         where: { id: input.groupId, workspaceId: input.workspaceId },
         select: { id: true },
@@ -21,7 +23,9 @@ export async function saveServiceFoundation(
           workspaceId: input.workspaceId,
           groupId: input.groupId,
           userId: input.actorUserId,
-          role: 'MANAGER',
+          ...(input.serviceAccess
+            ? { serviceRole: { in: ['SERVICE_OWNER', 'SERVICE_ADMIN'] } }
+            : { role: 'MANAGER' }),
           status: 'ACTIVE',
           group: { status: 'ACTIVE', workspace: { status: 'ACTIVE' } },
         },

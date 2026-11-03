@@ -42,6 +42,7 @@ export async function updateServiceWeeklyReportDeliveryResponse(
     const configuration = await new ServiceFoundationService(
       new db.PrismaServiceFoundationRepository(),
     ).save({
+      serviceAccess: 'ADMINISTRATION',
       workspaceId: service.workspaceId,
       groupId: service.serviceId,
       actorUserId: actor.userId,
