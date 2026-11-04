@@ -10,6 +10,7 @@ const BUCKET = 'social-image-media';
 const MAX_SOURCE_BYTES = 20_000_000;
 const MAX_RENDERED_BYTES = 15_000_000;
 const READ_SECONDS = 5 * 60;
+const PUBLISH_READ_SECONDS = 15 * 60;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function client() {
@@ -153,6 +154,47 @@ export class SupabaseSocialImageStorage implements SocialImageStoragePort {
     if (signed.error)
       throw new ApplicationError('INTERNAL_ERROR', '画像を開く準備ができませんでした');
     return signed.data.signedUrl;
+  }
+
+  private publishingJpegKey(completedStorageKey: string, intentId: string) {
+    if (!UUID.test(intentId))
+      throw new ApplicationError('VALIDATION_ERROR', '投稿画像の参照が不正です');
+    const matched =
+      /^([0-9a-f-]{36}\/[0-9a-f-]{36}\/[0-9a-f-]{36}\/[0-9a-f-]{36}\/[0-9a-f-]{36})\/completed\.png$/i.exec(
+        completedStorageKey,
+      );
+    if (!matched) throw new ApplicationError('FORBIDDEN', 'social image storage scope mismatch');
+    return `${matched[1]}/publication/${intentId}.jpg`;
+  }
+
+  /** Meta's single-image endpoint requires JPEG; keep the canonical generated PNG unchanged. */
+  async createPublishingJpegUrl(completedStorageKey: string, intentId: string) {
+    const publishingKey = this.publishingJpegKey(completedStorageKey, intentId);
+    const png = await this.readStoredPng(completedStorageKey);
+    const jpeg = await sharp(png).jpeg({ quality: 95, chromaSubsampling: '4:4:4' }).toBuffer();
+    await assertBytes(jpeg, MAX_RENDERED_BYTES, 'image/jpeg');
+    await this.ensureBucket();
+    const uploaded = await this.storage.storage.from(BUCKET).upload(publishingKey, jpeg, {
+      contentType: 'image/jpeg',
+      cacheControl: '900',
+      upsert: true,
+    });
+    if (uploaded.error)
+      throw new ApplicationError('INTERNAL_ERROR', '投稿画像を準備できませんでした');
+    const signed = await this.storage.storage
+      .from(BUCKET)
+      .createSignedUrl(publishingKey, PUBLISH_READ_SECONDS);
+    if (signed.error)
+      throw new ApplicationError('INTERNAL_ERROR', '投稿画像を開く準備ができませんでした');
+    return signed.data.signedUrl;
+  }
+
+  async removePublishingJpeg(completedStorageKey: string, intentId: string) {
+    const removed = await this.storage.storage
+      .from(BUCKET)
+      .remove([this.publishingJpegKey(completedStorageKey, intentId)]);
+    if (removed.error)
+      throw new ApplicationError('INTERNAL_ERROR', '投稿画像を削除できませんでした');
   }
 
   async readStoredPng(storageKey: string) {

@@ -16,6 +16,7 @@ export * from './video-render-job';
 export * from './video-ai-scene-generation-job';
 export * from './video-render-completion';
 export * from './social-image-generation-job';
+export * from './social-publication-job';
 export * from './social-image-pilot-evidence';
 export * from './service-participation';
 export * from './service-notification-preference';
