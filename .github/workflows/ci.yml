@@ -31,6 +31,16 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
+      - name: Restore trusted CI build cache
+        id: ci-build-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            .turbo
+            apps/web/.next/cache
+          key: ci-build-${{ runner.os }}-node24-${{ hashFiles('pnpm-lock.yaml', 'turbo.json') }}-${{ github.sha }}
+          restore-keys: |
+            ci-build-${{ runner.os }}-node24-${{ hashFiles('pnpm-lock.yaml', 'turbo.json') }}-
       - run: pnpm install --frozen-lockfile
       - run: pnpm format:check
       - run: pnpm typecheck
@@ -42,6 +52,18 @@ jobs:
         env:
           E2E_TELEMETRY_DISABLED: '1'
       - run: pnpm build
+      - name: Save trusted main CI build cache
+        if: >-
+          success() &&
+          github.event_name == 'push' &&
+          github.ref == 'refs/heads/main' &&
+          steps.ci-build-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            .turbo
+            apps/web/.next/cache
+          key: ${{ steps.ci-build-cache.outputs.cache-primary-key }}
 
   database:
     runs-on: ubuntu-24.04
