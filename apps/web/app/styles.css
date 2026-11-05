@@ -2393,8 +2393,7 @@ a {
     grid-template-columns: 1fr;
   }
   .admin-sidebar {
-    position: sticky;
-    top: 64px;
+    position: static;
     z-index: 15;
     display: block;
     max-height: min(52dvh, 430px);

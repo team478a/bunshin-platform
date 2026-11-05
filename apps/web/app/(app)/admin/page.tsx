@@ -11,7 +11,7 @@ import {
 } from '@bunshin/application';
 import { getServerEnvironment } from '@bunshin/config';
 import Link from 'next/link';
-import { notFound, redirect } from 'next/navigation';
+import { redirect } from 'next/navigation';
 import { currentUserProvider } from '../../../src/auth/current-user';
 import { currentLineEnvironment } from '../../../src/line/secure-configuration';
 import { currentAiProviderEnvironment } from '../../../src/ai/secure-provider-configuration';
@@ -36,7 +36,7 @@ export default async function OperationsAdminPage() {
   const admin = await new db.PrismaPlatformAdminRepository().findActivePlatformAdminByUserId(
     user.userId,
   );
-  if (!admin) notFound();
+  if (!admin) redirect('/login/admin-access');
 
   const environment = getServerEnvironment();
   const pointBalances = await new InspectPointBalances(
