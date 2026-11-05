@@ -14,7 +14,10 @@ import { createLogger, requestIdFromHeader } from '@bunshin/observability';
 import { ApplicationError, toApiError } from '@bunshin/shared';
 import { z } from 'zod';
 import { recordOpenAiUsageAndSettle } from '../ai/openai-cost-admission';
-import { reserveOpenAiRuntimeConfiguration } from '../ai/runtime-provider-configuration';
+import {
+  reserveOpenAiRuntimeConfiguration,
+  type AdmittedOpenAiRuntimeConfiguration,
+} from '../ai/runtime-provider-configuration';
 import { currentUserProvider } from '../auth/current-user';
 import { requireSameOrigin } from '../auth/request-security';
 import { withOrganizationAiGenerationQuota } from '../organization-ai-generation-quota';
@@ -36,6 +39,23 @@ const generateSchema = z
   })
   .strict();
 const emptySchema = z.object({}).strict();
+
+function providerAdmissionFailureReason(error: unknown) {
+  if (!(error instanceof ApplicationError)) return 'UNEXPECTED_ERROR';
+  if (error.code !== 'CONFLICT') return error.code;
+  switch (error.message) {
+    case 'provider cost is unknown':
+      return 'PROVIDER_COST_UNKNOWN';
+    case 'daily provider budget reached':
+      return 'DAILY_PROVIDER_BUDGET_REACHED';
+    case 'monthly provider budget reached':
+      return 'MONTHLY_PROVIDER_BUDGET_REACHED';
+    case 'provider call operation already admitted':
+      return 'PROVIDER_OPERATION_ALREADY_ADMITTED';
+    default:
+      return 'PROVIDER_ADMISSION_CONFLICT';
+  }
+}
 
 function resourceId(value: string) {
   const parsed = uuidSchema.safeParse(value);
@@ -184,7 +204,18 @@ export function generateServiceAccountStrategyResponse(
       });
       if (!profile || profile.id !== parsed.data.socialProfileId)
         throw new ApplicationError('NOT_FOUND', 'social profile not found');
-      const admittedRuntime = await reserveOpenAiRuntimeConfiguration(operationKey);
+      let admittedRuntime: AdmittedOpenAiRuntimeConfiguration;
+      try {
+        admittedRuntime = await reserveOpenAiRuntimeConfiguration(operationKey);
+      } catch (error) {
+        logger.error('service strategy generation admission failed', {
+          status: 'failed',
+          latency: Date.now() - started,
+          errorCode: error instanceof ApplicationError ? error.code : 'INTERNAL_ERROR',
+          failureReason: providerAdmissionFailureReason(error),
+        });
+        throw error;
+      }
       const { OpenAIStrategyGenerator, SOCIAL_ACCOUNT_STRATEGY_PROMPT_VERSION } =
         await import('../providers/openai-strategy-generator');
       try {
