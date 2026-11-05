@@ -25,9 +25,18 @@ export function AiUsageCostReconciliation({ initialRows }: { initialRows: Row[] 
   const selected = useMemo(
     () =>
       rows.flatMap((row) => {
-        const cost = Number(costs[row.id]);
+        const rawCost = costs[row.id]?.trim();
+        const cost = Number(rawCost);
         const pricingVersion = pricingVersions[row.id]?.trim();
-        return Number.isSafeInteger(cost) && cost > 0 && pricingVersion
+        const confirmedZeroCost =
+          cost === 0 &&
+          row.status === 'FAILED' &&
+          row.inputTokens === null &&
+          row.outputTokens === null;
+        return rawCost &&
+          Number.isSafeInteger(cost) &&
+          (cost > 0 || confirmedZeroCost) &&
+          pricingVersion
           ? [{ usageEventId: row.id, estimatedCostUsdMicros: cost, pricingVersion }]
           : [];
       }),
@@ -70,6 +79,9 @@ export function AiUsageCostReconciliation({ initialRows }: { initialRows: Row[] 
       <h2>原価未確定の精算（SUPER_ADMIN）</h2>
       <p>
         課金証跡または承認済み価格表で確認できた行だけ入力してください。原価を推測して一括入力したり、失敗記録を自動で0円にしたりしません。
+      </p>
+      <p>
+        0円は、失敗かつトークン記録がない行について、Providerへ送信していないことを運用ログなどの証跡で確認できた場合だけ入力できます。
       </p>
       <label>
         精算理由

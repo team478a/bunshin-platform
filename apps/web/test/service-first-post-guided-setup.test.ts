@@ -40,5 +40,7 @@ describe('service first-post guided setup', () => {
     expect(detailPage).toContain('迷ったときは「今日やること」だけ進めれば大丈夫です。');
     expect(setup).toContain('LINE配信を始める');
     expect(setup).toContain('SNSへの投稿はご自身で行います');
+    expect(setup).toContain('現在は配信されません。運営者へご連絡ください。');
+    expect(setup.match(/router\.refresh\(\)/g)).toHaveLength(1);
   });
 });

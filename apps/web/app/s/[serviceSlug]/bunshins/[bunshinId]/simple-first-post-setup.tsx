@@ -155,9 +155,11 @@ export function SimpleFirstPostSetup({
       const payload = (await response.json().catch(() => null)) as {
         error?: { message?: string; requestId?: string };
       } | null;
-      throw new Error(
-        `${payload?.error?.message ?? '処理を完了できませんでした。'}（受付番号: ${payload?.error?.requestId ?? requestId}）`,
-      );
+      const publicMessage =
+        response.status === 409 && path === '/social-account-strategies/generate'
+          ? 'AI利用記録の確認が必要なため、LINE配信を開始できませんでした。現在は配信されません。運営者へご連絡ください。'
+          : (payload?.error?.message ?? '処理を完了できませんでした。');
+      throw new Error(`${publicMessage}（受付番号: ${payload?.error?.requestId ?? requestId}）`);
     }
     const result = (await response.json()) as { data: T };
     return result.data;
@@ -239,7 +241,6 @@ export function SimpleFirstPostSetup({
       setMessage(
         `「${currentStep}」で処理が止まりました。${error instanceof Error ? error.message : '処理を完了できませんでした。'} 保存済みの内容は残っています。画面を更新して、もう一度お試しください。`,
       );
-      router.refresh();
     } finally {
       setPending(false);
     }

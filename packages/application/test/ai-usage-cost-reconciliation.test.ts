@@ -27,10 +27,12 @@ describe('AI usage cost reconciliation', () => {
     });
   });
 
-  it('rejects guessed zero costs and duplicate event ids before the repository', async () => {
+  it('accepts an evidence-backed zero cost and rejects duplicate event ids', async () => {
     const repository = {
       listUnknownCosts: vi.fn(),
-      repairUnknownCosts: vi.fn(),
+      repairUnknownCosts: vi
+        .fn()
+        .mockResolvedValue({ scanned: 1, updated: 1, alreadyReconciled: 0 }),
     } satisfies AiUsageCostReconciliationRepository;
     const useCase = new RepairUnknownAiUsageCosts(repository);
     const update = {
@@ -41,11 +43,11 @@ describe('AI usage cost reconciliation', () => {
     await expect(
       useCase.execute({
         ...scope,
-        reason: '証跡確認',
-        evidenceReference: 'ticket:123',
+        reason: 'Provider未送信を運用ログで確認',
+        evidenceReference: 'vercel-log:request-123',
         updates: [update],
       }),
-    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+    ).resolves.toMatchObject({ updated: 1 });
     await expect(
       useCase.execute({
         ...scope,
@@ -57,7 +59,7 @@ describe('AI usage cost reconciliation', () => {
         ],
       }),
     ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
-    expect(repository.repairUnknownCosts).not.toHaveBeenCalled();
+    expect(repository.repairUnknownCosts).toHaveBeenCalledTimes(1);
   });
 
   it('requires an evidence reference and returns an idempotent repair result', async () => {
