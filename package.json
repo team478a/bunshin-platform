@@ -43,6 +43,7 @@
     "db:migration:apply:release-20261026": "node packages/database/scripts/apply-release-20261026.mjs",
     "db:migration:apply:release-20261103": "node packages/database/scripts/apply-release-20261103.mjs",
     "db:migration:apply:release-20261104": "node packages/database/scripts/apply-release-20261104.mjs",
+    "db:migration:apply:social-release-20261105": "node packages/database/scripts/apply-social-release-20261105.mjs",
     "db:migration:probe": "node packages/database/scripts/probe-migration-connection.mjs",
     "db:assert-ready": "pnpm --filter @bunshin/database db:assert-ready"
   },
