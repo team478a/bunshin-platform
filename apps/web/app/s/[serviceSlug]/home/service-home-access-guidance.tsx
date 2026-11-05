@@ -4,6 +4,7 @@ import type { Route } from 'next';
 import { PublicShell } from '../../../ui/public-shell';
 import { ServiceAuthBranding } from '../../../ui/service-auth-branding';
 import type { ServiceAuthBrand } from '../../../../src/services/service-auth-brand';
+import { serviceAuthLoginPath } from '../../../../src/auth/line-return';
 
 export type ServiceHomeAccessState =
   'LOGIN_REQUIRED' | 'MEMBERSHIP_REQUIRED' | 'MANAGEMENT_REQUIRED' | 'LINK_UNAVAILABLE';
@@ -73,7 +74,7 @@ export function ServiceHomeAccessGuidance({
         {state === 'LOGIN_REQUIRED' && (
           <Link
             className="button button--primary button--full"
-            href={`/login?returnTo=${encodeURIComponent(returnTo)}` as Route}
+            href={serviceAuthLoginPath(returnTo)}
           >
             ログインして続ける
           </Link>

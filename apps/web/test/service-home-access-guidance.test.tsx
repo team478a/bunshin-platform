@@ -19,7 +19,7 @@ describe('service home access guidance', () => {
     expect(html).toContain('マナベルスタイルを利用するにはログインが必要です');
     expect(html).toContain('LINE内のブラウザでは');
     expect(html).toContain('ログインして続ける');
-    expect(html).toContain('/login?returnTo=%2Fs%2Fmanaberu-style%2Fhome');
+    expect(html).toContain('/s/manaberu-style/login?returnTo=%2Fs%2Fmanaberu-style%2Fhome');
     expect(html).toContain('/s/manaberu-style');
     expect(html).toContain('マナベルスタイルのロゴ');
     expect(html).toContain('ワタシワークスを利用しています');
@@ -62,7 +62,8 @@ describe('service home access guidance', () => {
     );
 
     expect(html).toContain('ログインして続ける');
-    expect(html).not.toContain('/s/private-service');
+    expect(html).toContain('/s/private-service/login?returnTo=');
+    expect(html).not.toContain('href="/s/private-service"');
   });
 
   it('does not disclose a service name or entry link when the service cannot be resolved', () => {

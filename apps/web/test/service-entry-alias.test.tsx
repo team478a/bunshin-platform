@@ -40,7 +40,7 @@ describe('service entry aliases', () => {
 
       expect(html).toContain(name);
       expect(html).toContain('ログインして続ける');
-      expect(html).toContain(`/login?returnTo=%2Fs%2F${slug}%2Fhome`);
+      expect(html).toContain(`/s/${slug}/login?returnTo=%2Fs%2F${slug}%2Fhome`);
       expect(html).toContain('ワタシワークスを利用しています');
     },
   );

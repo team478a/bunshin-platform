@@ -14,7 +14,9 @@ function pages(directory: URL, prefix = ''): string[] {
 describe('service authentication route inventory', () => {
   it('retains the exact learning request destination through the login entry', () => {
     const path = '/s/service-a/programs/11111111-1111-4111-8111-111111111111/learning-request';
-    expect(serviceAuthLoginPath(path)).toBe(`/login?returnTo=${encodeURIComponent(path)}`);
+    expect(serviceAuthLoginPath(path)).toBe(
+      `/s/service-a/login?returnTo=${encodeURIComponent(path)}`,
+    );
   });
   it.each([
     '/s/service-a/programs/11111111-1111-4111-8111-111111111111/learning-request?start=true',
@@ -76,17 +78,18 @@ describe('service authentication route inventory', () => {
   ])('rejects learning conversation route aliases and unapproved extensions: %s', (path) => {
     expect(safeLineAuthReturnPath(path)).toBeNull();
   });
-  it.each(pages(root).filter((page) => !['terms/page.tsx', 'privacy/page.tsx'].includes(page)))(
-    'preserves existing project page %s',
-    (page) => {
-      const suffix = page
-        .replace(/\/?page\.tsx$/, '')
-        .replace('[token]', 'a'.repeat(43))
-        .replace(/\[[^\]]+\]/g, '11111111-1111-4111-8111-111111111111');
-      const path = `/s/service-a${suffix ? `/${suffix}` : ''}`;
-      expect(safeLineAuthReturnPath(path)).toBe(path);
-    },
-  );
+  it.each(
+    pages(root).filter(
+      (page) => !['login/page.tsx', 'terms/page.tsx', 'privacy/page.tsx'].includes(page),
+    ),
+  )('preserves existing project page %s', (page) => {
+    const suffix = page
+      .replace(/\/?page\.tsx$/, '')
+      .replace('[token]', 'a'.repeat(43))
+      .replace(/\[[^\]]+\]/g, '11111111-1111-4111-8111-111111111111');
+    const path = `/s/service-a${suffix ? `/${suffix}` : ''}`;
+    expect(safeLineAuthReturnPath(path)).toBe(path);
+  });
 
   it.each(['settings', 'line', 'email', 'templates', 'personalization', 'weekly-report'])(
     'retains project context in previously unscoped management entry: %s',

@@ -1,5 +1,13 @@
 # BUNSHIN Platform Decision Log
 
+## 2026-11-05: 利用者ログイン入口をサービスURLへ分離する
+
+- 状態: 実装中。本番Supabaseの認証メール6種類とURL設定を読み取り専用で監査し、Magic Linkの誤ったquery区切りだけを修正済み。コード変更の本番反映と実メール確認は未実施。
+- サービス利用者のログイン入口は`/s/{serviceSlug}/login`とし、許可済みの同一サービス戻り先だけを保持する。別サービスの戻り先を渡された場合は対象サービスの入口へ戻し、認証後のMembership・Workspace・Service認可を従来どおり遷移先で再検証する。
+- 既存の`/login?returnTo=/s/...`は互換入口としてサービス別URLへ移す。管理者、招待、Mission、画像・動画閲覧等のサービス外認証は共通ログインを維持する。
+- ワタシワークスの共通トップと404画面から共通ログインへ誘導しない。公開トップは公式LINEが設定されている場合だけ開始導線を表示し、各サービス利用者は各サービスの案内URLからログインする。
+- 認証Provider、Supabase project、User identityは共有を維持し、サービス別にUserを重複作成しない。分離対象は入口、表示ブランド、戻り先、Membership認可であり、サービス間のデータ参照を許可するものではない。
+
 ## 2026-11-03: 最新main公開前の6件のProduction migrationを限定適用する
 
 - 状態: 未実行。Production Migration History Probe run `41577813391`で、対象project `vtkzinaudznwbsjoyszk`に未適用6件、migration history変更なしを確認した。

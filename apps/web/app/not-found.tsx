@@ -13,9 +13,6 @@ export default function NotFound() {
         <Link className="button button--primary button--full" href="/">
           トップへ戻る
         </Link>
-        <Link className="service-entry__login-link" href="/login">
-          ログイン画面を開く
-        </Link>
       </section>
     </PublicShell>
   );

@@ -23,8 +23,9 @@ const serviceOverviewAdminPagePattern = new RegExp(
 
 export function serviceAuthLoginPath(returnTo: string): Route {
   const safe = safeLineAuthReturnPath(returnTo);
-  return safe && serviceAuthReturnSlug(safe)
-    ? (`/login?returnTo=${encodeURIComponent(safe)}` as Route)
+  const serviceSlug = serviceAuthReturnSlug(safe);
+  return safe && serviceSlug
+    ? (`/s/${serviceSlug}/login?returnTo=${encodeURIComponent(safe)}` as Route)
     : '/login';
 }
 
