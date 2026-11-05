@@ -64,6 +64,9 @@ export class PrismaAiUsageCostReconciliationRepository implements AiUsageCostRec
           select: {
             id: true,
             provider: true,
+            status: true,
+            inputTokens: true,
+            outputTokens: true,
             occurredAt: true,
             estimatedCostUsdMicros: true,
             pricingVersion: true,
@@ -77,6 +80,14 @@ export class PrismaAiUsageCostReconciliationRepository implements AiUsageCostRec
         )
           throw new ApplicationError('CONFLICT', 'usage event is outside reconciliation scope');
         const cost = BigInt(update.estimatedCostUsdMicros);
+        if (
+          cost === 0n &&
+          (row.status !== 'FAILED' || row.inputTokens !== null || row.outputTokens !== null)
+        )
+          throw new ApplicationError(
+            'CONFLICT',
+            'zero cost requires a failed event without token usage',
+          );
         if (row.estimatedCostUsdMicros !== null) {
           if (row.estimatedCostUsdMicros === cost && row.pricingVersion === update.pricingVersion) {
             alreadyReconciled += 1;

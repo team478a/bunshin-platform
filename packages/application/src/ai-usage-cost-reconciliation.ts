@@ -130,11 +130,8 @@ export class RepairUnknownAiUsageCosts {
       if (!uuid(update.usageEventId) || ids.has(update.usageEventId))
         throw new ApplicationError('VALIDATION_ERROR', 'invalid or duplicate usage event id');
       ids.add(update.usageEventId);
-      if (
-        !Number.isSafeInteger(update.estimatedCostUsdMicros) ||
-        update.estimatedCostUsdMicros <= 0
-      )
-        throw new ApplicationError('VALIDATION_ERROR', 'reconciliation cost must be positive');
+      if (!Number.isSafeInteger(update.estimatedCostUsdMicros) || update.estimatedCostUsdMicros < 0)
+        throw new ApplicationError('VALIDATION_ERROR', 'reconciliation cost must be non-negative');
       if (!symbol(update.pricingVersion, 120))
         throw new ApplicationError('VALIDATION_ERROR', 'invalid reconciliation pricing version');
     }

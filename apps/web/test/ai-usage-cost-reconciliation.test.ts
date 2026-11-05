@@ -108,4 +108,26 @@ describe('AI usage cost reconciliation HTTP', () => {
       expect.objectContaining({ evidenceReference: 'invoice:2026-10-openai' }),
     );
   });
+
+  it('accepts an explicitly evidenced zero-cost repair for repository validation', async () => {
+    const response = await repairUnknownAiUsageCostsResponse(
+      request({
+        reason: 'Provider未送信を運用ログで確認',
+        evidenceReference: 'vercel-log:daily-mission-2026-11-02',
+        updates: [
+          {
+            usageEventId: '22222222-2222-4222-8222-222222222222',
+            estimatedCostUsdMicros: 0,
+            pricingVersion: 'no-provider-call-v1',
+          },
+        ],
+      }),
+    );
+    expect(response.status).toBe(200);
+    expect(state.repair).toHaveBeenCalledWith(
+      expect.objectContaining({
+        updates: [expect.objectContaining({ estimatedCostUsdMicros: 0 })],
+      }),
+    );
+  });
 });

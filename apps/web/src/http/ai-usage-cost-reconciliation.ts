@@ -14,7 +14,7 @@ import { requireSameOrigin } from '../auth/request-security';
 const updateSchema = z
   .object({
     usageEventId: z.string().uuid(),
-    estimatedCostUsdMicros: z.number().int().positive().safe(),
+    estimatedCostUsdMicros: z.number().int().nonnegative().safe(),
     pricingVersion: z.string().trim().min(1).max(120),
   })
   .strict();
