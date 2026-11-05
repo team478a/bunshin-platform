@@ -1,0 +1,96 @@
+name: Apply approved social publishing migrations (2026-11-05)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type APPLY_SOCIAL_PUBLISHING_SCHEMA_TO_vtkzinaudznwbsjoyszk to proceed
+        required: true
+        type: string
+      project_ref:
+        description: Approved 20-character Supabase project reference
+        required: true
+        type: string
+      mode:
+        description: Preview first; apply executes only the three approved social migrations
+        required: true
+        type: choice
+        default: preview
+        options: [preview, apply]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-migration-apply
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: production
+    steps:
+      - name: Require main and exact target confirmation
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+          EXPECTED_PROJECT_REF: ${{ inputs.project_ref }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$CONFIRMATION" = "APPLY_SOCIAL_PUBLISHING_SCHEMA_TO_vtkzinaudznwbsjoyszk"
+          test "$EXPECTED_PROJECT_REF" = "vtkzinaudznwbsjoyszk"
+
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.10.0
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install native PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client-16
+
+      - name: Apply only the approved social publishing migrations through the session pooler
+        env:
+          VERCEL_ENV: production
+          MIGRATION_APPLY_EXPECTED_PROJECT_REF: ${{ inputs.project_ref }}
+          MIGRATION_APPLY_CONFIRMATION: ${{ inputs.confirmation }}
+          MIGRATION_APPLY_MODE: ${{ inputs.mode }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+          SUPABASE_SESSION_POOLER_HOST: ${{ vars.SUPABASE_SESSION_POOLER_HOST || secrets.SUPABASE_SESSION_POOLER_HOST }}
+        run: |
+          set -euo pipefail
+          pnpm db:migration:apply:social-release-20261105 | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Verify complete schema readiness after apply
+        if: inputs.mode == 'apply'
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+        run: |
+          set -euo pipefail
+          pnpm db:assert-ready | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Record outcome
+        if: success()
+        env:
+          RELEASE_MODE: ${{ inputs.mode }}
+        run: |
+          {
+            echo "## Social publishing production schema release"
+            echo ""
+            echo "- Mode: $RELEASE_MODE"
+            echo "- Result: successful; Preview does not execute DDL or record migrations"
+            echo "- Scope: exactly the three approved social publishing migrations"
+            echo "- Database credentials and account identifiers: not recorded"
+          } >> "$GITHUB_STEP_SUMMARY"
