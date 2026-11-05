@@ -30,13 +30,14 @@ const m = vi.hoisted(() => ({
   strategyGenerate: vi.fn(),
   runtime: vi.fn(),
   usage: vi.fn(),
+  logError: vi.fn(),
 }));
 vi.mock('@bunshin/config', () => ({
   getServerEnvironment: () => ({ APP_URL: 'https://example.com' }),
 }));
 vi.mock('@bunshin/observability', () => ({
   requestIdFromHeader: () => 'request-a',
-  createLogger: () => ({ child: () => ({ info: vi.fn(), error: vi.fn() }) }),
+  createLogger: () => ({ child: () => ({ info: vi.fn(), error: m.logError }) }),
 }));
 vi.mock('../src/auth/current-user', () => ({
   currentUserProvider: () => Promise.resolve({ getCurrentUser: m.actor }),
@@ -489,6 +490,34 @@ describe('private service social planning HTTP operations', () => {
     ).toBe(404);
     expect(m.strategyGenerate).not.toHaveBeenCalled();
     expect(m.strategies.createVersion).not.toHaveBeenCalled();
+  });
+  it.each([
+    ['provider cost is unknown', 'PROVIDER_COST_UNKNOWN'],
+    ['daily provider budget reached', 'DAILY_PROVIDER_BUDGET_REACHED'],
+    ['monthly provider budget reached', 'MONTHLY_PROVIDER_BUDGET_REACHED'],
+    ['provider call operation already admitted', 'PROVIDER_OPERATION_ALREADY_ADMITTED'],
+    ['other private detail', 'PROVIDER_ADMISSION_CONFLICT'],
+  ])('records a safe strategy admission reason for %s', async (message, failureReason) => {
+    m.runtime.mockRejectedValueOnce(new ApplicationError('CONFLICT', message));
+
+    const response = await generateServiceAccountStrategyResponse(
+      request(strategyBody),
+      'private-a',
+      'bunshin-a',
+    );
+
+    expect(response.status).toBe(409);
+    expect(m.strategyGenerate).not.toHaveBeenCalled();
+    expect(m.usage).not.toHaveBeenCalled();
+    expect(m.logError).toHaveBeenCalledWith(
+      'service strategy generation admission failed',
+      expect.objectContaining({
+        status: 'failed',
+        errorCode: 'CONFLICT',
+        failureReason,
+      }),
+    );
+    expect(JSON.stringify(await response.json())).not.toContain(message);
   });
   it('preserves confirmed-plan theme protection and weekly generation conflicts', async () => {
     m.pillars.delete.mockRejectedValue(
