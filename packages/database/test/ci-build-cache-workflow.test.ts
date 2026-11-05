@@ -16,6 +16,16 @@ describe('CI build cache trust boundary', () => {
     expect(workflow).not.toMatch(/\.env|DATABASE_URL.*cache|DIRECT_URL.*cache/);
   });
 
+  it('regenerates Prisma Client after restoring Turbo cache', () => {
+    const installIndex = workflow.indexOf('- run: pnpm install --frozen-lockfile');
+    const generateIndex = workflow.indexOf('- run: pnpm db:generate');
+    const typecheckIndex = workflow.indexOf('- run: pnpm typecheck');
+
+    expect(installIndex).toBeGreaterThan(-1);
+    expect(generateIndex).toBeGreaterThan(installIndex);
+    expect(typecheckIndex).toBeGreaterThan(generateIndex);
+  });
+
   it('saves the cache only after a successful trusted main push', () => {
     expect(workflow).toContain('uses: actions/cache/save@v4');
     expect(workflow).toContain("github.event_name == 'push'");

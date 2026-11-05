@@ -13,7 +13,7 @@ import {
 describe('LINE authentication return path', () => {
   it('does not trust arbitrary service slugs supplied to a login redirect', () => {
     expect(serviceAuthLoginPath('/s/media/manage/points')).toBe(
-      '/login?returnTo=%2Fs%2Fmedia%2Fmanage%2Fpoints',
+      '/s/media/login?returnTo=%2Fs%2Fmedia%2Fmanage%2Fpoints',
     );
     expect(serviceAuthLoginPath('/s/media/../fortune/manage/points')).toBe('/login');
     expect(serviceAuthLoginPath('/s//evil.example/manage/points')).toBe('/login');

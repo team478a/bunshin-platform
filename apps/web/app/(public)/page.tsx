@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import Image from 'next/image';
 import { toDataURL } from 'qrcode';
 import { getOfficialLineAccountUrl } from '@bunshin/config';
@@ -21,14 +20,10 @@ export default async function HomePage() {
             あなた専用のSNS戦略を考え、今日やることと投稿案を届けます。内容を選んでコピーし、投稿するだけです。
           </p>
           <div className="landing-actions">
-            {lineUrl ? (
+            {lineUrl && (
               <a className="button button--primary" href={lineUrl} rel="noreferrer">
                 公式LINEを友だち追加してはじめる
               </a>
-            ) : (
-              <Link className="button button--primary" href="/login">
-                ワタシワークスをはじめる
-              </Link>
             )}
             <a className="button button--secondary" href="#how-it-works">
               使い方を見る
@@ -37,7 +32,7 @@ export default async function HomePage() {
           <small>
             {lineUrl
               ? '友だち追加後、LINEの案内から登録できます'
-              : 'メールリンクでログイン・パスワード不要'}
+              : 'ご利用中のサービスの案内からログインしてください'}
           </small>
           {lineQrCode ? (
             <figure className="landing-line-qr">

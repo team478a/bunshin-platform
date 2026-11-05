@@ -10,6 +10,7 @@ import { ParticipationForm } from './participation-form';
 import { PendingSubmitButton } from '../../ui/pending-submit-button';
 import { ServiceHomeAccessGuidance } from './home/service-home-access-guidance';
 import { serviceAuthBrandForSlug } from '../../../src/services/service-auth-brand';
+import { serviceAuthLoginPath } from '../../../src/auth/line-return';
 
 export const dynamic = 'force-dynamic';
 
@@ -221,10 +222,7 @@ export default async function ServiceEntryPage({
                 </form>
               )}
               {configuration.registration.emailEnabled && copy.action && !currentUser && (
-                <Link
-                  className="service-entry__login-link"
-                  href={`/login?returnTo=${encodeURIComponent(returnTo)}`}
-                >
+                <Link className="service-entry__login-link" href={serviceAuthLoginPath(returnTo)}>
                   メールでログインする
                 </Link>
               )}
