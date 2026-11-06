@@ -1,5 +1,6 @@
 'use client';
 import { useState, type FormEvent } from 'react';
+import { providerRuntimeReadiness } from './provider-runtime-readiness';
 
 type Provider =
   'OPENAI' | 'GOOGLE' | 'GROK' | 'EXA' | 'FIRECRAWL' | 'CREATOMATE' | 'FAL' | 'RUNWAY';
@@ -226,6 +227,7 @@ export function AiProviderConfigurationEditor(props: {
         <div className="settings-status-list">
           {(Object.keys(labels) as Provider[]).map((value) => {
             const item = configurations.find((configuration) => configuration.provider === value);
+            const readiness = providerRuntimeReadiness(item);
             return (
               <article className="settings-status-item" key={value}>
                 <h3>{labels[value]}</h3>
@@ -237,16 +239,9 @@ export function AiProviderConfigurationEditor(props: {
                     : item.lastErrorCategory
                       ? 'エラー'
                       : '確認済み'}
-                  ／ 使用：{item?.status === 'ACTIVE' ? '使用中' : '停止中'}
+                  ／ 使用：{readiness.usageLabel}
                 </p>
-                <p>
-                  次にすること：
-                  {!item?.apiKeyConfigured
-                    ? 'APIキーを登録する'
-                    : item.status !== 'ACTIVE'
-                      ? 'この設定を使い始める'
-                      : '設定済みです'}
-                </p>
+                <p>次にすること：{readiness.nextAction}</p>
               </article>
             );
           })}
@@ -400,14 +395,16 @@ export function AiProviderConfigurationEditor(props: {
               <input
                 name="requestCostUsd"
                 type="number"
-                defaultValue="0"
-                min="0"
+                key={provider}
+                defaultValue={provider === 'OPENAI' ? '0.01' : ''}
+                min="0.000001"
                 max="1000"
                 step="0.000001"
                 required
               />
               <small>
-                実行前の安全確認に使う見込み額です。請求額を手入力する欄ではありません。
+                実行前の安全確認に使う正の見込み額です。請求額を手入力する欄ではありません。
+                OpenAIの初期値は1処理あたり1セントの予約額です。利用モデルの価格に合わせて確認してください。
               </small>
             </label>
           </details>

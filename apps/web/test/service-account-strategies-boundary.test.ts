@@ -18,6 +18,7 @@ describe('service account strategy boundary', () => {
     expect(source).toContain('resolveMemberServiceContext(serviceSlug, actor)');
     expect(source).not.toContain('resolvePublicServiceContext');
     expect(source).toContain('groupId: service.serviceId');
+    expect(source).toContain('groupId: input.groupId');
     expect(source).not.toContain('groupId: z.');
     expect(source).not.toContain('workspaceId: z.');
   });

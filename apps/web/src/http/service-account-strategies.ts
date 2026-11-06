@@ -42,6 +42,13 @@ const emptySchema = z.object({}).strict();
 
 function providerAdmissionFailureReason(error: unknown) {
   if (!(error instanceof ApplicationError)) return 'UNEXPECTED_ERROR';
+  if (error.message === 'provider request cost is required')
+    return 'PROVIDER_REQUEST_COST_REQUIRED';
+  if (
+    error.message === 'provider secret authentication failed' ||
+    error.message === 'invalid encrypted provider secret'
+  )
+    return 'PROVIDER_SECRET_INVALID';
   if (error.code !== 'CONFLICT') return error.code;
   switch (error.message) {
     case 'provider cost is unknown':
@@ -221,6 +228,7 @@ export function generateServiceAccountStrategyResponse(
       try {
         const result = await withOrganizationAiGenerationQuota({
           workspaceId: input.workspaceId,
+          groupId: input.groupId,
           operationKey,
           generate: () => {
             providerAttempted = true;

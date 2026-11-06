@@ -30,6 +30,7 @@ const m = vi.hoisted(() => ({
   strategyGenerate: vi.fn(),
   runtime: vi.fn(),
   usage: vi.fn(),
+  quota: vi.fn(),
   logError: vi.fn(),
 }));
 vi.mock('@bunshin/config', () => ({
@@ -102,8 +103,15 @@ vi.mock('../src/providers/openai-strategy-generator', () => ({
 }));
 vi.mock('../src/observability/ai-usage', () => ({ recordAiUsageSafely: m.usage }));
 vi.mock('../src/organization-ai-generation-quota', () => ({
-  withOrganizationAiGenerationQuota: ({ generate }: { generate: () => Promise<unknown> }) =>
-    generate(),
+  withOrganizationAiGenerationQuota: (input: {
+    workspaceId: string;
+    groupId?: string;
+    operationKey: string;
+    generate: () => Promise<unknown>;
+  }) => {
+    m.quota(input);
+    return input.generate();
+  },
 }));
 import {
   createServiceSocialProfileResponse,
@@ -476,6 +484,13 @@ describe('private service social planning HTTP operations', () => {
     expect(m.strategyGenerate).toHaveBeenCalledWith(
       expect.objectContaining({ grantedKnowledge: [{ title: '自サービスの知識' }] }),
     );
+    expect(m.quota).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceId: 'workspace-a',
+        groupId: 'service-a',
+        operationKey: 'request-a:service-strategy',
+      }),
+    );
   });
   it('rejects a foreign social profile before strategy provider access', async () => {
     m.profiles.findByPlatform.mockResolvedValue({ ...profile, id: 'other-profile' });
@@ -514,6 +529,29 @@ describe('private service social planning HTTP operations', () => {
       expect.objectContaining({
         status: 'failed',
         errorCode: 'CONFLICT',
+        failureReason,
+      }),
+    );
+    expect(JSON.stringify(await response.json())).not.toContain(message);
+  });
+  it.each([
+    ['provider request cost is required', 'PROVIDER_REQUEST_COST_REQUIRED'],
+    ['provider secret authentication failed', 'PROVIDER_SECRET_INVALID'],
+    ['invalid encrypted provider secret', 'PROVIDER_SECRET_INVALID'],
+  ])('records a safe configuration reason for %s', async (message, failureReason) => {
+    m.runtime.mockRejectedValueOnce(new ApplicationError('CONFIGURATION_ERROR', message));
+
+    const response = await generateServiceAccountStrategyResponse(
+      request(strategyBody),
+      'private-a',
+      'bunshin-a',
+    );
+
+    expect(response.status).toBe(503);
+    expect(m.logError).toHaveBeenCalledWith(
+      'service strategy generation admission failed',
+      expect.objectContaining({
+        errorCode: 'CONFIGURATION_ERROR',
         failureReason,
       }),
     );
