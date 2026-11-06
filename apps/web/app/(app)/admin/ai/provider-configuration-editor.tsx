@@ -258,7 +258,7 @@ export function AiProviderConfigurationEditor(props: {
           <h2>初めてAIを設定する手順</h2>
           <ol>
             <li>利用するサービスの公式管理画面でAPIキーを作ります。</li>
-            <li>APIキーを下のフォームへ一度だけ貼り付け、予算と変更理由を入力します。</li>
+            <li>APIキーを下のフォームへ一度だけ貼り付け、月額上限と変更理由を入力します。</li>
             <li>保存した設定で「この設定を使い始める」を押します。</li>
             <li>接続確認は自動で行われ、成功した場合だけ使用中になります。</li>
           </ol>
@@ -366,19 +366,7 @@ export function AiProviderConfigurationEditor(props: {
             </small>
           </label>
           <label>
-            1日に使ってよい金額（米ドル）
-            <input
-              name="dailyBudgetUsd"
-              type="number"
-              defaultValue="1"
-              min="0"
-              max="10000"
-              step="0.01"
-              required
-            />
-          </label>
-          <label>
-            1か月に使ってよい金額（米ドル）
+            1か月の利用上限（米ドル）
             <input
               name="monthlyBudgetUsd"
               type="number"
@@ -388,20 +376,41 @@ export function AiProviderConfigurationEditor(props: {
               step="0.01"
               required
             />
+            <small>通常はこの月額上限だけを決めれば十分です。</small>
           </label>
-          <label>
-            1回の利用にかかる金額（米ドル）
-            <input
-              name="requestCostUsd"
-              type="number"
-              defaultValue="0"
-              min="0"
-              max="1000"
-              step="0.000001"
-              required
-            />
-            <small>調査または動画1本にかかる見込み金額です。不明なら0のまま保存できます。</small>
-          </label>
+          <details>
+            <summary>高度な安全設定（日額停止・処理中の予約額）</summary>
+            <p>
+              短時間の使い過ぎや同時実行を止めるための内部設定です。通常運用では変更する必要はありません。
+            </p>
+            <label>
+              1日の緊急停止上限（米ドル）
+              <input
+                name="dailyBudgetUsd"
+                type="number"
+                defaultValue="1"
+                min="0"
+                max="10000"
+                step="0.01"
+                required
+              />
+            </label>
+            <label>
+              1処理の予約額（米ドル）
+              <input
+                name="requestCostUsd"
+                type="number"
+                defaultValue="0"
+                min="0"
+                max="1000"
+                step="0.000001"
+                required
+              />
+              <small>
+                実行前の安全確認に使う見込み額です。請求額を手入力する欄ではありません。
+              </small>
+            </label>
+          </details>
           <label>
             変更した理由
             <input
@@ -455,11 +464,12 @@ export function AiProviderConfigurationEditor(props: {
                 </p>
                 <p>APIキー：{item.apiKeyConfigured ? (item.apiKeyMask ?? '登録済み') : '未登録'}</p>
                 {item.model ? <p>AIモデル：{item.model}</p> : null}
-                <p>
-                  上限：1日 ${usd(item.dailyBudgetUsdMicros)}／1か月 $
-                  {usd(item.monthlyBudgetUsdMicros)}
-                </p>
-                <p>利用1回の見込み原価：${usd(item.requestCostUsdMicros ?? 0)}</p>
+                <p>月額上限：${usd(item.monthlyBudgetUsdMicros)}</p>
+                <details>
+                  <summary>高度な安全設定を確認</summary>
+                  <p>日額停止上限：${usd(item.dailyBudgetUsdMicros)}</p>
+                  <p>1処理の予約額：${usd(item.requestCostUsdMicros ?? 0)}</p>
+                </details>
                 {item.apiKeyConfigured && item.status !== 'ACTIVE' ? (
                   <button
                     className="button button--primary"
