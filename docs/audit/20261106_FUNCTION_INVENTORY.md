@@ -2,87 +2,107 @@
 
 調査基準日: 2026-11-06 JST
 
-基準: `main` = `d884d7c6f57a5f882cca32b91dce3e0d67b3c706`、`production` = `9473b4294f0b6f36c339d659aca0e397637009f9`
+基準:
 
-## エグゼクティブサマリー
+- `main`: `d884d7c6f57a5f882cca32b91dce3e0d67b3c706`
+- `production` branch: `9473b4294f0b6f36c339d659aca0e397637009f9`
+- 公開Vercel deployment: `dpl_J2gYTWu8YsoQPZSBzSCpMsj5XZRb`
+- 公開deployment metadata SHA: `1d09ba058e75674c6dd34f9dd99b2e46825edaef`
 
-| 指標                                         | 件数・結論                                                                                     |
-| -------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| 調査したサービス領域                         | 8（7サービス群 + 共通基盤）                                                                    |
-| 台帳化した機能                               | 112                                                                                            |
-| A                                            | 8                                                                                              |
-| B                                            | 64                                                                                             |
-| C                                            | 31                                                                                             |
-| D                                            | 3                                                                                              |
-| E                                            | 2                                                                                              |
-| 要確認                                       | 4                                                                                              |
-| 本番でサービス全体の利用完了を確認できたもの | 0                                                                                              |
-| 本番で一部成功を確認できたもの               | ハッシーの公開入口、メール認証、初期設定、専用LINE接続、SNSプロフィール/テーマ保存。共通health |
-| 本番利用に問題があるもの                     | ハッシー（AI原価未確定で配信開始停止）。その他6サービス群は完走証拠不足のため販売Goにできない  |
+## 最終集計
 
-全112行の正本は[フィルター可能なCSV](20261106_FUNCTION_INVENTORY.csv)。Markdownでは判断基準と横断結論だけを保持し、画面・API・コード・Migration・PR・テスト・本番証拠の詳細はCSVを参照する。
+| 指標                                     |                  件数・結論 |
+| ---------------------------------------- | --------------------------: |
+| サービス領域                             | 8（7サービス群 + 共通基盤） |
+| 機能                                     |                         112 |
+| A                                        |                           8 |
+| B                                        |                          95 |
+| C                                        |                           0 |
+| D                                        |                           3 |
+| E                                        |                           2 |
+| 要確認                                   |                           4 |
+| コード実装 完了 / 部分 / 未実装          |                 106 / 4 / 2 |
+| 実利用検証 成功 / 失敗 / 未実施 / 未確認 |              8 / 3 / 7 / 94 |
+| サービス全体の一般販売GO                 |                           0 |
 
-## 重要な結論
+全112行の正本は[CSV](20261106_FUNCTION_INVENTORY.csv)。CSVではコード実装、本番反映、実利用検証、販売判断を独立列にした。A〜Eは機能の総合到達度であり、販売判断の代用ではない。
 
-1. コード量は「未実装」より「実装済みだが利用成功未確認」が支配的である。176 page、388 API route、276 Prisma migration、1,076 test fileを確認した。新機能追加より既存導線の実証が先である。
-2. `production`は`main`の単純な祖先ではない。分岐はproduction側のみ2 commit、main側のみ36 commitで、tree差分は95 file・6,454 insertions・322 deletions。mainへのmergeを本番反映とみなしていない。
-3. 2026-11-06の公開Production Health Smokeはlive、ready、configuration、authentication、database、databaseSchema=current、`/s/hassy`表示を確認して成功した。ただしこれは機能利用成功の証拠ではない。
-4. ハッシーの本番操作では2026-11-06 07:44 JSTに戦略生成が`PROVIDER_COST_UNKNOWN`でHTTP 409となり、LINE配信開始まで進まなかった。失敗・tokenなし記録を0円精算できる修正#1481と管理画面簡素化#1482はmainにあるが、productionブランチにはない。
-5. マナベルスタイルは固定教材と動的学習の両方にコードがある。固定教材はProgram/Assignment中心、動的学習はLearning Request/Goal/Plan revision/Definition approval/AI相談中心であり、提供状態を混同しない。どちらも本番完走証拠は見つからなかった。
-6. 副業、占い、物販、メディア/OEMは共通基盤を相当再利用している。専用Service設定・実利用・外部接続の証拠が不足し、コードの存在だけでは販売可能と判定できない。
+実利用検証の「失敗」3件（H-07、O-13、C-11）は、別々の3障害ではなく、ハッシーの`PROVIDER_COST_UNKNOWN`事象を、発信戦略生成・AI原価管理・共通AI実行の各機能行へ反映したものである。
+
+## 監査前後で変わった点
+
+| 項目        | 監査前         | 再監査後           | 根拠                                                                                                          |
+| ----------- | -------------- | ------------------ | ------------------------------------------------------------------------------------------------------------- |
+| C判定       | 31             | 0                  | 公開deploymentをread-onlyで同定。Instagram、side-hustle、fortune、resale、AI原価等のrouteをbuild outputで確認 |
+| B判定       | 64             | 95                 | main実装のみとみなしていた31件を「公開反映済み・実利用未確認」のBへ変更                                       |
+| #1481/#1482 | 本番未反映扱い | 公開反映済み       | 公開SHAは#1482 head `1d09ba05`。#1481 headを祖先に含み、main merge `d884d7c6`とGit treeが同じ                 |
+| Hassy権限   | P0前提         | 実利用失敗は未確認 | 設定上の未付与記録はあるが、一般参加者が権限不足で失敗した操作証跡はない                                      |
+
+Vercel metadataには`gitDirty=1`があるため、公開artifactがcommit treeとbyte単位で同一とは断定しない。一方、優先機能のrouteは公開build outputで個別に確認した。`production` branchが古いことと、公開Vercelへコードが反映済みであることを分けて記録する。
+
+## サービス別 A〜E・要確認
+
+| サービス               |     A |      B |     C |     D |     E | 要確認 |      計 |
+| ---------------------- | ----: | -----: | ----: | ----: | ----: | -----: | ------: |
+| ハッシー               |     6 |     13 |     0 |     1 |     1 |      1 |      22 |
+| マナベルスタイル       |     0 |     16 |     0 |     0 |     0 |      0 |      16 |
+| マナベルスタイル副業版 |     0 |      8 |     0 |     1 |     0 |      0 |       9 |
+| 占い                   |     0 |      7 |     0 |     0 |     0 |      1 |       8 |
+| AI物販                 |     0 |      8 |     0 |     1 |     0 |      0 |       9 |
+| メディア・アンバサダー |     0 |     11 |     0 |     0 |     0 |      1 |      12 |
+| OEM・ホワイトラベル    |     0 |     14 |     0 |     0 |     1 |      1 |      16 |
+| 共通基盤               |     2 |     18 |     0 |     0 |     0 |      0 |      20 |
+| **合計**               | **8** | **95** | **0** | **3** | **2** |  **4** | **112** |
+
+## 独立4軸
+
+| 軸           | 値                                   | 解釈                                                   |
+| ------------ | ------------------------------------ | ------------------------------------------------------ |
+| コード実装   | 完了・部分実装・未実装               | 現行source/API/UI/DBが揃うか                           |
+| 公開本番反映 | 確認済み・部分確認・対象なし・未確認 | branch名ではなく公開artifact/build output/schemaを確認 |
+| 実利用検証   | 成功・失敗・未実施・未確認           | 実利用がないことと利用不能を区別                       |
+| 販売判断     | GO・条件付きGO・NO-GO・未判定        | 説明/デモ/先行テスト/一般販売の条件を分離              |
+
+コードが公開済みでも実操作がなければBであり、Aや一般販売GOにはしない。実利用証拠がないだけでコードを未完成とはしない。
 
 ## 判定基準
 
-| 判定   | この監査で要求した証拠                                               |
-| ------ | -------------------------------------------------------------------- |
-| A      | 本番で利用者操作の成功、または対象機能そのものの実結果を確認済み     |
-| B      | productionブランチまたは本番相当環境に実装があるが、利用成功は未確認 |
-| C      | mainにコード・DB・テストがあるが、production反映を確認できない       |
-| D      | 主要部品だけ、または利用者導線/設定/公開Serviceが欠ける              |
-| E      | 実装を確認できない、構想のみ                                         |
-| 要確認 | 証拠が相反・不足し、A〜Eを確定すると推測になる                       |
+| 判定   | 証拠                                                          |
+| ------ | ------------------------------------------------------------- |
+| A      | 本番で対象機能の利用成功を確認                                |
+| B      | 公開本番へコード/DBが反映済みだが、対象機能の利用成功は未確認 |
+| C      | main実装済みだが公開本番反映を確認できない                    |
+| D      | 主要部品のみ、または利用者導線/設定/公開Serviceが欠ける       |
+| E      | 未実装・構想                                                  |
+| 要確認 | 証拠不足・相反により確定不能                                  |
 
-`A`はサービス全体ではなく機能単位。たとえばハッシーのメールログインがAでも、投稿案生成・LINE配信をAに引き上げていない。
+## main / production / 公開環境
 
-## サービス別集計
+- `origin/production...origin/main`はproduction側2 commit、main側36 commit。単純なfast-forward関係ではない。
+- 公開Vercelは2026-11-06 09:52:57 JSTにREADYとなった`1d09ba05`を示す。`production` branch headとは異なる。
+- `1d09ba05`は#1481を含み、#1482のhead。Git treeはmain `d884d7c6`と同一。
+- 公開build output 1,144 pathから、Instagram接続/投稿、side-hustle、fortune、resale、AI原価精算、custom-domain等のrouteを確認した。
+- `/api/health/live`は`ok`、`/api/health/ready`は`ready`。configuration/authentication/databaseは`ok`、databaseSchemaは`current`。
+- schema readiness正本は`20261104020000_social_publication_intents`。healthは機能別の成功や本番設定の妥当性を保証しない。
 
-| サービス               | 機能数 | 主な到達点                                                                  | 主な停止点                                                  |
-| ---------------------- | -----: | --------------------------------------------------------------------------- | ----------------------------------------------------------- |
-| ハッシー               |     22 | 公開入口、認証、初期設定、専用LINE接続、プロフィール/テーマ保存は実利用確認 | AI原価未確定により戦略生成409、配信開始・投稿完了ループ未達 |
-| マナベルスタイル       |     16 | 固定教材・動的学習・評価・再開・LINE・原価管理のコードあり                  | 本番完走なし。動的学習の本番Gate/実AI/実端末証拠不足        |
-| マナベルスタイル副業版 |      9 | ヒアリング、候補、90日計画、振り返り、revision実装                          | 専用Service/Programの本番実体と利用証拠なし                 |
-| 占い                   |      8 | Package、カード、標準知識、個別化、履歴、評価、LINE実装                     | 公開Service、承認済み知識版、実利用証拠が不明               |
-| AI物販                 |      9 | 7日/90日policy、Action、商品、オファー、決済部品あり                        | 公開Service、決済、7日/90日完走証拠なし                     |
-| メディア・アンバサダー |     12 | Campaign、商品素材、投稿支援、成果、紹介、point/badgeを実装                 | 千ノ国を含む本番通し・外部成果照合の証拠なし                |
-| OEM・ホワイトラベル    |     16 | テナント、brand、feature、契約、課金、請求、利用量を実装                    | 1社の登録から請求までの通し証拠なし。顧客移管は未実装       |
-| 共通基盤               |     20 | 認証、scope、Provider、Job、監査、法務、healthまで広範                      | 管理面が肥大化。機能別成功と本番RLS/role証拠は別途必要      |
+## P0/P1の証拠強化
 
-## main / production / 公開環境の扱い
+CSVのH-05、H-07、H-09、H-10、H-13、H-14、H-19、H-20、M-01〜M-11、O-01/O-02/O-06/O-07/O-09〜O-14、C-11/C-15/C-20には、具体的なAPI、source、table/migration、PR、test file、結果を記載した。
 
-- `git rev-list --left-right --count origin/production...origin/main`は`2 36`。release mergeを含むためcommit件数を機能数へ換算していない。
-- `origin/production..origin/main`にはInstagram公式接続・承認付き公開、サービス別login、AI原価診断/0円精算/管理画面簡素化が含まれる。
-- GitHub Deploymentの`environment=production`にはアプリdeployだけでなくMigration History Probeやmigration workflowも含まれる。`success`だけで公開アプリSHAと断定しない。
-- 2026-11-06の公開health成功を「基盤稼働B/Aの一部証拠」とし、ログイン後の業務成功へ流用しない。
-- 本番設定・データ・Feature Flag・外部APIは今回変更していない。有料AI、LINE送信、SNS投稿、決済を実行していない。
+主な実運用証拠:
 
-## 調査した証拠
-
-- ソース: `apps/web/app`、`apps/web/src`、`packages/*/src`
-- API/UI: Next.js page 176、route 388
-- DB: `packages/database/prisma/schema.prisma`、migration 276
-- 自動テスト: 1,076 test/spec file（web 579、database 241、application 155、training 39、social 34ほか）
-- 履歴: `git log`、`git diff origin/production..origin/main`、GitHub PR/Actions/Deployments
-- 本番証跡: `docs/hassy/HASSY_PRODUCTION_OPERATION_AUDIT_2026-11-05.md`、マナベルread-only audit/launch runbook、2026-11-06 Production Health Smoke log
-
-READMEや実装報告は索引として用い、最終判定は現行コード・route・schema・test・branch差分と矛盾しない場合だけ採用した。過去文書の「実装済み」は本番利用成功へ読み替えていない。
+- Hassy: 2026-11-06 07:44 JST、戦略生成が`PROVIDER_COST_UNKNOWN`でHTTP 409。成功4件はtokenあり、失敗8件はtokenなしでProvider送信前停止。
+- #1481: 失敗かつtokenなしだけ0円精算可能、成功/tokenありはDB拒否。対象22 test成功。
+- #1482: 月額上限中心の表示、原価記録のgroup化・一括入力。web 7 test + 用語2 test成功。
+- PR #1483 CI: `verify`と`database`が成功。これは実利用成功の代替ではない。
 
 ## 未解決事項
 
-- 公開アプリの厳密なcommit SHAと`production`ブランチの対応
-- 各Serviceの現行Feature/Program/Product/LINE/AI設定のread-only一覧
-- マナベル固定教材/動的学習の本番受講開始・完走件数
-- 千ノ国、占い、物販、副業版の公開slug・有効参加者・最終成功時刻
-- Stripeの本番/テストmode、webhook最終成功、返金・失効実績
-- Cron/Jobごとの最終成功、滞留、dead-letter相当状態
+- Hassyの本番実データ精算、戦略生成再実行、配信開始、LINE受信、投稿完了。
+- 一般参加者の契約資格、Service Membership、Group Feature、Capability、Member Assignmentのread-only照合。
+- マナベル固定/動的の開始・評価・完走件数。
+- 副業、占い、物販、千ノ国の有効Service設定と利用実績。
+- Stripe、請求、Cron/Jobの機能別最終成功。
+- Vercel `gitDirty=1`の変更内容。公開routeの存在は確認したが、artifact全体のbyte一致は未確認。
 
-これらは推測で埋めず、[実運用導線報告](20261106_SERVICE_OPERATION_READINESS.md)のsmoke項目として残す。
+本監査では本番設定、データ、Feature Flagを変更せず、有料AI、LINE送信、SNS投稿、決済を実行していない。
