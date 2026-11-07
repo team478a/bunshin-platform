@@ -16,6 +16,7 @@ describe('daily mission AI runtime boundary', () => {
     expect(runtime).toContain('pricingVersion: runtime.requestCostUsdMicros');
     expect(runtime).toContain("taskType: 'DAILY_MISSION_PIPELINE'");
     expect(runtime).toContain("status: 'FAILED'");
+    expect(runtime).toContain("pricingVersion: 'no-provider-call-v1'");
     expect(runtime).toContain(':daily-pipeline-failure`');
     expect(runtime).toContain("'category' in cause");
   });

@@ -63,7 +63,6 @@ export function AiProviderConfigurationEditor(props: {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           provider,
-          reason: form.get('reason'),
           model: ['OPENAI', 'GOOGLE', 'GROK', 'FAL', 'RUNWAY'].includes(provider)
             ? form.get('model')
             : null,
@@ -79,9 +78,10 @@ export function AiProviderConfigurationEditor(props: {
                 'TOOL_USE',
               ].includes(typeof value === 'string' ? value : ''),
             ),
-          dailyBudgetUsd: Number(form.get('dailyBudgetUsd')),
           monthlyBudgetUsd: Number(form.get('monthlyBudgetUsd')),
-          requestCostUsd: Number(form.get('requestCostUsd')),
+          ...(form.get('requestCostUsd')
+            ? { requestCostUsd: Number(form.get('requestCostUsd')) }
+            : {}),
           apiKey: form.get('apiKey') || null,
         }),
       });
@@ -253,7 +253,7 @@ export function AiProviderConfigurationEditor(props: {
           <h2>初めてAIを設定する手順</h2>
           <ol>
             <li>利用するサービスの公式管理画面でAPIキーを作ります。</li>
-            <li>APIキーを下のフォームへ一度だけ貼り付け、月額上限と変更理由を入力します。</li>
+            <li>APIキーを下のフォームへ一度だけ貼り付け、月額上限を入力します。</li>
             <li>保存した設定で「この設定を使い始める」を押します。</li>
             <li>接続確認は自動で行われ、成功した場合だけ使用中になります。</li>
           </ol>
@@ -326,32 +326,35 @@ export function AiProviderConfigurationEditor(props: {
             </label>
           ) : null}
           {['OPENAI', 'GOOGLE'].includes(provider) ? (
-            <fieldset>
-              <legend>このモデルで確認済みの能力</legend>
-              <p>
-                評価に使うモデルの能力だけを選んでください。機能はモデル名ではなく、この設定で判定します。
-              </p>
-              {(
-                [
-                  ['STRUCTURED_OUTPUT', '構造化出力'],
-                  ['IMAGE_INPUT', '画像入力'],
-                  ['LONG_CONTEXT', '長い文脈'],
-                  ['WEB_SEARCH', 'ウェブ検索'],
-                  ['AUDIO_INPUT', '音声入力'],
-                  ['TOOL_USE', 'ツール操作'],
-                ] as const
-              ).map(([value, label]) => (
-                <label key={value}>
-                  <input
-                    type="checkbox"
-                    name="modelCapabilities"
-                    value={value}
-                    defaultChecked={value === 'STRUCTURED_OUTPUT' || value === 'IMAGE_INPUT'}
-                  />
-                  {label}
-                </label>
-              ))}
-            </fieldset>
+            <details>
+              <summary>モデルの能力を変更する場合のみ</summary>
+              <fieldset>
+                <legend>このモデルで確認済みの能力</legend>
+                <p>
+                  評価に使うモデルの能力だけを選んでください。機能はモデル名ではなく、この設定で判定します。
+                </p>
+                {(
+                  [
+                    ['STRUCTURED_OUTPUT', '構造化出力'],
+                    ['IMAGE_INPUT', '画像入力'],
+                    ['LONG_CONTEXT', '長い文脈'],
+                    ['WEB_SEARCH', 'ウェブ検索'],
+                    ['AUDIO_INPUT', '音声入力'],
+                    ['TOOL_USE', 'ツール操作'],
+                  ] as const
+                ).map(([value, label]) => (
+                  <label key={value}>
+                    <input
+                      type="checkbox"
+                      name="modelCapabilities"
+                      value={value}
+                      defaultChecked={value === 'STRUCTURED_OUTPUT' || value === 'IMAGE_INPUT'}
+                    />
+                    {label}
+                  </label>
+                ))}
+              </fieldset>
+            </details>
           ) : null}
           <label>
             APIキー
@@ -371,53 +374,42 @@ export function AiProviderConfigurationEditor(props: {
               step="0.01"
               required
             />
-            <small>通常はこの月額上限だけを決めれば十分です。</small>
+            <small>この上限だけを管理します。日額の安全上限はシステムが同額に設定します。</small>
           </label>
-          <details>
-            <summary>高度な安全設定（日額停止・処理中の予約額）</summary>
-            <p>
-              短時間の使い過ぎや同時実行を止めるための内部設定です。通常運用では変更する必要はありません。
-            </p>
+          {provider === 'OPENAI' ? (
+            <details>
+              <summary>内部の予約額を変更する場合のみ</summary>
+              <label>
+                1処理の予約額（米ドル）
+                <input
+                  name="requestCostUsd"
+                  type="number"
+                  defaultValue="0.01"
+                  min="0.000001"
+                  max="1000"
+                  step="0.000001"
+                  required
+                />
+                <small>
+                  実行前の安全確認に使う正の見込み額です。請求額を手入力する欄ではありません。
+                  通常は1セントの内部初期値を使います。モデルや処理内容の単価が異なる場合だけ変更します。
+                </small>
+              </label>
+            </details>
+          ) : (
             <label>
-              1日の緊急停止上限（米ドル）
-              <input
-                name="dailyBudgetUsd"
-                type="number"
-                defaultValue="1"
-                min="0"
-                max="10000"
-                step="0.01"
-                required
-              />
-            </label>
-            <label>
-              1処理の予約額（米ドル）
+              1処理の承認済み見込額（米ドル）
               <input
                 name="requestCostUsd"
                 type="number"
-                key={provider}
-                defaultValue={provider === 'OPENAI' ? '0.01' : ''}
                 min="0.000001"
                 max="1000"
                 step="0.000001"
                 required
               />
-              <small>
-                実行前の安全確認に使う正の見込み額です。請求額を手入力する欄ではありません。
-                OpenAIの初期値は1処理あたり1セントの予約額です。利用モデルの価格に合わせて確認してください。
-              </small>
+              <small>外部サービスの契約単価を確認して入力します。</small>
             </label>
-          </details>
-          <label>
-            変更した理由
-            <input
-              name="reason"
-              required
-              minLength={3}
-              maxLength={500}
-              placeholder="例：最初の予算を準備"
-            />
-          </label>
+          )}
           <div className="settings-save-action">
             <p id="ai-settings-save-help">
               保存だけではAIを使い始めません。保存後に接続確認を行い、確認済みの設定を使用中にします。
@@ -462,11 +454,6 @@ export function AiProviderConfigurationEditor(props: {
                 <p>APIキー：{item.apiKeyConfigured ? (item.apiKeyMask ?? '登録済み') : '未登録'}</p>
                 {item.model ? <p>AIモデル：{item.model}</p> : null}
                 <p>月額上限：${usd(item.monthlyBudgetUsdMicros)}</p>
-                <details>
-                  <summary>高度な安全設定を確認</summary>
-                  <p>日額停止上限：${usd(item.dailyBudgetUsdMicros)}</p>
-                  <p>1処理の予約額：${usd(item.requestCostUsdMicros ?? 0)}</p>
-                </details>
                 {item.apiKeyConfigured && item.status !== 'ACTIVE' ? (
                   <button
                     className="button button--primary"

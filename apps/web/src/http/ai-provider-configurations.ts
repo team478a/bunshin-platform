@@ -32,13 +32,13 @@ const createSchema = z
       'FAL',
       'RUNWAY',
     ]),
-    reason: z.string().min(3).max(500),
+    reason: z.string().min(3).max(500).optional(),
     model: z.string().max(120).nullable().optional(),
     modelCapabilities: z
       .array(z.enum(AI_MODEL_CAPABILITIES))
       .max(AI_MODEL_CAPABILITIES.length)
       .optional(),
-    dailyBudgetUsd: z.number().min(0).max(10_000),
+    dailyBudgetUsd: z.number().min(0).max(100_000).optional(),
     monthlyBudgetUsd: z.number().min(0).max(100_000),
     requestCostUsd: z.number().min(0).max(1_000).optional(),
     apiKey: z.string().min(8).max(2000).nullable().optional(),
@@ -87,6 +87,7 @@ async function respond(request: Request, operation: () => Promise<unknown>, stat
   }
 }
 const micros = (usd: number) => Math.round(usd * 1_000_000);
+const DEFAULT_OPENAI_REQUEST_RESERVATION_USD = 0.01;
 
 export function listAiProviderConfigurationsResponse(request: Request) {
   return respond(request, async () => ({
@@ -115,14 +116,19 @@ export function createAiProviderConfigurationResponse(request: Request) {
           actorUserId: await actor(),
           environment: currentAiProviderEnvironment(),
           provider: parsed.data.provider,
-          reason: parsed.data.reason,
+          reason: parsed.data.reason ?? '管理画面から設定版を登録',
           model: parsed.data.model ?? null,
           ...(parsed.data.modelCapabilities
             ? { modelCapabilities: parsed.data.modelCapabilities }
             : {}),
-          dailyBudgetUsdMicros: micros(parsed.data.dailyBudgetUsd),
+          // The monthly cap is the operator-facing control. The daily guard remains
+          // fail-closed internally, without requiring a second budget decision.
+          dailyBudgetUsdMicros: micros(parsed.data.monthlyBudgetUsd),
           monthlyBudgetUsdMicros: micros(parsed.data.monthlyBudgetUsd),
-          requestCostUsdMicros: micros(parsed.data.requestCostUsd ?? 0),
+          requestCostUsdMicros: micros(
+            parsed.data.requestCostUsd ??
+              (parsed.data.provider === 'OPENAI' ? DEFAULT_OPENAI_REQUEST_RESERVATION_USD : 0),
+          ),
           apiKey: parsed.data.apiKey ?? null,
         }),
       );
