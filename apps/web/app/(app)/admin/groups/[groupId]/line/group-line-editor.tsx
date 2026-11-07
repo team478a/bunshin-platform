@@ -192,8 +192,8 @@ export function GroupLineEditor(props: {
         <p className="eyebrow">1. 使い方を選ぶ</p>
         <h2>どのLINEを使いますか</h2>
         <p>
-          「この{scopeLabel}
-          専用」を選ぶと、共通LINEと分けて運用できます。初めて専用LINEを設定する場合は、先にこれを選んで保存してください。
+          通常は「ワタシワークス共通LINE」を選ぶだけで完了です。個別ブランドのLINEが必要な場合だけ「この
+          {scopeLabel}専用」を選びます。
         </p>
         <form
           className="form-stack"
@@ -238,6 +238,14 @@ export function GroupLineEditor(props: {
           </button>
         </form>
       </section>
+      {message ? (
+        <p
+          className={`notice ${messageKind === 'error' ? 'notice--danger' : 'notice--success'}`}
+          role={messageKind === 'error' ? 'alert' : 'status'}
+        >
+          {message}
+        </p>
+      ) : null}
       {mode === 'DEDICATED' && (
         <section className="settings-card line-settings-card">
           <p className="eyebrow">2. 専用LINEの値を保存する</p>
@@ -326,7 +334,7 @@ export function GroupLineEditor(props: {
           </form>
         </section>
       )}
-      <section className="settings-card line-settings-card">
+      <section className="settings-card line-settings-card" hidden={mode !== 'DEDICATED'}>
         <p className="eyebrow">3. 接続を確認して運用を始める</p>
         <h2>保存した設定</h2>
         {items.length === 0 ? (
@@ -382,20 +390,13 @@ export function GroupLineEditor(props: {
             ))}
           </ul>
         )}
-        {message ? (
-          <p
-            className={`notice ${messageKind === 'error' ? 'notice--danger' : 'notice--success'}`}
-            role={messageKind === 'error' ? 'alert' : 'status'}
-          >
-            {message}
-          </p>
-        ) : null}
       </section>
-      <section className="settings-card line-settings-card">
+      <section className="settings-card line-settings-card" hidden={mode !== 'DEDICATED'}>
         <p className="eyebrow">4. LINEのメニューを公開する</p>
         <h2>標準リッチメニュー</h2>
         <p>
-          今日やること、投稿パートナーを見る、お知らせ設定、アカウントの4ボタンを、この{scopeLabel}
+          今日やること、投稿パートナーを見る、お知らせ設定、アカウントの4ボタンを、この
+          {scopeLabel}
           専用LINEへ自動で設定します。
         </p>
         {publication ? (
@@ -470,7 +471,10 @@ export function GroupLineEditor(props: {
             onClick={() => {
               if (!activeDedicated) return;
               setPublicationMessage('');
-              setPublication({ configuration: activeDedicated, operationId: crypto.randomUUID() });
+              setPublication({
+                configuration: activeDedicated,
+                operationId: crypto.randomUUID(),
+              });
             }}
           >
             公開内容を確認する
