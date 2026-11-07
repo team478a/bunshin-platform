@@ -42,4 +42,12 @@ describe('service participation repository modules', () => {
     expect(helper).toContain("kind: 'INTERNAL'");
     expect(helper).not.toContain('aiTrainingUsageConsent.create');
   });
+
+  it('assigns service-enabled features inside public registration persistence', () => {
+    const registration = source('service-participation-registration-repository.ts');
+    const helper = source('service-registration-feature-assignment.ts');
+    expect(registration).toContain('assignEnabledServiceFeaturesToRegistrant(tx');
+    expect(helper).toContain("status: 'ENABLED'");
+    expect(helper).toContain("feature: { status: 'ACTIVE' }");
+  });
 });
