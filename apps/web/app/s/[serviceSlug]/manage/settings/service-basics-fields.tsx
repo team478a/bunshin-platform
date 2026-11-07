@@ -31,226 +31,246 @@ export function ServiceBasicsFields({
 }) {
   return (
     <>
-      <label>
-        サービス名
-        <input name="displayName" required maxLength={120} defaultValue={value.displayName} />
-      </label>
-      <label>
-        運営者名
-        <input name="operatorName" required maxLength={160} defaultValue={value.operatorName} />
-      </label>
-      <label>
-        サービスの説明
-        <textarea
-          name="description"
-          required
-          maxLength={1000}
-          rows={4}
-          defaultValue={value.description}
-        />
-      </label>
-      <label>
-        問い合わせメール
-        <input
-          name="contactEmail"
-          type="email"
-          maxLength={320}
-          defaultValue={value.contactEmail ?? ''}
-        />
-      </label>
-      <label>
-        ロゴ画像URL
-        <input
-          name="logoUrl"
-          type="url"
-          defaultValue={value.brand.logoUrl ?? ''}
-          placeholder="https://..."
-        />
-      </label>
-      <label>
-        アイコン画像URL
-        <input
-          name="iconUrl"
-          type="url"
-          defaultValue={value.brand.iconUrl ?? ''}
-          placeholder="https://..."
-        />
-      </label>
-      <label>
-        ブラウザーアイコンURL
-        <input
-          name="faviconUrl"
-          type="url"
-          defaultValue={value.brand.faviconUrl ?? ''}
-          placeholder="https://..."
-        />
-      </label>
-      <label>
-        メインカラー
-        <input name="primaryColor" type="color" defaultValue={value.brand.primaryColor} />
-      </label>
-      <label>
-        サブカラー
-        <input name="secondaryColor" type="color" defaultValue={value.brand.secondaryColor} />
-      </label>
-      <label>
-        文字の種類
-        <select name="fontFamily" defaultValue={value.brand.fontFamily}>
-          <option value="system-ui">読みやすい標準文字</option>
-          <option value="sans-serif">すっきりした文字</option>
-          <option value="serif">落ち着いた文字</option>
-        </select>
-      </label>
-      <label>
-        利用規約URL
-        <input
-          name="termsUrl"
-          type="url"
-          defaultValue={value.termsUrl ?? ''}
-          placeholder="https://..."
-        />
-      </label>
-      <label>
-        プライバシーポリシーURL
-        <input
-          name="privacyUrl"
-          type="url"
-          defaultValue={value.privacyUrl ?? ''}
-          placeholder="https://..."
-        />
-      </label>
-      <fieldset>
-        <legend>新しい人の参加方法</legend>
+      <details className="settings-card admin-operation-details" open>
+        <summary>基本情報・ブランド</summary>
+        <p>サービス名や説明、ロゴ、色など、利用者に見える基本情報です。</p>
         <label>
-          参加できる人
-          <select
-            name="registrationAccess"
-            value={registrationAccess}
-            onChange={(event) =>
-              onRegistrationAccessChange(event.currentTarget.value as ServiceRegistrationAccess)
-            }
-          >
-            <option value="INVITATION_ONLY">招待された人だけ</option>
-            <option value="PUBLIC">誰でも申し込める</option>
-            <option value="CLOSED">新しい参加を止める</option>
-          </select>
+          サービス名
+          <input name="displayName" required maxLength={120} defaultValue={value.displayName} />
         </label>
         <label>
-          参加の承認
-          <select
-            name="registrationApproval"
-            value={registrationApproval}
-            disabled={registrationAccess === 'CLOSED'}
-            onChange={(event) =>
-              onRegistrationApprovalChange(event.currentTarget.value as ServiceRegistrationApproval)
-            }
-          >
-            <option value="AUTO">自動承認</option>
-            <option value="MANUAL">運営者が確認して承認</option>
-          </select>
-        </label>
-        <small>
-          招待の有無と承認方法を別々に選べます。受付停止中は、新しい人は招待・公開申込のどちらからも参加できません。
-        </small>
-      </fieldset>
-      <fieldset>
-        <legend>ログイン・参加に使う方法</legend>
-        <label>
-          <input
-            name="emailEnabled"
-            type="checkbox"
-            defaultChecked={value.registration.emailEnabled}
-          />{' '}
-          メールを使う
+          運営者名
+          <input name="operatorName" required maxLength={160} defaultValue={value.operatorName} />
         </label>
         <label>
-          <input
-            name="lineEnabled"
-            type="checkbox"
-            defaultChecked={value.registration.lineEnabled}
-          />{' '}
-          LINEを使う
-        </label>
-        <label>
-          <input
-            name="inviteCodeEnabled"
-            type="checkbox"
-            defaultChecked={!businessFreeSettingsLocked && value.registration.inviteCodeEnabled}
-            disabled={businessFreeSettingsLocked}
-          />{' '}
-          招待コードを使う
-        </label>
-        <label>
-          <input
-            name="referralEnabled"
-            type="checkbox"
-            defaultChecked={!businessFreeSettingsLocked && value.registration.referralEnabled}
-            disabled={businessFreeSettingsLocked}
-          />{' '}
-          紹介元を記録する
-        </label>
-        <small>メールだけ、LINEだけ、または両方を選べます。少なくとも一つを選んでください。</small>
-      </fieldset>
-      <fieldset>
-        <legend>話題を使った投稿案</legend>
-        <label>
-          <input
-            name="trendResearchEnabled"
-            type="checkbox"
-            defaultChecked={value.trendResearchEnabled ?? true}
-          />{' '}
-          今話題になっていることを、投稿案づくりに使う
-        </label>
-        <small>
-          オフにすると、このサービスの新しい話題調査と、話題を使った投稿案への反映を止めます。すでに作られた投稿案は消えません。
-        </small>
-        <small>調査サービスや費用の設定は、システム管理者が管理します。</small>
-      </fieldset>
-      <fieldset>
-        <legend>参加者へのお知らせ</legend>
-        <label>
-          <input name="announcementEnabled" type="checkbox" defaultChecked={announcement.enabled} />{' '}
-          サービスホームにお知らせを表示する
-        </label>
-        <label>
-          見出し
-          <input
-            name="announcementTitle"
-            maxLength={120}
-            defaultValue={announcement.title}
-            placeholder="例：今週の投稿テーマについて"
-          />
-        </label>
-        <label>
-          内容
+          サービスの説明
           <textarea
-            name="announcementMessage"
+            name="description"
+            required
             maxLength={1000}
             rows={4}
-            defaultValue={announcement.message}
-            placeholder="参加者に伝えたいことを、やさしい言葉で書きます。"
+            defaultValue={value.description}
           />
         </label>
         <label>
-          表示を始める日時（空欄ならすぐ表示）
+          問い合わせメール
           <input
-            name="announcementStartsAt"
-            type="datetime-local"
-            defaultValue={dateTimeInputValue(announcement.startsAt)}
+            name="contactEmail"
+            type="email"
+            maxLength={320}
+            defaultValue={value.contactEmail ?? ''}
           />
         </label>
         <label>
-          表示を終える日時（空欄なら表示を続ける）
+          ロゴ画像URL
           <input
-            name="announcementEndsAt"
-            type="datetime-local"
-            defaultValue={dateTimeInputValue(announcement.endsAt)}
+            name="logoUrl"
+            type="url"
+            defaultValue={value.brand.logoUrl ?? ''}
+            placeholder="https://..."
           />
         </label>
-        <small>
-          日本時間で予約できます。メンテナンスや今週の案内に使えます。表示を止めると参加者のホームから非表示になります。LINE送信や機能停止は行いません。
-        </small>
-      </fieldset>
+        <label>
+          アイコン画像URL
+          <input
+            name="iconUrl"
+            type="url"
+            defaultValue={value.brand.iconUrl ?? ''}
+            placeholder="https://..."
+          />
+        </label>
+        <label>
+          ブラウザーアイコンURL
+          <input
+            name="faviconUrl"
+            type="url"
+            defaultValue={value.brand.faviconUrl ?? ''}
+            placeholder="https://..."
+          />
+        </label>
+        <label>
+          メインカラー
+          <input name="primaryColor" type="color" defaultValue={value.brand.primaryColor} />
+        </label>
+        <label>
+          サブカラー
+          <input name="secondaryColor" type="color" defaultValue={value.brand.secondaryColor} />
+        </label>
+        <label>
+          文字の種類
+          <select name="fontFamily" defaultValue={value.brand.fontFamily}>
+            <option value="system-ui">読みやすい標準文字</option>
+            <option value="sans-serif">すっきりした文字</option>
+            <option value="serif">落ち着いた文字</option>
+          </select>
+        </label>
+      </details>
+      <details className="settings-card admin-operation-details">
+        <summary>参加方法・公開条件</summary>
+        <p>新規参加の受付方法やログイン方法、利用規約を変更するときだけ開きます。</p>
+        <label>
+          利用規約URL
+          <input
+            name="termsUrl"
+            type="url"
+            defaultValue={value.termsUrl ?? ''}
+            placeholder="https://..."
+          />
+        </label>
+        <label>
+          プライバシーポリシーURL
+          <input
+            name="privacyUrl"
+            type="url"
+            defaultValue={value.privacyUrl ?? ''}
+            placeholder="https://..."
+          />
+        </label>
+        <fieldset>
+          <legend>新しい人の参加方法</legend>
+          <label>
+            参加できる人
+            <select
+              name="registrationAccess"
+              value={registrationAccess}
+              onChange={(event) =>
+                onRegistrationAccessChange(event.currentTarget.value as ServiceRegistrationAccess)
+              }
+            >
+              <option value="INVITATION_ONLY">招待された人だけ</option>
+              <option value="PUBLIC">誰でも申し込める</option>
+              <option value="CLOSED">新しい参加を止める</option>
+            </select>
+          </label>
+          <label>
+            参加の承認
+            <select
+              name="registrationApproval"
+              value={registrationApproval}
+              disabled={registrationAccess === 'CLOSED'}
+              onChange={(event) =>
+                onRegistrationApprovalChange(
+                  event.currentTarget.value as ServiceRegistrationApproval,
+                )
+              }
+            >
+              <option value="AUTO">自動承認</option>
+              <option value="MANUAL">運営者が確認して承認</option>
+            </select>
+          </label>
+          <small>
+            招待の有無と承認方法を別々に選べます。受付停止中は、新しい人は招待・公開申込のどちらからも参加できません。
+          </small>
+        </fieldset>
+        <fieldset>
+          <legend>ログイン・参加に使う方法</legend>
+          <label>
+            <input
+              name="emailEnabled"
+              type="checkbox"
+              defaultChecked={value.registration.emailEnabled}
+            />{' '}
+            メールを使う
+          </label>
+          <label>
+            <input
+              name="lineEnabled"
+              type="checkbox"
+              defaultChecked={value.registration.lineEnabled}
+            />{' '}
+            LINEを使う
+          </label>
+          <label>
+            <input
+              name="inviteCodeEnabled"
+              type="checkbox"
+              defaultChecked={!businessFreeSettingsLocked && value.registration.inviteCodeEnabled}
+              disabled={businessFreeSettingsLocked}
+            />{' '}
+            招待コードを使う
+          </label>
+          <label>
+            <input
+              name="referralEnabled"
+              type="checkbox"
+              defaultChecked={!businessFreeSettingsLocked && value.registration.referralEnabled}
+              disabled={businessFreeSettingsLocked}
+            />{' '}
+            紹介元を記録する
+          </label>
+          <small>
+            メールだけ、LINEだけ、または両方を選べます。少なくとも一つを選んでください。
+          </small>
+        </fieldset>
+      </details>
+      <details className="settings-card admin-operation-details">
+        <summary>投稿案・参加者へのお知らせ</summary>
+        <p>話題調査やサービスホームのお知らせを変更するときだけ開きます。</p>
+        <fieldset>
+          <legend>話題を使った投稿案</legend>
+          <label>
+            <input
+              name="trendResearchEnabled"
+              type="checkbox"
+              defaultChecked={value.trendResearchEnabled ?? true}
+            />{' '}
+            今話題になっていることを、投稿案づくりに使う
+          </label>
+          <small>
+            オフにすると、このサービスの新しい話題調査と、話題を使った投稿案への反映を止めます。すでに作られた投稿案は消えません。
+          </small>
+          <small>調査サービスや費用の設定は、システム管理者が管理します。</small>
+        </fieldset>
+        <fieldset>
+          <legend>参加者へのお知らせ</legend>
+          <label>
+            <input
+              name="announcementEnabled"
+              type="checkbox"
+              defaultChecked={announcement.enabled}
+            />{' '}
+            サービスホームにお知らせを表示する
+          </label>
+          <label>
+            見出し
+            <input
+              name="announcementTitle"
+              maxLength={120}
+              defaultValue={announcement.title}
+              placeholder="例：今週の投稿テーマについて"
+            />
+          </label>
+          <label>
+            内容
+            <textarea
+              name="announcementMessage"
+              maxLength={1000}
+              rows={4}
+              defaultValue={announcement.message}
+              placeholder="参加者に伝えたいことを、やさしい言葉で書きます。"
+            />
+          </label>
+          <label>
+            表示を始める日時（空欄ならすぐ表示）
+            <input
+              name="announcementStartsAt"
+              type="datetime-local"
+              defaultValue={dateTimeInputValue(announcement.startsAt)}
+            />
+          </label>
+          <label>
+            表示を終える日時（空欄なら表示を続ける）
+            <input
+              name="announcementEndsAt"
+              type="datetime-local"
+              defaultValue={dateTimeInputValue(announcement.endsAt)}
+            />
+          </label>
+          <small>
+            日本時間で予約できます。メンテナンスや今週の案内に使えます。表示を止めると参加者のホームから非表示になります。LINE送信や機能停止は行いません。
+          </small>
+        </fieldset>
+      </details>
     </>
   );
 }

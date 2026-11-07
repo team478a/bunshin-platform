@@ -98,50 +98,56 @@ export function GroupMemberFeatureSettings({ model }: { model: GroupMemberFeatur
                           <option value="DISABLED">利用できない</option>
                         </select>
                       </label>
-                      <label className="field">
-                        <span className="field__label">
-                          1日の上限（空欄ならグループ上限と同じ）
-                        </span>
-                        <input
-                          className="field__control"
-                          name="dailyLimit"
-                          type="number"
-                          min="1"
-                          max={policy.dailyLimit ?? 1_000_000}
-                          defaultValue={assignment?.dailyLimit ?? ''}
-                        />
-                      </label>
-                      <label className="field">
-                        <span className="field__label">
-                          1か月の上限（空欄ならグループ上限と同じ）
-                        </span>
-                        <input
-                          className="field__control"
-                          name="monthlyLimit"
-                          type="number"
-                          min="1"
-                          max={policy.monthlyLimit ?? 1_000_000}
-                          defaultValue={assignment?.monthlyLimit ?? ''}
-                        />
-                      </label>
-                      <label className="field">
-                        <span className="field__label">利用開始日時（空欄なら今から）</span>
-                        <input
-                          className="field__control"
-                          name="startsAt"
-                          type="datetime-local"
-                          defaultValue={localDateTime(assignment?.startsAt ?? null)}
-                        />
-                      </label>
-                      <label className="field">
-                        <span className="field__label">利用終了日時（空欄なら期限なし）</span>
-                        <input
-                          className="field__control"
-                          name="endsAt"
-                          type="datetime-local"
-                          defaultValue={localDateTime(assignment?.endsAt ?? null)}
-                        />
-                      </label>
+                      <details className="admin-operation-details">
+                        <summary>この参加者だけ、上限や利用期間を変える</summary>
+                        <p>
+                          通常はグループ設定をそのまま使います。例外が必要な場合だけ設定します。
+                        </p>
+                        <label className="field">
+                          <span className="field__label">
+                            1日の上限（空欄ならグループ上限と同じ）
+                          </span>
+                          <input
+                            className="field__control"
+                            name="dailyLimit"
+                            type="number"
+                            min="1"
+                            max={policy.dailyLimit ?? 1_000_000}
+                            defaultValue={assignment?.dailyLimit ?? ''}
+                          />
+                        </label>
+                        <label className="field">
+                          <span className="field__label">
+                            1か月の上限（空欄ならグループ上限と同じ）
+                          </span>
+                          <input
+                            className="field__control"
+                            name="monthlyLimit"
+                            type="number"
+                            min="1"
+                            max={policy.monthlyLimit ?? 1_000_000}
+                            defaultValue={assignment?.monthlyLimit ?? ''}
+                          />
+                        </label>
+                        <label className="field">
+                          <span className="field__label">利用開始日時（空欄なら今から）</span>
+                          <input
+                            className="field__control"
+                            name="startsAt"
+                            type="datetime-local"
+                            defaultValue={localDateTime(assignment?.startsAt ?? null)}
+                          />
+                        </label>
+                        <label className="field">
+                          <span className="field__label">利用終了日時（空欄なら期限なし）</span>
+                          <input
+                            className="field__control"
+                            name="endsAt"
+                            type="datetime-local"
+                            defaultValue={localDateTime(assignment?.endsAt ?? null)}
+                          />
+                        </label>
+                      </details>
                       <label className="field">
                         <span className="field__label">変更理由</span>
                         <textarea

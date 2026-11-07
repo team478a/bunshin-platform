@@ -178,46 +178,50 @@ export default async function GroupFeatureSettingPage({
                 <option value="DISABLED">利用できない</option>
               </select>
             </label>
-            <label className="field">
-              <span className="field__label">1日の上限（空欄なら上限なし）</span>
-              <input
-                className="field__control"
-                name="dailyLimit"
-                type="number"
-                min="1"
-                max="1000000"
-                defaultValue={policy?.dailyLimit ?? ''}
-              />
-            </label>
-            <label className="field">
-              <span className="field__label">1か月の上限（空欄なら上限なし）</span>
-              <input
-                className="field__control"
-                name="monthlyLimit"
-                type="number"
-                min="1"
-                max="1000000"
-                defaultValue={policy?.monthlyLimit ?? ''}
-              />
-            </label>
-            <label className="field">
-              <span className="field__label">利用開始日時（空欄なら今から）</span>
-              <input
-                className="field__control"
-                name="startsAt"
-                type="datetime-local"
-                defaultValue={localDateTime(policy?.startsAt ?? null)}
-              />
-            </label>
-            <label className="field">
-              <span className="field__label">利用終了日時（空欄なら期限なし）</span>
-              <input
-                className="field__control"
-                name="endsAt"
-                type="datetime-local"
-                defaultValue={localDateTime(policy?.endsAt ?? null)}
-              />
-            </label>
+            <details className="admin-operation-details">
+              <summary>必要な場合だけ、利用回数や期間を制限する</summary>
+              <p>通常は空欄のままで利用できます。個別の契約条件がある場合だけ設定します。</p>
+              <label className="field">
+                <span className="field__label">1日の上限（空欄なら上限なし）</span>
+                <input
+                  className="field__control"
+                  name="dailyLimit"
+                  type="number"
+                  min="1"
+                  max="1000000"
+                  defaultValue={policy?.dailyLimit ?? ''}
+                />
+              </label>
+              <label className="field">
+                <span className="field__label">1か月の上限（空欄なら上限なし）</span>
+                <input
+                  className="field__control"
+                  name="monthlyLimit"
+                  type="number"
+                  min="1"
+                  max="1000000"
+                  defaultValue={policy?.monthlyLimit ?? ''}
+                />
+              </label>
+              <label className="field">
+                <span className="field__label">利用開始日時（空欄なら今から）</span>
+                <input
+                  className="field__control"
+                  name="startsAt"
+                  type="datetime-local"
+                  defaultValue={localDateTime(policy?.startsAt ?? null)}
+                />
+              </label>
+              <label className="field">
+                <span className="field__label">利用終了日時（空欄なら期限なし）</span>
+                <input
+                  className="field__control"
+                  name="endsAt"
+                  type="datetime-local"
+                  defaultValue={localDateTime(policy?.endsAt ?? null)}
+                />
+              </label>
+            </details>
             <label className="field">
               <span className="field__label">変更理由</span>
               <textarea
