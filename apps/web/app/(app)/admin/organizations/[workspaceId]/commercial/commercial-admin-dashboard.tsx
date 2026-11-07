@@ -24,6 +24,8 @@ function count(value: number | null): string {
 export function CommercialAdminDashboard(props: CommercialAdminDashboardProps) {
   const { dashboard, billing, query, reminderFailures, actions } = props;
   const { current } = dashboard;
+  const showCommercialPricing =
+    dashboard.workspace.oemEnabled && billing.organizationCommercialContract?.status === 'ACTIVE';
   return (
     <main className="app-page">
       <header className="app-page__heading">
@@ -131,24 +133,28 @@ export function CommercialAdminDashboard(props: CommercialAdminDashboardProps) {
           <span>今月のMAU</span>
           <strong>{current.mau.toLocaleString('ja-JP')}人</strong>
         </div>
-        <div>
-          <span>現在の月額</span>
-          <strong>
-            {current.billingState === 'REVIEW_REQUIRED'
-              ? '確認待ち（請求未確定）'
-              : yen(current.pricing.priceYen)}
-          </strong>
-        </div>
-        <div>
-          <span>次の料金帯まで</span>
-          <strong>
-            {current.billingState === 'REVIEW_REQUIRED'
-              ? '—'
-              : current.pricing.remainingToNextTier === null
-                ? '個別見積'
-                : `あと${current.pricing.remainingToNextTier}人`}
-          </strong>
-        </div>
+        {showCommercialPricing ? (
+          <>
+            <div>
+              <span>現在の月額</span>
+              <strong>
+                {current.billingState === 'REVIEW_REQUIRED'
+                  ? '確認待ち（請求未確定）'
+                  : yen(current.pricing.priceYen)}
+              </strong>
+            </div>
+            <div>
+              <span>次の料金帯まで</span>
+              <strong>
+                {current.billingState === 'REVIEW_REQUIRED'
+                  ? '—'
+                  : current.pricing.remainingToNextTier === null
+                    ? '個別見積'
+                    : `あと${current.pricing.remainingToNextTier}人`}
+              </strong>
+            </div>
+          </>
+        ) : null}
       </section>
 
       <section className="settings-card">
