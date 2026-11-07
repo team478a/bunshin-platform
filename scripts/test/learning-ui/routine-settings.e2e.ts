@@ -29,6 +29,7 @@ for (const width of [1280, 390, 320]) {
     await expect(screen.getByRole('status')).toContainText('設定を保存しました');
     expect(commands).toHaveLength(1);
     expect(commands[0]?.['reason']).toBeUndefined();
+    await screen.getByText('参加方法・公開条件', { exact: true }).tap();
     await screen
       .getByRole('combobox', '参加できる人', { exact: true })
       .selectOption({ value: 'INVITATION_ONLY' });
@@ -46,6 +47,7 @@ for (const width of [1280, 390, 320]) {
     await screen
       .getByRole('textbox', 'サービスの説明', { exact: true })
       .fill('重要変更を保存した後の通常編集');
+    await screen.getByText('初回案内・毎日の配信', { exact: true }).tap();
     await screen.getByRole('textbox', '初期のお届け時刻', { exact: true }).fill('10:30');
     await screen.getByRole('button', '設定を保存する', { exact: true }).tap();
     await expect(screen.getByRole('status')).toContainText('設定を保存しました');
