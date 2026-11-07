@@ -7,6 +7,7 @@ import { groupMembershipRecord } from './service-records';
 import { latestServiceLegalDocuments } from './service-legal-latest';
 import { recordOemRegistration } from './oem-billing-history';
 import { admitServiceRegistrantToConfiguredTraining } from './service-registration-training-admission';
+import { assignEnabledServiceFeaturesToRegistrant } from './service-registration-feature-assignment';
 
 export class PrismaServiceParticipationRegistrationRepository {
   constructor(private readonly client: PrismaClient = prisma) {}
@@ -277,6 +278,12 @@ export class PrismaServiceParticipationRegistrationRepository {
             skipDuplicates: true,
           });
         if (status === 'ACTIVE') {
+          await assignEnabledServiceFeaturesToRegistrant(tx, {
+            workspaceId: configuration.workspaceId,
+            groupId: configuration.groupId,
+            groupMembershipId: membership.id,
+            userId: input.actorUserId,
+          });
           await recordOemRegistration(
             tx,
             membership,
