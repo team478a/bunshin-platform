@@ -175,6 +175,8 @@ export function recordDailyMissionPipelineFailure(input: {
     inputTokens: null,
     outputTokens: null,
     latencyMs: Date.now() - input.startedAt,
+    estimatedCostUsdMicros: 0,
+    pricingVersion: 'no-provider-call-v1',
     errorCode: input.error instanceof ApplicationError ? input.error.code : 'INTERNAL_ERROR',
     idempotencyKey: `${input.usageIdempotencyPrefix}:daily-pipeline-failure`,
   });

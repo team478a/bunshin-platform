@@ -86,9 +86,7 @@ describe('AI provider configuration HTTP', () => {
     const response = await createAiProviderConfigurationResponse(
       request({
         provider: 'OPENAI',
-        reason: '最初の設定を準備',
         model: 'gpt-5-mini',
-        dailyBudgetUsd: 1,
         monthlyBudgetUsd: 5,
         apiKey: 'provider-secret-1234',
       }),
@@ -99,9 +97,31 @@ describe('AI provider configuration HTTP', () => {
     expect(body).not.toContain('provider-secret-1234');
     expect(state.createVersion).toHaveBeenCalledWith(
       expect.objectContaining({
-        dailyBudgetUsdMicros: 1_000_000,
+        dailyBudgetUsdMicros: 5_000_000,
         monthlyBudgetUsdMicros: 5_000_000,
+        requestCostUsdMicros: 10_000,
         apiKey: expect.objectContaining({ encryptedValue: expect.any(String) }),
+      }),
+    );
+  });
+
+  it('uses the monthly cap as the internal daily guard and records an automatic reason', async () => {
+    await createAiProviderConfigurationResponse(
+      request({
+        provider: 'OPENAI',
+        model: 'gpt-5-mini',
+        monthlyBudgetUsd: 100,
+        requestCostUsd: 0.02,
+        apiKey: 'provider-secret-1234',
+      }),
+    );
+
+    expect(state.createVersion).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reason: '管理画面から設定版を登録',
+        dailyBudgetUsdMicros: 100_000_000,
+        monthlyBudgetUsdMicros: 100_000_000,
+        requestCostUsdMicros: 20_000,
       }),
     );
   });

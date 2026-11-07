@@ -19,7 +19,10 @@ vi.mock('../src/organization-ai-generation-quota', () => ({
   withOrganizationAiGenerationQuota: mocks.withQuota,
 }));
 
-import { createDailyMissionAiRuntime } from '../src/services/daily-mission-ai-runtime';
+import {
+  createDailyMissionAiRuntime,
+  recordDailyMissionPipelineFailure,
+} from '../src/services/daily-mission-ai-runtime';
 
 describe('daily mission AI runtime', () => {
   beforeEach(() => {
@@ -116,6 +119,31 @@ describe('daily mission AI runtime', () => {
       expect.objectContaining({
         estimatedCostUsdMicros: null,
         pricingVersion: null,
+      }),
+    );
+  });
+
+  it('records a pipeline failure before provider execution as evidenced zero cost', async () => {
+    await recordDailyMissionPipelineFailure({
+      scope: {
+        workspaceId: 'workspace-1',
+        bunshinId: 'bunshin-1',
+        actorUserId: 'user-1',
+      },
+      usageIdempotencyPrefix: 'generation-key-3',
+      model: 'test-model',
+      startedAt: Date.now(),
+      error: new Error('pre-provider failure'),
+    });
+
+    expect(mocks.recordUsage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskType: 'DAILY_MISSION_PIPELINE',
+        status: 'FAILED',
+        inputTokens: null,
+        outputTokens: null,
+        estimatedCostUsdMicros: 0,
+        pricingVersion: 'no-provider-call-v1',
       }),
     );
   });
