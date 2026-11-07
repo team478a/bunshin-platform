@@ -39,4 +39,10 @@ describe('OEM billing evidence admin UI', () => {
     expect(dashboard).toContain('0人やMAUで代用して請求を確定しないでください');
     expect(dashboard).toContain('要確認の理由を特定できません');
   });
+
+  it('shows monthly pricing only for an enabled OEM workspace with an active contract', () => {
+    expect(dashboard).toContain('dashboard.workspace.oemEnabled');
+    expect(dashboard).toContain("billing.organizationCommercialContract?.status === 'ACTIVE'");
+    expect(dashboard).toContain('{showCommercialPricing ? (');
+  });
 });
