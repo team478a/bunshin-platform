@@ -9,7 +9,7 @@ describe('N-2 bounded learning nudge provider', () => {
       learningNudgeBody({
         situation: 'STUCK',
         ordinal: 1,
-        model: 'gpt-5.2',
+        model: 'gpt-5.6-terra',
         permit,
         offerPolicy: 'SIDE_HUSTLE_V1',
       }),
@@ -33,13 +33,13 @@ describe('N-2 bounded learning nudge provider', () => {
       learningNudgeBody({
         situation: 'NO_RESPONSE',
         ordinal: 2,
-        model: 'gpt-5.2',
+        model: 'gpt-5.6-terra',
         permit: { maxRequestBytes: 32, maxOutputTokens: 100 },
       }),
     ).toThrow('learning nudge request limit exceeded');
     const fetch = vi.fn().mockResolvedValue(
       Response.json({
-        model: 'gpt-5.2',
+        model: 'gpt-5.6-terra',
         status: 'completed',
         usage: { input_tokens: 10, output_tokens: 5 },
         output: [
@@ -53,15 +53,20 @@ describe('N-2 bounded learning nudge provider', () => {
     );
     const result = await generateLearningNudge({
       apiKey: 'synthetic-test-key',
-      model: 'gpt-5.2',
+      model: 'gpt-5.6-terra',
       modelCapabilities: ['STRUCTURED_OUTPUT'],
-      body: learningNudgeBody({ situation: 'STUCK', ordinal: 1, model: 'gpt-5.2', permit }),
+      body: learningNudgeBody({
+        situation: 'STUCK',
+        ordinal: 1,
+        model: 'gpt-5.6-terra',
+        permit,
+      }),
       fetch,
     });
     expect(result).toMatchObject({
       value: '一歩だけ進めましょう。',
       requestFinished: true,
-      measurement: { success: true, provider: 'openai', model: 'gpt-5.2' },
+      measurement: { success: true, provider: 'openai', model: 'gpt-5.6-terra' },
     });
     expect(fetch).toHaveBeenCalledTimes(1);
   });

@@ -13,7 +13,7 @@ const response = (review: unknown) =>
   new Response(
     JSON.stringify({
       status: 'completed',
-      model: 'gpt-5-mini',
+      model: 'gpt-5.6-terra',
       usage: { input_tokens: 100, output_tokens: 50 },
       output: [{ content: [{ type: 'output_text', text: JSON.stringify(review) }] }],
     }),
@@ -24,7 +24,7 @@ const body = (kind: 'TEXT' | 'SELF_REPORT', content: string) =>
     material,
     kind,
     content,
-    model: 'gpt-5-mini',
+    model: 'gpt-5.6-terra',
     maxRequestBytes: 20_000,
     maxOutputTokens: 400,
   });
@@ -35,7 +35,7 @@ describe('personal learning evidence review', () => {
       material,
       kind: 'TEXT',
       content: '提出内容',
-      model: 'gpt-5-mini',
+      model: 'gpt-5.6-terra',
       maxRequestBytes: 20_000,
       maxOutputTokens: 400,
       offerPolicy: 'SIDE_HUSTLE_V1',
@@ -75,7 +75,7 @@ describe('personal learning evidence review', () => {
   it('reports only criteria visible in submitted text and requests a follow-up for missing evidence', async () => {
     const result = await generateLearningEvidenceReview({
       apiKey: 'test',
-      model: 'gpt-5-mini',
+      model: 'gpt-5.6-terra',
       modelCapabilities: ['STRUCTURED_OUTPUT'],
       material,
       kind: 'TEXT',

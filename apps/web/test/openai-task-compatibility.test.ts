@@ -12,9 +12,28 @@ import { OpenAiTrainingAnswerEvaluator } from '../src/providers/openai-training-
 const tasks: OpenAiCompatibilityTask[] = [
   'SOCIAL_PLANNER',
   'TRAINING_ASSESSMENT',
+  'LEARNING_LESSON',
+  'LEARNING_SUPPORT',
   'LEARNING_CONVERSATION',
+  'LEARNING_NUDGE',
+  'PERSONAL_LEARNING_PERSONA_INFERENCE',
 ];
-const models = ['gpt-5.2', 'gpt-5.2-2025-12-11', 'gpt-5-mini', 'gpt-5-mini-2025-08-07'];
+const models = [
+  'gpt-5.2',
+  'gpt-5.2-2025-12-11',
+  'gpt-5-mini',
+  'gpt-5-mini-2025-08-07',
+  'gpt-5.6-terra',
+];
+const schemaNames: Record<OpenAiCompatibilityTask, string> = {
+  SOCIAL_PLANNER: 'daily_mission_brief',
+  TRAINING_ASSESSMENT: 'training_evaluation',
+  LEARNING_LESSON: 'learning_lesson',
+  LEARNING_SUPPORT: 'learning_support',
+  LEARNING_CONVERSATION: 'learning_conversation',
+  LEARNING_NUDGE: 'learning_nudge',
+  PERSONAL_LEARNING_PERSONA_INFERENCE: 'personal_learning_persona_inference',
+};
 function request(task: OpenAiCompatibilityTask) {
   return {
     model: 'gpt-5.2',
@@ -23,16 +42,7 @@ function request(task: OpenAiCompatibilityTask) {
     text: {
       format: {
         type: 'json_schema',
-        name:
-          task === 'SOCIAL_PLANNER'
-            ? 'daily_mission_brief'
-            : task === 'LEARNING_SUPPORT'
-              ? 'learning_support'
-              : task === 'LEARNING_LESSON'
-                ? 'learning_lesson'
-                : task === 'LEARNING_CONVERSATION'
-                  ? 'learning_conversation'
-                  : 'training_evaluation',
+        name: schemaNames[task],
         strict: true,
         schema: { type: 'object', additionalProperties: false },
       },
@@ -42,7 +52,7 @@ function request(task: OpenAiCompatibilityTask) {
 
 describe('versioned local OpenAI task compatibility', () => {
   it('fixes the policy version without claiming live quality', () => {
-    expect(OPENAI_TASK_COMPATIBILITY_VERSION).toBe('OPENAI_TASK_COMPATIBILITY_V1');
+    expect(OPENAI_TASK_COMPATIBILITY_VERSION).toBe('OPENAI_TASK_COMPATIBILITY_V2');
   });
   it.each(tasks)('preserves the exact request for %s', (task) => {
     const value = request(task);

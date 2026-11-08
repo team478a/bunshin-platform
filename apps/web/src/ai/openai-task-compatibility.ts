@@ -1,7 +1,7 @@
 import 'server-only';
 import { ApplicationError } from '@bunshin/shared';
 
-export const OPENAI_TASK_COMPATIBILITY_VERSION = 'OPENAI_TASK_COMPATIBILITY_V1';
+export const OPENAI_TASK_COMPATIBILITY_VERSION = 'OPENAI_TASK_COMPATIBILITY_V2';
 export const OPENAI_TASK_RESPONSES_ENDPOINT = 'https://api.openai.com/v1/responses';
 export type OpenAiCompatibilityTask =
   | 'SOCIAL_PLANNER'
@@ -20,6 +20,7 @@ const reviewedNonLearningModels = new Set([
   'gpt-5.2-2025-12-11',
   'gpt-5-mini',
   'gpt-5-mini-2025-08-07',
+  'gpt-5.6-terra',
 ]);
 const schemaNames: Record<OpenAiCompatibilityTask, readonly string[]> = {
   SOCIAL_PLANNER: ['daily_mission_brief', 'weekly_plan'],
