@@ -19,7 +19,7 @@ const AI_SKILL_COPY = {
   states: {
     PROGRAM_WAITING: {
       title: '研修プログラムの準備中です',
-      message: '運営が研修プログラムを準備しています。準備ができると、この画面から確認できます。',
+      message: '準備中です。開始案内をお待ちください。',
     },
     ENROLLMENT_WAITING: {
       title: '研修参加の準備待ちです',
@@ -44,7 +44,7 @@ const AI_SKILL_COPY = {
   dynamicStates: {
     PROGRAM_WAITING: {
       title: '研修プログラムの準備中です',
-      message: '運営が研修プログラムを準備しています。準備ができると、この画面から確認できます。',
+      message: '準備中です。開始案内をお待ちください。',
     },
     ENROLLMENT_WAITING: {
       title: '研修参加の準備待ちです',
