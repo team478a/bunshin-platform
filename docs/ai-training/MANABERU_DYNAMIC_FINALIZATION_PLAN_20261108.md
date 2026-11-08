@@ -1,5 +1,26 @@
 # マナベルスタイル 動的AI研修 最小改善・検証計画（2026-11-08）
 
+## 0. 進捗と次の承認単位（2026-11-08追補）
+
+P0-1はPR #1491、production Release PR #1492、migration manifest同期PR #1493で完了した。公開画面、CI、Vercel Ready、health/ready、停止中Programの準備中表示を確認済みである。
+
+P0-2の読み取り監査も完了した。現状は次のとおりで、設定変更・実AI・LINE送信はまだ行っていない。
+
+- 専用Program: `SUSPENDED`、実行 `OFF`、`FIXED_DEFINITIONS_V1`、開始履歴なし、未精算Call 0。
+- Program Feature: conversation / multiTopic / lineLearning / extendedScope / learningNudges / toolUpdates は全てOFF。
+- 参加制御: `currentWave=0`、`currentWaveCap=0`、internal cap 1。Enrollment 1、ACTIVE/INTERNAL Seat 1、同意1。
+- Production環境: `PERSONAL_LEARNING_REQUEST_INTAKE` と `PERSONAL_LEARNING_LESSON_ADMISSION` は未登録。Call Admission / AI Pricingはentryのみ存在し、値は未承認。
+- OpenAI: Production v3 ACTIVE・verified、`gpt-5-mini`、日額 `$10`、月額 `$100`、1回見込み `$0.01`、未精算予約0。
+- LINE: サービス専用設定v1は使用中・接続確認済みだが、内部参加者は未接続。Web先行のため初回変更対象外。
+
+変更は次の3単位に分け、各単位を別承認する。
+
+1. **Program設定（停止状態のまま）**: Personal Learningだけを `DYNAMIC_V1`、conversation ONへ変更する。multiTopic / lineLearning / extendedScope / learningNudges / toolUpdatesはOFFを維持する。既存30日研修は変更しない。
+2. **Production環境と費用Gate**: Request IntakeとLesson Admissionを専用Workspace / Service / Programへ限定して追加する。既存Call Admission・AI Pricing・Provider model・公式価格・上限を人間レビューし、値が一致しなければ開始しない。
+3. **内部1名START**: STOP担当、監視担当、最大損失額、停止条件を記録し、Seat・同意・allowlist・参加Waveを再確認してから既存Pilot Operationsで開始する。実AI呼出しはこの単位の承認後まで行わない。
+
+現在の判定は、単位1の変更準備までGo、単位2・3の実行はNo-Goである。
+
 ## 1. 目的と境界
 
 自由希望から本人の実践、評価、次課題、再開までを、既存の動的学習機能で1名が完走できる状態にする。固定教材追加、新分類基盤、新しい管理台帳、新しい承認フローは作らない。

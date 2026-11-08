@@ -1,5 +1,24 @@
 # マナベルスタイル 動的AI研修の現在地と不足機能（2026-11-08）
 
+## 0. 2026-11-08 追補: P0-1本番反映後の再確認
+
+停止中Programの利用者導線修正はPR #1491でmainへ、限定Release PR #1492でproductionへ反映した。productionのmigration manifest不足で最初のVercel buildは安全停止したが、本番DBへの書込みを行わず、適用済みmigration定義だけをPR #1493で同期した。
+
+| 項目                      | 再確認結果                                                                                       |
+| ------------------------- | ------------------------------------------------------------------------------------------------ |
+| production SHA            | `86a30cb5b36caace26fc537e58f8d0423da14a03`                                                       |
+| Vercel                    | `dpl_CAzqzmKToXwU32j28G16Tr3gHwF3`、Ready、`www.watashi-works.com`へalias済み                    |
+| health                    | `/api/health/live` 200、`/api/health/ready` 200、database schema `current`                       |
+| 停止中Programの利用者画面 | 「このプログラムは準備中です。開始案内をお待ちください。」を表示し、開始・再開リンクを表示しない |
+| 参加確認画面              | 「研修参加の準備待ちです」を表示し、停止中Programの同意保存・開始導線を表示しない                |
+| 本番DB読取監査            | GitHub Actions run `42441964154` が成功し、`database changes=none`                               |
+
+P0-1のデッドループは解消済みである。一方、専用Personal Learning Programは引き続き `SUSPENDED`、実行 `OFF`、`FIXED_DEFINITIONS_V1`、全Program Feature `OFF` である。参加枠は `currentWave=0` / `currentWaveCap=0`、PilotもOFFで、開始履歴はない。
+
+読み取り専用監査では専用ProgramにEnrollment 1、ACTIVE Seat 1、INTERNAL Seat 1、同意1を確認した。OpenAI Production v3はACTIVE・接続確認済み、model `gpt-5-mini`、1日上限 `$10`、月上限 `$100`、1回見込み原価 `$0.01`、未精算予約0である。本人LINEは未接続で、LINE配信対象は0人である。
+
+Production環境には `PERSONAL_LEARNING_REQUEST_INTAKE` と `PERSONAL_LEARNING_LESSON_ADMISSION` が依然として存在しない。`PERSONAL_LEARNING_CALL_ADMISSION` と `PERSONAL_LEARNING_AI_PRICING` は存在するが、対象scope・model・価格・上限の値は未承認である。このため、**内部1名の実AI開始は引き続きNo-Go** とする。
+
 ## 1. 結論
 
 **現在の本番は、内部1名の動的AI研修開始について No-Go。**
