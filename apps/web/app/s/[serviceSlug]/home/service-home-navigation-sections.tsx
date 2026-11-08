@@ -132,6 +132,9 @@ export function MemberFeatureLinks(props: MemberFeatureLinksProps) {
             <Link className="button button--primary" href={`/s/${serviceSlug}/roadmap` as Route}>
               90日計画を見る
             </Link>
+            <Link className="button" href={`/s/${serviceSlug}/manual-videos` as Route}>
+              動画マニュアルを見る
+            </Link>
           </>
         )}
         {!isBusinessDailyService && !isPersonalLearningService && (
