@@ -103,6 +103,24 @@ describe('invalid offer policy consent boundaries', () => {
     expect(trainingPage).not.toContain('?? AI_TRAINING_AI_CONSENT_TEXT');
   });
 
+  it('does not project a SUSPENDED Program as ready to start', async () => {
+    f.programMany.mockResolvedValue([
+      {
+        id: 'program',
+        displayName: 'マナベルスタイル Personal Learning',
+        status: 'SUSPENDED',
+        settings: { ...invalidSettings, learningOfferPolicy: 'AI_SKILL_V1' },
+      },
+    ]);
+
+    const participation = await readAiTrainingParticipation('service', 'user');
+
+    expect(participation).toMatchObject({ state: 'PROGRAM_WAITING', enrollments: [] });
+    expect(f.enrollmentMany).not.toHaveBeenCalled();
+    expect(f.seatMany).not.toHaveBeenCalled();
+    expect(f.consentMany).not.toHaveBeenCalled();
+  });
+
   it('matches each enrollment consent against its Program policy version and text digest', async () => {
     const settings = { ...invalidSettings, learningOfferPolicy: 'AI_SKILL_V1' };
     f.programMany.mockResolvedValue([
@@ -194,6 +212,20 @@ describe('invalid offer policy consent boundaries', () => {
     await expect(
       recordAiTrainingUsageConsent({ serviceSlug: 'service', userId: 'user', enrollmentId }),
     ).rejects.toMatchObject({ code: 'NOT_FOUND', message: 'training participation unavailable' });
+    expect(f.upsert).not.toHaveBeenCalled();
+  });
+
+  it('requires an ACTIVE Program when saving consent', async () => {
+    f.program.mockResolvedValue(null);
+
+    await expect(
+      recordAiTrainingUsageConsent({ serviceSlug: 'service', userId: 'user', enrollmentId }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND', message: 'training participation unavailable' });
+    expect(f.program).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ status: 'ACTIVE' }),
+      }),
+    );
     expect(f.upsert).not.toHaveBeenCalled();
   });
 

@@ -19,6 +19,7 @@ export function MemberProgramsEditor({
     preferredMode: string;
     notes: string;
     actionHref: string | null;
+    availabilityMessage: string | null;
     currentGoal: string | null;
     definitions: { id: string; name: string; metricType: string; unit: string; target: string }[];
   }[];
@@ -106,6 +107,9 @@ export function MemberProgramsEditor({
             <a className="button button--primary button--full" href={item.actionHref}>
               今日やることを見る
             </a>
+          ) : null}
+          {item.availabilityMessage ? (
+            <p className="notice notice--warning">{item.availabilityMessage}</p>
           ) : null}
           {item.memberMayChoose ? (
             <form className="form-stack" onSubmit={(event) => preference(event, item.enrollmentId)}>
