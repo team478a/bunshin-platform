@@ -44,7 +44,7 @@ describe('versioned learning conversation provider', () => {
       currentMessage: '社内向けのお知らせです',
       candidate: null,
       practice: null,
-      model: 'gpt-5.2',
+      model: 'gpt-5.6-terra',
       permit: { maxRequestBytes: 12000, maxOutputTokens: 400 },
     });
     const parsed = JSON.parse(body) as { input: { role: string; content: string }[] };

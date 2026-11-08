@@ -6,7 +6,7 @@ import {
 } from '../src/providers/mission-provider-response';
 
 describe('mission Provider response safety', () => {
-  it.each(['gpt-5-mini', 'gpt-5-mini-2025-08-07'])(
+  it.each(['gpt-5-mini', 'gpt-5-mini-2025-08-07', 'gpt-5.6-terra'])(
     'sets bounded reasoning only for supported %s',
     (model) => {
       expect(missionReasoningOptions(model)).toEqual({ reasoning: { effort: 'low' } });

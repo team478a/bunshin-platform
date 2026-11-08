@@ -300,6 +300,50 @@ describe('OpenAI runtime configuration', () => {
     });
   });
 
+  it('preserves the reviewed terra model and explicit cost reservation', async () => {
+    const admission = {
+      id: '44444444-4444-4444-8444-444444444444',
+      environment: 'DEVELOPMENT' as const,
+      provider: 'OPENAI' as const,
+      operationHash: 'c'.repeat(64),
+    };
+    const terra = {
+      ...active,
+      model: 'gpt-5.6-terra',
+      requestCostUsdMicros: 57_344,
+    };
+    const repo = admissionRepository({
+      configuration: terra,
+      encryptedApiKey: 'sealed',
+      dailySpentUsdMicros: 0,
+      monthlySpentUsdMicros: 0,
+      monthlyUnknownCostEvents: 0,
+      admission,
+    });
+
+    await expect(
+      reserveOpenAiRuntimeConfiguration(
+        'personal-learning:terra:1',
+        {
+          repository: repo,
+          crypto: { encrypt: vi.fn(), decrypt: vi.fn().mockReturnValue('plain-key') },
+        },
+        'TRAINING_ASSESSMENT',
+        57_344,
+      ),
+    ).resolves.toMatchObject({
+      model: 'gpt-5.6-terra',
+      requestCostUsdMicros: 57_344,
+      admission,
+    });
+    expect(repo.reserveActiveForRuntime).toHaveBeenCalledWith({
+      environment: 'DEVELOPMENT',
+      provider: 'OPENAI',
+      operationKey: 'personal-learning:terra:1',
+      reservedCostUsdMicros: 57_344,
+    });
+  });
+
   it('settles an OpenAI reservation when local validation fails before Provider use', async () => {
     const admission = {
       id: '33333333-3333-4333-8333-333333333333',
