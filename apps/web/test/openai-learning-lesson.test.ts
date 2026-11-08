@@ -25,10 +25,10 @@ const proposal = {
   criteria: ['本人が変更理由を説明する'],
 };
 const body = () =>
-  learningLessonBody(wish, 'gpt-5.2-2025-12-11', { maxRequestBytes: 16000, maxOutputTokens: 2000 });
+  learningLessonBody(wish, 'gpt-5.6-terra', { maxRequestBytes: 16000, maxOutputTokens: 2000 });
 const raw = (p: unknown = proposal) => ({
   status: 'completed',
-  model: 'gpt-5.2-2025-12-11',
+  model: 'gpt-5.6-terra',
   usage: { input_tokens: 100, output_tokens: 50, input_tokens_details: { cached_tokens: 0 } },
   output: [{ content: [{ type: 'output_text', text: JSON.stringify(p) }] }],
 });

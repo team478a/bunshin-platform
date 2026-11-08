@@ -68,7 +68,7 @@ const request: SavedPracticeSupport = {
   usageKey: null,
 };
 const body = () =>
-  learningSupportBody(practice, request, 'gpt-5.2-2025-12-11', {
+  learningSupportBody(practice, request, 'gpt-5.6-terra', {
     maxRequestBytes: 16000,
     maxOutputTokens: 1000,
   });
@@ -81,7 +81,7 @@ const advice = {
 function raw(value: unknown = advice) {
   return {
     status: 'completed',
-    model: 'gpt-5.2-2025-12-11',
+    model: 'gpt-5.6-terra',
     usage: { input_tokens: 90, output_tokens: 30, input_tokens_details: { cached_tokens: 0 } },
     output: [{ content: [{ type: 'output_text', text: JSON.stringify(value) }] }],
   };

@@ -23,9 +23,9 @@ export function missionTransportFailure(error: unknown) {
   );
 }
 
-// Only this explicitly supported, currently configured model gets a latency policy.
+// Only explicitly reviewed models used by the shared Provider get a latency policy.
 export function missionReasoningOptions(model: string) {
-  return /^gpt-5-mini(?:-\d{4}-\d{2}-\d{2})?$/.test(model)
+  return /^(?:gpt-5-mini(?:-\d{4}-\d{2}-\d{2})?|gpt-5\.6-terra)$/.test(model)
     ? { reasoning: { effort: 'low' as const } }
     : {};
 }

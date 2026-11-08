@@ -10,3 +10,7 @@
 - 既存Pilot/seat/admission/provider直前認可/LINE/V1/課金/Memoryは非変更。新key、実API、DB/schema/migration、本番操作はなし。
 - Release前には実設定modelとallowlistの一致を人間が確認する。未登録の旧modelは意図的にfail-closedとなるので、既存設定すべての無条件互換とは主張しない。aliasは外部で更新され得る。新model追加/実比較/本番反映は別承認。
 - rollbackはPR revertで旧検査へ戻す（DB操作なし）。EVO-04へ自動着手しない。
+
+## 2026-11-08追補
+
+別承認されたマナベル本番準備の最小PRとして、公式移行先`gpt-5.6-terra`を完全一致で`OPENAI_TASK_COMPATIBILITY_V2`へ追加する。V1の判断と履歴は変更せず、任意suffix、新modelの推測、自動選択は引き続き行わない。既存30日研修と動的学習の共有Provider経路を合成テストし、本番Provider・価格・予算・Admission・Feature Flag・Promptは別承認まで変更しない。

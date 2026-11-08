@@ -4702,3 +4702,10 @@
 - `PUBLIC`登録で参加者が即時`ACTIVE`になる場合、同一Workspace・Serviceで有効なGroup Featureを参加Transaction内で参加者へ自動割当する。Membershipだけ作られて実機能が利用できない状態を残さない。
 - 既存の参加者別割当は更新しない。明示的な停止、個別上限、利用期間を再登録で緩和せず、未設定の機能だけを補う。
 - 無効なGroup Feature、廃止Feature、別Workspace・別ServiceのFeatureは割り当てない。Member assignment、監査ログ、既存の実行時認可・上限判定は維持する。
+
+## 2026-11-08: `gpt-5.6-terra`を共有OpenAI Providerの明示互換modelへ追加する
+
+- マナベル動的学習の本番準備計画で承認された小PRとして、`gpt-5.6-terra`を`OPENAI_TASK_COMPATIBILITY_V2`の完全一致allowlistへ追加する。任意modelやsuffixを推測せず、Provider固有判断はWeb Adapter内に留める。
+- 既存30日研修のSocial Planner・Assessmentと動的学習のLesson・Conversation・Practice Support・Persona・Nudge・Evidence Reviewについて、Responses、非保存、strict JSON Schema、失敗時のfail-closedを合成テストする。Daily MissionのContent/Qualityは既存の低推論ポリシーを同modelへ引き継ぐ。
+- 原価予約テストは承認候補の最大予約額`57,344 USD micros`が既存Admissionへ明示入力され、そのまま保持されることだけを確認する。単価・予約額をruntimeへ固定せず、本番のPricing、Provider設定、予算、Admission値は同一レビュー単位で別承認する。
+- Prompt、DB、migration、Feature Flag、Program、Provider設定、環境変数、本番AI/LINE呼出しは変更しない。合成互換性は実モデル品質・利用権・実費・本番開始を承認しない。
