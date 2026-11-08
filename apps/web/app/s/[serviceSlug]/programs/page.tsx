@@ -235,6 +235,8 @@ export default async function MemberProgramsPage({
               typeof program.settings['moduleKey'] === 'string'
                 ? program.settings['moduleKey']
                 : null;
+            const hasLearningAction = ['AI_RESALE_V1', 'AI_TRAINING_V1'].includes(moduleKey ?? '');
+            const isProgramActive = program.status === 'ACTIVE';
             return {
               enrollmentId: enrollment.id,
               name: program?.displayName ?? '実践プログラム',
@@ -256,9 +258,14 @@ export default async function MemberProgramsPage({
                   ? 'GUIDED'
                   : (preference?.preferredSupportMode ?? enrollment.supportMode),
               notes: preference?.notes ?? '',
-              actionHref: ['AI_RESALE_V1', 'AI_TRAINING_V1'].includes(moduleKey ?? '')
-                ? `/s/${serviceSlug}/programs/${enrollment.id}`
-                : null,
+              actionHref:
+                hasLearningAction && isProgramActive
+                  ? `/s/${serviceSlug}/programs/${enrollment.id}`
+                  : null,
+              availabilityMessage:
+                hasLearningAction && !isProgramActive
+                  ? 'このプログラムは準備中です。開始案内をお待ちください。'
+                  : null,
               currentGoal: goal
                 ? `${goal.title}：${goal.targetValue.toString()} ${goal.unit}`
                 : null,

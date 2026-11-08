@@ -71,13 +71,14 @@ export async function readAiTrainingParticipation(serviceSlug: string, userId: s
     ({ settings }) =>
       isPersonalLearningPilotProgram(settings) && personalLearningOfferPolicy(settings) !== null,
   );
-  const enrollments = pilotPrograms.length
+  const activePilotPrograms = pilotPrograms.filter(({ status }) => status === 'ACTIVE');
+  const enrollments = activePilotPrograms.length
     ? await db.prisma.programEnrollment.findMany({
         where: {
           workspaceId: service.workspaceId,
           groupId: service.serviceId,
           groupMembershipId: membership.id,
-          serviceProgramId: { in: pilotPrograms.map(({ id }) => id) },
+          serviceProgramId: { in: activePilotPrograms.map(({ id }) => id) },
           status: 'ACTIVE',
         },
         select: {
@@ -96,7 +97,7 @@ export async function readAiTrainingParticipation(serviceSlug: string, userId: s
           where: {
             workspaceId: service.workspaceId,
             groupId: service.serviceId,
-            serviceProgramId: { in: pilotPrograms.map(({ id }) => id) },
+            serviceProgramId: { in: activePilotPrograms.map(({ id }) => id) },
             programEnrollmentId: { in: enrollmentIds },
             kind: 'INTERNAL',
             cohort: 'INTERNAL',
@@ -126,7 +127,7 @@ export async function readAiTrainingParticipation(serviceSlug: string, userId: s
     ({ startsAt, endsAt }) => (!startsAt || startsAt <= now) && (!endsAt || endsAt > now),
   );
   const rows = availableEnrollments.map((enrollment) => {
-    const program = pilotPrograms.find(({ id }) => id === enrollment.serviceProgramId)!;
+    const program = activePilotPrograms.find(({ id }) => id === enrollment.serviceProgramId)!;
     const offerPolicy = personalLearningOfferPolicy(program.settings)!;
     const consentPolicy = aiTrainingConsentPolicy(offerPolicy);
     const consentIdentity = aiTrainingConsentIdentity(offerPolicy);
@@ -157,7 +158,7 @@ export async function readAiTrainingParticipation(serviceSlug: string, userId: s
   });
 
   const state = resolveAiTrainingParticipationState({
-    hasProgram: pilotPrograms.length > 0,
+    hasProgram: activePilotPrograms.length > 0,
     hasEnrollment: availableEnrollments.length > 0,
     hasInternalSeat: rows.some(({ state: enrollmentState }) =>
       ['CONSENT_REQUIRED', 'READY'].includes(enrollmentState),
@@ -209,7 +210,7 @@ export async function recordAiTrainingUsageConsent(input: {
         id: enrollment.serviceProgramId,
         workspaceId: service.workspaceId,
         groupId: service.serviceId,
-        status: { not: 'ARCHIVED' },
+        status: 'ACTIVE',
         settings: { path: ['moduleKey'], equals: AI_TRAINING_V1_MODULE_KEY },
       },
       select: { settings: true },
