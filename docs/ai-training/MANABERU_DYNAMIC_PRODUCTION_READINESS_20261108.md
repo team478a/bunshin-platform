@@ -2,6 +2,10 @@
 
 ## 0. 2026-11-08 追補: P0-1本番反映後の再確認
 
+### 0.0.1 PR #1494反映後の次Gate
+
+`gpt-5.6-terra`共有Provider互換性はPR #1494でmainへ反映済みである。Production Provider、環境変数、Admission、Pricing、Program実行状態は変更していない。次は[P0-2 Production Gate一括レビュー票](MANABERU_P0_2_PRODUCTION_GATE_REVIEW_20261108.md)で5設定と停止運用を同時に照合し、全UNKNOWNが解消されるまで内部1名STARTをNo-Goとする。
+
 停止中Programの利用者導線修正はPR #1491でmainへ、限定Release PR #1492でproductionへ反映した。productionのmigration manifest不足で最初のVercel buildは安全停止したが、本番DBへの書込みを行わず、適用済みmigration定義だけをPR #1493で同期した。
 
 | 項目                      | 再確認結果                                                                                       |
@@ -258,6 +262,6 @@ Database対象は初回にPrisma Client未生成で5 suiteがテスト収集前�
 
 ## 11. 次に実施する作業（最大3件）
 
-1. `gpt-5.6-terra` への共有Provider互換性を限定した小PRで確認し、既存30日研修・動的学習・費用予約の合成テストを追加する。
-2. PR反映後にRequest Intake、Lesson/Call Admission、Pricing、Provider model、日次$1上限、担当・停止方法を同一レビュー単位で承認する。
-3. 設定反映後も停止状態でGateを再読込し、別承認後にWeb限定・内部1名・シナリオAの実AI通し試験を行う。
+1. P0-2一括レビュー票のUNKNOWNを読み取り専用で解消し、Request Intake、Lesson/Call Admission、Pricing、Provider model、日次$1上限、担当・停止方法を同一レビュー単位で承認する。
+2. 別承認後、対象Programを停止したまま5設定を反映し、Gateと既存30日研修の不変を再確認する。
+3. 設定反映後も一度停止し、別のSTART承認後にWeb限定・内部1名・シナリオAの実AI通し試験を行う。
