@@ -19,11 +19,25 @@ P0-1のデッドループは解消済みである。一方、専用Personal Lear
 
 Production環境には `PERSONAL_LEARNING_REQUEST_INTAKE` と `PERSONAL_LEARNING_LESSON_ADMISSION` が依然として存在しない。`PERSONAL_LEARNING_CALL_ADMISSION` と `PERSONAL_LEARNING_AI_PRICING` は存在するが、対象scope・model・価格・上限の値は未承認である。このため、**内部1名の実AI開始は引き続きNo-Go** とする。
 
+### 0.1 P0-2 Program設定反映後の確認
+
+人間承認後、公開管理画面から専用Personal Learning Programだけを変更した。レビュー記録IDは `manaberu-p0-2-program-config-20261108`。保存後に同画面とPilot準備画面を再読込して次を確認した。
+
+- 専用Programは `SUSPENDED`、実行 `OFF`、開始履歴なし、未精算Call 0のまま。
+- 学習モードは `DYNAMIC_V1`、`conversation` だけON。
+- `multiTopic`、`lineLearning`、`extendedScope`、`learningNudges`、`toolUpdates` はOFF。
+- 既存30日研修は `ACTIVE`、実行 `ON`、`FIXED_DEFINITIONS_V1` のまま。
+- Pilot準備画面の「Call Admission・価格設定・予約上限を確認済み」は未確認のままで、STARTは実施していない。
+
+同日にOpenAI公式の [`gpt-5-mini` モデル資料](https://developers.openai.com/api/docs/models/gpt-5-mini)、[廃止予定](https://developers.openai.com/api/docs/deprecations)、[`gpt-5.6-terra` モデル資料](https://developers.openai.com/api/docs/models/gpt-5.6-terra) を再確認した。現Providerの `gpt-5-mini` はDeprecatedで、API停止日は2026-12-11、推奨移行先は `gpt-5.6-terra`。現在登録済みの `gpt-5-mini` 単価（入力 $0.25、cached input $0.025、出力 $2.00 / 100万tokens）は公式値と一致するが、短期停止予定のモデルへ新しいLesson Admissionを追加して本番試験を始めることは避ける。`gpt-5.6-terra` はResponses API・Structured Outputs・画像入力に対応し、単価は入力 $2.00、cached input $0.20、出力 $12.00 / 100万tokensである。
+
+Provider設定は既存30日研修等と共有される。現コードの非学習タスクmodel allowlistには `gpt-5.6-terra` がなく、Provider設定だけを変更すると既存処理をfail-closedにし得る。したがって次の承認単位は環境変数追加ではなく、共有Provider利用箇所、Responses JSON Schema、費用予約、既存30日研修の回帰を限定確認する小さな互換性PRとする。
+
 ## 1. 結論
 
 **現在の本番は、内部1名の動的AI研修開始について No-Go。**
 
-理由は動的学習エンジンの再開発不足ではない。自由希望から次課題・再開までのコード、API、UI、永続化、費用制御は最新mainと公開Vercelへ収録済みである。一方、実際の専用Programは `SUSPENDED`、実行 `OFF`、`FIXED_DEFINITIONS_V1`、全学習Feature `OFF` で、動的入口と候補生成・相談に必要な本番環境設定も不足している。実AI・実受講者で最初から最後まで成功した証拠はない。
+理由は動的学習エンジンの再開発不足ではない。自由希望から次課題・再開までのコード、API、UI、永続化、費用制御は最新mainと公開Vercelへ収録済みである。専用Programは停止状態のまま `DYNAMIC_V1` と conversation ONまで整合したが、動的入口と候補生成・相談に必要な本番環境設定が不足し、共有Providerの現モデルは2026-12-11停止予定である。実AI・実受講者で最初から最後まで成功した証拠もない。
 
 したがって今回の判定は次のとおり。
 
@@ -57,11 +71,11 @@ Production環境には `PERSONAL_LEARNING_REQUEST_INTAKE` と `PERSONAL_LEARNING
 | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 既存30日研修          | `マナベルスタイル AI研修30日`、`ACTIVE`、全体実行 `ON`、`FIXED_DEFINITIONS_V1`、参加中2名                                                         |
 | 動的学習用専用Program | `マナベルスタイル Personal Learning`、Program ID `d6a0d526-f3ac-455d-9f18-386ed833f70b`                                                           |
-| 専用Program状態       | `SUSPENDED`、初期化済み、開始履歴なし、実行 `OFF`、`FIXED_DEFINITIONS_V1`、未精算Call 0                                                           |
-| 専用Program Feature   | conversation / multiTopic / lineLearning / extendedScope / learningNudges が全て `OFF`。一般Program設定画面では toolUpdates も `OFF`              |
+| 専用Program状態       | `SUSPENDED`、初期化済み、開始履歴なし、実行 `OFF`、`DYNAMIC_V1`、未精算Call 0                                                                       |
+| 専用Program Feature   | conversation `ON`。multiTopic / lineLearning / extendedScope / learningNudges / toolUpdates は `OFF`                                               |
 | 参加状態              | Personal Learningの参加中表示1名。監査アカウントにはEnrollment、内部Seat相当、現行AI利用同意があり、同意日は2026-10-20と表示                      |
 | Definition承認画面    | `PERSONAL_LEARNING_DEFINITION_ADMIN` が有効でないため操作不可。なお動的モードのSTARTはサーバー実装上、旧3 Definition承認と固定Profileを要求しない |
-| OpenAI                | Productionで接続確認済み・使用中、`gpt-5-mini`、有効設定の月額上限表示 `$100.00`、未精算予約なし                                                  |
+| OpenAI                | Productionで接続確認済み・使用中、`gpt-5-mini`、有効設定の月額上限表示 `$100.00`、未精算予約なし。モデルは2026-12-11停止予定                       |
 | 専用LINE              | サービス専用LINE設定 v1 は使用中・接続確認済み。Webhook表示あり                                                                                   |
 | 本人LINE              | 監査アカウントは未接続、通知同意チェックも未選択                                                                                                  |
 
@@ -178,8 +192,7 @@ Vercel APIから値を開かず、Production entryの名前だけを確認した
 
 ### A: 設定だけで解決できる
 
-- 専用Programを `DYNAMIC_V1` へ変更する。
-- 最初は `conversation=true`、必要なら `multiTopic=true`。`lineLearning`、`learningNudges`、`extendedScope`、`toolUpdates` はWeb基本経路の成功後に段階化する。
+- 専用Programの `DYNAMIC_V1` と `conversation=true` は反映済み。`multiTopic`、`lineLearning`、`learningNudges`、`extendedScope`、`toolUpdates` はWeb基本経路の成功後に段階化する。
 - `PERSONAL_LEARNING_REQUEST_INTAKE` を承認済みProduction releaseへ追加する。
 - `PERSONAL_LEARNING_LESSON_ADMISSION` を対象Workspace/Service/Program、model、回数、並行数、request/output上限、USD上限とともに追加する。
 - 既存 `PERSONAL_LEARNING_CALL_ADMISSION` と `PERSONAL_LEARNING_AI_PRICING` の値・model・Program scope・発効価格を人間レビューする。
@@ -190,12 +203,13 @@ Vercel APIから値を開かず、Production entryの名前だけを確認した
 
 ### B: 既存機能の接続不足
 
-- 停止中Programを参加一覧・同意画面へ「利用可能」と投影している。既存Program statusを表示判断へ接続すればよく、新しい管理基盤は不要。
-- Pilot開始前の利用者ホームから、利用可能な学習へ到達できるかを統一して判定する必要がある。
+- 停止中Programの参加一覧・同意画面への状態接続はP0-1で修正済み。
+- `gpt-5.6-terra` へ移行する場合、共有Providerの非学習タスクallowlist、Responses出力契約、価格Registry、Provider予約額を同じモデルへ接続し、既存30日研修を回帰確認する必要がある。
 
 ### C: 既存機能の不具合
 
-- 「今日やることを見る」→「研修を続ける」→同じ同意画面、という停止中Programの循環。再現済み。
+- 停止中Programの循環はP0-1で修正済み。
+- 現時点では `gpt-5.6-terra` 自体の不具合再現ではない。未レビューmodelへ本番設定だけを先行変更しない。
 
 ### D: 本当に必要な未実装機能
 
@@ -228,7 +242,7 @@ Database対象は初回にPrisma Client未生成で5 suiteがテスト収集前�
 | ----------------------------- | ---------- | -------------------------------------------------------------------- |
 | コードレビュー・合成テスト    | Go         | main CIと対象288 tests成功                                           |
 | 本番設定の読取監査            | Go         | 値を開かず、画面・entry名・公開SHAを確認済み                         |
-| 現在の本番で内部1名の実AI開始 | **No-Go**  | Program固定/停止、入口・Lesson Admission不足、デッドループあり       |
+| 現在の本番で内部1名の実AI開始 | **No-Go**  | 入口・Lesson Admission不足、現Provider modelの停止予定、START未承認  |
 | 設定変更後のWeb限定1名テスト  | 条件付きGo | P0、承認済み設定、停止担当、実費上限、本人同意、START/STOP rehearsal |
 | LINE対話テスト                | No-Go      | Web基本経路成功後、本人接続とFeatureを別承認                         |
 | 外部モニター募集              | No-Go      | 1〜3名の通し成功・品質評価・原価・停止・再開証拠がない               |
@@ -244,6 +258,6 @@ Database対象は初回にPrisma Client未生成で5 suiteがテスト収集前�
 
 ## 11. 次に実施する作業（最大3件）
 
-1. 停止中Programの参加一覧・同意画面デッドループを小さなPRで修正し、状態別テストを追加する。
-2. [最小改善・検証計画](MANABERU_DYNAMIC_FINALIZATION_PLAN_20261108.md) のP0設定表を人間レビューし、値・担当・停止方法を承認する。
-3. 承認後、Web限定・内部1名・シナリオAから実AI通し試験を別作業として実施する。
+1. `gpt-5.6-terra` への共有Provider互換性を限定した小PRで確認し、既存30日研修・動的学習・費用予約の合成テストを追加する。
+2. PR反映後にRequest Intake、Lesson/Call Admission、Pricing、Provider model、日次$1上限、担当・停止方法を同一レビュー単位で承認する。
+3. 設定反映後も停止状態でGateを再読込し、別承認後にWeb限定・内部1名・シナリオAの実AI通し試験を行う。

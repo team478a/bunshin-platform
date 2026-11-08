@@ -4,22 +4,22 @@
 
 P0-1はPR #1491、production Release PR #1492、migration manifest同期PR #1493で完了した。公開画面、CI、Vercel Ready、health/ready、停止中Programの準備中表示を確認済みである。
 
-P0-2の読み取り監査も完了した。現状は次のとおりで、設定変更・実AI・LINE送信はまだ行っていない。
+P0-2の読み取り監査と最初のProgram設定単位まで完了した。実AI・LINE送信は行っていない。
 
-- 専用Program: `SUSPENDED`、実行 `OFF`、`FIXED_DEFINITIONS_V1`、開始履歴なし、未精算Call 0。
-- Program Feature: conversation / multiTopic / lineLearning / extendedScope / learningNudges / toolUpdates は全てOFF。
+- 専用Program: `SUSPENDED`、実行 `OFF`、`DYNAMIC_V1`、開始履歴なし、未精算Call 0。
+- Program Feature: conversationだけON。multiTopic / lineLearning / extendedScope / learningNudges / toolUpdates はOFF。
 - 参加制御: `currentWave=0`、`currentWaveCap=0`、internal cap 1。Enrollment 1、ACTIVE/INTERNAL Seat 1、同意1。
 - Production環境: `PERSONAL_LEARNING_REQUEST_INTAKE` と `PERSONAL_LEARNING_LESSON_ADMISSION` は未登録。Call Admission / AI Pricingはentryのみ存在し、値は未承認。
-- OpenAI: Production v3 ACTIVE・verified、`gpt-5-mini`、日額 `$10`、月額 `$100`、1回見込み `$0.01`、未精算予約0。
+- OpenAI: Production v3 ACTIVE・verified、`gpt-5-mini`、日額 `$10`、月額 `$100`、1回見込み `$0.01`、未精算予約0。ただし `gpt-5-mini` は2026-12-11停止予定。
 - LINE: サービス専用設定v1は使用中・接続確認済みだが、内部参加者は未接続。Web先行のため初回変更対象外。
 
 変更は次の3単位に分け、各単位を別承認する。
 
-1. **Program設定（停止状態のまま）**: Personal Learningだけを `DYNAMIC_V1`、conversation ONへ変更する。multiTopic / lineLearning / extendedScope / learningNudges / toolUpdatesはOFFを維持する。既存30日研修は変更しない。
-2. **Production環境と費用Gate**: Request IntakeとLesson Admissionを専用Workspace / Service / Programへ限定して追加する。既存Call Admission・AI Pricing・Provider model・公式価格・上限を人間レビューし、値が一致しなければ開始しない。
+1. **Program設定（完了）**: Personal Learningだけを `DYNAMIC_V1`、conversation ONへ変更済み。その他FeatureはOFF、既存30日研修は不変。
+2. **モデル互換性とProduction費用Gate（次の承認単位）**: 2026-12-11停止予定の `gpt-5-mini` のまま新規開始しない。公式移行先 `gpt-5.6-terra` の共有Provider互換性を小PRで検証後、Request Intake、Lesson/Call Admission、AI Pricing、Provider model・予約額を一括照合する。
 3. **内部1名START**: STOP担当、監視担当、最大損失額、停止条件を記録し、Seat・同意・allowlist・参加Waveを再確認してから既存Pilot Operationsで開始する。実AI呼出しはこの単位の承認後まで行わない。
 
-現在の判定は、単位1の変更準備までGo、単位2・3の実行はNo-Goである。
+現在の判定は単位1完了、単位2・3の実行はNo-Goである。環境変数だけを先行追加しない。
 
 ## 1. 目的と境界
 
@@ -53,7 +53,7 @@ P0-2の読み取り監査も完了した。現状は次のとおりで、設定�
 
 #### P0-2 既存設定を動的Pilot向けに整合する
 
-分類: A（設定のみ）
+分類: A（設定）＋B（共有Provider modelの接続確認）
 
 実行順は必ず次のとおりとし、各変更は田中さんの別承認後に行う。
 
@@ -72,6 +72,26 @@ P0-2の読み取り監査も完了した。現状は次のとおりで、設定�
 13. 既存Pilot OperationsからSTARTする。安全制御を迂回しない。
 
 設定値は本書に推測で記載しない。Provider公式価格、契約上限、許容予算、実測を人間が確認する。
+
+#### P0-2a 共有Providerのモデル移行を先に限定検証する
+
+OpenAI公式の2026-11-08時点の[廃止予定](https://developers.openai.com/api/docs/deprecations)では、`gpt-5-mini` は2026-12-11停止予定、推奨移行先は `gpt-5.6-terra`。[`gpt-5.6-terra` モデル資料](https://developers.openai.com/api/docs/models/gpt-5.6-terra)ではResponses API、Structured Outputs、画像入力をサポートする。公式単価は入力 $2.00、cached input $0.20、出力 $12.00 / 100万tokens。
+
+最小PRの対象:
+
+- 共有Providerの非学習タスクmodel allowlistへ、公式移行先を追加できるか確認する。
+- 動的Lesson、Conversation、Practice Support、Persona、既存30日研修評価の厳格JSON Schemaを合成応答で回帰する。
+- Provider設定は全サービス共有のため、既存30日研修と他のOpenAI利用経路の拒否・誤変更がないことを確認する。
+- `PERSONAL_LEARNING_AI_PRICING`、Lesson/Call Admission、Provider `requestCostUsdMicros` のmodel・価格・予約額を同時に更新する運用案を作る。
+- Prompt改変や新AI基盤は行わない。互換性差分だけに限定する。
+
+費用候補（承認前・未反映）:
+
+- `dailyAttemptLimit=12`、`maxConcurrent=1`、`maxRequestBytes=16384`、`maxOutputTokens=2048`。
+- 保守的予約式では1回最大 $0.057344、12回最大 $0.688128。Program日次Hard Stop候補 `$1`（`dailyCostLimitUsdMicros=1000000`）内。
+- 上記は実使用料の予測ではなく、byteをtoken上限として扱う安全側予約。Provider Runtimeの日額 `$10`・月額 `$100`を緩めない。
+
+このPRの対象・理由・影響・テストを人間承認してから実装する。PR前にProvider、環境変数、Pricingを変更しない。
 
 #### P0-3 内部1名・Web限定でシナリオAを完走する
 
