@@ -54,10 +54,11 @@ export function AiProviderConfigurationEditor(props: {
 
   async function create(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const formElement = event.currentTarget;
     setBusy(true);
     setMessage('');
     try {
-      const form = new FormData(event.currentTarget);
+      const form = new FormData(formElement);
       const response = await fetch('/api/admin/ai-provider-configurations', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -94,7 +95,7 @@ export function AiProviderConfigurationEditor(props: {
       else {
         setConfigurations((current) => [result.data!, ...current]);
         setMessage('停止中の下書きを保存しました。まだ外部サービスには接続しません。');
-        event.currentTarget.reset();
+        formElement.reset();
       }
     } catch {
       setMessage('通信に失敗しました。画面を再読み込みして、もう一度お試しください。');
@@ -226,7 +227,11 @@ export function AiProviderConfigurationEditor(props: {
         <p>未登録のサービスも表示しています。秘密の値は保存後に再表示しません。</p>
         <div className="settings-status-list">
           {(Object.keys(labels) as Provider[]).map((value) => {
-            const item = configurations.find((configuration) => configuration.provider === value);
+            const item =
+              configurations.find(
+                (configuration) =>
+                  configuration.provider === value && configuration.status === 'ACTIVE',
+              ) ?? configurations.find((configuration) => configuration.provider === value);
             const readiness = providerRuntimeReadiness(item);
             return (
               <article className="settings-status-item" key={value}>
