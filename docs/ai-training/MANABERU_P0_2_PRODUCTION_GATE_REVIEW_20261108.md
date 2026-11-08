@@ -4,7 +4,7 @@
 
 **設定変更はNo-Go、レビュー準備はGo。**
 
-PR #1494で`gpt-5.6-terra`の共有Provider互換性と費用予約の合成回帰はmainへ反映済みである。ただし、本書作成時点ではProductionの環境変数、Provider設定、Program実行状態を変更していない。実AI、LINE、参加者追加、課金も行っていない。
+PR #1494で`gpt-5.6-terra`の共有Provider互換性と費用予約の合成回帰をmainへ反映し、限定Release PR #1496で同じ互換性差分だけをProductionへ配備した。Productionの環境変数、Provider設定、Program実行状態は変更していない。実AI、LINE、参加者追加、課金も行っていない。
 
 本書は、次の5項目を同じ承認単位で照合するためのレビュー票である。1項目だけを先行変更しない。
 
@@ -16,17 +16,31 @@ PR #1494で`gpt-5.6-terra`の共有Provider互換性と費用予約の合成回�
 
 対象は停止中のPersonal Learning専用Programだけである。既存30日研修のProgram、学習モード、Feature、参加者を変更しない。OpenAI Provider Runtimeは共有設定なので、変更前後に既存30日研修を含む全対応タスクへの影響をレビューする。
 
+### 1-1. 互換性Release後の読み取り確認
+
+2026-11-08 19:34 JSTまでに、設定を変更せず次を確認した。
+
+- PR #1496は`production`へmerge済み。merge SHAは`028de7c306177fd92fb34ebc6a3446def20604e8`。
+- Vercel Production deployment `dpl_4u6c8oCQnNZimESVxunqho2g2SPf`は同SHAをbuildし、`READY`。`www.watashi-works.com`へ反映済み。
+- CIの`verify`と`database`は成功。Vercel buildも成功。
+- `/api/health/live`は200、`/api/health/ready`は200。configuration / authentication / databaseは`ok`、database schemaは`current`。
+- Production環境変数一覧ではCall Admission、AI Pricing、Pilot、Closed Pilot、Pilot Operations、Production Preparationのentryを確認した。Request IntakeとLesson Admissionは未登録。
+- 同日のProduction読み取り監査では、OpenAI Providerは`gpt-5-mini`、Call Admissionの日次費用上限は$0.10、AI Pricingは`gpt-5-mini`向けのまま。互換性コードの配備だけではGateは整合していない。
+- Personal Learningは`SUSPENDED`、実行OFF、参加Wave 0 / cap 0のまま。既存30日研修は`ACTIVE`のまま。
+
+したがって、**コード互換性Releaseは完了したが、設定変更と内部1名STARTは引き続きNo-Go**である。欠損値や旧model値を個別に先行変更しない。
+
 ## 2. 変更前の正本
 
 | 項目                      | 2026-11-08の既知状態                                                          | 開始前の再確認                    |
 | ------------------------- | ----------------------------------------------------------------------------- | --------------------------------- |
-| main                      | PR #1494を含む`61bd2fba`                                                      | release候補SHAとrequired CIを記録 |
+| Production code           | PR #1496を含む`028de7c3`、Vercel Ready、health/ready成功                      | 対象deploymentとrequired CIを記録 |
 | Personal Learning Program | `SUSPENDED`、実行`OFF`、`DYNAMIC_V1`、conversationのみON                      | Program識別子を画面上で二者確認   |
 | その他Feature             | multiTopic / lineLearning / extendedScope / learningNudges / toolUpdatesはOFF | OFFのまま維持                     |
 | 既存30日研修              | `ACTIVE`、実行`ON`、`FIXED_DEFINITIONS_V1`                                    | 変更前後で不変                    |
 | Request Intake            | Production未登録                                                              | UNKNOWNなら変更しない             |
 | Lesson Admission          | Production未登録                                                              | UNKNOWNなら変更しない             |
-| Call Admission / Pricing  | entryあり、値は未承認                                                         | 秘密を転記せず完全一致を確認      |
+| Call Admission / Pricing  | entryあり。`gpt-5-mini`向けで候補値と不一致                                   | 秘密を転記せず完全一致を確認      |
 | OpenAI Provider           | Production v3 ACTIVE・verified、modelは旧`gpt-5-mini`、日額$10・月額$100      | 現行版と未精算予約0を再確認       |
 | 内部参加者                | Enrollment 1、ACTIVE/INTERNAL Seat 1、AI利用同意1                             | 本人、scope、同意版を再確認       |
 | LINE                      | 初回Web試験では対象外                                                         | Feature OFF、送信しない           |
@@ -141,13 +155,13 @@ Provider Runtimeは既存30日研修や他のOpenAI処理と共有される。PR
 
 | Gate              | PASS条件                                          | 現在             |
 | ----------------- | ------------------------------------------------- | ---------------- |
-| Code              | PR #1494 main反映、required CI成功                | PASS             |
+| Code              | PR #1496 Production反映、required CI・health成功  | PASS             |
 | Program isolation | Personal Learning専用Program、既存30日研修不変    | 実行日再確認待ち |
-| Provider          | 追記版、verified、terra、能力、予約額、予算一致   | UNKNOWN          |
-| Intake            | Productionで`true`、承認済みdeploymentへ反映      | UNKNOWN          |
-| Lesson Admission  | scope・model・上限・日次費用が完全一致            | UNKNOWN          |
-| Call Admission    | scope・model・上限・日次費用が完全一致            | UNKNOWN          |
-| Pricing           | terraの有効価格が完全一致、公式再確認済み         | UNKNOWN          |
+| Provider          | 追記版、verified、terra、能力、予約額、予算一致   | FAIL（旧model）  |
+| Intake            | Productionで`true`、承認済みdeploymentへ反映      | FAIL（未登録）   |
+| Lesson Admission  | scope・model・上限・日次費用が完全一致            | FAIL（未登録）   |
+| Call Admission    | scope・model・上限・日次費用が完全一致            | FAIL（旧model）  |
+| Pricing           | terraの有効価格が完全一致、公式再確認済み         | FAIL（旧model）  |
 | Participant       | 本人Enrollment、INTERNAL Seat、allowlist、同意    | 実行日再確認待ち |
 | Operations        | STOP/監視/環境/復旧担当と連絡方法が記録済み       | UNKNOWN          |
 | Cost              | Pilot日次$1、1回$0.057344、最大12回、共有予算維持 | 人間承認待ち     |

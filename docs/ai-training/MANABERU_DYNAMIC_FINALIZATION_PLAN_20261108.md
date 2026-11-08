@@ -6,7 +6,7 @@ P0-1はPR #1491、production Release PR #1492、migration manifest同期PR #1493
 
 P0-2の読み取り監査と最初のProgram設定単位まで完了した。実AI・LINE送信は行っていない。
 
-共有Provider互換性はPR #1494でmainへ反映し、`gpt-5.6-terra`を7タスクの厳格出力契約と費用予約で回帰確認した。Production設定は未変更である。次の承認資料は[P0-2 Production Gate一括レビュー票](MANABERU_P0_2_PRODUCTION_GATE_REVIEW_20261108.md)とし、Request Intake、Lesson/Call Admission、Pricing、Provider Runtime、担当・停止条件を分割せず照合する。
+共有Provider互換性はPR #1494でmainへ反映し、`gpt-5.6-terra`を7タスクの厳格出力契約と費用予約で回帰確認した。限定Release PR #1496で互換性差分だけをProductionへ配備し、Vercel Ready、health/ready 200、database schema currentを確認した。Production設定は未変更である。次の承認資料は[P0-2 Production Gate一括レビュー票](MANABERU_P0_2_PRODUCTION_GATE_REVIEW_20261108.md)とし、Request Intake、Lesson/Call Admission、Pricing、Provider Runtime、担当・停止条件を分割せず照合する。
 
 - 専用Program: `SUSPENDED`、実行 `OFF`、`DYNAMIC_V1`、開始履歴なし、未精算Call 0。
 - Program Feature: conversationだけON。multiTopic / lineLearning / extendedScope / learningNudges / toolUpdates はOFF。
@@ -21,7 +21,7 @@ P0-2の読み取り監査と最初のProgram設定単位まで完了した。実
 2. **モデル互換性（完了）とProduction費用Gate（次の承認単位）**: 2026-12-11停止予定の `gpt-5-mini` のまま新規開始しない。公式移行先 `gpt-5.6-terra` の共有Provider互換性はPR #1494で確認済み。Request Intake、Lesson/Call Admission、AI Pricing、Provider model・予約額は一括レビュー後に別承認で反映する。
 3. **内部1名START**: STOP担当、監視担当、最大損失額、停止条件を記録し、Seat・同意・allowlist・参加Waveを再確認してから既存Pilot Operationsで開始する。実AI呼出しはこの単位の承認後まで行わない。
 
-現在の判定は単位1と単位2のコード互換性まで完了、単位2のProduction設定反映と単位3の実行はNo-Goである。環境変数だけを先行追加しない。
+現在の判定は単位1と単位2のコード互換性・Production配備まで完了、単位2のProduction設定反映と単位3の実行はNo-Goである。Request IntakeとLesson Admissionは未登録、Provider / Call Admission / Pricingは旧`gpt-5-mini`向けであり、環境変数だけを先行追加しない。
 
 ## 1. 目的と境界
 
