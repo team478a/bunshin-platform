@@ -32,7 +32,7 @@ describe('persona inference provider', () => {
       const sources = screenPersonaInferenceSources([{ ...source, text }]);
       expect(sources).toHaveLength(1);
       const body = personaInferenceBody({
-        model: 'gpt-5.2-2025-12-11',
+        model: 'gpt-5.6-terra',
         maxOutputTokens: 300,
         maxRequestBytes: 6000,
         maxSourceBytes: 1000,
@@ -51,7 +51,7 @@ describe('persona inference provider', () => {
 
   it('uses the allowlisted learning-only output contract and non-storage mode', () => {
     const body = personaInferenceBody({
-      model: 'gpt-5.2-2025-12-11',
+      model: 'gpt-5.6-terra',
       maxOutputTokens: 300,
       maxRequestBytes: 6000,
       maxSourceBytes: 1000,
@@ -90,7 +90,7 @@ describe('persona inference provider', () => {
     const fetcher = vi.fn().mockResolvedValue(
       Response.json({
         status: 'completed',
-        model: 'gpt-5.2-2025-12-11',
+        model: 'gpt-5.6-terra',
         usage: { input_tokens: 50, output_tokens: 20, input_tokens_details: { cached_tokens: 0 } },
         output: [
           {
@@ -109,7 +109,7 @@ describe('persona inference provider', () => {
       }),
     );
     const body = personaInferenceBody({
-      model: 'gpt-5.2-2025-12-11',
+      model: 'gpt-5.6-terra',
       maxOutputTokens: 300,
       maxRequestBytes: 6000,
       maxSourceBytes: 1000,
@@ -117,7 +117,7 @@ describe('persona inference provider', () => {
     });
     const result = await generatePersonaInference({
       apiKey: 'test-only',
-      model: 'gpt-5.2-2025-12-11',
+      model: 'gpt-5.6-terra',
       modelCapabilities: ['STRUCTURED_OUTPUT'],
       body,
       fetch: fetcher,

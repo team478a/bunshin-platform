@@ -81,7 +81,13 @@ describe('OpenAIWeeklyPlanner', () => {
     });
     expect(fetcher).not.toHaveBeenCalled();
   });
-  it.each(['gpt-5.2', 'gpt-5.2-2025-12-11', 'gpt-5-mini', 'gpt-5-mini-2025-08-07'])(
+  it.each([
+    'gpt-5.2',
+    'gpt-5.2-2025-12-11',
+    'gpt-5-mini',
+    'gpt-5-mini-2025-08-07',
+    'gpt-5.6-terra',
+  ])(
     'uses strict Responses Structured Outputs and returns usage metadata for %s',
     async (model) => {
       const fetcher = vi.fn().mockResolvedValue(

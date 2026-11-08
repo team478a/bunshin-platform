@@ -39,3 +39,11 @@
 - Policyはローカルrequest契約を固定し、モデルの全機能やschema subsetの意味的保証、品質承認、Budget予約の厳密な金額上限を実装しない。
 - DB/schema/migration/UI/Provider設定/本番model/Prompt変更なし、新key/実Provider/Production接続/merge/deployなし。
 - rollbackは本PRのrevert（DB操作不要）。互換性検査も外れるためrelease/rollbackは人間判断。EVO-04や新model導入へ自動着手せずレビュー待ちで停止する。
+
+## 2026-11-08追補: `gpt-5.6-terra` 互換性
+
+マナベル動的学習の本番準備で、`gpt-5-mini`の公式移行先として確認した`gpt-5.6-terra`を、明示レビュー済みmodelとして`OPENAI_TASK_COMPATIBILITY_V2`へ追加する。学習タスクは従来どおり管理設定の能力検査を正本とし、非学習の`SOCIAL_PLANNER`と`TRAINING_ASSESSMENT`だけ完全一致allowlistを更新する。Daily MissionのContent/Qualityは既存の低推論・時間上限を維持する。
+
+合成テストは、既存30日研修のDaily/Weekly/Assessmentと、動的Lesson、Conversation、Practice Support、Persona、Nudge、Evidence ReviewのResponses・`store:false`・strict JSON Schemaを確認する。原価予約は承認済み金額を引数で渡して保持できることだけを確認し、価格をruntimeへハードコードしない。
+
+本追補はPrompt、DB、migration、Provider設定、環境変数、Feature Flag、本番model、実AI呼出しを変更しない。互換性の合成成功は品質、アカウント利用権、実費、本番開始の承認を意味しない。
