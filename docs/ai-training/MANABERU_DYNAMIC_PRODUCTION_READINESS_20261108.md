@@ -71,11 +71,11 @@ Provider設定は既存30日研修等と共有される。現コードの非学�
 | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 既存30日研修          | `マナベルスタイル AI研修30日`、`ACTIVE`、全体実行 `ON`、`FIXED_DEFINITIONS_V1`、参加中2名                                                         |
 | 動的学習用専用Program | `マナベルスタイル Personal Learning`、Program ID `d6a0d526-f3ac-455d-9f18-386ed833f70b`                                                           |
-| 専用Program状態       | `SUSPENDED`、初期化済み、開始履歴なし、実行 `OFF`、`DYNAMIC_V1`、未精算Call 0                                                                       |
-| 専用Program Feature   | conversation `ON`。multiTopic / lineLearning / extendedScope / learningNudges / toolUpdates は `OFF`                                               |
+| 専用Program状態       | `SUSPENDED`、初期化済み、開始履歴なし、実行 `OFF`、`DYNAMIC_V1`、未精算Call 0                                                                     |
+| 専用Program Feature   | conversation `ON`。multiTopic / lineLearning / extendedScope / learningNudges / toolUpdates は `OFF`                                              |
 | 参加状態              | Personal Learningの参加中表示1名。監査アカウントにはEnrollment、内部Seat相当、現行AI利用同意があり、同意日は2026-10-20と表示                      |
 | Definition承認画面    | `PERSONAL_LEARNING_DEFINITION_ADMIN` が有効でないため操作不可。なお動的モードのSTARTはサーバー実装上、旧3 Definition承認と固定Profileを要求しない |
-| OpenAI                | Productionで接続確認済み・使用中、`gpt-5-mini`、有効設定の月額上限表示 `$100.00`、未精算予約なし。モデルは2026-12-11停止予定                       |
+| OpenAI                | Productionで接続確認済み・使用中、`gpt-5-mini`、有効設定の月額上限表示 `$100.00`、未精算予約なし。モデルは2026-12-11停止予定                      |
 | 専用LINE              | サービス専用LINE設定 v1 は使用中・接続確認済み。Webhook表示あり                                                                                   |
 | 本人LINE              | 監査アカウントは未接続、通知同意チェックも未選択                                                                                                  |
 
