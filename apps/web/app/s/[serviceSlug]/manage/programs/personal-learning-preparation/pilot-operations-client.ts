@@ -130,6 +130,12 @@ export function pilotOperationErrorMessage(reason: unknown, status?: number) {
     return '別の運用操作と競合しました。状態を再取得してください。';
   if (reason === 'PILOT_EMPTY_DEDICATED_PROGRAM_REQUIRED')
     return '専用の空Programではないため操作できません。対象Programを確認してください。';
+  if (reason === 'PILOT_ENROLLMENT_ALREADY_EXISTS')
+    return '対象者はすでにこのProgramへ参加登録されています。最新の参加状態を確認してください。';
+  if (reason === 'PILOT_INTERNAL_PREPARATION_CAP_REACHED')
+    return '内部参加者の準備上限に達しています。参加枠と現在の参加者を確認してください。';
+  if (reason === 'PILOT_OPERATION_CONFLICT')
+    return '同じ操作IDが別の内容または実行者ですでに使用されています。最新状態を再取得し、新しい操作としてやり直してください。';
   if (reason === 'PILOT_OPERATION_SUPERSEDED')
     return 'この操作はすでに後続状態へ進んでいます。最新状態を確認してください。';
   if (reason === 'PILOT_OPERATION_REVISION_INVALID')
