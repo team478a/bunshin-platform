@@ -13,6 +13,21 @@ interface Row {
   occurredAt: string;
 }
 
+export function selectAiUsageCostReconciliationUpdates(
+  rows: readonly Pick<Row, 'id'>[],
+  costs: Readonly<Record<string, string>>,
+  pricingVersions: Readonly<Record<string, string>>,
+) {
+  return rows.flatMap((row) => {
+    const rawCost = costs[row.id]?.trim();
+    const cost = Number(rawCost);
+    const pricingVersion = pricingVersions[row.id]?.trim();
+    return rawCost && Number.isSafeInteger(cost) && cost >= 0 && pricingVersion
+      ? [{ usageEventId: row.id, estimatedCostUsdMicros: cost, pricingVersion }]
+      : [];
+  });
+}
+
 export function AiUsageCostReconciliation({ initialRows }: { initialRows: Row[] }) {
   const [rows, setRows] = useState(initialRows);
   const [costs, setCosts] = useState<Record<string, string>>({});
@@ -23,14 +38,7 @@ export function AiUsageCostReconciliation({ initialRows }: { initialRows: Row[] 
   const [busy, setBusy] = useState(false);
 
   const selected = useMemo(
-    () =>
-      rows.flatMap((row) => {
-        const cost = Number(costs[row.id]);
-        const pricingVersion = pricingVersions[row.id]?.trim();
-        return Number.isSafeInteger(cost) && cost > 0 && pricingVersion
-          ? [{ usageEventId: row.id, estimatedCostUsdMicros: cost, pricingVersion }]
-          : [];
-      }),
+    () => selectAiUsageCostReconciliationUpdates(rows, costs, pricingVersions),
     [costs, pricingVersions, rows],
   );
 
@@ -70,6 +78,7 @@ export function AiUsageCostReconciliation({ initialRows }: { initialRows: Row[] 
       <h2>原価未確定の精算（SUPER_ADMIN）</h2>
       <p>
         課金証跡または承認済み価格表で確認できた行だけ入力してください。原価を推測して一括入力したり、失敗記録を自動で0円にしたりしません。
+        0円は、Providerの請求証跡で請求なしを確認できた場合に限り入力してください。
       </p>
       <label>
         精算理由

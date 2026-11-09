@@ -14,8 +14,16 @@ import { requireSameOrigin } from '../auth/request-security';
 const updateSchema = z
   .object({
     usageEventId: z.string().uuid(),
-    estimatedCostUsdMicros: z.number().int().positive().safe(),
+    estimatedCostUsdMicros: z.number().int().nonnegative().safe(),
     pricingVersion: z.string().trim().min(1).max(120),
+  })
+  .superRefine((value, context) => {
+    if (value.estimatedCostUsdMicros === 0 && value.pricingVersion !== 'provider-no-charge-v1')
+      context.addIssue({
+        code: 'custom',
+        message: 'zero cost requires the provider no-charge pricing version',
+        path: ['pricingVersion'],
+      });
   })
   .strict();
 const repairSchema = z
