@@ -17,6 +17,7 @@ export type PilotOperationsSnapshot = {
     learningNudges: boolean;
     toolUpdates: boolean;
   };
+  practiceStorageEnabled: boolean;
   openCallCount: number;
 };
 
@@ -43,6 +44,7 @@ export function pilotOperationsSnapshot(value: unknown): PilotOperationsSnapshot
       typeof (v.learningFeatures as Record<string, unknown>).learningNudges !== 'boolean') ||
     (Object.hasOwn(v.learningFeatures, 'toolUpdates') &&
       typeof (v.learningFeatures as Record<string, unknown>).toolUpdates !== 'boolean') ||
+    typeof v.practiceStorageEnabled !== 'boolean' ||
     typeof v.openCallCount !== 'number' ||
     !Number.isSafeInteger(v.openCallCount) ||
     v.openCallCount < 0
@@ -66,6 +68,7 @@ export function pilotOperationsSnapshot(value: unknown): PilotOperationsSnapshot
       learningNudges: (v.learningFeatures as Record<string, unknown>).learningNudges === true,
       toolUpdates: (v.learningFeatures as Record<string, unknown>).toolUpdates === true,
     },
+    practiceStorageEnabled: v.practiceStorageEnabled,
     openCallCount: v.openCallCount,
   };
 }
@@ -181,20 +184,30 @@ export async function submitPilotOperation(
     const after = pilotOperationsSnapshot(body.data);
     if (!after) return { result: 'RETRY' };
     const saved =
-      (command.action === 'INITIALIZE' && after.initialized && !after.enabled) ||
-      (command.action === 'START' && after.status === 'ACTIVE' && after.enabled && after.started) ||
+      (command.action === 'INITIALIZE' &&
+        after.initialized &&
+        !after.enabled &&
+        !after.practiceStorageEnabled) ||
+      (command.action === 'START' &&
+        after.status === 'ACTIVE' &&
+        after.enabled &&
+        after.started &&
+        after.practiceStorageEnabled === (after.learningMode === 'DYNAMIC_V1')) ||
       (command.action === 'STOP' &&
         after.status === 'SUSPENDED' &&
         !after.enabled &&
+        !after.practiceStorageEnabled &&
         after.operationRevisionValid) ||
       (command.action === 'SET_LEARNING_MODE' &&
         after.learningMode === command.learningMode &&
         after.status === 'SUSPENDED' &&
-        !after.enabled) ||
+        !after.enabled &&
+        !after.practiceStorageEnabled) ||
       (command.action === 'SET_LEARNING_FEATURES' &&
         JSON.stringify(after.learningFeatures) === JSON.stringify(command.learningFeatures) &&
         after.status === 'SUSPENDED' &&
-        !after.enabled);
+        !after.enabled &&
+        !after.practiceStorageEnabled);
     return saved ? { result: 'SAVED' } : { result: 'REJECTED' };
   } catch {
     return { result: 'RETRY' };

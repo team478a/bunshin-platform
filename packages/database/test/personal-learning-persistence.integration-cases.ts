@@ -3573,11 +3573,24 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
       expect(await client.personalLearningPilotSeat.count({ where: f.authority })).toBe(0);
       expect(await f.ops.read(f.owner.id)).toMatchObject({
         learningMode: 'FIXED_DEFINITIONS_V1',
+        practiceStorageEnabled: false,
         learningFeatures: {
           conversation: false,
           multiTopic: false,
           lineLearning: false,
           extendedScope: false,
+        },
+      });
+      expect(
+        (
+          await client.serviceProgram.findUniqueOrThrow({
+            where: { id: f.authority.serviceProgramId },
+          })
+        ).settings,
+      ).toMatchObject({
+        personalLearningPracticePolicy: {
+          enabled: false,
+          version: 'LEARNER_PRACTICE_TOOL_INDEPENDENT_V1',
         },
       });
       await expect(
@@ -3599,6 +3612,7 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
         status: 'SUSPENDED',
         enabled: false,
         learningMode: 'DYNAMIC_V1',
+        practiceStorageEnabled: false,
       });
       const featureCommand = {
         ...(await f.command('INITIALIZE')),
@@ -3611,6 +3625,7 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
         },
       };
       expect(await f.ops.change(f.owner.id, featureCommand)).toMatchObject({
+        practiceStorageEnabled: false,
         learningFeatures: {
           conversation: true,
           multiTopic: false,
@@ -3640,6 +3655,19 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
         status: 'ACTIVE',
         enabled: true,
         learningMode: 'DYNAMIC_V1',
+        practiceStorageEnabled: true,
+      });
+      expect(
+        (
+          await client.serviceProgram.findUniqueOrThrow({
+            where: { id: g.authority.serviceProgramId },
+          })
+        ).settings,
+      ).toMatchObject({
+        personalLearningPracticePolicy: {
+          enabled: true,
+          version: 'LEARNER_PRACTICE_TOOL_INDEPENDENT_V1',
+        },
       });
       await expect(
         g.ops.change(g.owner.id, {
@@ -3648,6 +3676,23 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
           learningMode: 'FIXED_DEFINITIONS_V1',
         }),
       ).rejects.toThrow('PILOT_CONFIG_REQUIRES_SUSPENDED');
+      expect(await g.ops.change(g.owner.id, await g.command('STOP'))).toMatchObject({
+        status: 'SUSPENDED',
+        enabled: false,
+        practiceStorageEnabled: false,
+      });
+      expect(
+        (
+          await client.serviceProgram.findUniqueOrThrow({
+            where: { id: g.authority.serviceProgramId },
+          })
+        ).settings,
+      ).toMatchObject({
+        personalLearningPracticePolicy: {
+          enabled: false,
+          version: 'LEARNER_PRACTICE_TOOL_INDEPENDENT_V1',
+        },
+      });
     });
     it('prepares a dynamic participant beside a sibling Personal Learning Program while fixed mode stays isolated', async () => {
       const dynamic = await operationsFixture();
@@ -3753,12 +3798,14 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
       expect(await f.ops.change(f.owner.id, start)).toMatchObject({
         status: 'ACTIVE',
         enabled: true,
+        practiceStorageEnabled: false,
       });
       expect(await f.ops.change(f.owner.id, start)).toMatchObject({ replayed: true });
       const stop = { ...(await f.command('STOP')), expectedStateToken: '0'.repeat(64) };
       expect(await f.ops.change(f.owner.id, stop)).toMatchObject({
         status: 'SUSPENDED',
         enabled: false,
+        practiceStorageEnabled: false,
         drainStatus: 'UNKNOWN',
       });
       await expect(f.ops.change(f.owner.id, start)).rejects.toThrow('PILOT_OPERATION_SUPERSEDED');

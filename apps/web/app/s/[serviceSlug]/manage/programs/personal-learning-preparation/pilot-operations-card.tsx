@@ -174,7 +174,8 @@ export function PilotOperationsCard({ serviceSlug }: { serviceSlug: string }) {
           Program: {snapshot.exists ? 'あり' : 'なし'} / 状態: {snapshot.status} / 初期化:
           {snapshot.initialized ? '済み' : '未'} / 開始履歴: {snapshot.started ? 'あり' : 'なし'} /
           実行: {snapshot.enabled ? 'ON' : 'OFF'} / モード: {snapshot.learningMode} / 未精算Call:
-          {snapshot.openCallCount} / 運用管理状態:
+          {snapshot.openCallCount} / 実践保存: {snapshot.practiceStorageEnabled ? 'ON' : 'OFF'} /
+          運用管理状態:
           {snapshot.operationRevisionValid ? '正常' : '再確定が必要'}
         </p>
       )}
