@@ -1975,6 +1975,108 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
       expect(await client.programMemberGoal.count()).toBe(0);
       expect(await client.programMissionAssignment.count()).toBe(0);
     });
+    it('free request: owner requires a live INTERNAL seat in the dedicated Pilot', async () => {
+      const f = await fixture(false);
+      const ownerMembership = await client.groupMembership.findFirstOrThrow({
+        where: {
+          workspaceId: f.scope.workspaceId,
+          groupId: f.scope.groupId,
+          userId: f.owner.id,
+          serviceRole: 'SERVICE_OWNER',
+        },
+      });
+      const ownerEnrollment = await client.programEnrollment.create({
+        data: {
+          workspaceId: f.scope.workspaceId,
+          groupId: f.scope.groupId,
+          groupMembershipId: ownerMembership.id,
+          serviceProgramId: f.enrollment.serviceProgramId,
+          programOfferingId: f.enrollment.programOfferingId,
+          status: 'ACTIVE',
+          supportMode: 'GUIDED',
+          goalSnapshot: {},
+          offeringSnapshot: {},
+          invitedByUserId: f.owner.id,
+          startsAt: new Date(now.getTime() - 86_400_000),
+          endsAt: null,
+        },
+      });
+      await client.serviceProgram.update({
+        where: { id: f.enrollment.serviceProgramId },
+        data: {
+          settings: {
+            moduleKey: 'AI_TRAINING_V1',
+            trainingOperations: {
+              notificationsEnabled: false,
+              notificationHour: 9,
+              postponedReminderEnabled: false,
+              postponedReminderHours: 24,
+              helpQueueEnabled: false,
+            },
+            personalLearningPilot: {
+              enabled: true,
+              enrollmentIds: [ownerEnrollment.id],
+              learningMode: 'DYNAMIC_V1',
+              participantControl: {
+                version: 'PILOT_PARTICIPANT_CAP_V1',
+                revision: 1,
+                externalParticipantCap: 0,
+                internalParticipantCap: 1,
+                currentWave: 0,
+                currentWaveCap: 0,
+              },
+              learningFeatures: {
+                conversation: true,
+                multiTopic: false,
+                lineLearning: false,
+                extendedScope: false,
+                learningNudges: false,
+                toolUpdates: false,
+              },
+            },
+          },
+        },
+      });
+      const ownerActor = {
+        actorUserId: f.owner.id,
+        scope: {
+          workspaceId: f.scope.workspaceId,
+          groupId: f.scope.groupId,
+          programEnrollmentId: ownerEnrollment.id,
+          groupMembershipId: ownerMembership.id,
+          userId: f.owner.id,
+        },
+      };
+      const repo = new PrismaPersonalLearningRequestRepository(client, () => now);
+      await expect(repo.readRequest(ownerActor)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+      const seat = await client.personalLearningPilotSeat.create({
+        data: {
+          workspaceId: f.scope.workspaceId,
+          groupId: f.scope.groupId,
+          serviceProgramId: f.enrollment.serviceProgramId,
+          participantHash: pilotParticipantHash(f.enrollment.serviceProgramId, f.owner.id),
+          programEnrollmentId: ownerEnrollment.id,
+          kind: 'INTERNAL',
+          cohort: 'INTERNAL',
+          seatNumber: 1,
+          admittedAt: now,
+        },
+      });
+      expect(await repo.readRequest(ownerActor)).toBeNull();
+      await expect(
+        repo.saveRequest({
+          ...ownerActor,
+          content: requestContent,
+          expectedRevision: 0,
+          idempotencyKey: randomUUID(),
+        }),
+      ).resolves.toMatchObject({ revision: 1, originalText: requestContent.originalText });
+      await client.personalLearningPilotSeat.update({
+        where: { id: seat.id },
+        data: { revokedAt: now },
+      });
+      await expect(repo.readRequest(ownerActor)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    });
     it('free request: other user, service and expired enrollment denied; RLS enabled', async () => {
       const f = await fixture(false);
       const repo = new PrismaPersonalLearningRequestRepository(client, () => now);
