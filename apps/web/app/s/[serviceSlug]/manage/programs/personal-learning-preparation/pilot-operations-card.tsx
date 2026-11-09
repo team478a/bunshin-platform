@@ -83,14 +83,18 @@ export function PilotOperationsCard({ serviceSlug }: { serviceSlug: string }) {
       setConfirmed(false);
       setChecks(startChecksForMode(current.learningMode).map(() => false));
       const action = availablePilotOperation(current);
+      const revisionRepair =
+        action === 'STOP' && !current.started && !current.operationRevisionValid;
       setMessage(
-        action === 'STOP'
-          ? '開始済みです。停止はPilot実行flagがONでも実行できます。'
-          : action === 'START'
-            ? '停止中・未開始です。開始前提を確認してください。'
-            : action === 'INITIALIZE'
-              ? 'Programはありますが未初期化です。対象と初期化内容を確認してください。'
-              : '操作可能な状態ではありません。',
+        revisionRepair
+          ? '停止中ですが運用管理状態の再確定が必要です。開始せず、停止状態だけを再確定します。'
+          : action === 'STOP'
+            ? '開始済みです。停止はPilot実行flagがONでも実行できます。'
+            : action === 'START'
+              ? '停止中・未開始です。開始前提を確認してください。'
+              : action === 'INITIALIZE'
+                ? 'Programはありますが未初期化です。対象と初期化内容を確認してください。'
+                : '操作可能な状態ではありません。',
       );
     } catch {
       setSnapshot(null);
@@ -108,6 +112,8 @@ export function PilotOperationsCard({ serviceSlug }: { serviceSlug: string }) {
     if (lock.current) return;
     const allStartChecks = action !== 'START' || checks.every(Boolean);
     const acknowledged = action === 'START' ? allStartChecks : confirmed;
+    const revisionRepair =
+      action === 'STOP' && snapshot?.started === false && !snapshot.operationRevisionValid;
     const command =
       pending.current ??
       createPilotOperationCommand(snapshot, action, evidence, acknowledged, value);
@@ -133,7 +139,9 @@ export function PilotOperationsCard({ serviceSlug }: { serviceSlug: string }) {
         ? action === 'START'
           ? '開始状態を再取得して確認しました。実運用の監視・停止担当はRunbookに従ってください。'
           : action === 'STOP'
-            ? '停止状態を再取得して確認しました。送信済みCallのdrain確認は別途必要です。'
+            ? revisionRepair
+              ? '停止状態を再確定し、運用管理状態が正常になったことを確認しました。開始はしていません。'
+              : '停止状態を再取得して確認しました。送信済みCallのdrain確認は別途必要です。'
             : action === 'INITIALIZE'
               ? '初期化状態を再取得して確認しました。開始はしていません。'
               : '設定変更を再取得して確認しました。'
@@ -142,6 +150,13 @@ export function PilotOperationsCard({ serviceSlug }: { serviceSlug: string }) {
   }
 
   const action = availablePilotOperation(snapshot);
+  const revisionRepair =
+    action === 'STOP' && snapshot?.started === false && !snapshot.operationRevisionValid;
+  const canConfigure =
+    snapshot?.initialized === true &&
+    snapshot.status === 'SUSPENDED' &&
+    !snapshot.enabled &&
+    snapshot.operationRevisionValid;
   const evidenceValid = /^[a-zA-Z0-9_.:-]{1,100}$/.test(evidence);
   const startChecks = startChecksForMode(snapshot?.learningMode ?? 'FIXED_DEFINITIONS_V1');
   return (
@@ -159,7 +174,8 @@ export function PilotOperationsCard({ serviceSlug }: { serviceSlug: string }) {
           Program: {snapshot.exists ? 'あり' : 'なし'} / 状態: {snapshot.status} / 初期化:
           {snapshot.initialized ? '済み' : '未'} / 開始履歴: {snapshot.started ? 'あり' : 'なし'} /
           実行: {snapshot.enabled ? 'ON' : 'OFF'} / モード: {snapshot.learningMode} / 未精算Call:
-          {snapshot.openCallCount}
+          {snapshot.openCallCount} / 運用管理状態:
+          {snapshot.operationRevisionValid ? '正常' : '再確定が必要'}
         </p>
       )}
       {snapshot && (
@@ -178,7 +194,7 @@ export function PilotOperationsCard({ serviceSlug }: { serviceSlug: string }) {
           </ul>
         </section>
       )}
-      {snapshot?.initialized && snapshot.status === 'SUSPENDED' && !snapshot.enabled && (
+      {canConfigure && (
         <fieldset className="stack">
           <legend>停止中のProgram機能設定</legend>
           <p>
@@ -374,10 +390,12 @@ export function PilotOperationsCard({ serviceSlug }: { serviceSlug: string }) {
       {action === 'STOP' && (
         <>
           <p>
-            緊急停止です。実行flagがONでも停止を受け付けます。処理中Callは別途drain状況を確認してください。
+            {revisionRepair
+              ? 'Programは停止中です。開始は行わず、既存の安全な停止処理で運用管理状態だけを再確定します。'
+              : '緊急停止です。実行flagがONでも停止を受け付けます。処理中Callは別途drain状況を確認してください。'}
           </p>
           <label>
-            停止レビュー記録の識別子
+            {revisionRepair ? '再確定レビュー記録の識別子' : '停止レビュー記録の識別子'}
             <input
               value={evidence}
               maxLength={100}
@@ -392,14 +410,16 @@ export function PilotOperationsCard({ serviceSlug }: { serviceSlug: string }) {
               disabled={busy || retry}
               onChange={(e) => setConfirmed(e.target.checked)}
             />
-            対象Programを停止することを確認しました
+            {revisionRepair
+              ? '対象Programを開始せず、停止状態だけを再確定することを確認しました'
+              : '対象Programを停止することを確認しました'}
           </label>
           <button
             type="button"
             disabled={busy || retry || !confirmed || !evidenceValid}
             onClick={() => void submit('STOP')}
           >
-            緊急停止
+            {revisionRepair ? '停止状態を再確定' : '緊急停止'}
           </button>
         </>
       )}

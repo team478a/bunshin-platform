@@ -6,6 +6,7 @@ export type PilotOperationsSnapshot = {
   initialized: boolean;
   enabled: boolean;
   started: boolean;
+  operationRevisionValid: boolean;
   stateToken: string;
   learningMode: 'DYNAMIC_V1' | 'FIXED_DEFINITIONS_V1';
   learningFeatures: {
@@ -28,6 +29,7 @@ export function pilotOperationsSnapshot(value: unknown): PilotOperationsSnapshot
     typeof v.initialized !== 'boolean' ||
     typeof v.enabled !== 'boolean' ||
     typeof v.started !== 'boolean' ||
+    typeof v.operationRevisionValid !== 'boolean' ||
     typeof v.stateToken !== 'string' ||
     !/^[a-f0-9]{64}$/.test(v.stateToken) ||
     !['DYNAMIC_V1', 'FIXED_DEFINITIONS_V1'].includes(String(v.learningMode)) ||
@@ -52,6 +54,7 @@ export function pilotOperationsSnapshot(value: unknown): PilotOperationsSnapshot
     initialized: v.initialized,
     enabled: v.enabled,
     started: v.started,
+    operationRevisionValid: v.operationRevisionValid,
     stateToken: v.stateToken,
     learningMode: v.learningMode as PilotOperationsSnapshot['learningMode'],
     learningFeatures: {
@@ -71,7 +74,8 @@ export function availablePilotOperation(snapshot: PilotOperationsSnapshot | null
   if (!snapshot?.exists) return null;
   if (!snapshot.initialized) return 'INITIALIZE' as const;
   if (snapshot.started) return 'STOP' as const;
-  if (snapshot.status === 'SUSPENDED' && !snapshot.enabled) return 'START' as const;
+  if (snapshot.status === 'SUSPENDED' && !snapshot.enabled)
+    return snapshot.operationRevisionValid ? ('START' as const) : ('STOP' as const);
   return null;
 }
 
@@ -128,6 +132,8 @@ export function pilotOperationErrorMessage(reason: unknown, status?: number) {
     return '専用の空Programではないため操作できません。対象Programを確認してください。';
   if (reason === 'PILOT_OPERATION_SUPERSEDED')
     return 'この操作はすでに後続状態へ進んでいます。最新状態を確認してください。';
+  if (reason === 'PILOT_OPERATION_REVISION_INVALID')
+    return '運用管理状態を開始前に再確定する必要があります。停止状態を再取得し、再確定してください。';
   if (reason === 'PILOT_CONFIG_REQUIRES_SUSPENDED')
     return '学習モード・機能設定は停止中のProgramでのみ変更できます。';
   if (status === 404 || status === 403)
@@ -174,7 +180,7 @@ export async function submitPilotOperation(
       (command.action === 'STOP' &&
         after.status === 'SUSPENDED' &&
         !after.enabled &&
-        after.started) ||
+        after.operationRevisionValid) ||
       (command.action === 'SET_LEARNING_MODE' &&
         after.learningMode === command.learningMode &&
         after.status === 'SUSPENDED' &&
