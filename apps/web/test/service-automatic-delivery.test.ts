@@ -4,6 +4,7 @@ const m = vi.hoisted(() => ({
   actor: vi.fn(),
   authorize: vi.fn(),
   eligible: vi.fn(),
+  lineConnection: vi.fn(),
   save: vi.fn(),
   enqueue: vi.fn(),
   completion: vi.fn(),
@@ -44,7 +45,7 @@ vi.mock('../src/services/public-service', () => ({
 vi.mock('../src/line/secure-configuration', () => ({ currentLineEnvironment: () => 'PRODUCTION' }));
 vi.mock('../src/jobs/service-automatic-week', () => ({ mondayForDate: () => '2026-09-07' }));
 vi.mock('../src/line/ensure-user-workspace-connection', () => ({
-  ensureUserWorkspaceLineConnection: () => Promise.resolve(true),
+  ensureUserWorkspaceLineConnection: m.lineConnection,
 }));
 vi.mock('../src/services/registration-completion-line', () => ({
   sendRegistrationCompletionLine: m.completion,
@@ -93,6 +94,7 @@ describe('service automatic delivery settings', () => {
     vi.resetAllMocks();
     m.actor.mockResolvedValue({ userId: 'member' });
     m.eligible.mockResolvedValue(true);
+    m.lineConnection.mockResolvedValue(true);
     m.preference.mockResolvedValue({ enabled: false, notificationConsentAt: null });
     m.completion.mockResolvedValue({ status: 'SENT' });
     m.routing.mockResolvedValue({ mode: 'DEDICATED' });
@@ -134,7 +136,13 @@ describe('service automatic delivery settings', () => {
   });
   it('requires the service-specific LINE connection before enabling dedicated delivery', async () => {
     m.dedicatedConnection.mockResolvedValue(null);
-    expect((await call({ enabled: true, localTime: '08:00' })).status).toBe(409);
+    const response = await call({ enabled: true, localTime: '08:00' });
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({
+      error: {
+        message: '先にこのサービス専用の公式LINEを接続し、友だち追加を確認してください。',
+      },
+    });
     expect(m.save).not.toHaveBeenCalled();
     expect(m.enqueue).not.toHaveBeenCalled();
     expect(m.completion).not.toHaveBeenCalled();
@@ -155,12 +163,29 @@ describe('service automatic delivery settings', () => {
   });
   it('rejects missing setup, unauthenticated requests and supplied authority', async () => {
     m.eligible.mockResolvedValue(false);
-    expect((await call({ enabled: true, localTime: '08:00' })).status).toBe(409);
+    const missingSetup = await call({ enabled: true, localTime: '08:00' });
+    expect(missingSetup.status).toBe(409);
+    await expect(missingSetup.json()).resolves.toMatchObject({
+      error: { message: '先に投稿するSNSと発信方法を設定してください。' },
+    });
     m.actor.mockResolvedValue(null);
     expect((await call({ enabled: true, localTime: '08:00' })).status).toBe(401);
     expect(
       (await call({ enabled: true, localTime: '08:00', workspaceId: 'other' })).status,
     ).toBeGreaterThanOrEqual(400);
     expect(m.save).not.toHaveBeenCalled();
+  });
+
+  it('explains when shared LINE login is required', async () => {
+    m.routing.mockResolvedValue({ mode: 'SHARED' });
+    m.lineConnection.mockResolvedValue(false);
+    const response = await call({ enabled: true, localTime: '08:00' });
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { message: 'LINEでログインしてから、お届け設定を開始してください。' },
+    });
+    expect(m.save).not.toHaveBeenCalled();
+    expect(m.enqueue).not.toHaveBeenCalled();
+    expect(m.completion).not.toHaveBeenCalled();
   });
 });

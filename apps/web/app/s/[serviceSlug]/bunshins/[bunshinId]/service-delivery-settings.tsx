@@ -27,11 +27,22 @@ export function ServiceDeliverySettings(props: {
           body: JSON.stringify({ enabled, localTime }),
         },
       );
-      if (!response.ok) throw new Error();
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as {
+          error?: { message?: string; requestId?: string };
+        } | null;
+        throw new Error(
+          `${payload?.error?.message ?? '設定を保存できませんでした。'}（受付番号: ${payload?.error?.requestId ?? requestId}）`,
+        );
+      }
       setMessage('お届け設定を保存しました。');
       router.refresh();
-    } catch {
-      setMessage(`設定を保存できませんでした。（受付番号: ${requestId}）`);
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : `設定を保存できませんでした。（受付番号: ${requestId}）`,
+      );
     } finally {
       setPending(false);
     }

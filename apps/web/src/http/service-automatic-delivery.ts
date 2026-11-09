@@ -22,6 +22,12 @@ const schema = z
   .object({ enabled: z.boolean(), localTime: z.string().regex(/^(0[7-9]|1\d|20):[0-5]\d$/) })
   .strict();
 
+const actionableConflictMessages = new Set([
+  '先に投稿するSNSと発信方法を設定してください。',
+  '先にこのサービス専用の公式LINEを接続し、友だち追加を確認してください。',
+  'LINEでログインしてから、お届け設定を開始してください。',
+]);
+
 export async function updateServiceAutomaticDelivery(
   request: Request,
   serviceSlug: string,
@@ -152,6 +158,12 @@ export async function updateServiceAutomaticDelivery(
     );
   } catch (error) {
     const mapped = toApiError(error, requestId);
+    if (
+      error instanceof ApplicationError &&
+      error.code === 'CONFLICT' &&
+      actionableConflictMessages.has(error.message)
+    )
+      mapped.body.error.message = error.message;
     return Response.json(mapped.body, {
       status: mapped.status,
       headers: { 'cache-control': 'no-store' },
