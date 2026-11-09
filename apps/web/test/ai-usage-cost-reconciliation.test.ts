@@ -108,4 +108,50 @@ describe('AI usage cost reconciliation HTTP', () => {
       expect.objectContaining({ evidenceReference: 'invoice:2026-10-openai' }),
     );
   });
+
+  it('passes an evidenced no-charge repair as an explicit zero cost', async () => {
+    const response = await repairUnknownAiUsageCostsResponse(
+      request({
+        reason: 'Providerの請求証跡で請求なしを確認',
+        evidenceReference: 'provider-usage:no-charge:2026-10',
+        updates: [
+          {
+            usageEventId: '22222222-2222-4222-8222-222222222222',
+            estimatedCostUsdMicros: 0,
+            pricingVersion: 'provider-no-charge-v1',
+          },
+        ],
+      }),
+    );
+    expect(response.status).toBe(200);
+    expect(state.repair).toHaveBeenCalledWith(
+      expect.objectContaining({
+        evidenceReference: 'provider-usage:no-charge:2026-10',
+        updates: [
+          expect.objectContaining({
+            estimatedCostUsdMicros: 0,
+            pricingVersion: 'provider-no-charge-v1',
+          }),
+        ],
+      }),
+    );
+  });
+
+  it('rejects zero cost without the explicit provider no-charge marker', async () => {
+    const response = await repairUnknownAiUsageCostsResponse(
+      request({
+        reason: 'Providerの請求証跡で請求なしを確認',
+        evidenceReference: 'provider-usage:no-charge:2026-10',
+        updates: [
+          {
+            usageEventId: '22222222-2222-4222-8222-222222222222',
+            estimatedCostUsdMicros: 0,
+            pricingVersion: 'provider-approved-v1',
+          },
+        ],
+      }),
+    );
+    expect(response.status).toBe(400);
+    expect(state.repair).not.toHaveBeenCalled();
+  });
 });

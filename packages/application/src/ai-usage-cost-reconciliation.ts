@@ -130,13 +130,15 @@ export class RepairUnknownAiUsageCosts {
       if (!uuid(update.usageEventId) || ids.has(update.usageEventId))
         throw new ApplicationError('VALIDATION_ERROR', 'invalid or duplicate usage event id');
       ids.add(update.usageEventId);
-      if (
-        !Number.isSafeInteger(update.estimatedCostUsdMicros) ||
-        update.estimatedCostUsdMicros <= 0
-      )
-        throw new ApplicationError('VALIDATION_ERROR', 'reconciliation cost must be positive');
+      if (!Number.isSafeInteger(update.estimatedCostUsdMicros) || update.estimatedCostUsdMicros < 0)
+        throw new ApplicationError('VALIDATION_ERROR', 'reconciliation cost must be nonnegative');
       if (!symbol(update.pricingVersion, 120))
         throw new ApplicationError('VALIDATION_ERROR', 'invalid reconciliation pricing version');
+      if (update.estimatedCostUsdMicros === 0 && update.pricingVersion !== 'provider-no-charge-v1')
+        throw new ApplicationError(
+          'VALIDATION_ERROR',
+          'zero cost requires the provider no-charge pricing version',
+        );
     }
     const result = await this.repository.repairUnknownCosts({
       ...input,
