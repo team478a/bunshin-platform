@@ -11,6 +11,7 @@
 - `apps/web/app/s/[serviceSlug]/programs/[programEnrollmentId]/page.tsx`
 - `apps/web/src/services/personal-learning-profile-preparation-entry.ts`
 - `apps/web/test/personal-learning-profile-preparation-ui.test.tsx`
+- `apps/web/test/ai-training-ended-participant.test.tsx`
 - 本報告書
 
 ## 3. 主要な設計判断
