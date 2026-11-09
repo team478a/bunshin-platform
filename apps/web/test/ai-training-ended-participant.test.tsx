@@ -177,7 +177,7 @@ describe('ended training participant view', () => {
       select: { endedAt: true },
     });
     expect(fake.program).toHaveBeenCalledWith(
-      expect.objectContaining({ select: { settings: true, displayName: true } }),
+      expect.objectContaining({ select: { settings: true, displayName: true, status: true } }),
     );
   });
   it('does not let an owner enter the legacy V1 path using management role alone', async () => {

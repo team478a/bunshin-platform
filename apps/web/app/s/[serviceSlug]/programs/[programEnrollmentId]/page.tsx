@@ -10,7 +10,6 @@ import {
   AiTrainingV1Policy,
   TrainingRuntimeError,
   isPersonalLearningPilotProgram,
-  personalLearningDynamicProgramAllows,
   personalLearningMode,
 } from '@bunshin/capability-training';
 import type { CSSProperties } from 'react';
@@ -28,6 +27,7 @@ import { readPersonalLearningProfilePreparation } from '../../../../../src/servi
 import { PersonalLearningProfilePreparationCard } from './personal-learning-profile-preparation-card';
 import { personalLearningRequestEnabled } from '../../../../../src/services/personal-learning-request-access';
 import { requireAiTrainingUsageConsent } from '../../../../../src/services/ai-training-consent';
+import { personalLearningProfilePreparationEntryEnabled } from '../../../../../src/services/personal-learning-profile-preparation-entry';
 
 export const dynamic = 'force-dynamic';
 
@@ -70,7 +70,7 @@ export default async function ProgramParticipantPage({
       workspaceId: service.workspaceId,
       groupId: service.serviceId,
     },
-    select: { settings: true, displayName: true },
+    select: { settings: true, displayName: true, status: true },
   });
   if (!program) notFound();
   // Owners are learner candidates only in the dedicated Pilot; its branch rechecks their live INTERNAL seat.
@@ -95,8 +95,10 @@ export default async function ProgramParticipantPage({
   if (moduleKey === AI_TRAINING_V1_MODULE_KEY) {
     if (isPersonalLearningPilotProgram(program.settings)) {
       if (
-        process.env['PERSONAL_LEARNING_PROFILE_PREPARATION'] === 'true' &&
-        !personalLearningDynamicProgramAllows(program.settings, programEnrollmentId)
+        personalLearningProfilePreparationEntryEnabled({
+          preparationFlag: process.env['PERSONAL_LEARNING_PROFILE_PREPARATION'],
+          programStatus: program.status,
+        })
       ) {
         let initialProfile;
         try {
