@@ -122,6 +122,7 @@ export class PrismaPersonalLearningPilotProfileRepository {
               this.preparationAuthority,
               s,
               enrollment.serviceProgramId,
+              { allowSiblingProgramsForDynamicMode: true },
             );
           const programs = await tx.$queryRaw<{ settings: unknown }[]>`
           SELECT settings FROM service_programs WHERE id=${enrollment.serviceProgramId}::uuid

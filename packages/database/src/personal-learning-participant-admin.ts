@@ -57,7 +57,10 @@ export class PrismaPersonalLearningParticipantAdminRepository {
           AND u.status::text='ACTIVE' AND w.status::text='ACTIVE' FOR SHARE OF m,u,w`;
           if (groups.length !== 1 || admins.length !== 1) throw unavailable();
           await tx.$queryRaw`SELECT id FROM service_programs WHERE id=${a.serviceProgramId}::uuid AND workspace_id=${a.workspaceId}::uuid AND group_id=${a.groupId}::uuid FOR UPDATE`;
-          await requirePersonalLearningPreparationAuthority(tx, a, a, a.serviceProgramId, true);
+          await requirePersonalLearningPreparationAuthority(tx, a, a, a.serviceProgramId, {
+            allowEmpty: true,
+            allowSiblingProgramsForDynamicMode: true,
+          });
           return work(tx);
         },
         { isolationLevel: 'Serializable', maxWait: 10000, timeout: 20000 },
