@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { Prisma, type PrismaClient, type ServiceProgram } from '@prisma/client';
 import {
+  LEARNING_CANDIDATE_POLICY,
   parsePilotOperation,
   parsePersonalLearningPreparationAuthority,
   parsePersonalLearningCallAdmissionPolicy,
@@ -49,6 +50,14 @@ const defaultLearningFeatures: Prisma.JsonObject = {
   extendedScope: false,
   learningNudges: false,
   toolUpdates: false,
+};
+const practicePolicy = (enabled: boolean): Prisma.JsonObject => ({
+  enabled,
+  version: LEARNING_CANDIDATE_POLICY,
+});
+const practiceStorageEnabled = (settings: Prisma.JsonObject) => {
+  const policy = settings.personalLearningPracticePolicy as Prisma.JsonObject | undefined;
+  return policy?.enabled === true && policy.version === LEARNING_CANDIDATE_POLICY;
 };
 const pilotOperationRevision = (settings: Prisma.JsonObject): number | null => {
   const control = settings.personalLearningPilotOperations as Prisma.JsonObject | undefined;
@@ -144,6 +153,7 @@ export class PrismaPersonalLearningPilotOperations {
       enabled: (s.personalLearningPilot as Prisma.JsonObject | undefined)?.enabled === true,
       learningMode: personalLearningMode(s),
       learningFeatures: personalLearningFeatures(s),
+      practiceStorageEnabled: practiceStorageEnabled(s),
       started,
       operationRevisionValid: pilotOperationRevision(s) !== null,
       openCallCount,
@@ -168,6 +178,7 @@ export class PrismaPersonalLearningPilotOperations {
           learningNudges: false,
           toolUpdates: false,
         }),
+        practiceStorageEnabled: false,
         started: false,
         operationRevisionValid: true,
         openCallCount: 0,
@@ -261,6 +272,7 @@ export class PrismaPersonalLearningPilotOperations {
             learningMode: 'FIXED_DEFINITIONS_V1',
             learningFeatures: defaultLearningFeatures,
           },
+          personalLearningPracticePolicy: practicePolicy(false),
           trainingOperations: { notificationsEnabled: false, postponedReminderEnabled: false },
           personalLearningPilotOperations: { version: 'PILOT_OPERATIONS_V1', revision: 1 },
         },
@@ -407,6 +419,7 @@ export class PrismaPersonalLearningPilotOperations {
             learningMode: 'FIXED_DEFINITIONS_V1',
             learningFeatures: defaultLearningFeatures,
           },
+          personalLearningPracticePolicy: practicePolicy(false),
           trainingOperations: {
             ...operationsSettings,
             notificationsEnabled: false,
@@ -416,6 +429,7 @@ export class PrismaPersonalLearningPilotOperations {
         status = 'SUSPENDED';
       } else if (c.action === 'STOP') {
         next.personalLearningPilot = { ...pilot, enabled: false };
+        next.personalLearningPracticePolicy = practicePolicy(false);
         next.trainingOperations = {
           ...operationsSettings,
           notificationsEnabled: false,
@@ -437,6 +451,7 @@ export class PrismaPersonalLearningPilotOperations {
               ? { learningFeatures: { ...defaultLearningFeatures, ...c.learningFeatures } }
               : {}),
           };
+          next.personalLearningPracticePolicy = practicePolicy(false);
         } else {
           await requirePersonalLearningPreparationAuthority(tx, a, a, p.id, {
             allowEmpty: true,
@@ -622,6 +637,9 @@ export class PrismaPersonalLearningPilotOperations {
                 throw conflict('PILOT_DEFINITION_APPROVAL_REQUIRED');
             }
             next.personalLearningPilot = { ...pilot, enabled: true };
+            next.personalLearningPracticePolicy = practicePolicy(
+              personalLearningMode(settings) === 'DYNAMIC_V1',
+            );
             status = 'ACTIVE';
           }
         }

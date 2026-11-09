@@ -27,6 +27,7 @@ const snapshot: PilotOperationsSnapshot = {
     learningNudges: false,
     toolUpdates: false,
   },
+  practiceStorageEnabled: false,
   openCallCount: 0,
 };
 const evidence = 'review-2026-10-16';
@@ -107,6 +108,15 @@ describe('Wave 0 operations UI boundaries', () => {
     });
   });
 
+  it('requires an explicit dynamic practice storage signal', () => {
+    const legacy = { ...snapshot } as Record<string, unknown>;
+    delete legacy.practiceStorageEnabled;
+    expect(pilotOperationsSnapshot(legacy)).toBeNull();
+    expect(pilotOperationsSnapshot({ ...snapshot, practiceStorageEnabled: true })).toMatchObject({
+      practiceStorageEnabled: true,
+    });
+  });
+
   it('reads the per-Program nudge flag and keeps older snapshots safely OFF', () => {
     const current = pilotOperationsSnapshot({
       ...snapshot,
@@ -153,13 +163,26 @@ describe('Wave 0 operations UI boundaries', () => {
   });
 
   it('performs POST then a fresh GET and accepts STOP even when runtime flags are on', async () => {
-    const stopSnapshot = { ...snapshot, started: true, status: 'ACTIVE', enabled: true };
+    const stopSnapshot = {
+      ...snapshot,
+      started: true,
+      status: 'ACTIVE',
+      enabled: true,
+      practiceStorageEnabled: true,
+    };
     const command = createPilotOperationCommand(stopSnapshot, 'STOP', evidence, true)!;
     const fetcher = vi
       .fn()
       .mockResolvedValueOnce(Response.json({ data: { status: 'SUSPENDED' } }))
       .mockResolvedValueOnce(
-        Response.json({ data: { ...stopSnapshot, status: 'SUSPENDED', enabled: false } }),
+        Response.json({
+          data: {
+            ...stopSnapshot,
+            status: 'SUSPENDED',
+            enabled: false,
+            practiceStorageEnabled: false,
+          },
+        }),
       );
     vi.stubGlobal('fetch', fetcher);
     expect(await submitPilotOperation('/endpoint', command)).toEqual({ result: 'SAVED' });
@@ -178,6 +201,36 @@ describe('Wave 0 operations UI boundaries', () => {
         .mockResolvedValueOnce(Response.json({ data: { status: 'SUSPENDED' } }))
         .mockResolvedValueOnce(
           Response.json({ data: { ...repairSnapshot, operationRevisionValid: true } }),
+        ),
+    );
+    expect(await submitPilotOperation('/endpoint', command)).toEqual({ result: 'SAVED' });
+  });
+
+  it('accepts dynamic START only after practice storage is enabled', async () => {
+    const dynamic = { ...snapshot, learningMode: 'DYNAMIC_V1' as const };
+    const command = createPilotOperationCommand(dynamic, 'START', evidence, true)!;
+    const started = {
+      ...dynamic,
+      status: 'ACTIVE',
+      enabled: true,
+      started: true,
+    };
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValueOnce(Response.json({ data: started }))
+        .mockResolvedValueOnce(Response.json({ data: started })),
+    );
+    expect(await submitPilotOperation('/endpoint', command)).toEqual({ result: 'REJECTED' });
+
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValueOnce(Response.json({ data: started }))
+        .mockResolvedValueOnce(
+          Response.json({ data: { ...started, practiceStorageEnabled: true } }),
         ),
     );
     expect(await submitPilotOperation('/endpoint', command)).toEqual({ result: 'SAVED' });
