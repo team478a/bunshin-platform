@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { Prisma } from '@prisma/client';
+import type { Prisma, PrismaClient } from '@prisma/client';
 import {
   personalLearningPilotAllows,
   parsePilotParticipantPolicy,
@@ -11,7 +11,7 @@ export const pilotParticipantHash = (programId: string, userId: string) =>
 
 /** Live seat authorization, never trust the settings allowlist alone. */
 export async function requirePersonalLearningPilotSeat(
-  tx: Prisma.TransactionClient,
+  tx: PrismaClient | Prisma.TransactionClient,
   scope: { workspaceId: string; groupId: string; programEnrollmentId: string; userId: string },
   required = false,
 ) {
@@ -102,7 +102,7 @@ export async function requirePersonalLearningPilotSeat(
 
 /** Candidate role is not authority: owners must hold their own live INTERNAL Pilot seat. */
 export async function requireTrainingLearnerRole(
-  tx: Prisma.TransactionClient,
+  tx: PrismaClient | Prisma.TransactionClient,
   scope: { workspaceId: string; groupId: string; programEnrollmentId: string; userId: string },
   role: string,
 ) {

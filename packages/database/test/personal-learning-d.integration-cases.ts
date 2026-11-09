@@ -711,6 +711,85 @@ export function registerPersonalLearningDIntegrationCases(client: PrismaClient) 
       expect(await examples.list(first.scope)).toHaveLength(1);
     });
 
+    it('allows an internally seated service owner to create and list learning topics', async () => {
+      const f = await serviceFixture('PR-D-1 internal owner topics');
+      const ownerMembership = await client.groupMembership.findFirstOrThrow({
+        where: {
+          workspaceId: f.workspace.id,
+          groupId: f.group.id,
+          userId: f.owner.id,
+          serviceRole: 'SERVICE_OWNER',
+        },
+      });
+      const ownerEnrollmentId = randomUUID();
+      await client.programEnrollment.create({
+        data: {
+          id: ownerEnrollmentId,
+          workspaceId: f.workspace.id,
+          groupId: f.group.id,
+          groupMembershipId: ownerMembership.id,
+          serviceProgramId: f.program.id,
+          programOfferingId: f.offering.id,
+          status: 'ACTIVE',
+          supportMode: 'GUIDED',
+          goalSnapshot: {},
+          offeringSnapshot: {},
+          invitedByUserId: f.owner.id,
+          startsAt: now,
+        },
+      });
+      const currentProgram = await client.serviceProgram.findUniqueOrThrow({
+        where: { id: f.program.id },
+        select: { settings: true },
+      });
+      const settings = currentProgram.settings as Record<string, unknown>;
+      const pilot = settings.personalLearningPilot as Record<string, unknown>;
+      const participantControl = pilot.participantControl as Record<string, unknown>;
+      await client.serviceProgram.update({
+        where: { id: f.program.id },
+        data: {
+          settings: {
+            ...settings,
+            personalLearningPilot: {
+              ...pilot,
+              enrollmentIds: [f.enrollmentId, ownerEnrollmentId],
+              participantControl: { ...participantControl, internalParticipantCap: 1 },
+            },
+          },
+        },
+      });
+      const seat = await client.personalLearningPilotSeat.create({
+        data: {
+          workspaceId: f.workspace.id,
+          groupId: f.group.id,
+          serviceProgramId: f.program.id,
+          participantHash: pilotParticipantHash(f.program.id, f.owner.id),
+          programEnrollmentId: ownerEnrollmentId,
+          kind: 'INTERNAL',
+          cohort: 'INTERNAL',
+          seatNumber: 1,
+          admittedAt: now,
+        },
+      });
+      const ownerScope = {
+        workspaceId: f.workspace.id,
+        groupId: f.group.id,
+        programEnrollmentId: ownerEnrollmentId,
+        groupMembershipId: ownerMembership.id,
+        userId: f.owner.id,
+      };
+      const topics = new PrismaPersonalLearningTopicRepository(client);
+      expect(await topics.list(ownerScope)).toEqual([]);
+      await expect(topics.create(ownerScope, { title: 'Owner topic' })).resolves.toMatchObject({
+        outcome: 'CREATED',
+      });
+      await client.personalLearningPilotSeat.update({
+        where: { id: seat.id },
+        data: { revokedAt: now },
+      });
+      await expect(topics.list(ownerScope)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    });
+
     it('allows opted-in persona use on dynamic single-topic programs with multiTopic OFF', async () => {
       const f = await serviceFixture('PR-D-3b single topic without multiTopic', {
         multiTopic: false,
