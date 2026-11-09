@@ -42,13 +42,12 @@ describe('Wave 0 operations UI boundaries', () => {
     expect(availablePilotOperation({ ...snapshot, initialized: false })).toBe('INITIALIZE');
     expect(availablePilotOperation(snapshot)).toBe('START');
     expect(availablePilotOperation({ ...snapshot, operationRevisionValid: false })).toBe('STOP');
-    expect(
-      availablePilotOperation({ ...snapshot, started: true, status: 'ACTIVE', enabled: true }),
-    ).toBe('STOP');
-    expect(availablePilotOperation({ ...snapshot, started: true, status: 'SUSPENDED' })).toBe(
+    expect(availablePilotOperation({ ...snapshot, started: true })).toBe('START');
+    expect(availablePilotOperation({ ...snapshot, status: 'ACTIVE', enabled: true })).toBe('STOP');
+    expect(availablePilotOperation({ ...snapshot, status: 'ACTIVE', enabled: false })).toBe('STOP');
+    expect(availablePilotOperation({ ...snapshot, status: 'SUSPENDED', enabled: true })).toBe(
       'STOP',
     );
-    expect(availablePilotOperation({ ...snapshot, status: 'ACTIVE', enabled: true })).toBeNull();
   });
 
   it('does not create a command before explicit confirmation and bounded evidence', () => {
@@ -64,7 +63,12 @@ describe('Wave 0 operations UI boundaries', () => {
       ),
     ).toMatchObject({ action: 'STOP' });
     expect(
-      createPilotOperationCommand({ ...snapshot, started: true }, 'STOP', evidence, true),
+      createPilotOperationCommand(
+        { ...snapshot, started: true, status: 'ACTIVE' },
+        'STOP',
+        evidence,
+        true,
+      ),
     ).toMatchObject({
       action: 'STOP',
       confirmation,
