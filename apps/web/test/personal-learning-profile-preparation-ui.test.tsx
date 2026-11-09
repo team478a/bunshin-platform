@@ -6,6 +6,7 @@ import {
   profilePreparationCommand,
   submitProfilePreparation,
 } from '../app/s/[serviceSlug]/programs/[programEnrollmentId]/personal-learning-profile-preparation-client';
+import { personalLearningProfilePreparationEntryEnabled } from '../src/services/personal-learning-profile-preparation-entry';
 
 const draft = { role: 'OTHER', aiLevel: 'BEGINNER', dailyMinutes: '5' };
 describe('learner Profile preparation UI', () => {
@@ -113,9 +114,9 @@ describe('learner Profile preparation UI', () => {
     expect(page.indexOf('readPersonalLearningProfilePreparation(')).toBeLessThan(
       page.indexOf('await requireAiTrainingUsageConsent({'),
     );
-    expect(page).toContain(
-      '!personalLearningDynamicProgramAllows(program.settings, programEnrollmentId)',
-    );
+    expect(page).toContain('personalLearningProfilePreparationEntryEnabled({');
+    expect(page).toContain('select: { settings: true, displayName: true, status: true }');
+    expect(page).not.toContain('personalLearningDynamicProgramAllows');
     expect(page.indexOf('readPersonalLearningProfilePreparation(')).toBeLessThan(
       page.indexOf('new AiTrainingParticipantService'),
     );
@@ -131,5 +132,25 @@ describe('learner Profile preparation UI', () => {
     expect(card).not.toMatch(
       /localStorage|sessionStorage|console\.|\/answers|\/evaluate|\/consultation/,
     );
+  });
+  it('never sends an active Program into the stopped preparation flow', () => {
+    expect(
+      personalLearningProfilePreparationEntryEnabled({
+        preparationFlag: 'true',
+        programStatus: 'ACTIVE',
+      }),
+    ).toBe(false);
+    expect(
+      personalLearningProfilePreparationEntryEnabled({
+        preparationFlag: 'true',
+        programStatus: 'SUSPENDED',
+      }),
+    ).toBe(true);
+    expect(
+      personalLearningProfilePreparationEntryEnabled({
+        preparationFlag: 'false',
+        programStatus: 'SUSPENDED',
+      }),
+    ).toBe(false);
   });
 });
