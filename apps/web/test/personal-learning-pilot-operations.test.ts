@@ -7,6 +7,7 @@ const f = vi.hoisted(() => ({
   read: vi.fn(),
   change: vi.fn(),
   runtime: vi.fn(),
+  warn: vi.fn(),
   environment: 'production',
 }));
 vi.mock('@bunshin/config', () => ({ getServerEnvironment: () => ({ APP_ENV: f.environment }) }));
@@ -17,6 +18,10 @@ vi.mock('../src/auth/request-security', () => ({ requireSameOrigin: f.origin }))
 vi.mock('../src/services/public-service', () => ({ resolveManagedServiceContext: f.service }));
 vi.mock('../src/ai/runtime-provider-configuration', () => ({
   resolveOpenAiRuntimeConfiguration: f.runtime,
+}));
+vi.mock('@bunshin/observability', () => ({
+  createLogger: () => ({ warn: f.warn }),
+  requestIdFromHeader: () => 'req_test_pilot_operations',
 }));
 vi.mock('@bunshin/database', () => ({
   prisma: {},
@@ -199,6 +204,24 @@ describe('trusted Pilot operations HTTP', () => {
     f.change.mockRejectedValue(new ApplicationError('CONFLICT', 'PRIVATE_INTERNAL_DETAIL'));
     const responseWithoutReason = await response(request(), 'slug');
     expect((await responseWithoutReason.json()).error.reason).toBeUndefined();
+    expect(f.warn).toHaveBeenLastCalledWith('personal learning pilot operation conflict', {
+      requestId: 'req_test_pilot_operations',
+      operation: 'STOP',
+      errorCode: 'CONFLICT',
+      reason: 'UNCLASSIFIED_CONFLICT',
+    });
+  });
+  it('publishes and logs the idempotency conflict reason without request content', async () => {
+    f.change.mockRejectedValue(new ApplicationError('CONFLICT', 'PILOT_OPERATION_CONFLICT'));
+    const conflictResponse = await response(request({ ...command, action: 'START' }), 'slug');
+    expect(conflictResponse.status).toBe(409);
+    expect((await conflictResponse.json()).error.reason).toBe('PILOT_OPERATION_CONFLICT');
+    expect(f.warn).toHaveBeenLastCalledWith('personal learning pilot operation conflict', {
+      requestId: 'req_test_pilot_operations',
+      operation: 'START',
+      errorCode: 'CONFLICT',
+      reason: 'PILOT_OPERATION_CONFLICT',
+    });
   });
   it('operation authority/flag revocation after lookup is denied', async () => {
     f.service.mockImplementation(() => {

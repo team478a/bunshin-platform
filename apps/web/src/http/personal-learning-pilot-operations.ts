@@ -9,7 +9,7 @@ import {
   type PilotOperation,
 } from '@bunshin/application';
 import { ApplicationError, toApiError } from '@bunshin/shared';
-import { requestIdFromHeader } from '@bunshin/observability';
+import { createLogger, requestIdFromHeader } from '@bunshin/observability';
 import { currentUserProvider } from '../auth/current-user';
 import { requireSameOrigin } from '../auth/request-security';
 import { resolveManagedServiceContext } from '../services/public-service';
@@ -17,6 +17,7 @@ import { resolveOpenAiRuntimeConfiguration } from '../ai/runtime-provider-config
 
 const headers = { 'cache-control': 'private, no-store', 'x-content-type-options': 'nosniff' };
 const denied = () => new ApplicationError('NOT_FOUND', 'pilot operation unavailable');
+const logger = createLogger();
 const publicPilotReasons = new Set([
   'PILOT_CONCURRENT_OPERATION',
   'PILOT_CONFIG_REQUIRES_SUSPENDED',
@@ -24,6 +25,7 @@ const publicPilotReasons = new Set([
   'PILOT_EMPTY_DEDICATED_PROGRAM_REQUIRED',
   'PILOT_ENROLLMENT_ALREADY_EXISTS',
   'PILOT_INTERNAL_PREPARATION_CAP_REACHED',
+  'PILOT_OPERATION_CONFLICT',
   'PILOT_OPERATION_REVISION_INVALID',
   'PILOT_OPERATION_SUPERSEDED',
   'PILOT_PROFILE_REQUIRED',
@@ -48,6 +50,7 @@ export async function personalLearningPilotOperationsResponse(
   serviceSlug: string,
 ) {
   const requestId = requestIdFromHeader(request.headers.get('x-request-id'));
+  let operation: PilotOperation['action'] | 'READ' = 'READ';
   try {
     if (!['GET', 'POST'].includes(request.method))
       return Response.json(
@@ -132,6 +135,7 @@ export async function personalLearningPilotOperationsResponse(
       command = parsePilotOperation(value);
       if (!command)
         throw new ApplicationError('VALIDATION_ERROR', 'valid reviewed operation required');
+      operation = command.action;
       guard(command.action);
       if (command.action === 'START') {
         let pricing: unknown;
@@ -182,6 +186,13 @@ export async function personalLearningPilotOperationsResponse(
       error instanceof ApplicationError && publicPilotReasons.has(error.message)
         ? error.message
         : undefined;
+    if (error instanceof ApplicationError && error.code === 'CONFLICT')
+      logger.warn('personal learning pilot operation conflict', {
+        requestId,
+        operation,
+        errorCode: error.code,
+        reason: reason ?? 'UNCLASSIFIED_CONFLICT',
+      });
     return Response.json(
       reason ? { ...mapped.body, error: { ...mapped.body.error, reason } } : mapped.body,
       { status: mapped.status, headers },

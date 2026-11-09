@@ -142,6 +142,11 @@ describe('Wave 0 operations UI boundaries', () => {
     );
     expect(pilotOperationErrorMessage('PILOT_PROFILE_REQUIRED')).toContain('本人Profile');
     expect(pilotOperationErrorMessage('PILOT_OPERATION_REVISION_INVALID')).toContain('再確定');
+    expect(pilotOperationErrorMessage('PILOT_OPERATION_CONFLICT')).toContain('操作ID');
+    expect(pilotOperationErrorMessage('PILOT_ENROLLMENT_ALREADY_EXISTS')).toContain('参加登録');
+    expect(pilotOperationErrorMessage('PILOT_INTERNAL_PREPARATION_CAP_REACHED')).toContain(
+      '準備上限',
+    );
     expect(pilotOperationErrorMessage('UNKNOWN_INTERNAL_SECRET')).not.toContain(
       'UNKNOWN_INTERNAL_SECRET',
     );
