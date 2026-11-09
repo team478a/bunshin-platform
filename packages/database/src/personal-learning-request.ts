@@ -13,7 +13,10 @@ import {
 } from '@bunshin/capability-training';
 import type { Prisma } from '@prisma/client';
 import { PrismaPersonalLearningPersistenceRepository } from './personal-learning-persistence';
-import { requirePersonalLearningPilotSeat } from './personal-learning-pilot-seat';
+import {
+  requirePersonalLearningPilotSeat,
+  requireTrainingLearnerRole,
+} from './personal-learning-pilot-seat';
 
 function project(
   row: Prisma.PersonalLearningRequestGetPayload<object>,
@@ -43,9 +46,10 @@ export class PrismaPersonalLearningRequestRepository
     const program =
       enrollment &&
       (await tx.serviceProgram.findUnique({ where: { id: enrollment.serviceProgramId } }));
-    if (member?.serviceRole !== 'PARTICIPANT' || !program)
+    if (!member || !program)
       throw new ApplicationError('NOT_FOUND', 'learning request unavailable');
-    if (isPersonalLearningPilotProgram(program.settings)) {
+    await requireTrainingLearnerRole(tx, s, member.serviceRole);
+    if (isPersonalLearningPilotProgram(program.settings) && member.serviceRole === 'PARTICIPANT') {
       await requirePersonalLearningPilotSeat(tx, s, true);
       const externalSeat = await tx.personalLearningPilotSeat.findFirst({
         where: {
