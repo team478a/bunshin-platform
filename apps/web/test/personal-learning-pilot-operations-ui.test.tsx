@@ -16,6 +16,7 @@ const snapshot: PilotOperationsSnapshot = {
   initialized: true,
   enabled: false,
   started: false,
+  operationRevisionValid: true,
   stateToken: 'a'.repeat(64),
   learningMode: 'FIXED_DEFINITIONS_V1',
   learningFeatures: {
@@ -39,6 +40,7 @@ describe('Wave 0 operations UI boundaries', () => {
     expect(availablePilotOperation({ ...snapshot, exists: false })).toBeNull();
     expect(availablePilotOperation({ ...snapshot, initialized: false })).toBe('INITIALIZE');
     expect(availablePilotOperation(snapshot)).toBe('START');
+    expect(availablePilotOperation({ ...snapshot, operationRevisionValid: false })).toBe('STOP');
     expect(
       availablePilotOperation({ ...snapshot, started: true, status: 'ACTIVE', enabled: true }),
     ).toBe('STOP');
@@ -52,6 +54,14 @@ describe('Wave 0 operations UI boundaries', () => {
     expect(createPilotOperationCommand(snapshot, 'START', evidence, false)).toBeNull();
     expect(createPilotOperationCommand(snapshot, 'START', 'private body', true)).toBeNull();
     expect(createPilotOperationCommand(snapshot, 'STOP', evidence, true)).toBeNull();
+    expect(
+      createPilotOperationCommand(
+        { ...snapshot, operationRevisionValid: false },
+        'STOP',
+        evidence,
+        true,
+      ),
+    ).toMatchObject({ action: 'STOP' });
     expect(
       createPilotOperationCommand({ ...snapshot, started: true }, 'STOP', evidence, true),
     ).toMatchObject({
@@ -88,6 +98,15 @@ describe('Wave 0 operations UI boundaries', () => {
     );
   });
 
+  it('requires an explicit operation revision health signal', () => {
+    const legacy = { ...snapshot } as Record<string, unknown>;
+    delete legacy.operationRevisionValid;
+    expect(pilotOperationsSnapshot(legacy)).toBeNull();
+    expect(pilotOperationsSnapshot({ ...snapshot, operationRevisionValid: false })).toMatchObject({
+      operationRevisionValid: false,
+    });
+  });
+
   it('reads the per-Program nudge flag and keeps older snapshots safely OFF', () => {
     const current = pilotOperationsSnapshot({
       ...snapshot,
@@ -122,6 +141,7 @@ describe('Wave 0 operations UI boundaries', () => {
       'Call Admission',
     );
     expect(pilotOperationErrorMessage('PILOT_PROFILE_REQUIRED')).toContain('本人Profile');
+    expect(pilotOperationErrorMessage('PILOT_OPERATION_REVISION_INVALID')).toContain('再確定');
     expect(pilotOperationErrorMessage('UNKNOWN_INTERNAL_SECRET')).not.toContain(
       'UNKNOWN_INTERNAL_SECRET',
     );
@@ -141,6 +161,21 @@ describe('Wave 0 operations UI boundaries', () => {
     expect(fetcher).toHaveBeenCalledTimes(2);
     expect(fetcher.mock.calls[0]?.[1]).toMatchObject({ method: 'POST' });
     expect(fetcher.mock.calls[1]?.[1]).toMatchObject({ cache: 'no-store' });
+  });
+
+  it('accepts a verified fail-closed STOP that repairs an invalid revision without starting', async () => {
+    const repairSnapshot = { ...snapshot, operationRevisionValid: false };
+    const command = createPilotOperationCommand(repairSnapshot, 'STOP', evidence, true)!;
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValueOnce(Response.json({ data: { status: 'SUSPENDED' } }))
+        .mockResolvedValueOnce(
+          Response.json({ data: { ...repairSnapshot, operationRevisionValid: true } }),
+        ),
+    );
+    expect(await submitPilotOperation('/endpoint', command)).toEqual({ result: 'SAVED' });
   });
 
   it('prompts a fresh read for stale state and preserves pending command after unknown response', async () => {

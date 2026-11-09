@@ -3812,9 +3812,11 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
           },
         },
       });
+      expect(await f.ops.read(f.owner.id)).toMatchObject({ operationRevisionValid: false });
       expect(await f.ops.change(f.owner.id, await f.command('STOP'))).toMatchObject({
         status: 'SUSPENDED',
         enabled: false,
+        operationRevisionValid: true,
       });
     });
     it('internal owner prepares their own Enrollment/Profile and remains a service owner through START/STOP', async () => {

@@ -50,6 +50,16 @@ const defaultLearningFeatures: Prisma.JsonObject = {
   learningNudges: false,
   toolUpdates: false,
 };
+const pilotOperationRevision = (settings: Prisma.JsonObject): number | null => {
+  const control = settings.personalLearningPilotOperations as Prisma.JsonObject | undefined;
+  const revision = control?.revision ?? 0;
+  return typeof revision === 'number' &&
+    Number.isSafeInteger(revision) &&
+    revision >= 0 &&
+    revision < Number.MAX_SAFE_INTEGER
+    ? revision
+    : null;
+};
 
 /** No env mutation, Provider calls, Definition approval or automatic Seat admission. */
 export class PrismaPersonalLearningPilotOperations {
@@ -135,6 +145,7 @@ export class PrismaPersonalLearningPilotOperations {
       learningMode: personalLearningMode(s),
       learningFeatures: personalLearningFeatures(s),
       started,
+      operationRevisionValid: pilotOperationRevision(s) !== null,
       openCallCount,
       drainStatus: 'UNKNOWN' as const,
     };
@@ -158,6 +169,7 @@ export class PrismaPersonalLearningPilotOperations {
           toolUpdates: false,
         }),
         started: false,
+        operationRevisionValid: true,
         openCallCount: 0,
         drainStatus: 'UNKNOWN' as const,
       };
@@ -614,14 +626,8 @@ export class PrismaPersonalLearningPilotOperations {
           }
         }
       }
-      const oldControl = settings.personalLearningPilotOperations as Prisma.JsonObject | undefined;
-      let revision = oldControl?.revision ?? 0;
-      if (
-        typeof revision !== 'number' ||
-        !Number.isSafeInteger(revision) ||
-        revision < 0 ||
-        revision >= Number.MAX_SAFE_INTEGER
-      ) {
+      let revision = pilotOperationRevision(settings);
+      if (revision === null) {
         if (c.action !== 'STOP') throw conflict('PILOT_OPERATION_REVISION_INVALID');
         // Corrupt operation metadata must not prevent a fail-closed emergency stop.
         revision = 0;
