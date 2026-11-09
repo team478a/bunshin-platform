@@ -93,21 +93,6 @@ export default async function ProgramParticipantPage({
 
   if (moduleKey === AI_TRAINING_V1_MODULE_KEY) {
     if (isPersonalLearningPilotProgram(program.settings)) {
-      try {
-        await requireAiTrainingUsageConsent({
-          workspaceId: service.workspaceId,
-          groupId: service.serviceId,
-          enrollmentId: programEnrollmentId,
-          userId: actor.userId,
-        });
-      } catch (error) {
-        if (error instanceof ApplicationError && error.code === 'NOT_FOUND')
-          redirect(`/s/${serviceSlug}/training`);
-        throw error;
-      }
-      if (personalLearningMode(program.settings) === 'DYNAMIC_V1') {
-        redirect(`/s/${serviceSlug}/programs/${programEnrollmentId}/learning-request`);
-      }
       if (process.env['PERSONAL_LEARNING_PROFILE_PREPARATION'] === 'true') {
         let initialProfile;
         try {
@@ -144,6 +129,21 @@ export default async function ProgramParticipantPage({
             </main>
           </PublicShell>
         );
+      }
+      try {
+        await requireAiTrainingUsageConsent({
+          workspaceId: service.workspaceId,
+          groupId: service.serviceId,
+          enrollmentId: programEnrollmentId,
+          userId: actor.userId,
+        });
+      } catch (error) {
+        if (error instanceof ApplicationError && error.code === 'NOT_FOUND')
+          redirect(`/s/${serviceSlug}/training`);
+        throw error;
+      }
+      if (personalLearningMode(program.settings) === 'DYNAMIC_V1') {
+        redirect(`/s/${serviceSlug}/programs/${programEnrollmentId}/learning-request`);
       }
       let pilotActor;
       try {
