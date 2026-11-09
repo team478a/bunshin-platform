@@ -76,9 +76,9 @@ export function pilotOperationsSnapshot(value: unknown): PilotOperationsSnapshot
 export function availablePilotOperation(snapshot: PilotOperationsSnapshot | null) {
   if (!snapshot?.exists) return null;
   if (!snapshot.initialized) return 'INITIALIZE' as const;
-  if (snapshot.started) return 'STOP' as const;
   if (snapshot.status === 'SUSPENDED' && !snapshot.enabled)
     return snapshot.operationRevisionValid ? ('START' as const) : ('STOP' as const);
+  if (snapshot.status === 'ACTIVE' || snapshot.enabled) return 'STOP' as const;
   return null;
 }
 
