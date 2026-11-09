@@ -11,6 +11,7 @@ import {
 } from '@bunshin/capability-training';
 import { prisma } from './index';
 import { lockTrainingEnrollmentData } from './training-data-lock';
+import { requireTrainingLearnerRole } from './personal-learning-pilot-seat';
 
 export type DynamicLearningScope = {
   workspaceId: string;
@@ -48,9 +49,9 @@ async function ownsEnabledDynamicEnrollment(
       id: scope.groupMembershipId,
       userId: scope.userId,
       status: 'ACTIVE',
-      serviceRole: 'PARTICIPANT',
+      serviceRole: { in: ['PARTICIPANT', 'SERVICE_OWNER'] },
     },
-    select: { id: true },
+    select: { id: true, serviceRole: true },
   });
   if (!membership) return null;
   const enrollments = await client.programEnrollment.findMany({
@@ -78,8 +79,17 @@ async function ownsEnabledDynamicEnrollment(
       settings &&
       personalLearningDynamicProgramAllows(settings, enrollment.id) &&
       (!requireMultiTopic || personalLearningFeatureEnabled(settings, 'multiTopic'))
-    )
+    ) {
+      await requireTrainingLearnerRole(
+        client,
+        {
+          ...scope,
+          programEnrollmentId: enrollment.id,
+        },
+        membership.serviceRole,
+      );
       return enrollment;
+    }
   }
   return null;
 }
