@@ -24,6 +24,7 @@ export default {
     'routine-settings.e2e.ts',
     'oauth-consent.e2e.ts',
     'line-broadcast.e2e.ts',
+    'service-not-found.e2e.ts',
   ],
   workers: 1,
   actionTimeout: 10_000,

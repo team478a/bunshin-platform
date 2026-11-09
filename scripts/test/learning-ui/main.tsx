@@ -27,6 +27,7 @@ import { ServiceOverviewCard } from '../../../apps/web/app/s/[serviceSlug]/manag
 import { AiTrainingCard } from '../../../apps/web/app/s/[serviceSlug]/programs/[programEnrollmentId]/ai-training-card';
 import '../../../apps/web/app/styles.css';
 import { PersonalLearningRequestCard } from '../../../apps/web/app/s/[serviceSlug]/programs/[programEnrollmentId]/learning-request/card';
+import { ServiceNotFoundCard } from '../../../apps/web/app/s/[serviceSlug]/service-not-found-card';
 
 createRoot(document.getElementById('root')!).render(
   new URLSearchParams(window.location.search).has('oauth-consent') ? (
@@ -41,6 +42,12 @@ createRoot(document.getElementById('root')!).render(
             callbackOrigin: 'https://client.example.invalid',
           }}
         />
+      </div>
+    </main>
+  ) : new URLSearchParams(window.location.search).has('service-not-found') ? (
+    <main className="public-shell">
+      <div className="public-shell__content public-shell__content--narrow">
+        <ServiceNotFoundCard serviceSlug="manaberu-style" />
       </div>
     </main>
   ) : new URLSearchParams(window.location.search).has('line-broadcast') ? (

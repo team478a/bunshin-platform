@@ -113,10 +113,8 @@ describe('learner Profile preparation UI', () => {
     expect(page.indexOf('readPersonalLearningProfilePreparation(')).toBeLessThan(
       page.indexOf('await requireAiTrainingUsageConsent({'),
     );
-    expect(page.indexOf('readPersonalLearningProfilePreparation(')).toBeLessThan(
-      page.indexOf(
-        'redirect(`/s/${serviceSlug}/programs/${programEnrollmentId}/learning-request`)',
-      ),
+    expect(page).toContain(
+      '!personalLearningDynamicProgramAllows(program.settings, programEnrollmentId)',
     );
     expect(page.indexOf('readPersonalLearningProfilePreparation(')).toBeLessThan(
       page.indexOf('new AiTrainingParticipantService'),

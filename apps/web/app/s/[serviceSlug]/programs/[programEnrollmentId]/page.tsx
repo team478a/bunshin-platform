@@ -10,6 +10,7 @@ import {
   AiTrainingV1Policy,
   TrainingRuntimeError,
   isPersonalLearningPilotProgram,
+  personalLearningDynamicProgramAllows,
   personalLearningMode,
 } from '@bunshin/capability-training';
 import type { CSSProperties } from 'react';
@@ -93,7 +94,10 @@ export default async function ProgramParticipantPage({
 
   if (moduleKey === AI_TRAINING_V1_MODULE_KEY) {
     if (isPersonalLearningPilotProgram(program.settings)) {
-      if (process.env['PERSONAL_LEARNING_PROFILE_PREPARATION'] === 'true') {
+      if (
+        process.env['PERSONAL_LEARNING_PROFILE_PREPARATION'] === 'true' &&
+        !personalLearningDynamicProgramAllows(program.settings, programEnrollmentId)
+      ) {
         let initialProfile;
         try {
           initialProfile = await readPersonalLearningProfilePreparation(
