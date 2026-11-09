@@ -12,13 +12,18 @@ import {
 } from '@bunshin/capability-training';
 import { ApplicationError } from '@bunshin/shared';
 
+type PersonalLearningPreparationAuthorityOptions = Readonly<{
+  allowEmpty?: boolean;
+  allowSiblingProgramsForDynamicMode?: boolean;
+}>;
+
 /** Called inside the existing authorization transaction, not a preflight-only check. */
 export async function requirePersonalLearningPreparationAuthority(
   tx: Prisma.TransactionClient,
   authority: PersonalLearningPreparationAuthority,
   scope: { workspaceId: string; groupId: string },
   enrollmentProgramId?: string,
-  allowEmpty = false,
+  options: PersonalLearningPreparationAuthorityOptions = {},
 ) {
   const parsed = parsePersonalLearningPreparationAuthority(authority);
   if (
@@ -48,7 +53,7 @@ export async function requirePersonalLearningPreparationAuthority(
   const modeValid = personalLearningMode(settings) !== null;
   const featuresValid = personalLearningFeatures(settings) !== null;
   const emptyValid =
-    (allowEmpty || !!parsePilotParticipantPolicy(pilot?.participantControl)) &&
+    (options.allowEmpty || !!parsePilotParticipantPolicy(pilot?.participantControl)) &&
     pilot?.enabled === false &&
     Array.isArray(pilot.enrollmentIds) &&
     pilot.enrollmentIds.length === 0 &&
@@ -99,6 +104,9 @@ export async function requirePersonalLearningPreparationAuthority(
       AND settings ? 'personalLearningPilot'
     LIMIT 1
   `;
-  if (otherPersonalLearningPrograms.length)
+  if (
+    otherPersonalLearningPrograms.length &&
+    !(options.allowSiblingProgramsForDynamicMode && personalLearningMode(settings) === 'DYNAMIC_V1')
+  )
     throw new ApplicationError('NOT_FOUND', 'dedicated preparation service required');
 }

@@ -414,7 +414,10 @@ export class PrismaPersonalLearningPilotOperations {
         if (c.action === 'SET_LEARNING_MODE' || c.action === 'SET_LEARNING_FEATURES') {
           if (p.status !== 'SUSPENDED' || pilot?.enabled !== false)
             throw conflict('PILOT_CONFIG_REQUIRES_SUSPENDED');
-          await requirePersonalLearningPreparationAuthority(tx, a, a, p.id, true);
+          await requirePersonalLearningPreparationAuthority(tx, a, a, p.id, {
+            allowEmpty: true,
+            allowSiblingProgramsForDynamicMode: c.action === 'SET_LEARNING_FEATURES',
+          });
           next.personalLearningPilot = {
             ...pilot,
             ...(c.action === 'SET_LEARNING_MODE' ? { learningMode: c.learningMode } : {}),
@@ -423,7 +426,10 @@ export class PrismaPersonalLearningPilotOperations {
               : {}),
           };
         } else {
-          await requirePersonalLearningPreparationAuthority(tx, a, a, p.id, true);
+          await requirePersonalLearningPreparationAuthority(tx, a, a, p.id, {
+            allowEmpty: true,
+            allowSiblingProgramsForDynamicMode: true,
+          });
           if (c.action === 'PREPARE_ENROLLMENT') {
             const policy = parsePilotParticipantPolicy(pilot?.participantControl);
             if (

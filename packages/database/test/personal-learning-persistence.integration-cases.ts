@@ -3547,6 +3547,56 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
         }),
       ).rejects.toThrow('PILOT_CONFIG_REQUIRES_SUSPENDED');
     });
+    it('prepares a dynamic participant beside a sibling Personal Learning Program while fixed mode stays isolated', async () => {
+      const dynamic = await operationsFixture();
+      const dynamicSeats = await dynamic.initialize();
+      await dynamic.ops.change(dynamic.owner.id, {
+        ...(await dynamic.command('INITIALIZE')),
+        action: 'SET_LEARNING_MODE',
+        learningMode: 'DYNAMIC_V1',
+      });
+      const dynamicProgram = await client.serviceProgram.findUniqueOrThrow({
+        where: { id: dynamic.authority.serviceProgramId },
+      });
+      await client.serviceProgram.create({
+        data: {
+          ...dynamicProgram,
+          id: randomUUID(),
+          displayName: 'Synthetic sibling Personal Learning',
+          status: 'SUSPENDED',
+          settings: dynamicProgram.settings as Prisma.InputJsonValue,
+        },
+      });
+      await expect(dynamicSeats.read(dynamic.owner.id)).resolves.toBeDefined();
+      await expect(
+        dynamic.ops.change(dynamic.owner.id, {
+          ...(await dynamic.command('INITIALIZE')),
+          action: 'SET_LEARNING_MODE',
+          learningMode: 'FIXED_DEFINITIONS_V1',
+        }),
+      ).rejects.toThrow('dedicated preparation service required');
+      await expect(
+        dynamic.ops.change(dynamic.owner.id, await dynamic.prepare()),
+      ).resolves.toMatchObject({ status: 'SUSPENDED', enabled: false });
+
+      const fixed = await operationsFixture();
+      const fixedSeats = await fixed.initialize();
+      const fixedProgram = await client.serviceProgram.findUniqueOrThrow({
+        where: { id: fixed.authority.serviceProgramId },
+      });
+      await client.serviceProgram.create({
+        data: {
+          ...fixedProgram,
+          id: randomUUID(),
+          displayName: 'Synthetic fixed sibling Personal Learning',
+          status: 'SUSPENDED',
+          settings: fixedProgram.settings as Prisma.InputJsonValue,
+        },
+      });
+      await expect(fixedSeats.read(fixed.owner.id)).rejects.toThrow(
+        'dedicated preparation service required',
+      );
+    });
     it('operations reject conversion of a legacy populated Program', async () => {
       const f = await fixture(false);
       const ops = new PrismaPersonalLearningPilotOperations(
