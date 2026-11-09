@@ -111,6 +111,14 @@ describe('learner Profile preparation UI', () => {
       page.indexOf('readPersonalLearningProfilePreparation('),
     );
     expect(page.indexOf('readPersonalLearningProfilePreparation(')).toBeLessThan(
+      page.indexOf('await requireAiTrainingUsageConsent({'),
+    );
+    expect(page.indexOf('readPersonalLearningProfilePreparation(')).toBeLessThan(
+      page.indexOf(
+        'redirect(`/s/${serviceSlug}/programs/${programEnrollmentId}/learning-request`)',
+      ),
+    );
+    expect(page.indexOf('readPersonalLearningProfilePreparation(')).toBeLessThan(
       page.indexOf('new AiTrainingParticipantService'),
     );
     const card = readFileSync(
