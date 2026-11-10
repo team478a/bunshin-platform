@@ -59,6 +59,15 @@ const practiceStorageEnabled = (settings: Prisma.JsonObject) => {
   const policy = settings.personalLearningPracticePolicy as Prisma.JsonObject | undefined;
   return policy?.enabled === true && policy.version === LEARNING_CANDIDATE_POLICY;
 };
+const stoppedPilotSettings = (pilot: Prisma.JsonObject): Prisma.JsonObject => ({
+  enabled: false,
+  ...(Object.hasOwn(pilot, 'enrollmentIds') ? { enrollmentIds: pilot.enrollmentIds } : {}),
+  ...(Object.hasOwn(pilot, 'participantControl')
+    ? { participantControl: pilot.participantControl }
+    : {}),
+  ...(Object.hasOwn(pilot, 'learningMode') ? { learningMode: pilot.learningMode } : {}),
+  ...(Object.hasOwn(pilot, 'learningFeatures') ? { learningFeatures: pilot.learningFeatures } : {}),
+});
 const pilotOperationRevision = (settings: Prisma.JsonObject): number | null => {
   const control = settings.personalLearningPilotOperations as Prisma.JsonObject | undefined;
   const revision = control?.revision ?? 0;
@@ -428,7 +437,9 @@ export class PrismaPersonalLearningPilotOperations {
         };
         status = 'SUSPENDED';
       } else if (c.action === 'STOP') {
-        next.personalLearningPilot = { ...pilot, enabled: false };
+        // Preserve every identity/capability field needed for a reviewed restart, but remove
+        // legacy markers that the strict runtime allowlist deliberately rejects.
+        next.personalLearningPilot = stoppedPilotSettings(pilot!);
         next.personalLearningPracticePolicy = practicePolicy(false);
         next.trainingOperations = {
           ...operationsSettings,

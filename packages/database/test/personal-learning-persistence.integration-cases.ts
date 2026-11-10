@@ -3694,6 +3694,49 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
         },
       });
     });
+    it('STOP removes legacy Pilot markers while preserving the reviewed restart projection', async () => {
+      const f = await operationsFixture();
+      await f.ready();
+      await f.ops.change(f.owner.id, {
+        ...(await f.command('INITIALIZE')),
+        action: 'SET_LEARNING_MODE',
+        learningMode: 'DYNAMIC_V1',
+      });
+      await f.ops.change(f.owner.id, await f.command('START'));
+      const before = await client.serviceProgram.findUniqueOrThrow({
+        where: { id: f.authority.serviceProgramId },
+      });
+      const settings = before.settings as Prisma.JsonObject;
+      await client.serviceProgram.update({
+        where: { id: before.id },
+        data: {
+          settings: {
+            ...settings,
+            personalLearningPilot: {
+              ...(settings.personalLearningPilot as Prisma.JsonObject),
+              legacyMarker: 'REMOVE_ON_STOP',
+            },
+          },
+        },
+      });
+
+      await f.ops.change(f.owner.id, await f.command('STOP'));
+      const stopped = await client.serviceProgram.findUniqueOrThrow({
+        where: { id: f.authority.serviceProgramId },
+      });
+      const stoppedPilot = (stopped.settings as Prisma.JsonObject)
+        .personalLearningPilot as Prisma.JsonObject;
+      expect(stoppedPilot).not.toHaveProperty('legacyMarker');
+      expect(stoppedPilot.enabled).toBe(false);
+      expect(Array.isArray(stoppedPilot.enrollmentIds)).toBe(true);
+      expect(typeof stoppedPilot.participantControl).toBe('object');
+      expect(stoppedPilot.learningMode).toBe('DYNAMIC_V1');
+      expect(typeof stoppedPilot.learningFeatures).toBe('object');
+      expect(await f.ops.change(f.owner.id, await f.command('START'))).toMatchObject({
+        status: 'ACTIVE',
+        enabled: true,
+      });
+    });
     it('prepares a dynamic participant beside a sibling Personal Learning Program while fixed mode stays isolated', async () => {
       const dynamic = await operationsFixture();
       const dynamicSeats = await dynamic.initialize();
