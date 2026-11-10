@@ -28,6 +28,10 @@ import { PersonalLearningProfilePreparationCard } from './personal-learning-prof
 import { personalLearningRequestEnabled } from '../../../../../src/services/personal-learning-request-access';
 import { requireAiTrainingUsageConsent } from '../../../../../src/services/ai-training-consent';
 import { personalLearningProfilePreparationEntryEnabled } from '../../../../../src/services/personal-learning-profile-preparation-entry';
+import {
+  resolveCurrentPersonalLearningEnrollment,
+  type PersonalLearningEnrollmentStore,
+} from '../../../../../src/services/personal-learning-current-enrollment';
 
 export const dynamic = 'force-dynamic';
 
@@ -94,6 +98,18 @@ export default async function ProgramParticipantPage({
 
   if (moduleKey === AI_TRAINING_V1_MODULE_KEY) {
     if (isPersonalLearningPilotProgram(program.settings)) {
+      if (!isDynamicLearning) {
+        const currentEnrollmentId = await resolveCurrentPersonalLearningEnrollment(
+          db.prisma as unknown as PersonalLearningEnrollmentStore,
+          {
+            workspaceId: service.workspaceId,
+            groupId: service.serviceId,
+            groupMembershipId: membership.id,
+            currentEnrollmentId: programEnrollmentId,
+          },
+        );
+        if (currentEnrollmentId) redirect(`/s/${serviceSlug}/programs/${currentEnrollmentId}`);
+      }
       if (
         personalLearningProfilePreparationEntryEnabled({
           preparationFlag: process.env['PERSONAL_LEARNING_PROFILE_PREPARATION'],
