@@ -147,6 +147,7 @@ export interface DailyMissionRepository {
       | 'READY'
       | 'LINK_CHANGED'
       | 'LINK_UNAVAILABLE'
+      | 'CAMPAIGN_UNAVAILABLE'
       | 'APPROVAL_PENDING'
       | 'APPROVAL_CHANGES_REQUESTED';
     reviewNote?: string | null;

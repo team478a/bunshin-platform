@@ -22,6 +22,7 @@ import { registerServiceImprovementProgressIntegrationCases } from './service-im
 import { registerMemberUsageIntegrationCases } from './member-usage.integration-cases';
 import { registerMemberRoadmapContextIntegrationCases } from './member-roadmap-context.integration-cases';
 import { registerSocialServiceReferralEvidenceIntegrationCases } from './social-service-referral-evidence.integration-cases';
+import { registerCampaignPostingApprovalIntegrationCases } from './campaign-posting-approval.integration-cases';
 import { cleanupProgramFixtures } from './program-fixture-cleanup';
 import {
   integrationDatabaseTarget,
@@ -254,6 +255,7 @@ describe('database ownership boundaries', () => {
   registerSocialSupportAccessIntegrationCases(client);
   registerSocialAccountConnectionIntegrationCases(client);
   registerSocialPublicationIntentIntegrationCases(client);
+  registerCampaignPostingApprovalIntegrationCases(client);
 
   it('fixture cleanup regression: program and training residue is absent before new fixtures', async () => {
     expect(

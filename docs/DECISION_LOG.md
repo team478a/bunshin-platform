@@ -4709,3 +4709,11 @@
 - 既存30日研修のSocial Planner・Assessmentと動的学習のLesson・Conversation・Practice Support・Persona・Nudge・Evidence Reviewについて、Responses、非保存、strict JSON Schema、失敗時のfail-closedを合成テストする。Daily MissionのContent/Qualityは既存の低推論ポリシーを同modelへ引き継ぐ。
 - 原価予約テストは承認候補の最大予約額`57,344 USD micros`が既存Admissionへ明示入力され、そのまま保持されることだけを確認する。単価・予約額をruntimeへ固定せず、本番のPricing、Provider設定、予算、Admission値は同一レビュー単位で別承認する。
 - Prompt、DB、migration、Feature Flag、Program、Provider設定、環境変数、本番AI/LINE呼出しは変更しない。合成互換性は実モデル品質・利用権・実費・本番開始を承認しない。
+
+## 2026-11-12: Campaign投稿案はコピー時点の参加条件と確認済み本文で判定する
+
+- 企業・グループ型広告サービスの最新main監査（`docs/GROUP_AD_CAMPAIGN_SERVICE_AUDIT.md`）で、Campaign投稿案のコピー可否が作成時点の条件に依存し、中止・終了、参加取消、Service退出、商品版差替え、割当解除後もコピーできることを確認した。コピー可否の判定時に、Campaign OPEN・期間内、参加ACCEPTED、Group所属ACTIVE・同意済み、商品版PUBLISHED＋割当ACTIVEを再確認し、満たさない場合は`CAMPAIGN_UNAVAILABLE`とする。承認・URL確認より前に判定する。
+- 企業の投稿確認は確認した本文に対して有効とする。確認依頼があるCampaign投稿案で参加者が別案を初めて選んだ時は、同じTransactionで確認依頼を`PENDING`に戻し、`contentSnapshot`を別案本文にし、確認結果をクリアし、監査`RESUBMITTED`を残す（再承認方式）。同じ別案の選び直しでは承認を消さない。確認不要のServiceは変更しない。WPを使う前の確認文で、確認がやり直しになることを示す。
+- 別案生成を禁止するService設定は追加しない。要望が出た場合のP2とする。
+- SNS投稿の本人承認と企業管理者の広告確認は別権限のまま維持する。新規テーブル、migration、Feature Flag、本番設定は変更しない。
+- Service分身のCampaign参加と参加時の商品割当（P0-1・P0-2）は未対応であり、一般販売はNo-Goのままとする。後続PRの計画は監査文書に記録する。
