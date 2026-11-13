@@ -67,6 +67,30 @@ export function ServiceDailyMissionAccepted({
   return (
     <div className="mission-accepted">
       <p className="mission-step-complete">✓ 採用しました</p>
+      {!businessFree ? (
+        <section
+          className="mission-use-options"
+          aria-labelledby={`mission-use-options-${mission.id}`}
+        >
+          <h4 id={`mission-use-options-${mission.id}`}>この投稿案の使い方</h4>
+          <ol>
+            <li>
+              <strong>そのままコピー</strong>
+              <span>下のコピーボタンから、SNSの投稿画面へ貼り付けます。</span>
+            </li>
+            <li>
+              <strong>自分で編集</strong>
+              <span>コピーしてから、自分の言葉や写真に合わせてSNS側で直せます。</span>
+            </li>
+            <li>
+              <strong>Muse等のAIで制作</strong>
+              <span>
+                画像や動画にしたいときだけ外部AIを使えます。外部AIの接続は必須ではありません。
+              </span>
+            </li>
+          </ol>
+        </section>
+      ) : null}
       {copyOptions(missionWithSelectedVariant(mission), serviceSlug).map((option, index) => (
         <button
           key={`${option.type}:${index}`}
