@@ -46,8 +46,25 @@ const experience = [
 const imageWorkspace = ['social-image-workspace.tsx', 'social-image-workspace-view.tsx']
   .map((file) => readFileSync(new URL(`../app/ui/${file}`, import.meta.url), 'utf8'))
   .join('\n');
+const productionBriefCard = readFileSync(
+  new URL(
+    '../app/s/[serviceSlug]/bunshins/[bunshinId]/external-ai-production-brief-card.tsx',
+    import.meta.url,
+  ),
+  'utf8',
+);
 
 describe('service daily mission boundary', () => {
+  it('hands a neutral production brief to an external AI only after member copy or share', () => {
+    expect(productionBriefCard).toContain('この画面から外部へ自動送信しません');
+    expect(productionBriefCard).toContain("handOffProductionBrief(mission, brief, 'COPY')");
+    expect(productionBriefCard).toContain("handOffProductionBrief(mission, brief, 'SHARE')");
+    expect(productionBriefCard).not.toContain('fetch(');
+    expect(detailPage).toContain('campaignRepository.resolvePlanningContext');
+    expect(detailPage).toContain('...scope');
+    expect(detailPage).toContain("status === 'APPROVED'");
+  });
+
   it('derives service authority on the server', () => {
     expect(source).toContain('resolveMemberServiceContext(serviceSlug, actor)');
     expect(source).not.toContain('resolvePublicServiceContext');

@@ -163,6 +163,27 @@ export function useServiceDailyMissionController({
     return selectedCopy || (await clipboardAttempt) || false;
   }
 
+  function requireCopyAuthorization(mission: DailyMissionView) {
+    const authorizationData = mission.copyAuthorization;
+    if (!authorizationData) {
+      setMessage('コピーの準備を確認できませんでした。画面を開き直してください。');
+      return false;
+    }
+    if (authorizationData.allowed) return true;
+    setMessage(
+      authorizationData.reason === 'CAMPAIGN_UNAVAILABLE'
+        ? CAMPAIGN_UNAVAILABLE_MESSAGE
+        : authorizationData.reason === 'LINK_CHANGED'
+          ? 'あなた専用の紹介URLが新しくなりました。この投稿案を作り直してください。'
+          : authorizationData.reason === 'APPROVAL_PENDING'
+            ? 'この投稿案は運営者の確認待ちです。確認が終わるまでコピーできません。'
+            : authorizationData.reason === 'APPROVAL_CHANGES_REQUESTED'
+              ? `この投稿案は見直しが必要です。${authorizationData.reviewNote ? `理由：${authorizationData.reviewNote}` : '運営者の案内を確認してください。'}`
+              : 'この紹介URLは今は使えません。運営者へお問い合わせください。',
+    );
+    return false;
+  }
+
   async function copy(
     mission: DailyMissionView,
     value: string,
@@ -173,25 +194,7 @@ export function useServiceDailyMissionController({
     const id = mission.id;
     setMessage(null);
     setManualCopy(null);
-    const authorizationData = mission.copyAuthorization;
-    if (!authorizationData) {
-      setMessage('コピーの準備を確認できませんでした。画面を開き直してください。');
-      return false;
-    }
-    if (!authorizationData?.allowed) {
-      setMessage(
-        authorizationData?.reason === 'CAMPAIGN_UNAVAILABLE'
-          ? CAMPAIGN_UNAVAILABLE_MESSAGE
-          : authorizationData?.reason === 'LINK_CHANGED'
-            ? 'あなた専用の紹介URLが新しくなりました。この投稿案を作り直してください。'
-            : authorizationData?.reason === 'APPROVAL_PENDING'
-              ? 'この投稿案は運営者の確認待ちです。確認が終わるまでコピーできません。'
-              : authorizationData?.reason === 'APPROVAL_CHANGES_REQUESTED'
-                ? `この投稿案は見直しが必要です。${authorizationData.reviewNote ? `理由：${authorizationData.reviewNote}` : '運営者の案内を確認してください。'}`
-                : 'この紹介URLは今は使えません。運営者へお問い合わせください。',
-      );
-      return false;
-    }
+    if (!requireCopyAuthorization(mission)) return false;
     setPendingAction(`${id}:copy`);
     if (!(await writeToClipboard(value))) {
       setManualCopy({
@@ -218,6 +221,34 @@ export function useServiceDailyMissionController({
         : null,
     );
     return ok;
+  }
+
+  async function handOffProductionBrief(
+    mission: DailyMissionView,
+    value: string,
+    method: 'COPY' | 'SHARE',
+  ) {
+    if (pendingAction || !requireCopyAuthorization(mission)) return;
+    setPendingAction(`${mission.id}:production-brief`);
+    setMessage(null);
+    setManualCopy(null);
+    try {
+      if (method === 'SHARE' && typeof navigator.share === 'function') {
+        await navigator.share({ title: '外部AI向け 制作指示', text: value });
+        setMessage('共有メニューを閉じました。送信先はご自身で選択したものだけです。');
+        return;
+      }
+      if (await writeToClipboard(value)) {
+        setMessage('制作指示をコピーしました。使いたいAIを開いて貼り付けてください。');
+        return;
+      }
+      setManualCopy({ title: '外部AI向け 制作指示', value });
+      setMessage('自動コピーができないため、下の文章を長押ししてコピーしてください。');
+    } catch {
+      setMessage('共有は行われませんでした。必要ならコピーをお試しください。');
+    } finally {
+      setPendingAction(null);
+    }
   }
 
   async function markPosted(mission: DailyMissionView) {
@@ -346,6 +377,7 @@ export function useServiceDailyMissionController({
     recordExecutionResult,
     copyWithSelection,
     copy,
+    handOffProductionBrief,
     markPosted,
     openMission,
     feedback,

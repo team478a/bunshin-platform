@@ -88,6 +88,21 @@ export type DailyMissionView = {
     campaignName: string | null;
     advertisingClassification: 'ORGANIC' | 'PRODUCT_RELATED' | 'ADVERTISEMENT';
   } | null;
+  productionBriefContext?: {
+    personalStyle: string[];
+    campaign: {
+      name: string;
+      theme: string;
+      targetSummary: string;
+      productSummary: string;
+      providerName: string;
+      facts: Array<{ label: string; value: string }>;
+      allowedAssets: Array<{ label: string; url: string; usageTerms: string }>;
+      requiredDisclosures: string[];
+      prohibitedExpressions: string[];
+      conditionalExpressions: Array<{ expression: string; condition: string }>;
+    } | null;
+  };
   copyAuthorization?: {
     allowed: boolean;
     reason: string;

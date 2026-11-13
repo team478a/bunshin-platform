@@ -17,6 +17,7 @@ import {
   type SocialActivityBarrierQuestion,
   type SocialActivitySupportProgress,
   type SocialProfile,
+  type SocialAccountStrategy,
   type ServiceBusinessPurpose,
   isServiceBusinessPurpose,
 } from '@bunshin/capability-social';
@@ -74,7 +75,7 @@ export async function loadServiceBunshinDetail({
   let capabilities;
   let socialProfiles: SocialProfile[];
   let contentPillars;
-  let accountStrategies;
+  let accountStrategies: SocialAccountStrategy[];
   let weeklyPlans;
   let dailyMissions: DailyMissionView[];
   let variantPointCost: number | null = null;
@@ -204,6 +205,27 @@ export async function loadServiceBunshinDetail({
     });
     const generationContextByMission = new Map(
       generationContexts.map(({ dailyMissionId, payload }) => [dailyMissionId, payload]),
+    );
+    const campaignRepository = new db.PrismaCampaignRepository();
+    const campaignIds = [
+      ...new Set(
+        missionRecords.flatMap(({ campaignId }) => (campaignId === null ? [] : [campaignId])),
+      ),
+    ];
+    const campaignContextById = new Map(
+      await Promise.all(
+        campaignIds.map(
+          async (campaignId) =>
+            [
+              campaignId,
+              await campaignRepository.resolvePlanningContext({
+                ...scope,
+                campaignId,
+                at: new Date(),
+              }),
+            ] as const,
+        ),
+      ),
     );
     const missionStates = await Promise.all(
       missionRecords.map(async (mission) => ({
@@ -367,6 +389,51 @@ export async function loadServiceBunshinDetail({
               advertisingClassification: mission.linkUsage.advertisingClassification,
             }
           : null,
+      productionBriefContext: (() => {
+        const profile = socialProfiles.find(({ id }) => id === mission.socialProfileId);
+        const strategy = accountStrategies.find(
+          ({ socialProfileId, status }) =>
+            socialProfileId === mission.socialProfileId && status === 'APPROVED',
+        );
+        const campaign = mission.campaignId
+          ? (campaignContextById.get(mission.campaignId) ?? null)
+          : null;
+        return {
+          personalStyle: [strategy?.positioning, strategy?.postingPolicy, profile?.purpose].filter(
+            (value): value is string => Boolean(value),
+          ),
+          campaign: campaign
+            ? {
+                name: campaign.name,
+                theme: campaign.theme,
+                targetSummary: campaign.targetSummary,
+                productSummary: campaign.productPack.summary,
+                providerName: campaign.productPack.providerName,
+                facts: Object.entries(campaign.productPack.facts).map(([label, value]) => ({
+                  label,
+                  value,
+                })),
+                allowedAssets: campaign.productPack.assets.map(({ label, url, usageTerms }) => ({
+                  label,
+                  url,
+                  usageTerms,
+                })),
+                requiredDisclosures: campaign.productPack.rules
+                  .filter(({ type }) => type === 'REQUIRED_DISCLOSURE')
+                  .map(({ value }) => value),
+                prohibitedExpressions: campaign.productPack.rules
+                  .filter(({ type }) => type === 'FORBIDDEN_EXPRESSION')
+                  .map(({ value }) => value),
+                conditionalExpressions: campaign.productPack.rules.flatMap(
+                  ({ type, value, condition }) =>
+                    type === 'CONDITIONAL_EXPRESSION' && condition
+                      ? [{ expression: value, condition }]
+                      : [],
+                ),
+              }
+            : null,
+        };
+      })(),
       variants: isBusinessDailyService
         ? []
         : missionVariants[index]!.map(({ id, sequence, content, qualityScore, selectedAt }) => ({

@@ -8,6 +8,7 @@ import {
   type DailyMissionView,
 } from '../../../../(app)/bunshins/[bunshinId]/daily-mission-section';
 import type { ServiceDailyMissionController } from './service-daily-mission-controller';
+import { ExternalAiProductionBriefCard } from './external-ai-production-brief-card';
 
 const feedbackOptions = [
   ['GOOD', '👍 自分らしい'],
@@ -112,6 +113,9 @@ export function ServiceDailyMissionAccepted({
           ) : null}
         </button>
       ))}
+      {!businessFree ? (
+        <ExternalAiProductionBriefCard mission={mission} controller={controller} />
+      ) : null}
       {mission.postedAt === null ? (
         <div className="mission-post-action">
           <p className="mission-self-report-notice">
