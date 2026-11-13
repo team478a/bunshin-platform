@@ -20,6 +20,7 @@ import {
   LineConnectionTestAdapter,
 } from '../line/secure-configuration';
 import { renderDefaultLineRichMenu } from '../line/default-rich-menu';
+import { richMenuLayoutForService } from '../line/rich-menu-layout';
 import {
   isGroupRichMenuPublicationActive,
   publishDefaultGroupRichMenu,
@@ -287,14 +288,21 @@ export function publishDefaultGroupRichMenuResponse(request: Request, groupIdVal
       groupId,
       input.target?.configurationId,
     );
+    const serviceSlug = stored.group.serviceConfiguration?.slug ?? null;
+    // 商品情報か発信企画があるServiceだけ、発信パートナー向けの4ボタン（今日の投稿・グループの企画・
+    // 公式素材・マイページ）にする。それ以外のServiceは従来の標準メニューのまま。
+    const layout = serviceSlug
+      ? await richMenuLayoutForService(db, input.workspaceId, groupId)
+      : 'DEFAULT';
     const published = await publishDefaultGroupRichMenu({
       accessToken: new AesGcmLineSecretCrypto().decrypt(stored.encryptedAccessToken),
       groupId,
       ...(input.target ? { operationId: input.target.operationId } : {}),
       groupName: stored.group.serviceConfiguration?.displayName ?? stored.group.name,
       appUrl: getServerEnvironment().APP_URL,
-      serviceSlug: stored.group.serviceConfiguration?.slug ?? null,
-      image: await renderDefaultLineRichMenu(),
+      serviceSlug,
+      image: await renderDefaultLineRichMenu(layout),
+      layout,
     });
     await db.prisma.groupLineConfigurationAudit.create({
       data: {
@@ -307,7 +315,7 @@ export function publishDefaultGroupRichMenuResponse(request: Request, groupIdVal
         reason,
         afterData: {
           lineRichMenuId: published.lineRichMenuId,
-          template: 'DEFAULT_V1',
+          template: layout === 'PARTNER' ? 'PARTNER_V1' : 'DEFAULT_V1',
           cleanupFailedIds: published.cleanupFailedIds,
         },
       },

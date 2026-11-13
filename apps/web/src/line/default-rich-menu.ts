@@ -25,7 +25,9 @@ export const DEFAULT_LINE_RICH_MENU = {
   ] satisfies LineRichMenuArea[],
 } as const;
 
-const items = [
+type RichMenuItem = { title: string; subtitle: string; symbol: string; color: string };
+
+const items: readonly RichMenuItem[] = [
   { title: '今日やること', subtitle: '今日の予定を確認', symbol: '✓', color: '#2563eb' },
   {
     title: '投稿パートナーを見る',
@@ -35,15 +37,30 @@ const items = [
   },
   { title: 'お知らせ設定', subtitle: '通知方法を変更', symbol: '●', color: '#db2777' },
   { title: 'アカウント', subtitle: '登録情報を確認', symbol: '○', color: '#059669' },
-] as const;
+];
 
-export async function renderDefaultLineRichMenu(): Promise<Buffer> {
+/**
+ * 企業・グループの発信パートナー向け専用LINEの4ボタン。ボタン位置は標準メニューと同じ。
+ * 移動先は group-rich-menu-provider の PARTNER_LINE_RICH_MENU_PATHS と同じ順番で対応する。
+ */
+const partnerItems: readonly RichMenuItem[] = [
+  { title: '今日の投稿', subtitle: '今日の投稿案を見る', symbol: '✓', color: '#2563eb' },
+  { title: 'グループの企画', subtitle: '参加できる企画を見る', symbol: '★', color: '#7c3aed' },
+  { title: '公式素材', subtitle: '企画で使える素材', symbol: '◆', color: '#db2777' },
+  { title: 'マイページ', subtitle: '登録情報・通知設定', symbol: '○', color: '#059669' },
+];
+
+export type LineRichMenuLayout = 'DEFAULT' | 'PARTNER';
+
+export async function renderDefaultLineRichMenu(
+  layout: LineRichMenuLayout = 'DEFAULT',
+): Promise<Buffer> {
   const fontDirectory = join(process.cwd(), 'assets/fonts/noto-sans-jp');
   const regularFont = join(fontDirectory, 'NotoSansCJKjp-Regular.otf');
   const boldFont = join(fontDirectory, 'NotoSansCJKjp-Bold.otf');
   await Promise.all([readFile(regularFont), readFile(boldFont)]);
 
-  const cells = items
+  const cells = (layout === 'PARTNER' ? partnerItems : items)
     .map((item, index) => {
       const x = (index % 2) * 1250;
       const y = Math.floor(index / 2) * 843;
