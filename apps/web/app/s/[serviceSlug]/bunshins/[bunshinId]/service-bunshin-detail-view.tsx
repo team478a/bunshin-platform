@@ -161,6 +161,7 @@ export function ServiceBunshinDetailView({ model }: { model: ServiceBunshinDetai
         <section className="service-entry__card" id="today-post">
           <ServiceDailyMissionSection
             endpoint={`/api/services/${encodeURIComponent(service.configuration.slug)}/bunshins/${encodeURIComponent(bunshin.id)}/daily-missions`}
+            bunshinId={bunshin.id}
             missions={dailyMissions}
             today={today}
             variantPointCost={variantPointCost}

@@ -1,14 +1,69 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { RewardsActionFeedback } from '../../../../ui/rewards-action-feedback';
 import type { DailyMissionView } from '../../../../(app)/bunshins/[bunshinId]/daily-mission-section';
 import { useServiceDailyMissionController } from './service-daily-mission-controller';
 import { ServiceDailyMissionList } from './service-daily-mission-list';
-import { splitServiceMissionsByDate } from './service-mission-date-filter';
+import {
+  splitServiceMissionsByDate,
+  splitServiceMissionsBySource,
+} from './service-mission-date-filter';
+
+function MissionSourceGroups({
+  missions,
+  showSourceGroups,
+  campaignHref,
+  idPrefix,
+  list,
+}: {
+  missions: DailyMissionView[];
+  showSourceGroups: boolean;
+  campaignHref: string;
+  idPrefix: string;
+  list: (missions: DailyMissionView[]) => ReactNode;
+}) {
+  if (!showSourceGroups) return list(missions);
+
+  const { personalMissions, campaignMissions } = splitServiceMissionsBySource(missions);
+  return (
+    <div className="mission-source-groups">
+      <section
+        className="mission-source-group"
+        aria-labelledby={`${idPrefix}-personal-posts-title`}
+      >
+        <header>
+          <p className="eyebrow">自分で育てる発信</p>
+          <h3 id={`${idPrefix}-personal-posts-title`}>自分の投稿</h3>
+          <p>あなたの日常や発信テーマをもとにした投稿案です。</p>
+        </header>
+        {personalMissions.length > 0 ? list(personalMissions) : <p>この日の投稿案はありません。</p>}
+      </section>
+      <section
+        className="mission-source-group mission-source-group--campaign"
+        aria-labelledby={`${idPrefix}-campaign-posts-title`}
+      >
+        <header>
+          <p className="eyebrow">参加を選んだ企画</p>
+          <h3 id={`${idPrefix}-campaign-posts-title`}>グループの企画</h3>
+          <p>あなたが参加した企業・グループの企画だけを表示します。</p>
+        </header>
+        {campaignMissions.length > 0 ? (
+          list(campaignMissions)
+        ) : (
+          <p>この日の企画投稿案はありません。</p>
+        )}
+        <a className="mission-source-group__link" href={campaignHref}>
+          参加中・参加できる企画を見る
+        </a>
+      </section>
+    </div>
+  );
+}
 
 export function ServiceDailyMissionSection({
   endpoint,
+  bunshinId,
   missions,
   today,
   variantPointCost,
@@ -22,6 +77,7 @@ export function ServiceDailyMissionSection({
   businessFree = false,
 }: {
   endpoint: string;
+  bunshinId: string;
   missions: DailyMissionView[];
   today: string;
   variantPointCost: number | null;
@@ -36,6 +92,8 @@ export function ServiceDailyMissionSection({
 }) {
   const [selectedHistoryDate, setSelectedHistoryDate] = useState('');
   const { todayMissions, pastMissions } = splitServiceMissionsByDate(missions, today);
+  const showSourceGroups = !businessFree && missions.some(({ campaignId }) => campaignId !== null);
+  const campaignHref = `/s/${encodeURIComponent(serviceSlug)}/bunshins/${encodeURIComponent(bunshinId)}/campaigns`;
   const pastDates = pastMissions.map(({ missionDate }) => missionDate);
   const selectedHistoryMissions = pastMissions.filter(
     ({ missionDate }) => missionDate === selectedHistoryDate,
@@ -148,17 +206,27 @@ export function ServiceDailyMissionSection({
           ) : null}
         </div>
       ) : null}
-      <ServiceDailyMissionList
-        missions={todayMissions}
-        controller={controller}
-        variantPointCost={variantPointCost}
-        pointWorkspaceId={pointWorkspaceId}
-        serviceSlug={serviceSlug}
-        active={active}
-        videos={videos}
-        {...(imageCreationBaseHref === undefined ? {} : { imageCreationBaseHref })}
-        businessFree={businessFree}
-      />
+      {todayMissions.length > 0 ? (
+        <MissionSourceGroups
+          missions={todayMissions}
+          showSourceGroups={showSourceGroups}
+          campaignHref={campaignHref}
+          idPrefix="today"
+          list={(sourceMissions) => (
+            <ServiceDailyMissionList
+              missions={sourceMissions}
+              controller={controller}
+              variantPointCost={variantPointCost}
+              pointWorkspaceId={pointWorkspaceId}
+              serviceSlug={serviceSlug}
+              active={active}
+              videos={videos}
+              {...(imageCreationBaseHref === undefined ? {} : { imageCreationBaseHref })}
+              businessFree={businessFree}
+            />
+          )}
+        />
+      ) : null}
       <details className="mission-history">
         <summary>過去の投稿をカレンダーから見る</summary>
         {pastMissions.length === 0 ? (
@@ -176,16 +244,24 @@ export function ServiceDailyMissionSection({
             />
             {selectedHistoryDate ? (
               selectedHistoryMissions.length > 0 ? (
-                <ServiceDailyMissionList
+                <MissionSourceGroups
                   missions={selectedHistoryMissions}
-                  controller={controller}
-                  variantPointCost={variantPointCost}
-                  pointWorkspaceId={pointWorkspaceId}
-                  serviceSlug={serviceSlug}
-                  active={active}
-                  videos={videos}
-                  {...(imageCreationBaseHref === undefined ? {} : { imageCreationBaseHref })}
-                  businessFree={businessFree}
+                  showSourceGroups={showSourceGroups}
+                  campaignHref={campaignHref}
+                  idPrefix={`history-${selectedHistoryDate}`}
+                  list={(sourceMissions) => (
+                    <ServiceDailyMissionList
+                      missions={sourceMissions}
+                      controller={controller}
+                      variantPointCost={variantPointCost}
+                      pointWorkspaceId={pointWorkspaceId}
+                      serviceSlug={serviceSlug}
+                      active={active}
+                      videos={videos}
+                      {...(imageCreationBaseHref === undefined ? {} : { imageCreationBaseHref })}
+                      businessFree={businessFree}
+                    />
+                  )}
                 />
               ) : (
                 <p>選んだ日付の投稿案はありません。別の日付を選んでください。</p>
