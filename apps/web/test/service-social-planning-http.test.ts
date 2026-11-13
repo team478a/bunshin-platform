@@ -215,7 +215,7 @@ const operations: Array<{
   },
   {
     name: 'profile edit',
-    body: { purpose: '更新' },
+    body: { postingFrequency: 'THREE_PER_WEEK' },
     repo: m.profiles.update,
     run: (r: Request, s: string, b: string) => updateServiceSocialProfileResponse(r, s, b, 'X'),
   },

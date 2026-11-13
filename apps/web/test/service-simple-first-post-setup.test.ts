@@ -20,6 +20,15 @@ describe('simple service first-post setup', () => {
     expect(setup).toContain('serviceContentAssistanceLevel(deliveryPolicy.contentMode)');
   });
 
+  it('lets the member change the saved posting frequency after setup without a new ledger', () => {
+    expect(setup).toContain('投稿するペースを確認・変更する');
+    expect(setup).toContain('/social-profiles/${encodeURIComponent(profile.platform)}');
+    expect(setup).toContain('{ postingFrequency }');
+    expect(setup).toContain("'PATCH'");
+    expect(setup).toContain('deliveryPolicy.enabled && deliveryPolicy.lockCadence');
+    expect(setup).toContain('SNSごとに選んだペースをもとに');
+  });
+
   it('prepares the existing guarded workflow in order', () => {
     const endpoints = [
       '/content-pillars',
