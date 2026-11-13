@@ -51,6 +51,7 @@ export function serviceHomeFixture(training = true): ServiceManagementHomeModel 
       aiTraining: training,
       socialOperations: !training,
     }),
+    campaignOverview: { state: 'HIDDEN' },
     summary: {
       readyCount: 1,
       readiness: [

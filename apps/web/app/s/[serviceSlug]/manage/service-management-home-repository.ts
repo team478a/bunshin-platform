@@ -500,3 +500,104 @@ export async function readServiceBusinessActivity({
   ]);
   return { businessActivityRows, businessLineOpenRows, businessOutcomePosts };
 }
+
+export interface ServiceCampaignOverview {
+  /** 商品情報または発信企画が1件でもあるか。企画を使わないServiceの管理トップは変えない。 */
+  inUse: boolean;
+  publishedProductPackCount: number;
+  openCampaignCount: number;
+  pendingPostApprovalCount: number;
+  recent: {
+    generated: number;
+    accepted: number;
+    copied: number;
+    postedSelfReported: number;
+  };
+}
+
+/** 管理トップの「日常の4業務」用の件数。既存データを数えるだけで、集計テーブルは作らない。 */
+export async function readServiceCampaignOverview({
+  workspaceId,
+  serviceId,
+  now,
+}: {
+  workspaceId: string;
+  serviceId: string;
+  now: Date;
+}): Promise<ServiceCampaignOverview> {
+  const db = await import('@bunshin/database');
+  const scope = { workspaceId, groupId: serviceId };
+  const [packCount, campaignCount] = await Promise.all([
+    db.prisma.productPack.count({ where: scope }),
+    db.prisma.campaign.count({ where: scope }),
+  ]);
+  const empty = { generated: 0, accepted: 0, copied: 0, postedSelfReported: 0 };
+  if (packCount === 0 && campaignCount === 0)
+    return {
+      inUse: false,
+      publishedProductPackCount: 0,
+      openCampaignCount: 0,
+      pendingPostApprovalCount: 0,
+      recent: empty,
+    };
+  const sevenDaysAgo = new Date(now.valueOf() - 7 * 86_400_000);
+  const recentMissions = {
+    workspaceId,
+    bunshin: { is: { groupId: serviceId } },
+    campaign: { is: scope },
+    createdAt: { gte: sevenDaysAgo },
+  };
+  const [
+    publishedProductPackCount,
+    openCampaignCount,
+    pendingPostApprovalCount,
+    generated,
+    accepted,
+    copiedRows,
+    postedSelfReported,
+  ] = await Promise.all([
+    db.prisma.productPack.count({
+      where: { ...scope, status: 'ACTIVE', versions: { some: { status: 'PUBLISHED' } } },
+    }),
+    db.prisma.campaign.count({
+      where: { ...scope, status: 'OPEN', startsAt: { lte: now }, endsAt: { gt: now } },
+    }),
+    db.prisma.campaignPostingApprovalRequest.count({
+      where: {
+        ...scope,
+        status: 'PENDING',
+        campaign: { is: { status: 'OPEN', startsAt: { lte: now }, endsAt: { gt: now } } },
+      },
+    }),
+    db.prisma.dailyMission.count({ where: recentMissions }),
+    db.prisma.dailyMission.count({
+      where: { ...recentMissions, decision: { is: { decision: 'ACCEPTED' } } },
+    }),
+    db.prisma.missionActivity.findMany({
+      where: {
+        type: {
+          in: [
+            'COPIED_TEXT',
+            'COPIED_SLIDE',
+            'COPIED_IMAGE_INSTRUCTION',
+            'COPIED_VIDEO_PROMPT',
+            'COPIED_SCRIPT',
+          ],
+        },
+        dailyMission: { is: recentMissions },
+      },
+      select: { dailyMissionId: true },
+      distinct: ['dailyMissionId'],
+    }),
+    db.prisma.postRecord.count({
+      where: { source: 'MANUAL', dailyMission: { is: recentMissions } },
+    }),
+  ]);
+  return {
+    inUse: true,
+    publishedProductPackCount,
+    openCampaignCount,
+    pendingPostApprovalCount,
+    recent: { generated, accepted, copied: copiedRows.length, postedSelfReported },
+  };
+}

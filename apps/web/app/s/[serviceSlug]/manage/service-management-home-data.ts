@@ -18,7 +18,9 @@ import {
 } from './service-management-view-model';
 import {
   readServiceBusinessActivity,
+  readServiceCampaignOverview,
   readServiceManagementHomeRecords,
+  type ServiceCampaignOverview,
 } from './service-management-home-repository';
 
 export class ServiceManagementAccessError extends Error {
@@ -78,6 +80,15 @@ export async function loadServiceManagementHome(serviceSlug: string) {
     socialFeedback,
     improvementOverview: socialFeedback || trainingOverview,
   });
+  const campaignOverview = await loadCampaignOverview({
+    enabled:
+      socialOperations &&
+      !isBusinessDailyService &&
+      visibleSections.some(({ href }) => href === 'product-packs'),
+    workspaceId: service.workspaceId,
+    serviceId: service.serviceId,
+    now,
+  });
   const common = {
     configuration,
     isBusinessDailyService,
@@ -85,6 +96,7 @@ export async function loadServiceManagementHome(serviceSlug: string) {
     socialOperations,
     participantCount: group.memberships.length,
     visibleSections,
+    campaignOverview,
   };
   // Unavailable aggregates must not turn into zero counts or successful readiness.
   if (!records.summary) return { ...common, summary: null };
@@ -277,6 +289,33 @@ export async function loadServiceManagementHome(serviceSlug: string) {
       serviceId: service.serviceId,
     });
     return { ...common, summary: null };
+  }
+}
+
+export type ServiceCampaignOverviewState =
+  | { state: 'HIDDEN' }
+  | { state: 'UNAVAILABLE' }
+  | { state: 'READY'; overview: ServiceCampaignOverview };
+
+/** 商品情報か発信企画があるServiceだけ、管理トップに日常の4業務を出す。 */
+async function loadCampaignOverview(input: {
+  enabled: boolean;
+  workspaceId: string;
+  serviceId: string;
+  now: Date;
+}): Promise<ServiceCampaignOverviewState> {
+  if (!input.enabled) return { state: 'HIDDEN' };
+  try {
+    const overview = await readServiceCampaignOverview(input);
+    return overview.inUse ? { state: 'READY', overview } : { state: 'HIDDEN' };
+  } catch {
+    // 件数を取得できない時に0件と表示しない。運営メニューは引き続き利用できる。
+    createLogger().error('Service campaign overview unavailable', {
+      errorCode: 'CAMPAIGN_OVERVIEW_UNAVAILABLE',
+      workspaceId: input.workspaceId,
+      serviceId: input.serviceId,
+    });
+    return { state: 'UNAVAILABLE' };
   }
 }
 

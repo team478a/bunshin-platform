@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { readServiceManagementHomeRecords } from '../app/s/[serviceSlug]/manage/service-management-home-repository';
+import {
+  readServiceCampaignOverview,
+  readServiceManagementHomeRecords,
+} from '../app/s/[serviceSlug]/manage/service-management-home-repository';
 
 const mocks = vi.hoisted(() => {
   const names = [
@@ -176,5 +179,42 @@ describe('service management home scoped summaries', () => {
     mocks.group.mockResolvedValueOnce(null);
     expect(await readServiceManagementHomeRecords(scope)).toBeNull();
     expect(mocks.counters.dailyMission.count).not.toHaveBeenCalled();
+  });
+});
+
+describe('service campaign overview', () => {
+  const now = new Date('2026-11-13T00:00:00Z');
+  it('does not read activity when the Service has no product information or campaigns', async () => {
+    await expect(readServiceCampaignOverview({ ...scope, now })).resolves.toMatchObject({
+      inUse: false,
+    });
+    expect(mocks.counters.productPack.count).toHaveBeenCalledWith({
+      where: { workspaceId: 'workspace-a', groupId: 'service-a' },
+    });
+    expect(mocks.counters.dailyMission.count).not.toHaveBeenCalled();
+  });
+
+  it('counts only this Service and separates self-reported posts', async () => {
+    mocks.counters.productPack.count.mockResolvedValueOnce(1);
+    mocks.counters.campaign.count.mockResolvedValueOnce(1);
+    await expect(readServiceCampaignOverview({ ...scope, now })).resolves.toMatchObject({
+      inUse: true,
+    });
+    const missionScope = expect.objectContaining({
+      workspaceId: 'workspace-a',
+      bunshin: { is: { groupId: 'service-a' } },
+      campaign: { is: { workspaceId: 'workspace-a', groupId: 'service-a' } },
+    });
+    expect(mocks.counters.dailyMission.count).toHaveBeenCalledWith({ where: missionScope });
+    expect(mocks.counters.postRecord.count).toHaveBeenCalledWith({
+      where: { source: 'MANUAL', dailyMission: { is: missionScope } },
+    });
+    expect(mocks.counters.campaignPostingApprovalRequest.count).toHaveBeenCalledWith({
+      where: expect.objectContaining({
+        workspaceId: 'workspace-a',
+        groupId: 'service-a',
+        status: 'PENDING',
+      }),
+    });
   });
 });
