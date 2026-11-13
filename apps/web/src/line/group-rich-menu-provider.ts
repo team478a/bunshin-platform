@@ -2,7 +2,7 @@ import 'server-only';
 import { randomUUID } from 'node:crypto';
 import type { LineRichMenuAction } from '@bunshin/application';
 import { ApplicationError } from '@bunshin/shared';
-import { DEFAULT_LINE_RICH_MENU } from './default-rich-menu';
+import { DEFAULT_LINE_RICH_MENU, type LineRichMenuLayout } from './default-rich-menu';
 
 const endpoint = 'https://api.line.me';
 
@@ -25,6 +25,17 @@ function actionUrl(action: LineRichMenuAction, appUrl: string, serviceSlug: stri
     OPEN_NOTIFICATION_SETTINGS: `${accountUrl}#notifications`,
     OPEN_ACCOUNT: accountUrl,
   }[action];
+}
+
+/** 発信パートナー向けメニューの移動先（標準メニューと同じボタン位置の順）。 */
+export const PARTNER_LINE_RICH_MENU_PATHS = ['home', 'campaigns', 'campaigns#materials'] as const;
+
+function partnerActionUrl(index: number, appUrl: string, serviceSlug: string) {
+  const base = new URL(appUrl).origin;
+  const servicePath = PARTNER_LINE_RICH_MENU_PATHS[index];
+  return servicePath
+    ? `${base}/s/${serviceSlug}/${servicePath}`
+    : `${base}/account?service=${encodeURIComponent(serviceSlug)}`;
 }
 
 function defaultMenuName(groupId: string, operationId: string) {
@@ -70,6 +81,8 @@ export async function publishDefaultGroupRichMenu(input: {
   serviceSlug: string | null;
   image: Buffer;
   operationId?: string;
+  /** PARTNERはServiceの専用LINEだけで使い、ボタン位置は標準メニューと同じにする。 */
+  layout?: LineRichMenuLayout;
 }) {
   const request = input.request ?? fetch;
   const headers = { authorization: `Bearer ${input.accessToken}` };
@@ -99,9 +112,15 @@ export async function publishDefaultGroupRichMenu(input: {
       selected: true,
       name: providerName,
       chatBarText,
-      areas: DEFAULT_LINE_RICH_MENU.areas.map((area) => ({
+      areas: DEFAULT_LINE_RICH_MENU.areas.map((area, index) => ({
         bounds: { x: area.x, y: area.y, width: area.width, height: area.height },
-        action: { type: 'uri', uri: actionUrl(area.action, input.appUrl, input.serviceSlug) },
+        action: {
+          type: 'uri',
+          uri:
+            input.layout === 'PARTNER' && input.serviceSlug
+              ? partnerActionUrl(index, input.appUrl, input.serviceSlug)
+              : actionUrl(area.action, input.appUrl, input.serviceSlug),
+        },
       })),
     }),
     signal: AbortSignal.timeout(10_000),

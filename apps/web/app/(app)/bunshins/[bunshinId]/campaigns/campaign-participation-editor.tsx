@@ -70,12 +70,14 @@ export function CampaignParticipationEditor({
       setPendingCampaignId(null);
     }
   };
+  // LINEの「公式素材」ボタンから開いた時に、最初の素材一覧へ移動する。
+  const firstWithAssets = campaigns.findIndex(({ assets }) => assets.length > 0);
   return (
     <>
       {campaigns.length === 0 ? (
         <p>いま参加できる募集はありません。</p>
       ) : (
-        campaigns.map((campaign) => {
+        campaigns.map((campaign, index) => {
           const status = campaign.participations[0]?.status;
           return (
             <section className="settings-card" key={campaign.id}>
@@ -87,7 +89,7 @@ export function CampaignParticipationEditor({
               <p>締切：{new Date(campaign.endsAt).toLocaleString('ja-JP')}</p>
               {campaign.assets.length ? (
                 <>
-                  <h3>使える公式素材</h3>
+                  <h3 id={index === firstWithAssets ? 'materials' : undefined}>使える公式素材</h3>
                   <ul>
                     {campaign.assets.map(({ productPackAsset: asset }) => (
                       <li key={asset.id}>
