@@ -2970,6 +2970,37 @@ a {
   padding: 0;
   list-style: none;
 }
+.mission-source-groups {
+  display: grid;
+  gap: 18px;
+}
+.mission-source-group {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--color-border);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--color-primary) 3%, white);
+}
+.mission-source-group--campaign {
+  border-color: color-mix(in srgb, var(--service-primary, var(--color-primary)) 28%, white);
+  background: color-mix(in srgb, var(--service-primary, var(--color-primary)) 6%, white);
+}
+.mission-source-group > header h3,
+.mission-source-group > header p {
+  margin: 0;
+}
+.mission-source-group > header h3 {
+  margin-top: 2px;
+}
+.mission-source-group > header p:last-child {
+  margin-top: 4px;
+  color: var(--color-text-muted);
+}
+.mission-source-group__link {
+  width: fit-content;
+  font-weight: 700;
+}
 .mission-history {
   margin-top: 24px;
   border-top: 1px solid var(--color-border);
@@ -3004,6 +3035,30 @@ a {
   border-radius: 20px;
   background: var(--color-surface);
   box-shadow: var(--shadow-card);
+}
+.mission-use-options {
+  margin: 0 0 14px;
+  padding: 14px;
+  border-radius: 14px;
+  background: var(--color-primary-soft);
+}
+.mission-use-options h4 {
+  margin: 0 0 10px;
+}
+.mission-use-options ol {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding-left: 1.4rem;
+}
+.mission-use-options li strong,
+.mission-use-options li span {
+  display: block;
+}
+.mission-use-options li span {
+  margin-top: 2px;
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
 }
 .mission-card > h3 {
   margin: 0 0 10px;

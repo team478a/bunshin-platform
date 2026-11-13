@@ -85,6 +85,24 @@ describe('service daily mission boundary', () => {
     expect(experience).toContain('missions={selectedHistoryMissions}');
   });
 
+  it('separates joined campaign proposals from personal posts without another data source', () => {
+    expect(experience).toContain('splitServiceMissionsBySource');
+    expect(experience).toContain('自分の投稿');
+    expect(experience).toContain('グループの企画');
+    expect(experience).toContain('あなたが参加した企業・グループの企画だけを表示します。');
+    expect(experience).toContain('!businessFree && missions.some');
+    expect(experience).toContain('campaignId }) => campaignId !== null');
+    expect(experience).not.toContain('fetchCampaign');
+  });
+
+  it('shows the three optional ways to use an accepted proposal', () => {
+    expect(experience).toContain('そのままコピー');
+    expect(experience).toContain('自分で編集');
+    expect(experience).toContain('Muse等のAIで制作');
+    expect(experience).toContain('外部AIの接続は必須ではありません。');
+    expect(experience).toContain('!businessFree ? (');
+  });
+
   it('gives image users one clear mobile action and hides technical directions by default', () => {
     expect(detailPage).toContain('imageCreationBaseHref');
     expect(detailPage).toContain("featureKey: 'SOCIAL.IMAGE_GENERATION'");
