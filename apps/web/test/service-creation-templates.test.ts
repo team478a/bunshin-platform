@@ -22,7 +22,18 @@ describe('service creation templates', () => {
       inviteCodeEnabled: true,
       referralEnabled: false,
     });
-    expect(SERVICE_CREATION_TEMPLATES.ENTERPRISE_PROGRAM.onboarding.questions).toHaveLength(6);
+    expect(SERVICE_CREATION_TEMPLATES.ENTERPRISE_PROGRAM.onboarding.questions).toHaveLength(3);
+  });
+
+  it('does not ask posting partners for company or business details at registration', () => {
+    const onboarding = SERVICE_CREATION_TEMPLATES.ENTERPRISE_PROGRAM.onboarding;
+    expect(onboarding.questions[0]).toContain('SNS');
+    expect([onboarding.welcomeMessage, ...onboarding.questions].join('\n')).not.toMatch(
+      /会社|事業|役割|商品/u,
+    );
+    expect(SERVICE_CREATION_TEMPLATES.ENTERPRISE_PROGRAM).not.toHaveProperty(
+      'businessProfileEnabled',
+    );
   });
 
   it('leaves onboarding empty when the administrator chooses custom settings', () => {
