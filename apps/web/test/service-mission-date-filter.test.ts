@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { splitServiceMissionsByDate } from '../app/s/[serviceSlug]/bunshins/[bunshinId]/service-mission-date-filter';
+import {
+  splitServiceMissionsByDate,
+  splitServiceMissionsBySource,
+} from '../app/s/[serviceSlug]/bunshins/[bunshinId]/service-mission-date-filter';
 
 describe('service mission dates', () => {
   it('shows only the service-local current day in the today section', () => {
@@ -23,5 +26,20 @@ describe('service mission dates', () => {
 
     expect(result.todayMissions).toEqual([]);
     expect(result.pastMissions).toEqual(missions);
+  });
+});
+
+describe('service mission sources', () => {
+  it('separates personal posts from joined campaign posts by the existing campaign id', () => {
+    const missions = [
+      { id: 'personal', campaignId: null },
+      { id: 'campaign-a', campaignId: 'campaign-a' },
+      { id: 'campaign-b', campaignId: 'campaign-b' },
+    ];
+
+    const result = splitServiceMissionsBySource(missions);
+
+    expect(result.personalMissions.map(({ id }) => id)).toEqual(['personal']);
+    expect(result.campaignMissions.map(({ id }) => id)).toEqual(['campaign-a', 'campaign-b']);
   });
 });
