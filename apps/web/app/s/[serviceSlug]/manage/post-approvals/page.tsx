@@ -4,7 +4,9 @@ import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { currentUserProvider } from '../../../../../src/auth/current-user';
 import { resolveManagedServiceContext } from '../../../../../src/services/public-service';
+import { MissionContent } from '../../../../(app)/bunshins/[bunshinId]/daily-mission-content';
 import { PublicShell } from '../../../../ui/public-shell';
+import { campaignOpen } from '@bunshin/database';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,6 +23,12 @@ const auditActionLabel = {
   RESUBMITTED: 'もう一度確認を依頼',
   POLICY_UPDATED: '確認ルールを変更',
 } as const;
+
+function contentRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
 
 function path(serviceSlug: string) {
   return `/s/${serviceSlug}/manage/post-approvals` as Route;
@@ -57,32 +65,12 @@ export default async function ServicePostApprovalsPage({
     );
     if (!currentService) redirect('/');
     const database = await import('@bunshin/database');
-    await database.prisma.$transaction(async (tx) => {
-      const previous = await tx.campaignPostingApprovalPolicy.findUnique({
-        where: { groupId: currentService.serviceId },
-        select: { required: true },
-      });
-      const required = value.data.required === 'true';
-      await tx.campaignPostingApprovalPolicy.upsert({
-        where: { groupId: currentService.serviceId },
-        create: {
-          workspaceId: currentService.workspaceId,
-          groupId: currentService.serviceId,
-          required,
-          updatedByUserId: current.userId,
-        },
-        update: { required, updatedByUserId: current.userId },
-      });
-      await tx.campaignPostingApprovalAudit.create({
-        data: {
-          workspaceId: currentService.workspaceId,
-          groupId: currentService.serviceId,
-          action: 'POLICY_UPDATED',
-          beforeData: previous ? { required: previous.required } : { configured: false },
-          afterData: { required },
-          performedByUserId: current.userId,
-        },
-      });
+    await new database.PrismaCampaignPostingApprovalRepository().updatePolicy({
+      workspaceId: currentService.workspaceId,
+      groupId: currentService.serviceId,
+      actorUserId: current.userId,
+      required: value.data.required === 'true',
+      now: new Date(),
     });
     revalidatePath(path(serviceSlug));
     redirect(`${path(serviceSlug)}?saved=1` as Route);
@@ -99,53 +87,31 @@ export default async function ServicePostApprovalsPage({
     );
     if (!currentService) redirect('/');
     const database = await import('@bunshin/database');
-    const reviewed = await database.prisma.$transaction(async (tx) => {
-      const previous = await tx.campaignPostingApprovalRequest.findFirst({
-        where: {
-          id: value.data.requestId,
-          workspaceId: currentService.workspaceId,
-          groupId: currentService.serviceId,
-          status: 'PENDING',
-        },
-        select: { id: true, status: true },
-      });
-      if (!previous) return false;
-      const reviewNote = value.data.reviewNote || null;
-      await tx.campaignPostingApprovalRequest.update({
-        where: { id: previous.id },
-        data: {
-          status: value.data.decision,
-          reviewNote,
-          reviewedByUserId: current.userId,
-          reviewedAt: new Date(),
-        },
-      });
-      await tx.campaignPostingApprovalAudit.create({
-        data: {
-          workspaceId: currentService.workspaceId,
-          groupId: currentService.serviceId,
-          requestId: previous.id,
-          action: value.data.decision,
-          beforeData: { status: previous.status },
-          afterData: { status: value.data.decision },
-          note: reviewNote,
-          performedByUserId: current.userId,
-        },
-      });
-      return true;
+    const reviewed = await new database.PrismaCampaignPostingApprovalRepository().review({
+      workspaceId: currentService.workspaceId,
+      groupId: currentService.serviceId,
+      actorUserId: current.userId,
+      requestId: value.data.requestId,
+      decision: value.data.decision,
+      reviewNote: value.data.reviewNote || null,
+      now: new Date(),
     });
-    if (!reviewed) redirect(`${path(serviceSlug)}?error=missing` as Route);
+    if (reviewed === 'CAMPAIGN_UNAVAILABLE')
+      redirect(`${path(serviceSlug)}?error=campaign` as Route);
+    if (reviewed !== 'REVIEWED') redirect(`${path(serviceSlug)}?error=missing` as Route);
     revalidatePath(path(serviceSlug));
     redirect(`${path(serviceSlug)}?reviewed=1` as Route);
   }
 
+  const now = new Date();
   const [policy, requests] = await Promise.all([
     db.prisma.campaignPostingApprovalPolicy.findUnique({ where: { groupId: group.id } }),
     db.prisma.campaignPostingApprovalRequest.findMany({
       where: { workspaceId: group.workspaceId, groupId: group.id },
       include: {
-        campaign: { select: { name: true } },
+        campaign: { select: { name: true, status: true, startsAt: true, endsAt: true } },
         bunshin: { select: { name: true } },
+        dailyMission: { select: { format: true } },
         requestedBy: { select: { displayName: true } },
         audits: {
           select: { action: true, note: true, occurredAt: true },
@@ -172,7 +138,11 @@ export default async function ServicePostApprovalsPage({
         {query.reviewed === '1' ? (
           <p className="notice notice--success">投稿案を確認しました。</p>
         ) : null}
-        {query.error ? (
+        {query.error === 'campaign' ? (
+          <p className="notice notice--danger">
+            この企画は終了または中止したため、確認できません。参加者もこの投稿案はコピーできません。
+          </p>
+        ) : query.error ? (
           <p className="notice notice--danger">
             操作を完了できませんでした。画面を更新してもう一度お試しください。
           </p>
@@ -180,12 +150,21 @@ export default async function ServicePostApprovalsPage({
         <nav aria-label="投稿確認の項目" className="settings-anchor-nav">
           <a href="#approval-policy">確認のルール</a>
           <a href="#approval-requests">
-            確認を待つ投稿案（{requests.filter((item) => item.status === 'PENDING').length}件）
+            確認を待つ投稿案（
+            {
+              requests.filter(
+                (item) => item.status === 'PENDING' && campaignOpen(item.campaign, now),
+              ).length
+            }
+            件）
           </a>
         </nav>
         <section className="settings-card" id="approval-policy">
           <h2>確認のルール</h2>
           <p>通常の投稿は止めません。商品またはキャンペーンを含む投稿だけが対象です。</p>
+          <p>
+            確認するに変えると、公開中の企画ですでに作られた投稿案も、確認が終わるまでコピーできなくなります。
+          </p>
           <form action={savePolicy} className="form-stack">
             <label className="field">
               <span className="field__label">コピー前の確認</span>
@@ -211,7 +190,10 @@ export default async function ServicePostApprovalsPage({
             <div className="admin-list">
               {requests.map((request) => (
                 <article className="admin-list__item" key={request.id}>
-                  <h3>{request.campaign.name}</h3>
+                  <h3>
+                    {request.campaign.name}
+                    {campaignOpen(request.campaign, now) ? '' : '（終了・中止）'}
+                  </h3>
                   <p>
                     投稿人格：{request.bunshin.name} ／ 参加者：{request.requestedBy.displayName}
                   </p>
@@ -227,9 +209,12 @@ export default async function ServicePostApprovalsPage({
                   <details>
                     <summary>この投稿案を確認する</summary>
                     <p>商品・キャンペーン投稿の確認に必要な内容だけを表示しています。</p>
-                    <pre className="mission-content__code">
-                      {JSON.stringify(request.contentSnapshot, null, 2)}
-                    </pre>
+                    <MissionContent
+                      mission={{
+                        format: request.dailyMission.format,
+                        content: contentRecord(request.contentSnapshot),
+                      }}
+                    />
                   </details>
                   {request.audits.length > 0 ? (
                     <details>
@@ -245,7 +230,11 @@ export default async function ServicePostApprovalsPage({
                       </ul>
                     </details>
                   ) : null}
-                  {request.status === 'PENDING' ? (
+                  {request.status === 'PENDING' && !campaignOpen(request.campaign, now) ? (
+                    <p>
+                      この企画は終了または中止したため、確認は不要です。参加者もコピーできません。
+                    </p>
+                  ) : request.status === 'PENDING' ? (
                     <form action={review} className="form-stack">
                       <input type="hidden" name="requestId" value={request.id} />
                       <label className="field">
