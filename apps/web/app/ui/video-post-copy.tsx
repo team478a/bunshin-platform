@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { CAMPAIGN_UNAVAILABLE_MESSAGE } from './campaign-copy-messages';
 
 function copyWithSelection(value: string) {
   const textarea = document.createElement('textarea');
@@ -41,11 +42,13 @@ export function VideoPostCopy({
       : null;
     if (!authorization?.ok || !result?.data?.allowed) {
       setMessage(
-        result?.data?.reason === 'APPROVAL_PENDING'
-          ? 'この投稿文は運営者の確認待ちです。確認が終わるまでコピーできません。'
-          : result?.data?.reason === 'LINK_CHANGED'
-            ? '専用URLが変更されています。投稿案を作り直してください。'
-            : '投稿文をコピーできません。元の投稿案を確認してください。',
+        result?.data?.reason === 'CAMPAIGN_UNAVAILABLE'
+          ? CAMPAIGN_UNAVAILABLE_MESSAGE
+          : result?.data?.reason === 'APPROVAL_PENDING'
+            ? 'この投稿文は運営者の確認待ちです。確認が終わるまでコピーできません。'
+            : result?.data?.reason === 'LINK_CHANGED'
+              ? '専用URLが変更されています。投稿案を作り直してください。'
+              : '投稿文をコピーできません。元の投稿案を確認してください。',
       );
       return;
     }

@@ -39,6 +39,38 @@ export class PrismaDailyMissionAccessRepository extends PrismaDailyMissionReposi
     if (!(await this.authorized(this.client, input, false))) return null;
     const mission = await this.row(this.client, input);
     if (!mission) return null;
+    if (mission.campaignId) {
+      // Campaign投稿案は、作成時ではなくコピー時点の参加条件を正とする。
+      // 中止・終了、参加取消、Service退出、商品情報の差替え・割当解除後は外部へ持ち出させない。
+      const campaign = await this.client.campaign.findFirst({
+        where: {
+          id: mission.campaignId,
+          status: 'OPEN',
+          startsAt: { lte: input.at },
+          endsAt: { gt: input.at },
+          group: {
+            status: 'ACTIVE',
+            memberships: {
+              some: { userId: input.actorUserId, status: 'ACTIVE', consentedAt: { not: null } },
+            },
+          },
+          participations: {
+            some: {
+              participantWorkspaceId: input.workspaceId,
+              userId: input.actorUserId,
+              bunshinId: input.bunshinId,
+              status: 'ACCEPTED',
+            },
+          },
+          productPackVersion: {
+            status: 'PUBLISHED',
+            assignments: { some: { bunshinId: input.bunshinId, status: 'ACTIVE' } },
+          },
+        },
+        select: { id: true },
+      });
+      if (!campaign) return { allowed: false, reason: 'CAMPAIGN_UNAVAILABLE' } as const;
+    }
     const approval = await this.client.campaignPostingApprovalRequest.findFirst({
       where: {
         workspaceId: input.workspaceId,

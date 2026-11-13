@@ -408,6 +408,50 @@ export class PrismaMissionContentVariantRepository implements MissionContentVari
         },
       });
       if (!variant) return null;
+      const previouslySelected = await tx.missionContentVariantSelection.findFirst({
+        where: {
+          workspaceId: input.workspaceId,
+          bunshinId: input.bunshinId,
+          dailyMissionId: input.dailyMissionId,
+          variantId: variant.id,
+        },
+        select: { id: true },
+      });
+      if (!previouslySelected) {
+        // 企業の投稿確認は確認した本文に対して行う。初めて別案を選んだ時は、
+        // 同じTransactionで確認依頼を別案本文に差し替え、企業の再確認を待たせる。
+        const approval = await tx.campaignPostingApprovalRequest.findFirst({
+          where: {
+            workspaceId: input.workspaceId,
+            bunshinId: input.bunshinId,
+            dailyMissionId: input.dailyMissionId,
+          },
+          select: { id: true, workspaceId: true, groupId: true, status: true },
+        });
+        if (approval) {
+          await tx.campaignPostingApprovalRequest.update({
+            where: { id: approval.id },
+            data: {
+              status: 'PENDING',
+              contentSnapshot: variant.contentJson as Prisma.InputJsonValue,
+              reviewNote: null,
+              reviewedByUserId: null,
+              reviewedAt: null,
+            },
+          });
+          await tx.campaignPostingApprovalAudit.create({
+            data: {
+              workspaceId: approval.workspaceId,
+              groupId: approval.groupId,
+              requestId: approval.id,
+              action: 'RESUBMITTED',
+              beforeData: { status: approval.status },
+              afterData: { status: 'PENDING', variantId: variant.id },
+              performedByUserId: input.actorUserId,
+            },
+          });
+        }
+      }
       await tx.missionContentVariantSelection.upsert({
         where: {
           workspaceId_bunshinId_actorUserId_idempotencyKey: {

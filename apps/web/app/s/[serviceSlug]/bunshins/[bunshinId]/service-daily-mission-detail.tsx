@@ -1,5 +1,6 @@
 'use client';
 
+import { CAMPAIGN_VARIANT_RECONFIRMATION_NOTICE } from '../../../../ui/campaign-copy-messages';
 import {
   MissionContent,
   MissionGuide,
@@ -98,6 +99,7 @@ export function ServiceDailyMissionDetail({
                 {confirmation.instruction ? '内容を直した案' : '別の案'}を1つ作ります。
                 作成に失敗した場合、WPは戻ります。
               </p>
+              {mission.campaignId ? <p>{CAMPAIGN_VARIANT_RECONFIRMATION_NOTICE}</p> : null}
               <div className="mission-variant-confirmation__actions">
                 <button
                   className="button button--secondary"

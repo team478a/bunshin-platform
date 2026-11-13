@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
+import { CAMPAIGN_UNAVAILABLE_MESSAGE } from '../../../../ui/campaign-copy-messages';
 import { createClientRequestId } from '../../../../ui/client-request-id';
 import {
   emptyBusinessOutcomes,
@@ -179,13 +180,15 @@ export function useServiceDailyMissionController({
     }
     if (!authorizationData?.allowed) {
       setMessage(
-        authorizationData?.reason === 'LINK_CHANGED'
-          ? 'あなた専用の紹介URLが新しくなりました。この投稿案を作り直してください。'
-          : authorizationData?.reason === 'APPROVAL_PENDING'
-            ? 'この投稿案は運営者の確認待ちです。確認が終わるまでコピーできません。'
-            : authorizationData?.reason === 'APPROVAL_CHANGES_REQUESTED'
-              ? `この投稿案は見直しが必要です。${authorizationData.reviewNote ? `理由：${authorizationData.reviewNote}` : '運営者の案内を確認してください。'}`
-              : 'この紹介URLは今は使えません。運営者へお問い合わせください。',
+        authorizationData?.reason === 'CAMPAIGN_UNAVAILABLE'
+          ? CAMPAIGN_UNAVAILABLE_MESSAGE
+          : authorizationData?.reason === 'LINK_CHANGED'
+            ? 'あなた専用の紹介URLが新しくなりました。この投稿案を作り直してください。'
+            : authorizationData?.reason === 'APPROVAL_PENDING'
+              ? 'この投稿案は運営者の確認待ちです。確認が終わるまでコピーできません。'
+              : authorizationData?.reason === 'APPROVAL_CHANGES_REQUESTED'
+                ? `この投稿案は見直しが必要です。${authorizationData.reviewNote ? `理由：${authorizationData.reviewNote}` : '運営者の案内を確認してください。'}`
+                : 'この紹介URLは今は使えません。運営者へお問い合わせください。',
       );
       return false;
     }
