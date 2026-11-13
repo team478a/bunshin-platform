@@ -38,6 +38,7 @@ const conversionGoalLabels: Partial<Record<SocialAccountStrategyGoal, string>> =
 type Profile = {
   id: string;
   platform: SocialPlatform;
+  postingFrequency: SocialPostingFrequency;
   status: 'ACTIVE' | 'INACTIVE';
 };
 
@@ -107,6 +108,11 @@ export function SimpleFirstPostSetup({
   const [pending, setPending] = useState(false);
   const [step, setStep] = useState('');
   const [message, setMessage] = useState('');
+  const [profileFrequencies, setProfileFrequencies] = useState<
+    Record<string, SocialPostingFrequency>
+  >(() => Object.fromEntries(profiles.map((profile) => [profile.id, profile.postingFrequency])));
+  const [frequencyPendingProfileId, setFrequencyPendingProfileId] = useState<string | null>(null);
+  const [frequencyMessage, setFrequencyMessage] = useState('');
   const initialGoal = primaryPurpose
     ? initialSocialAccountStrategyGoal(primaryPurpose)
     : businessPurposeEnabled
@@ -142,10 +148,14 @@ export function SimpleFirstPostSetup({
     : null;
   const serviceLineHref = `/s/${encodedService}/bunshins/${encodedBunshin}/line`;
 
-  async function request<T>(path: string, body: unknown): Promise<T> {
+  async function request<T>(
+    path: string,
+    body: unknown,
+    method: 'POST' | 'PATCH' = 'POST',
+  ): Promise<T> {
     const requestId = createClientRequestId();
     const response = await fetch(`${base}${path}`, {
-      method: 'POST',
+      method,
       headers: { 'content-type': 'application/json', 'x-request-id': requestId },
       body: JSON.stringify(body),
     }).catch(() => {
@@ -163,6 +173,26 @@ export function SimpleFirstPostSetup({
     }
     const result = (await response.json()) as { data: T };
     return result.data;
+  }
+
+  async function savePostingFrequency(profile: Profile) {
+    const postingFrequency = profileFrequencies[profile.id] ?? profile.postingFrequency;
+    setFrequencyPendingProfileId(profile.id);
+    setFrequencyMessage('');
+    try {
+      await request(
+        `/social-profiles/${encodeURIComponent(profile.platform)}`,
+        { postingFrequency },
+        'PATCH',
+      );
+      setFrequencyMessage(`${platformLabels[profile.platform]}の投稿するペースを保存しました。`);
+    } catch (error) {
+      setFrequencyMessage(
+        error instanceof Error ? error.message : '投稿するペースを保存できませんでした。',
+      );
+    } finally {
+      setFrequencyPendingProfileId(null);
+    }
   }
 
   async function prepare() {
@@ -269,6 +299,7 @@ export function SimpleFirstPostSetup({
   }
 
   if (ready) {
+    const activeProfiles = profiles.filter(({ status }) => status === 'ACTIVE');
     return (
       <section className="simple-first-post simple-first-post--ready">
         <span aria-hidden="true">✓</span>
@@ -303,6 +334,55 @@ export function SimpleFirstPostSetup({
         <a className="button button--primary" href="#today-post">
           届いた投稿案を見る
         </a>
+        <details className="simple-first-post__frequency-settings">
+          <summary>投稿するペースを確認・変更する</summary>
+          {deliveryPolicy.enabled && deliveryPolicy.lockCadence ? (
+            <p>
+              このサービスでは、投稿するペースは
+              {deliveryPolicy.cadence === 'DAILY' ? '毎日' : '平日'}に設定されています。
+            </p>
+          ) : (
+            <div className="simple-first-post__frequency-list">
+              {activeProfiles.map((profile) => (
+                <div className="simple-first-post__frequency-row" key={profile.id}>
+                  <label>
+                    {platformLabels[profile.platform]}
+                    <select
+                      value={profileFrequencies[profile.id] ?? profile.postingFrequency}
+                      disabled={frequencyPendingProfileId !== null}
+                      onChange={(event) =>
+                        setProfileFrequencies({
+                          ...profileFrequencies,
+                          [profile.id]: event.target.value as SocialPostingFrequency,
+                        })
+                      }
+                    >
+                      {frequencyOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <button
+                    className="button button--secondary"
+                    type="button"
+                    disabled={frequencyPendingProfileId !== null}
+                    onClick={() => void savePostingFrequency(profile)}
+                  >
+                    {frequencyPendingProfileId === profile.id ? '保存しています…' : '保存する'}
+                  </button>
+                </div>
+              ))}
+              <p>SNSごとに選んだペースをもとに、これからの投稿予定を準備します。</p>
+            </div>
+          )}
+          {frequencyMessage ? (
+            <p className="notice" role="status">
+              {frequencyMessage}
+            </p>
+          ) : null}
+        </details>
       </section>
     );
   }
