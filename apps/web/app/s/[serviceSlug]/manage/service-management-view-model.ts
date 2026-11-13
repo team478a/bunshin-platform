@@ -40,6 +40,11 @@ export const serviceManagementSections = [
     href: 'product-packs',
   },
   {
+    title: '発信企画（参加募集）',
+    description: '商品・イベントの企画を公開し、参加状況と投稿の流れを確認します。',
+    href: 'campaigns',
+  },
+  {
     title: '専用URL',
     description: '参加者別・商品別の紹介URLを登録し、投稿案へ安全に差し込みます。',
     href: 'external-tracking',

@@ -30,6 +30,8 @@ type Campaign = {
     accepted: number;
     copied: number;
     posted: number;
+    postedSelfReported: number;
+    postedVerified: number;
     feedbackGood: number;
     duplicateRejected: number;
   };
@@ -188,67 +190,73 @@ export function CampaignAdminEditor({
                 required
               />
             </label>
-            <label className="field">
-              <span className="field__label">1週間の関連投稿（最大）</span>
-              <input
-                className="field__control"
-                name="maxRelatedPerWeek"
-                type="number"
-                min="0"
-                max="7"
-                defaultValue="2"
-                required
-              />
-            </label>
-            <label className="field">
-              <span className="field__label">1週間の商品紹介投稿（最大）</span>
-              <input
-                className="field__control"
-                name="maxAdsPerWeek"
-                type="number"
-                min="0"
-                max="7"
-                defaultValue="1"
-                required
-              />
-            </label>
-            <label className="field">
-              <span className="field__label">商品投稿を続けない日数</span>
-              <input
-                className="field__control"
-                name="cooldownDays"
-                type="number"
-                min="0"
-                max="30"
-                defaultValue="2"
-                required
-              />
-            </label>
-            <label className="field">
-              <span className="field__label">1人が作れる企画の上限</span>
-              <input
-                className="field__control"
-                name="generationLimitPerParticipant"
-                type="number"
-                min="1"
-                max="365"
-                defaultValue="60"
-                required
-              />
-            </label>
-            <label className="field">
-              <span className="field__label">重複とみなす近さ（70〜100％）</span>
-              <input
-                className="field__control"
-                name="similarityThresholdBasisPoints"
-                type="number"
-                min="7000"
-                max="10000"
-                step="100"
-                defaultValue="8500"
-                required
-              />
-            </label>
+            <details className="admin-operation-details">
+              <summary>詳細設定（通常は変更不要）</summary>
+              <p>
+                投稿の頻度と重複防止の初期値です。商品投稿が続きすぎないよう調整されているため、必要なときだけ変更してください。
+              </p>
+              <label className="field">
+                <span className="field__label">1週間の関連投稿（最大）</span>
+                <input
+                  className="field__control"
+                  name="maxRelatedPerWeek"
+                  type="number"
+                  min="0"
+                  max="7"
+                  defaultValue="2"
+                  required
+                />
+              </label>
+              <label className="field">
+                <span className="field__label">1週間の商品紹介投稿（最大）</span>
+                <input
+                  className="field__control"
+                  name="maxAdsPerWeek"
+                  type="number"
+                  min="0"
+                  max="7"
+                  defaultValue="1"
+                  required
+                />
+              </label>
+              <label className="field">
+                <span className="field__label">商品投稿を続けない日数</span>
+                <input
+                  className="field__control"
+                  name="cooldownDays"
+                  type="number"
+                  min="0"
+                  max="30"
+                  defaultValue="2"
+                  required
+                />
+              </label>
+              <label className="field">
+                <span className="field__label">1人が作れる企画の上限</span>
+                <input
+                  className="field__control"
+                  name="generationLimitPerParticipant"
+                  type="number"
+                  min="1"
+                  max="365"
+                  defaultValue="60"
+                  required
+                />
+              </label>
+              <label className="field">
+                <span className="field__label">重複とみなす近さ（70〜100％）</span>
+                <input
+                  className="field__control"
+                  name="similarityThresholdBasisPoints"
+                  type="number"
+                  min="7000"
+                  max="10000"
+                  step="100"
+                  defaultValue="8500"
+                  required
+                />
+              </label>
+            </details>
             <label className="field">
               <span className="field__label">開始日時</span>
               <input className="field__control" name="startsAt" type="datetime-local" required />
@@ -316,27 +324,36 @@ export function CampaignAdminEditor({
               参加：{accepted} / {campaign.participationLimit}人 ／ 状態：{campaign.status}
             </p>
             <p>
-              週の商品投稿は最大{campaign.maxRelatedPerWeek}件（商品紹介は最大
-              {campaign.maxAdsPerWeek}件）、間を{campaign.cooldownDays}日あけます。
+              投稿案 {campaign.metrics.generated}件 ／ 採用 {campaign.metrics.accepted}件 ／ コピー{' '}
+              {campaign.metrics.copied}件 ／ 投稿完了（本人申告）{' '}
+              {campaign.metrics.postedSelfReported}件 ／ よかった {campaign.metrics.feedbackGood}件
             </p>
+            {campaign.metrics.postedVerified > 0 ? (
+              <p>SNSの公式連携で公開を確認：{campaign.metrics.postedVerified}件</p>
+            ) : null}
             <p>
-              1人最大{campaign.generationLimitPerParticipant}件 ／ 類似度
-              {campaign.similarityThresholdBasisPoints / 100}%以上は保存しません。
+              投稿完了（本人申告）は、参加者が「投稿した」と記録した件数です。SNS上で公開されたことの確認ではありません。
             </p>
-            <p>
-              企画 {campaign.metrics.generated}件 ／ 採用 {campaign.metrics.accepted}件 ／ コピー{' '}
-              {campaign.metrics.copied}件 ／ 投稿完了 {campaign.metrics.posted}件 ／ よかった{' '}
-              {campaign.metrics.feedbackGood}件
-            </p>
-            <p>似すぎて停止した企画：{campaign.metrics.duplicateRejected}件</p>
+            <details className="admin-operation-details">
+              <summary>投稿の頻度と重複防止の設定</summary>
+              <p>
+                週の商品投稿は最大{campaign.maxRelatedPerWeek}件（商品紹介は最大
+                {campaign.maxAdsPerWeek}件）、間を{campaign.cooldownDays}日あけます。
+              </p>
+              <p>
+                1人最大{campaign.generationLimitPerParticipant}件 ／ 類似度
+                {campaign.similarityThresholdBasisPoints / 100}%以上は保存しません。
+              </p>
+              <p>似すぎて停止した企画：{campaign.metrics.duplicateRejected}件</p>
+            </details>
             <p>
               採用率：
               {campaign.metrics.generated
                 ? `${Math.round((campaign.metrics.accepted / campaign.metrics.generated) * 100)}%`
                 : 'まだ計測できません'}{' '}
-              ／ 投稿完了率：
+              ／ 投稿完了率（本人申告）：
               {campaign.metrics.generated
-                ? `${Math.round((campaign.metrics.posted / campaign.metrics.generated) * 100)}%`
+                ? `${Math.round((campaign.metrics.postedSelfReported / campaign.metrics.generated) * 100)}%`
                 : 'まだ計測できません'}
             </p>
             <p>

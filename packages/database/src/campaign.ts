@@ -73,7 +73,7 @@ export class PrismaCampaignRepository implements CampaignRepository {
               },
               select: { id: true },
             },
-            postRecord: { select: { id: true } },
+            postRecord: { select: { source: true } },
             feedback: { select: { rating: true } },
           },
         },
@@ -92,6 +92,13 @@ export class PrismaCampaignRepository implements CampaignRepository {
         accepted: dailyMissions.filter(({ decision }) => decision?.decision === 'ACCEPTED').length,
         copied: dailyMissions.filter(({ activities }) => activities.length > 0).length,
         posted: dailyMissions.filter(({ postRecord }) => postRecord !== null).length,
+        // 投稿完了は参加者の本人申告（MANUAL）と、SNS公式API等での確認済み公開を分ける。
+        postedSelfReported: dailyMissions.filter(
+          ({ postRecord }) => postRecord?.source === 'MANUAL',
+        ).length,
+        postedVerified: dailyMissions.filter(
+          ({ postRecord }) => postRecord?.source === 'OFFICIAL_API',
+        ).length,
         feedbackGood: dailyMissions.filter(({ feedback }) => feedback?.rating === 'GOOD').length,
         duplicateRejected: campaign._count.similarityReviews,
       },
