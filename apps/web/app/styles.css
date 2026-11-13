@@ -3426,6 +3426,30 @@ a {
   padding-top: 16px;
   border-top: 1px solid var(--color-border);
 }
+
+.external-ai-production-brief {
+  margin-top: 1rem;
+  border: 1px solid color-mix(in srgb, var(--service-primary) 24%, transparent);
+  border-radius: 0.75rem;
+  padding: 0.85rem;
+}
+
+.external-ai-production-brief > summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.external-ai-production-brief__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin: 0.75rem 0;
+}
+
+.external-ai-production-brief textarea {
+  width: 100%;
+  margin-top: 0.75rem;
+}
 .mission-accepted > span button {
   color: var(--color-primary-strong);
   border-color: #d6d6f7;
