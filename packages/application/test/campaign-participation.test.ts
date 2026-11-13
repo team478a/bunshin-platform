@@ -93,6 +93,23 @@ describe('CampaignService', () => {
       campaignId: 'campaign',
       decision: 'ON_HOLD',
     });
-    expect(repository.last).toMatchObject({ decision: 'ON_HOLD', reason: null });
+    expect(repository.last).toMatchObject({
+      decision: 'ON_HOLD',
+      reason: null,
+      productPackConsent: false,
+    });
+  });
+
+  it('商品情報の利用同意は本人が明示した場合だけ渡す', async () => {
+    const repository = new Repository();
+    await new CampaignService(repository).decide({
+      workspaceId: 'organization',
+      actorUserId: 'user',
+      bunshinId: 'bunshin',
+      campaignId: 'campaign',
+      decision: 'ACCEPTED',
+      productPackConsent: true,
+    });
+    expect(repository.last).toMatchObject({ decision: 'ACCEPTED', productPackConsent: true });
   });
 });

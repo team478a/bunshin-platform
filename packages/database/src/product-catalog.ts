@@ -326,6 +326,13 @@ export class PrismaProductPackRepository implements ProductPackRepository {
         },
       });
       if (!eligible || !bunshin) return null;
+      // Service Bunshinには、同じServiceの商品パックだけを割り当てる。他企業の商品版を混在させない。
+      if (
+        bunshin.groupId !== null &&
+        (bunshin.groupId !== eligible.productPack.groupId ||
+          bunshin.workspaceId !== eligible.productPack.workspaceId)
+      )
+        return null;
       const active = await tx.productPackAssignment.findFirst({
         where: { bunshinId: input.bunshinId, status: 'ACTIVE' },
       });

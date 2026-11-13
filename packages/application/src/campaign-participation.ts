@@ -79,6 +79,8 @@ export interface CampaignRepository {
       decision: CampaignDecision;
       now: Date;
       reason: string | null;
+      /** Service Bunshinの参加時に、Campaignの商品版を自分の投稿パートナーで使う本人同意。 */
+      productPackConsent: boolean;
     },
   ): Promise<object | null>;
   listPlanningContexts(
@@ -204,10 +206,12 @@ export class CampaignService {
       campaignId: string;
       decision: CampaignDecision;
       reason?: string | null;
+      productPackConsent?: boolean;
     },
   ) {
     const result = await this.repository.decide({
       ...input,
+      productPackConsent: input.productPackConsent === true,
       reason: input.reason?.trim().slice(0, 500) || null,
       now: new Date(),
     });

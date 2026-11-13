@@ -21,10 +21,13 @@ export function CampaignParticipationEditor({
   workspaceId,
   bunshinId,
   initialCampaigns,
+  productConsentRequired = false,
 }: {
   workspaceId: string;
   bunshinId: string;
   initialCampaigns: Campaign[];
+  /** Service Bunshinでは、参加時にCampaignの商品情報を使う本人同意を同じ操作で受け取る。 */
+  productConsentRequired?: boolean;
 }) {
   const [campaigns, setCampaigns] = useState(initialCampaigns);
   const [message, setMessage] = useState('');
@@ -38,10 +41,23 @@ export function CampaignParticipationEditor({
       const response = await fetch(`${base}/${campaignId}/decision`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ decision, reason: null }),
+        body: JSON.stringify({
+          decision,
+          reason: null,
+          ...(productConsentRequired && decision === 'ACCEPTED'
+            ? { productPackConsent: true }
+            : {}),
+        }),
       });
       if (!response.ok) {
-        setMessage('処理できませんでした。募集期間や人数をご確認ください。');
+        const failure = (await response.json().catch(() => null)) as {
+          error?: { code?: string };
+        } | null;
+        setMessage(
+          failure?.error?.code === 'CONFLICT'
+            ? 'この投稿パートナーは別の商品情報を使っているため、この企画には参加できません。運営者へお問い合わせください。'
+            : '処理できませんでした。募集期間や人数をご確認ください。',
+        );
         return;
       }
       const refreshed = await fetch(base, { cache: 'no-store' });
@@ -84,6 +100,11 @@ export function CampaignParticipationEditor({
                   </ul>
                 </>
               ) : null}
+              {productConsentRequired && status !== 'ACCEPTED' ? (
+                <p>
+                  参加すると、この商品情報と公式素材を、あなたの投稿パートナーが投稿案づくりに使います。投稿するかどうかは毎回あなたが決められます。
+                </p>
+              ) : null}
               <p>
                 あなたの選択：
                 {status === 'ACCEPTED'
@@ -103,7 +124,11 @@ export function CampaignParticipationEditor({
                   disabled={pendingCampaignId !== null}
                   onClick={() => void decide(campaign.id, 'ACCEPTED')}
                 >
-                  {pendingCampaignId === campaign.id ? '保存しています…' : '参加する'}
+                  {pendingCampaignId === campaign.id
+                    ? '保存しています…'
+                    : productConsentRequired && status !== 'ACCEPTED'
+                      ? '商品情報の利用に同意して参加する'
+                      : '参加する'}
                 </button>
                 <button
                   className="button button--secondary"

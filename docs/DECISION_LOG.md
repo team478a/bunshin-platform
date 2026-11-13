@@ -4717,3 +4717,10 @@
 - 別案生成を禁止するService設定は追加しない。要望が出た場合のP2とする。
 - SNS投稿の本人承認と企業管理者の広告確認は別権限のまま維持する。新規テーブル、migration、Feature Flag、本番設定は変更しない。
 - Service分身のCampaign参加と参加時の商品割当（P0-1・P0-2）は未対応であり、一般販売はNo-Goのままとする。後続PRの計画は監査文書に記録する。
+
+## 2026-11-13: 企業ServiceのBunshinは参加時の本人同意で商品版を割り当てる
+
+- 企業Serviceの参加者は、そのServiceの組織Workspaceにある自分のBunshinでCampaignへ参加できる。対象は同じGroupの公開中Campaignに限り、他Serviceや他人のBunshinは扱わない。個人WorkspaceのCampaign参加は従来どおり、事前の商品割当を条件とする。
+- 参加時に、そのCampaignの商品版を参加と同じTransactionで割り当てる。割当には本人の明示同意を必須とし、同意がない場合は参加も割当も作らない。新しい商品マスター、素材管理、テーブル、migrationは追加しない。
+- 有効な商品パックをBunshinごとに1つとする既存規則を維持し、別商品を使用中の場合は差し替えずに拒否する。取消・辞退では割当を外さず、計画・コピーは参加状態で止める。
+- 既存の商品割当APIでも、Service Bunshinには同じService・同じWorkspaceの商品パックだけを割り当てる。
