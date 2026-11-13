@@ -6,6 +6,7 @@ import {
   PrismaCampaignRepository,
   PrismaDailyMissionRepository,
   PrismaMissionContentVariantRepository,
+  PrismaProductPackRepository,
 } from '../src';
 
 /**
@@ -24,7 +25,7 @@ export function registerCampaignPostingApprovalIntegrationCases(client: PrismaCl
     const missionRepository = new PrismaDailyMissionRepository(client);
     const variants = new PrismaMissionContentVariantRepository(client);
 
-    async function company(label: string, approvalRequired: boolean) {
+    async function company(label: string, approvalRequired: boolean, join = true) {
       const admin = await client.user.create({ data: { displayName: `${label} admin` } });
       const participant = await client.user.create({
         data: { displayName: `${label} participant` },
@@ -116,16 +117,6 @@ export function registerCampaignPostingApprovalIntegrationCases(client: PrismaCl
           createdByUserId: admin.id,
         },
       });
-      const assignment = await client.productPackAssignment.create({
-        data: {
-          workspaceId: workspace.id,
-          productPackId: pack.id,
-          productPackVersionId: version.id,
-          bunshinId: bunshin.id,
-          consentedAt,
-          assignedByUserId: admin.id,
-        },
-      });
       const draft = (await campaigns.createDraft({
         workspaceId: workspace.id,
         actorUserId: admin.id,
@@ -146,16 +137,21 @@ export function registerCampaignPostingApprovalIntegrationCases(client: PrismaCl
         from: 'DRAFT',
         to: 'OPEN',
       });
-      // Service分身の参加UI/APIはPR-2で整備する。ここでは計画側と同じ参加レコードを直接用意する。
-      const participation = await client.campaignParticipation.create({
-        data: {
-          campaignId: draft.id,
-          participantWorkspaceId: workspace.id,
-          userId: participant.id,
+      // 参加者本人が、商品情報の利用に同意してService分身でCampaignへ参加する。
+      if (join)
+        await campaigns.decide({
+          workspaceId: workspace.id,
+          actorUserId: participant.id,
           bunshinId: bunshin.id,
-          status: 'ACCEPTED',
-          consentedAt,
-        },
+          campaignId: draft.id,
+          decision: 'ACCEPTED',
+          productPackConsent: true,
+        });
+      const participation = await client.campaignParticipation.findFirst({
+        where: { campaignId: draft.id, userId: participant.id },
+      });
+      const assignment = await client.productPackAssignment.findFirst({
+        where: { productPackId: pack.id, bunshinId: bunshin.id },
       });
       if (approvalRequired)
         await client.campaignPostingApprovalPolicy.create({
@@ -178,9 +174,10 @@ export function registerCampaignPostingApprovalIntegrationCases(client: PrismaCl
         workspace,
         group,
         bunshin,
+        pack,
         version,
-        assignment,
-        participation,
+        assignment: assignment!,
+        participation: participation!,
         campaignId: draft.id,
         scope,
         approvalRequired,
@@ -357,6 +354,234 @@ export function registerCampaignPostingApprovalIntegrationCases(client: PrismaCl
       await expect(copy(b, other.mission.id)).resolves.toMatchObject({
         reason: 'APPROVAL_PENDING',
       });
+    });
+
+    it('lets a Service participant join with product consent, isolated from other companies', async () => {
+      const a = await company('Join company A', false, false);
+      const b = await company('Join company B', false, false);
+      const participantScope = {
+        workspaceId: a.workspace.id,
+        actorUserId: a.participant.id,
+        bunshinId: a.bunshin.id,
+      };
+      const planning = () =>
+        campaigns.listPlanningContexts({
+          ...a.scope,
+          from: new Date(),
+          to: new Date(Date.now() + 60_000),
+        });
+
+      // 自分のServiceのCampaignだけが見え、割当は参加前には作られない。
+      await expect(campaigns.listAvailable(participantScope)).resolves.toEqual([
+        expect.objectContaining({ id: a.campaignId, participations: [] }),
+      ]);
+      await expect(
+        client.productPackAssignment.count({ where: { bunshinId: a.bunshin.id } }),
+      ).resolves.toBe(0);
+      await expect(planning()).resolves.toEqual([]);
+
+      // 本人の同意がなければ参加も割当も行わない。
+      await expect(
+        campaigns.decide({ ...participantScope, campaignId: a.campaignId, decision: 'ACCEPTED' }),
+      ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+      await expect(
+        client.campaignParticipation.count({ where: { campaignId: a.campaignId } }),
+      ).resolves.toBe(0);
+      await expect(
+        client.productPackAssignment.count({ where: { bunshinId: a.bunshin.id } }),
+      ).resolves.toBe(0);
+
+      // 他企業のCampaignには、自分のService分身でも相手のWorkspaceでも参加できない。
+      await expect(
+        campaigns.decide({
+          ...participantScope,
+          campaignId: b.campaignId,
+          decision: 'ACCEPTED',
+          productPackConsent: true,
+        }),
+      ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+      await expect(
+        campaigns.decide({
+          ...participantScope,
+          workspaceId: b.workspace.id,
+          campaignId: b.campaignId,
+          decision: 'ACCEPTED',
+          productPackConsent: true,
+        }),
+      ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+      await expect(
+        campaigns.listAvailable({
+          workspaceId: a.workspace.id,
+          actorUserId: b.participant.id,
+          bunshinId: a.bunshin.id,
+        }),
+      ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+
+      await campaigns.decide({
+        ...participantScope,
+        campaignId: a.campaignId,
+        decision: 'ACCEPTED',
+        productPackConsent: true,
+      });
+      await expect(
+        client.campaignParticipation.findFirstOrThrow({ where: { campaignId: a.campaignId } }),
+      ).resolves.toMatchObject({
+        participantWorkspaceId: a.workspace.id,
+        userId: a.participant.id,
+        bunshinId: a.bunshin.id,
+        status: 'ACCEPTED',
+      });
+      await expect(
+        client.productPackAssignment.findFirstOrThrow({ where: { bunshinId: a.bunshin.id } }),
+      ).resolves.toMatchObject({
+        workspaceId: a.workspace.id,
+        productPackVersionId: a.version.id,
+        status: 'ACTIVE',
+        assignedByUserId: a.participant.id,
+      });
+      await expect(planning()).resolves.toEqual([expect.objectContaining({ id: a.campaignId })]);
+      await expect(
+        client.campaignParticipation.count({ where: { campaignId: b.campaignId } }),
+      ).resolves.toBe(0);
+
+      // 保留・辞退・取消・再参加。取消後は計画に出さず、再参加では同じ割当を使う。
+      await campaigns.decide({
+        ...participantScope,
+        campaignId: a.campaignId,
+        decision: 'WITHDRAWN',
+      });
+      await expect(planning()).resolves.toEqual([]);
+      await campaigns.decide({
+        ...participantScope,
+        campaignId: a.campaignId,
+        decision: 'ACCEPTED',
+      });
+      await expect(planning()).resolves.toEqual([expect.objectContaining({ id: a.campaignId })]);
+      for (const decision of ['ON_HOLD', 'DECLINED'] as const) {
+        await campaigns.decide({ ...participantScope, campaignId: a.campaignId, decision });
+        await expect(planning()).resolves.toEqual([]);
+      }
+      await expect(
+        client.productPackAssignment.count({ where: { bunshinId: a.bunshin.id } }),
+      ).resolves.toBe(1);
+
+      // Serviceを退出した参加者は、参加募集を見られない。
+      await client.groupMembership.updateMany({
+        where: { groupId: a.group.id, userId: a.participant.id },
+        data: { status: 'REVOKED', revokedAt: new Date() },
+      });
+      await expect(campaigns.listAvailable(participantScope)).rejects.toMatchObject({
+        code: 'NOT_FOUND',
+      });
+    });
+
+    it('does not assign another company product pack to a Service bunshin', async () => {
+      const a = await company('Pack company A', false, false);
+      const b = await company('Pack company B', false, false);
+      // 同じ人が企業Bにも参加していても、企業Aの分身へ企業Bの商品版は割り当てない。
+      await client.groupMembership.create({
+        data: {
+          workspaceId: b.workspace.id,
+          groupId: b.group.id,
+          userId: a.participant.id,
+          status: 'ACTIVE',
+          consentedAt: new Date(),
+        },
+      });
+      const packs = new PrismaProductPackRepository(client);
+      await expect(
+        packs.assign({
+          workspaceId: b.workspace.id,
+          actorUserId: a.participant.id,
+          productPackId: b.pack.id,
+          versionId: b.version.id,
+          bunshinId: a.bunshin.id,
+          consentedAt: new Date(),
+        }),
+      ).resolves.toBeNull();
+      await expect(
+        packs.assign({
+          workspaceId: a.workspace.id,
+          actorUserId: a.participant.id,
+          productPackId: a.pack.id,
+          versionId: a.version.id,
+          bunshinId: a.bunshin.id,
+          consentedAt: new Date(),
+        }),
+      ).resolves.toMatchObject({ status: 'ACTIVE', productPackVersionId: a.version.id });
+      // 本人が同じ商品版をすでに割り当てていれば、追加の同意なしで参加できる。
+      await expect(
+        campaigns.decide({
+          workspaceId: a.workspace.id,
+          actorUserId: a.participant.id,
+          bunshinId: a.bunshin.id,
+          campaignId: a.campaignId,
+          decision: 'ACCEPTED',
+        }),
+      ).resolves.toMatchObject({ status: 'ACCEPTED' });
+
+      // 分身に有効な商品は1つという既存の割当規則を保ち、別商品の企画は黙って差し替えない。
+      const otherPack = await client.productPack.create({
+        data: {
+          workspaceId: a.workspace.id,
+          groupId: a.group.id,
+          name: 'Second product',
+          status: 'ACTIVE',
+          versions: {
+            create: {
+              version: 1,
+              status: 'PUBLISHED',
+              allowLinklessPosts: true,
+              summary: '別の商品',
+              providerName: 'Pack company A',
+              targetCustomer: '初めての人',
+              facts: {},
+              faq: [],
+              suitableFor: [],
+              unsuitableFor: [],
+              publishedAt: new Date(),
+              createdByUserId: a.admin.id,
+            },
+          },
+        },
+        include: { versions: true },
+      });
+      const otherCampaign = (await campaigns.createDraft({
+        workspaceId: a.workspace.id,
+        actorUserId: a.admin.id,
+        groupId: a.group.id,
+        productPackVersionId: otherPack.versions[0]!.id,
+        name: 'Second campaign',
+        theme: '別の商品',
+        targetSummary: '初めての人',
+        participationLimit: 10,
+        startsAt: new Date(Date.now() - 60_000),
+        endsAt: new Date(Date.now() + 86_400_000),
+      })) as { id: string };
+      await campaigns.transition({
+        workspaceId: a.workspace.id,
+        actorUserId: a.admin.id,
+        groupId: a.group.id,
+        campaignId: otherCampaign.id,
+        from: 'DRAFT',
+        to: 'OPEN',
+      });
+      await expect(
+        campaigns.decide({
+          workspaceId: a.workspace.id,
+          actorUserId: a.participant.id,
+          bunshinId: a.bunshin.id,
+          campaignId: otherCampaign.id,
+          decision: 'ACCEPTED',
+          productPackConsent: true,
+        }),
+      ).rejects.toMatchObject({ code: 'CONFLICT' });
+      await expect(
+        client.campaignParticipation.count({ where: { campaignId: otherCampaign.id } }),
+      ).resolves.toBe(0);
+      await expect(
+        client.productPackAssignment.findFirstOrThrow({ where: { bunshinId: a.bunshin.id } }),
+      ).resolves.toMatchObject({ productPackId: a.pack.id, status: 'ACTIVE' });
     });
 
     it('does not create review work when the Service does not require company review', async () => {

@@ -1,5 +1,8 @@
 import type { CampaignPlanningContext, CampaignRepository } from '@bunshin/application';
+import { ApplicationError } from '@bunshin/shared';
 import { type Prisma, type PrismaClient, prisma } from './client';
+
+type CampaignParticipant = { kind: 'PERSONAL' } | { kind: 'SERVICE'; groupId: string };
 
 type CampaignPlanningRow = Prisma.CampaignGetPayload<{
   include: {
@@ -187,8 +190,12 @@ export class PrismaCampaignRepository implements CampaignRepository {
     });
   }
 
-  private participant(input: { workspaceId: string; actorUserId: string; bunshinId: string }) {
-    return this.client.bunshin.findFirst({
+  private async participant(input: {
+    workspaceId: string;
+    actorUserId: string;
+    bunshinId: string;
+  }): Promise<CampaignParticipant | null> {
+    const personal = await this.client.bunshin.findFirst({
       where: {
         id: input.bunshinId,
         workspaceId: input.workspaceId,
@@ -198,27 +205,78 @@ export class PrismaCampaignRepository implements CampaignRepository {
       },
       select: { id: true },
     });
-  }
-
-  async listAvailable(input: Parameters<CampaignRepository['listAvailable']>[0]) {
-    if (!(await this.participant(input))) return null;
-    return this.client.campaign.findMany({
+    if (personal) return { kind: 'PERSONAL' };
+    // 企業ServiceのBunshinは、そのServiceの組織Workspaceにあり、本人が所有し、
+    // 同じServiceへ同意済みで参加している場合だけCampaignに参加できる。
+    const service = await this.client.bunshin.findFirst({
       where: {
-        status: 'OPEN',
-        startsAt: { lte: input.now },
-        endsAt: { gt: input.now },
+        id: input.bunshinId,
+        workspaceId: input.workspaceId,
+        ownerUserId: input.actorUserId,
+        groupId: { not: null },
+        status: { in: ['DRAFT', 'ACTIVE', 'PAUSED'] },
+        workspace: {
+          type: 'ORGANIZATION',
+          status: 'ACTIVE',
+          memberships: { some: { userId: input.actorUserId, status: 'ACTIVE' } },
+        },
         group: {
           status: 'ACTIVE',
+          serviceConfiguration: { isNot: null },
           memberships: {
             some: { userId: input.actorUserId, status: 'ACTIVE', consentedAt: { not: null } },
           },
         },
-        productPackVersion: {
-          assignments: {
-            some: { bunshinId: input.bunshinId, status: 'ACTIVE' },
-          },
+      },
+      select: { groupId: true },
+    });
+    return service?.groupId ? { kind: 'SERVICE', groupId: service.groupId } : null;
+  }
+
+  /** 参加者から見えるCampaignの範囲。Service Bunshinは自分のServiceのCampaignだけを扱う。 */
+  private availableWhere(
+    participant: CampaignParticipant,
+    input: { workspaceId: string; actorUserId: string; bunshinId: string; now: Date },
+  ): Prisma.CampaignWhereInput {
+    const common: Prisma.CampaignWhereInput = {
+      status: 'OPEN',
+      startsAt: { lte: input.now },
+      endsAt: { gt: input.now },
+      group: {
+        status: 'ACTIVE',
+        memberships: {
+          some: { userId: input.actorUserId, status: 'ACTIVE', consentedAt: { not: null } },
         },
       },
+    };
+    if (participant.kind === 'PERSONAL')
+      return {
+        ...common,
+        productPackVersion: {
+          assignments: { some: { bunshinId: input.bunshinId, status: 'ACTIVE' } },
+        },
+      };
+    // 商品版の割当は参加時の本人同意で行うため、公開中の商品版であることだけを条件にする。
+    return {
+      ...common,
+      workspaceId: input.workspaceId,
+      groupId: participant.groupId,
+      productPackVersion: {
+        status: 'PUBLISHED',
+        productPack: {
+          workspaceId: input.workspaceId,
+          groupId: participant.groupId,
+          status: 'ACTIVE',
+        },
+      },
+    };
+  }
+
+  async listAvailable(input: Parameters<CampaignRepository['listAvailable']>[0]) {
+    const participant = await this.participant(input);
+    if (!participant) return null;
+    return this.client.campaign.findMany({
+      where: this.availableWhere(participant, input),
       include: {
         group: { select: { name: true } },
         productPackVersion: {
@@ -232,25 +290,13 @@ export class PrismaCampaignRepository implements CampaignRepository {
   }
 
   async decide(input: Parameters<CampaignRepository['decide']>[0]) {
-    if (!(await this.participant(input))) return null;
+    const participant = await this.participant(input);
+    if (!participant) return null;
     return this.client.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${input.campaignId}::text, 0))`;
       const campaign = await tx.campaign.findFirst({
-        where: {
-          id: input.campaignId,
-          status: 'OPEN',
-          startsAt: { lte: input.now },
-          endsAt: { gt: input.now },
-          group: {
-            status: 'ACTIVE',
-            memberships: {
-              some: { userId: input.actorUserId, status: 'ACTIVE', consentedAt: { not: null } },
-            },
-          },
-          productPackVersion: {
-            assignments: { some: { bunshinId: input.bunshinId, status: 'ACTIVE' } },
-          },
-        },
+        where: { id: input.campaignId, ...this.availableWhere(participant, input) },
+        include: { productPackVersion: { select: { id: true, productPackId: true } } },
       });
       if (!campaign) return null;
       const previous = await tx.campaignParticipation.findUnique({
@@ -263,6 +309,8 @@ export class PrismaCampaignRepository implements CampaignRepository {
         });
         if (accepted >= campaign.participationLimit) return null;
       }
+      if (participant.kind === 'SERVICE' && input.decision === 'ACCEPTED')
+        await this.assignCampaignProduct(tx, input, campaign.productPackVersion);
       const timestamps = {
         consentedAt: input.decision === 'ACCEPTED' ? input.now : null,
         declinedAt: input.decision === 'DECLINED' ? input.now : null,
@@ -298,6 +346,55 @@ export class PrismaCampaignRepository implements CampaignRepository {
         },
       });
       return participation;
+    });
+  }
+
+  /**
+   * Service Bunshinの参加時に、Campaignの商品版を参加と同じTransactionで割り当てる。
+   * 既存の商品割当と同じく、Bunshinごとに有効な商品パックは1つに限る。
+   */
+  private async assignCampaignProduct(
+    tx: Prisma.TransactionClient,
+    input: {
+      workspaceId: string;
+      actorUserId: string;
+      bunshinId: string;
+      now: Date;
+      productPackConsent: boolean;
+    },
+    version: { id: string; productPackId: string },
+  ) {
+    const active = await tx.productPackAssignment.findFirst({
+      where: { bunshinId: input.bunshinId, status: 'ACTIVE' },
+      select: { productPackId: true, productPackVersionId: true },
+    });
+    if (active && active.productPackId !== version.productPackId)
+      throw new ApplicationError('CONFLICT', 'another product pack is assigned');
+    if (active?.productPackVersionId === version.id) return;
+    if (!input.productPackConsent)
+      throw new ApplicationError('VALIDATION_ERROR', 'product pack consent required');
+    await tx.productPackAssignment.upsert({
+      where: {
+        productPackId_bunshinId: {
+          productPackId: version.productPackId,
+          bunshinId: input.bunshinId,
+        },
+      },
+      create: {
+        workspaceId: input.workspaceId,
+        productPackId: version.productPackId,
+        productPackVersionId: version.id,
+        bunshinId: input.bunshinId,
+        consentedAt: input.now,
+        assignedByUserId: input.actorUserId,
+      },
+      update: {
+        productPackVersionId: version.id,
+        status: 'ACTIVE',
+        consentedAt: input.now,
+        assignedByUserId: input.actorUserId,
+        revokedAt: null,
+      },
     });
   }
 
@@ -395,7 +492,16 @@ export class PrismaCampaignRepository implements CampaignRepository {
     actorUserId: string;
     bunshinId: string;
   }) {
-    const personal = await this.participant(input);
+    const personal = await this.client.bunshin.findFirst({
+      where: {
+        id: input.bunshinId,
+        workspaceId: input.workspaceId,
+        ownerUserId: input.actorUserId,
+        status: { in: ['DRAFT', 'ACTIVE', 'PAUSED'] },
+        workspace: { type: 'PERSONAL', status: 'ACTIVE' },
+      },
+      select: { id: true },
+    });
     if (personal || !input.groupId) return personal;
     return this.client.bunshin.findFirst({
       where: {

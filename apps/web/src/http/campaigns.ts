@@ -36,6 +36,7 @@ const decisionSchema = z
   .object({
     decision: z.enum(['ACCEPTED', 'DECLINED', 'ON_HOLD', 'WITHDRAWN']),
     reason: z.string().max(500).nullable().optional(),
+    productPackConsent: z.boolean().optional(),
   })
   .strict();
 
@@ -158,6 +159,7 @@ export function decideCampaignResponse(
       campaignId: uuid.parse(campaignId),
       decision: value.decision,
       reason: value.reason ?? null,
+      productPackConsent: value.productPackConsent === true,
     });
   });
 }

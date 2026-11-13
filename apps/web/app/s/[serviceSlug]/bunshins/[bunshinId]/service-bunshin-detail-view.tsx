@@ -187,6 +187,18 @@ export function ServiceBunshinDetailView({ model }: { model: ServiceBunshinDetai
             }
           />
         </section>
+        {isBusinessDailyService || bunshin.ownerUserId !== actor.userId ? null : (
+          <section className="service-entry__card" id="group-campaigns">
+            <h2>グループの企画</h2>
+            <p>企業やグループの商品・イベントの企画に、参加するかどうかを自分で選べます。</p>
+            <a
+              className="button button--secondary button--full"
+              href={`/s/${service.configuration.slug}/bunshins/${bunshin.id}/campaigns`}
+            >
+              参加できる企画を見る
+            </a>
+          </section>
+        )}
         <section className="service-member-tools" aria-labelledby="service-member-tools-title">
           <header>
             <p className="eyebrow">必要なときに確認</p>
