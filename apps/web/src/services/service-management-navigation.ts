@@ -83,6 +83,7 @@ export function groupServiceManagementSections<T extends { href: string }>(secti
         'templates',
         'knowledge',
         'product-packs',
+        'campaigns',
         'external-tracking',
         'post-approvals',
         'video-operations',

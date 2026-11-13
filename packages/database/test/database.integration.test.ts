@@ -24,6 +24,7 @@ import { registerMemberRoadmapContextIntegrationCases } from './member-roadmap-c
 import { registerSocialServiceReferralEvidenceIntegrationCases } from './social-service-referral-evidence.integration-cases';
 import { registerCampaignPostingApprovalIntegrationCases } from './campaign-posting-approval.integration-cases';
 import { registerCampaignPostingApprovalRuleIntegrationCases } from './campaign-posting-approval-rules.integration-cases';
+import { registerCampaignMetricsIntegrationCases } from './campaign-metrics.integration-cases';
 import { cleanupProgramFixtures } from './program-fixture-cleanup';
 import {
   integrationDatabaseTarget,
@@ -258,6 +259,7 @@ describe('database ownership boundaries', () => {
   registerSocialPublicationIntentIntegrationCases(client);
   registerCampaignPostingApprovalIntegrationCases(client);
   registerCampaignPostingApprovalRuleIntegrationCases(client);
+  registerCampaignMetricsIntegrationCases(client);
 
   it('fixture cleanup regression: program and training residue is absent before new fixtures', async () => {
     expect(
