@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   resolve: vi.fn(),
   records: vi.fn(),
   business: vi.fn(),
+  overview: vi.fn(),
   training: vi.fn(() => Promise.resolve(true)),
 }));
 vi.mock('next/navigation', () => ({
@@ -30,6 +31,7 @@ vi.mock('../src/services/service-ai-training-mode', () => ({
 vi.mock('../app/s/[serviceSlug]/manage/service-management-home-repository', () => ({
   readServiceManagementHomeRecords: mocks.records,
   readServiceBusinessActivity: mocks.business,
+  readServiceCampaignOverview: mocks.overview,
 }));
 
 beforeEach(() => {
@@ -81,5 +83,57 @@ describe('service management home access and unavailable data', () => {
       }),
     );
     expect(mocks.business).not.toHaveBeenCalled();
+  });
+
+  describe('daily tasks for Services that use product information or campaigns', () => {
+    const socialRecords = {
+      group: { memberships: [], fortuneServiceSetting: null },
+      socialFeedback: false,
+      trainingOverview: false,
+      socialOperations: true,
+      now: new Date('2026-11-13T00:00:00Z'),
+      summary: null,
+    };
+    const overview = {
+      inUse: true,
+      publishedProductPackCount: 1,
+      openCampaignCount: 1,
+      pendingPostApprovalCount: 2,
+      recent: { generated: 5, accepted: 3, copied: 2, postedSelfReported: 1 },
+    };
+    beforeEach(() => {
+      mocks.training.mockResolvedValue(false);
+      mocks.records.mockResolvedValue(socialRecords);
+    });
+
+    it('shows counts only when the Service already uses product information or campaigns', async () => {
+      mocks.overview.mockResolvedValue(overview);
+      await expect(loadServiceManagementHome('social-a')).resolves.toMatchObject({
+        campaignOverview: { state: 'READY', overview },
+      });
+      expect(mocks.overview).toHaveBeenCalledWith(
+        expect.objectContaining({ workspaceId: 'workspace-a', serviceId: 'service-a' }),
+      );
+      mocks.overview.mockResolvedValue({ ...overview, inUse: false });
+      await expect(loadServiceManagementHome('social-a')).resolves.toMatchObject({
+        campaignOverview: { state: 'HIDDEN' },
+      });
+    });
+
+    it('does not turn an unavailable count into zero', async () => {
+      mocks.overview.mockRejectedValue(new Error('database unavailable'));
+      await expect(loadServiceManagementHome('social-a')).resolves.toMatchObject({
+        campaignOverview: { state: 'UNAVAILABLE' },
+      });
+    });
+
+    it('does not read campaign counts for training Services', async () => {
+      mocks.training.mockResolvedValue(true);
+      mocks.records.mockResolvedValue({ ...socialRecords, socialOperations: false });
+      await expect(loadServiceManagementHome('training-a')).resolves.toMatchObject({
+        campaignOverview: { state: 'HIDDEN' },
+      });
+      expect(mocks.overview).not.toHaveBeenCalled();
+    });
   });
 });

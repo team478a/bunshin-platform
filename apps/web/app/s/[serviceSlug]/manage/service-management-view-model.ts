@@ -339,3 +339,59 @@ export function buildServiceOperationActions(input: {
   ];
   return operationActions;
 }
+
+export type ServiceDailyTask = {
+  title: string;
+  lines: string[];
+  links: Array<{ label: string; href: string }>;
+};
+
+/** 企業の日常業務（参加者・発信企画・公式素材・活動状況）を、既存画面への入口として並べる。 */
+export function buildServiceDailyTasks(input: {
+  serviceSlug: string;
+  participantCount: number;
+  overview: {
+    publishedProductPackCount: number;
+    openCampaignCount: number;
+    pendingPostApprovalCount: number;
+    recent: { generated: number; accepted: number; copied: number; postedSelfReported: number };
+  } | null;
+}): ServiceDailyTask[] {
+  const base = `/s/${input.serviceSlug}/manage`;
+  const overview = input.overview;
+  return [
+    {
+      title: '参加者',
+      lines: [`利用中の参加者：${input.participantCount}名`],
+      links: [{ label: '参加者を招待・確認する', href: `${base}/members` }],
+    },
+    {
+      title: '発信企画',
+      lines: overview
+        ? [
+            `募集中の企画：${overview.openCampaignCount}件`,
+            `確認を待つ投稿案：${overview.pendingPostApprovalCount}件`,
+          ]
+        : [],
+      links: [
+        { label: '企画を作る・確認する', href: `${base}/campaigns` },
+        { label: '投稿案を確認する', href: `${base}/post-approvals` },
+      ],
+    },
+    {
+      title: '公式素材',
+      lines: overview ? [`公開中の商品情報：${overview.publishedProductPackCount}件`] : [],
+      links: [{ label: '商品情報・素材を登録する', href: `${base}/product-packs` }],
+    },
+    {
+      title: '活動状況（直近7日）',
+      lines: overview
+        ? [
+            `投稿案 ${overview.recent.generated}件 ／ 採用 ${overview.recent.accepted}件`,
+            `コピー ${overview.recent.copied}件 ／ 投稿完了（本人申告） ${overview.recent.postedSelfReported}件`,
+          ]
+        : [],
+      links: [{ label: '企画ごとの状況を見る', href: `${base}/campaigns` }],
+    },
+  ];
+}

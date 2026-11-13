@@ -4,6 +4,7 @@ import type { Route } from 'next';
 import Link from 'next/link';
 import { PublicShell } from '../../../ui/public-shell';
 import type { ServiceManagementHomeModel } from './service-management-home-data';
+import { buildServiceDailyTasks } from './service-management-view-model';
 
 function ServiceManagementHomeSummary({
   model,
@@ -286,6 +287,7 @@ export function ServiceManagementHomeView({ model }: { model: ServiceManagementH
             </div>
           )}
         </section>
+        <ServiceDailyTasks model={model} />
         {model.summary ? (
           <ServiceOperationActions actions={model.summary.operationActions} />
         ) : null}
@@ -363,5 +365,44 @@ function ServiceOperationActions({
         </section>
       ) : null}
     </>
+  );
+}
+
+function ServiceDailyTasks({ model }: { model: ServiceManagementHomeModel }) {
+  const overview = model.campaignOverview;
+  if (overview.state === 'HIDDEN') return null;
+  const tasks = buildServiceDailyTasks({
+    serviceSlug: model.configuration.slug,
+    participantCount: model.participantCount,
+    overview: overview.state === 'READY' ? overview.overview : null,
+  });
+  return (
+    <section className="settings-card" aria-labelledby="service-daily-tasks-title">
+      <h2 id="service-daily-tasks-title">日常の4業務</h2>
+      {overview.state === 'UNAVAILABLE' ? (
+        <p role="status">件数を取得できませんでした。0件とは判定していません。各画面は開けます。</p>
+      ) : null}
+      <div className="admin-list">
+        {tasks.map((task) => (
+          <article className="admin-list__item" key={task.title}>
+            <h3>{task.title}</h3>
+            {task.lines.map((line) => (
+              <p key={line}>{line}</p>
+            ))}
+            <div className="button-row">
+              {task.links.map((link) => (
+                <Link
+                  className="button button--secondary"
+                  href={link.href as Route}
+                  key={link.href}
+                >
+                  {link.label}
+                </Link>
+              ))}
+            </div>
+          </article>
+        ))}
+      </div>
+    </section>
   );
 }
