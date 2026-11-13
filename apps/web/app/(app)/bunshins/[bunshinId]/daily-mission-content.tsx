@@ -245,7 +245,11 @@ export function MissionGuide({ mission }: { mission: DailyMissionView }) {
   );
 }
 
-export function MissionContent({ mission }: { mission: DailyMissionView }) {
+export function MissionContent({
+  mission,
+}: {
+  mission: Pick<DailyMissionView, 'format' | 'content'>;
+}) {
   const content = mission.content;
   if (mission.format === 'TEXT') {
     return (

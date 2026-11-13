@@ -60,6 +60,12 @@ export {
 export { PrismaGroupKnowledgeRepository } from './group-knowledge';
 export { PrismaAdvertisingSafetyRepository } from './advertising-safety';
 export { PrismaCampaignRepository } from './campaign';
+export {
+  PrismaCampaignPostingApprovalRepository,
+  campaignOpen,
+  type CampaignPostingReviewDecision,
+  type CampaignPostingReviewResult,
+} from './campaign-posting-approval';
 export { PrismaCampaignSafetyRepository } from './campaign-safety';
 export {
   PrismaMemberProductActivityRepository,
