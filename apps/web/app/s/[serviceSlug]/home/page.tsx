@@ -44,6 +44,7 @@ import {
 } from './service-home-navigation-sections';
 import { ServiceHomeAccessGuidance } from './service-home-access-guidance';
 import { serviceAuthBrandForSlug } from '../../../../src/services/service-auth-brand';
+import { selectServiceMemberRoadmapPolicy } from '../../../../src/services/service-growth-policy';
 import {
   personalLearningRequestEnabled,
   resolvePersonalLearningRequestActor,
@@ -382,6 +383,7 @@ export default async function ServiceMemberHome({
         />
         <MemberFeatureLinks
           imageAvailable={imageAvailable}
+          manualVideosAvailable={Boolean(selectServiceMemberRoadmapPolicy(service))}
           isBusinessDailyService={isBusinessDailyService}
           isPersonalLearningService={isPersonalLearningService}
           isDynamicLearning={isDynamicLearning}
