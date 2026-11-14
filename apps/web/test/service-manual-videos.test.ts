@@ -11,7 +11,9 @@ describe('service manual videos', () => {
   it('requires a signed-in service member and keeps the route inside the service context', () => {
     expect(page).toContain('resolveMemberServiceContext(slug, actorUserId)');
     expect(page).toContain('/login?returnTo=');
-    expect(page).toContain('if (!onboarding.businessProfileEnabled) notFound()');
+    expect(page).toContain(
+      '!onboarding.businessProfileEnabled || !selectServiceMemberRoadmapPolicy(service)',
+    );
   });
 
   it('lists the existing Hassy manuals with mobile-friendly playback', () => {

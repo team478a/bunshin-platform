@@ -6,6 +6,7 @@ import { currentUserProvider } from '../../../../src/auth/current-user';
 import { isRouteNotFound } from '../../../../src/navigation/route-not-found';
 import { resolveMemberServiceContext } from '../../../../src/services/public-service';
 import { readServiceOnboardingSettings } from '../../../../src/services/service-onboarding-settings';
+import { selectServiceMemberRoadmapPolicy } from '../../../../src/services/service-growth-policy';
 import { PublicShell } from '../../../ui/public-shell';
 
 export const dynamic = 'force-dynamic';
@@ -53,7 +54,7 @@ export default async function ServiceManualVideosPage({
     service.configuration.registration.onboardingConfig,
     service.configuration.registration.surveyConfig,
   );
-  if (!onboarding.businessProfileEnabled) notFound();
+  if (!onboarding.businessProfileEnabled || !selectServiceMemberRoadmapPolicy(service)) notFound();
 
   const style = {
     '--service-primary': service.configuration.brand.primaryColor,
