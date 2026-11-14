@@ -81,6 +81,15 @@ describe('LINE authentication return path', () => {
     expect(requiresPlatformOnboarding(null, `/image-access/${id}`)).toBe(false);
     expect(requiresPlatformOnboarding(null, `/video-access/${id}`)).toBe(false);
   });
+
+  it('keeps only the exact service video manual library path through login', () => {
+    const path = '/s/side-job-support/manual-videos';
+    expect(safeLineAuthReturnPath(path)).toBe(path);
+    expect(serviceAuthReturnSlug(path)).toBe('side-job-support');
+    expect(safeLineAuthReturnPath(`${path}?next=/admin`)).toBeNull();
+    expect(safeLineAuthReturnPath(`${path}/extra`)).toBeNull();
+  });
+
   it('keeps the exact video viewer path through the authentication cookie', () => {
     const id = '11111111-1111-4111-8111-111111111111';
     const path = `/video-access/${id}`;
