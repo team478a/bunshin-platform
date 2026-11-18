@@ -85,7 +85,7 @@ async function context(id: string) {
     throw new ApplicationError('VALIDATION_ERROR', 'invalid authorization');
   const environment = getServerEnvironment().APP_ENV;
   const clients = externalReadClientCatalog().filter((client) => client.oauthRedirectUris?.length);
-  if (environment === 'staging' || !clients.length) return { kind: 'unavailable' as const };
+  if (!clients.length) return { kind: 'unavailable' as const };
   const sdk = await createSupabaseServerClient();
   const identity = await verifiedFirstPartyIdentity(sdk);
   if (!identity) return { kind: 'login' as const, returnTo: oauthConsentPath(id)! };
