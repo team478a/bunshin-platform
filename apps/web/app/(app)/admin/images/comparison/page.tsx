@@ -175,7 +175,7 @@ export default async function SocialImageProviderComparisonPage({
       <section className="settings-card">
         <h2>題材を絞り込む</h2>
         <p>
-          <Link href={'/admin/images/comparison' as Route}>全20題材</Link>
+          <Link href="/admin/images/comparison">全20題材</Link>
           {' ／ '}
           {SOCIAL_IMAGE_COMPARISON_INDUSTRIES.map((industry, index) => (
             <span key={industry}>
