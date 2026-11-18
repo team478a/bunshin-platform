@@ -110,4 +110,4 @@ DB schema、migration、既存データへの変更はない。合成fixtureを�
 
 PR-04でxAI動画生成Providerを既存 `VideoSceneGenerationProviderPort` と非同期Jobへ接続する。公式仕様、外部request ID、状態照会、重複生成防止、URL取得制限、原価管理を実装し、実APIは費用承認まで呼び出さない。
 
-PR URL: 作成後に追記する。
+PR URL: https://github.com/team478a/bunshin-platform/pull/1530
