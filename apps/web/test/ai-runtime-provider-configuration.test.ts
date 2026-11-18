@@ -7,6 +7,7 @@ import type {
 } from '@bunshin/application';
 import {
   reserveOpenAiRuntimeConfiguration,
+  reserveSocialImageRuntimeConfiguration,
   reserveTrendRuntimeConfiguration,
   resolveOpenAiRuntimeConfiguration,
   resolveVideoAiRuntimeConfiguration,
@@ -16,6 +17,7 @@ const active: AiProviderConfiguration = {
   id: '11111111-1111-4111-8111-111111111111',
   environment: 'DEVELOPMENT',
   provider: 'OPENAI',
+  capabilityKey: 'GENERAL',
   version: 2,
   status: 'ACTIVE',
   apiKeyConfigured: true,
@@ -412,6 +414,85 @@ describe('OpenAI runtime configuration', () => {
   });
 });
 
+describe('social image runtime configuration', () => {
+  const xai = {
+    ...active,
+    id: '22222222-2222-4222-8222-222222222222',
+    provider: 'XAI' as const,
+    capabilityKey: 'SOCIAL_IMAGE_GENERATION' as const,
+    model: 'grok-imagine-image-2.0',
+    requestCostUsdMicros: 2_000,
+  };
+  const admission = {
+    id: '33333333-3333-4333-8333-333333333333',
+    environment: 'DEVELOPMENT' as const,
+    provider: 'XAI' as const,
+    operationHash: 'd'.repeat(64),
+  };
+
+  it('reserves the exact xAI image configuration snapshot', async () => {
+    const repo = admissionRepository({
+      configuration: xai,
+      encryptedApiKey: 'sealed',
+      dailySpentUsdMicros: 0,
+      monthlySpentUsdMicros: 0,
+      monthlyUnknownCostEvents: 0,
+      admission,
+    });
+    await expect(
+      reserveSocialImageRuntimeConfiguration(
+        {
+          provider: 'XAI',
+          configurationId: xai.id,
+          model: xai.model,
+          operationKey: 'social-image:request:page:1',
+        },
+        {
+          repository: repo,
+          crypto: { encrypt: vi.fn(), decrypt: vi.fn().mockReturnValue('plain-xai-key') },
+        },
+      ),
+    ).resolves.toEqual({
+      provider: 'XAI',
+      configurationId: xai.id,
+      apiKey: 'plain-xai-key',
+      model: xai.model,
+      requestCostUsdMicros: 2_000,
+      admission,
+    });
+    expect(repo.reserveActiveForRuntime).toHaveBeenCalledWith({
+      environment: 'DEVELOPMENT',
+      provider: 'XAI',
+      capabilityKey: 'SOCIAL_IMAGE_GENERATION',
+      configurationId: xai.id,
+      operationKey: 'social-image:request:page:1',
+    });
+  });
+
+  it('settles the reservation when the request model snapshot does not match', async () => {
+    const repo = admissionRepository({
+      configuration: xai,
+      encryptedApiKey: 'sealed',
+      dailySpentUsdMicros: 0,
+      monthlySpentUsdMicros: 0,
+      monthlyUnknownCostEvents: 0,
+      admission,
+    });
+    await expect(
+      reserveSocialImageRuntimeConfiguration(
+        {
+          provider: 'XAI',
+          configurationId: xai.id,
+          model: 'different-model',
+          operationKey: 'social-image:request:page:2',
+        },
+        { repository: repo, crypto: { encrypt: vi.fn(), decrypt: vi.fn() } },
+      ),
+    ).rejects.toMatchObject({ code: 'CONFIGURATION_ERROR' });
+    expect(repo.settleRuntimeAdmission).toHaveBeenCalledWith(admission);
+  });
+});
+
 describe('video AI runtime configuration', () => {
   it('uses only the active, verified configuration for the current environment', async () => {
     await expect(
@@ -421,6 +502,7 @@ describe('video AI runtime configuration', () => {
           configuration: {
             ...active,
             provider: 'FAL',
+            capabilityKey: 'VIDEO_SCENE_GENERATION',
             model: 'fal-ai/kling-video/o1/reference-to-video',
             requestCostUsdMicros: 112_000,
           },

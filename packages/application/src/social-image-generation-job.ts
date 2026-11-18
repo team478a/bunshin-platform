@@ -2,12 +2,14 @@ import { ApplicationError } from '@bunshin/shared';
 import type { CompleteJob, FailJob, Job } from './index';
 import type { SocialImageReference } from './social-image-generation-core';
 import type { SocialImageLayout } from './social-image-templates';
+import type { AiProviderKey } from './ai-provider-configuration';
 
 export const SOCIAL_IMAGE_GENERATION_JOB_TYPE = 'SOCIAL_IMAGE_GENERATE';
 
 export type SocialImageGenerationExecutionBlockReason =
   | 'REQUEST_UNAVAILABLE'
   | 'PILOT_STOPPED'
+  | 'PROVIDER_UNAVAILABLE'
   | 'DAILY_LIMIT_REACHED'
   | 'MONTHLY_LIMIT_REACHED'
   | 'MEMBER_MONTHLY_LIMIT_REACHED';
@@ -23,6 +25,8 @@ export interface SocialImageGenerationExecutionContext {
   idempotencyKey: string;
   referenceImage?: SocialImageReference | null;
   layout: SocialImageLayout;
+  provider: Extract<AiProviderKey, 'OPENAI' | 'XAI'>;
+  providerConfigurationId: string;
   model: string;
   quality: string;
 }
@@ -52,6 +56,7 @@ export interface SocialImageGenerationExecutionRepository {
   claim(input: {
     workspaceId: string;
     requestId: string;
+    environment: 'DEVELOPMENT' | 'STAGING' | 'PRODUCTION';
     now: Date;
     dailyFrom: Date;
     monthlyFrom: Date;
@@ -91,7 +96,11 @@ export class ClaimSocialImageGenerationExecution {
     private readonly now = () => new Date(),
   ) {}
 
-  async execute(input: { workspaceId: string; requestId: string }) {
+  async execute(input: {
+    workspaceId: string;
+    requestId: string;
+    environment: 'DEVELOPMENT' | 'STAGING' | 'PRODUCTION';
+  }) {
     const now = this.now();
     const result = await this.repository.claim({
       ...input,

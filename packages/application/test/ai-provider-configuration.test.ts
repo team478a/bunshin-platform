@@ -10,6 +10,7 @@ const value: AiProviderConfiguration = {
   id: '00000000-0000-4000-8000-000000000001',
   environment: 'PRODUCTION',
   provider: 'OPENAI',
+  capabilityKey: 'GENERAL',
   version: 1,
   status: 'DRAFT',
   apiKeyConfigured: false,
@@ -109,6 +110,45 @@ describe('CreateAiProviderConfigurationVersion', () => {
     expect(createVersion).toHaveBeenCalledWith(
       expect.objectContaining({ provider: 'GROK', model: 'grok-4.6' }),
     );
+  });
+
+  it('accepts xAI only in an image or video capability slot', async () => {
+    const createVersion = vi.fn(() =>
+      Promise.resolve({
+        ...value,
+        provider: 'XAI' as const,
+        capabilityKey: 'SOCIAL_IMAGE_GENERATION' as const,
+      }),
+    );
+    const useCase = new CreateAiProviderConfigurationVersion(repository(createVersion), crypto);
+    await useCase.execute({
+      actorUserId: 'actor',
+      environment: 'PRODUCTION',
+      provider: 'XAI',
+      capabilityKey: 'SOCIAL_IMAGE_GENERATION',
+      reason: 'xAI画像生成を準備',
+      model: 'grok-imagine-image-2.0',
+      dailyBudgetUsdMicros: 1_000_000,
+      monthlyBudgetUsdMicros: 10_000_000,
+    });
+    expect(createVersion).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: 'XAI',
+        capabilityKey: 'SOCIAL_IMAGE_GENERATION',
+      }),
+    );
+    await expect(
+      useCase.execute({
+        actorUserId: 'actor',
+        environment: 'PRODUCTION',
+        provider: 'XAI',
+        capabilityKey: 'GENERAL',
+        reason: '汎用枠には登録しない',
+        model: 'grok-imagine-image-2.0',
+        dailyBudgetUsdMicros: 1_000_000,
+        monthlyBudgetUsdMicros: 10_000_000,
+      }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
   });
 
   it('rejects a monthly budget below the daily budget', async () => {

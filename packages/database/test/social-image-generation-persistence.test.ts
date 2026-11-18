@@ -39,6 +39,10 @@ const row = {
   productPackVersionId: null,
   generationContextSnapshotId: null,
   pilotEnrollmentId: ids.pilotEnrollmentId,
+  assetProvider: 'OPENAI' as const,
+  assetModel: 'gpt-image-1.5',
+  assetQuality: 'medium',
+  providerConfigurationId: null,
   status: 'DRAFT' as const,
   templateKey: input.layout.templateKey,
   layout: input.layout,
@@ -52,7 +56,14 @@ const row = {
 const transactionClient = (overrides: Record<string, unknown> = {}) => ({
   groupMembership: { findFirst: vi.fn().mockResolvedValue({ id: ids.groupMembershipId }) },
   socialImagePilotEnrollment: {
-    findFirst: vi.fn().mockResolvedValue({ id: ids.pilotEnrollmentId }),
+    findFirst: vi.fn().mockResolvedValue({
+      id: ids.pilotEnrollmentId,
+      pilot: {
+        assetProvider: 'OPENAI',
+        defaultModel: 'gpt-image-1.5',
+        defaultQuality: 'medium',
+      },
+    }),
   },
   bunshin: { findFirst: vi.fn().mockResolvedValue({ id: ids.bunshinId }) },
   dailyMission: { findFirst: vi.fn().mockResolvedValue({ id: ids.dailyMissionId }) },

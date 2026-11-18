@@ -8,12 +8,23 @@ import {
 } from '@bunshin/application';
 import { ApplicationError } from '@bunshin/shared';
 import { randomUUID } from 'node:crypto';
-import { recordOpenAiUsageAndSettle } from '../ai/openai-cost-admission';
-import { reserveOpenAiRuntimeConfiguration } from '../ai/runtime-provider-configuration';
+import {
+  recordOpenAiUsageAndSettle,
+  recordProviderUsageAndSettle,
+} from '../ai/openai-cost-admission';
+import {
+  reserveOpenAiRuntimeConfiguration,
+  reserveSocialImageRuntimeConfiguration,
+} from '../ai/runtime-provider-configuration';
+import { currentAiProviderEnvironment } from '../ai/secure-provider-configuration';
 import {
   OpenAiSocialImageGenerationAdapter,
   OpenAiSocialImageProviderError,
 } from '../providers/openai-social-image-generation';
+import {
+  XaiSocialImageGenerationAdapter,
+  XaiSocialImageProviderError,
+} from '../providers/xai-social-image-generation';
 import {
   OpenAiSocialImageQualityReviewer,
   OpenAiSocialImageQualityReviewError,
@@ -35,7 +46,10 @@ export function createSocialImageGenerationJobHandler(): SocialImageGenerationJo
     async execute(input) {
       const db = await import('@bunshin/database');
       const repository = new db.PrismaSocialImageGenerationExecutionRepository();
-      const context = await new ClaimSocialImageGenerationExecution(repository).execute(input);
+      const context = await new ClaimSocialImageGenerationExecution(repository).execute({
+        ...input,
+        environment: currentAiProviderEnvironment(),
+      });
       const { serviceMediaReservation, planPayment } =
         await authorizeSocialImageGeneration(context);
       const usageKey = `social-image:${context.requestId}:attempt:${input.attemptCount}`;
@@ -56,14 +70,21 @@ export function createSocialImageGenerationJobHandler(): SocialImageGenerationJo
         ) => {
           const isQualityRetry = Boolean(repairInstruction);
           const pageUsageKey = `${usageKey}:page:${pageIndex + 1}${isQualityRetry ? ':quality-retry' : ''}`;
-          const runtime = await reserveOpenAiRuntimeConfiguration(pageUsageKey);
+          const runtime = await reserveSocialImageRuntimeConfiguration({
+            provider: context.provider,
+            configurationId: context.providerConfigurationId,
+            model: context.model,
+            operationKey: pageUsageKey,
+          });
           let providerAttempted = false;
           let usagePersistenceStarted = false;
           try {
             providerAttempted = true;
-            const generated = await new OpenAiSocialImageGenerationAdapter({
-              apiKey: runtime.apiKey,
-            }).generate({
+            const adapter =
+              context.provider === 'XAI'
+                ? new XaiSocialImageGenerationAdapter({ apiKey: runtime.apiKey })
+                : new OpenAiSocialImageGenerationAdapter({ apiKey: runtime.apiKey });
+            const generated = await adapter.generate({
               requestId: `${context.requestId}:page:${pageIndex + 1}${isQualityRetry ? ':quality-retry' : ''}`,
               prompt: [
                 socialImagePagePrompt(
@@ -86,7 +107,7 @@ export function createSocialImageGenerationJobHandler(): SocialImageGenerationJo
               quality: pageIndex === 0 ? 'high' : context.quality,
             });
             usagePersistenceStarted = true;
-            await recordOpenAiUsageAndSettle(runtime, {
+            await recordProviderUsageAndSettle(runtime, {
               workspaceId: context.workspaceId,
               bunshinId: context.bunshinId,
               actorUserId: context.ownerUserId,
@@ -112,13 +133,13 @@ export function createSocialImageGenerationJobHandler(): SocialImageGenerationJo
           } catch (error) {
             if (!usagePersistenceStarted) {
               usagePersistenceStarted = true;
-              await recordOpenAiUsageAndSettle(runtime, {
+              await recordProviderUsageAndSettle(runtime, {
                 workspaceId: context.workspaceId,
                 bunshinId: context.bunshinId,
                 actorUserId: context.ownerUserId,
                 taskType: 'SOCIAL_IMAGE_GENERATION',
-                provider: 'OPENAI',
-                model: context.model,
+                provider: context.provider,
+                model: runtime.model,
                 promptVersion: pageReference
                   ? isQualityRetry
                     ? 'social-image-carousel-reference-quality-retry-v1'
@@ -135,11 +156,22 @@ export function createSocialImageGenerationJobHandler(): SocialImageGenerationJo
                 errorCode:
                   error instanceof OpenAiSocialImageProviderError
                     ? error.category
-                    : error instanceof ApplicationError
-                      ? error.code
-                      : 'INTERNAL_ERROR',
+                    : error instanceof XaiSocialImageProviderError
+                      ? error.category
+                      : error instanceof ApplicationError
+                        ? error.code
+                        : 'INTERNAL_ERROR',
                 idempotencyKey: pageUsageKey,
               });
+            }
+            if (
+              error instanceof OpenAiSocialImageProviderError ||
+              error instanceof XaiSocialImageProviderError
+            ) {
+              throw new SocialImageGenerationJobHandlerError(
+                `SOCIAL_IMAGE_PROVIDER_${error.category}`,
+                error.retryable,
+              );
             }
             throw error;
           }

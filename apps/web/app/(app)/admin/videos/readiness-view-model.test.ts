@@ -6,6 +6,7 @@ const provider: AiProviderConfiguration = {
   id: '11111111-1111-4111-8111-111111111111',
   environment: 'PRODUCTION',
   provider: 'CREATOMATE',
+  capabilityKey: 'GENERAL',
   version: 1,
   status: 'ACTIVE',
   apiKeyConfigured: true,

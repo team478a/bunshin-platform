@@ -1,9 +1,6 @@
 import 'server-only';
-import type { RecordAiUsageInput } from '@bunshin/application';
-import {
-  settleProviderRuntimeAdmission,
-  type AdmittedOpenAiRuntimeConfiguration,
-} from './runtime-provider-configuration';
+import type { AiProviderRuntimeAdmission, RecordAiUsageInput } from '@bunshin/application';
+import { settleProviderRuntimeAdmission } from './runtime-provider-configuration';
 import { recordAiUsage, recordAiUsageSafely } from '../observability/ai-usage';
 
 /**
@@ -12,7 +9,7 @@ import { recordAiUsage, recordAiUsageSafely } from '../observability/ai-usage';
  * reservation to strand and is never available in production.
  */
 export async function recordOpenAiUsageAndSettle(
-  runtime: AdmittedOpenAiRuntimeConfiguration,
+  runtime: { admission: AiProviderRuntimeAdmission | null },
   usage: RecordAiUsageInput,
 ) {
   if (runtime.admission === null) {
@@ -22,3 +19,5 @@ export async function recordOpenAiUsageAndSettle(
   await recordAiUsage(usage);
   await settleProviderRuntimeAdmission(runtime.admission);
 }
+
+export const recordProviderUsageAndSettle = recordOpenAiUsageAndSettle;

@@ -88,7 +88,8 @@ export class AesGcmAiProviderSecretCrypto implements AiProviderSecretCryptoPort 
 
 export class AiProviderConnectionTestAdapter {
   async validate(input: {
-    provider: 'OPENAI' | 'GOOGLE' | 'GROK' | 'EXA' | 'FIRECRAWL' | 'CREATOMATE' | 'FAL' | 'RUNWAY';
+    provider:
+      'OPENAI' | 'GOOGLE' | 'GROK' | 'XAI' | 'EXA' | 'FIRECRAWL' | 'CREATOMATE' | 'FAL' | 'RUNWAY';
     apiKey: string;
     model: string | null;
   }) {
@@ -152,7 +153,7 @@ export class AiProviderConnectionTestAdapter {
       return { success: false, errorCategory: 'PROVIDER_CONFIGURATION_INVALID' };
     }
     const request =
-      input.provider === 'OPENAI' || input.provider === 'GROK'
+      input.provider === 'OPENAI' || input.provider === 'GROK' || input.provider === 'XAI'
         ? fetch(
             `${input.provider === 'OPENAI' ? 'https://api.openai.com' : 'https://api.x.ai'}/v1/models/${encodeURIComponent(input.model ?? '')}`,
             {
@@ -181,7 +182,7 @@ export class AiProviderConnectionTestAdapter {
     if (response.status === 401 || response.status === 403)
       return { success: false, errorCategory: 'CREDENTIAL_INVALID' };
     if (response.status === 429) return { success: false, errorCategory: 'QUOTA_OR_RATE_LIMIT' };
-    if (response.status === 404 && ['OPENAI', 'GROK'].includes(input.provider))
+    if (response.status === 404 && ['OPENAI', 'GROK', 'XAI'].includes(input.provider))
       return { success: false, errorCategory: 'MODEL_UNAVAILABLE' };
     return { success: false, errorCategory: 'PROVIDER_CONFIGURATION_INVALID' };
   }

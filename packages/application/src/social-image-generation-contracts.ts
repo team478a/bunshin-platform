@@ -56,6 +56,10 @@ export interface SocialImageGenerationRequestRecord {
   productPackVersionId: string | null;
   generationContextSnapshotId: string | null;
   pilotEnrollmentId: string;
+  assetProvider: 'OPENAI' | 'XAI';
+  assetModel: string;
+  assetQuality: string;
+  providerConfigurationId: string | null;
   status: SocialImageGenerationStatus;
   templateKey: SocialImageTemplateKey;
   layout: SocialImageLayout;

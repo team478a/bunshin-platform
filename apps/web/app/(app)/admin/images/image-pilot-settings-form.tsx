@@ -4,6 +4,7 @@ type PilotSettings = {
   dailyLimit: number;
   monthlyLimit: number;
   memberMonthlyLimit: number;
+  assetProvider: 'OPENAI' | 'XAI';
   defaultModel: string;
   defaultQuality: string;
   startsAt: Date | null;
@@ -81,6 +82,17 @@ export function ImagePilotSettingsForm({
               required
               defaultValue={pilot?.memberMonthlyLimit ?? 20}
             />
+          </label>
+          <label className="field">
+            <span className="field__label">画像生成サービス</span>
+            <select
+              className="field__control"
+              name="assetProvider"
+              defaultValue={pilot?.assetProvider ?? 'OPENAI'}
+            >
+              <option value="OPENAI">OpenAI</option>
+              <option value="XAI">xAI</option>
+            </select>
           </label>
           <label className="field">
             <span className="field__label">画像モデル</span>

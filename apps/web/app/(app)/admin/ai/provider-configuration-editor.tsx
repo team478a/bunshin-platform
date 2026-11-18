@@ -3,12 +3,14 @@ import { useState, type FormEvent } from 'react';
 import { providerRuntimeReadiness } from './provider-runtime-readiness';
 
 type Provider =
-  'OPENAI' | 'GOOGLE' | 'GROK' | 'EXA' | 'FIRECRAWL' | 'CREATOMATE' | 'FAL' | 'RUNWAY';
+  'OPENAI' | 'GOOGLE' | 'GROK' | 'XAI' | 'EXA' | 'FIRECRAWL' | 'CREATOMATE' | 'FAL' | 'RUNWAY';
+type CapabilityKey = 'GENERAL' | 'SOCIAL_IMAGE_GENERATION' | 'VIDEO_SCENE_GENERATION';
 type ModelCapability =
   'STRUCTURED_OUTPUT' | 'IMAGE_INPUT' | 'LONG_CONTEXT' | 'WEB_SEARCH' | 'AUDIO_INPUT' | 'TOOL_USE';
 type Configuration = {
   id: string;
   provider: Provider;
+  capabilityKey: CapabilityKey;
   version: number;
   status: 'DRAFT' | 'ACTIVE' | 'DISABLED' | 'ERROR';
   apiKeyConfigured: boolean;
@@ -26,12 +28,26 @@ const labels: Record<Provider, string> = {
   OPENAI: '文章を作るAI（OpenAI）',
   GOOGLE: '学習評価用AI（Google Gemini・本番使用不可）',
   GROK: 'Xの話題を調べるAI（Grok）',
+  XAI: '画像・動画を作るAI（xAI）',
   EXA: '話題を調べる検索（Exa）',
   FIRECRAWL: 'ウェブページを読む検索（Firecrawl）',
   CREATOMATE: '動画を仕上げるサービス（Creatomate）',
   FAL: 'AI動画を作るサービス（fal）',
   RUNWAY: 'AI動画を作るサービス（Runway）',
 };
+const capabilityLabels: Record<CapabilityKey, string> = {
+  GENERAL: '文章・調査などの共通処理',
+  SOCIAL_IMAGE_GENERATION: 'SNS画像生成',
+  VIDEO_SCENE_GENERATION: '動画シーン生成',
+};
+const supportedCapabilities = (provider: Provider): CapabilityKey[] =>
+  provider === 'XAI'
+    ? ['SOCIAL_IMAGE_GENERATION', 'VIDEO_SCENE_GENERATION']
+    : provider === 'FAL' || provider === 'RUNWAY'
+      ? ['VIDEO_SCENE_GENERATION']
+      : provider === 'OPENAI'
+        ? ['GENERAL', 'SOCIAL_IMAGE_GENERATION']
+        : ['GENERAL'];
 const usd = (micros: number) => (micros / 1_000_000).toFixed(2);
 const connectionErrors: Record<string, string> = {
   CREDENTIAL_INVALID: 'APIキーが正しくないか、利用権限がありません',
@@ -47,6 +63,7 @@ export function AiProviderConfigurationEditor(props: {
 }) {
   const [configurations, setConfigurations] = useState(props.initialConfigurations);
   const [provider, setProvider] = useState<Provider>('OPENAI');
+  const [capabilityKey, setCapabilityKey] = useState<CapabilityKey>('GENERAL');
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
   const [actionConfigurationId, setActionConfigurationId] = useState<string | null>(null);
@@ -64,7 +81,8 @@ export function AiProviderConfigurationEditor(props: {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           provider,
-          model: ['OPENAI', 'GOOGLE', 'GROK', 'FAL', 'RUNWAY'].includes(provider)
+          capabilityKey,
+          model: ['OPENAI', 'GOOGLE', 'GROK', 'XAI', 'FAL', 'RUNWAY'].includes(provider)
             ? form.get('model')
             : null,
           modelCapabilities: form
@@ -167,7 +185,9 @@ export function AiProviderConfigurationEditor(props: {
         current.map((item) =>
           item.id === updated.id
             ? updated
-            : item.provider === updated.provider && item.status === 'ACTIVE'
+            : item.provider === updated.provider &&
+                item.capabilityKey === updated.capabilityKey &&
+                item.status === 'ACTIVE'
               ? { ...item, status: 'DISABLED', globallyPaused: true }
               : item,
         ),
@@ -299,7 +319,17 @@ export function AiProviderConfigurationEditor(props: {
             使うサービス
             <select
               value={provider}
-              onChange={(event) => setProvider(event.target.value as Provider)}
+              onChange={(event) => {
+                const next = event.target.value as Provider;
+                setProvider(next);
+                setCapabilityKey(
+                  next === 'XAI'
+                    ? 'SOCIAL_IMAGE_GENERATION'
+                    : next === 'FAL' || next === 'RUNWAY'
+                      ? 'VIDEO_SCENE_GENERATION'
+                      : 'GENERAL',
+                );
+              }}
             >
               {Object.entries(labels).map(([value, label]) => (
                 <option key={value} value={value}>
@@ -308,7 +338,20 @@ export function AiProviderConfigurationEditor(props: {
               ))}
             </select>
           </label>
-          {['OPENAI', 'GOOGLE', 'GROK', 'FAL', 'RUNWAY'].includes(provider) ? (
+          <label>
+            利用目的
+            <select
+              value={capabilityKey}
+              onChange={(event) => setCapabilityKey(event.target.value as CapabilityKey)}
+            >
+              {supportedCapabilities(provider).map((value) => (
+                <option key={value} value={value}>
+                  {capabilityLabels[value]}
+                </option>
+              ))}
+            </select>
+          </label>
+          {['OPENAI', 'GOOGLE', 'GROK', 'XAI', 'FAL', 'RUNWAY'].includes(provider) ? (
             <label>
               使うAIモデル
               <input
@@ -317,13 +360,15 @@ export function AiProviderConfigurationEditor(props: {
                 defaultValue={
                   provider === 'GROK'
                     ? 'grok-4.6'
-                    : provider === 'GOOGLE'
-                      ? ''
-                      : provider === 'FAL'
-                        ? 'kling-o1-reference-to-video'
-                        : provider === 'RUNWAY'
-                          ? 'gen4_turbo'
-                          : 'gpt-5-mini'
+                    : provider === 'XAI'
+                      ? 'grok-imagine-image-2.0'
+                      : provider === 'GOOGLE'
+                        ? ''
+                        : provider === 'FAL'
+                          ? 'kling-o1-reference-to-video'
+                          : provider === 'RUNWAY'
+                            ? 'gen4_turbo'
+                            : 'gpt-5-mini'
                 }
                 required
                 maxLength={120}
@@ -405,14 +450,21 @@ export function AiProviderConfigurationEditor(props: {
             <label>
               1処理の承認済み見込額（米ドル）
               <input
+                key={provider}
                 name="requestCostUsd"
                 type="number"
+                defaultValue={provider === 'XAI' ? '0.07' : undefined}
                 min="0.000001"
                 max="1000"
                 step="0.000001"
                 required
               />
-              <small>外部サービスの契約単価を確認して入力します。</small>
+              <small>
+                外部サービスの契約単価を確認して入力します。
+                {provider === 'XAI'
+                  ? ' 初期値は1K・medium出力（$0.06）と参照画像入力（$0.01）の上限見込みです。'
+                  : ''}
+              </small>
             </label>
           )}
           <div className="settings-save-action">
@@ -445,6 +497,7 @@ export function AiProviderConfigurationEditor(props: {
                 <strong>
                   {labels[item.provider]}・第{item.version}版
                 </strong>
+                <p>利用目的：{capabilityLabels[item.capabilityKey]}</p>
                 <p>
                   状態：
                   {item.status === 'DRAFT'

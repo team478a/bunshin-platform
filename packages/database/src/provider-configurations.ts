@@ -20,6 +20,7 @@ function aiProviderConfiguration(
     id: row.id,
     environment: row.environment,
     provider: row.provider,
+    capabilityKey: row.capabilityKey,
     version: row.version,
     status: row.status,
     apiKeyConfigured: row.encryptedApiKey !== null,
@@ -218,13 +219,18 @@ export class PrismaAiProviderConfigurationRepository
     if (admin?.role !== 'SUPER_ADMIN') return null;
     return this.client.$transaction(async (tx) => {
       const latest = await tx.aiProviderConfiguration.findFirst({
-        where: { environment: input.environment, provider: input.provider },
+        where: {
+          environment: input.environment,
+          provider: input.provider,
+          capabilityKey: input.capabilityKey,
+        },
         orderBy: { version: 'desc' },
       });
       const row = await tx.aiProviderConfiguration.create({
         data: {
           environment: input.environment,
           provider: input.provider,
+          capabilityKey: input.capabilityKey,
           version: (latest?.version ?? 0) + 1,
           encryptedApiKey: input.apiKey?.encryptedValue ?? null,
           apiKeyMask: input.apiKey?.mask ?? null,
@@ -248,6 +254,7 @@ export class PrismaAiProviderConfigurationRepository
           changedFields: [
             ...(input.apiKey === null ? [] : ['credentials']),
             'model',
+            'capabilityKey',
             'modelCapabilities',
             'budgetPolicy',
             'globallyPaused',
@@ -321,7 +328,12 @@ export class PrismaAiProviderConfigurationRepository
       if (target.requestCostUsdMicros <= 0)
         throw new ApplicationError('CONFLICT', 'provider request cost is required');
       await tx.aiProviderConfiguration.updateMany({
-        where: { environment: input.environment, provider: target.provider, status: 'ACTIVE' },
+        where: {
+          environment: input.environment,
+          provider: target.provider,
+          capabilityKey: target.capabilityKey,
+          status: 'ACTIVE',
+        },
         data: { status: 'DISABLED', globallyPaused: true },
       });
       const row = await tx.aiProviderConfiguration.update({
@@ -375,6 +387,8 @@ export class PrismaAiProviderConfigurationRepository
       where: {
         environment: input.environment,
         provider: input.provider,
+        capabilityKey: input.capabilityKey ?? 'GENERAL',
+        ...(input.configurationId ? { id: input.configurationId } : {}),
         status: 'ACTIVE',
       },
     });
@@ -415,6 +429,10 @@ export class PrismaAiProviderConfigurationRepository
       AiProviderConfigurationRepository['getActiveForRuntime']
     >[0]['environment'];
     provider: Parameters<AiProviderConfigurationRepository['getActiveForRuntime']>[0]['provider'];
+    capabilityKey?: Parameters<
+      AiProviderConfigurationRepository['getActiveForRuntime']
+    >[0]['capabilityKey'];
+    configurationId?: string;
     operationKey: string;
     reservedCostUsdMicros?: number;
     requestCount?: number;
@@ -428,6 +446,8 @@ export class PrismaAiProviderConfigurationRepository
         where: {
           environment: input.environment,
           provider: input.provider,
+          capabilityKey: input.capabilityKey ?? 'GENERAL',
+          ...(input.configurationId ? { id: input.configurationId } : {}),
           status: 'ACTIVE',
         },
       });
@@ -487,18 +507,33 @@ export class PrismaAiProviderConfigurationRepository
       ]);
       const safeNumber = (value: bigint) =>
         Number(value > BigInt(Number.MAX_SAFE_INTEGER) ? Number.MAX_SAFE_INTEGER : value);
-      const snapshot = assertAiProviderRuntimeConfiguration(input, {
-        configuration: aiProviderConfiguration(row),
-        encryptedApiKey: row.encryptedApiKey,
-        dailySpentUsdMicros: safeNumber(
-          (daily._sum.estimatedCostUsdMicros ?? 0n) + (dailyOpen._sum.reservedCostUsdMicros ?? 0n),
-        ),
-        monthlySpentUsdMicros: safeNumber(
-          (monthly._sum.estimatedCostUsdMicros ?? 0n) +
-            (monthlyOpen._sum.reservedCostUsdMicros ?? 0n),
-        ),
-        monthlyUnknownCostEvents,
-      });
+      const snapshot = assertAiProviderRuntimeConfiguration(
+        {
+          environment: input.environment,
+          provider: input.provider,
+          ...(input.capabilityKey === undefined ? {} : { capabilityKey: input.capabilityKey }),
+          ...(input.configurationId === undefined
+            ? {}
+            : { configurationId: input.configurationId }),
+          ...(input.reservedCostUsdMicros === undefined
+            ? {}
+            : { reservedCostUsdMicros: input.reservedCostUsdMicros }),
+          ...(input.requestCount === undefined ? {} : { requestCount: input.requestCount }),
+        },
+        {
+          configuration: aiProviderConfiguration(row),
+          encryptedApiKey: row.encryptedApiKey,
+          dailySpentUsdMicros: safeNumber(
+            (daily._sum.estimatedCostUsdMicros ?? 0n) +
+              (dailyOpen._sum.reservedCostUsdMicros ?? 0n),
+          ),
+          monthlySpentUsdMicros: safeNumber(
+            (monthly._sum.estimatedCostUsdMicros ?? 0n) +
+              (monthlyOpen._sum.reservedCostUsdMicros ?? 0n),
+          ),
+          monthlyUnknownCostEvents,
+        },
+      );
       const admission = await tx.aiProviderCallAdmission.create({
         data: {
           configurationId: row.id,
@@ -559,6 +594,7 @@ export class PrismaVideoAiProviderCostPolicyRepository implements VideoAiProvide
         environment: input.environment,
         provider: input.provider,
         model: input.model,
+        capabilityKey: 'VIDEO_SCENE_GENERATION',
         status: 'ACTIVE',
         globallyPaused: false,
         encryptedApiKey: { not: null },

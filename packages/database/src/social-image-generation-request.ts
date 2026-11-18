@@ -8,6 +8,7 @@ const socialImageGenerationRequestRecord = (
   row: Prisma.SocialImageGenerationRequestGetPayload<object>,
 ): SocialImageGenerationRequestRecord => ({
   ...row,
+  assetProvider: row.assetProvider as SocialImageGenerationRequestRecord['assetProvider'],
   status: row.status,
   referenceImage:
     (row.referenceImage as SocialImageGenerationRequestRecord['referenceImage']) ?? null,
@@ -77,9 +78,12 @@ export class PrismaSocialImageGenerationRequestRepository implements SocialImage
           AND: [{ OR: [{ endsAt: null }, { endsAt: { gt: now } }] }],
         },
       },
-      select: { id: true },
+      select: {
+        id: true,
+        pilot: { select: { assetProvider: true, defaultModel: true, defaultQuality: true } },
+      },
     });
-    return Boolean(enrollment);
+    return enrollment;
   }
 
   async create(input: Parameters<SocialImageGenerationRequestRepository['create']>[0]) {
@@ -93,7 +97,8 @@ export class PrismaSocialImageGenerationRequestRepository implements SocialImage
     } as const;
     try {
       return await this.client.$transaction(async (tx) => {
-        if (!(await this.activeScope(tx, input))) return null;
+        const scope = await this.activeScope(tx, input);
+        if (!scope) return null;
         const existing = await tx.socialImageGenerationRequest.findUnique({ where: lookup });
         if (existing) return socialImageGenerationRequestRecord(existing);
         const bunshin = await tx.bunshin.findFirst({
@@ -166,6 +171,9 @@ export class PrismaSocialImageGenerationRequestRepository implements SocialImage
             productPackVersionId: input.productPackVersionId,
             generationContextSnapshotId: input.generationContextSnapshotId,
             pilotEnrollmentId: input.pilotEnrollmentId,
+            assetProvider: scope.pilot.assetProvider,
+            assetModel: scope.pilot.defaultModel,
+            assetQuality: scope.pilot.defaultQuality,
             templateKey: input.layout.templateKey,
             referenceImage: input.referenceImage ?? Prisma.DbNull,
             layout: input.layout as unknown as Prisma.InputJsonValue,

@@ -77,7 +77,15 @@ export default async function ImagePilotAdminPage({
     : [];
   const enrolled = new Set(pilot?.enrollments.map((item) => item.groupMembershipId) ?? []);
   const provider = await db.prisma.aiProviderConfiguration.findFirst({
-    where: { environment: currentAiProviderEnvironment(), provider: 'OPENAI', status: 'ACTIVE' },
+    where: {
+      environment: currentAiProviderEnvironment(),
+      provider: pilot?.assetProvider ?? 'OPENAI',
+      capabilityKey:
+        pilot?.assetProvider === 'XAI'
+          ? 'SOCIAL_IMAGE_GENERATION'
+          : { in: ['GENERAL', 'SOCIAL_IMAGE_GENERATION'] },
+      status: 'ACTIVE',
+    },
     orderBy: { version: 'desc' },
     select: {
       apiKeyMask: true,
@@ -207,7 +215,11 @@ export default async function ImagePilotAdminPage({
           <ImagePilotSettingsForm
             workspaceId={selected.workspaceId}
             groupId={selected.id}
-            pilot={pilot}
+            pilot={
+              pilot && (pilot.assetProvider === 'OPENAI' || pilot.assetProvider === 'XAI')
+                ? { ...pilot, assetProvider: pilot.assetProvider }
+                : null
+            }
             members={members}
             enrolled={enrolled}
             canEdit={admin.role === 'SUPER_ADMIN'}
