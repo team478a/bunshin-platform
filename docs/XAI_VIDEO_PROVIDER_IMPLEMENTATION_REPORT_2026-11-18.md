@@ -80,4 +80,4 @@ PR-05として、既存 `ExternalReadGrant`、外部読取認証、Member Usage�
 
 ## 10. PR URL
 
-PR作成後に追記する。
+https://github.com/team478a/bunshin-platform/pull/1531
