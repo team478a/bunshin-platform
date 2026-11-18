@@ -4787,3 +4787,9 @@
 - 同一client・operationで複数BunshinのGrantが有効な場合は順序で選ばず拒否する。tool input、prompt、URLへUser ID、Bunshin ID、connection IDを追加しない。読取時にGrantを発行・更新・結合する副作用も追加しない。
 - 既存のconnection ID付き限定HTTP APIと明示的なcredential bindingは互換維持する。MCP経路だけを標準OAuth Connectorに合わせる。
 - reviewed client catalogは既定で空とし、client ID・表示名・完全一致redirect URIの検証環境設定が全部そろった場合だけ有効化する。client secretはアプリへ渡さない。本番設定、実Grok接続、有料実行は別の明示承認を必要とする。
+
+## 2026-11-19: Grok WebのDCRはstagingで登録メタデータを再検証する
+
+- Grok WebのCustom MCP実機画面はOAuth Client ID入力を持たず、Supabase OAuth ServerのDynamic Client Registrationから接続試行ごとに新しいpublic clientを登録する。固定client IDだけをcatalogで許可する方式では、初回失敗後の再接続を完了できない。
+- 明示フラグがあるstagingに限り、認可画面で受け取ったclient IDをSupabase Admin OAuth APIで毎回取得する。登録名、public/dynamic区分、secretなし、grant/response type、完全一致redirect URIがreviewed templateと一致する場合だけ許可する。取得失敗・複数template・追加redirect・メタデータ変更は拒否する。
+- Productionは従来どおり固定client ID完全一致のみとし、dynamic clientフラグを設定できない。OAuth scopeは業務権限にせず、MCPの読取対象は引き続き本人の一意な操作別`ExternalReadGrant`で毎回解決する。DB、Grant、ツール入力は変更しない。

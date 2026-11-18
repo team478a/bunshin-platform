@@ -133,6 +133,44 @@ describe('environment validation', () => {
     ).toThrow('EXTERNAL_READ_OAUTH_REDIRECT_URIS');
   });
 
+  it('limits dynamic external OAuth clients to configured staging Auth administration', () => {
+    const client = {
+      EXTERNAL_READ_OAUTH_CLIENT_ID: 'reviewed-grok-template',
+      EXTERNAL_READ_OAUTH_CLIENT_NAME: 'Grok',
+      EXTERNAL_READ_OAUTH_REDIRECT_URIS: JSON.stringify([
+        'https://grok.com/connectors-oauth-exchange-code/',
+      ]),
+      EXTERNAL_READ_OAUTH_DYNAMIC_CLIENTS_ENABLED: 'true',
+    } as const;
+    expect(() => parseServerEnvironment({ ...valid, ...client })).toThrow(
+      'EXTERNAL_READ_OAUTH_DYNAMIC_CLIENTS_ENABLED',
+    );
+    expect(
+      parseServerEnvironment({
+        ...valid,
+        NODE_ENV: 'production',
+        APP_ENV: 'staging',
+        APP_URL: 'https://staging.example.com',
+        SUPABASE_AUTH_ADMIN_URL: 'https://preview.supabase.co',
+        SUPABASE_SERVICE_ROLE_KEY: 's'.repeat(40),
+        SUPABASE_AUTH_ADMIN_ENV: 'staging',
+        ...client,
+      }).EXTERNAL_READ_OAUTH_DYNAMIC_CLIENTS_ENABLED,
+    ).toBe('true');
+    expect(() =>
+      parseServerEnvironment({
+        ...valid,
+        NODE_ENV: 'production',
+        APP_ENV: 'production',
+        APP_URL: 'https://app.example.com',
+        SUPABASE_AUTH_ADMIN_URL: 'https://project.supabase.co',
+        SUPABASE_SERVICE_ROLE_KEY: 's'.repeat(40),
+        SUPABASE_AUTH_ADMIN_ENV: 'production',
+        ...client,
+      }),
+    ).toThrow('EXTERNAL_READ_OAUTH_DYNAMIC_CLIENTS_ENABLED');
+  });
+
   it('requires a second explicit approval before enabling production deletion', () => {
     const production = {
       ...valid,

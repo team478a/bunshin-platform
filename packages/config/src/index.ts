@@ -30,6 +30,7 @@ const serverSchema = z
       .optional(),
     EXTERNAL_READ_OAUTH_CLIENT_NAME: z.string().min(1).max(100).optional(),
     EXTERNAL_READ_OAUTH_REDIRECT_URIS: z.string().min(1).max(4096).optional(),
+    EXTERNAL_READ_OAUTH_DYNAMIC_CLIENTS_ENABLED: z.enum(['true', 'false']).default('false'),
     ACCOUNT_DELETION_EXECUTION_MODE: z.enum(['disabled', 'dry-run', 'enabled']).default('disabled'),
     ACCOUNT_DELETION_PRODUCTION_APPROVED: z.enum(['true', 'false']).default('false'),
     LINE_CONFIG_KEY_VERSION: z.coerce.number().int().positive().default(1),
@@ -134,6 +135,19 @@ const serverSchema = z
         code: 'custom',
         path: ['EXTERNAL_READ_OAUTH_CLIENT_ID'],
         message: 'External read OAuth client configuration must be provided together',
+      });
+    }
+    if (
+      value.EXTERNAL_READ_OAUTH_DYNAMIC_CLIENTS_ENABLED === 'true' &&
+      (value.APP_ENV !== 'staging' ||
+        externalReadClientValues.some((item) => item === undefined) ||
+        authAdminValues.some((item) => item === undefined))
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['EXTERNAL_READ_OAUTH_DYNAMIC_CLIENTS_ENABLED'],
+        message:
+          'Dynamic external OAuth clients require staging and complete client/Auth administration configuration',
       });
     }
     if (value.EXTERNAL_READ_OAUTH_REDIRECT_URIS !== undefined) {
