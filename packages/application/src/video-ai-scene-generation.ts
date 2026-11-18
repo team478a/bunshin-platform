@@ -10,7 +10,7 @@ export type VideoSceneGenerationStatus =
   | 'FAILED'
   | 'CANCELLED';
 
-export type VideoAiProvider = 'FAL' | 'RUNWAY';
+export type VideoAiProvider = 'FAL' | 'RUNWAY' | 'XAI';
 
 export interface VideoAiProviderCostPolicy {
   provider: VideoAiProvider;
@@ -76,9 +76,10 @@ export interface VideoSceneGenerationRepository {
     workspaceId: string;
     generationId: string;
   }): Promise<VideoSceneGenerationExecutionContext | null>;
-  claimFalSubmission(input: {
+  claimProviderSubmission(input: {
     workspaceId: string;
     generationId: string;
+    provider: string;
   }): Promise<VideoSceneGenerationRecord | null>;
   markSubmitted(input: {
     workspaceId: string;
@@ -93,6 +94,7 @@ export interface VideoSceneGenerationRepository {
     workspaceId: string;
     generationId: string;
     outputStorageKey: string;
+    actualCostUsdMicros?: number | null;
   }): Promise<VideoSceneGenerationRecord | null>;
   markFailed(input: {
     workspaceId: string;
@@ -121,7 +123,7 @@ export interface VideoSceneGenerationProviderPort {
     externalJobId: string;
   }): Promise<
     | { status: 'SUBMITTED' | 'GENERATING' }
-    | { status: 'SUCCEEDED'; outputUrl: string }
+    | { status: 'SUCCEEDED'; outputUrl: string; actualCostUsdMicros?: number }
     | { status: 'FAILED'; errorCode: string }
   >;
 }
@@ -266,18 +268,21 @@ export class ExecuteVideoSceneGenerationStep {
     if (generation.status === 'SUBMISSION_UNKNOWN')
       return { status: 'RECONCILIATION_REQUIRED', generation };
     if (generation.status === 'QUEUED') {
-      if (context.referenceStorageKeys.length === 0)
+      if (context.referenceStorageKeys.length === 0 && generation.provider !== 'XAI')
         throw new ApplicationError('VALIDATION_ERROR', 'character reference image is required');
-      const referenceImageUrls = await this.references.createTemporaryReadUrls({
-        storageKeys: context.referenceStorageKeys,
+      const referenceImageUrls =
+        context.referenceStorageKeys.length === 0
+          ? []
+          : await this.references.createTemporaryReadUrls({
+              storageKeys: context.referenceStorageKeys,
+            });
+      // Claim before every paid provider POST. If the response or request ID is lost,
+      // SUBMISSION_UNKNOWN prevents a later Job delivery from generating the same scene again.
+      const claimed = await this.repository.claimProviderSubmission({
+        ...input,
+        provider: generation.provider,
       });
-      // fal has no confirmed lookup/deduplication contract when the request ID is lost.
-      // Claim before POST so a crash, timeout or failed ID write cannot silently re-POST.
-      if (generation.provider === 'FAL') {
-        const claimed = await this.repository.claimFalSubmission(input);
-        if (!claimed)
-          throw new ApplicationError('CONFLICT', 'video scene submission claim conflict');
-      }
+      if (!claimed) throw new ApplicationError('CONFLICT', 'video scene submission claim conflict');
       const submitted = await this.provider.submit({
         generationId: generation.id,
         model: generation.model,
@@ -317,6 +322,11 @@ export class ExecuteVideoSceneGenerationStep {
     }
     if (inspected.status !== 'SUCCEEDED')
       throw new ApplicationError('INTERNAL_ERROR', 'invalid video scene provider status');
+    if (
+      inspected.actualCostUsdMicros !== undefined &&
+      (!Number.isSafeInteger(inspected.actualCostUsdMicros) || inspected.actualCostUsdMicros < 0)
+    )
+      throw new ApplicationError('INTERNAL_ERROR', 'invalid video scene provider cost');
     const stored = await this.storage.store({
       workspaceId: generation.workspaceId,
       groupId: generation.groupId,
@@ -327,6 +337,7 @@ export class ExecuteVideoSceneGenerationStep {
     const updated = await this.repository.markSucceeded({
       ...input,
       outputStorageKey: stored.storageKey,
+      actualCostUsdMicros: inspected.actualCostUsdMicros ?? null,
     });
     if (!updated)
       throw new ApplicationError('CONFLICT', 'video scene generation transition conflict');

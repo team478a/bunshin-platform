@@ -78,7 +78,7 @@ const persistedRepository = (store: Store): VideoSceneGenerationRepository => ({
           }
         : null,
     ),
-  claimFalSubmission: () => {
+  claimProviderSubmission: () => {
     store.claimCalls += 1;
     if (store.claimConflict || store.generation.status !== 'QUEUED') return Promise.resolve(null);
     store.generation = {

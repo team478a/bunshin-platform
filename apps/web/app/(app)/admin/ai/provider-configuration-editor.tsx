@@ -355,13 +355,15 @@ export function AiProviderConfigurationEditor(props: {
             <label>
               使うAIモデル
               <input
-                key={provider}
+                key={`${provider}:${capabilityKey}`}
                 name="model"
                 defaultValue={
                   provider === 'GROK'
                     ? 'grok-4.6'
                     : provider === 'XAI'
-                      ? 'grok-imagine-image-2.0'
+                      ? capabilityKey === 'VIDEO_SCENE_GENERATION'
+                        ? 'grok-imagine-video-1.5'
+                        : 'grok-imagine-image-2.0'
                       : provider === 'GOOGLE'
                         ? ''
                         : provider === 'FAL'
@@ -450,10 +452,16 @@ export function AiProviderConfigurationEditor(props: {
             <label>
               1処理の承認済み見込額（米ドル）
               <input
-                key={provider}
+                key={`${provider}:${capabilityKey}`}
                 name="requestCostUsd"
                 type="number"
-                defaultValue={provider === 'XAI' ? '0.07' : undefined}
+                defaultValue={
+                  provider === 'XAI'
+                    ? capabilityKey === 'VIDEO_SCENE_GENERATION'
+                      ? '0.14'
+                      : '0.07'
+                    : undefined
+                }
                 min="0.000001"
                 max="1000"
                 step="0.000001"
@@ -462,7 +470,9 @@ export function AiProviderConfigurationEditor(props: {
               <small>
                 外部サービスの契約単価を確認して入力します。
                 {provider === 'XAI'
-                  ? ' 初期値は1K・medium出力（$0.06）と参照画像入力（$0.01）の上限見込みです。'
+                  ? capabilityKey === 'VIDEO_SCENE_GENERATION'
+                    ? ' 動画では1秒あたりの見込額です。初期値は720pのgrok-imagine-video-1.5公式単価です。'
+                    : ' 初期値は1K・medium出力（$0.06）と参照画像入力（$0.01）の上限見込みです。'
                   : ''}
               </small>
             </label>

@@ -18,7 +18,7 @@ describe('QueueVideoSceneGenerations', () => {
     const repository: VideoSceneGenerationRepository = {
       enqueueAiScenes: vi.fn().mockResolvedValue([{ id: 'scene-generation-1' }]),
       findForExecution: vi.fn(),
-      claimFalSubmission: vi.fn(),
+      claimProviderSubmission: vi.fn(),
       markSubmitted: vi.fn(),
       markGenerating: vi.fn(),
       markSucceeded: vi.fn(),
@@ -45,7 +45,7 @@ describe('QueueVideoSceneGenerations', () => {
     const repository: VideoSceneGenerationRepository = {
       enqueueAiScenes: vi.fn().mockResolvedValue([]),
       findForExecution: vi.fn(),
-      claimFalSubmission: vi.fn(),
+      claimProviderSubmission: vi.fn(),
       markSubmitted: vi.fn(),
       markGenerating: vi.fn(),
       markSucceeded: vi.fn(),
@@ -110,7 +110,7 @@ describe('AuthorizeVideoAiGenerationCost', () => {
 });
 
 describe('ExecuteVideoSceneGenerationStep', () => {
-  it('keeps the existing Runway submit path without a fal claim', async () => {
+  it('claims a Runway submission before the paid provider request', async () => {
     const generation = {
       id: 'scene-generation-1',
       workspaceId,
@@ -135,7 +135,10 @@ describe('ExecuteVideoSceneGenerationStep', () => {
       createdAt: new Date(),
       updatedAt: new Date(),
     };
-    const claimFalSubmission = vi.fn();
+    const claimProviderSubmission = vi.fn().mockResolvedValue({
+      ...generation,
+      status: 'SUBMISSION_UNKNOWN',
+    });
     const markSubmitted = vi.fn().mockResolvedValue({
       ...generation,
       status: 'SUBMITTED',
@@ -149,7 +152,7 @@ describe('ExecuteVideoSceneGenerationStep', () => {
         durationSeconds: 5,
         referenceStorageKeys: ['fictional/reference.png'],
       }),
-      claimFalSubmission,
+      claimProviderSubmission,
       markSubmitted,
       markGenerating: vi.fn(),
       markSucceeded: vi.fn(),
@@ -166,7 +169,11 @@ describe('ExecuteVideoSceneGenerationStep', () => {
         { store: vi.fn() },
       ).execute({ workspaceId, generationId: generation.id }),
     ).resolves.toMatchObject({ status: 'PENDING' });
-    expect(claimFalSubmission).not.toHaveBeenCalled();
+    expect(claimProviderSubmission).toHaveBeenCalledWith({
+      workspaceId,
+      generationId: generation.id,
+      provider: 'RUNWAY',
+    });
     expect(submit).toHaveBeenCalledOnce();
     expect(markSubmitted).toHaveBeenCalledWith({
       workspaceId,
@@ -208,7 +215,7 @@ describe('ExecuteVideoSceneGenerationStep', () => {
         referenceStorageKeys: [],
       }),
       markSubmitted: vi.fn(),
-      claimFalSubmission: vi.fn(),
+      claimProviderSubmission: vi.fn(),
       markGenerating: vi.fn(),
       markSucceeded: vi.fn(),
       markFailed: vi.fn(),
@@ -228,5 +235,145 @@ describe('ExecuteVideoSceneGenerationStep', () => {
     });
     expect(createTemporaryReadUrls).not.toHaveBeenCalled();
     expect(submit).not.toHaveBeenCalled();
+  });
+
+  it('allows xAI text-to-video without creating reference URLs and still claims before POST', async () => {
+    const generation = {
+      id: 'scene-generation-1',
+      workspaceId,
+      groupId,
+      groupMembershipId: 'membership-1',
+      ownerUserId: userId,
+      videoProjectId: projectId,
+      videoSceneId: 'scene-1',
+      projectRevision: 3,
+      sceneRevision: 1,
+      provider: 'XAI',
+      model: 'grok-imagine-video-1.5',
+      status: 'QUEUED' as const,
+      inputSnapshot: {},
+      estimatedCostUsdMicros: 700_000,
+      actualCostUsdMicros: null,
+      externalJobId: null,
+      outputStorageKey: null,
+      errorCode: null,
+      startedAt: null,
+      completedAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    const createTemporaryReadUrls = vi.fn();
+    const claimProviderSubmission = vi.fn().mockResolvedValue({
+      ...generation,
+      status: 'SUBMISSION_UNKNOWN',
+    });
+    const submit = vi.fn().mockResolvedValue({ externalJobId: 'xai-request-1' });
+    const repository: VideoSceneGenerationRepository = {
+      enqueueAiScenes: vi.fn(),
+      findForExecution: vi.fn().mockResolvedValue({
+        generation,
+        prompt: 'vertical text-to-video scene',
+        durationSeconds: 5,
+        referenceStorageKeys: [],
+      }),
+      claimProviderSubmission,
+      markSubmitted: vi.fn().mockResolvedValue({
+        ...generation,
+        status: 'SUBMITTED',
+        externalJobId: 'xai-request-1',
+      }),
+      markGenerating: vi.fn(),
+      markSucceeded: vi.fn(),
+      markFailed: vi.fn(),
+    };
+
+    await expect(
+      new ExecuteVideoSceneGenerationStep(
+        repository,
+        { submit, inspect: vi.fn() },
+        { createTemporaryReadUrls },
+        { store: vi.fn() },
+      ).execute({ workspaceId, generationId: generation.id }),
+    ).resolves.toMatchObject({ status: 'PENDING' });
+    expect(createTemporaryReadUrls).not.toHaveBeenCalled();
+    expect(claimProviderSubmission).toHaveBeenCalledWith({
+      workspaceId,
+      generationId: generation.id,
+      provider: 'XAI',
+    });
+    expect(submit).toHaveBeenCalledWith(expect.objectContaining({ referenceImageUrls: [] }));
+  });
+
+  it('persists the exact xAI billed cost only when the completed output is stored', async () => {
+    const generation = {
+      id: 'scene-generation-1',
+      workspaceId,
+      groupId,
+      groupMembershipId: 'membership-1',
+      ownerUserId: userId,
+      videoProjectId: projectId,
+      videoSceneId: 'scene-1',
+      projectRevision: 3,
+      sceneRevision: 1,
+      provider: 'XAI',
+      model: 'grok-imagine-video-1.5',
+      status: 'GENERATING' as const,
+      inputSnapshot: {},
+      estimatedCostUsdMicros: 700_000,
+      actualCostUsdMicros: null,
+      externalJobId: 'xai-request-1',
+      outputStorageKey: null,
+      errorCode: null,
+      startedAt: new Date(),
+      completedAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    const markSucceeded = vi.fn().mockResolvedValue({
+      ...generation,
+      status: 'SUCCEEDED',
+      outputStorageKey: 'stored/result.mp4',
+      actualCostUsdMicros: 50_000,
+    });
+    const store = vi.fn().mockResolvedValue({ storageKey: 'stored/result.mp4' });
+    const repository: VideoSceneGenerationRepository = {
+      enqueueAiScenes: vi.fn(),
+      findForExecution: vi.fn().mockResolvedValue({
+        generation,
+        prompt: 'completed scene',
+        durationSeconds: 5,
+        referenceStorageKeys: [],
+      }),
+      claimProviderSubmission: vi.fn(),
+      markSubmitted: vi.fn(),
+      markGenerating: vi.fn(),
+      markSucceeded,
+      markFailed: vi.fn(),
+    };
+
+    await expect(
+      new ExecuteVideoSceneGenerationStep(
+        repository,
+        {
+          submit: vi.fn(),
+          inspect: vi.fn().mockResolvedValue({
+            status: 'SUCCEEDED',
+            outputUrl: 'https://vidgen.x.ai/result.mp4',
+            actualCostUsdMicros: 50_000,
+          }),
+        },
+        { createTemporaryReadUrls: vi.fn() },
+        { store },
+      ).execute({ workspaceId, generationId: generation.id }),
+    ).resolves.toMatchObject({ status: 'SUCCEEDED' });
+    expect(store).toHaveBeenCalledWith(
+      expect.objectContaining({ sourceUrl: 'https://vidgen.x.ai/result.mp4' }),
+    );
+    expect(markSucceeded).toHaveBeenCalledWith({
+      workspaceId,
+      generationId: generation.id,
+      outputStorageKey: 'stored/result.mp4',
+      actualCostUsdMicros: 50_000,
+    });
   });
 });

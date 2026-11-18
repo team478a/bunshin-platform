@@ -55,7 +55,7 @@ export interface CreatomateRuntimeConfiguration {
 }
 
 export interface VideoAiRuntimeConfiguration {
-  provider: 'FAL' | 'RUNWAY';
+  provider: 'FAL' | 'RUNWAY' | 'XAI';
   apiKey: string;
   model: string;
   dailyBudgetUsdMicros: number;
@@ -370,7 +370,7 @@ export async function resolveCreatomateRuntimeConfiguration(input?: {
  * every paid generation must remain visible and pausable in the admin console.
  */
 export async function resolveVideoAiRuntimeConfiguration(input: {
-  provider: 'FAL' | 'RUNWAY';
+  provider: 'FAL' | 'RUNWAY' | 'XAI';
   repository?: AiProviderConfigurationRepository;
   crypto?: AiProviderSecretCryptoPort;
 }): Promise<VideoAiRuntimeConfiguration> {

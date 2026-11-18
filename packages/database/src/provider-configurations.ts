@@ -625,7 +625,9 @@ export class PrismaVideoAiProviderCostPolicyRepository implements VideoAiProvide
         globallyPaused: configuration.globallyPaused,
         dailyBudgetUsdMicros: configuration.dailyBudgetUsdMicros,
         monthlyBudgetUsdMicros: configuration.monthlyBudgetUsdMicros,
-        maxSceneCostUsdMicros: configuration.requestCostUsdMicros,
+        // The configuration stores video price per second. Current scene generation
+        // accepts at most ten seconds, so the per-scene guard must use the same unit.
+        maxSceneCostUsdMicros: configuration.requestCostUsdMicros * 10,
       },
       dailySpentUsdMicros,
       monthlySpentUsdMicros,

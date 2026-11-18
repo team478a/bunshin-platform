@@ -1,5 +1,11 @@
 # BUNSHIN Platform Decision Log
 
+## 2026-11-18: xAI動画は既存非同期Jobへ接続し、全ProviderをPOST前claimする
+
+- xAI動画は `VideoSceneGenerationProviderPort` のWeb Adapterとして追加し、用途別Provider設定、既存Job、外部Job ID、費用上限、非公開Storage、字幕・編集経路を再利用する。
+- FAL専用だった `SUBMISSION_UNKNOWN` claimを全動画Provider共通にし、有料POSTの応答やrequest ID保存が不明な場合は自動再送しない。完了時はxAIの実請求ticksを既存の実原価列へ保存する。
+- Text-to-Videoと単一画像のImage-to-Videoを初期範囲とし、複数参照、音声参照、編集・延長、実API実行、本番変更は含めない。詳細は `docs/adr/XAI_VIDEO_PROVIDER_ADR.md` を正本とする。
+
 ## 2026-11-18: xAIメディアと外部AI読取は用途別Provider設定と共通Remote MCPへ接続する
 
 - 状態: PR-01監査・差分設計。Runtime、migration、本番設定、外部API実行、Grok Bot/Muse実接続は未実施。

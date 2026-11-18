@@ -21,7 +21,7 @@ import { videoProjectUuid } from './video-project-http-core';
 const queueAiScenesSchema = z
   .object({
     expectedRevision: z.number().int().positive(),
-    provider: z.enum(['FAL', 'RUNWAY']),
+    provider: z.enum(['FAL', 'RUNWAY', 'XAI']),
   })
   .strict();
 const jobEnvironment = {

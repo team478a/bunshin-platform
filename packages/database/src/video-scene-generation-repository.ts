@@ -166,10 +166,7 @@ export class PrismaVideoSceneGenerationRepository implements VideoSceneGeneratio
       where: {
         id: input.generationId,
         workspaceId: input.workspaceId,
-        OR: [
-          { provider: 'FAL', status: 'SUBMISSION_UNKNOWN' },
-          { provider: { not: 'FAL' }, status: 'QUEUED' },
-        ],
+        status: 'SUBMISSION_UNKNOWN',
       },
       data: {
         status: 'SUBMITTED',
@@ -185,21 +182,21 @@ export class PrismaVideoSceneGenerationRepository implements VideoSceneGeneratio
     return videoSceneGenerationRecord(row);
   }
 
-  async claimFalSubmission(
-    input: Parameters<VideoSceneGenerationRepository['claimFalSubmission']>[0],
+  async claimProviderSubmission(
+    input: Parameters<VideoSceneGenerationRepository['claimProviderSubmission']>[0],
   ) {
     const changed = await this.client.videoSceneGeneration.updateMany({
       where: {
         id: input.generationId,
         workspaceId: input.workspaceId,
-        provider: 'FAL',
+        provider: input.provider,
         status: 'QUEUED',
         externalJobId: null,
       },
       data: {
         status: 'SUBMISSION_UNKNOWN',
         startedAt: new Date(),
-        errorCode: 'FAL_SUBMISSION_UNCONFIRMED',
+        errorCode: `${input.provider}_SUBMISSION_UNCONFIRMED`.slice(0, 80),
       },
     });
     if (changed.count !== 1) return null;
@@ -240,6 +237,7 @@ export class PrismaVideoSceneGenerationRepository implements VideoSceneGeneratio
         data: {
           status: 'SUCCEEDED',
           outputStorageKey: input.outputStorageKey,
+          actualCostUsdMicros: input.actualCostUsdMicros ?? null,
           completedAt: new Date(),
           expiresAt: assetRetentionExpiry(),
           errorCode: null,

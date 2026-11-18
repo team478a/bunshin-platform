@@ -12,7 +12,7 @@ export function VideoAiSceneRequester(props: {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
-  const [provider, setProvider] = useState<'FAL' | 'RUNWAY'>('FAL');
+  const [provider, setProvider] = useState<'FAL' | 'RUNWAY' | 'XAI'>('FAL');
 
   async function submit() {
     setBusy(true);
@@ -43,10 +43,11 @@ export function VideoAiSceneRequester(props: {
         AI動画サービス
         <select
           value={provider}
-          onChange={(event) => setProvider(event.target.value as 'FAL' | 'RUNWAY')}
+          onChange={(event) => setProvider(event.target.value as 'FAL' | 'RUNWAY' | 'XAI')}
         >
           <option value="FAL">fal</option>
           <option value="RUNWAY">Runway</option>
+          <option value="XAI">xAI</option>
         </select>
       </label>
       <button
