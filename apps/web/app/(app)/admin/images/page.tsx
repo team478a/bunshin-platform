@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import type { Route } from 'next';
 import { notFound, redirect } from 'next/navigation';
 import { getServerEnvironment } from '@bunshin/config';
 import { ListSocialImagePilotEvidence } from '@bunshin/application';
@@ -168,6 +169,11 @@ export default async function ImagePilotAdminPage({
           保存できませんでした。入力と利用機能の設定を確認してください。
         </p>
       ) : null}
+      <section className="settings-card">
+        <h2>OpenAIとxAIを比較する</h2>
+        <p>4業種・20題材の合成fixtureで、評価画面と決定的な選択ルールを確認します。</p>
+        <Link href={'/admin/images/comparison' as Route}>画像生成サービスの比較を見る</Link>
+      </section>
       <ImagePilotGroupSelector groups={groups} selectedGroupId={selected?.id} />
       {selected ? (
         <>
