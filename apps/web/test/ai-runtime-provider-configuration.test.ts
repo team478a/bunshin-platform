@@ -523,6 +523,35 @@ describe('video AI runtime configuration', () => {
     });
   });
 
+  it('resolves xAI independently from the xAI image capability configuration', async () => {
+    await expect(
+      resolveVideoAiRuntimeConfiguration({
+        provider: 'XAI',
+        repository: repository({
+          configuration: {
+            ...active,
+            provider: 'XAI',
+            capabilityKey: 'VIDEO_SCENE_GENERATION',
+            model: 'grok-imagine-video-1.5',
+            requestCostUsdMicros: 140_000,
+          },
+          encryptedApiKey: 'sealed',
+          dailySpentUsdMicros: 0,
+          monthlySpentUsdMicros: 0,
+          monthlyUnknownCostEvents: 0,
+        }),
+        crypto: { encrypt: vi.fn(), decrypt: vi.fn().mockReturnValue('plain-xai-key') },
+      }),
+    ).resolves.toEqual({
+      provider: 'XAI',
+      apiKey: 'plain-xai-key',
+      model: 'grok-imagine-video-1.5',
+      dailyBudgetUsdMicros: 1_000_000,
+      monthlyBudgetUsdMicros: 10_000_000,
+      estimatedCostUsdMicrosPerSecond: 140_000,
+    });
+  });
+
   it('does not support an environment-variable fallback for paid video generation', async () => {
     await expect(
       resolveVideoAiRuntimeConfiguration({

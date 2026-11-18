@@ -11,6 +11,7 @@ const HOSTS = new Set([
   'v2.fal.media',
   'v3.fal.media',
   'dnznrvs05pmza.cloudfront.net',
+  'vidgen.x.ai',
 ]);
 
 function storageClient() {
@@ -44,6 +45,9 @@ function allowedSourceUrl(value: string) {
 }
 
 async function readMp4(response: Response) {
+  const contentType = response.headers.get('content-type')?.split(';', 1)[0]?.trim().toLowerCase();
+  if (contentType !== 'video/mp4' && contentType !== 'application/octet-stream')
+    throw new ApplicationError('VALIDATION_ERROR', '生成動画のContent-Typeが不正です');
   const declaredSize = Number(response.headers.get('content-length') ?? 0);
   if (declaredSize > MAX_BYTES)
     throw new ApplicationError('VALIDATION_ERROR', '生成動画が大きすぎます');
@@ -57,7 +61,7 @@ async function readMp4(response: Response) {
   return bytes;
 }
 
-export class SupabaseFalVideoSceneOutputStorage implements VideoSceneGenerationOutputStoragePort {
+export class SupabaseVideoSceneOutputStorage implements VideoSceneGenerationOutputStoragePort {
   constructor(private readonly storage: SupabaseClient = storageClient()) {}
 
   private async ensureBucket() {
@@ -99,3 +103,6 @@ export class SupabaseFalVideoSceneOutputStorage implements VideoSceneGenerationO
     return signed.data.signedUrl;
   }
 }
+
+// Kept as a source-compatible alias for existing composition code outside this package.
+export const SupabaseFalVideoSceneOutputStorage = SupabaseVideoSceneOutputStorage;

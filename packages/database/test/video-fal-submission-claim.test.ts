@@ -5,8 +5,8 @@ import { PrismaVideoSceneGenerationRepository } from '../src/video-scene-generat
 const workspaceId = '11111111-1111-4111-8111-111111111111';
 const generationId = '22222222-2222-4222-8222-222222222222';
 
-describe('fal submission claim persistence', () => {
-  it('claims only a scoped QUEUED fal row before POST and saves the returned ID from that state', async () => {
+describe('provider submission claim persistence', () => {
+  it('claims only a scoped QUEUED provider row before POST and saves the returned ID from that state', async () => {
     const updateMany = vi.fn().mockResolvedValue({ count: 1 });
     const findUniqueOrThrow = vi
       .fn()
@@ -23,7 +23,7 @@ describe('fal submission claim persistence', () => {
     const repository = new PrismaVideoSceneGenerationRepository(client);
 
     await expect(
-      repository.claimFalSubmission({ workspaceId, generationId }),
+      repository.claimProviderSubmission({ workspaceId, generationId, provider: 'FAL' }),
     ).resolves.toMatchObject({
       status: 'SUBMISSION_UNKNOWN',
     });
@@ -53,10 +53,7 @@ describe('fal submission claim persistence', () => {
         where: {
           id: generationId,
           workspaceId,
-          OR: [
-            { provider: 'FAL', status: 'SUBMISSION_UNKNOWN' },
-            { provider: { not: 'FAL' }, status: 'QUEUED' },
-          ],
+          status: 'SUBMISSION_UNKNOWN',
         },
         data: expect.objectContaining({
           status: 'SUBMITTED',
@@ -74,9 +71,10 @@ describe('fal submission claim persistence', () => {
       videoSceneGeneration: { updateMany, findUniqueOrThrow },
     } as unknown as PrismaClient;
     await expect(
-      new PrismaVideoSceneGenerationRepository(client).claimFalSubmission({
+      new PrismaVideoSceneGenerationRepository(client).claimProviderSubmission({
         workspaceId,
         generationId,
+        provider: 'XAI',
       }),
     ).resolves.toBeNull();
     expect(findUniqueOrThrow).not.toHaveBeenCalled();

@@ -10,7 +10,8 @@ import { resolveVideoAiRuntimeConfiguration } from '../ai/runtime-provider-confi
 import { AiCharacterReferenceStorage } from '../ai-character-reference-storage';
 import { FalKlingVideoAdapter, FalKlingVideoProviderError } from '../providers/fal-kling-video';
 import { RunwayVideoAdapter, RunwayVideoProviderError } from '../providers/runway-video';
-import { SupabaseFalVideoSceneOutputStorage } from '../video/fal-video-scene-output-storage';
+import { XaiVideoAdapter, XaiVideoProviderError } from '../providers/xai-video';
+import { SupabaseVideoSceneOutputStorage } from '../video/fal-video-scene-output-storage';
 
 class PrivateCharacterReferenceUrls implements VideoSceneReferenceUrlPort {
   constructor(private readonly storage = new AiCharacterReferenceStorage()) {}
@@ -35,21 +36,29 @@ export function createVideoAiSceneGenerationJobHandler(): VideoAiSceneGeneration
         const repository = new db.PrismaVideoSceneGenerationRepository();
         const execution = await repository.findForExecution(input);
         if (!execution) throw new ApplicationError('NOT_FOUND', 'video scene generation not found');
-        if (execution.generation.provider !== 'FAL' && execution.generation.provider !== 'RUNWAY')
+        if (
+          execution.generation.provider !== 'FAL' &&
+          execution.generation.provider !== 'RUNWAY' &&
+          execution.generation.provider !== 'XAI'
+        )
           throw new ApplicationError('CONFIGURATION_ERROR', 'unsupported video provider');
         const provider = execution.generation.provider;
         const configuration = await resolveVideoAiRuntimeConfiguration({ provider });
+        if (configuration.model !== execution.generation.model)
+          throw new ApplicationError('CONFIGURATION_ERROR', 'video model snapshot mismatch');
         if (execution?.generation.status === 'QUEUED')
           await new db.PrismaVideoMediaQuotaRepository().reserve(execution.generation);
         const providerAdapter =
           provider === 'RUNWAY'
             ? new RunwayVideoAdapter(configuration.apiKey)
-            : new FalKlingVideoAdapter(configuration.apiKey);
+            : provider === 'XAI'
+              ? new XaiVideoAdapter(configuration.apiKey)
+              : new FalKlingVideoAdapter(configuration.apiKey);
         const result = await new ExecuteVideoSceneGenerationStep(
           repository,
           providerAdapter,
           new PrivateCharacterReferenceUrls(),
-          new SupabaseFalVideoSceneOutputStorage(),
+          new SupabaseVideoSceneOutputStorage(),
         ).execute(input);
         if (result.status === 'RECONCILIATION_REQUIRED')
           return { status: 'RECONCILIATION_REQUIRED' };
@@ -69,6 +78,8 @@ export function createVideoAiSceneGenerationJobHandler(): VideoAiSceneGeneration
             `RUNWAY_${error.category}`,
             error.retryable,
           );
+        if (error instanceof XaiVideoProviderError)
+          throw new VideoAiSceneGenerationJobHandlerError(`XAI_${error.category}`, error.retryable);
         if (error instanceof ApplicationError) throw error;
         throw new VideoAiSceneGenerationJobHandlerError('VIDEO_AI_SCENE_INFRASTRUCTURE', true);
       }
