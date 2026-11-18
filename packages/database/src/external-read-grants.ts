@@ -262,7 +262,10 @@ export class PrismaExternalReadGrantRepository implements ExternalGrantManagemen
       )
       .digest('hex');
   }
-  private bindingMatches(row: GrantRow, credential: VerifiedExternalReadCredential) {
+  private bindingMatches(
+    row: Pick<GrantRow, 'id' | 'credentialBindingHash' | 'consentVersion'>,
+    credential: VerifiedExternalReadCredential,
+  ) {
     return (
       row.credentialBindingHash === this.bindingHash(row.id, credential) ||
       (row.consentVersion === LEGACY_EXTERNAL_READ_CONSENT_VERSION &&
@@ -385,7 +388,7 @@ export class PrismaExternalReadGrantRepository implements ExternalGrantManagemen
         take: 2,
       });
       if (identities.length !== 1) return null;
-      const rows = await tx.externalReadGrant.findMany({
+      const candidates = await tx.externalReadGrant.findMany({
         where: {
           clientId: credential.clientId,
           environment: this.environment,
@@ -396,14 +399,12 @@ export class PrismaExternalReadGrantRepository implements ExternalGrantManagemen
           credentialBindingHash: { not: null },
         },
         orderBy: [{ grantedAt: 'desc' }, { id: 'asc' }],
-        take: 2,
+        select: { id: true, credentialBindingHash: true, consentVersion: true },
       });
-      const matched: GrantRow[] = [];
-      for (const row of rows) {
-        if (this.bindingMatches(row, credential) && (await this.canRead(tx, row, this.at())))
-          matched.push(row);
-      }
-      return matched.length === 1 ? projection(matched[0]!) : null;
+      const matched = candidates.filter((row) => this.bindingMatches(row, credential));
+      if (matched.length !== 1) return null;
+      const row = await this.credentialRow(tx, matched[0]!.id, credential);
+      return row && this.bindingMatches(row, credential) ? projection(row) : null;
     }, txOptions);
     running(signal);
     return this.credentialValid(credential, this.at()) ? result : null;

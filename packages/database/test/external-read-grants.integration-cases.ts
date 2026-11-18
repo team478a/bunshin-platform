@@ -396,6 +396,62 @@ export function registerExternalReadGrantIntegrationCases(client: PrismaClient) 
         f.repository.resolveOperation('daily-post-ideas:read', f.credential, signal()),
       ).resolves.toBeNull();
     });
+    it('denies an operation when one credential is bound to multiple Bunshin grants', async () => {
+      const f = await fixture();
+      const createOwner = async (name: string): Promise<ExternalGrantOwner> => {
+        const bunshin = await client.bunshin.create({
+          data: {
+            workspaceId: f.workspace.id,
+            groupId: f.group.id,
+            ownerUserId: f.user.id,
+            slug: randomUUID(),
+            name,
+            type: 'COPY',
+            status: 'ACTIVE',
+            objectiveSummary: 'Synthetic',
+            audienceSummary: 'Synthetic',
+            personalitySummary: 'Synthetic',
+          },
+        });
+        await client.bunshinCapabilityAssignment.create({
+          data: {
+            workspaceId: f.workspace.id,
+            bunshinId: bunshin.id,
+            capabilityType: 'SOCIAL',
+            status: 'ACTIVE',
+            activatedAt: new Date('2026-11-01'),
+            assignedByUserId: f.user.id,
+          },
+        });
+        return { ...f.owner, scope: { ...f.owner.scope, bunshinId: bunshin.id } };
+      };
+      const owners = [f.owner, await createOwner('Second'), await createOwner('Third')];
+      const ids = [
+        '11111111-1111-4111-8111-111111111111',
+        '22222222-2222-4222-8222-222222222222',
+        '33333333-3333-4333-8333-333333333333',
+      ];
+      const grants = await Promise.all(
+        owners.map((owner, index) =>
+          f.manager.issue(owner, {
+            ...f.command,
+            commandId: ids[index]!,
+            operation: 'daily-post-ideas:read',
+          }),
+        ),
+      );
+      const otherSessionCredential = { ...f.credential, sessionId: randomUUID() };
+      await f.repository.bind(grants[0]!.connectionId, f.credential, signal());
+      await f.repository.bind(grants[1]!.connectionId, otherSessionCredential, signal());
+      await f.repository.bind(grants[2]!.connectionId, f.credential, signal());
+
+      await expect(
+        f.repository.resolveOperation('daily-post-ideas:read', f.credential, signal()),
+      ).resolves.toBeNull();
+      await expect(
+        f.repository.resolveOperation('daily-post-ideas:read', otherSessionCredential, signal()),
+      ).resolves.toMatchObject({ connectionId: grants[1]!.connectionId });
+    });
     it('persists exactly one immutable scope and audit for concurrent identical issue retries', async () => {
       const f = await fixture();
       const grants = await Promise.all([

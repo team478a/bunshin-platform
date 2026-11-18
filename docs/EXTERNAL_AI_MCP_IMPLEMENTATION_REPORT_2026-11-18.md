@@ -48,6 +48,8 @@
 - 使い捨てPostgreSQL 16で、変更したGrant上限の対象integration test: 1件成功。専用containerは検証後に削除
 - PR CI database: migration 278件、schema readiness、integration 433件、native transaction / migration履歴、TLS検証がすべて成功
 - PR CI verify: format / typecheck / lint / test / external-read PoC / learning UI / buildがすべて成功
+- 独立確認で判明した複数Grant候補の先行2件絞り込みを廃止し、資格に結合された候補が厳密に1件の場合だけ対象を解決するよう修正。3件以上かつ複数Bunshin・複数セッションの回帰テストを追加
+- 修正後、使い捨てPostgreSQL 16で上記回帰テスト1件が成功。database packageのtypecheck、lint、単体テスト1402件も成功
 
 ## 6. 本番で利用できる範囲
 
