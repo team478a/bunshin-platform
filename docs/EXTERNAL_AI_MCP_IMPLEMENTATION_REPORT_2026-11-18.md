@@ -72,4 +72,4 @@ PR-06で独立検証環境のSupabase OAuth client / audience hookを設定し�
 
 ## 10. PR URL
 
-作成後に追記する。
+https://github.com/team478a/bunshin-platform/pull/1532
