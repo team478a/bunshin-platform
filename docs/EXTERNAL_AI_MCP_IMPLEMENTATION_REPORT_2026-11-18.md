@@ -45,8 +45,9 @@
 - `pnpm build`: 13/13成功。`/api/mcp`と2つのProtected Resource Metadata routeをproduction buildで確認
 - Prisma schema validate: 成功（ローカルの秘密情報を使わず、構文検証用URLを指定）
 - `git diff --check`: 成功。変更ファイルのPrettier検査: 成功
-- PostgreSQL統合caseを追加。ローカルでは使い捨てDBを新規準備していないため未実行で、PRのdatabase CIを正本とする。
-- 全体`format:check`はローカルのignored `.pnpm-store`まで走査するため未完了で、変更ファイル単位の検査を実施した。
+- 使い捨てPostgreSQL 16で、変更したGrant上限の対象integration test: 1件成功。専用containerは検証後に削除
+- PR CI database: migration 278件、schema readiness、integration 433件、native transaction / migration履歴、TLS検証がすべて成功
+- PR CI verify: format / typecheck / lint / test / external-read PoC / learning UI / buildがすべて成功
 
 ## 6. 本番で利用できる範囲
 
