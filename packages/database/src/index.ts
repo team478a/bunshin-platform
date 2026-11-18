@@ -378,6 +378,7 @@ export {
   PrismaExternalReadGrantRepository,
   type ExternalGrantServerPolicy,
 } from './external-read-grants';
+export { PrismaExternalAiReadProjection } from './external-ai-read-projections';
 
 export {
   PrismaSocialAccountConnections,

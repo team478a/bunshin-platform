@@ -30,7 +30,7 @@ test('mobile owner explicitly consents to exact client and duration, without cla
     clientId: 'synthetic-client',
     operation: 'member-usage:read',
     expiresInMinutes: 15,
-    consentVersion: 'external-read-consent-v1',
+    consentVersion: 'external-read-consent-v2',
   });
   expect(calls[0]?.['userId']).toBeUndefined();
   expect(calls[0]?.['environment']).toBeUndefined();

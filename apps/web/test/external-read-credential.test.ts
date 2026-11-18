@@ -89,6 +89,7 @@ describe('real SDK OAuth signature and identity verification', () => {
       subject,
       sessionId: session,
       clientId,
+      audience: 'authenticated',
       environment: 'test',
     });
     expect(s.calls).toContain(base + '/auth/v1/user');

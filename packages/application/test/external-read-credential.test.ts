@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   BindExternalReadCredential,
+  ReadAuthenticatedExternalResource,
   ReadAuthenticatedExternalMemberUsage,
 } from '../src/external-read-credential';
 import type { ExternalReadGrant, ExternalReadPorts } from '../src/external-connection-read';
@@ -23,12 +24,14 @@ function setup() {
     subject: id,
     sessionId: id,
     clientId: 'client',
+    audience: 'authenticated',
     environment: 'test' as const,
     expiresAt: new Date('2026-11-03T01:00:00Z'),
   };
   const verify = vi.fn().mockResolvedValue(credential),
     bind = vi.fn().mockResolvedValue(grant),
-    resolve = vi.fn().mockResolvedValue(grant);
+    resolve = vi.fn().mockResolvedValue(grant),
+    resolveOperation = vi.fn().mockResolvedValue(grant);
   const authorize = vi.fn().mockResolvedValue(true),
     release = vi.fn(),
     read = vi.fn().mockResolvedValue({
@@ -52,6 +55,7 @@ function setup() {
     verify,
     bind,
     resolve,
+    resolveOperation,
     authorize,
     read,
     release,
@@ -59,10 +63,10 @@ function setup() {
     setTime: (value: Date) => {
       time = value;
     },
-    binding: new BindExternalReadCredential({ verify }, { bind, resolve }),
+    binding: new BindExternalReadCredential({ verify }, { bind, resolve, resolveOperation }),
     reader: new ReadAuthenticatedExternalMemberUsage(
       { verify },
-      { bind, resolve },
+      { bind, resolve, resolveOperation },
       ports,
       { authorize },
       { read },
@@ -150,5 +154,30 @@ describe('verified external credential use cases', () => {
     await vi.advanceTimersByTimeAsync(10001);
     await pending;
     expect(s.bind).not.toHaveBeenCalled();
+  });
+});
+
+describe('operation-bound external reads', () => {
+  it('resolves the connection from the credential instead of tool arguments', async () => {
+    const s = setup();
+    const execute = vi.fn().mockResolvedValue({ ok: true });
+    const resource = new ReadAuthenticatedExternalResource(
+      { verify: s.verify },
+      { bind: s.bind, resolve: s.resolve, resolveOperation: s.resolveOperation },
+      { authorization: { permitted: s.permitted } },
+      'daily-post-ideas:read',
+      () => ({ execute }),
+      () => at,
+    );
+    await expect(resource.execute('Bearer synthetic', 'request_1')).resolves.toEqual({ ok: true });
+    expect(s.resolveOperation).toHaveBeenCalledWith(
+      'daily-post-ideas:read',
+      s.credential,
+      expect.any(AbortSignal),
+    );
+    expect(execute).toHaveBeenCalledWith(
+      { clientId: 'client', environment: 'test' },
+      { connectionId: id, requestId: 'request_1' },
+    );
   });
 });

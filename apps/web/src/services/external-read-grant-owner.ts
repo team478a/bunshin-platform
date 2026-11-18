@@ -97,6 +97,7 @@ export async function externalGrantOwnerView(
     grants: grants.map((grant) => ({
       id: grant.connectionId,
       clientName: catalog.find((c) => c.id === grant.clientId)?.name ?? '登録済みの接続先',
+      operation: grant.operations[0]!,
       revision: grant.revision,
       state: grant.revokedAt ? 'REVOKED' : grant.expiresAt.getTime() <= at ? 'EXPIRED' : 'ACTIVE',
       grantedAt: grant.grantedAt.toISOString(),

@@ -4,7 +4,7 @@ import { authConfiguration } from '../auth/supabase';
 import { SupabaseExternalReadCredentialVerifier } from '../auth/external-read-credential';
 import { externalReadClientCatalog } from './external-read-client-catalog';
 /** Disabled until a reviewed OAuth client is registered. Does not expose a read or bind endpoint. */
-export async function createExternalReadCredentialServices() {
+export async function createExternalReadCredentialServices(expectedAudience = 'authenticated') {
   const environment = getServerEnvironment().APP_ENV;
   const clients = externalReadClientCatalog();
   if (environment === 'staging' || clients.length === 0) return null;
@@ -14,6 +14,7 @@ export async function createExternalReadCredentialServices() {
     ...configuration,
     environment,
     clientIds,
+    expectedAudience,
   });
   const db = await import('@bunshin/database');
   const bindings = new db.PrismaExternalReadGrantRepository(

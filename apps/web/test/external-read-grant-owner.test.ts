@@ -48,7 +48,7 @@ const issue = {
   clientId: 'reviewed-client',
   operation: 'member-usage:read',
   expiresInMinutes: 60,
-  consentVersion: 'external-read-consent-v1',
+  consentVersion: 'external-read-consent-v2',
 };
 function request(method = 'GET', body?: unknown, origin = 'http://localhost:3000') {
   return new Request('http://localhost:3000/api/grants', {

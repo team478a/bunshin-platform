@@ -142,6 +142,7 @@ export function registerExternalReadGrantIntegrationCases(client: PrismaClient) 
         subject: randomUUID(),
         sessionId: randomUUID(),
         clientId: principal.clientId,
+        audience: 'authenticated',
         environment: 'test' as const,
         expiresAt: new Date('2026-11-03T02:00:00Z'),
       };
@@ -366,6 +367,34 @@ export function registerExternalReadGrantIntegrationCases(client: PrismaClient) 
       ).toBe(0);
       f.setPolicy({ enabled: false, clients: [principal.clientId] });
       expect(await f.repository.issuanceAllowed(f.owner, principal.clientId)).toBe(false);
+    });
+    it('keeps MCP read operations on separate consent grants and resolves only the bound operation', async () => {
+      const f = await fixture();
+      const daily = await f.manager.issue(f.owner, {
+        ...f.command,
+        commandId: randomUUID(),
+        operation: 'daily-post-ideas:read',
+      });
+      const campaign = await f.manager.issue(f.owner, {
+        ...f.command,
+        commandId: randomUUID(),
+        operation: 'campaign-brief:read',
+      });
+      await f.repository.bind(daily.connectionId, f.credential, signal());
+      await f.repository.bind(campaign.connectionId, f.credential, signal());
+      await expect(
+        f.repository.resolveOperation('daily-post-ideas:read', f.credential, signal()),
+      ).resolves.toMatchObject({ connectionId: daily.connectionId });
+      await expect(
+        f.repository.resolveOperation('campaign-brief:read', f.credential, signal()),
+      ).resolves.toMatchObject({ connectionId: campaign.connectionId });
+      await f.manager.revoke(f.owner, {
+        connectionId: daily.connectionId,
+        expectedRevision: 2,
+      });
+      await expect(
+        f.repository.resolveOperation('daily-post-ideas:read', f.credential, signal()),
+      ).resolves.toBeNull();
     });
     it('persists exactly one immutable scope and audit for concurrent identical issue retries', async () => {
       const f = await fixture();

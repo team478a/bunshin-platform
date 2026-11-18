@@ -3,6 +3,8 @@ import {
   type ExternalReadEnvironment,
   type ExternalReadGrant,
   type ExternalReadDependencies,
+  type ExternalReadOperation,
+  type ExternalReadPrincipal,
 } from './external-connection-read';
 import { ReadExternalMemberUsage } from './external-member-usage';
 import type { MemberUsageAuthorizationPort, MemberUsageSourceRepository } from './member-usage';
@@ -12,6 +14,7 @@ export interface VerifiedExternalReadCredential {
   subject: string;
   sessionId: string;
   clientId: string;
+  audience: string;
   environment: ExternalReadEnvironment;
   expiresAt: Date;
 }
@@ -29,6 +32,11 @@ export interface ExternalReadCredentialBindings {
   ): Promise<ExternalReadGrant>;
   resolve(
     connectionId: string,
+    credential: VerifiedExternalReadCredential,
+    signal: AbortSignal,
+  ): Promise<ExternalReadGrant | null>;
+  resolveOperation(
+    operation: ExternalReadOperation,
     credential: VerifiedExternalReadCredential,
     signal: AbortSignal,
   ): Promise<ExternalReadGrant | null>;
@@ -128,6 +136,72 @@ export class ReadAuthenticatedExternalMemberUsage {
     return reader.execute(
       { clientId: credential.clientId, environment: credential.environment },
       input,
+    );
+  }
+}
+
+export interface ExternalAuthenticatedReader<T> {
+  execute(principal: ExternalReadPrincipal, input: unknown): Promise<T>;
+}
+
+/** Resolves the target Grant from the credential and operation; MCP callers cannot name an owner. */
+export class ReadAuthenticatedExternalResource<T> {
+  constructor(
+    private readonly verifier: ExternalReadCredentialVerifier,
+    private readonly bindings: ExternalReadCredentialBindings,
+    private readonly ports: Omit<ExternalReadDependencies, 'grants'>,
+    private readonly operation: ExternalReadOperation,
+    private readonly reader: (ports: ExternalReadDependencies) => ExternalAuthenticatedReader<T>,
+    private readonly now: () => Date = () => new Date(),
+  ) {}
+
+  async execute(authorization: string, requestId: string): Promise<T> {
+    if (!/^[a-zA-Z0-9_-]{1,128}$/.test(requestId)) throw new ExternalReadError('INVALID');
+    const credential = await verified(this.verifier, authorization);
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let resolved: ExternalReadGrant | null;
+    try {
+      resolved = await Promise.race([
+        this.bindings.resolveOperation(this.operation, credential, controller.signal),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => {
+            controller.abort();
+            reject(new ExternalReadError('TIMEOUT'));
+          }, 10_000);
+        }),
+      ]);
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
+      controller.abort();
+    }
+    if (!resolved) throw new ExternalReadError('DENIED');
+    const connectionId = resolved.connectionId;
+    const reader = this.reader({
+      ...this.ports,
+      authorization: {
+        permitted: async (grant, operation, at, signal) => {
+          if (credential.expiresAt <= this.now()) return false;
+          const allowed = await this.ports.authorization.permitted(grant, operation, at, signal);
+          return allowed && credential.expiresAt > this.now();
+        },
+      },
+      grants: {
+        find: (requestedConnectionId, principal, signal) => {
+          if (
+            requestedConnectionId !== connectionId ||
+            principal.clientId !== credential.clientId ||
+            principal.environment !== credential.environment ||
+            credential.expiresAt <= this.now()
+          )
+            return Promise.resolve(null);
+          return this.bindings.resolve(requestedConnectionId, credential, signal);
+        },
+      },
+    });
+    return reader.execute(
+      { clientId: credential.clientId, environment: credential.environment },
+      { connectionId, requestId },
     );
   }
 }

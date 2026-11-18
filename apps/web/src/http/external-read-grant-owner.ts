@@ -17,7 +17,7 @@ const issueSchema = z
   .object({
     commandId: z.uuid(),
     clientId: z.string().regex(/^[a-zA-Z0-9_-]{1,128}$/),
-    operation: z.literal('member-usage:read'),
+    operation: z.enum(['member-usage:read', 'daily-post-ideas:read', 'campaign-brief:read']),
     expiresInMinutes: z.number().int().min(5).max(1440),
     consentVersion: z.literal(EXTERNAL_READ_CONSENT_VERSION),
   })

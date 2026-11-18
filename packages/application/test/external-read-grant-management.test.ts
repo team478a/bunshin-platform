@@ -56,6 +56,14 @@ describe('explicit owner consent for external grant lifecycle', () => {
     expect(s.issue.mock.calls[0]?.[0]).not.toBe(owner);
     expect(s.issue.mock.calls[0]?.[0].scope).not.toBe(owner.scope);
   });
+  it.each(['daily-post-ideas:read', 'campaign-brief:read'] as const)(
+    'requires explicit consent for the %s operation',
+    async (operation) => {
+      const s = setup();
+      await s.manager.issue(owner, { ...command, operation });
+      expect(s.issue).toHaveBeenCalledWith(owner, { ...command, operation });
+    },
+  );
   it('requires a known connection and positive revision for revocation', () => {
     const s = setup();
     for (const input of [

@@ -12,10 +12,11 @@ interface Configuration {
   key: string;
   environment: ExternalReadEnvironment;
   clientIds: readonly string[];
+  expectedAudience?: string;
 }
 const claimsSchema = z.object({
   iss: z.string(),
-  aud: z.literal('authenticated'),
+  aud: z.string().min(1).max(2048),
   role: z.literal('authenticated'),
   sub: z.uuid(),
   session_id: z.uuid(),
@@ -91,6 +92,7 @@ export class SupabaseExternalReadCredentialVerifier implements ExternalReadCrede
       };
       if (
         claims.iss !== this.issuer ||
+        claims.aud !== (this.config.expectedAudience ?? 'authenticated') ||
         !this.config.clientIds.includes(claims.client_id) ||
         claims.exp <= seconds() ||
         claims.iat > seconds() ||
@@ -115,6 +117,7 @@ export class SupabaseExternalReadCredentialVerifier implements ExternalReadCrede
         subject: claims.sub,
         sessionId: claims.session_id,
         clientId: claims.client_id,
+        audience: claims.aud,
         environment: this.config.environment,
         expiresAt: new Date(claims.exp * 1000),
       };
