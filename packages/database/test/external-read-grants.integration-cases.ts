@@ -603,16 +603,22 @@ export function registerExternalReadGrantIntegrationCases(client: PrismaClient) 
     });
     it('serializes the five-active-grant cap and allows new IDs after revocation', async () => {
       const f = await fixture();
+      const clients = Array.from({ length: 7 }, (_, index) => `synthetic-client-${index}`);
+      f.setPolicy({ enabled: true, clients });
       const settled = await Promise.allSettled(
-        Array.from({ length: 6 }, () =>
-          f.manager.issue(f.owner, { ...f.command, commandId: randomUUID() }),
-        ),
+        clients
+          .slice(0, 6)
+          .map((clientId) =>
+            f.manager.issue(f.owner, { ...f.command, commandId: randomUUID(), clientId }),
+          ),
       );
       expect(settled.filter((r) => r.status === 'fulfilled')).toHaveLength(5);
       const rows = await f.manager.list(f.owner);
       expect(rows).toHaveLength(5);
       await f.manager.revoke(f.owner, { connectionId: rows[0]!.connectionId, expectedRevision: 1 });
-      await expect(f.manager.issue(f.owner, f.command)).resolves.toMatchObject({ revision: 1 });
+      await expect(
+        f.manager.issue(f.owner, { ...f.command, clientId: clients[6]! }),
+      ).resolves.toMatchObject({ revision: 1 });
     });
     it('rejects direct database insertion with a foreign membership or Bunshin owner', async () => {
       const f = await fixture(),
