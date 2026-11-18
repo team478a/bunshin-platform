@@ -1,5 +1,15 @@
 # BUNSHIN Platform Decision Log
 
+## 2026-11-18: xAIメディアと外部AI読取は用途別Provider設定と共通Remote MCPへ接続する
+
+- 状態: PR-01監査・差分設計。Runtime、migration、本番設定、外部API実行、Grok Bot/Muse実接続は未実施。
+- xAI画像・動画は既存の画像/動画Provider Port、非公開Storage、品質確認、利用権限、原価・予算、非同期Jobを再利用する。xAI固有処理をSOCIAL Domain/Applicationへ入れず、Web Adapterとcomposition rootへ閉じ込める。OpenAI、FAL、Runway、Creatomateは維持する。
+- 現行のProviderごとに有効modelを1つ持つ設定では、同じxAI Providerの画像modelと動画modelを同時運用できない。Provider設定の解決キーへ用途を追加し、実行RequestにはProvider、model、設定版をスナップショットする。xAIメディア用に`XAI`を追加し、既存Grok Trendの`GROK`は互換性のため今回改名しない。model名・価格・rate limitはDomainへ固定しない。
+- 動画送信前の重複実行防止をFAL専用からProvider共通へ広げる。送信結果が不明な場合は自動再送せず、保存済み外部request IDまたはProviderの照会手段を優先し、照合不能なら不明状態で停止する。
+- Grok Botを最初のclientとするが、業務読取はGrok専用にしない。既存`ExternalReadGrant`、OAuth資格情報結合、失効、Workspace/Service/Membership/User/Bunshin境界を再利用し、`member-usage:read`、`daily-post-ideas:read`、`campaign-brief:read`を操作別に本人同意する。既存Grantへ権限を暗黙追加しない。
+- 既存HTTP読取APIをMCPとみなさず、公式MCPのStreamable HTTP、tool schema、OAuth Protected Resource Metadata、resource/audience検証を実装する。ツール引数に任意のUser/Workspace/Service/Bunshin IDを置かず、Grantからscopeを解決する。初期MCPは副作用のない読取専用とする。
+- Museは対象製品と公式Connector/OAuth仕様を正本として確定できるまで専用実装を開始しない。共通MCPと業務投影Use Caseを将来再利用し、実接続確認前に接続済みと報告しない。
+
 ## 2026-11-05: 本部管理の権限不足をログイン案内へ接続する
 
 - `/admin`で有効なPlatformAdminがない場合は404ではなく`/login/admin-access`へ案内する。管理画面共通layoutでも権限を確認し、各画面・APIの既存認可は維持する。
