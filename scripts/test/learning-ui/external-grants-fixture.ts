@@ -5,7 +5,7 @@ export function externalGrantFixture(
 ): ComponentProps<typeof ExternalGrantOwnerCard>['initial'] {
   return {
     version: 'external-grant-owner-v1',
-    consentVersion: 'external-read-consent-v1',
+    consentVersion: 'external-read-consent-v2',
     targetName: '合成データの投稿パートナー',
     managementAvailable: true,
     clients: stopped ? [] : [{ id: 'synthetic-client', name: '検証用接続先' }],
@@ -14,6 +14,7 @@ export function externalGrantFixture(
           {
             id: '11111111-1111-4111-8111-111111111111',
             clientName: '検証用接続先',
+            operation: 'member-usage:read',
             state: 'ACTIVE',
             revision: 1,
             grantedAt: '2026-11-03T00:00:00.000Z',

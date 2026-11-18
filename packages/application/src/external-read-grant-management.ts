@@ -1,9 +1,14 @@
 import { ApplicationError } from '@bunshin/shared';
-import type { ExternalReadGrant } from './external-connection-read';
+import {
+  isExternalReadOperation,
+  type ExternalReadGrant,
+  type ExternalReadOperation,
+} from './external-connection-read';
 import type { MemberUsageScope } from './member-usage';
 
 export const EXTERNAL_READ_FEATURE_KEY = 'EXTERNAL.READ';
-export const EXTERNAL_READ_CONSENT_VERSION = 'external-read-consent-v1';
+export const LEGACY_EXTERNAL_READ_CONSENT_VERSION = 'external-read-consent-v1';
+export const EXTERNAL_READ_CONSENT_VERSION = 'external-read-consent-v2';
 export interface ExternalGrantOwner {
   actorUserId: string;
   scope: MemberUsageScope;
@@ -11,7 +16,7 @@ export interface ExternalGrantOwner {
 export interface ExternalGrantIssue {
   commandId: string;
   clientId: string;
-  operation: 'member-usage:read';
+  operation: ExternalReadOperation;
   expiresInMinutes: number;
   consentVersion: typeof EXTERNAL_READ_CONSENT_VERSION;
 }
@@ -55,7 +60,7 @@ export function normalizeExternalGrantIssue(value: unknown): ExternalGrantIssue 
     !uuid.test(command['commandId']) ||
     typeof command['clientId'] !== 'string' ||
     !/^[a-zA-Z0-9_-]{1,128}$/.test(command['clientId']) ||
-    command['operation'] !== 'member-usage:read' ||
+    !isExternalReadOperation(command['operation']) ||
     command['consentVersion'] !== EXTERNAL_READ_CONSENT_VERSION ||
     typeof command['expiresInMinutes'] !== 'number' ||
     !Number.isInteger(command['expiresInMinutes']) ||

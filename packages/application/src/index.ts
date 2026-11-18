@@ -151,3 +151,4 @@ export * from './external-connection-read';
 export * from './external-member-usage';
 export * from './external-read-grant-management';
 export * from './external-read-credential';
+export * from './external-ai-read';

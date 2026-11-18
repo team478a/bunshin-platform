@@ -2,6 +2,8 @@ import { createHash } from 'node:crypto';
 import {
   EXTERNAL_READ_FEATURE_KEY,
   EXTERNAL_READ_CONSENT_VERSION,
+  LEGACY_EXTERNAL_READ_CONSENT_VERSION,
+  isExternalReadOperation,
   normalizeExternalGrantOwner,
   normalizeExternalGrantIssue,
   normalizeExternalGrantRevoke,
@@ -13,6 +15,7 @@ import {
   type ExternalReadGrant,
   type ExternalReadPrincipal,
   type ExternalReadEnvironment,
+  type ExternalReadOperation,
   type VerifiedExternalReadCredential,
 } from '@bunshin/application';
 import { ApplicationError } from '@bunshin/shared';
@@ -56,7 +59,7 @@ function projection(row: GrantRow): ExternalReadGrant {
       userId: row.userId,
       bunshinId: row.bunshinId,
     },
-    operations: [...row.operations],
+    operations: row.operations.filter(isExternalReadOperation),
     grantedAt: row.grantedAt,
     expiresAt: row.expiresAt,
     revokedAt: row.revokedAt,
@@ -67,7 +70,7 @@ function metadata(row: GrantRow) {
     connectionId: row.id,
     clientId: row.clientId,
     environment: row.environment,
-    operation: 'member-usage:read',
+    operation: row.operations[0] ?? null,
     revision: row.revision,
     consentVersion: row.consentVersion,
     credentialBound: row.credentialBoundAt !== null,
@@ -138,9 +141,13 @@ export class PrismaExternalReadGrantRepository implements ExternalGrantManagemen
       row.revokedAt !== null ||
       row.grantedAt > at ||
       row.expiresAt <= at ||
-      row.consentVersion !== EXTERNAL_READ_CONSENT_VERSION ||
       row.operations.length !== 1 ||
-      row.operations[0] !== 'member-usage:read'
+      !isExternalReadOperation(row.operations[0]) ||
+      !(
+        row.consentVersion === EXTERNAL_READ_CONSENT_VERSION ||
+        (row.consentVersion === LEGACY_EXTERNAL_READ_CONSENT_VERSION &&
+          row.operations[0] === 'member-usage:read')
+      )
     )
       return false;
     const scope = {
@@ -186,7 +193,11 @@ export class PrismaExternalReadGrantRepository implements ExternalGrantManagemen
     return true;
   }
   /** Same current checks as issue, without persisting a probe grant or audit. */
-  async issuanceAllowed(inputOwner: ExternalGrantOwner, clientId: string): Promise<boolean> {
+  async issuanceAllowed(
+    inputOwner: ExternalGrantOwner,
+    clientId: string,
+    operation: ExternalReadOperation = 'member-usage:read',
+  ): Promise<boolean> {
     const owner = normalizeExternalGrantOwner(inputOwner);
     return this.client.$transaction(async (tx) => {
       await tx.$executeRaw`SET TRANSACTION READ ONLY`;
@@ -197,7 +208,7 @@ export class PrismaExternalReadGrantRepository implements ExternalGrantManagemen
           ...ownerWhere(owner),
           clientId,
           environment: this.environment,
-          operations: ['member-usage:read'],
+          operations: [operation],
           consentVersion: EXTERNAL_READ_CONSENT_VERSION,
           grantedAt: at,
           expiresAt: new Date(at.getTime() + 300_000),
@@ -214,6 +225,7 @@ export class PrismaExternalReadGrantRepository implements ExternalGrantManagemen
       credential.environment === this.environment &&
       uuid.test(credential.subject) &&
       uuid.test(credential.sessionId) &&
+      credential.audience.length > 0 &&
       this.clientEnabled(credential.clientId) &&
       Number.isFinite(credential.expiresAt.getTime()) &&
       credential.expiresAt > at
@@ -230,9 +242,35 @@ export class PrismaExternalReadGrantRepository implements ExternalGrantManagemen
           credential.subject,
           credential.clientId,
           credential.sessionId,
+          credential.audience,
         ]),
       )
       .digest('hex');
+  }
+  private legacyBindingHash(id: string, credential: VerifiedExternalReadCredential) {
+    return createHash('sha256')
+      .update(
+        JSON.stringify([
+          'external-credential-v1',
+          this.environment,
+          id,
+          credential.issuer,
+          credential.subject,
+          credential.clientId,
+          credential.sessionId,
+        ]),
+      )
+      .digest('hex');
+  }
+  private bindingMatches(
+    row: Pick<GrantRow, 'id' | 'credentialBindingHash' | 'consentVersion'>,
+    credential: VerifiedExternalReadCredential,
+  ) {
+    return (
+      row.credentialBindingHash === this.bindingHash(row.id, credential) ||
+      (row.consentVersion === LEGACY_EXTERNAL_READ_CONSENT_VERSION &&
+        row.credentialBindingHash === this.legacyBindingHash(row.id, credential))
+    );
   }
   private async credentialRow(
     tx: Prisma.TransactionClient,
@@ -273,7 +311,7 @@ export class PrismaExternalReadGrantRepository implements ExternalGrantManagemen
       if (!row) unavailable();
       const hash = this.bindingHash(row.id, credential);
       if (row.credentialBindingHash !== null) {
-        if (row.credentialBindingHash !== hash) conflict();
+        if (!this.bindingMatches(row, credential)) conflict();
         return projection(row);
       }
       running(signal);
@@ -321,10 +359,52 @@ export class PrismaExternalReadGrantRepository implements ExternalGrantManagemen
       await tx.$executeRaw`SET TRANSACTION READ ONLY`;
       const row = await this.credentialRow(tx, connectionId, credential);
       return row &&
-        row.credentialBindingHash === this.bindingHash(row.id, credential) &&
+        this.bindingMatches(row, credential) &&
         this.credentialValid(credential, this.at())
         ? projection(row)
         : null;
+    }, txOptions);
+    running(signal);
+    return this.credentialValid(credential, this.at()) ? result : null;
+  }
+  async resolveOperation(
+    operation: ExternalReadOperation,
+    input: VerifiedExternalReadCredential,
+    signal: AbortSignal,
+  ): Promise<ExternalReadGrant | null> {
+    running(signal);
+    if (!isExternalReadOperation(operation)) return null;
+    const credential = { ...input, expiresAt: new Date(input.expiresAt) };
+    const result = await this.client.$transaction(async (tx) => {
+      await tx.$executeRaw`SET TRANSACTION READ ONLY`;
+      if (!this.credentialValid(credential, this.at())) return null;
+      const identities = await tx.authIdentity.findMany({
+        where: {
+          provider: 'EMAIL',
+          providerUserId: credential.subject,
+          user: { status: 'ACTIVE' },
+        },
+        select: { userId: true },
+        take: 2,
+      });
+      if (identities.length !== 1) return null;
+      const candidates = await tx.externalReadGrant.findMany({
+        where: {
+          clientId: credential.clientId,
+          environment: this.environment,
+          userId: identities[0]!.userId,
+          operations: { equals: [operation] },
+          revokedAt: null,
+          expiresAt: { gt: this.at() },
+          credentialBindingHash: { not: null },
+        },
+        orderBy: [{ grantedAt: 'desc' }, { id: 'asc' }],
+        select: { id: true, credentialBindingHash: true, consentVersion: true },
+      });
+      const matched = candidates.filter((row) => this.bindingMatches(row, credential));
+      if (matched.length !== 1) return null;
+      const row = await this.credentialRow(tx, matched[0]!.id, credential);
+      return row && this.bindingMatches(row, credential) ? projection(row) : null;
     }, txOptions);
     running(signal);
     return this.credentialValid(credential, this.at()) ? result : null;
@@ -377,6 +457,18 @@ export class PrismaExternalReadGrantRepository implements ExternalGrantManagemen
             conflict();
           return projection(existing); // Includes revoked/expired state; never renews or reactivates.
         }
+        const duplicateOperation = await tx.externalReadGrant.count({
+          where: {
+            ...ownerWhere(o),
+            clientId: command.clientId,
+            environment: this.environment,
+            operations: { equals: [command.operation] },
+            revokedAt: null,
+            expiresAt: { gt: at },
+          },
+        });
+        if (duplicateOperation > 0)
+          throw new ApplicationError('CONFLICT', 'external read operation already granted');
         const active = await tx.externalReadGrant.count({
           where: {
             workspaceId: o.scope.workspaceId,
@@ -514,7 +606,7 @@ export class PrismaExternalReadGrantRepository implements ExternalGrantManagemen
   ): Promise<boolean> {
     running(signal);
     if (
-      operation !== 'member-usage:read' ||
+      !isExternalReadOperation(operation) ||
       grant.environment !== this.environment ||
       !uuid.test(grant.connectionId)
     )

@@ -1,6 +1,14 @@
 import type { MemberUsageScope } from './member-usage';
 
 export const EXTERNAL_READ_VERSION = 'external-read-v1';
+export const EXTERNAL_READ_OPERATIONS = [
+  'member-usage:read',
+  'daily-post-ideas:read',
+  'campaign-brief:read',
+] as const;
+export type ExternalReadOperation = (typeof EXTERNAL_READ_OPERATIONS)[number];
+export const isExternalReadOperation = (value: unknown): value is ExternalReadOperation =>
+  typeof value === 'string' && (EXTERNAL_READ_OPERATIONS as readonly string[]).includes(value);
 export type ExternalReadEnvironment = 'test' | 'development' | 'production';
 /** Trusted server context, obtained by a future credential-verifying adapter, never JSON input. */
 export interface ExternalReadPrincipal {
@@ -13,7 +21,7 @@ export interface ExternalReadGrant {
   environment: ExternalReadEnvironment;
   revision: number;
   scope: MemberUsageScope;
-  operations: readonly string[];
+  operations: readonly ExternalReadOperation[];
   grantedAt: Date;
   expiresAt: Date;
   revokedAt: Date | null;
@@ -43,7 +51,7 @@ export interface ExternalReadPorts {
   authorization: {
     permitted(
       grant: ExternalReadGrant,
-      operation: string,
+      operation: ExternalReadOperation,
       at: Date,
       signal: AbortSignal,
     ): Promise<boolean>;
@@ -61,7 +69,7 @@ export interface ExternalReadPorts {
         connectionId: string;
         clientId: string;
         environment: ExternalReadEnvironment;
-        operation: string;
+        operation: ExternalReadOperation;
         outcome: 'READ_COMPLETED' | ExternalReadFailure;
         count: number;
       },
@@ -90,7 +98,7 @@ function validGrant(
   g: ExternalReadGrant,
   id: string,
   p: ExternalReadPrincipal,
-  operation: string,
+  operation: ExternalReadOperation,
   at: Date,
 ) {
   return (
@@ -120,7 +128,7 @@ function sameGrant(a: ExternalReadGrant, b: ExternalReadGrant) {
 export class ExternalConnectionRead<T> {
   constructor(
     private readonly ports: ExternalReadDependencies,
-    private readonly operation: string,
+    private readonly operation: ExternalReadOperation,
     private readonly read: (context: ExternalReadContext) => Promise<{ data: T; count: number }>,
     private readonly now: () => Date = () => new Date(),
     private readonly timeoutMs = 30_000,

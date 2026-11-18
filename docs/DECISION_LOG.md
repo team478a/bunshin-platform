@@ -4766,3 +4766,11 @@
 - 専用LINEのボタン移動先はコードで決めているため、DBのenumやmigrationは追加しない。共通LINEのリッチメニュー（`LineRichMenuAction`）は従来の4種類のまま。
 - 「グループの企画」「公式素材」は`/s/{slug}/campaigns`を入口とし、本人の投稿パートナーが1つならその企画画面、複数なら選択画面、未作成なら作成画面へ移す。マイページは既存のアカウント画面で、お知らせ設定もそこから開く。
 - 既に公開済みのメニューは自動で差し替えない。管理者が専用LINE設定画面から標準メニューを公開し直した時に反映される。
+
+## 2026-11-18: 外部AI読取は操作別Grantを正本にしたRemote MCPで提供する
+
+- Grok Bot専用の業務APIは作らず、`/api/mcp`のProvider非依存Remote MCPから、本人の活動実績、直近の投稿案、参加中の企業企画の3操作だけを読み取れるようにする。tool inputにUser ID、Bunshin ID、connection ID、URLを持たせない。
+- Supabase OAuth tokenは署名、issuer、client、session、expiryに加えてMCP resource audienceを検証する。OAuth scopeは業務権限の正本にせず、操作別の`ExternalReadGrant`を毎回実行前後に検証する。解除・期限切れ・Membership失効・Capability停止後は配信しない。
+- 既存consent v1は`member-usage:read`だけに限定して維持し、新しい3操作はconsent v2で1 Grant 1操作として個別に許可・解除する。新しい業務テーブルや専用監査台帳は追加しない。
+- Daily MissionとCampaignの既存本人向けRepositoryを再利用し、外部DTOには本人に表示可能な本文・制作指示、公式素材、必須表記、禁止表現だけを含める。内部Prompt、Memory、AI原価、APIキー、非公開管理情報、内部IDは返さない。
+- client catalogは空のままとする。Production OAuth client登録、custom access-token hook、実Grok接続はPR-06の承認済み検証環境で行い、PR-05のモック成功を実接続成功と表現しない。

@@ -2,7 +2,7 @@ import { z } from 'zod';
 export const externalGrantViewSchema = z
   .object({
     version: z.literal('external-grant-owner-v1'),
-    consentVersion: z.literal('external-read-consent-v1'),
+    consentVersion: z.literal('external-read-consent-v2'),
     targetName: z.string().min(1).max(100),
     managementAvailable: z.boolean(),
     clients: z
@@ -21,6 +21,11 @@ export const externalGrantViewSchema = z
           .object({
             id: z.uuid(),
             clientName: z.string().min(1).max(160),
+            operation: z.enum([
+              'member-usage:read',
+              'daily-post-ideas:read',
+              'campaign-brief:read',
+            ]),
             revision: z.number().int().positive(),
             state: z.enum(['ACTIVE', 'EXPIRED', 'REVOKED']),
             grantedAt: z.iso.datetime(),

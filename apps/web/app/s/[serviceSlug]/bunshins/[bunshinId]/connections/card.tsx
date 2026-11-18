@@ -20,7 +20,10 @@ export function ExternalGrantOwnerCard({
 }) {
   const [view, setView] = useState(initial),
     [clientId, setClientId] = useState(initial.clients[0]?.id ?? '');
-  const [minutes, setMinutes] = useState(60),
+  const [operation, setOperation] = useState<
+      'member-usage:read' | 'daily-post-ideas:read' | 'campaign-brief:read'
+    >('member-usage:read'),
+    [minutes, setMinutes] = useState(60),
     [consent, setConsent] = useState(false),
     [pending, setPending] = useState(false);
   const [confirmation, setConfirmation] = useState<string | null>(null),
@@ -58,12 +61,12 @@ export function ExternalGrantOwnerCard({
       let body: unknown;
       if (kind === 'ISSUE') {
         if (!consent || !view.clients.some((c) => c.id === clientId)) throw new Error('consent');
-        const key = JSON.stringify([clientId, minutes, view.consentVersion]);
+        const key = JSON.stringify([clientId, operation, minutes, view.consentVersion]);
         if (command.current?.key !== key) command.current = { key, id: crypto.randomUUID() };
         body = {
           commandId: command.current.id,
           clientId,
-          operation: 'member-usage:read',
+          operation,
           expiresInMinutes: minutes,
           consentVersion: view.consentVersion,
         };
@@ -116,10 +119,10 @@ export function ExternalGrantOwnerCard({
       <p>この画面では、外部サービスに見せる情報の範囲と期限を管理します。</p>
       <section aria-labelledby="external-read-scope">
         <h2 id="external-read-scope">許可する情報</h2>
+        <p>利用実績、直近の投稿案、参加中の企業企画を、情報の種類ごとに個別に許可できます。</p>
         <p>
-          この投稿パートナーの直近7日・30日の利用実績（生成・採用・不採用・投稿完了報告・活動日数）です。投稿完了報告は本人の申告です。
+          内部プロンプト・記憶・AI原価・APIキーは含みません。投稿や設定変更の権限は付与しません。
         </p>
-        <p>投稿本文・記憶・企業情報・AI原価は含みません。投稿や設定変更の権限は付与しません。</p>
         <p>
           解除後は新たな読取を停止します。外部サービスがすでに取得した情報は、別途そのサービスで削除が必要な場合があります。
         </p>
@@ -160,6 +163,24 @@ export function ExternalGrantOwnerCard({
               </select>
             </label>
             <label>
+              許可する情報
+              <select
+                value={operation}
+                disabled={pending}
+                onChange={(event) => {
+                  setOperation(
+                    event.target.value as
+                      'member-usage:read' | 'daily-post-ideas:read' | 'campaign-brief:read',
+                  );
+                  setConsent(false);
+                }}
+              >
+                <option value="member-usage:read">7日・30日の利用実績</option>
+                <option value="daily-post-ideas:read">直近7日の投稿案</option>
+                <option value="campaign-brief:read">参加中の企業企画</option>
+              </select>
+            </label>
+            <label>
               許可する期間
               <select
                 value={minutes}
@@ -182,7 +203,7 @@ export function ExternalGrantOwnerCard({
                 onChange={(event) => setConsent(event.target.checked)}
               />
               <span>
-                選択した接続先に、この投稿パートナーの利用実績を選択した期間だけ読み取らせることに同意します。
+                選択した接続先に、選択した種類の情報を指定期間だけ読み取らせることに同意します。
               </span>
             </label>
             <button
@@ -222,6 +243,13 @@ export function ExternalGrantOwnerCard({
                       : '許可中'}
                 </p>
                 <p>
+                  情報：
+                  {grant.operation === 'member-usage:read'
+                    ? '7日・30日の利用実績'
+                    : grant.operation === 'daily-post-ideas:read'
+                      ? '直近7日の投稿案'
+                      : '参加中の企業企画'}
+                  <br />
                   許可日時：{date(grant.grantedAt)}
                   <br />
                   期限：{date(grant.expiresAt)}
