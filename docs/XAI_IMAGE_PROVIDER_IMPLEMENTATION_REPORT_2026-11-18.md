@@ -131,4 +131,4 @@ OpenAI画像生成は削除していない。xAIが停止または未設定で�
 
 PR-03で、OpenAI / xAIの生成済みfixture、20題材の評価セット、決定的なProvider選択規則、比較・運用管理を実装する。実API比較は費用提示と承認後に行う。
 
-PR URL: 作成後に追記する。
+PR URL: https://github.com/team478a/bunshin-platform/pull/1529
