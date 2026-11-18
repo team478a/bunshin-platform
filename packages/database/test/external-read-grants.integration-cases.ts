@@ -368,7 +368,7 @@ export function registerExternalReadGrantIntegrationCases(client: PrismaClient) 
       f.setPolicy({ enabled: false, clients: [principal.clientId] });
       expect(await f.repository.issuanceAllowed(f.owner, principal.clientId)).toBe(false);
     });
-    it('keeps MCP read operations on separate consent grants and resolves only the bound operation', async () => {
+    it('resolves unique MCP operations from OAuth identity without a connection ID binding', async () => {
       const f = await fixture();
       const daily = await f.manager.issue(f.owner, {
         ...f.command,
@@ -380,8 +380,6 @@ export function registerExternalReadGrantIntegrationCases(client: PrismaClient) 
         commandId: randomUUID(),
         operation: 'campaign-brief:read',
       });
-      await f.repository.bind(daily.connectionId, f.credential, signal());
-      await f.repository.bind(campaign.connectionId, f.credential, signal());
       await expect(
         f.repository.resolveOperation('daily-post-ideas:read', f.credential, signal()),
       ).resolves.toMatchObject({ connectionId: daily.connectionId });
@@ -390,13 +388,13 @@ export function registerExternalReadGrantIntegrationCases(client: PrismaClient) 
       ).resolves.toMatchObject({ connectionId: campaign.connectionId });
       await f.manager.revoke(f.owner, {
         connectionId: daily.connectionId,
-        expectedRevision: 2,
+        expectedRevision: 1,
       });
       await expect(
         f.repository.resolveOperation('daily-post-ideas:read', f.credential, signal()),
       ).resolves.toBeNull();
     });
-    it('denies an operation when one credential is bound to multiple Bunshin grants', async () => {
+    it('denies an operation when OAuth identity has multiple Bunshin grants', async () => {
       const f = await fixture();
       const createOwner = async (name: string): Promise<ExternalGrantOwner> => {
         const bunshin = await client.bunshin.create({
@@ -431,7 +429,7 @@ export function registerExternalReadGrantIntegrationCases(client: PrismaClient) 
         '22222222-2222-4222-8222-222222222222',
         '33333333-3333-4333-8333-333333333333',
       ];
-      const grants = await Promise.all(
+      await Promise.all(
         owners.map((owner, index) =>
           f.manager.issue(owner, {
             ...f.command,
@@ -440,17 +438,16 @@ export function registerExternalReadGrantIntegrationCases(client: PrismaClient) 
           }),
         ),
       );
-      const otherSessionCredential = { ...f.credential, sessionId: randomUUID() };
-      await f.repository.bind(grants[0]!.connectionId, f.credential, signal());
-      await f.repository.bind(grants[1]!.connectionId, otherSessionCredential, signal());
-      await f.repository.bind(grants[2]!.connectionId, f.credential, signal());
-
       await expect(
         f.repository.resolveOperation('daily-post-ideas:read', f.credential, signal()),
       ).resolves.toBeNull();
       await expect(
-        f.repository.resolveOperation('daily-post-ideas:read', otherSessionCredential, signal()),
-      ).resolves.toMatchObject({ connectionId: grants[1]!.connectionId });
+        f.repository.resolveOperation(
+          'daily-post-ideas:read',
+          { ...f.credential, sessionId: randomUUID() },
+          signal(),
+        ),
+      ).resolves.toBeNull();
     });
     it('persists exactly one immutable scope and audit for concurrent identical issue retries', async () => {
       const f = await fixture();

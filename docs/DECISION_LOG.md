@@ -4774,3 +4774,10 @@
 - 既存consent v1は`member-usage:read`だけに限定して維持し、新しい3操作はconsent v2で1 Grant 1操作として個別に許可・解除する。新しい業務テーブルや専用監査台帳は追加しない。
 - Daily MissionとCampaignの既存本人向けRepositoryを再利用し、外部DTOには本人に表示可能な本文・制作指示、公式素材、必須表記、禁止表現だけを含める。内部Prompt、Memory、AI原価、APIキー、非公開管理情報、内部IDは返さない。
 - client catalogは空のままとする。Production OAuth client登録、custom access-token hook、実Grok接続はPR-06の承認済み検証環境で行い、PR-05のモック成功を実接続成功と表現しない。
+
+## 2026-11-18: Remote MCPは標準OAuth本人と一意な操作Grantから対象を解決する
+
+- Grok Botの公式Remote HTTPS Connectorには、OAuth後にbunshin固有のconnection IDを別endpointへ送る手順がない。MCP読取ではresource audience検証済みtokenのsubject・client・operationと、本人が事前に発行した現在有効なGrantを毎回照合し、一意な場合だけ対象Bunshinを解決する。
+- 同一client・operationで複数BunshinのGrantが有効な場合は順序で選ばず拒否する。tool input、prompt、URLへUser ID、Bunshin ID、connection IDを追加しない。読取時にGrantを発行・更新・結合する副作用も追加しない。
+- 既存のconnection ID付き限定HTTP APIと明示的なcredential bindingは互換維持する。MCP経路だけを標準OAuth Connectorに合わせる。
+- reviewed client catalogは既定で空とし、client ID・表示名・完全一致redirect URIの検証環境設定が全部そろった場合だけ有効化する。client secretはアプリへ渡さない。本番設定、実Grok接続、有料実行は別の明示承認を必要とする。

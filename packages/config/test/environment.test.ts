@@ -106,6 +106,33 @@ describe('environment validation', () => {
     ).toBe('development');
   });
 
+  it('accepts only complete, environment-safe external OAuth client configuration', () => {
+    expect(() =>
+      parseServerEnvironment({ ...valid, EXTERNAL_READ_OAUTH_CLIENT_ID: 'grok-client' }),
+    ).toThrow('EXTERNAL_READ_OAUTH_CLIENT_ID');
+    expect(
+      parseServerEnvironment({
+        ...valid,
+        EXTERNAL_READ_OAUTH_CLIENT_ID: 'grok-client',
+        EXTERNAL_READ_OAUTH_CLIENT_NAME: 'Grok Bot',
+        EXTERNAL_READ_OAUTH_REDIRECT_URIS: JSON.stringify([
+          'https://connector.example.com/oauth/callback',
+        ]),
+      }).EXTERNAL_READ_OAUTH_CLIENT_NAME,
+    ).toBe('Grok Bot');
+    expect(() =>
+      parseServerEnvironment({
+        ...valid,
+        APP_ENV: 'production',
+        NODE_ENV: 'production',
+        APP_URL: 'https://app.example.com',
+        EXTERNAL_READ_OAUTH_CLIENT_ID: 'grok-client',
+        EXTERNAL_READ_OAUTH_CLIENT_NAME: 'Grok Bot',
+        EXTERNAL_READ_OAUTH_REDIRECT_URIS: JSON.stringify(['http://localhost:3000/oauth/callback']),
+      }),
+    ).toThrow('EXTERNAL_READ_OAUTH_REDIRECT_URIS');
+  });
+
   it('requires a second explicit approval before enabling production deletion', () => {
     const production = {
       ...valid,
