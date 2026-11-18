@@ -195,7 +195,9 @@ export class ReadAuthenticatedExternalResource<T> {
             credential.expiresAt <= this.now()
           )
             return Promise.resolve(null);
-          return this.bindings.resolve(requestedConnectionId, credential, signal);
+          return this.bindings
+            .resolveOperation(this.operation, credential, signal)
+            .then((grant) => (grant?.connectionId === requestedConnectionId ? grant : null));
         },
       },
     });

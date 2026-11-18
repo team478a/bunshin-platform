@@ -396,15 +396,15 @@ export class PrismaExternalReadGrantRepository implements ExternalGrantManagemen
           operations: { equals: [operation] },
           revokedAt: null,
           expiresAt: { gt: this.at() },
-          credentialBindingHash: { not: null },
         },
         orderBy: [{ grantedAt: 'desc' }, { id: 'asc' }],
-        select: { id: true, credentialBindingHash: true, consentVersion: true },
       });
-      const matched = candidates.filter((row) => this.bindingMatches(row, credential));
-      if (matched.length !== 1) return null;
-      const row = await this.credentialRow(tx, matched[0]!.id, credential);
-      return row && this.bindingMatches(row, credential) ? projection(row) : null;
+      const permitted: GrantRow[] = [];
+      for (const row of candidates) {
+        if (await this.canRead(tx, row, this.at())) permitted.push(row);
+        if (permitted.length > 1) return null;
+      }
+      return permitted.length === 1 ? projection(permitted[0]!) : null;
     }, txOptions);
     running(signal);
     return this.credentialValid(credential, this.at()) ? result : null;

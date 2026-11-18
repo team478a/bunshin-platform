@@ -24,6 +24,12 @@ const serverSchema = z
     SUPABASE_AUTH_ADMIN_URL: z.url().optional(),
     SUPABASE_SERVICE_ROLE_KEY: z.string().min(32).optional(),
     SUPABASE_AUTH_ADMIN_ENV: z.enum(['development', 'staging', 'production']).optional(),
+    EXTERNAL_READ_OAUTH_CLIENT_ID: z
+      .string()
+      .regex(/^[a-zA-Z0-9_-]{1,128}$/)
+      .optional(),
+    EXTERNAL_READ_OAUTH_CLIENT_NAME: z.string().min(1).max(100).optional(),
+    EXTERNAL_READ_OAUTH_REDIRECT_URIS: z.string().min(1).max(4096).optional(),
     ACCOUNT_DELETION_EXECUTION_MODE: z.enum(['disabled', 'dry-run', 'enabled']).default('disabled'),
     ACCOUNT_DELETION_PRODUCTION_APPROVED: z.enum(['true', 'false']).default('false'),
     LINE_CONFIG_KEY_VERSION: z.coerce.number().int().positive().default(1),
@@ -112,6 +118,52 @@ const serverSchema = z
           code: 'custom',
           path: ['SUPABASE_AUTH_ADMIN_URL'],
           message: 'Supabase Auth administration URL cannot use localhost outside development',
+        });
+      }
+    }
+    const externalReadClientValues = [
+      value.EXTERNAL_READ_OAUTH_CLIENT_ID,
+      value.EXTERNAL_READ_OAUTH_CLIENT_NAME,
+      value.EXTERNAL_READ_OAUTH_REDIRECT_URIS,
+    ];
+    if (
+      externalReadClientValues.some((item) => item !== undefined) &&
+      externalReadClientValues.some((item) => item === undefined)
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['EXTERNAL_READ_OAUTH_CLIENT_ID'],
+        message: 'External read OAuth client configuration must be provided together',
+      });
+    }
+    if (value.EXTERNAL_READ_OAUTH_REDIRECT_URIS !== undefined) {
+      let redirects: unknown;
+      try {
+        redirects = JSON.parse(value.EXTERNAL_READ_OAUTH_REDIRECT_URIS);
+      } catch {
+        redirects = null;
+      }
+      const parsed = z.array(z.url()).min(1).max(10).safeParse(redirects);
+      const valid =
+        parsed.success &&
+        new Set(parsed.data).size === parsed.data.length &&
+        parsed.data.every((raw) => {
+          const url = new URL(raw);
+          const localhost = url.hostname === 'localhost' || url.hostname === '127.0.0.1';
+          return (
+            !url.username &&
+            !url.password &&
+            !url.hash &&
+            (url.protocol === 'https:' ||
+              (value.APP_ENV === 'development' && localhost && url.protocol === 'http:')) &&
+            (!localhost || value.APP_ENV === 'development')
+          );
+        });
+      if (!valid) {
+        context.addIssue({
+          code: 'custom',
+          path: ['EXTERNAL_READ_OAUTH_REDIRECT_URIS'],
+          message: 'External read OAuth redirect URIs are invalid',
         });
       }
     }

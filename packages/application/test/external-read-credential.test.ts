@@ -4,7 +4,11 @@ import {
   ReadAuthenticatedExternalResource,
   ReadAuthenticatedExternalMemberUsage,
 } from '../src/external-read-credential';
-import type { ExternalReadGrant, ExternalReadPorts } from '../src/external-connection-read';
+import {
+  ExternalConnectionRead,
+  type ExternalReadGrant,
+  type ExternalReadPorts,
+} from '../src/external-connection-read';
 const id = '11111111-1111-4111-8111-111111111111';
 const at = new Date('2026-11-03T00:00:00Z');
 const grant: ExternalReadGrant = {
@@ -160,24 +164,32 @@ describe('verified external credential use cases', () => {
 describe('operation-bound external reads', () => {
   it('resolves the connection from the credential instead of tool arguments', async () => {
     const s = setup();
-    const execute = vi.fn().mockResolvedValue({ ok: true });
+    const operationGrant: ExternalReadGrant = {
+      ...grant,
+      operations: ['daily-post-ideas:read'],
+    };
+    s.resolveOperation.mockResolvedValue(operationGrant);
     const resource = new ReadAuthenticatedExternalResource(
       { verify: s.verify },
       { bind: s.bind, resolve: s.resolve, resolveOperation: s.resolveOperation },
       { authorization: { permitted: s.permitted } },
       'daily-post-ideas:read',
-      () => ({ execute }),
+      (ports) =>
+        new ExternalConnectionRead(
+          ports,
+          'daily-post-ideas:read',
+          () => Promise.resolve({ data: { ok: true }, count: 1 }),
+          () => at,
+        ),
       () => at,
     );
     await expect(resource.execute('Bearer synthetic', 'request_1')).resolves.toEqual({ ok: true });
-    expect(s.resolveOperation).toHaveBeenCalledWith(
+    expect(s.resolveOperation).toHaveBeenCalledTimes(3);
+    expect(s.resolveOperation).toHaveBeenLastCalledWith(
       'daily-post-ideas:read',
       s.credential,
       expect.any(AbortSignal),
     );
-    expect(execute).toHaveBeenCalledWith(
-      { clientId: 'client', environment: 'test' },
-      { connectionId: id, requestId: 'request_1' },
-    );
+    expect(s.resolve).not.toHaveBeenCalled();
   });
 });

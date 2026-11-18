@@ -25,6 +25,13 @@ Grok Botを最初の接続候補としつつ、業務読取を特定Providerへ�
 - 複数の有効Grantが同じclient・scope・operationに存在する場合は対象を推測せず拒否する。通常の発行処理は重複を作らない。
 - 既存GrantはOAuth資格との明示的な結合後にだけMCPから解決できる。connection IDをtool引数へ露出せず、Grokの公式OAuth接続フローで3つの操作別Grantを安全に結合できるかはPR-06の実機確認事項とし、確認できるまで接続完了とは扱わない。
 
+## PR-06 amendment: standard OAuth connector compatibility
+
+- Grok Botの公式Remote HTTPS ConnectorはMCP URLとOAuth Client ID／Secretを設定するが、connection ID付きの追加binding endpointを呼ぶ導線を提供しない。このためMCP操作解決だけは、resource audienceを検証したOAuth tokenのsubject・client・operationと、本人が事前に発行した現在有効なGrantを照合する。
+- 一意なGrantだけを採用し、0件または複数Bunshin候補では拒否する。読取によるGrant発行・結合・更新は行わない。従来のconnection ID付き限定HTTP APIと明示bindingは互換維持する。
+- reviewed clientは既定で空のままとし、検証環境のclient ID・表示名・完全一致redirect URIを3項目そろえた時だけ有効化する。client secretはGrokとSupabaseにだけ設定し、アプリ環境変数やリポジトリへ保存しない。
+- Grokの正確なcallback URIは公開資料に記載がないため、実Connector画面で確認する。実値を推測しない。実アカウント設定、Supabase OAuth client登録、audience hook、接続、有料実行は明示承認後に限定する。
+
 ## Official references checked
 
 - MCP specification changelog: https://modelcontextprotocol.io/specification/draft/changelog
