@@ -1,5 +1,11 @@
 # BUNSHIN Platform Decision Log
 
+## 2026-11-18: 隔離stagingの確認済みOAuth clientだけ外部AI同意を許可する
+
+- Supabase preview branchとVercel custom environmentを分離したPR-06実機PoCで、Vercel runtimeは`NODE_ENV=production`を強制するため`APP_ENV=development`を拒否する一方、旧OAuth同意導線は`APP_ENV=staging`を一律停止し、ホストした非本番検証ができないことを確認した。
+- stagingの一律停止だけを外し、server-reviewed client catalogにclient ID・表示名・完全一致redirect URIが揃う場合だけOAuth同意を許可する。catalog空、callback不足、未対応scope、本人不一致は引き続きfail-closedとする。
+- 本変更はstaging専用DB/AuthとHTTPS callbackを前提とし、Production client登録、Production設定、本番デプロイを許可しない。
+
 ## 2026-11-18: xAI動画は既存非同期Jobへ接続し、全ProviderをPOST前claimする
 
 - xAI動画は `VideoSceneGenerationProviderPort` のWeb Adapterとして追加し、用途別Provider設定、既存Job、外部Job ID、費用上限、非公開Storage、字幕・編集経路を再利用する。

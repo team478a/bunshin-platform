@@ -68,17 +68,21 @@ describe('official OAuth consent service', () => {
     m.approve.mockResolvedValue({ data: { redirect_url: url }, error: null });
     expect(await decideOAuthConsent(id, 'approve')).toEqual({ kind: 'redirect', url });
   });
-  it.each(['empty', 'staging', 'callback-missing'])(
-    'does not load SDK/auth when %s',
-    async (condition) => {
-      if (condition === 'empty') m.catalog.mockReturnValue([]);
-      if (condition === 'staging') m.env.mockReturnValue({ APP_ENV: 'staging' });
-      if (condition === 'callback-missing')
-        m.catalog.mockReturnValue([{ id: 'synthetic-client', name: 'Synthetic' }]);
-      expect(await loadOAuthConsent(id)).toEqual({ kind: 'unavailable' });
-      expect(m.sdk).not.toHaveBeenCalled();
-    },
-  );
+  it.each(['empty', 'callback-missing'])('does not load SDK/auth when %s', async (condition) => {
+    if (condition === 'empty') m.catalog.mockReturnValue([]);
+    if (condition === 'callback-missing')
+      m.catalog.mockReturnValue([{ id: 'synthetic-client', name: 'Synthetic' }]);
+    expect(await loadOAuthConsent(id)).toEqual({ kind: 'unavailable' });
+    expect(m.sdk).not.toHaveBeenCalled();
+  });
+  it('allows a reviewed OAuth client in an isolated staging environment', async () => {
+    m.env.mockReturnValue({ APP_ENV: 'staging' });
+    await expect(loadOAuthConsent(id)).resolves.toMatchObject({
+      kind: 'consent',
+      view: { clientName: '確認済みアプリ' },
+    });
+    expect(m.sdk).toHaveBeenCalledTimes(1);
+  });
   it('keeps the request through login and never loads details before identity verification', async () => {
     m.identity.mockResolvedValue(null);
     expect(await loadOAuthConsent(id)).toEqual({
