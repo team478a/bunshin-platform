@@ -64,6 +64,7 @@ export * from './video-render-operations';
 export * from './video-disclosure-policy';
 export * from './social-image-generation-core';
 export * from './social-image-templates';
+export * from './social-image-provider-comparison';
 export * from './group-line-configuration';
 export * from './group-line-webhook';
 export * from './point-core';
