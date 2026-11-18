@@ -71,6 +71,7 @@ DB schema、migration、既存データへの変更はない。合成fixtureを�
 - `pnpm lint`: 25/25 tasks + Learning UI成功。既存4 warnings、error 0
 - `pnpm build`: 13/13 tasks、Next.js production build成功。新規route `/admin/images/comparison` を確認
 - `git diff --check`: 成功
+- PR CI: `verify`、`database` ともに成功（format / typecheck / lint / test / external-read PoC / Learning UI / build / DB integration / release検証を含む）
 
 全体 `pnpm test` の高負荷並列実行では、既存3ファイルが5秒timeoutした。
 
@@ -104,7 +105,7 @@ DB schema、migration、既存データへの変更はない。合成fixtureを�
 - 合成fixtureを実品質の証拠と誤認しないこと。画面とADRで明示したが、運用資料でも区別が必要である。
 - Provider価格、model、機能対応は変更され得る。実比較開始前に公式仕様と既存Provider設定を再確認する。
 - 人物一貫性はモデル機能の保証ではなく評価項目である。実画像による人間評価が必要である。
-- 全体並列実行で既存の短いtest timeoutが再現した。CIで再確認する。
+- ローカルの高負荷並列実行では既存の短いtest timeoutが再現した。単独再実行とPR CIでは成功したが、ローカル実行環境の負荷により再発する可能性がある。
 
 ## 10. 次のPR
 
