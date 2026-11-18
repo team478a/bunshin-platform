@@ -26,12 +26,16 @@ const createSchema = z
       'OPENAI',
       'GOOGLE',
       'GROK',
+      'XAI',
       'EXA',
       'FIRECRAWL',
       'CREATOMATE',
       'FAL',
       'RUNWAY',
     ]),
+    capabilityKey: z
+      .enum(['GENERAL', 'SOCIAL_IMAGE_GENERATION', 'VIDEO_SCENE_GENERATION'])
+      .optional(),
     reason: z.string().min(3).max(500).optional(),
     model: z.string().max(120).nullable().optional(),
     modelCapabilities: z
@@ -116,6 +120,7 @@ export function createAiProviderConfigurationResponse(request: Request) {
           actorUserId: await actor(),
           environment: currentAiProviderEnvironment(),
           provider: parsed.data.provider,
+          ...(parsed.data.capabilityKey ? { capabilityKey: parsed.data.capabilityKey } : {}),
           reason: parsed.data.reason ?? '管理画面から設定版を登録',
           model: parsed.data.model ?? null,
           ...(parsed.data.modelCapabilities

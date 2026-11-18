@@ -104,11 +104,13 @@ describe('ClaimSocialImageGenerationExecution', () => {
       new ClaimSocialImageGenerationExecution({ claim } as never, () => now).execute({
         workspaceId: job.workspaceId,
         requestId: '00000000-0000-4000-8000-000000000002',
+        environment: 'DEVELOPMENT',
       }),
     ).rejects.toMatchObject({ category: 'SOCIAL_IMAGE_PILOT_STOPPED', retryable: false });
     expect(claim).toHaveBeenCalledWith({
       workspaceId: job.workspaceId,
       requestId: '00000000-0000-4000-8000-000000000002',
+      environment: 'DEVELOPMENT',
       now,
       dailyFrom: new Date('2026-08-28T00:00:00.000Z'),
       monthlyFrom: new Date('2026-08-01T00:00:00.000Z'),

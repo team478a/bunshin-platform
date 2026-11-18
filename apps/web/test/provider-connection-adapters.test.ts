@@ -16,6 +16,24 @@ describe('外部サービス接続確認', () => {
     ).resolves.toEqual({ success: false, errorCategory: 'CREDENTIAL_INVALID' });
   });
 
+  it('xAIは画像を生成せずモデル情報だけで接続確認する', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ id: 'grok-imagine-image-2.0' }));
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(
+      new AiProviderConnectionTestAdapter().validate({
+        provider: 'XAI',
+        apiKey: 'xai-secret',
+        model: 'grok-imagine-image-2.0',
+      }),
+    ).resolves.toEqual({ success: true, errorCategory: null });
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.x.ai/v1/models/grok-imagine-image-2.0',
+      expect.objectContaining({ headers: { authorization: 'Bearer xai-secret' } }),
+    );
+    expect(fetchMock.mock.calls[0]?.[1]).not.toHaveProperty('method');
+    expect(fetchMock.mock.calls[0]?.[1]).not.toHaveProperty('body');
+  });
+
   it('Googleのモデル情報だけをGETして接続確認し、生成APIは呼ばない', async () => {
     const fetchMock = vi
       .fn()

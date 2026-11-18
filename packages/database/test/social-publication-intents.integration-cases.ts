@@ -224,6 +224,8 @@ export function registerSocialPublicationIntentIntegrationCases(client: PrismaCl
           bunshinId: bunshin.id,
           dailyMissionId: mission.id,
           pilotEnrollmentId: enrollment.id,
+          assetModel: 'gpt-image-1',
+          assetQuality: 'medium',
           status: 'READY_FOR_REVIEW',
           templateKey: 'PERSON_HEADLINE',
           layout: {},

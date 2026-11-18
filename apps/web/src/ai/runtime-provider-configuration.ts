@@ -27,6 +27,15 @@ export interface AdmittedOpenAiRuntimeConfiguration extends OpenAiRuntimeConfigu
   admission: AiProviderRuntimeAdmission | null;
 }
 
+export interface AdmittedSocialImageRuntimeConfiguration {
+  provider: 'OPENAI' | 'XAI';
+  configurationId: string;
+  apiKey: string;
+  model: string;
+  requestCostUsdMicros: number;
+  admission: AiProviderRuntimeAdmission;
+}
+
 export interface TrendRuntimeConfiguration {
   provider: 'GROK' | 'EXA' | 'FIRECRAWL';
   apiKey: string;
@@ -191,6 +200,62 @@ export async function reserveOpenAiRuntimeConfiguration(
   }
 }
 
+export async function reserveSocialImageRuntimeConfiguration(
+  input: {
+    provider: 'OPENAI' | 'XAI';
+    configurationId: string;
+    model: string;
+    operationKey: string;
+  },
+  dependencies?: {
+    repository: AiProviderConfigurationRepository & AiProviderRuntimeAdmissionRepository;
+    crypto?: AiProviderSecretCryptoPort;
+    environment?: LineConfigurationEnvironment;
+  },
+): Promise<AdmittedSocialImageRuntimeConfiguration> {
+  let repository = dependencies?.repository;
+  if (!repository) {
+    const db = await import('@bunshin/database');
+    repository = new db.PrismaAiProviderConfigurationRepository();
+  }
+  const environment = dependencies?.environment ?? currentAiProviderEnvironment();
+  const capabilities =
+    input.provider === 'OPENAI'
+      ? (['SOCIAL_IMAGE_GENERATION', 'GENERAL'] as const)
+      : (['SOCIAL_IMAGE_GENERATION'] as const);
+  for (const capabilityKey of capabilities) {
+    try {
+      const reserved = await new ReserveAiProviderRuntimeCall(repository).execute({
+        environment,
+        provider: input.provider,
+        capabilityKey,
+        configurationId: input.configurationId,
+        operationKey: input.operationKey,
+      });
+      try {
+        if (reserved.configuration.model !== input.model)
+          throw new ApplicationError('CONFIGURATION_ERROR', 'image model snapshot mismatch');
+        return {
+          provider: input.provider,
+          configurationId: reserved.configuration.id,
+          apiKey: (dependencies?.crypto ?? new AesGcmAiProviderSecretCrypto()).decrypt(
+            reserved.encryptedApiKey,
+          ),
+          model: input.model,
+          requestCostUsdMicros: reserved.configuration.requestCostUsdMicros ?? 0,
+          admission: reserved.admission,
+        };
+      } catch (error) {
+        await new SettleAiProviderRuntimeCall(repository).execute(reserved.admission);
+        throw error;
+      }
+    } catch (error) {
+      if (!isMissingActiveConfiguration(error)) throw error;
+    }
+  }
+  throw new ApplicationError('CONFIGURATION_ERROR', 'active image provider configuration required');
+}
+
 export async function resolveTrendRuntimeConfiguration(input?: {
   repository?: AiProviderConfigurationRepository;
   crypto?: AiProviderSecretCryptoPort;
@@ -317,6 +382,7 @@ export async function resolveVideoAiRuntimeConfiguration(input: {
   const resolved = await new ResolveAiProviderRuntimeConfiguration(repository).execute({
     environment: currentAiProviderEnvironment(),
     provider: input.provider,
+    capabilityKey: 'VIDEO_SCENE_GENERATION',
   });
   const model = resolved.configuration.model?.trim();
   if (!model)

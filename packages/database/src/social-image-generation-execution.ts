@@ -17,6 +17,8 @@ export class PrismaSocialImageGenerationExecutionRepository implements SocialIma
         });
         if (!request || !['QUEUED', 'GENERATING_ASSET', 'COMPOSING'].includes(request.status))
           return { allowed: false as const, reason: 'REQUEST_UNAVAILABLE' as const };
+        if (request.assetProvider !== 'OPENAI' && request.assetProvider !== 'XAI')
+          return { allowed: false as const, reason: 'PROVIDER_UNAVAILABLE' as const };
         const pilot = request.pilotEnrollment.pilot;
         const membership = await tx.groupMembership.findFirst({
           where: {
@@ -58,6 +60,55 @@ export class PrismaSocialImageGenerationExecutionRepository implements SocialIma
           (pilot.endsAt && pilot.endsAt <= input.now)
         )
           return { allowed: false as const, reason: 'PILOT_STOPPED' as const };
+
+        const providerConfiguration = request.providerConfigurationId
+          ? await tx.aiProviderConfiguration.findFirst({
+              where: {
+                id: request.providerConfigurationId,
+                environment: input.environment,
+                provider: request.assetProvider,
+                capabilityKey:
+                  request.assetProvider === 'XAI'
+                    ? 'SOCIAL_IMAGE_GENERATION'
+                    : { in: ['GENERAL', 'SOCIAL_IMAGE_GENERATION'] },
+                model: request.assetModel,
+                status: 'ACTIVE',
+                globallyPaused: false,
+                lastVerifiedAt: { not: null },
+                lastErrorCategory: null,
+              },
+              select: { id: true },
+            })
+          : ((await tx.aiProviderConfiguration.findFirst({
+              where: {
+                environment: input.environment,
+                provider: request.assetProvider,
+                capabilityKey: 'SOCIAL_IMAGE_GENERATION',
+                model: request.assetModel,
+                status: 'ACTIVE',
+                globallyPaused: false,
+                lastVerifiedAt: { not: null },
+                lastErrorCategory: null,
+              },
+              select: { id: true },
+            })) ??
+            (request.assetProvider === 'OPENAI'
+              ? await tx.aiProviderConfiguration.findFirst({
+                  where: {
+                    environment: input.environment,
+                    provider: 'OPENAI',
+                    capabilityKey: 'GENERAL',
+                    model: request.assetModel,
+                    status: 'ACTIVE',
+                    globallyPaused: false,
+                    lastVerifiedAt: { not: null },
+                    lastErrorCategory: null,
+                  },
+                  select: { id: true },
+                })
+              : null));
+        if (!providerConfiguration)
+          return { allowed: false as const, reason: 'PROVIDER_UNAVAILABLE' as const };
         if (
           !(await socialImagePilotCanGenerate(tx, {
             workspaceId: request.workspaceId,
@@ -123,9 +174,26 @@ export class PrismaSocialImageGenerationExecutionRepository implements SocialIma
         if (request.status === 'QUEUED') {
           const claimed = await tx.socialImageGenerationRequest.updateMany({
             where: { id: request.id, workspaceId: request.workspaceId, status: 'QUEUED' },
-            data: { status: 'GENERATING_ASSET', revision: { increment: 1 }, errorCode: null },
+            data: {
+              status: 'GENERATING_ASSET',
+              providerConfigurationId: providerConfiguration.id,
+              revision: { increment: 1 },
+              errorCode: null,
+            },
           });
           if (claimed.count !== 1)
+            return { allowed: false as const, reason: 'REQUEST_UNAVAILABLE' as const };
+        } else if (request.providerConfigurationId === null) {
+          const bound = await tx.socialImageGenerationRequest.updateMany({
+            where: {
+              id: request.id,
+              workspaceId: request.workspaceId,
+              providerConfigurationId: null,
+              status: request.status,
+            },
+            data: { providerConfigurationId: providerConfiguration.id },
+          });
+          if (bound.count !== 1)
             return { allowed: false as const, reason: 'REQUEST_UNAVAILABLE' as const };
         }
         const context: SocialImageGenerationExecutionContext = {
@@ -141,8 +209,10 @@ export class PrismaSocialImageGenerationExecutionRepository implements SocialIma
             (request.referenceImage as SocialImageGenerationExecutionContext['referenceImage']) ??
             null,
           layout: request.layout as unknown as SocialImageGenerationExecutionContext['layout'],
-          model: pilot.defaultModel,
-          quality: pilot.defaultQuality,
+          provider: request.assetProvider,
+          providerConfigurationId: providerConfiguration.id,
+          model: request.assetModel,
+          quality: request.assetQuality,
         };
         return { allowed: true as const, context };
       },

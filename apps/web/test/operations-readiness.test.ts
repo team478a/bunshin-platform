@@ -12,6 +12,7 @@ const ai = {
   id: 'ai',
   environment: 'PRODUCTION',
   provider: 'OPENAI',
+  capabilityKey: 'GENERAL',
   version: 1,
   status: 'ACTIVE',
   apiKeyConfigured: true,
@@ -55,6 +56,7 @@ const trend = {
   ...ai,
   id: 'trend',
   provider: 'GROK',
+  capabilityKey: 'GENERAL',
   model: 'grok-4-fast',
 } satisfies AiProviderConfiguration;
 const richMenu = {

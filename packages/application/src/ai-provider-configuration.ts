@@ -10,6 +10,7 @@ export const AI_PROVIDER_KEYS = [
   'OPENAI',
   'GOOGLE',
   'GROK',
+  'XAI',
   'EXA',
   'FIRECRAWL',
   'CREATOMATE',
@@ -17,6 +18,12 @@ export const AI_PROVIDER_KEYS = [
   'RUNWAY',
 ] as const;
 export type AiProviderKey = (typeof AI_PROVIDER_KEYS)[number];
+export const AI_PROVIDER_CAPABILITY_KEYS = [
+  'GENERAL',
+  'SOCIAL_IMAGE_GENERATION',
+  'VIDEO_SCENE_GENERATION',
+] as const;
+export type AiProviderCapabilityKey = (typeof AI_PROVIDER_CAPABILITY_KEYS)[number];
 export const AI_MODEL_CAPABILITIES = [
   'STRUCTURED_OUTPUT',
   'IMAGE_INPUT',
@@ -31,6 +38,7 @@ export interface AiProviderConfiguration {
   id: string;
   environment: LineConfigurationEnvironment;
   provider: AiProviderKey;
+  capabilityKey: AiProviderCapabilityKey;
   version: number;
   status: AiProviderConfigurationStatus;
   apiKeyConfigured: boolean;
@@ -71,6 +79,7 @@ export interface AiProviderConfigurationRepository {
     actorUserId: string;
     environment: LineConfigurationEnvironment;
     provider: AiProviderKey;
+    capabilityKey: AiProviderCapabilityKey;
     reason: string;
     model: string | null;
     modelCapabilities?: readonly AiModelCapability[];
@@ -106,6 +115,8 @@ export interface AiProviderConfigurationRepository {
   getActiveForRuntime(input: {
     environment: LineConfigurationEnvironment;
     provider: AiProviderKey;
+    capabilityKey?: AiProviderCapabilityKey;
+    configurationId?: string;
     dailyFrom: Date;
     monthlyFrom: Date;
     now: Date;
@@ -130,6 +141,8 @@ export function assertAiProviderRuntimeConfiguration(
   input: {
     environment: LineConfigurationEnvironment;
     provider: AiProviderKey;
+    capabilityKey?: AiProviderCapabilityKey;
+    configurationId?: string;
     reservedCostUsdMicros?: number;
     requestCount?: number;
   },
@@ -138,6 +151,10 @@ export function assertAiProviderRuntimeConfiguration(
   const { configuration } = value;
   if (configuration.environment !== input.environment || configuration.provider !== input.provider)
     throw new ApplicationError('CONFIGURATION_ERROR', 'provider configuration scope mismatch');
+  if (input.capabilityKey && configuration.capabilityKey !== input.capabilityKey)
+    throw new ApplicationError('CONFIGURATION_ERROR', 'provider capability scope mismatch');
+  if (input.configurationId && configuration.id !== input.configurationId)
+    throw new ApplicationError('CONFIGURATION_ERROR', 'provider configuration version mismatch');
   if (configuration.status !== 'ACTIVE' || configuration.globallyPaused)
     throw new ApplicationError('CONFIGURATION_ERROR', 'provider is paused');
   if (configuration.lastVerifiedAt === null || configuration.lastErrorCategory !== null)
@@ -167,6 +184,8 @@ export interface AiProviderRuntimeAdmissionRepository {
   reserveActiveForRuntime(input: {
     environment: LineConfigurationEnvironment;
     provider: AiProviderKey;
+    capabilityKey?: AiProviderCapabilityKey;
+    configurationId?: string;
     operationKey: string;
     reservedCostUsdMicros?: number;
     requestCount?: number;
@@ -223,6 +242,7 @@ export class CreateAiProviderConfigurationVersion {
     actorUserId: string;
     environment: LineConfigurationEnvironment;
     provider: AiProviderKey;
+    capabilityKey?: AiProviderCapabilityKey;
     reason: string;
     model?: string | null;
     modelCapabilities?: readonly AiModelCapability[];
@@ -235,13 +255,39 @@ export class CreateAiProviderConfigurationVersion {
       throw new ApplicationError('VALIDATION_ERROR', 'invalid environment');
     if (!AI_PROVIDER_KEYS.includes(input.provider))
       throw new ApplicationError('VALIDATION_ERROR', 'invalid provider');
+    const capabilityKey =
+      input.capabilityKey ??
+      (input.provider === 'XAI'
+        ? 'SOCIAL_IMAGE_GENERATION'
+        : input.provider === 'FAL' || input.provider === 'RUNWAY'
+          ? 'VIDEO_SCENE_GENERATION'
+          : 'GENERAL');
+    if (!AI_PROVIDER_CAPABILITY_KEYS.includes(capabilityKey))
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid provider capability');
+    const capabilityAllowed =
+      (input.provider === 'OPENAI' &&
+        (capabilityKey === 'GENERAL' || capabilityKey === 'SOCIAL_IMAGE_GENERATION')) ||
+      (input.provider === 'XAI' &&
+        (capabilityKey === 'SOCIAL_IMAGE_GENERATION' ||
+          capabilityKey === 'VIDEO_SCENE_GENERATION')) ||
+      ((input.provider === 'FAL' || input.provider === 'RUNWAY') &&
+        capabilityKey === 'VIDEO_SCENE_GENERATION') ||
+      (!['OPENAI', 'XAI', 'FAL', 'RUNWAY'].includes(input.provider) && capabilityKey === 'GENERAL');
+    if (!capabilityAllowed)
+      throw new ApplicationError('VALIDATION_ERROR', 'provider capability is not supported');
     const reason = input.reason.trim();
     if (reason.length < 3 || reason.length > 500)
       throw new ApplicationError('VALIDATION_ERROR', 'invalid reason');
     const model = input.model?.trim() || null;
-    if (['OPENAI', 'GOOGLE', 'GROK', 'FAL', 'RUNWAY'].includes(input.provider) && model === null)
+    if (
+      ['OPENAI', 'GOOGLE', 'GROK', 'XAI', 'FAL', 'RUNWAY'].includes(input.provider) &&
+      model === null
+    )
       throw new ApplicationError('VALIDATION_ERROR', 'AI model is required');
-    if (!['OPENAI', 'GOOGLE', 'GROK', 'FAL', 'RUNWAY'].includes(input.provider) && model !== null)
+    if (
+      !['OPENAI', 'GOOGLE', 'GROK', 'XAI', 'FAL', 'RUNWAY'].includes(input.provider) &&
+      model !== null
+    )
       throw new ApplicationError('VALIDATION_ERROR', 'model is not supported for this provider');
     const modelCapabilities = input.modelCapabilities ?? [];
     if (
@@ -263,6 +309,7 @@ export class CreateAiProviderConfigurationVersion {
       actorUserId: input.actorUserId,
       environment: input.environment,
       provider: input.provider,
+      capabilityKey,
       reason,
       model,
       modelCapabilities,
@@ -351,6 +398,8 @@ export class ResolveAiProviderRuntimeConfiguration {
   async execute(input: {
     environment: LineConfigurationEnvironment;
     provider: AiProviderKey;
+    capabilityKey?: AiProviderCapabilityKey;
+    configurationId?: string;
     now?: Date;
   }) {
     const now = input.now ?? new Date();
@@ -374,6 +423,8 @@ export class ReserveAiProviderRuntimeCall {
   async execute(input: {
     environment: LineConfigurationEnvironment;
     provider: AiProviderKey;
+    capabilityKey?: AiProviderCapabilityKey;
+    configurationId?: string;
     operationKey: string;
     reservedCostUsdMicros?: number;
     requestCount?: number;

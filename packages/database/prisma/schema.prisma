@@ -1898,11 +1898,18 @@ enum AiProviderKey {
   OPENAI
   GOOGLE
   GROK
+  XAI
   EXA
   FIRECRAWL
   CREATOMATE
   FAL
   RUNWAY
+}
+
+enum AiProviderCapabilityKey {
+  GENERAL
+  SOCIAL_IMAGE_GENERATION
+  VIDEO_SCENE_GENERATION
 }
 
 enum AiProviderConfigurationStatus {
@@ -6132,6 +6139,7 @@ model SocialImageGenerationPilot {
   dailyLimit         Int                              @map("daily_limit")
   monthlyLimit       Int                              @map("monthly_limit")
   memberMonthlyLimit Int                              @map("member_monthly_limit")
+  assetProvider      AiProviderKey                    @default(OPENAI) @map("asset_provider")
   defaultModel       String                           @map("default_model") @db.VarChar(120)
   defaultQuality     String                           @map("default_quality") @db.VarChar(40)
   emergencyStop      Boolean                          @default(false) @map("emergency_stop")
@@ -6203,6 +6211,10 @@ model SocialImageGenerationRequest {
   productPackVersionId        String?                            @map("product_pack_version_id") @db.Uuid
   generationContextSnapshotId String?                            @map("generation_context_snapshot_id") @db.Uuid
   pilotEnrollmentId           String                             @map("pilot_enrollment_id") @db.Uuid
+  assetProvider               AiProviderKey                      @default(OPENAI) @map("asset_provider")
+  assetModel                  String                             @map("asset_model") @db.VarChar(120)
+  assetQuality                String                             @map("asset_quality") @db.VarChar(40)
+  providerConfigurationId     String?                            @map("provider_configuration_id") @db.Uuid
   status                      SocialImageGenerationRequestStatus @default(DRAFT)
   templateKey                 String                             @map("template_key") @db.VarChar(80)
   layout                      Json
@@ -6213,6 +6225,7 @@ model SocialImageGenerationRequest {
   createdAt                   DateTime                           @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt                   DateTime                           @updatedAt @map("updated_at") @db.Timestamptz(6)
   pilotEnrollment             SocialImagePilotEnrollment         @relation(fields: [workspaceId, groupId, pilotEnrollmentId, groupMembershipId], references: [workspaceId, groupId, id, groupMembershipId], onDelete: Restrict)
+  providerConfiguration       AiProviderConfiguration?           @relation(fields: [providerConfigurationId], references: [id], onDelete: Restrict)
   media                       SocialImageGeneratedMedia[]
   videoProjects               VideoProject[]
 
@@ -6222,6 +6235,7 @@ model SocialImageGenerationRequest {
   @@index([workspaceId, groupId, ownerUserId, status, updatedAt])
   @@index([dailyMissionId, status])
   @@index([pilotEnrollmentId, status])
+  @@index([providerConfigurationId])
   @@map("social_image_generation_requests")
 }
 
@@ -6697,6 +6711,7 @@ model AiProviderConfiguration {
   id                     String                         @id @default(uuid()) @db.Uuid
   environment            LineConfigurationEnvironment
   provider               AiProviderKey
+  capabilityKey          AiProviderCapabilityKey          @default(GENERAL) @map("capability_key")
   version                Int
   status                 AiProviderConfigurationStatus  @default(DRAFT)
   encryptedApiKey        String?                        @map("encrypted_api_key") @db.Text
@@ -6714,9 +6729,10 @@ model AiProviderConfiguration {
   updatedAt              DateTime                       @updatedAt @map("updated_at") @db.Timestamptz(6)
   audits                 AiProviderConfigurationAudit[]
   callAdmissions         AiProviderCallAdmission[]
+  socialImageRequests    SocialImageGenerationRequest[]
 
-  @@unique([environment, provider, version])
-  @@index([environment, provider, status])
+  @@unique([environment, provider, capabilityKey, version])
+  @@index([environment, provider, capabilityKey, status])
   @@map("ai_provider_configurations")
 }
 

@@ -12,6 +12,10 @@ const request = {
   dailyMissionId: '00000000-0000-4000-8000-000000000007',
   pilotEnrollmentId: '00000000-0000-4000-8000-000000000009',
   campaignId: null,
+  assetProvider: 'OPENAI',
+  assetModel: 'gpt-image-1',
+  assetQuality: 'medium',
+  providerConfigurationId: null,
   status: 'QUEUED',
   layout: {
     templateKey: 'THREE_POINTS' as const,
@@ -60,6 +64,11 @@ function transaction(overrides: Record<string, unknown> = {}) {
     campaign: { findFirst: vi.fn() },
     serviceMediaGenerationReservation: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
     socialImageGeneratedMedia: { createMany: vi.fn().mockResolvedValue({ count: 2 }) },
+    aiProviderConfiguration: {
+      findFirst: vi.fn().mockResolvedValue({
+        id: '00000000-0000-4000-8000-000000000010',
+      }),
+    },
     ...overrides,
   };
   return tx;
@@ -74,6 +83,7 @@ function repository(tx: ReturnType<typeof transaction>) {
 const input = {
   workspaceId: request.workspaceId,
   requestId: request.id,
+  environment: 'DEVELOPMENT' as const,
   now,
   dailyFrom: new Date('2026-08-28T00:00:00.000Z'),
   monthlyFrom: new Date('2026-08-01T00:00:00.000Z'),
@@ -193,6 +203,8 @@ describe('PrismaSocialImageGenerationExecutionRepository', () => {
           pilotEnrollmentId: request.pilotEnrollmentId,
           idempotencyKey: 'carousel-1',
           layout: request.layout,
+          provider: 'OPENAI',
+          providerConfigurationId: '00000000-0000-4000-8000-000000000010',
           model: 'gpt-image-1',
           quality: 'medium',
         },
