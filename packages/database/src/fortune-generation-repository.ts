@@ -115,6 +115,18 @@ export class PrismaFortuneGenerationRepository {
           generatedAt: new Date(),
         },
       });
+      if (scope.personalProfileEnabled && !participant.profileUpdatedAt) {
+        // Drawing directly is also a valid way to finish the optional intake.
+        await tx.fortuneParticipant.updateMany({
+          where: {
+            id: participant.id,
+            serviceSettingId: scope.id,
+            userId: input.actorUserId,
+            profileUpdatedAt: null,
+          },
+          data: { profileUpdatedAt: new Date() },
+        });
+      }
       return { kind: 'READY', reading: await fortuneReadingView(tx, reading) };
     });
   }

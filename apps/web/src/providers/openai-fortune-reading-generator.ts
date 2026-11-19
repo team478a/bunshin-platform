@@ -137,7 +137,7 @@ export class OpenAiFortuneReadingGenerator implements FortuneAiReadingGenerator 
                         {
                           role: 'system',
                           content:
-                            'reflectionPromptには、今日の小さな行動を次回に振り返る具体的で答えやすい問いを一つ書いてください。過去のreflectionAnswerは、試したかどうかと変化の有無のみを示します。回答を決めつけたり同じ提案を繰り返したりせず、今日のカードと本人の希望に合わせて小さな選択肢を示してください。',
+                            'reflectionPromptには、今日の小さな行動を次回に振り返る具体的で答えやすい問いを一つ書いてください。過去のreflectionAnswerは、試したかどうかと変化の有無のみを示します。回答を決めつけたり同じ提案を繰り返したりせず、今日のカードと本人の希望に合わせて小さな選択肢を示してください。承認済み解釈から言える範囲で、本人が考えを整理するヒントや次に確認できる観点を本文に入れてください。',
                         },
                       ]
                     : []),
