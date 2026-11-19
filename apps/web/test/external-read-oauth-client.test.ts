@@ -9,7 +9,10 @@ const m = vi.hoisted(() => ({
 vi.mock('@bunshin/config', () => ({ getServerEnvironment: m.env }));
 vi.mock('@bunshin/observability', () => ({ createLogger: () => ({ warn: m.warn }) }));
 vi.mock('@supabase/supabase-js', () => ({ createClient: m.createClient }));
-import { resolveExternalReadOAuthClient } from '../src/services/external-read-oauth-client';
+import {
+  resolveExternalReadOAuthClient,
+  resolveExternalReadOAuthCredentialClient,
+} from '../src/services/external-read-oauth-client';
 
 const redirect = 'https://grok.com/connectors-oauth-exchange-code/';
 const clients = [{ id: 'reviewed-template', name: 'Grok', oauthRedirectUris: [redirect] }];
@@ -49,10 +52,18 @@ describe('external read OAuth client resolution', () => {
   it('admits the exact reviewed public dynamic client in staging', async () => {
     await expect(
       resolveExternalReadOAuthClient('dynamic-client', redirect, clients),
-    ).resolves.toEqual({
-      ...clients[0],
-      id: 'dynamic-client',
-    });
+    ).resolves.toEqual({ ...clients[0], id: 'dynamic-client' });
+    expect(m.getClient).toHaveBeenCalledWith('dynamic-client');
+  });
+
+  it('re-validates the exact reviewed dynamic client for a signed credential', async () => {
+    await expect(
+      resolveExternalReadOAuthCredentialClient(
+        'dynamic-client',
+        clients,
+        new AbortController().signal,
+      ),
+    ).resolves.toEqual(clients[0]);
     expect(m.getClient).toHaveBeenCalledWith('dynamic-client');
   });
 
