@@ -7,8 +7,10 @@ const m = vi.hoisted(() => ({
   details: vi.fn(),
   approve: vi.fn(),
   deny: vi.fn(),
+  warn: vi.fn(),
 }));
 vi.mock('@bunshin/config', () => ({ getServerEnvironment: m.env }));
+vi.mock('@bunshin/observability', () => ({ createLogger: () => ({ warn: m.warn }) }));
 vi.mock('../src/services/external-read-client-catalog', () => ({
   externalReadClientCatalog: m.catalog,
 }));
@@ -143,6 +145,11 @@ describe('official OAuth consent service', () => {
         message: 'OAuth consent unavailable',
       });
       expect(m.approve).not.toHaveBeenCalled();
+      if (change === 'provider-error')
+        expect(m.warn).toHaveBeenCalledWith('External OAuth authorization rejected', {
+          route: '/oauth/consent',
+          errorCode: 'EXTERNAL_OAUTH_AUTHORIZATION_DETAILS_UNAVAILABLE',
+        });
     },
   );
   it('resumes a previously approved request without another approval', async () => {

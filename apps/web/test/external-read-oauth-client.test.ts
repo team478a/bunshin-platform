@@ -4,8 +4,10 @@ const m = vi.hoisted(() => ({
   env: vi.fn(),
   createClient: vi.fn(),
   getClient: vi.fn(),
+  warn: vi.fn(),
 }));
 vi.mock('@bunshin/config', () => ({ getServerEnvironment: m.env }));
+vi.mock('@bunshin/observability', () => ({ createLogger: () => ({ warn: m.warn }) }));
 vi.mock('@supabase/supabase-js', () => ({ createClient: m.createClient }));
 import { resolveExternalReadOAuthClient } from '../src/services/external-read-oauth-client';
 
@@ -85,6 +87,7 @@ describe('external read OAuth client resolution', () => {
     await expect(
       resolveExternalReadOAuthClient('dynamic-client', redirect, clients),
     ).resolves.toBeNull();
+    expect(m.warn).not.toHaveBeenCalled();
     m.env.mockReturnValue({
       APP_ENV: 'staging',
       EXTERNAL_READ_OAUTH_DYNAMIC_CLIENTS_ENABLED: 'true',
@@ -96,5 +99,9 @@ describe('external read OAuth client resolution', () => {
     await expect(
       resolveExternalReadOAuthClient('dynamic-client', redirect, clients),
     ).resolves.toBeNull();
+    expect(m.warn).toHaveBeenCalledWith('External OAuth dynamic client rejected', {
+      route: '/oauth/consent',
+      errorCode: 'EXTERNAL_OAUTH_DYNAMIC_CLIENT_LOOKUP_FAILED',
+    });
   });
 });

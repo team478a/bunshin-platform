@@ -1,5 +1,6 @@
 import 'server-only';
 import { getServerEnvironment } from '@bunshin/config';
+import { createLogger } from '@bunshin/observability';
 import { ApplicationError } from '@bunshin/shared';
 import { z } from 'zod';
 import { createSupabaseServerClient } from '../auth/supabase';
@@ -31,6 +32,13 @@ export interface OAuthConsentView {
   callbackOrigin: string;
 }
 const unavailable = () => new ApplicationError('FORBIDDEN', 'OAuth consent unavailable');
+function rejectAuthorization(errorCode: string): never {
+  createLogger().warn('External OAuth authorization rejected', {
+    route: '/oauth/consent',
+    errorCode,
+  });
+  throw unavailable();
+}
 function callback(raw: string, environment: string) {
   try {
     const url = new URL(raw);
@@ -91,11 +99,11 @@ async function context(id: string) {
   const identity = await verifiedFirstPartyIdentity(sdk);
   if (!identity) return { kind: 'login' as const, returnTo: oauthConsentPath(id)! };
   const { data, error } = await sdk.auth.oauth.getAuthorizationDetails(id);
-  if (error || !data) throw unavailable();
+  if (error || !data) rejectAuthorization('EXTERNAL_OAUTH_AUTHORIZATION_DETAILS_UNAVAILABLE');
   if ('redirect_url' in data)
     return { kind: 'redirect' as const, url: redirectTo(data.redirect_url, clients, environment) };
   const parsed = detailsSchema.safeParse(data);
-  if (!parsed.success) throw unavailable();
+  if (!parsed.success) rejectAuthorization('EXTERNAL_OAUTH_AUTHORIZATION_DETAILS_INVALID');
   const details = parsed.data;
   const client = await resolveExternalReadOAuthClient(
     details.client.id,
@@ -103,16 +111,17 @@ async function context(id: string) {
     clients,
   );
   const scopes = [...new Set(details.scope.split(/\s+/).filter(Boolean))];
-  if (
-    !client ||
-    details.authorization_id !== id ||
-    details.user.id !== identity.providerUserId ||
-    scopes.some((scope) => !Object.hasOwn(oauthScopeLabels, scope)) ||
-    !client.oauthRedirectUris?.includes(details.redirect_uri)
-  )
-    throw unavailable();
+  if (!client) rejectAuthorization('EXTERNAL_OAUTH_CLIENT_REJECTED');
+  if (details.authorization_id !== id)
+    rejectAuthorization('EXTERNAL_OAUTH_AUTHORIZATION_ID_MISMATCH');
+  if (details.user.id !== identity.providerUserId)
+    rejectAuthorization('EXTERNAL_OAUTH_AUTHORIZATION_USER_MISMATCH');
+  if (scopes.some((scope) => !Object.hasOwn(oauthScopeLabels, scope)))
+    rejectAuthorization('EXTERNAL_OAUTH_AUTHORIZATION_SCOPE_REJECTED');
+  if (!client.oauthRedirectUris?.includes(details.redirect_uri))
+    rejectAuthorization('EXTERNAL_OAUTH_AUTHORIZATION_REDIRECT_REJECTED');
   const uri = callback(details.redirect_uri, environment);
-  if (!uri) throw unavailable();
+  if (!uri) rejectAuthorization('EXTERNAL_OAUTH_AUTHORIZATION_CALLBACK_INVALID');
   return {
     kind: 'consent' as const,
     sdk,
