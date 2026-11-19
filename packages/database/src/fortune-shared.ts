@@ -4,7 +4,7 @@ import type {
   FortuneReadingView,
   FortuneTheme,
 } from '@bunshin/capability-fortune';
-import { TAROT_DECK } from '@bunshin/capability-fortune';
+import { FORTUNE_REFLECTION_ANSWERS, TAROT_DECK } from '@bunshin/capability-fortune';
 import type { Prisma, PrismaClient } from '@prisma/client';
 
 type Db = PrismaClient | Prisma.TransactionClient;
@@ -74,6 +74,8 @@ export async function fortuneReadingView(
     status: 'GENERATING' | 'READY_AI' | 'READY_BASIC' | 'FAILED' | 'DELETED';
     readingText: string | null;
     actionStep: string | null;
+    reflectionPrompt?: string | null;
+    reflectionAnswer?: string | null;
     knowledgeVersionId: string | null;
     createdAt: Date;
   },
@@ -83,6 +85,9 @@ export async function fortuneReadingView(
     where: { readingId: row.id },
     select: { rating: true, issueCode: true },
   });
+  const reflectionAnswer = FORTUNE_REFLECTION_ANSWERS.find(
+    (answer) => answer === row.reflectionAnswer,
+  );
   return {
     id: row.id,
     localDate: row.localDate.toISOString().slice(0, 10),
@@ -94,6 +99,10 @@ export async function fortuneReadingView(
     title: row.status === 'FAILED' ? null : (meaning?.title ?? null),
     body: row.status === 'FAILED' ? null : row.readingText,
     actionStep: row.status === 'FAILED' ? null : row.actionStep,
+    ...(row.reflectionPrompt && row.status === 'READY_AI'
+      ? { reflectionPrompt: row.reflectionPrompt }
+      : {}),
+    ...(reflectionAnswer ? { reflectionAnswer } : {}),
     feedbackRating: feedback?.rating ?? null,
     feedbackIssue: (feedback?.issueCode as FortuneFeedbackIssue | null | undefined) ?? null,
     createdAt: row.createdAt,

@@ -24,6 +24,7 @@ export function FortuneOperatorEditor({
   enabled,
   aiEnabled,
   personalProfileEnabled,
+  reflectionEnabled,
   weeklyNotificationEnabled,
   weeklyNotificationDay,
   weeklyNotificationHour,
@@ -41,6 +42,7 @@ export function FortuneOperatorEditor({
   enabled: boolean;
   aiEnabled: boolean;
   personalProfileEnabled: boolean;
+  reflectionEnabled: boolean;
   weeklyNotificationEnabled: boolean;
   weeklyNotificationDay: number;
   weeklyNotificationHour: number;
@@ -292,6 +294,24 @@ export function FortuneOperatorEditor({
                 }
               >
                 {personalProfileEnabled ? '初回ヒアリングを停止する' : '初回ヒアリングを有効にする'}
+              </button>
+              <button
+                className="button button--secondary"
+                type="button"
+                disabled={busy || (!reflectionEnabled && !personalProfileEnabled)}
+                onClick={() =>
+                  void run(async () => {
+                    await send(serviceSlug, {
+                      action: 'SET_REFLECTION_ENABLED',
+                      enabled: !reflectionEnabled,
+                    });
+                    setMessage(
+                      reflectionEnabled ? '振り返りを停止しました。' : '振り返りを有効にしました。',
+                    );
+                  })
+                }
+              >
+                {reflectionEnabled ? '振り返りを停止する' : '振り返りを有効にする'}
               </button>
             </div>
             <p>{aiEnabled ? '現在、AI個別化は有効です。' : '現在、標準解釈だけを表示します。'}</p>

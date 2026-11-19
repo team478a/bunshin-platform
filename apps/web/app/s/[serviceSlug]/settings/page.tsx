@@ -1,9 +1,11 @@
 import { PublicShell } from '../../../ui/public-shell';
 import { fortuneDailyReadingService } from '../../../../src/fortune/runtime';
+import { resolveFortuneGuidanceSettings } from '../../../../src/fortune/guidance-settings';
 import { resolveFortunePage } from '../../../../src/fortune/page-context';
 import { FortuneNav } from '../fortune-ui';
 import { FortuneProfileForm } from '../fortune-profile-form';
 import { fortunePersonalProfileRepository } from '../../../../src/fortune/personal-profile';
+import { FortuneNotificationSlot } from '../fortune-notification-slot';
 import { FortuneNotificationSetting } from '../fortune-notification-setting';
 import { FortunePersonalizationSetting, FortuneWithdrawButton } from '../fortune-actions';
 
@@ -59,6 +61,7 @@ export default async function FortuneSettingsPage({
             key={String(profile.profile.consented)}
             serviceSlug={serviceSlug}
             profile={profile.profile}
+            guidance={resolveFortuneGuidanceSettings(setting.guidanceSettings)}
             enabled={profile.enabled}
           />
         )}
@@ -83,7 +86,17 @@ export default async function FortuneSettingsPage({
           ) : !today.participant ? (
             <p>年齢確認を終えると、LINE通知を設定できます。</p>
           ) : (
-            <FortuneNotificationSetting serviceSlug={serviceSlug} />
+            <>
+              <FortuneNotificationSetting serviceSlug={serviceSlug} />
+              {profile?.enabled && (
+                <FortuneNotificationSlot
+                  serviceSlug={serviceSlug}
+                  slot={profile.notificationSlot}
+                  defaultWeekday={setting.weeklyNotificationDay}
+                  defaultHour={setting.weeklyNotificationHour}
+                />
+              )}
+            </>
           )}
         </section>
         <section className="settings-card">

@@ -90,6 +90,7 @@ describe('interrupted fortune generation recovery', () => {
         status: 'READY_BASIC',
         failureCode: 'AI_GENERATION_INTERRUPTED',
         modelName: null,
+        pendingConsultation: null,
       },
     });
   });
@@ -112,6 +113,7 @@ describe('interrupted fortune generation recovery', () => {
           status: 'FAILED',
           failureCode: 'AI_GENERATION_INTERRUPTED_MISSING_BASIC',
           modelName: null,
+          pendingConsultation: null,
         },
       }),
     );
