@@ -20,6 +20,13 @@ export const FORTUNE_FEEDBACK_ISSUES = [
 ] as const;
 export type FortuneFeedbackIssue = (typeof FORTUNE_FEEDBACK_ISSUES)[number];
 
+export const FORTUNE_REFLECTION_ANSWERS = [
+  'TRIED_CHANGED',
+  'TRIED_NO_CHANGE',
+  'NOT_TRIED',
+] as const;
+export type FortuneReflectionAnswer = (typeof FORTUNE_REFLECTION_ANSWERS)[number];
+
 export interface FortuneReadingView {
   id: string;
   localDate: string;
@@ -33,6 +40,8 @@ export interface FortuneReadingView {
   actionStep: string | null;
   feedbackRating: FortuneFeedbackRating | null;
   feedbackIssue: FortuneFeedbackIssue | null;
+  reflectionPrompt?: string;
+  reflectionAnswer?: FortuneReflectionAnswer;
   createdAt: Date;
 }
 
@@ -56,6 +65,7 @@ export interface FortuneAiGenerationClaim {
   bunshinId: string;
   reading: FortuneReadingView;
   personalGuidance?: boolean;
+  reflectionEnabled?: boolean;
   personalProfileRevision?: Date;
   consultation?: string;
   personalization?: {
@@ -82,6 +92,7 @@ export interface FortuneAiGenerationClaim {
       actionStep: string | null;
       feedbackRating: FortuneFeedbackRating | null;
       feedbackIssue: FortuneFeedbackIssue | null;
+      reflectionAnswer?: FortuneReflectionAnswer;
     }>;
   };
 }

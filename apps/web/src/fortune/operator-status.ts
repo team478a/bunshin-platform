@@ -15,6 +15,7 @@ export interface FortuneOperatorStatus {
   enabled: boolean;
   aiEnabled: boolean;
   personalProfileEnabled: boolean;
+  reflectionEnabled: boolean;
   weeklyNotificationEnabled: boolean;
   weeklyNotificationDay: number;
   weeklyNotificationHour: number;
@@ -72,6 +73,7 @@ export async function fortuneOperatorStatus(
             enabled: true,
             aiEnabled: true,
             personalProfileEnabled: true,
+            reflectionEnabled: true,
             weeklyNotificationEnabled: true,
             weeklyNotificationDay: true,
             weeklyNotificationHour: true,
@@ -182,6 +184,7 @@ export async function fortuneOperatorStatus(
     enabled: configuration.fortuneSetting?.enabled ?? false,
     aiEnabled: configuration.fortuneSetting?.aiEnabled ?? false,
     personalProfileEnabled: configuration.fortuneSetting?.personalProfileEnabled ?? false,
+    reflectionEnabled: configuration.fortuneSetting?.reflectionEnabled ?? false,
     weeklyNotificationEnabled: configuration.fortuneSetting?.weeklyNotificationEnabled ?? false,
     weeklyNotificationDay: configuration.fortuneSetting?.weeklyNotificationDay ?? 3,
     weeklyNotificationHour: configuration.fortuneSetting?.weeklyNotificationHour ?? 19,

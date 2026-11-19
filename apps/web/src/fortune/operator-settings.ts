@@ -22,7 +22,8 @@ export async function setFortuneEnabled(input: {
   return { enabled: input.enabled };
 }
 
-export async function setFortunePersonalProfileEnabled(input: {
+export async function setFortuneGuidanceSetting(input: {
+  field: 'personalProfileEnabled' | 'reflectionEnabled';
   serviceSlug: string;
   actorUserId: string;
   enabled: boolean;
@@ -35,10 +36,10 @@ export async function setFortunePersonalProfileEnabled(input: {
       groupId: service.serviceId,
       configurationId: service.configuration.id,
     },
-    data: { personalProfileEnabled: input.enabled },
+    data: { [input.field]: input.enabled },
   });
   if (updated.count !== 1) throw new ApplicationError('NOT_FOUND', 'fortune setting not found');
-  return { personalProfileEnabled: input.enabled };
+  return { [input.field]: input.enabled };
 }
 
 export async function setFortuneAiEnabled(input: {
