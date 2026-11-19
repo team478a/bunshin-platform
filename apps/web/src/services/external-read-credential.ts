@@ -1,5 +1,6 @@
 import 'server-only';
 import { getServerEnvironment } from '@bunshin/config';
+import { createLogger } from '@bunshin/observability';
 import { authConfiguration } from '../auth/supabase';
 import { SupabaseExternalReadCredentialVerifier } from '../auth/external-read-credential';
 import { externalReadClientCatalog } from './external-read-client-catalog';
@@ -18,6 +19,16 @@ export async function createExternalReadCredentialServices(expectedAudience = 'a
     expectedAudience,
     resolveClientId: async (clientId, signal) =>
       (await resolveExternalReadOAuthCredentialClient(clientId, clients, signal))?.id ?? null,
+    ...(environment === 'staging' && expectedAudience !== 'authenticated'
+      ? {
+          onRejected: (stage) =>
+            createLogger().warn('External MCP credential verification rejected', {
+              route: '/api/mcp',
+              errorCode: 'MCP_CREDENTIAL_STAGE_REJECTED',
+              stage,
+            }),
+        }
+      : {}),
   });
   const db = await import('@bunshin/database');
   const bindings = new db.PrismaExternalReadGrantRepository(

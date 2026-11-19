@@ -41,7 +41,7 @@ async function token(change: Record<string, unknown> = {}, key?: CryptoKey) {
   );
   return header + '.' + payload + '.' + Buffer.from(signature).toString('base64url');
 }
-function setup(userId = subject) {
+function setup(userId = subject, onRejected = vi.fn()) {
   const calls: string[] = [];
   const request: typeof fetch = (input) => {
     const url = requestUrl(input);
@@ -67,18 +67,32 @@ function setup(userId = subject) {
   return {
     calls,
     request,
+    onRejected,
     verifier: new SupabaseExternalReadCredentialVerifier(
       {
         url: base,
         key: 'synthetic-publishable-key-only',
         environment: 'test',
         clientIds: [clientId],
+        onRejected,
       },
       request,
     ),
   };
 }
 describe('real SDK OAuth signature and identity verification', () => {
+  it('reports only the rejection stage for a signed token with the wrong audience', async () => {
+    const s = setup();
+    expect(
+      await s.verifier.verify(
+        'Bearer ' + (await token({ aud: 'https://foreign.example/api/mcp' })),
+        new AbortController().signal,
+      ),
+    ).toBeNull();
+    expect(s.onRejected.mock.calls).toEqual([['audience']]);
+    expect(s.calls).not.toContain(base + '/auth/v1/user');
+  });
+
   it('verifies an ES256 signature through SDK JWKS and checks the auth user', async () => {
     const s = setup();
     const result = await s.verifier.verify(

@@ -14,7 +14,17 @@ interface Configuration {
   clientIds: readonly string[];
   expectedAudience?: string;
   resolveClientId?: (clientId: string, signal: AbortSignal) => Promise<string | null>;
+  onRejected?: (stage: CredentialRejectionStage) => void;
 }
+type CredentialRejectionStage =
+  | 'bearer_format'
+  | 'claims_verification'
+  | 'claims_schema'
+  | 'issuer'
+  | 'audience'
+  | 'token_time'
+  | 'client_policy'
+  | 'user_verification';
 const claimsSchema = z.object({
   iss: z.string(),
   aud: z.string().min(1).max(2048),
@@ -39,6 +49,12 @@ function checkError(error: { name: string; status?: number | undefined }) {
 /** Cookie-free OAuth credential verification; never signs in, refreshes or provisions an account. */
 export class SupabaseExternalReadCredentialVerifier implements ExternalReadCredentialVerifier {
   private readonly issuer: string;
+
+  private reject(stage: CredentialRejectionStage): null {
+    this.config.onRejected?.(stage);
+    return null;
+  }
+
   constructor(
     private readonly config: Configuration,
     private readonly request: typeof fetch = fetch,
@@ -66,11 +82,12 @@ export class SupabaseExternalReadCredentialVerifier implements ExternalReadCrede
     signal: AbortSignal,
   ): Promise<VerifiedExternalReadCredential | null> {
     active(signal);
-    if (!this.config.clientIds.length || authorization.length > 8192) return null;
+    if (!this.config.clientIds.length) return this.reject('client_policy');
+    if (authorization.length > 8192) return this.reject('bearer_format');
     const matched = /^Bearer ([A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)$/i.exec(
       authorization,
     );
-    if (!matched?.[1]) return null;
+    if (!matched?.[1]) return this.reject('bearer_format');
     const token = matched[1];
     try {
       const client = createClient(this.config.url, this.config.key, {
@@ -81,44 +98,43 @@ export class SupabaseExternalReadCredentialVerifier implements ExternalReadCrede
       active(signal);
       if (claimsResult.error) {
         checkError(claimsResult.error);
-        return null;
+        return this.reject('claims_verification');
       }
       const parsed = claimsSchema.safeParse(claimsResult.data?.claims);
-      if (!parsed.success) return null;
+      if (!parsed.success) return this.reject('claims_schema');
       const claims = parsed.data;
       const seconds = () => {
         const time = this.now().getTime();
         if (!Number.isFinite(time)) throw new ExternalReadError('UNAVAILABLE');
         return Math.floor(time / 1000);
       };
+      if (claims.iss !== this.issuer) return this.reject('issuer');
+      if (claims.aud !== (this.config.expectedAudience ?? 'authenticated'))
+        return this.reject('audience');
       if (
-        claims.iss !== this.issuer ||
-        claims.aud !== (this.config.expectedAudience ?? 'authenticated') ||
         claims.exp <= seconds() ||
         claims.iat > seconds() ||
         claims.exp <= claims.iat ||
         (claims.nbf !== undefined && claims.nbf > seconds())
       )
-        return null;
+        return this.reject('token_time');
       const resolvedClientId = this.config.clientIds.includes(claims.client_id)
         ? claims.client_id
         : this.config.resolveClientId
           ? await this.config.resolveClientId(claims.client_id, signal)
           : null;
       active(signal);
-      if (!resolvedClientId || !this.config.clientIds.includes(resolvedClientId)) return null;
+      if (!resolvedClientId || !this.config.clientIds.includes(resolvedClientId))
+        return this.reject('client_policy');
       const userResult = await client.auth.getUser(token);
       active(signal);
       if (userResult.error) {
         checkError(userResult.error);
-        return null;
+        return this.reject('user_verification');
       }
-      if (
-        !userResult.data.user ||
-        userResult.data.user.id !== claims.sub ||
-        claims.exp <= seconds()
-      )
-        return null;
+      if (!userResult.data.user || userResult.data.user.id !== claims.sub)
+        return this.reject('user_verification');
+      if (claims.exp <= seconds()) return this.reject('token_time');
       return {
         issuer: this.issuer,
         subject: claims.sub,
