@@ -55,7 +55,6 @@ export type ExternalGrantOwnerTarget = Awaited<ReturnType<typeof externalReadGra
 export async function externalGrantOwnerManager() {
   const db = await import('@bunshin/database');
   const env = getServerEnvironment().APP_ENV;
-  if (env === 'staging') return null; // Never reinterpret unsupported staging as development/production.
   const clients = externalReadClientCatalog();
   return new db.PrismaExternalReadGrantRepository(db.prisma, env, () => ({
     enabled: clients.length > 0,
