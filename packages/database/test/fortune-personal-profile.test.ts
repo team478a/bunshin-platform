@@ -93,6 +93,7 @@ describe('fortune personal profile', () => {
     await expect(repo.read(actor)).resolves.toEqual({
       enabled: true,
       completed: true,
+      revision: null,
       profile: { consented: false, interest: null, question: null, style: null },
     });
   });

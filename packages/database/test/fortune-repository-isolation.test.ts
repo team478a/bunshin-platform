@@ -165,6 +165,36 @@ describe('fortune repository isolation', () => {
     expect(tx.fortuneReading.upsert).not.toHaveBeenCalled();
   });
 
+  it('skips stored personal context when the participant did not consent', async () => {
+    const tx = targetClient({ ...scope, personalProfileEnabled: true });
+    tx.fortuneParticipant.findFirst.mockResolvedValue({
+      profileUpdatedAt: new Date(),
+      profileConsentedAt: null,
+    });
+    tx.fortuneReading.updateMany.mockResolvedValue({ count: 1 });
+    tx.fortuneReading.findFirst.mockResolvedValue({
+      ...reading,
+      pendingConsultation: '今日だけの相談',
+    });
+    const client = {
+      $transaction: vi.fn((callback: (transaction: typeof tx) => unknown) =>
+        Promise.resolve(callback(tx)),
+      ),
+    };
+    await expect(
+      repository(client).claimAiGeneration({ serviceSlug, actorUserId, readingId }),
+    ).resolves.toMatchObject({
+      personalGuidance: true,
+      consultation: '今日だけの相談',
+      personalization: { recentReadings: [] },
+    });
+    expect(tx.fortuneParticipant.findFirst).toHaveBeenCalledTimes(1);
+    expect(tx.fortuneReading.findMany).not.toHaveBeenCalled();
+    expect(tx.fortuneReading.update.mock.calls[0]?.[0].data.personalizationContext).toMatchObject({
+      sources: ['CURRENT_CONSULTATION'],
+    });
+  });
+
   it('uses only the participant-selected owned Bunshin when claiming AI generation', async () => {
     const tx = targetClient();
     tx.fortuneParticipant.findFirst.mockResolvedValue({

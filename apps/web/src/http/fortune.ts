@@ -40,7 +40,9 @@ const personalProfileBody = z.discriminatedUnion('consented', [
     })
     .strict(),
 ]);
-const drawBody = z.object({ theme: z.enum(FORTUNE_THEMES) }).strict();
+const drawBody = z
+  .object({ theme: z.enum(FORTUNE_THEMES), consultation: z.string().trim().max(500).optional() })
+  .strict();
 const feedbackBody = z
   .object({
     rating: z.enum(FORTUNE_FEEDBACK_RATINGS),
@@ -169,6 +171,7 @@ export const drawFortuneResponse = (request: Request, serviceSlug: string) =>
         serviceSlug: parsedSlug,
         actorUserId,
         theme: body.theme,
+        ...(body.consultation ? { consultation: body.consultation } : {}),
       });
     },
     201,

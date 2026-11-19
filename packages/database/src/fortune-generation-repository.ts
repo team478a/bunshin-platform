@@ -11,6 +11,8 @@ import type {
 import type { Prisma, PrismaClient } from '@prisma/client';
 import { dateOnly, fortuneReadingView, fortuneTarget } from './fortune-shared';
 import { lockFortuneGenerationLease } from './fortune-generation-jobs';
+import { PrismaFortunePersonalProfileRepository } from './fortune-personal-profile';
+import { fortuneReadingRetentionCutoff } from './fortune-retention';
 
 export class PrismaFortuneGenerationRepository {
   constructor(private readonly db: PrismaClient) {}
@@ -43,6 +45,7 @@ export class PrismaFortuneGenerationRepository {
     actorUserId: string;
     localDate: string;
     theme: FortuneTheme;
+    consultation?: string;
     cardCode: string;
     orientation: FortuneOrientation;
   }): Promise<CreateFortuneReadingResult> {
@@ -104,6 +107,9 @@ export class PrismaFortuneGenerationRepository {
           status: 'READY_BASIC',
           readingText: meaning.body,
           actionStep: meaning.actionStep,
+          ...(scope.personalProfileEnabled && scope.aiEnabled && input.consultation
+            ? { pendingConsultation: input.consultation }
+            : {}),
           promptVersion: knowledge.promptVersion,
           generatedAt: new Date(),
         },
@@ -157,55 +163,65 @@ export class PrismaFortuneGenerationRepository {
         },
       });
       if (!reading) return null;
-      const [participantProfile, recentReadings] = await Promise.all([
-        tx.fortuneParticipant.findFirst({
-          where: {
-            id: reading.participantId,
-            serviceSettingId: scope.id,
-            userId: input.actorUserId,
-            workspaceId: scope.workspaceId,
-            personalizationBunshin: {
-              is: {
-                groupId: scope.groupId,
-                ownerUserId: input.actorUserId,
-                status: 'ACTIVE',
-              },
-            },
-          },
-          select: {
-            personalizationBunshin: {
-              select: {
-                id: true,
-                name: true,
-                objectiveSummary: true,
-                audienceSummary: true,
-                personalitySummary: true,
-                updatedAt: true,
-                memories: {
-                  where: { active: true, deletedAt: null },
-                  orderBy: [{ importance: 'desc' }, { updatedAt: 'desc' }],
-                  take: 10,
+      const personal = await new PrismaFortunePersonalProfileRepository(tx).read(input);
+      const personalProfileRevision = personal?.enabled ? personal.revision : null;
+      const useEarlierContext = personal?.enabled
+        ? Boolean(personalProfileRevision)
+        : !personal?.completed;
+      const [participantProfile, recentReadings] = useEarlierContext
+        ? await Promise.all([
+            tx.fortuneParticipant.findFirst({
+              where: {
+                id: reading.participantId,
+                serviceSettingId: scope.id,
+                userId: input.actorUserId,
+                workspaceId: scope.workspaceId,
+                personalizationBunshin: {
+                  is: {
+                    groupId: scope.groupId,
+                    ownerUserId: input.actorUserId,
+                    status: 'ACTIVE',
+                  },
                 },
               },
-            },
-          },
-        }),
-        tx.fortuneReading.findMany({
-          where: {
-            id: { not: reading.id },
-            serviceSettingId: scope.id,
-            participantId: reading.participantId,
-            memberUserId: input.actorUserId,
-            status: { in: ['READY_AI', 'READY_BASIC'] },
-            deletedAt: null,
-          },
-          orderBy: [{ localDate: 'desc' }, { createdAt: 'desc' }],
-          take: 7,
-          include: {
-            feedback: { select: { id: true, rating: true, issueCode: true } },
-          },
-        }),
-      ]);
+              select: {
+                personalizationBunshin: {
+                  select: {
+                    id: true,
+                    name: true,
+                    objectiveSummary: true,
+                    audienceSummary: true,
+                    personalitySummary: true,
+                    updatedAt: true,
+                    memories: {
+                      where: { active: true, deletedAt: null },
+                      orderBy: [{ importance: 'desc' }, { updatedAt: 'desc' }],
+                      take: 10,
+                    },
+                  },
+                },
+              },
+            }),
+            tx.fortuneReading.findMany({
+              where: {
+                id: { not: reading.id },
+                serviceSettingId: scope.id,
+                participantId: reading.participantId,
+                memberUserId: input.actorUserId,
+                status: { in: ['READY_AI', 'READY_BASIC'] },
+                deletedAt: null,
+                localDate: {
+                  gte: fortuneReadingRetentionCutoff(new Date(), scope.historyRetentionDays),
+                },
+              },
+              orderBy: [{ localDate: 'desc' }, { createdAt: 'desc' }],
+              take: 7,
+              include: {
+                feedback: { select: { id: true, rating: true, issueCode: true } },
+              },
+            }),
+          ])
+        : ([null, []] as const);
       const bunshinProfile = participantProfile?.personalizationBunshin ?? null;
       const selectedMemories = bunshinProfile
         ? await new SelectBunshinMemories({
@@ -225,6 +241,8 @@ export class PrismaFortuneGenerationRepository {
               reading.cardCode,
               reading.readingText,
               reading.actionStep,
+              personalProfileRevision ? personal?.profile.interest : null,
+              personalProfileRevision ? personal?.profile.question : null,
               bunshinProfile.objectiveSummary,
               bunshinProfile.audienceSummary,
               bunshinProfile.personalitySummary,
@@ -242,8 +260,15 @@ export class PrismaFortuneGenerationRepository {
         where: { id: reading.id },
         data: {
           personalizationContext: {
-            version: 'fortune-personalization-v2',
+            version: personal?.enabled
+              ? 'fortune-personalization-v3'
+              : 'fortune-personalization-v2',
+            ...(personalProfileRevision
+              ? { participantProfileUpdatedAt: personalProfileRevision.toISOString() }
+              : {}),
             sources: [
+              ...(personalProfileRevision ? ['PARTICIPANT_FORTUNE_PROFILE'] : []),
+              ...(personal?.enabled && reading.pendingConsultation ? ['CURRENT_CONSULTATION'] : []),
               ...(bunshinProfile ? ['PARTICIPANT_BUNSHIN_PROFILE'] : []),
               ...(selectedMemories.length > 0 ? ['PARTICIPANT_BUNSHIN_MEMORY'] : []),
               ...(recentReadings.length > 0 ? ['RECENT_READING'] : []),
@@ -274,7 +299,21 @@ export class PrismaFortuneGenerationRepository {
         groupId: scope.groupId,
         bunshinId: scope.bunshinId,
         reading: await fortuneReadingView(tx, reading),
+        ...(personal?.enabled ? { personalGuidance: true } : {}),
+        ...(personal?.enabled && reading.pendingConsultation
+          ? { consultation: reading.pendingConsultation }
+          : {}),
+        ...(personal?.profile && personalProfileRevision ? { personalProfileRevision } : {}),
         personalization: {
+          ...(personal?.profile && personalProfileRevision
+            ? {
+                participantProfile: {
+                  interest: personal.profile.interest,
+                  question: personal.profile.question,
+                  style: personal.profile.style,
+                },
+              }
+            : {}),
           ...(bunshinProfile
             ? {
                 bunshinProfile: {
@@ -362,6 +401,7 @@ export class PrismaFortuneGenerationRepository {
       },
       data: {
         status: 'READY_AI',
+        pendingConsultation: null,
         readingText: input.output.body,
         actionStep: input.output.actionStep,
         modelName: input.output.model,
@@ -429,7 +469,12 @@ export class PrismaFortuneGenerationRepository {
             }
           : {}),
       },
-      data: { status: 'READY_BASIC', failureCode: input.failureCode, modelName: null },
+      data: {
+        status: 'READY_BASIC',
+        failureCode: input.failureCode,
+        modelName: null,
+        pendingConsultation: null,
+      },
     });
     if (updated.count !== 1) return null;
     const row = await db.fortuneReading.findFirst({
