@@ -9,6 +9,7 @@ import {
   externalReadClientCatalog,
   type ExternalReadClientDescriptor,
 } from './external-read-client-catalog';
+import { resolveExternalReadOAuthClient } from './external-read-oauth-client';
 
 export const oauthScopeLabels: Record<string, string> = {
   openid: '本人を識別する情報',
@@ -96,7 +97,11 @@ async function context(id: string) {
   const parsed = detailsSchema.safeParse(data);
   if (!parsed.success) throw unavailable();
   const details = parsed.data;
-  const client = clients.find((item) => item.id === details.client.id);
+  const client = await resolveExternalReadOAuthClient(
+    details.client.id,
+    details.redirect_uri,
+    clients,
+  );
   const scopes = [...new Set(details.scope.split(/\s+/).filter(Boolean))];
   if (
     !client ||
