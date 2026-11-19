@@ -67,6 +67,10 @@ export class PrismaFortuneRepository implements FortuneRepository {
     return this.history.submitFeedback(input);
   }
 
+  saveReflection(input: Parameters<PrismaFortuneHistoryRepository['saveReflection']>[0]) {
+    return this.history.saveReflection(input);
+  }
+
   deleteReading(input: Parameters<FortuneRepository['deleteReading']>[0]) {
     return this.history.deleteReading(input);
   }

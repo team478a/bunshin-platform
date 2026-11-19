@@ -3,7 +3,7 @@ import {
   FORTUNE_PROFILE_STYLES,
   type FortunePersonalProfileUpdate,
 } from '@bunshin/capability-fortune';
-import type { PrismaClient } from '@prisma/client';
+import type { Prisma, PrismaClient } from '@prisma/client';
 import { fortuneReadingRetentionCutoff } from './fortune-retention';
 import { fortuneTarget } from './fortune-shared';
 
@@ -14,7 +14,7 @@ interface ActorScope {
 
 export class PrismaFortunePersonalProfileRepository {
   constructor(
-    private readonly db: PrismaClient,
+    private readonly db: PrismaClient | Prisma.TransactionClient,
     private readonly now: () => Date = () => new Date(),
   ) {}
 
@@ -35,6 +35,8 @@ export class PrismaFortunePersonalProfileRepository {
         profileStyle: true,
         profileUpdatedAt: true,
         profileConsentedAt: true,
+        notificationWeekday: true,
+        notificationHour: true,
       },
     });
     if (!participant) return null;
@@ -45,7 +47,13 @@ export class PrismaFortunePersonalProfileRepository {
         fortuneReadingRetentionCutoff(this.now(), scope.historyRetentionDays);
     return {
       enabled: scope.personalProfileEnabled,
-      completed: participant.profileUpdatedAt !== null,
+      completed: Boolean(participant.profileUpdatedAt),
+      revision: active ? participant.profileUpdatedAt : null,
+      notificationSlot:
+        typeof participant.notificationWeekday === 'number' &&
+        typeof participant.notificationHour === 'number'
+          ? { weekday: participant.notificationWeekday, hour: participant.notificationHour }
+          : null,
       profile: active
         ? {
             interest: participant.profileInterest,
@@ -56,6 +64,32 @@ export class PrismaFortunePersonalProfileRepository {
           }
         : emptyFortunePersonalProfile,
     };
+  }
+
+  async saveNotificationSlot(
+    input: ActorScope & { slot: { weekday: number; hour: number } | null },
+  ) {
+    const scope = await fortuneTarget(this.db, input.serviceSlug, input.actorUserId);
+    if (!scope?.personalProfileEnabled || !scope.weeklyNotificationEnabled) return false;
+    const result = await this.db.fortuneParticipant.updateMany({
+      where: {
+        workspaceId: scope.workspaceId,
+        groupId: scope.groupId,
+        serviceSettingId: scope.id,
+        userId: input.actorUserId,
+        groupMembership: { status: 'ACTIVE', consentedAt: { not: null } },
+        serviceSetting: {
+          enabled: true,
+          personalProfileEnabled: true,
+          weeklyNotificationEnabled: true,
+        },
+      },
+      data: {
+        notificationWeekday: input.slot?.weekday ?? null,
+        notificationHour: input.slot?.hour ?? null,
+      },
+    });
+    return result.count === 1;
   }
 
   async update(input: ActorScope & { profile: FortunePersonalProfileUpdate }) {

@@ -6,6 +6,7 @@ import { FORTUNE_ORIENTATIONS, TAROT_DECK, type FortuneOrientation } from './tar
 export interface FortuneReadingOutput {
   body: string;
   actionStep: string;
+  reflectionPrompt?: string;
 }
 
 export interface FortuneKnowledgeMeaningInput {
@@ -132,11 +133,18 @@ export function validateFortuneReadingOutput(output: FortuneReadingOutput): Fort
       '占い本文または行動提案の長さが規定外です',
     );
   }
-  if (hasProhibitedReadingPattern(`${body}\n${actionStep}`)) {
+  const reflectionPrompt = output.reflectionPrompt?.trim();
+  if (
+    output.reflectionPrompt !== undefined &&
+    (!reflectionPrompt || reflectionPrompt.length > 200)
+  ) {
+    throw new FortunePolicyError('INVALID_READING_OUTPUT', '振り返りの質問の長さが規定外です');
+  }
+  if (hasProhibitedReadingPattern(`${body}\n${actionStep}\n${reflectionPrompt ?? ''}`)) {
     throw new FortunePolicyError(
       'UNSAFE_READING_OUTPUT',
       '断定、診断、投資判断、販売誘導を含む占い結果は公開できません',
     );
   }
-  return { body, actionStep };
+  return { body, actionStep, ...(reflectionPrompt ? { reflectionPrompt } : {}) };
 }
