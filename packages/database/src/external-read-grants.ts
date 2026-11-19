@@ -94,7 +94,7 @@ export class PrismaExternalReadGrantRepository implements ExternalGrantManagemen
     private readonly now: () => Date = () => new Date(),
     private readonly credentialIssuer: string | null = null,
   ) {
-    if (!['test', 'development', 'production'].includes(environment))
+    if (!['test', 'development', 'staging', 'production'].includes(environment))
       throw new ApplicationError('CONFIGURATION_ERROR', 'invalid grant environment');
   }
   private at() {
