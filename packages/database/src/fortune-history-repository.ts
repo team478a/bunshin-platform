@@ -154,6 +154,7 @@ export class PrismaFortuneHistoryRepository {
         status: 'DELETED',
         readingText: null,
         actionStep: null,
+        pendingConsultation: null,
         modelName: null,
         failureCode: null,
         deletedAt: input.deletedAt,

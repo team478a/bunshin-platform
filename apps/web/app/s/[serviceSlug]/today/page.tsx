@@ -54,7 +54,16 @@ export default async function FortuneTodayPage({
           <section className="settings-card">
             <h2>何について占いますか？</h2>
             <p>今日いちばん気になるものを選んでください。</p>
-            <FortuneDrawButtons serviceSlug={serviceSlug} />
+            {profile?.enabled && <p>AIが承認済みのタロット解釈をもとに案内します。</p>}
+            <FortuneDrawButtons
+              serviceSlug={serviceSlug}
+              askConsultation={Boolean(
+                setting.aiEnabled &&
+                profile?.enabled &&
+                profile.completed &&
+                !profile.profile.question,
+              )}
+            />
           </section>
         )}
         <p className="fortune-note">

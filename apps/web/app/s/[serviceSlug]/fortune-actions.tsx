@@ -134,12 +134,31 @@ const choices = [
   { value: 'RELATIONSHIPS', label: '人間関係', note: '家族・友人・周囲との関係について' },
 ] as const;
 
-export function FortuneDrawButtons({ serviceSlug }: { serviceSlug: string }) {
+export function FortuneDrawButtons({
+  serviceSlug,
+  askConsultation = false,
+}: {
+  serviceSlug: string;
+  askConsultation?: boolean;
+}) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
+  const [consultation, setConsultation] = useState('');
   const [error, setError] = useState('');
   return (
     <div className="fortune-theme-list">
+      {askConsultation && (
+        <label className="form-field">
+          <span>今日、特に知りたいこと（任意）</span>
+          <textarea
+            value={consultation}
+            onChange={(event) => setConsultation(event.target.value)}
+            maxLength={500}
+            rows={2}
+            disabled={busy !== null}
+          />
+        </label>
+      )}
       {choices.map((choice) => (
         <button
           key={choice.value}
@@ -153,7 +172,12 @@ export function FortuneDrawButtons({ serviceSlug }: { serviceSlug: string }) {
               try {
                 await request(`/api/services/${serviceSlug}/fortune/today`, {
                   method: 'POST',
-                  body: JSON.stringify({ theme: choice.value }),
+                  body: JSON.stringify({
+                    theme: choice.value,
+                    ...(askConsultation && consultation.trim()
+                      ? { consultation: consultation.trim() }
+                      : {}),
+                  }),
                 });
                 router.refresh();
               } catch (cause) {

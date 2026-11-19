@@ -3,7 +3,7 @@ import {
   FORTUNE_PROFILE_STYLES,
   type FortunePersonalProfileUpdate,
 } from '@bunshin/capability-fortune';
-import type { PrismaClient } from '@prisma/client';
+import type { Prisma, PrismaClient } from '@prisma/client';
 import { fortuneReadingRetentionCutoff } from './fortune-retention';
 import { fortuneTarget } from './fortune-shared';
 
@@ -14,7 +14,7 @@ interface ActorScope {
 
 export class PrismaFortunePersonalProfileRepository {
   constructor(
-    private readonly db: PrismaClient,
+    private readonly db: PrismaClient | Prisma.TransactionClient,
     private readonly now: () => Date = () => new Date(),
   ) {}
 
@@ -45,7 +45,8 @@ export class PrismaFortunePersonalProfileRepository {
         fortuneReadingRetentionCutoff(this.now(), scope.historyRetentionDays);
     return {
       enabled: scope.personalProfileEnabled,
-      completed: participant.profileUpdatedAt !== null,
+      completed: Boolean(participant.profileUpdatedAt),
+      revision: active ? participant.profileUpdatedAt : null,
       profile: active
         ? {
             interest: participant.profileInterest,

@@ -1,6 +1,7 @@
 import { FORTUNE_THEMES, type FortuneTheme } from './fortune-definition';
 import { type FortuneReadingOutput, validateFortuneReadingOutput } from './fortune-knowledge';
 import { FortunePolicyError } from './fortune-policy-error';
+import type { FortunePersonalProfile } from './fortune-personal-profile';
 import type {
   FortuneAiGenerationQueue,
   FortuneGenerationJobLease,
@@ -54,7 +55,11 @@ export interface FortuneAiGenerationClaim {
   groupId: string;
   bunshinId: string;
   reading: FortuneReadingView;
+  personalGuidance?: boolean;
+  personalProfileRevision?: Date;
+  consultation?: string;
   personalization?: {
+    participantProfile?: Omit<FortunePersonalProfile, 'consented'>;
     bunshinProfile?: {
       name: string;
       objectiveSummary: string;
@@ -123,6 +128,7 @@ export interface FortuneRepository {
     actorUserId: string;
     localDate: string;
     theme: FortuneTheme;
+    consultation?: string;
     cardCode: string;
     orientation: FortuneOrientation;
   }): Promise<CreateFortuneReadingResult>;
@@ -241,7 +247,13 @@ export class FortuneDailyReadingService {
     return { participant, reading: visible ?? reading };
   }
 
-  async draw(input: { serviceSlug: string; actorUserId: string; theme: unknown; now?: Date }) {
+  async draw(input: {
+    serviceSlug: string;
+    actorUserId: string;
+    theme: unknown;
+    consultation?: string;
+    now?: Date;
+  }) {
     const localDate = toJapanLocalDate(input.now ?? new Date());
     const existing = await this.repository.findReadingForDate({
       serviceSlug: input.serviceSlug,
@@ -260,6 +272,7 @@ export class FortuneDailyReadingService {
       actorUserId: input.actorUserId,
       localDate,
       theme,
+      ...(input.consultation ? { consultation: input.consultation } : {}),
       cardCode: draw.card.code,
       orientation: draw.orientation,
     });
