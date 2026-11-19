@@ -22,6 +22,25 @@ export async function setFortuneEnabled(input: {
   return { enabled: input.enabled };
 }
 
+export async function setFortunePersonalProfileEnabled(input: {
+  serviceSlug: string;
+  actorUserId: string;
+  enabled: boolean;
+}) {
+  const service = await fortuneOperatorScope(input.serviceSlug, input.actorUserId);
+  const db = await import('@bunshin/database');
+  const updated = await db.prisma.fortuneServiceSetting.updateMany({
+    where: {
+      workspaceId: service.workspaceId,
+      groupId: service.serviceId,
+      configurationId: service.configuration.id,
+    },
+    data: { personalProfileEnabled: input.enabled },
+  });
+  if (updated.count !== 1) throw new ApplicationError('NOT_FOUND', 'fortune setting not found');
+  return { personalProfileEnabled: input.enabled };
+}
+
 export async function setFortuneAiEnabled(input: {
   serviceSlug: string;
   actorUserId: string;

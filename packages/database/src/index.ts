@@ -67,6 +67,8 @@ export {
 } from './member-product';
 export { PrismaPointExpirationRepository } from './point-expiration';
 export { PrismaFortuneRepository, purgeExpiredFortuneReadings } from './fortune';
+export { PrismaFortunePersonalProfileRepository } from './fortune-personal-profile';
+export { purgeExpiredFortuneProfiles } from './fortune-retention';
 export { recoverStaleFortuneReadings } from './fortune-generation-recovery';
 export {
   PrismaFortuneGenerationQueue,

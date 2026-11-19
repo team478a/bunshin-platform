@@ -12,6 +12,7 @@ const status = (override: Partial<FortuneOperatorStatus> = {}): FortuneOperatorS
   configured: true,
   enabled: false,
   aiEnabled: false,
+  personalProfileEnabled: false,
   weeklyNotificationEnabled: false,
   weeklyNotificationDay: 3,
   weeklyNotificationHour: 19,

@@ -2,6 +2,8 @@ import { PublicShell } from '../../../ui/public-shell';
 import { fortuneDailyReadingService } from '../../../../src/fortune/runtime';
 import { resolveFortunePage } from '../../../../src/fortune/page-context';
 import { FortuneNav } from '../fortune-ui';
+import { FortuneProfileForm } from '../fortune-profile-form';
+import { fortunePersonalProfileRepository } from '../../../../src/fortune/personal-profile';
 import { FortuneNotificationSetting } from '../fortune-notification-setting';
 import { FortunePersonalizationSetting, FortuneWithdrawButton } from '../fortune-actions';
 
@@ -19,6 +21,11 @@ export default async function FortuneSettingsPage({
   const today = await (
     await fortuneDailyReadingService()
   ).today({ serviceSlug, actorUserId: actor.userId });
+  const profile = today.participant
+    ? await (
+        await fortunePersonalProfileRepository()
+      ).read({ serviceSlug, actorUserId: actor.userId })
+    : null;
   const db = await import('@bunshin/database');
   const personalizationCandidates = today.participant
     ? await db.prisma.bunshin.findMany({
@@ -47,6 +54,14 @@ export default async function FortuneSettingsPage({
               : 'まだ年齢確認が終わっていません。'}
           </p>
         </section>
+        {profile && (profile.enabled || profile.profile.consented) && (
+          <FortuneProfileForm
+            key={String(profile.profile.consented)}
+            serviceSlug={serviceSlug}
+            profile={profile.profile}
+            enabled={profile.enabled}
+          />
+        )}
         {today.participant && (
           <section className="settings-card">
             <h2>あなたに合わせた占い</h2>
