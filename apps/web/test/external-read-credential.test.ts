@@ -66,6 +66,7 @@ function setup(userId = subject) {
   };
   return {
     calls,
+    request,
     verifier: new SupabaseExternalReadCredentialVerifier(
       {
         url: base,
@@ -133,6 +134,48 @@ describe('real SDK OAuth signature and identity verification', () => {
     expect(
       await s.verifier.verify('Bearer ' + (await token()), new AbortController().signal),
     ).toBeNull();
+  });
+  it('admits a server-validated dynamic OAuth client ID', async () => {
+    const dynamicClientId = '44444444-4444-4444-8444-444444444444';
+    const resolveClientId = vi.fn().mockResolvedValue(clientId);
+    const s = setup();
+    const verifier = new SupabaseExternalReadCredentialVerifier(
+      {
+        url: base,
+        key: 'synthetic-publishable-key-only',
+        environment: 'test',
+        clientIds: [clientId],
+        resolveClientId,
+      },
+      s.request,
+    );
+    const result = await verifier.verify(
+      'Bearer ' + (await token({ client_id: dynamicClientId })),
+      new AbortController().signal,
+    );
+    expect(result?.clientId).toBe(clientId);
+    expect(resolveClientId).toHaveBeenCalledWith(dynamicClientId, expect.any(AbortSignal));
+  });
+  it('rejects a dynamic client unless it maps to the reviewed catalog', async () => {
+    const dynamicClientId = '44444444-4444-4444-8444-444444444444';
+    const s = setup();
+    const verifier = new SupabaseExternalReadCredentialVerifier(
+      {
+        url: base,
+        key: 'synthetic-publishable-key-only',
+        environment: 'test',
+        clientIds: [clientId],
+        resolveClientId: vi.fn().mockResolvedValue(dynamicClientId),
+      },
+      s.request,
+    );
+    expect(
+      await verifier.verify(
+        'Bearer ' + (await token({ client_id: dynamicClientId })),
+        new AbortController().signal,
+      ),
+    ).toBeNull();
+    expect(s.calls).not.toContain(base + '/auth/v1/user');
   });
   it.each(['', 'Bearer text', 'Basic token', 'Bearer a.b.c extra', 'Bearer ' + 'x'.repeat(9000)])(
     'rejects malformed or oversized bearer header',

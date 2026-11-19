@@ -13,6 +13,7 @@ interface Configuration {
   environment: ExternalReadEnvironment;
   clientIds: readonly string[];
   expectedAudience?: string;
+  resolveClientId?: (clientId: string, signal: AbortSignal) => Promise<string | null>;
 }
 const claimsSchema = z.object({
   iss: z.string(),
@@ -93,13 +94,19 @@ export class SupabaseExternalReadCredentialVerifier implements ExternalReadCrede
       if (
         claims.iss !== this.issuer ||
         claims.aud !== (this.config.expectedAudience ?? 'authenticated') ||
-        !this.config.clientIds.includes(claims.client_id) ||
         claims.exp <= seconds() ||
         claims.iat > seconds() ||
         claims.exp <= claims.iat ||
         (claims.nbf !== undefined && claims.nbf > seconds())
       )
         return null;
+      const resolvedClientId = this.config.clientIds.includes(claims.client_id)
+        ? claims.client_id
+        : this.config.resolveClientId
+          ? await this.config.resolveClientId(claims.client_id, signal)
+          : null;
+      active(signal);
+      if (!resolvedClientId || !this.config.clientIds.includes(resolvedClientId)) return null;
       const userResult = await client.auth.getUser(token);
       active(signal);
       if (userResult.error) {
@@ -116,7 +123,7 @@ export class SupabaseExternalReadCredentialVerifier implements ExternalReadCrede
         issuer: this.issuer,
         subject: claims.sub,
         sessionId: claims.session_id,
-        clientId: claims.client_id,
+        clientId: resolvedClientId,
         audience: claims.aud,
         environment: this.config.environment,
         expiresAt: new Date(claims.exp * 1000),

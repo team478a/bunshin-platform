@@ -34,20 +34,11 @@ function rejectDynamicClient(errorCode: string) {
   return null;
 }
 
-/**
- * Fixed clients remain the default. In staging only, a reviewed redirect/name template may
- * admit a Supabase-registered public DCR client after its server-side metadata is re-read.
- */
-export async function resolveExternalReadOAuthClient(
+async function resolveDynamicClient(
   clientId: string,
-  redirectUri: string,
-  clients: readonly ExternalReadClientDescriptor[],
-): Promise<ExternalReadClientDescriptor | null> {
-  const fixed = clients.find(
-    (client) => client.id === clientId && client.oauthRedirectUris?.includes(redirectUri),
-  );
-  if (fixed) return fixed;
-
+  templates: readonly ExternalReadClientDescriptor[],
+  signal?: AbortSignal,
+) {
   const environment = getServerEnvironment();
   if (environment.APP_ENV !== 'staging') return null;
   if (
@@ -58,7 +49,6 @@ export async function resolveExternalReadOAuthClient(
   )
     return rejectDynamicClient('EXTERNAL_OAUTH_DYNAMIC_CLIENT_NOT_CONFIGURED');
 
-  const templates = clients.filter((client) => client.oauthRedirectUris?.includes(redirectUri));
   if (templates.length !== 1)
     return rejectDynamicClient('EXTERNAL_OAUTH_DYNAMIC_CLIENT_TEMPLATE_AMBIGUOUS');
   const template = templates[0]!;
@@ -69,9 +59,18 @@ export async function resolveExternalReadOAuthClient(
       environment.SUPABASE_SERVICE_ROLE_KEY,
       {
         auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+        ...(signal === undefined
+          ? {}
+          : {
+              global: {
+                fetch: (input: RequestInfo | URL, init?: RequestInit) =>
+                  fetch(input, { ...init, signal }),
+              },
+            }),
       },
     );
     const { data, error } = await admin.auth.admin.oauth.getClient(clientId);
+    if (signal?.aborted) return null;
     if (error) return rejectDynamicClient('EXTERNAL_OAUTH_DYNAMIC_CLIENT_LOOKUP_FAILED');
     const parsed = registeredClientSchema.safeParse(data);
     if (!parsed.success)
@@ -91,4 +90,34 @@ export async function resolveExternalReadOAuthClient(
   } catch {
     return rejectDynamicClient('EXTERNAL_OAUTH_DYNAMIC_CLIENT_LOOKUP_FAILED');
   }
+}
+
+/**
+ * Fixed clients remain the default. In staging only, a reviewed redirect/name template may
+ * admit a Supabase-registered public DCR client after its server-side metadata is re-read.
+ */
+export async function resolveExternalReadOAuthClient(
+  clientId: string,
+  redirectUri: string,
+  clients: readonly ExternalReadClientDescriptor[],
+): Promise<ExternalReadClientDescriptor | null> {
+  const fixed = clients.find(
+    (client) => client.id === clientId && client.oauthRedirectUris?.includes(redirectUri),
+  );
+  if (fixed) return fixed;
+  const templates = clients.filter((client) => client.oauthRedirectUris?.includes(redirectUri));
+  return resolveDynamicClient(clientId, templates);
+}
+
+/** Re-validates a DCR client from its signed OAuth token claim before MCP reads are allowed. */
+export async function resolveExternalReadOAuthCredentialClient(
+  clientId: string,
+  clients: readonly ExternalReadClientDescriptor[],
+  signal: AbortSignal,
+): Promise<ExternalReadClientDescriptor | null> {
+  const fixed = clients.find((client) => client.id === clientId);
+  if (fixed) return fixed;
+  const templates = clients.filter((client) => client.oauthRedirectUris?.length);
+  const resolved = await resolveDynamicClient(clientId, templates, signal);
+  return resolved ? templates[0]! : null;
 }
