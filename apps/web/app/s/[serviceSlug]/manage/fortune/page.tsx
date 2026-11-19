@@ -167,6 +167,7 @@ export default async function FortuneManagementPage({
           enabled={status.enabled}
           aiEnabled={status.aiEnabled}
           personalProfileEnabled={status.personalProfileEnabled}
+          reflectionEnabled={status.reflectionEnabled}
           weeklyNotificationEnabled={status.weeklyNotificationEnabled}
           weeklyNotificationDay={status.weeklyNotificationDay}
           weeklyNotificationHour={status.weeklyNotificationHour}

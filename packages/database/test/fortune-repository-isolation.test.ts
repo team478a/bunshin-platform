@@ -195,6 +195,27 @@ describe('fortune repository isolation', () => {
     });
   });
 
+  it('limits reflection writes to the participant, service, retention window and consent', async () => {
+    const tx = targetClient({ ...scope, reflectionEnabled: true });
+    tx.fortuneReading.updateMany.mockResolvedValue({ count: 0 });
+    await expect(
+      repository(tx).saveReflection({ serviceSlug, actorUserId, readingId, answer: 'NOT_TRIED' }),
+    ).resolves.toBe(false);
+    expect(tx.fortuneReading.updateMany).toHaveBeenCalledWith({
+      where: expect.objectContaining({
+        workspaceId: scope.workspaceId,
+        groupId: scope.groupId,
+        serviceSettingId: scope.id,
+        memberUserId: actorUserId,
+        localDate: { gte: expect.any(Date) },
+        deletedAt: null,
+        participant: expect.objectContaining({ profileConsentedAt: { not: null } }),
+        serviceSetting: { personalProfileEnabled: true, reflectionEnabled: true },
+      }),
+      data: { reflectionAnswer: 'NOT_TRIED' },
+    });
+  });
+
   it('uses only the participant-selected owned Bunshin when claiming AI generation', async () => {
     const tx = targetClient();
     tx.fortuneParticipant.findFirst.mockResolvedValue({

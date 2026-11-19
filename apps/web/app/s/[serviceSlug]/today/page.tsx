@@ -1,9 +1,11 @@
 import type { Metadata } from 'next';
+import { toJapanLocalDate } from '@bunshin/capability-fortune';
 import { PublicShell } from '../../../ui/public-shell';
 import { fortuneDailyReadingService } from '../../../../src/fortune/runtime';
 import { resolveFortunePage } from '../../../../src/fortune/page-context';
 import { FortuneDrawButtons, FortuneJoinButton } from '../fortune-actions';
 import { FortuneNav, ReadingCard } from '../fortune-ui';
+import { FortuneReflection } from '../fortune-reflection';
 import { FortuneProfileForm } from '../fortune-profile-form';
 import { fortunePersonalProfileRepository } from '../../../../src/fortune/personal-profile';
 
@@ -26,6 +28,18 @@ export default async function FortuneTodayPage({
           await fortunePersonalProfileRepository()
         ).read({ serviceSlug, actorUserId: actor.userId })
       : null;
+  const previous =
+    setting.reflectionEnabled && profile?.enabled && profile.profile.consented
+      ? (
+          await (
+            await fortuneDailyReadingService()
+          ).history({ serviceSlug, actorUserId: actor.userId, limit: 7 })
+        ).find(
+          (reading) =>
+            reading.localDate < toJapanLocalDate(new Date()) &&
+            ['READY_AI', 'READY_BASIC'].includes(reading.status),
+        )
+      : null;
   return (
     <PublicShell showPlatformBrand={false}>
       <main className="app-page fortune-page">
@@ -36,6 +50,9 @@ export default async function FortuneTodayPage({
         </header>
         {profile?.enabled && !profile.completed && (
           <FortuneProfileForm serviceSlug={serviceSlug} profile={profile.profile} initial enabled />
+        )}
+        {previous && (
+          <FortuneReflection key={previous.id} serviceSlug={serviceSlug} reading={previous} />
         )}
         {!today.participant ? (
           <section className="settings-card">

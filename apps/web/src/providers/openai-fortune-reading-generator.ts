@@ -15,6 +15,8 @@ export const FORTUNE_AI_PROMPT_VERSION = 'fortune-daily-reading-v3-participant-m
 
 export const FORTUNE_PERSONAL_AI_PROMPT_VERSION = 'fortune-daily-reading-v4-personal-profile';
 
+const FORTUNE_REFLECTION_PROMPT_VERSION = 'fortune-daily-reading-v5-reflection';
+
 export function fortuneReadingPromptInput(
   claim: Parameters<FortuneAiReadingGenerator['generate']>[0]['claim'],
 ) {
@@ -44,6 +46,10 @@ const outputSchema = z
   })
   .strict();
 
+const reflectionOutputSchema = outputSchema.extend({
+  reflectionPrompt: z.string().min(1).max(200),
+});
+
 const jsonSchema = {
   type: 'object',
   additionalProperties: false,
@@ -52,6 +58,12 @@ const jsonSchema = {
     actionStep: { type: 'string' },
   },
   required: ['body', 'actionStep'],
+} as const;
+
+const reflectionJsonSchema = {
+  ...jsonSchema,
+  properties: { ...jsonSchema.properties, reflectionPrompt: { type: 'string' } },
+  required: [...jsonSchema.required, 'reflectionPrompt'],
 } as const;
 
 type ResponseValue = {
@@ -64,9 +76,11 @@ type ResponseValue = {
 export class OpenAiFortuneReadingGenerator implements FortuneAiReadingGenerator {
   async generate(input: Parameters<FortuneAiReadingGenerator['generate']>[0]) {
     const started = Date.now();
-    const promptVersion = input.claim.personalGuidance
-      ? FORTUNE_PERSONAL_AI_PROMPT_VERSION
-      : FORTUNE_AI_PROMPT_VERSION;
+    const promptVersion = input.claim.reflectionEnabled
+      ? FORTUNE_REFLECTION_PROMPT_VERSION
+      : input.claim.personalGuidance
+        ? FORTUNE_PERSONAL_AI_PROMPT_VERSION
+        : FORTUNE_AI_PROMPT_VERSION;
     const assertCurrentProfile = async () => {
       if (!input.claim.personalProfileRevision && !input.claim.consultation) return;
       const current = await (await fortunePersonalProfileRepository()).read(input);
@@ -114,6 +128,15 @@ export class OpenAiFortuneReadingGenerator implements FortuneAiReadingGenerator 
                   ...(input.claim.personalGuidance
                     ? [{ role: 'system', content: personalGuidanceInstructions }]
                     : []),
+                  ...(input.claim.reflectionEnabled
+                    ? [
+                        {
+                          role: 'system',
+                          content:
+                            'reflectionPromptには、今日の小さな行動を次回に振り返る具体的で答えやすい問いを一つ書いてください。過去のreflectionAnswerは、試したかどうかと変化の有無のみを示します。回答を決めつけたり同じ提案を繰り返したりせず、今日のカードと本人の希望に合わせて小さな選択肢を示してください。',
+                        },
+                      ]
+                    : []),
                   {
                     role: 'user',
                     content: JSON.stringify(fortuneReadingPromptInput(input.claim)),
@@ -124,7 +147,7 @@ export class OpenAiFortuneReadingGenerator implements FortuneAiReadingGenerator 
                     type: 'json_schema',
                     name: 'fortune_daily_reading',
                     strict: true,
-                    schema: jsonSchema,
+                    schema: input.claim.reflectionEnabled ? reflectionJsonSchema : jsonSchema,
                   },
                 },
               }),
@@ -161,9 +184,10 @@ export class OpenAiFortuneReadingGenerator implements FortuneAiReadingGenerator 
               'AI_PROVIDER_UNAVAILABLE',
               'fortune provider returned no output',
             );
-          let parsed: { body: string; actionStep: string };
+          let parsed: ReturnType<typeof validateFortuneReadingOutput>;
           try {
-            parsed = validateFortuneReadingOutput(outputSchema.parse(JSON.parse(text)));
+            const schema = input.claim.reflectionEnabled ? reflectionOutputSchema : outputSchema;
+            parsed = validateFortuneReadingOutput(schema.parse(JSON.parse(text)));
           } catch {
             throw new ApplicationError('CONTENT_REJECTED', 'invalid fortune output');
           }

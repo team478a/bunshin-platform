@@ -51,6 +51,12 @@ export function ReadingCard({
           <p>{reading.actionStep}</p>
         </div>
       )}
+      {!linked && reading.reflectionPrompt && (
+        <div className="fortune-action-step">
+          <strong>次に振り返ること</strong>
+          <p>{reading.reflectionPrompt}</p>
+        </div>
+      )}
       {!linked && reading.body && reading.status !== 'GENERATING' && (
         <FortuneFeedbackButtons
           serviceSlug={serviceSlug}

@@ -1,4 +1,5 @@
 import { SelectBunshinMemories } from '@bunshin/application';
+import { FORTUNE_REFLECTION_ANSWERS } from '@bunshin/capability-fortune';
 import type {
   CreateFortuneReadingResult,
   FortuneFeedbackIssue,
@@ -273,6 +274,11 @@ export class PrismaFortuneGenerationRepository {
               ...(selectedMemories.length > 0 ? ['PARTICIPANT_BUNSHIN_MEMORY'] : []),
               ...(recentReadings.length > 0 ? ['RECENT_READING'] : []),
               ...(feedbackIds.length > 0 ? ['READING_FEEDBACK'] : []),
+              ...(personalProfileRevision &&
+              scope.reflectionEnabled &&
+              recentReadings.some((item) => item.reflectionAnswer)
+                ? ['READING_REFLECTION']
+                : []),
             ],
             ...(bunshinProfile
               ? {
@@ -300,6 +306,7 @@ export class PrismaFortuneGenerationRepository {
         bunshinId: scope.bunshinId,
         reading: await fortuneReadingView(tx, reading),
         ...(personal?.enabled ? { personalGuidance: true } : {}),
+        ...(personal?.enabled && scope.reflectionEnabled ? { reflectionEnabled: true } : {}),
         ...(personal?.enabled && reading.pendingConsultation
           ? { consultation: reading.pendingConsultation }
           : {}),
@@ -335,6 +342,13 @@ export class PrismaFortuneGenerationRepository {
               }
             : {}),
           recentReadings: recentReadings.map((item) => ({
+            ...(personalProfileRevision && scope.reflectionEnabled && item.reflectionAnswer
+              ? {
+                  reflectionAnswer: FORTUNE_REFLECTION_ANSWERS.find(
+                    (answer) => answer === item.reflectionAnswer,
+                  )!,
+                }
+              : {}),
             id: item.id,
             localDate: item.localDate.toISOString().slice(0, 10),
             theme: item.theme,
@@ -403,6 +417,9 @@ export class PrismaFortuneGenerationRepository {
         status: 'READY_AI',
         pendingConsultation: null,
         readingText: input.output.body,
+        ...(scope.reflectionEnabled && input.output.reflectionPrompt
+          ? { reflectionPrompt: input.output.reflectionPrompt }
+          : {}),
         actionStep: input.output.actionStep,
         modelName: input.output.model,
         promptVersion: input.output.promptVersion,

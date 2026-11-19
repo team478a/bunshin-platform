@@ -5,6 +5,7 @@ import {
   FORTUNE_FEEDBACK_RATINGS,
   FORTUNE_THEMES,
   FORTUNE_PROFILE_STYLES,
+  FORTUNE_REFLECTION_ANSWERS,
 } from '@bunshin/capability-fortune';
 import { requestIdFromHeader } from '@bunshin/observability';
 import { ApplicationError, toApiError } from '@bunshin/shared';
@@ -43,6 +44,7 @@ const personalProfileBody = z.discriminatedUnion('consented', [
 const drawBody = z
   .object({ theme: z.enum(FORTUNE_THEMES), consultation: z.string().trim().max(500).optional() })
   .strict();
+const reflectionBody = z.object({ answer: z.enum(FORTUNE_REFLECTION_ANSWERS).nullable() }).strict();
 const feedbackBody = z
   .object({
     rating: z.enum(FORTUNE_FEEDBACK_RATINGS),
@@ -213,6 +215,24 @@ export const deleteFortuneReadingResponse = (
       readingId: uuid.parse(readingId),
     });
     return { deleted: true };
+  });
+
+export const updateFortuneReflectionResponse = (
+  request: Request,
+  serviceSlug: string,
+  readingId: string,
+) =>
+  json(request, serviceSlug, async (actorUserId, parsedSlug) => {
+    const body = await requireJson(request, reflectionBody);
+    const db = await import('@bunshin/database');
+    const saved = await new db.PrismaFortuneRepository(db.prisma).saveReflection({
+      serviceSlug: parsedSlug,
+      actorUserId,
+      readingId: uuid.parse(readingId),
+      answer: body.answer,
+    });
+    if (!saved) throw new ApplicationError('NOT_FOUND', '振り返りを保存できません。');
+    return { saved };
   });
 
 export const updateFortuneFeedbackResponse = (

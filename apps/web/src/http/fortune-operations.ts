@@ -12,7 +12,7 @@ import {
   installStandardFortunePackage,
   setFortuneAiEnabled,
   setFortuneEnabled,
-  setFortunePersonalProfileEnabled,
+  setFortuneGuidanceSetting,
   setFortuneWeeklyNotification,
   updateStandardFortunePackage,
 } from '../fortune/operator';
@@ -39,7 +39,12 @@ const body = z.discriminatedUnion('action', [
     .strict(),
   z.object({ action: z.literal('SET_ENABLED'), enabled: z.boolean() }).strict(),
   z.object({ action: z.literal('SET_AI_ENABLED'), enabled: z.boolean() }).strict(),
-  z.object({ action: z.literal('SET_PERSONAL_PROFILE_ENABLED'), enabled: z.boolean() }).strict(),
+  z
+    .object({
+      action: z.enum(['SET_PERSONAL_PROFILE_ENABLED', 'SET_REFLECTION_ENABLED']),
+      enabled: z.boolean(),
+    })
+    .strict(),
   z
     .object({
       action: z.literal('SET_WEEKLY_NOTIFICATION'),
@@ -144,9 +149,16 @@ export async function updateFortuneOperationsResponse(request: Request, serviceS
         requestId,
         201,
       );
-    if (value.action === 'SET_PERSONAL_PROFILE_ENABLED')
+    if (
+      value.action === 'SET_PERSONAL_PROFILE_ENABLED' ||
+      value.action === 'SET_REFLECTION_ENABLED'
+    )
       return result(
-        await setFortunePersonalProfileEnabled({
+        await setFortuneGuidanceSetting({
+          field:
+            value.action === 'SET_REFLECTION_ENABLED'
+              ? 'reflectionEnabled'
+              : 'personalProfileEnabled',
           serviceSlug: parsedSlug,
           actorUserId,
           enabled: value.enabled,
