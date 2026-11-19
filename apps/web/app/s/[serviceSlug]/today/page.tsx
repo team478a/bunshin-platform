@@ -1,7 +1,9 @@
-import type { Metadata } from 'next';
+import type { Metadata, Route } from 'next';
+import Link from 'next/link';
 import { toJapanLocalDate } from '@bunshin/capability-fortune';
 import { PublicShell } from '../../../ui/public-shell';
 import { fortuneDailyReadingService } from '../../../../src/fortune/runtime';
+import { resolveFortuneGuidanceSettings } from '../../../../src/fortune/guidance-settings';
 import { resolveFortunePage } from '../../../../src/fortune/page-context';
 import { FortuneDrawButtons, FortuneJoinButton } from '../fortune-actions';
 import { FortuneNav, ReadingCard } from '../fortune-ui';
@@ -21,25 +23,24 @@ export default async function FortuneTodayPage({
   const { actor, setting } = await resolveFortunePage(serviceSlug, `/s/${serviceSlug}/today`);
   const today = await (
     await fortuneDailyReadingService()
-  ).today({ serviceSlug, actorUserId: actor.userId });
-  const profile =
-    today.participant && !today.reading
-      ? await (
-          await fortunePersonalProfileRepository()
-        ).read({ serviceSlug, actorUserId: actor.userId })
-      : null;
-  const previous =
-    setting.reflectionEnabled && profile?.enabled && profile.profile.consented
-      ? (
-          await (
-            await fortuneDailyReadingService()
-          ).history({ serviceSlug, actorUserId: actor.userId, limit: 7 })
-        ).find(
-          (reading) =>
-            reading.localDate < toJapanLocalDate(new Date()) &&
-            ['READY_AI', 'READY_BASIC'].includes(reading.status),
-        )
-      : null;
+  ).today({ serviceSlug, actorUserId: actor.userId, recordView: true });
+  const profile = today.participant
+    ? await (
+        await fortunePersonalProfileRepository()
+      ).read({ serviceSlug, actorUserId: actor.userId })
+    : null;
+  const guidance = resolveFortuneGuidanceSettings(setting.guidanceSettings);
+  const previous = profile?.enabled
+    ? (
+        await (
+          await fortuneDailyReadingService()
+        ).history({ serviceSlug, actorUserId: actor.userId, limit: 7 })
+      ).find(
+        (reading) =>
+          reading.localDate < toJapanLocalDate(new Date()) &&
+          ['READY_AI', 'READY_BASIC'].includes(reading.status),
+      )
+    : null;
   return (
     <PublicShell showPlatformBrand={false}>
       <main className="app-page fortune-page">
@@ -47,11 +48,20 @@ export default async function FortuneTodayPage({
           <p className="eyebrow">1日1回</p>
           <h1>今日の占い</h1>
           <p>気になるテーマを1つ選んで、今日のカードを引きます。</p>
+          {profile?.enabled && (
+            <p>占いは、自己理解のきっかけとして楽しめるエンターテインメントです。</p>
+          )}
         </header>
-        {profile?.enabled && !profile.completed && (
-          <FortuneProfileForm serviceSlug={serviceSlug} profile={profile.profile} initial enabled />
+        {profile?.enabled && !profile.completed && !today.reading && (
+          <FortuneProfileForm
+            serviceSlug={serviceSlug}
+            profile={profile.profile}
+            initial
+            enabled
+            guidance={guidance}
+          />
         )}
-        {previous && (
+        {previous && setting.reflectionEnabled && profile?.profile.consented && (
           <FortuneReflection key={previous.id} serviceSlug={serviceSlug} reading={previous} />
         )}
         {!today.participant ? (
@@ -71,9 +81,12 @@ export default async function FortuneTodayPage({
           <section className="settings-card">
             <h2>何について占いますか？</h2>
             <p>今日いちばん気になるものを選んでください。</p>
-            {profile?.enabled && <p>AIが承認済みのタロット解釈をもとに案内します。</p>}
+            {profile?.enabled && setting.aiEnabled && (
+              <p>{guidance.guideName}（AI）が、承認済みのタロット解釈をもとに案内します。</p>
+            )}
             <FortuneDrawButtons
               serviceSlug={serviceSlug}
+              {...(profile?.enabled ? { themeLabels: guidance.themeLabels } : {})}
               askConsultation={Boolean(
                 setting.aiEnabled &&
                 profile?.enabled &&
@@ -81,6 +94,22 @@ export default async function FortuneTodayPage({
                 !profile.profile.question,
               )}
             />
+          </section>
+        )}
+        {profile?.enabled && (
+          <section className="settings-card">
+            <h2>あなたの占い</h2>
+            {profile.profile.interest && <p>関心テーマ {profile.profile.interest}</p>}
+            {previous && (
+              <>
+                <h3>前回の鑑定</h3>
+                <ReadingCard reading={previous} serviceSlug={serviceSlug} linked />
+              </>
+            )}
+            <div className="button-row">
+              <Link href={`/s/${serviceSlug}/history` as Route}>過去の鑑定を見る</Link>
+              <Link href={`/s/${serviceSlug}/settings` as Route}>希望・LINE通知の設定</Link>
+            </div>
           </section>
         )}
         <p className="fortune-note">

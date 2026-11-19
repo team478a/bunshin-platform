@@ -94,6 +94,7 @@ describe('fortune personal profile', () => {
       enabled: true,
       completed: true,
       revision: null,
+      notificationSlot: null,
       profile: { consented: false, interest: null, question: null, style: null },
     });
   });

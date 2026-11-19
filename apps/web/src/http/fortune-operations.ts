@@ -11,11 +11,14 @@ import {
   importStandardFortuneKnowledge,
   installStandardFortunePackage,
   setFortuneAiEnabled,
+  saveFortuneGuidanceSettings,
   setFortuneEnabled,
   setFortuneGuidanceSetting,
   setFortuneWeeklyNotification,
   updateStandardFortunePackage,
 } from '../fortune/operator';
+
+import { fortuneGuidanceSettingsSchema } from '../fortune/guidance-settings';
 
 const slug = z
   .string()
@@ -39,6 +42,12 @@ const body = z.discriminatedUnion('action', [
     .strict(),
   z.object({ action: z.literal('SET_ENABLED'), enabled: z.boolean() }).strict(),
   z.object({ action: z.literal('SET_AI_ENABLED'), enabled: z.boolean() }).strict(),
+  z
+    .object({
+      action: z.literal('SAVE_GUIDANCE_SETTINGS'),
+      settings: fortuneGuidanceSettingsSchema,
+    })
+    .strict(),
   z
     .object({
       action: z.enum(['SET_PERSONAL_PROFILE_ENABLED', 'SET_REFLECTION_ENABLED']),
@@ -148,6 +157,15 @@ export async function updateFortuneOperationsResponse(request: Request, serviceS
         }),
         requestId,
         201,
+      );
+    if (value.action === 'SAVE_GUIDANCE_SETTINGS')
+      return result(
+        await saveFortuneGuidanceSettings({
+          serviceSlug: parsedSlug,
+          actorUserId,
+          settings: value.settings,
+        }),
+        requestId,
       );
     if (
       value.action === 'SET_PERSONAL_PROFILE_ENABLED' ||

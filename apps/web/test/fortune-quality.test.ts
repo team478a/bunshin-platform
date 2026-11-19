@@ -2,11 +2,21 @@ import { describe, expect, it } from 'vitest';
 import {
   assessFortuneQuality,
   fortuneFailureLabel,
+  fortuneReturnRate,
   summarizeFortuneMembershipActivity,
   summarizeFortuneAiOperations,
 } from '../src/fortune/quality';
 
 describe('fortune operations quality', () => {
+  it('uses only members with a complete observation window for revisits', () => {
+    const dates = new Map([
+      ['returned', new Set(['2026-10-01', '2026-10-06'])],
+      ['late', new Set(['2026-10-01', '2026-10-09'])],
+      ['recent', new Set(['2026-11-18'])],
+    ]);
+    expect(fortuneReturnRate(dates, new Date('2026-11-20'), 7)).toBe(0.5);
+    expect(fortuneReturnRate(dates, new Date('2026-11-20'), 30)).toBe(1);
+  });
   it('does not treat standard readings as fallbacks while AI is disabled', () => {
     const result = assessFortuneQuality({
       aiEnabled: false,
@@ -103,6 +113,7 @@ describe('fortune operations quality', () => {
       pricedCalls: 1,
       unpricedCalls: 1,
       estimatedCostUsdMicros: 2_500,
+      uniqueAiUsers: 0,
     });
   });
 

@@ -1,5 +1,5 @@
 import { SelectBunshinMemories } from '@bunshin/application';
-import { FORTUNE_REFLECTION_ANSWERS } from '@bunshin/capability-fortune';
+import { FORTUNE_PROFILE_STYLES, FORTUNE_REFLECTION_ANSWERS } from '@bunshin/capability-fortune';
 import type {
   CreateFortuneReadingResult,
   FortuneFeedbackIssue,
@@ -115,6 +115,18 @@ export class PrismaFortuneGenerationRepository {
           generatedAt: new Date(),
         },
       });
+      if (scope.personalProfileEnabled && !participant.profileUpdatedAt) {
+        // Drawing directly is also a valid way to finish the optional intake.
+        await tx.fortuneParticipant.updateMany({
+          where: {
+            id: participant.id,
+            serviceSettingId: scope.id,
+            userId: input.actorUserId,
+            profileUpdatedAt: null,
+          },
+          data: { profileUpdatedAt: new Date() },
+        });
+      }
       return { kind: 'READY', reading: await fortuneReadingView(tx, reading) };
     });
   }
@@ -294,7 +306,13 @@ export class PrismaFortuneGenerationRepository {
           },
         },
       });
+      const settings = scope.guidanceSettings;
+      const defaultStyle =
+        settings && typeof settings === 'object' && !Array.isArray(settings)
+          ? FORTUNE_PROFILE_STYLES.find((style) => settings['defaultStyle'] === style)
+          : undefined;
       return {
+        ...(personal?.enabled && defaultStyle ? { defaultStyle } : {}),
         ...(lease
           ? {
               generationRevision: contextualized.updatedAt,
@@ -412,6 +430,19 @@ export class PrismaFortuneGenerationRepository {
               deletedAt: null,
             }
           : {}),
+        ...(input.personalProfileRevision
+          ? {
+              serviceSetting: { personalProfileEnabled: true },
+              participant: {
+                profileConsentedAt: { not: null },
+                profileUpdatedAt: {
+                  equals: input.personalProfileRevision,
+                  gte: fortuneReadingRetentionCutoff(new Date(), scope.historyRetentionDays),
+                },
+                groupMembership: { status: 'ACTIVE', consentedAt: { not: null } },
+              },
+            }
+          : {}),
       },
       data: {
         status: 'READY_AI',
@@ -427,7 +458,10 @@ export class PrismaFortuneGenerationRepository {
         generatedAt: new Date(),
       },
     });
-    if (updated.count !== 1) return null;
+    if (updated.count !== 1)
+      return input.personalProfileRevision
+        ? this.saveFallback({ ...input, failureCode: 'FORTUNE_PROFILE_CHANGED' }, db)
+        : null;
     const row = await db.fortuneReading.findFirst({
       where: {
         id: input.readingId,

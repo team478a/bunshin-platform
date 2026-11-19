@@ -21,6 +21,9 @@ export async function resolveFortunePage(serviceSlug: string, returnTo: string) 
       weeklyNotificationEnabled: true,
       aiEnabled: true,
       reflectionEnabled: true,
+      guidanceSettings: true,
+      weeklyNotificationDay: true,
+      weeklyNotificationHour: true,
     },
   });
   if (!setting) notFound();

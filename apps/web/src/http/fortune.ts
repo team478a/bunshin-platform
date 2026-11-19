@@ -44,6 +44,14 @@ const personalProfileBody = z.discriminatedUnion('consented', [
 const drawBody = z
   .object({ theme: z.enum(FORTUNE_THEMES), consultation: z.string().trim().max(500).optional() })
   .strict();
+const notificationSlotBody = z
+  .object({
+    slot: z
+      .object({ weekday: z.number().int().min(0).max(6), hour: z.number().int().min(0).max(23) })
+      .strict()
+      .nullable(),
+  })
+  .strict();
 const reflectionBody = z.object({ answer: z.enum(FORTUNE_REFLECTION_ANSWERS).nullable() }).strict();
 const feedbackBody = z
   .object({
@@ -151,6 +159,20 @@ export const updateFortunePersonalProfileResponse = (request: Request, serviceSl
       profile,
     });
     if (!saved) throw new ApplicationError('FORBIDDEN', 'プロフィールを更新できません。');
+    return { saved };
+  });
+
+export const updateFortuneNotificationSlotResponse = (request: Request, serviceSlug: string) =>
+  json(request, serviceSlug, async (actorUserId, parsedSlug) => {
+    const { slot } = await requireJson(request, notificationSlotBody);
+    const saved = await (
+      await fortunePersonalProfileRepository()
+    ).saveNotificationSlot({
+      serviceSlug: parsedSlug,
+      actorUserId,
+      slot,
+    });
+    if (!saved) throw new ApplicationError('FORBIDDEN', '通知の曜日と時刻を変更できません。');
     return { saved };
   });
 

@@ -1,7 +1,7 @@
 import { FORTUNE_THEMES, type FortuneTheme } from './fortune-definition';
 import { type FortuneReadingOutput, validateFortuneReadingOutput } from './fortune-knowledge';
 import { FortunePolicyError } from './fortune-policy-error';
-import type { FortunePersonalProfile } from './fortune-personal-profile';
+import type { FortunePersonalProfile, FortuneProfileStyle } from './fortune-personal-profile';
 import type {
   FortuneAiGenerationQueue,
   FortuneGenerationJobLease,
@@ -67,6 +67,7 @@ export interface FortuneAiGenerationClaim {
   personalGuidance?: boolean;
   reflectionEnabled?: boolean;
   personalProfileRevision?: Date;
+  defaultStyle?: FortuneProfileStyle;
   consultation?: string;
   personalization?: {
     participantProfile?: Omit<FortunePersonalProfile, 'consented'>;
@@ -156,6 +157,7 @@ export interface FortuneRepository {
     actorUserId: string;
     readingId: string;
     output: FortuneAiReadingResult;
+    personalProfileRevision?: Date;
   }): Promise<FortuneReadingView | null>;
   fallbackAiGeneration(input: {
     jobLease?: FortuneGenerationJobLease;
@@ -312,6 +314,9 @@ export class FortuneDailyReadingService {
             actorUserId: input.actorUserId,
             readingId: result.reading.id,
             output: { ...generated, ...safe },
+            ...(claim.personalProfileRevision
+              ? { personalProfileRevision: claim.personalProfileRevision }
+              : {}),
           })) ?? result.reading
         );
       } catch (error) {
