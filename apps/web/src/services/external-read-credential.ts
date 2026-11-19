@@ -7,7 +7,7 @@ import { externalReadClientCatalog } from './external-read-client-catalog';
 export async function createExternalReadCredentialServices(expectedAudience = 'authenticated') {
   const environment = getServerEnvironment().APP_ENV;
   const clients = externalReadClientCatalog();
-  if (environment === 'staging' || clients.length === 0) return null;
+  if (clients.length === 0) return null;
   const configuration = authConfiguration();
   const clientIds = clients.map((c) => c.id);
   const verifier = new SupabaseExternalReadCredentialVerifier({

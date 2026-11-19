@@ -9,7 +9,7 @@ export const EXTERNAL_READ_OPERATIONS = [
 export type ExternalReadOperation = (typeof EXTERNAL_READ_OPERATIONS)[number];
 export const isExternalReadOperation = (value: unknown): value is ExternalReadOperation =>
   typeof value === 'string' && (EXTERNAL_READ_OPERATIONS as readonly string[]).includes(value);
-export type ExternalReadEnvironment = 'test' | 'development' | 'production';
+export type ExternalReadEnvironment = 'test' | 'development' | 'staging' | 'production';
 /** Trusted server context, obtained by a future credential-verifying adapter, never JSON input. */
 export interface ExternalReadPrincipal {
   clientId: string;

@@ -88,10 +88,10 @@ describe('owner target and catalog', () => {
     expect((await externalGrantOwnerView(target)).clients).toEqual([]);
     expect(m.issuance).toHaveBeenCalledWith(target.owner, 'verified');
   });
-  it('does not reinterpret staging as another environment', async () => {
+  it('uses staging as its own grant environment', async () => {
     m.env.mockReturnValue({ APP_ENV: 'staging' });
     const target = await externalReadGrantOwner('hassy', id, 'user');
-    expect((await externalGrantOwnerView(target)).managementAvailable).toBe(false);
-    expect(m.repository).not.toHaveBeenCalled();
+    expect((await externalGrantOwnerView(target)).managementAvailable).toBe(true);
+    expect(m.repository.mock.calls[0]?.[1]).toBe('staging');
   });
 });

@@ -1,5 +1,11 @@
 # BUNSHIN Platform Decision Log
 
+## 2026-11-19: 外部AI読取の隔離stagingを独立したGrant環境として扱う
+
+- PR-06実機PoCでOAuth token交換とMCP到達までは成功したが、外部読取compositionが`APP_ENV=staging`を一律停止し、`POST /api/mcp`を503で返した。OAuth同意だけstaging対応した状態とRuntime／Grant管理が不整合だった。
+- `staging`を`development`や`production`へ読み替えず、`ExternalReadEnvironment`と既存GrantのCHECK制約へ独立値として追加する。reviewed client catalogが空なら従来どおりcompositionとGrant発行を停止する。
+- 新しい業務テーブル、権限、MCP tool、外部書込みは追加しない。本番設定、本番DB、Grok有料実行は変更せず、隔離Supabaseへのmigration適用と実tool検証はPRレビュー・明示承認後に行う。
+
 ## 2026-11-18: 隔離stagingの確認済みOAuth clientだけ外部AI同意を許可する
 
 - Supabase preview branchとVercel custom environmentを分離したPR-06実機PoCで、Vercel runtimeは`NODE_ENV=production`を強制するため`APP_ENV=development`を拒否する一方、旧OAuth同意導線は`APP_ENV=staging`を一律停止し、ホストした非本番検証ができないことを確認した。
