@@ -3423,6 +3423,7 @@ model FortuneServiceSetting {
   bunshinId                 String                    @unique @map("bunshin_id") @db.Uuid
   enabled                   Boolean                   @default(false)
   aiEnabled                 Boolean                   @default(false) @map("ai_enabled")
+  personalProfileEnabled    Boolean                   @default(false) @map("personal_profile_enabled")
   minimumAge                Int                       @default(18) @map("minimum_age")
   timeZone                  String                    @default("Asia/Tokyo") @map("time_zone") @db.VarChar(80)
   historyRetentionDays      Int                       @default(90) @map("history_retention_days")
@@ -3457,6 +3458,11 @@ model FortuneParticipant {
   groupMembershipId          String                @unique @map("group_membership_id") @db.Uuid
   userId                     String                @map("user_id") @db.Uuid
   personalizationBunshinId   String?               @map("personalization_bunshin_id") @db.Uuid
+  profileInterest            String?               @map("profile_interest") @db.VarChar(120)
+  profileQuestion            String?               @map("profile_question") @db.VarChar(500)
+  profileStyle               String?               @map("profile_style") @db.VarChar(20)
+  profileUpdatedAt           DateTime?             @map("profile_updated_at") @db.Timestamptz(6)
+  profileConsentedAt         DateTime?             @map("profile_consented_at") @db.Timestamptz(6)
   ageConfirmedAt             DateTime              @map("age_confirmed_at") @db.Timestamptz(6)
   joinedAt                   DateTime              @default(now()) @map("joined_at") @db.Timestamptz(6)
   createdAt                  DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
