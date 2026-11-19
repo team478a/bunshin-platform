@@ -1,5 +1,6 @@
 import 'server-only';
 import { ApplicationError } from '@bunshin/shared';
+import type { FortuneGuidanceSettings } from './guidance-settings';
 import { fortuneOperatorScope } from './operator-scope';
 import { fortuneOperatorStatus } from './operator-status';
 
@@ -25,7 +26,7 @@ export async function setFortuneEnabled(input: {
 export async function saveFortuneGuidanceSettings(input: {
   serviceSlug: string;
   actorUserId: string;
-  settings: import('./guidance-settings').FortuneGuidanceSettings;
+  settings: FortuneGuidanceSettings;
 }) {
   const service = await fortuneOperatorScope(input.serviceSlug, input.actorUserId);
   const db = await import('@bunshin/database');

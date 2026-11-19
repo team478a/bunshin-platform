@@ -99,7 +99,7 @@ export default async function FortuneTodayPage({
         {profile?.enabled && (
           <section className="settings-card">
             <h2>あなたの占い</h2>
-            {profile.profile.interest && <p>関心テーマ　{profile.profile.interest}</p>}
+            {profile.profile.interest && <p>関心テーマ {profile.profile.interest}</p>}
             {previous && (
               <>
                 <h3>前回の鑑定</h3>

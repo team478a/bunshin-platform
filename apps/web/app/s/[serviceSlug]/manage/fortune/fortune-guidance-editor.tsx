@@ -22,7 +22,10 @@ export function FortuneGuidanceEditor({
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const fields = new FormData(event.currentTarget);
-    const text = (key: string) => String(fields.get(key) ?? '');
+    const text = (key: string) => {
+      const value = fields.get(key);
+      return typeof value === 'string' ? value : '';
+    };
     setBusy(true);
     setMessage('');
     setError('');
