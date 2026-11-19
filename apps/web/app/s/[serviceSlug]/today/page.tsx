@@ -4,6 +4,8 @@ import { fortuneDailyReadingService } from '../../../../src/fortune/runtime';
 import { resolveFortunePage } from '../../../../src/fortune/page-context';
 import { FortuneDrawButtons, FortuneJoinButton } from '../fortune-actions';
 import { FortuneNav, ReadingCard } from '../fortune-ui';
+import { FortuneProfileForm } from '../fortune-profile-form';
+import { fortunePersonalProfileRepository } from '../../../../src/fortune/personal-profile';
 
 export const dynamic = 'force-dynamic';
 export const metadata: Metadata = { title: '今日の占い' };
@@ -18,6 +20,12 @@ export default async function FortuneTodayPage({
   const today = await (
     await fortuneDailyReadingService()
   ).today({ serviceSlug, actorUserId: actor.userId });
+  const profile =
+    today.participant && !today.reading
+      ? await (
+          await fortunePersonalProfileRepository()
+        ).read({ serviceSlug, actorUserId: actor.userId })
+      : null;
   return (
     <PublicShell showPlatformBrand={false}>
       <main className="app-page fortune-page">
@@ -26,6 +34,9 @@ export default async function FortuneTodayPage({
           <h1>今日の占い</h1>
           <p>気になるテーマを1つ選んで、今日のカードを引きます。</p>
         </header>
+        {profile?.enabled && !profile.completed && (
+          <FortuneProfileForm serviceSlug={serviceSlug} profile={profile.profile} initial enabled />
+        )}
         {!today.participant ? (
           <section className="settings-card">
             <h2>最初に年齢を確認します</h2>

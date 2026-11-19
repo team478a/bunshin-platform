@@ -216,6 +216,21 @@ export class PrismaServiceParticipationMembershipRepository {
         where: { id: membership.id },
         data: { status: 'REVOKED', revokedAt: input.now },
       });
+      await tx.fortuneParticipant.updateMany({
+        where: {
+          workspaceId: membership.workspaceId,
+          groupId: membership.groupId,
+          groupMembershipId: membership.id,
+          userId: input.actorUserId,
+          profileConsentedAt: { not: null },
+        },
+        data: {
+          profileInterest: null,
+          profileQuestion: null,
+          profileStyle: null,
+          profileConsentedAt: null,
+        },
+      });
       await endOemRegistration(
         tx,
         membership,

@@ -4,6 +4,7 @@ import {
   FORTUNE_FEEDBACK_ISSUES,
   FORTUNE_FEEDBACK_RATINGS,
   FORTUNE_THEMES,
+  FORTUNE_PROFILE_STYLES,
 } from '@bunshin/capability-fortune';
 import { requestIdFromHeader } from '@bunshin/observability';
 import { ApplicationError, toApiError } from '@bunshin/shared';
@@ -11,6 +12,7 @@ import { z } from 'zod';
 import { currentUserProvider } from '../auth/current-user';
 import { requireSameOrigin } from '../auth/request-security';
 import { fortuneDailyReadingService } from '../fortune/runtime';
+import { fortunePersonalProfileRepository } from '../fortune/personal-profile';
 import { recordServiceUse } from '../services/service-membership';
 
 const slug = z
@@ -20,6 +22,24 @@ const slug = z
 const uuid = z.string().uuid();
 const joinBody = z.object({ ageConfirmed: z.literal(true) }).strict();
 const personalizationBody = z.object({ bunshinId: uuid.nullable() }).strict();
+const optionalProfileText = (limit: number) =>
+  z
+    .string()
+    .trim()
+    .max(limit)
+    .nullable()
+    .transform((value) => value || null);
+const personalProfileBody = z.discriminatedUnion('consented', [
+  z.object({ consented: z.literal(false) }).strict(),
+  z
+    .object({
+      consented: z.literal(true),
+      interest: optionalProfileText(120),
+      question: optionalProfileText(500),
+      style: z.enum(FORTUNE_PROFILE_STYLES).nullable(),
+    })
+    .strict(),
+]);
 const drawBody = z.object({ theme: z.enum(FORTUNE_THEMES) }).strict();
 const feedbackBody = z
   .object({
@@ -85,7 +105,10 @@ const requireJson = async <T>(request: Request, schema: z.ZodType<T>) => {
   requireSameOrigin(request);
   if (!request.headers.get('content-type')?.startsWith('application/json'))
     throw new ApplicationError('VALIDATION_ERROR', 'application/json required');
-  return schema.parse(await request.json());
+  const body = await request.json().catch(() => {
+    throw new ApplicationError('VALIDATION_ERROR', 'JSON形式の入力が必要です');
+  });
+  return schema.parse(body);
 };
 
 export const joinFortuneResponse = (request: Request, serviceSlug: string) =>
@@ -111,6 +134,20 @@ export const updateFortunePersonalizationResponse = (request: Request, serviceSl
       actorUserId,
       bunshinId: body.bunshinId,
     });
+  });
+
+export const updateFortunePersonalProfileResponse = (request: Request, serviceSlug: string) =>
+  json(request, serviceSlug, async (actorUserId, parsedSlug) => {
+    const profile = await requireJson(request, personalProfileBody);
+    const saved = await (
+      await fortunePersonalProfileRepository()
+    ).update({
+      serviceSlug: parsedSlug,
+      actorUserId,
+      profile,
+    });
+    if (!saved) throw new ApplicationError('FORBIDDEN', 'プロフィールを更新できません。');
+    return { saved };
   });
 
 export const getFortuneTodayResponse = (request: Request, serviceSlug: string) =>
