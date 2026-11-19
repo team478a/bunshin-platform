@@ -94,6 +94,20 @@ export async function resolveServiceLineBroadcastRecipientIds(input: {
         enabled: true,
         consentedAt: { not: null },
         optedOutAt: null,
+        groupMembership: {
+          fortuneParticipation: {
+            is: {
+              serviceSetting: {
+                enabled: true,
+                weeklyNotificationEnabled: true,
+                bunshin: {
+                  status: 'ACTIVE',
+                  capabilityAssignments: { some: { capabilityType: 'FORTUNE', status: 'ACTIVE' } },
+                },
+              },
+            },
+          },
+        },
       },
       select: { groupMembershipId: true },
     });

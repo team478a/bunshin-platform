@@ -1,5 +1,5 @@
 import { SelectBunshinMemories } from '@bunshin/application';
-import { FORTUNE_REFLECTION_ANSWERS } from '@bunshin/capability-fortune';
+import { FORTUNE_PROFILE_STYLES, FORTUNE_REFLECTION_ANSWERS } from '@bunshin/capability-fortune';
 import type {
   CreateFortuneReadingResult,
   FortuneFeedbackIssue,
@@ -294,7 +294,13 @@ export class PrismaFortuneGenerationRepository {
           },
         },
       });
+      const settings = scope.guidanceSettings;
+      const defaultStyle =
+        settings && typeof settings === 'object' && !Array.isArray(settings)
+          ? FORTUNE_PROFILE_STYLES.find((style) => settings['defaultStyle'] === style)
+          : undefined;
       return {
+        ...(personal?.enabled && defaultStyle ? { defaultStyle } : {}),
         ...(lease
           ? {
               generationRevision: contextualized.updatedAt,
@@ -412,6 +418,19 @@ export class PrismaFortuneGenerationRepository {
               deletedAt: null,
             }
           : {}),
+        ...(input.personalProfileRevision
+          ? {
+              serviceSetting: { personalProfileEnabled: true },
+              participant: {
+                profileConsentedAt: { not: null },
+                profileUpdatedAt: {
+                  equals: input.personalProfileRevision,
+                  gte: fortuneReadingRetentionCutoff(new Date(), scope.historyRetentionDays),
+                },
+                groupMembership: { status: 'ACTIVE', consentedAt: { not: null } },
+              },
+            }
+          : {}),
       },
       data: {
         status: 'READY_AI',
@@ -427,7 +446,10 @@ export class PrismaFortuneGenerationRepository {
         generatedAt: new Date(),
       },
     });
-    if (updated.count !== 1) return null;
+    if (updated.count !== 1)
+      return input.personalProfileRevision
+        ? this.saveFallback({ ...input, failureCode: 'FORTUNE_PROFILE_CHANGED' }, db)
+        : null;
     const row = await db.fortuneReading.findFirst({
       where: {
         id: input.readingId,

@@ -290,6 +290,8 @@ MS-1とMS-2を完了する前に、第一号サービスを一般公開しない
 
 ## 占い
 
+AIパーソナル占い・継続利用v1の差分と段階導入は [実装報告](FORTUNE_PERSONAL_GUIDANCE_V1_IMPLEMENTATION.md) を参照。初回ヒアリング、個別鑑定、振り返り、本人ホーム・運営集計の順に検証する。
+
 占いの中断生成復旧はD-129に従い、最終更新から10分以上の`GENERATING`を保存済み標準結果へ戻す認証済みCronをコード実装した。カード再抽選・AI再実行・LINE再送はしない。検証結果は対象PRのCI、本番反映・Cron実行は別確認とする。詳細は`FORTUNE_GENERATION_RECOVERY_IMPLEMENTATION_REPORT.md`を参照。
 
 占いAIの非同期Job/最大3回再試行をD-145に従ってコード実装した。標準結果を先に返し、本人/Service/Bunshin・lease・更新Revisionを検証してAI結果を確定する。試行別Quota/使用量を記録し、有効なJobがあるReadingを中断復旧から除く。`FORTUNE_ASYNC_GENERATION_ENABLED`は既定無効で本番設定は変更していない。検証結果は対象PRのCI、本番稼働は別確認。詳細は`FORTUNE_ASYNC_GENERATION_IMPLEMENTATION_REPORT.md`。

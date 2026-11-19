@@ -9,11 +9,14 @@ import {
 } from '../../../../../src/fortune/operator';
 import { buildFortuneLaunchSteps } from '../../../../../src/fortune/launch-readiness';
 import { buildFortuneOperationalValidation } from '../../../../../src/fortune/operational-validation';
-import { fortuneFailureLabel } from '../../../../../src/fortune/quality';
+import { fortuneFailureLabel, fortuneRate } from '../../../../../src/fortune/quality';
 import { PublicShell } from '../../../../ui/public-shell';
+import { FortuneGuidanceEditor } from './fortune-guidance-editor';
 import { FortuneOperatorEditor } from './fortune-operator-editor';
 
 export const dynamic = 'force-dynamic';
+const percent = (value: number | null) =>
+  value === null ? '集計対象なし' : `${(value * 100).toFixed(1)}%`;
 
 export default async function FortuneManagementPage({
   params,
@@ -176,6 +179,9 @@ export default async function FortuneManagementPage({
           bunshinId={status.bunshinId}
           bunshins={status.bunshins}
         />
+        {status.configured && status.guidanceSettings && (
+          <FortuneGuidanceEditor serviceSlug={serviceSlug} settings={status.guidanceSettings} />
+        )}
         {status.configured && (
           <section className="settings-card fortune-readiness-card">
             <p className="eyebrow">本番開始後の確認</p>
@@ -253,6 +259,32 @@ export default async function FortuneManagementPage({
                   </dd>
                 </div>
                 <div>
+                  <dt>AI生成成功率・失敗率</dt>
+                  <dd>
+                    {percent(
+                      fortuneRate(
+                        quality.aiOperations.successfulCalls,
+                        quality.aiOperations.successfulCalls + quality.aiOperations.failedCalls,
+                      ),
+                    )}
+                    {' / '}
+                    {percent(
+                      fortuneRate(
+                        quality.aiOperations.failedCalls,
+                        quality.aiOperations.successfulCalls + quality.aiOperations.failedCalls,
+                      ),
+                    )}
+                  </dd>
+                </div>
+                <div>
+                  <dt>AI利用者1人あたりの概算原価</dt>
+                  <dd>
+                    {quality.aiOperations.uniqueAiUsers > 0 && quality.aiOperations.pricedCalls > 0
+                      ? `約 $${(quality.aiOperations.estimatedCostUsdMicros / quality.aiOperations.uniqueAiUsers / 1_000_000).toFixed(4)} USD`
+                      : '集計対象なし'}
+                  </dd>
+                </div>
+                <div>
                   <dt>使用トークン</dt>
                   <dd>
                     入力 {quality.aiOperations.inputTokens.toLocaleString('ja-JP')} / 出力{' '}
@@ -295,6 +327,33 @@ export default async function FortuneManagementPage({
                   <dt>別の日にも利用した人</dt>
                   <dd>{quality.membershipActivity.revisitedParticipants}人</dd>
                 </div>
+                {quality.personalGuidance && (
+                  <>
+                    <div>
+                      <dt>初回鑑定完了率（直近30日の新規登録者）</dt>
+                      <dd>{percent(quality.personalGuidance.firstCompletionRate)}</dd>
+                    </div>
+                    <div>
+                      <dt>2回目利用率（直近30日の鑑定閲覧者）</dt>
+                      <dd>{percent(quality.personalGuidance.secondUseRate)}</dd>
+                    </div>
+                    <div>
+                      <dt>7日以内 / 30日以内の再訪率（鑑定を別日に閲覧）</dt>
+                      <dd>
+                        {percent(quality.personalGuidance.return7Rate)} /{' '}
+                        {percent(quality.personalGuidance.return30Rate)}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>振り返り回答率（完了した鑑定に対する割合）</dt>
+                      <dd>{percent(quality.personalGuidance.reflectionRate)}</dd>
+                    </div>
+                    <div>
+                      <dt>提案を試した割合（振り返り回答者の自己申告）</dt>
+                      <dd>{percent(quality.personalGuidance.suggestionUseRate)}</dd>
+                    </div>
+                  </>
+                )}
                 <div>
                   <dt>週1回のお知らせを開始した人</dt>
                   <dd>{quality.membershipActivity.notificationOptInParticipants}人</dd>

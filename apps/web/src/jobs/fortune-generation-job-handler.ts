@@ -117,7 +117,13 @@ export function createFortuneGenerationJobHandler(
           failure.retryable && input.attemptCount < Math.min(input.maxAttempts, 3),
         );
       }
-      await deps.repository.completeAiGeneration({ ...revision, output });
+      await deps.repository.completeAiGeneration({
+        ...revision,
+        output,
+        ...(claim.personalProfileRevision
+          ? { personalProfileRevision: claim.personalProfileRevision }
+          : {}),
+      });
     },
   };
 }

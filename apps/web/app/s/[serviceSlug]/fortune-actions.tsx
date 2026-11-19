@@ -137,9 +137,11 @@ const choices = [
 export function FortuneDrawButtons({
   serviceSlug,
   askConsultation = false,
+  themeLabels,
 }: {
   serviceSlug: string;
   askConsultation?: boolean;
+  themeLabels?: Record<(typeof choices)[number]['value'], string>;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
@@ -188,7 +190,11 @@ export function FortuneDrawButtons({
             })()
           }
         >
-          <strong>{busy === choice.value ? 'カードを引いています…' : choice.label}</strong>
+          <strong>
+            {busy === choice.value
+              ? 'カードを引いています…'
+              : (themeLabels?.[choice.value] ?? choice.label)}
+          </strong>
           <span>{choice.note}</span>
         </button>
       ))}
