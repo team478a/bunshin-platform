@@ -105,7 +105,7 @@ const requireJson = async <T>(request: Request, schema: z.ZodType<T>) => {
   requireSameOrigin(request);
   if (!request.headers.get('content-type')?.startsWith('application/json'))
     throw new ApplicationError('VALIDATION_ERROR', 'application/json required');
-  const body = await request.json().catch(() => {
+  const body: unknown = await request.json().catch(() => {
     throw new ApplicationError('VALIDATION_ERROR', 'JSON形式の入力が必要です');
   });
   return schema.parse(body);
