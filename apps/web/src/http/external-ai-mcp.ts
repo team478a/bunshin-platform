@@ -2,6 +2,7 @@ import 'server-only';
 import type { AuthInfo } from '@modelcontextprotocol/server';
 import { ExternalReadError } from '@bunshin/application';
 import { getServerEnvironment } from '@bunshin/config';
+import { createLogger } from '@bunshin/observability';
 import { authConfiguration } from '../auth/supabase';
 import { createExternalAiMcpHandler } from '../mcp/external-ai-mcp';
 import { createExternalAiMcpServices } from '../services/external-read';
@@ -34,6 +35,13 @@ function unauthorized(resource: URL) {
   );
 }
 
+function warnAuthenticationRejection(errorCode: string) {
+  createLogger().warn('External MCP authentication rejected', {
+    route: '/api/mcp',
+    errorCode,
+  });
+}
+
 export async function externalAiMcpResponse(request: Request) {
   const resource = externalAiMcpResourceUrl();
   const requestUrl = new URL(request.url);
@@ -46,7 +54,10 @@ export async function externalAiMcpResponse(request: Request) {
   )
     return Response.json({ error: 'invalid_request' }, { status: 400, headers: noStore });
   const authorization = request.headers.get('authorization');
-  if (!authorization) return unauthorized(resource);
+  if (!authorization) {
+    warnAuthenticationRejection('MCP_AUTHORIZATION_MISSING');
+    return unauthorized(resource);
+  }
   const services = await createExternalAiMcpServices(resource.toString());
   if (!services)
     return Response.json({ error: 'service_unavailable' }, { status: 503, headers: noStore });
@@ -62,7 +73,10 @@ export async function externalAiMcpResponse(request: Request) {
         }, 10_000);
       }),
     ]);
-    if (!credential) return unauthorized(resource);
+    if (!credential) {
+      warnAuthenticationRejection('MCP_CREDENTIAL_REJECTED');
+      return unauthorized(resource);
+    }
     const token = /^Bearer (.+)$/i.exec(authorization)?.[1];
     if (!token) return unauthorized(resource);
     const authInfo: AuthInfo = {

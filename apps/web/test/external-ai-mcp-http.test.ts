@@ -1,11 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const m = vi.hoisted(() => ({ services: vi.fn() }));
+const m = vi.hoisted(() => ({ services: vi.fn(), warn: vi.fn() }));
 vi.mock('@bunshin/config', () => ({
   getServerEnvironment: () => ({ APP_URL: 'https://app.example.invalid', APP_ENV: 'test' }),
 }));
 vi.mock('../src/auth/supabase', () => ({
   authConfiguration: () => ({ url: 'https://auth.example.invalid', key: 'public' }),
+}));
+vi.mock('@bunshin/observability', () => ({
+  createLogger: () => ({ warn: m.warn }),
 }));
 vi.mock('../src/services/external-read', () => ({
   createExternalAiMcpServices: m.services,
@@ -46,6 +49,10 @@ describe('external AI MCP HTTP resource boundary', () => {
     expect(response.status).toBe(401);
     expect(response.headers.get('www-authenticate')).toContain('resource_metadata=');
     expect(m.services).not.toHaveBeenCalled();
+    expect(m.warn).toHaveBeenCalledWith('External MCP authentication rejected', {
+      route: '/api/mcp',
+      errorCode: 'MCP_AUTHORIZATION_MISSING',
+    });
   });
 
   it('rejects foreign browser origins and invalid resource audiences', async () => {
@@ -56,5 +63,10 @@ describe('external AI MCP HTTP resource boundary', () => {
     expect(
       (await externalAiMcpResponse(request({ authorization: 'Bearer signed.token.value' }))).status,
     ).toBe(401);
+    expect(m.warn).toHaveBeenCalledWith('External MCP authentication rejected', {
+      route: '/api/mcp',
+      errorCode: 'MCP_CREDENTIAL_REJECTED',
+    });
+    expect(JSON.stringify(m.warn.mock.calls)).not.toContain('signed.token.value');
   });
 });
