@@ -2,6 +2,10 @@
 
 import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
+import {
+  defaultFortuneGuidanceSettings,
+  type FortuneGuidanceSettings,
+} from '../../../src/fortune/guidance-settings';
 import type { FortunePersonalProfile } from '@bunshin/capability-fortune';
 
 export function FortuneProfileForm({
@@ -9,11 +13,13 @@ export function FortuneProfileForm({
   profile,
   initial = false,
   enabled,
+  guidance = defaultFortuneGuidanceSettings,
 }: {
   serviceSlug: string;
   profile: FortunePersonalProfile;
   initial?: boolean;
   enabled: boolean;
+  guidance?: FortuneGuidanceSettings;
 }) {
   const router = useRouter();
   const [consented, setConsented] = useState(profile.consented);
@@ -73,16 +79,16 @@ export function FortuneProfileForm({
           {enabled && (
             <>
               <label className="form-field">
-                <span>今、どんなことが気になっていますか？</span>
+                <span>{guidance.interestQuestion}</span>
                 <input
                   name="interest"
                   defaultValue={profile.interest ?? ''}
                   maxLength={120}
-                  placeholder="恋愛、仕事、人間関係など"
+                  placeholder={Object.values(guidance.themeLabels).join('、')}
                 />
               </label>
               <label className="form-field">
-                <span>具体的に知りたいことはありますか？</span>
+                <span>{guidance.consultationQuestion}</span>
                 <textarea
                   name="question"
                   defaultValue={profile.question ?? ''}
@@ -91,12 +97,14 @@ export function FortuneProfileForm({
                 />
               </label>
               <label className="form-field">
-                <span>どんな雰囲気が好みですか？</span>
+                <span>{guidance.styleQuestion}</span>
                 <select name="style" defaultValue={profile.style ?? ''}>
                   <option value="">おまかせ</option>
-                  <option value="GENTLE">やさしく</option>
-                  <option value="DIRECT">簡潔に</option>
-                  <option value="REFLECTIVE">じっくり考える</option>
+                  {Object.entries(guidance.styleLabels).map(([style, label]) => (
+                    <option key={style} value={style}>
+                      {label}
+                    </option>
+                  ))}
                 </select>
               </label>
               <label className="fortune-check">

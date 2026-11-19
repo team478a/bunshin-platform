@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildFortuneWeeklyLineMessage,
   fortuneWeeklyDeliveryKey,
+  fortuneWeeklyLocalSlot,
   isFortuneWeeklyNotificationDue,
 } from '../src/fortune/weekly-line-delivery';
 
@@ -25,6 +26,15 @@ describe('fortune weekly LINE delivery', () => {
       }),
     ).toBe(false);
     expect(fortuneWeeklyDeliveryKey(now, 'Asia/Tokyo')).toBe('2026-09-16');
+  });
+
+  it('uses the service calendar week when a member chooses a different day', () => {
+    expect(fortuneWeeklyLocalSlot(new Date('2026-11-15T15:00:00.000Z'), 'Asia/Tokyo')).toEqual({
+      date: '2026-11-16',
+      weekStart: '2026-11-16',
+      weekday: 1,
+      hour: 0,
+    });
   });
 
   it('keeps private fortune content out of the notification', () => {

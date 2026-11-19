@@ -73,6 +73,25 @@ describe('fortune reading personalization', () => {
     expect(FORTUNE_AI_PROMPT_VERSION).toBe('fortune-daily-reading-v3-participant-memory');
   });
 
+  it('passes the current consultation and consented preferences as data for Tarot', () => {
+    const value = fortuneReadingPromptInput({
+      ...claim,
+      personalGuidance: true,
+      personalProfileRevision: new Date('2026-09-27'),
+      consultation: '配置転換について考えたい',
+      personalization: {
+        recentReadings: [],
+        participantProfile: { interest: '働き方', question: null, style: 'DIRECT' },
+      },
+    });
+    expect(value).toMatchObject({
+      method: 'TAROT',
+      consultation: '配置転換について考えたい',
+      personalization: { participantProfile: { interest: '働き方', style: 'DIRECT' } },
+    });
+    expect(value).not.toHaveProperty('personalProfileRevision');
+  });
+
   it('keeps generation available when no history exists', () => {
     const claimWithoutPersonalization = { ...claim };
     delete claimWithoutPersonalization.personalization;

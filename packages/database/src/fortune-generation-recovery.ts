@@ -72,6 +72,7 @@ export async function recoverStaleFortuneReadings(
           ? 'AI_GENERATION_INTERRUPTED'
           : 'AI_GENERATION_INTERRUPTED_MISSING_BASIC',
         modelName: null,
+        pendingConsultation: null,
       },
     });
     if (result.count === 1) {

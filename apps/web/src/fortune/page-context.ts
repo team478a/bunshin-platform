@@ -15,7 +15,16 @@ export async function resolveFortunePage(serviceSlug: string, returnTo: string) 
         capabilityAssignments: { some: { capabilityType: 'FORTUNE', status: 'ACTIVE' } },
       },
     },
-    select: { minimumAge: true, historyRetentionDays: true, weeklyNotificationEnabled: true },
+    select: {
+      minimumAge: true,
+      historyRetentionDays: true,
+      weeklyNotificationEnabled: true,
+      aiEnabled: true,
+      reflectionEnabled: true,
+      guidanceSettings: true,
+      weeklyNotificationDay: true,
+      weeklyNotificationHour: true,
+    },
   });
   if (!setting) notFound();
   return { ...page, setting };

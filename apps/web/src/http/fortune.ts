@@ -5,6 +5,7 @@ import {
   FORTUNE_FEEDBACK_RATINGS,
   FORTUNE_THEMES,
   FORTUNE_PROFILE_STYLES,
+  FORTUNE_REFLECTION_ANSWERS,
 } from '@bunshin/capability-fortune';
 import { requestIdFromHeader } from '@bunshin/observability';
 import { ApplicationError, toApiError } from '@bunshin/shared';
@@ -40,7 +41,18 @@ const personalProfileBody = z.discriminatedUnion('consented', [
     })
     .strict(),
 ]);
-const drawBody = z.object({ theme: z.enum(FORTUNE_THEMES) }).strict();
+const drawBody = z
+  .object({ theme: z.enum(FORTUNE_THEMES), consultation: z.string().trim().max(500).optional() })
+  .strict();
+const notificationSlotBody = z
+  .object({
+    slot: z
+      .object({ weekday: z.number().int().min(0).max(6), hour: z.number().int().min(0).max(23) })
+      .strict()
+      .nullable(),
+  })
+  .strict();
+const reflectionBody = z.object({ answer: z.enum(FORTUNE_REFLECTION_ANSWERS).nullable() }).strict();
 const feedbackBody = z
   .object({
     rating: z.enum(FORTUNE_FEEDBACK_RATINGS),
@@ -150,6 +162,20 @@ export const updateFortunePersonalProfileResponse = (request: Request, serviceSl
     return { saved };
   });
 
+export const updateFortuneNotificationSlotResponse = (request: Request, serviceSlug: string) =>
+  json(request, serviceSlug, async (actorUserId, parsedSlug) => {
+    const { slot } = await requireJson(request, notificationSlotBody);
+    const saved = await (
+      await fortunePersonalProfileRepository()
+    ).saveNotificationSlot({
+      serviceSlug: parsedSlug,
+      actorUserId,
+      slot,
+    });
+    if (!saved) throw new ApplicationError('FORBIDDEN', '通知の曜日と時刻を変更できません。');
+    return { saved };
+  });
+
 export const getFortuneTodayResponse = (request: Request, serviceSlug: string) =>
   json(request, serviceSlug, async (actorUserId, parsedSlug) =>
     (await fortuneDailyReadingService()).today({
@@ -169,6 +195,7 @@ export const drawFortuneResponse = (request: Request, serviceSlug: string) =>
         serviceSlug: parsedSlug,
         actorUserId,
         theme: body.theme,
+        ...(body.consultation ? { consultation: body.consultation } : {}),
       });
     },
     201,
@@ -210,6 +237,24 @@ export const deleteFortuneReadingResponse = (
       readingId: uuid.parse(readingId),
     });
     return { deleted: true };
+  });
+
+export const updateFortuneReflectionResponse = (
+  request: Request,
+  serviceSlug: string,
+  readingId: string,
+) =>
+  json(request, serviceSlug, async (actorUserId, parsedSlug) => {
+    const body = await requireJson(request, reflectionBody);
+    const db = await import('@bunshin/database');
+    const saved = await new db.PrismaFortuneRepository(db.prisma).saveReflection({
+      serviceSlug: parsedSlug,
+      actorUserId,
+      readingId: uuid.parse(readingId),
+      answer: body.answer,
+    });
+    if (!saved) throw new ApplicationError('NOT_FOUND', '振り返りを保存できません。');
+    return { saved };
   });
 
 export const updateFortuneFeedbackResponse = (

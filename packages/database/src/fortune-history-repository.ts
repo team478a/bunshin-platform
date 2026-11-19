@@ -2,6 +2,7 @@ import type {
   FortuneFeedbackIssue,
   FortuneFeedbackRating,
   FortuneReadingView,
+  FortuneReflectionAnswer,
 } from '@bunshin/capability-fortune';
 import type { PrismaClient } from '@prisma/client';
 import { fortuneReadingRetentionCutoff } from './fortune-retention';
@@ -135,6 +136,41 @@ export class PrismaFortuneHistoryRepository {
     });
   }
 
+  async saveReflection(input: {
+    serviceSlug: string;
+    actorUserId: string;
+    readingId: string;
+    answer: FortuneReflectionAnswer | null;
+  }) {
+    const scope = await fortuneTarget(this.db, input.serviceSlug, input.actorUserId);
+    if (!scope || (input.answer && !scope.reflectionEnabled)) return false;
+    const cutoff = fortuneReadingRetentionCutoff(this.now(), scope.historyRetentionDays);
+    const result = await this.db.fortuneReading.updateMany({
+      where: {
+        id: input.readingId,
+        workspaceId: scope.workspaceId,
+        groupId: scope.groupId,
+        serviceSettingId: scope.id,
+        memberUserId: input.actorUserId,
+        status: { in: ['READY_AI', 'READY_BASIC'] },
+        deletedAt: null,
+        localDate: { gte: cutoff },
+        participant: {
+          userId: input.actorUserId,
+          groupMembership: { status: 'ACTIVE', consentedAt: { not: null } },
+          ...(input.answer
+            ? { profileUpdatedAt: { gte: cutoff }, profileConsentedAt: { not: null } }
+            : {}),
+        },
+        ...(input.answer
+          ? { serviceSetting: { reflectionEnabled: true, personalProfileEnabled: true } }
+          : {}),
+      },
+      data: { reflectionAnswer: input.answer },
+    });
+    return result.count === 1;
+  }
+
   async deleteReading(input: {
     serviceSlug: string;
     actorUserId: string;
@@ -154,6 +190,9 @@ export class PrismaFortuneHistoryRepository {
         status: 'DELETED',
         readingText: null,
         actionStep: null,
+        pendingConsultation: null,
+        reflectionPrompt: null,
+        reflectionAnswer: null,
         modelName: null,
         failureCode: null,
         deletedAt: input.deletedAt,
