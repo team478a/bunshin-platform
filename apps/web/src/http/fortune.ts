@@ -3,6 +3,8 @@ import {
   FortunePolicyError,
   FORTUNE_FEEDBACK_ISSUES,
   FORTUNE_FEEDBACK_RATINGS,
+  FORTUNE_INTAKE_KEYS,
+  FORTUNE_INTAKE_MAX_QUESTIONS,
   FORTUNE_PERSONAL_FIT_RATINGS,
   FORTUNE_THEMES,
   FORTUNE_PROFILE_STYLES,
@@ -17,6 +19,7 @@ import { fortuneDailyReadingService } from '../fortune/runtime';
 import { fortunePersonalProfileRepository } from '../fortune/personal-profile';
 import { recordServiceUse } from '../services/service-membership';
 import { askFortuneFollowUp, fortuneFollowUpRepository } from '../fortune/follow-ups';
+import { selectFortuneIntakeQuestion } from '../providers/openai-fortune-intake';
 
 const slug = z
   .string()
@@ -45,6 +48,22 @@ const personalProfileBody = z.discriminatedUnion('consented', [
 ]);
 const drawBody = z
   .object({ theme: z.enum(FORTUNE_THEMES), consultation: z.string().trim().max(500).optional() })
+  .strict();
+const intakeBody = z
+  .object({
+    theme: z.enum(FORTUNE_THEMES),
+    consultation: z.string().trim().max(200),
+    answers: z
+      .array(
+        z
+          .object({
+            key: z.enum(FORTUNE_INTAKE_KEYS),
+            answer: z.string().trim().min(1).max(50).nullable(),
+          })
+          .strict(),
+      )
+      .max(FORTUNE_INTAKE_MAX_QUESTIONS),
+  })
   .strict();
 const notificationSlotBody = z
   .object({
@@ -208,6 +227,28 @@ export const drawFortuneResponse = (request: Request, serviceSlug: string) =>
     },
     201,
   );
+
+export const nextFortuneIntakeResponse = (request: Request, serviceSlug: string) =>
+  json(request, serviceSlug, async (actorUserId, parsedSlug) => {
+    const body = await requireJson(request, intakeBody);
+    const answered = body.answers.map(({ key }) => key);
+    if (new Set(answered).size !== answered.length)
+      throw new ApplicationError('VALIDATION_ERROR', '同じ質問への回答が重複しています。');
+    const db = await import('@bunshin/database');
+    const repo = new db.PrismaFortuneIntakeRepository(db.prisma);
+    const actor = { serviceSlug: parsedSlug, actorUserId };
+    const reservation = await repo.reserve({ ...actor, theme: body.theme, answered });
+    if (reservation.kind !== 'RESERVED') return reservation;
+    const claim = { ...actor, id: reservation.id, profileRevision: reservation.profileRevision };
+    const key = await selectFortuneIntakeQuestion({
+      ...reservation,
+      ...body,
+      actorUserId,
+      candidates: FORTUNE_INTAKE_KEYS.filter((question) => !answered.includes(question)),
+      allowed: () => repo.allowed(claim),
+    }).catch(() => null);
+    return repo.finish({ ...claim, key });
+  });
 
 export const listFortuneHistoryResponse = (request: Request, serviceSlug: string) =>
   json(request, serviceSlug, async (actorUserId, parsedSlug) =>

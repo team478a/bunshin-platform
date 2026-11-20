@@ -6,6 +6,7 @@ import {
   FortuneJoinButton,
 } from '../../../apps/web/app/s/[serviceSlug]/fortune-actions';
 import { FortuneProfileForm } from '../../../apps/web/app/s/[serviceSlug]/fortune-profile-form';
+import { FortuneDynamicIntake } from '../../../apps/web/app/s/[serviceSlug]/fortune-dynamic-intake';
 import { FortuneReflection } from '../../../apps/web/app/s/[serviceSlug]/fortune-reflection';
 import { ReadingCard } from '../../../apps/web/app/s/[serviceSlug]/fortune-ui';
 import '../../../apps/web/app/styles.css';
@@ -34,6 +35,9 @@ function FortuneHarness() {
   }, []);
   if (!state) return null;
   const serviceSlug = 'fixture-fortune';
+  const DrawButtons = new URLSearchParams(window.location.search).has('dynamic-intake')
+    ? FortuneDynamicIntake
+    : FortuneDrawButtons;
   return (
     <main className="app-page fortune-page">
       <h1>今日の占い</h1>
@@ -51,10 +55,7 @@ function FortuneHarness() {
               showFollowUps
             />
           ) : (
-            <FortuneDrawButtons
-              serviceSlug={serviceSlug}
-              askConsultation={state.profile.consented}
-            />
+            <DrawButtons serviceSlug={serviceSlug} askConsultation={state.profile.consented} />
           )}
           {state.previous && state.profile.consented && (
             <FortuneReflection serviceSlug={serviceSlug} reading={state.previous} />

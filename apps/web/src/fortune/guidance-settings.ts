@@ -1,4 +1,4 @@
-import { FORTUNE_PROFILE_STYLES } from '@bunshin/capability-fortune';
+import { FORTUNE_INTAKE_MAX_QUESTIONS, FORTUNE_PROFILE_STYLES } from '@bunshin/capability-fortune';
 import { z } from 'zod';
 
 const label = z.string().trim().min(1).max(100);
@@ -46,6 +46,14 @@ export const fortuneGuidanceSettingsSchema = z
     guideName: label,
     guide: guideSchema.optional(),
     followUpLimit: z.number().int().min(0).max(2).optional(),
+    intake: z
+      .object({
+        enabled: z.boolean(),
+        questions: z.number().int().min(1).max(FORTUNE_INTAKE_MAX_QUESTIONS),
+        calls: z.number().int().min(1).max(FORTUNE_INTAKE_MAX_QUESTIONS),
+      })
+      .strict()
+      .optional(),
     defaultStyle: z.enum(FORTUNE_PROFILE_STYLES).nullable(),
     themeLabels: z.object({ LOVE: label, WORK: label, RELATIONSHIPS: label }).strict(),
     styleLabels: z.object({ GENTLE: label, DIRECT: label, REFLECTIVE: label }).strict(),
