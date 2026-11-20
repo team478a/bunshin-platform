@@ -1,0 +1,49 @@
+.fortune-today {
+  font-family: 'Noto Sans JP Variable', 'Noto Sans JP', sans-serif;
+}
+
+.fortune-today__guide {
+  display: grid;
+  justify-items: start;
+  gap: 0.875rem;
+  padding: clamp(1rem, 4vw, 1.75rem);
+  border: 1px solid #ded8f0;
+  border-radius: 1.25rem;
+  background: linear-gradient(140deg, #ffffff 30%, #f4f0fa);
+  color: var(--color-text);
+  overflow-wrap: anywhere;
+}
+
+.fortune-today__guide-profile {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.fortune-today__guide-profile img {
+  flex: 0 0 auto;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.fortune-today__guide h2,
+.fortune-today__guide p {
+  margin: 0;
+}
+
+.fortune-today__guide > p {
+  line-height: 1.75;
+}
+
+.fortune-today__action {
+  display: grid;
+  min-width: 0;
+  gap: 1rem;
+  scroll-margin-top: 5rem;
+}
+
+@media (max-width: 480px) {
+  .fortune-today__guide .button {
+    width: 100%;
+  }
+}

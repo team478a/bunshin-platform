@@ -20,6 +20,7 @@ export async function resolveFortunePage(serviceSlug: string, returnTo: string) 
       historyRetentionDays: true,
       weeklyNotificationEnabled: true,
       aiEnabled: true,
+      personalProfileEnabled: true,
       reflectionEnabled: true,
       guidanceSettings: true,
       weeklyNotificationDay: true,
