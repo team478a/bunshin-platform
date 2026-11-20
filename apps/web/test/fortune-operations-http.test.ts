@@ -1,4 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  defaultFortuneGuidanceSettings,
+  defaultFortuneGuide,
+} from '../src/fortune/guidance-settings';
 
 vi.mock('server-only', () => ({}));
 const state = vi.hoisted(() => ({
@@ -10,6 +14,7 @@ const state = vi.hoisted(() => ({
   updateStandard: vi.fn(),
   setEnabled: vi.fn(),
   setAiEnabled: vi.fn(),
+  saveGuidance: vi.fn(),
   setWeeklyNotification: vi.fn(),
 }));
 vi.mock('../src/auth/current-user', () => ({
@@ -23,6 +28,7 @@ vi.mock('../src/fortune/operator', () => ({
   updateStandardFortunePackage: state.updateStandard,
   setFortuneEnabled: state.setEnabled,
   setFortuneAiEnabled: state.setAiEnabled,
+  saveFortuneGuidanceSettings: state.saveGuidance,
   setFortuneWeeklyNotification: state.setWeeklyNotification,
 }));
 
@@ -64,6 +70,7 @@ describe('fortune operator HTTP boundary', () => {
     });
     state.updateStandard.mockResolvedValue({ updated: true, fromVersion: 1, toVersion: 2 });
     state.setEnabled.mockResolvedValue({ enabled: true });
+    state.saveGuidance.mockResolvedValue({ saved: true });
     state.setWeeklyNotification.mockResolvedValue({
       weeklyNotificationEnabled: true,
       weeklyNotificationDay: 3,
@@ -74,6 +81,44 @@ describe('fortune operator HTTP boundary', () => {
   it('requires authentication for readiness data', async () => {
     state.user = null;
     expect((await getFortuneOperationsResponse(request(), 'fortune')).status).toBe(401);
+  });
+
+  it('accepts the existing guide settings and scopes the extended guide to the selected service', async () => {
+    const guide = {
+      ...defaultFortuneGuide,
+      introduction: '一緒に考えを整理しましょう。',
+      imageUrl: 'https://images.example/guide.webp',
+    };
+    for (const settings of [
+      defaultFortuneGuidanceSettings,
+      { ...defaultFortuneGuidanceSettings, guide },
+    ]) {
+      const result = await updateFortuneOperationsResponse(
+        request({ action: 'SAVE_GUIDANCE_SETTINGS', settings }),
+        'fortune',
+      );
+      expect(result.status).toBe(200);
+      expect(state.saveGuidance).toHaveBeenLastCalledWith({
+        serviceSlug: 'fortune',
+        actorUserId: 'manager-1',
+        settings,
+      });
+    }
+  });
+
+  it('rejects non-HTTPS avatar URLs before calling the operator service', async () => {
+    const result = await updateFortuneOperationsResponse(
+      request({
+        action: 'SAVE_GUIDANCE_SETTINGS',
+        settings: {
+          ...defaultFortuneGuidanceSettings,
+          guide: { ...defaultFortuneGuide, imageUrl: 'http://images.example/guide.webp' },
+        },
+      }),
+      'fortune',
+    );
+    expect(result.status).toBe(400);
+    expect(state.saveGuidance).not.toHaveBeenCalled();
   });
 
   it('rejects cross-origin and authority fields before importing', async () => {

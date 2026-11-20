@@ -319,6 +319,7 @@ export class PrismaFortuneGenerationRepository {
           ? FORTUNE_PROFILE_STYLES.find((style) => settings['defaultStyle'] === style)
           : undefined;
       return {
+        ...(personal?.enabled && settings ? { guidanceSettings: settings } : {}),
         ...(personal?.enabled && defaultStyle ? { defaultStyle } : {}),
         ...(lease
           ? {

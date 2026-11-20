@@ -166,7 +166,8 @@ describe('fortune repository isolation', () => {
   });
 
   it('skips stored personal context when the participant did not consent', async () => {
-    const tx = targetClient({ ...scope, personalProfileEnabled: true });
+    const guidanceSettings = { guideName: 'このサービスの案内役', defaultStyle: 'GENTLE' };
+    const tx = targetClient({ ...scope, personalProfileEnabled: true, guidanceSettings });
     tx.fortuneParticipant.findFirst.mockResolvedValue({
       profileUpdatedAt: new Date(),
       profileConsentedAt: null,
@@ -185,6 +186,8 @@ describe('fortune repository isolation', () => {
       repository(client).claimAiGeneration({ serviceSlug, actorUserId, readingId }),
     ).resolves.toMatchObject({
       personalGuidance: true,
+      guidanceSettings,
+      defaultStyle: 'GENTLE',
       consultation: '今日だけの相談',
       personalization: { recentReadings: [] },
     });

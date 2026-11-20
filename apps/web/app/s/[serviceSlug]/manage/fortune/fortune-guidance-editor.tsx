@@ -3,9 +3,19 @@
 import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
 import {
+  defaultFortuneGuide,
   defaultFortuneGuidanceSettings,
   type FortuneGuidanceSettings,
 } from '../../../../../src/fortune/guidance-settings';
+
+const guideFields = [
+  ['introduction', '利用者向けの紹介文'],
+  ['personality', '基本の性格・雰囲気'],
+  ['language', '言葉遣い'],
+  ['readingRules', '鑑定時の表現ルール'],
+  ['questionApproach', '質問の進め方'],
+  ['suggestionPolicy', '提案内容の方針'],
+] as const;
 
 export function FortuneGuidanceEditor({
   serviceSlug,
@@ -18,6 +28,7 @@ export function FortuneGuidanceEditor({
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const guide = settings.guide ?? defaultFortuneGuide;
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -40,6 +51,10 @@ export function FortuneGuidanceEditor({
             consultationQuestion: text('consultationQuestion'),
             styleQuestion: text('styleQuestion'),
             guideName: text('guideName'),
+            guide: {
+              ...Object.fromEntries(guideFields.map(([key]) => [key, text(key)])),
+              imageUrl: text('imageUrl'),
+            },
             defaultStyle: text('defaultStyle') || null,
             themeLabels: Object.fromEntries(
               Object.keys(settings.themeLabels).map((key) => [key, text(key)]),
@@ -81,6 +96,19 @@ export function FortuneGuidanceEditor({
               <input name={key} defaultValue={settings[key]} maxLength={100} required />
             </label>
           ))}
+          <p>
+            案内役はAIとして表示します。紹介や表現ルールには、ご本人の選択を尊重する案内を入力してください。
+          </p>
+          {guideFields.map(([key, label]) => (
+            <label key={key} className="form-field">
+              <span>{label}</span>
+              <textarea name={key} defaultValue={guide[key]} maxLength={240} rows={2} />
+            </label>
+          ))}
+          <label className="form-field">
+            <span>案内役の画像・アイコンURL（HTTPS、任意）</span>
+            <input name="imageUrl" type="url" defaultValue={guide.imageUrl} maxLength={500} />
+          </label>
           {Object.entries(settings.themeLabels).map(([key, value]) => (
             <label key={key} className="form-field">
               <span>
