@@ -107,7 +107,7 @@ describe('Fortune dynamic question provider', () => {
   it('does not contact the provider after a permission change', async () => {
     const fetch = provider({ key: 'VALUES' });
     await expect(
-      selectFortuneIntakeQuestion({ ...input, allowed: async () => false }),
+      selectFortuneIntakeQuestion({ ...input, allowed: () => Promise.resolve(false) }),
     ).resolves.toBeNull();
     expect(fetch).not.toHaveBeenCalled();
     expect(mocks.usage).toHaveBeenCalledWith(
