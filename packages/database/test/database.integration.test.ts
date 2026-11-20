@@ -1315,6 +1315,23 @@ describe('database ownership boundaries', () => {
       await expect(repository.saveReflection({ ...input, answer: 'TRIED_CHANGED' })).resolves.toBe(
         true,
       );
+      await client.fortuneReading.create({
+        data: {
+          ...base,
+          groupId: group.id,
+          serviceSettingId: setting.id,
+          participantId: participant.id,
+          memberUserId: owner.user.id,
+          localDate: new Date(Date.now() - 2 * 86_400_000),
+          theme: 'LOVE',
+          cardCode: 'THE_FOOL',
+          orientation: 'UPRIGHT',
+          status: 'READY_BASIC',
+          readingText: 'Unrelated theme',
+          actionStep: 'Unrelated action',
+          reflectionAnswer: 'NOT_TRIED',
+        },
+      });
       const today = await client.fortuneReading.create({
         data: {
           ...base,
