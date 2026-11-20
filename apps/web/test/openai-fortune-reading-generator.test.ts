@@ -56,21 +56,15 @@ const claim: FortuneAiGenerationClaim = {
 };
 
 describe('fortune reading personalization', () => {
-  it('passes only the scoped Bunshin profile and participant history to the prompt input', () => {
+  it('passes selected Bunshin information and omits history without profile consent', () => {
     expect(fortuneReadingPromptInput(claim)).toMatchObject({
       personalization: {
         bunshinProfile: { name: '細矢めぐみ', personalitySummary: '穏やかで具体的' },
-        memories: [{ id: 'memory-1', summary: '朝に優先順位を整理する習慣' }],
-        recentReadings: [
-          {
-            id: 'reading-previous',
-            feedbackRating: 'NOT_HELPFUL',
-            feedbackIssue: 'TOO_VAGUE',
-          },
-        ],
+        memories: [{ summary: '朝に優先順位を整理する習慣' }],
+        recentReadings: [],
       },
     });
-    expect(FORTUNE_AI_PROMPT_VERSION).toBe('fortune-daily-reading-v3-participant-memory');
+    expect(FORTUNE_AI_PROMPT_VERSION).toBe('fortune-daily-reading-v6-tarot');
   });
 
   it('passes the current consultation and consented preferences as data for Tarot', () => {
@@ -98,6 +92,41 @@ describe('fortune reading personalization', () => {
     expect(fortuneReadingPromptInput(claimWithoutPersonalization)).toMatchObject({
       personalization: null,
       approvedBasic: { body: '承認済み本文' },
+    });
+  });
+
+  it('keeps the prior action and its evaluation without sending the previous reading text or IDs', () => {
+    const value = fortuneReadingPromptInput({
+      ...claim,
+      personalGuidance: true,
+      personalProfileRevision: new Date('2026-09-27'),
+      personalization: {
+        ...claim.personalization,
+        recentReadings: [
+          { ...claim.personalization!.recentReadings[0]!, reflectionAnswer: 'TRIED_CHANGED' },
+        ],
+      },
+    });
+    expect(value.personalization?.recentReadings).toEqual([
+      {
+        actionStep: '考えてみましょう',
+        feedbackRating: 'NOT_HELPFUL',
+        feedbackIssue: 'TOO_VAGUE',
+        reflectionAnswer: 'TRIED_CHANGED',
+      },
+    ]);
+    expect(JSON.stringify(value)).not.toMatch(/reading-previous|memory-1|少し抽象的な前回結果/);
+  });
+
+  it('keeps a one-time consultation usable without loading prior readings', () => {
+    const value = fortuneReadingPromptInput({
+      ...claim,
+      personalGuidance: true,
+      consultation: '今日だけ相談したい',
+    });
+    expect(value).toMatchObject({
+      consultation: '今日だけ相談したい',
+      personalization: { recentReadings: [] },
     });
   });
 });

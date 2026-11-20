@@ -178,12 +178,12 @@ export class PrismaFortuneGenerationRepository {
       if (!reading) return null;
       const personal = await new PrismaFortunePersonalProfileRepository(tx).read(input);
       const personalProfileRevision = personal?.enabled ? personal.revision : null;
-      const useEarlierContext = personal?.enabled
+      const useSelectedBunshin = personal?.enabled
         ? Boolean(personalProfileRevision)
         : !personal?.completed;
-      const [participantProfile, recentReadings] = useEarlierContext
-        ? await Promise.all([
-            tx.fortuneParticipant.findFirst({
+      const [participantProfile, recentReadings] = await Promise.all([
+        useSelectedBunshin
+          ? tx.fortuneParticipant.findFirst({
               where: {
                 id: reading.participantId,
                 serviceSettingId: scope.id,
@@ -214,16 +214,22 @@ export class PrismaFortuneGenerationRepository {
                   },
                 },
               },
-            }),
-            tx.fortuneReading.findMany({
+            })
+          : null,
+        personalProfileRevision
+          ? tx.fortuneReading.findMany({
               where: {
                 id: { not: reading.id },
+                workspaceId: scope.workspaceId,
+                groupId: scope.groupId,
                 serviceSettingId: scope.id,
                 participantId: reading.participantId,
                 memberUserId: input.actorUserId,
+                theme: reading.theme,
                 status: { in: ['READY_AI', 'READY_BASIC'] },
                 deletedAt: null,
                 localDate: {
+                  lt: reading.localDate,
                   gte: fortuneReadingRetentionCutoff(new Date(), scope.historyRetentionDays),
                 },
               },
@@ -232,9 +238,9 @@ export class PrismaFortuneGenerationRepository {
               include: {
                 feedback: { select: { id: true, rating: true, issueCode: true } },
               },
-            }),
-          ])
-        : ([null, []] as const);
+            })
+          : [],
+      ]);
       const bunshinProfile = participantProfile?.personalizationBunshin ?? null;
       const selectedMemories = bunshinProfile
         ? await new SelectBunshinMemories({
@@ -250,6 +256,7 @@ export class PrismaFortuneGenerationRepository {
             actorUserId: input.actorUserId,
             bunshinId: bunshinProfile.id,
             query: [
+              personal?.enabled ? reading.pendingConsultation : null,
               reading.theme,
               reading.cardCode,
               reading.readingText,
