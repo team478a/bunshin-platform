@@ -4,7 +4,11 @@ import type {
   FortuneReadingView,
   FortuneTheme,
 } from '@bunshin/capability-fortune';
-import { FORTUNE_REFLECTION_ANSWERS, TAROT_DECK } from '@bunshin/capability-fortune';
+import {
+  FORTUNE_PERSONAL_FIT_RATINGS,
+  FORTUNE_REFLECTION_ANSWERS,
+  TAROT_DECK,
+} from '@bunshin/capability-fortune';
 import type { Prisma, PrismaClient } from '@prisma/client';
 
 type Db = PrismaClient | Prisma.TransactionClient;
@@ -76,6 +80,7 @@ export async function fortuneReadingView(
     actionStep: string | null;
     reflectionPrompt?: string | null;
     reflectionAnswer?: string | null;
+    personalFitRating?: string | null;
     knowledgeVersionId: string | null;
     createdAt: Date;
   },
@@ -87,6 +92,9 @@ export async function fortuneReadingView(
   });
   const reflectionAnswer = FORTUNE_REFLECTION_ANSWERS.find(
     (answer) => answer === row.reflectionAnswer,
+  );
+  const personalFitRating = FORTUNE_PERSONAL_FIT_RATINGS.find(
+    (rating) => rating === row.personalFitRating,
   );
   return {
     id: row.id,
@@ -103,6 +111,7 @@ export async function fortuneReadingView(
       ? { reflectionPrompt: row.reflectionPrompt }
       : {}),
     ...(reflectionAnswer ? { reflectionAnswer } : {}),
+    ...(personalFitRating ? { personalFitRating } : {}),
     feedbackRating: feedback?.rating ?? null,
     feedbackIssue: (feedback?.issueCode as FortuneFeedbackIssue | null | undefined) ?? null,
     createdAt: row.createdAt,

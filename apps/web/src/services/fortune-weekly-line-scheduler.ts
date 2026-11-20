@@ -5,6 +5,7 @@ import { getServerEnvironment } from '@bunshin/config';
 import {
   buildFortuneWeeklyLineMessage,
   fortuneWeeklyLocalSlot,
+  fortuneWeeklyLinePath,
   isFortuneWeeklyNotificationDue,
 } from '../fortune/weekly-line-delivery';
 
@@ -176,7 +177,7 @@ export async function scheduleFortuneWeeklyLineDeliveries(input: {
         continue;
       }
       const serviceUrl = new URL(
-        `/s/${encodeURIComponent(setting.configuration.slug)}`,
+        fortuneWeeklyLinePath(setting.configuration.slug),
         getServerEnvironment().APP_URL,
       ).toString();
       const message = buildFortuneWeeklyLineMessage({

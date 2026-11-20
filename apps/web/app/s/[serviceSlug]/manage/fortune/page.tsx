@@ -352,6 +352,21 @@ export default async function FortuneManagementPage({
                       <dt>提案を試した割合（振り返り回答者の自己申告）</dt>
                       <dd>{percent(quality.personalGuidance.suggestionUseRate)}</dd>
                     </div>
+                    <div>
+                      <dt>追加質問の利用率（期間中に初めて閲覧した鑑定）</dt>
+                      <dd>
+                        {percent(quality.personalGuidance.followUpUseRate)}（
+                        {quality.personalGuidance.followUpReadings}件）
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>自分に合っていたか（任意評価）</dt>
+                      <dd>
+                        とても {quality.personalGuidance.personalFit.very}件 / ある程度{' '}
+                        {quality.personalGuidance.personalFit.somewhat}件 / あまり{' '}
+                        {quality.personalGuidance.personalFit.notMuch}件
+                      </dd>
+                    </div>
                   </>
                 )}
                 <div>
@@ -363,11 +378,14 @@ export default async function FortuneManagementPage({
                   <dd>{quality.membershipActivity.notificationOptOutParticipants}人</dd>
                 </div>
                 <div>
+                  <dt>週次LINE用リンクから再訪した人</dt>
+                  <dd>{quality.membershipActivity.weeklyLineReturnParticipants}人</dd>
+                </div>
+                <div>
                   <dt>サービスを退会した人</dt>
                   <dd>{quality.membershipActivity.withdrawnParticipants}人</dd>
                 </div>
               </dl>
-              <p>同じ人が期間中に同じ操作を複数回行っても、この画面では1人として数えます。</p>
             </section>
             <section className="settings-card">
               <p className="eyebrow">直近{quality.periodDays}日</p>
