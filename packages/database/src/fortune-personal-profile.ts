@@ -6,6 +6,7 @@ import {
 import type { Prisma, PrismaClient } from '@prisma/client';
 import { fortuneReadingRetentionCutoff } from './fortune-retention';
 import { fortuneTarget } from './fortune-shared';
+import { eraseFortuneFollowUps } from './fortune-follow-ups';
 
 interface ActorScope {
   serviceSlug: string;
@@ -97,26 +98,35 @@ export class PrismaFortunePersonalProfileRepository {
     if (!scope || (input.profile.consented && !scope.personalProfileEnabled)) return false;
     const now = this.now();
     const { profile } = input;
-    const result = await this.db.fortuneParticipant.updateMany({
-      where: {
-        workspaceId: scope.workspaceId,
-        groupId: scope.groupId,
-        serviceSettingId: scope.id,
-        userId: input.actorUserId,
-        groupMembership: { status: 'ACTIVE', consentedAt: { not: null } },
-        serviceSetting: {
-          enabled: true,
-          ...(profile.consented ? { personalProfileEnabled: true } : {}),
+    const save = async (db: Prisma.TransactionClient) => {
+      const result = await db.fortuneParticipant.updateMany({
+        where: {
+          workspaceId: scope.workspaceId,
+          groupId: scope.groupId,
+          serviceSettingId: scope.id,
+          userId: input.actorUserId,
+          groupMembership: { status: 'ACTIVE', consentedAt: { not: null } },
+          serviceSetting: {
+            enabled: true,
+            ...(profile.consented ? { personalProfileEnabled: true } : {}),
+          },
         },
-      },
-      data: {
-        profileInterest: profile.consented ? profile.interest : null,
-        profileQuestion: profile.consented ? profile.question : null,
-        profileStyle: profile.consented ? profile.style : null,
-        profileConsentedAt: profile.consented ? now : null,
-        profileUpdatedAt: now,
-      },
-    });
-    return result.count === 1;
+        data: {
+          profileInterest: profile.consented ? profile.interest : null,
+          profileQuestion: profile.consented ? profile.question : null,
+          profileStyle: profile.consented ? profile.style : null,
+          profileConsentedAt: profile.consented ? now : null,
+          profileUpdatedAt: now,
+        },
+      });
+      if (result.count === 1 && !profile.consented) {
+        await eraseFortuneFollowUps(db, {
+          serviceSettingId: scope.id,
+          memberUserId: input.actorUserId,
+        });
+      }
+      return result.count === 1;
+    };
+    return '$transaction' in this.db ? this.db.$transaction(save) : save(this.db);
   }
 }

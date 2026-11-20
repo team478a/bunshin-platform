@@ -10,15 +10,25 @@ export function fortuneReadingRetentionCutoff(at: Date, historyRetentionDays: nu
 
 export async function purgeExpiredFortuneProfiles(db: PrismaClient, at: Date): Promise<number> {
   return db.$executeRaw(Prisma.sql`
+    WITH expired AS (
+      SELECT participant."id" FROM "fortune_participants" AS participant
+      JOIN "fortune_service_settings" AS setting ON participant."service_setting_id" = setting."id"
+      WHERE participant."profile_consented_at" IS NOT NULL
+        AND participant."profile_updated_at" < (
+          ${dateOnly(toJapanLocalDate(at))}::timestamptz - GREATEST(setting."history_retention_days" - 1, 0) * INTERVAL '1 day'
+        )
+      FOR UPDATE OF participant
+    ), erased AS (
+      UPDATE "fortune_reading_follow_ups" AS follow_up
+      SET "status" = 'ERASED', "question" = NULL, "answer" = NULL, "action_step" = NULL
+      FROM "fortune_readings" AS reading, expired
+      WHERE follow_up."reading_id" = reading."id"
+        AND reading."participant_id" = expired."id" AND follow_up."status" <> 'ERASED'
+    )
     UPDATE "fortune_participants" AS participant
     SET "profile_interest" = NULL, "profile_question" = NULL,
         "profile_style" = NULL, "profile_consented_at" = NULL
-    FROM "fortune_service_settings" AS setting
-    WHERE participant."service_setting_id" = setting."id"
-      AND participant."profile_consented_at" IS NOT NULL
-      AND participant."profile_updated_at" < (
-        ${dateOnly(toJapanLocalDate(at))}::timestamptz - GREATEST(setting."history_retention_days" - 1, 0) * INTERVAL '1 day'
-      )
+    FROM expired WHERE participant."id" = expired."id"
   `);
 }
 

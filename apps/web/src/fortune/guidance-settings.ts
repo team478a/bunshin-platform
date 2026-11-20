@@ -45,6 +45,7 @@ export const fortuneGuidanceSettingsSchema = z
     styleQuestion: label,
     guideName: label,
     guide: guideSchema.optional(),
+    followUpLimit: z.number().int().min(0).max(2).optional(),
     defaultStyle: z.enum(FORTUNE_PROFILE_STYLES).nullable(),
     themeLabels: z.object({ LOVE: label, WORK: label, RELATIONSHIPS: label }).strict(),
     styleLabels: z.object({ GENTLE: label, DIRECT: label, REFLECTIVE: label }).strict(),

@@ -60,6 +60,31 @@ beforeEach(() => {
 });
 
 describe('fortune provider attempts', () => {
+  it('uses a distinct bounded follow-up request and records it in the existing fortune usage', async () => {
+    await new OpenAiFortuneReadingGenerator().generate({
+      serviceSlug: 'fortune-a',
+      actorUserId: 'user-a',
+      claim,
+      followUp: { requestId: 'turn-1', question: '別の見方は？', prior: [] },
+    });
+    expect(mocks.quota).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operationKey: 'fortune-follow-up:reading-a:turn-1',
+      }),
+    );
+    expect(mocks.usage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskType: 'FORTUNE_DAILY_READING',
+        idempotencyKey: 'fortune-follow-up:reading-a:turn-1',
+        promptVersion: 'fortune-follow-up-v1',
+        estimatedCostUsdMicros: 100,
+      }),
+    );
+    const request = mocks.fetch.mock.calls[0]?.[1] as RequestInit;
+    expect(request.body).toContain('別の見方は？');
+    expect(request.body).toContain('fortune_follow_up');
+    expect(request.body).toContain('"max_output_tokens":900');
+  });
   it('uses separate quota and usage keys per attempt while retaining model, cost and tokens', async () => {
     const generator = new OpenAiFortuneReadingGenerator();
     mocks.fetch.mockImplementation(() => Promise.resolve(success()));

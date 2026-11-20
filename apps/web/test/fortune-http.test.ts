@@ -13,6 +13,7 @@ const state = vi.hoisted(() => ({
   reading: vi.fn(),
   delete: vi.fn(),
   feedback: vi.fn(),
+  ask: vi.fn(),
   recordUse: vi.fn(),
 }));
 
@@ -25,11 +26,13 @@ vi.mock('../src/fortune/runtime', () => ({
 vi.mock('../src/fortune/personal-profile', () => ({
   fortunePersonalProfileRepository: () => Promise.resolve({ update: state.updateProfile }),
 }));
+vi.mock('../src/fortune/follow-ups', () => ({ askFortuneFollowUp: state.ask }));
 vi.mock('../src/services/service-membership', () => ({
   recordServiceUse: state.recordUse,
 }));
 
 import {
+  askFortuneFollowUpResponse,
   drawFortuneResponse,
   getFortuneTodayResponse,
   joinFortuneResponse,
@@ -88,6 +91,35 @@ describe('fortune HTTP contract', () => {
       serviceSlug: 'fortune',
       actorUserId: 'user-1',
       profile: { consented: false },
+    });
+  });
+
+  it('uses only the session identity and rejects invalid follow-up input before invoking AI', async () => {
+    const requestId = '11111111-1111-4111-8111-111111111111';
+    const readingId = '22222222-2222-4222-8222-222222222222';
+    const submit = (data: object, origin = 'http://localhost:3000') =>
+      askFortuneFollowUpResponse(
+        request('/api/fortune/follow-ups', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', origin },
+          body: JSON.stringify(data),
+        }),
+        'fortune',
+        readingId,
+      );
+    state.ask.mockResolvedValue({ remaining: 1, turns: [] });
+    expect((await submit({ requestId, question: ' ' })).status).toBe(400);
+    expect((await submit({ requestId, question: 'a'.repeat(301) })).status).toBe(400);
+    expect(
+      (await submit({ requestId, question: 'hello' }, 'https://unrelated.example')).status,
+    ).toBe(403);
+    expect((await submit({ requestId, question: ' 別の見方は？ ' })).status).toBe(200);
+    expect(state.ask).toHaveBeenCalledExactlyOnceWith({
+      serviceSlug: 'fortune',
+      readingId,
+      actorUserId: 'user-1',
+      requestId,
+      question: '別の見方は？',
     });
   });
 

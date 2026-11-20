@@ -15,6 +15,7 @@ import { requireSameOrigin } from '../auth/request-security';
 import { fortuneDailyReadingService } from '../fortune/runtime';
 import { fortunePersonalProfileRepository } from '../fortune/personal-profile';
 import { recordServiceUse } from '../services/service-membership';
+import { askFortuneFollowUp, fortuneFollowUpRepository } from '../fortune/follow-ups';
 
 const slug = z
   .string()
@@ -53,6 +54,9 @@ const notificationSlotBody = z
   })
   .strict();
 const reflectionBody = z.object({ answer: z.enum(FORTUNE_REFLECTION_ANSWERS).nullable() }).strict();
+const followUpBody = z
+  .object({ requestId: uuid, question: z.string().trim().min(1).max(300) })
+  .strict();
 const feedbackBody = z
   .object({
     rating: z.enum(FORTUNE_FEEDBACK_RATINGS),
@@ -255,6 +259,34 @@ export const updateFortuneReflectionResponse = (
     });
     if (!saved) throw new ApplicationError('NOT_FOUND', '振り返りを保存できません。');
     return { saved };
+  });
+
+export const getFortuneFollowUpsResponse = (
+  request: Request,
+  serviceSlug: string,
+  readingId: string,
+) =>
+  json(request, serviceSlug, async (actorUserId, parsedSlug) =>
+    (await fortuneFollowUpRepository()).read({
+      serviceSlug: parsedSlug,
+      actorUserId,
+      readingId: uuid.parse(readingId),
+    }),
+  );
+
+export const askFortuneFollowUpResponse = (
+  request: Request,
+  serviceSlug: string,
+  readingId: string,
+) =>
+  json(request, serviceSlug, async (actorUserId, parsedSlug) => {
+    const body = await requireJson(request, followUpBody);
+    return askFortuneFollowUp({
+      ...body,
+      serviceSlug: parsedSlug,
+      actorUserId,
+      readingId: uuid.parse(readingId),
+    });
   });
 
 export const updateFortuneFeedbackResponse = (

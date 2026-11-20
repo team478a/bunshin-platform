@@ -74,6 +74,7 @@ export {
 export { PrismaPointExpirationRepository } from './point-expiration';
 export { PrismaFortuneRepository, purgeExpiredFortuneReadings } from './fortune';
 export { PrismaFortunePersonalProfileRepository } from './fortune-personal-profile';
+export { PrismaFortuneFollowUpRepository } from './fortune-follow-ups';
 export { purgeExpiredFortuneProfiles } from './fortune-retention';
 export { recoverStaleFortuneReadings } from './fortune-generation-recovery';
 export {
