@@ -135,6 +135,7 @@ import {
   PrismaFortuneGenerationQueue,
   PrismaFortuneRepository,
   PrismaFortunePersonalProfileRepository,
+  PrismaFortuneFollowUpRepository,
   verifyFortuneGenerationJob,
   PrismaTrainingPersonalDataExportRepository,
   PrismaTrainingPersonalDataDeletionRepository,
@@ -1305,6 +1306,39 @@ describe('database ownership boundaries', () => {
       ).resolves.toBe(false);
       await expect(profiles.update({ ...input, profile })).resolves.toBe(true);
       await expect(profiles.read(input)).resolves.toMatchObject({ profile });
+      const followUps = new PrismaFortuneFollowUpRepository(client);
+      const question = '別の見方を教えてください';
+      await expect(followUps.read({ ...input, actorUserId: other.user.id })).resolves.toBeNull();
+      await expect(
+        followUps.read({ ...input, serviceSlug: 'foreign-fortune' }),
+      ).resolves.toBeNull();
+      const requests = Array.from({ length: 3 }, () => ({
+        ...input,
+        requestId: randomUUID(),
+        question,
+      }));
+      const reservations = await Promise.all(requests.map((request) => followUps.reserve(request)));
+      expect(reservations.map(({ kind }) => kind).sort()).toEqual([
+        'LIMIT',
+        'RESERVED',
+        'RESERVED',
+      ]);
+      for (const [index, reservation] of reservations.entries()) {
+        if (reservation.kind !== 'RESERVED') continue;
+        const request = requests[index]!;
+        await expect(followUps.reserve(request)).resolves.toMatchObject({ kind: 'REPLAY' });
+        await expect(
+          followUps.complete({
+            ...request,
+            revision: reservation.claim.personalProfileRevision,
+            output: { body: '別の見方があります。', actionStep: '考えを一つ書き出しましょう。' },
+          }),
+        ).resolves.toMatchObject({ remaining: 0 });
+      }
+      expect(await followUps.read(input)).toMatchObject({
+        remaining: 0,
+        turns: [{ status: 'READY' }, { status: 'READY' }],
+      });
       await client.fortuneReading.update({
         where: { id: reading.id },
         data: { localDate: new Date(Date.now() - 86_400_000) },
@@ -1349,6 +1383,20 @@ describe('database ownership boundaries', () => {
         },
       });
       const guided = { ...input, readingId: today.id };
+      const anotherQuestion = { ...guided, requestId: randomUUID(), question };
+      await client.fortuneServiceSetting.update({
+        where: { id: setting.id },
+        data: { guidanceSettings: { followUpLimit: 0 } },
+      });
+      await expect(followUps.reserve(anotherQuestion)).resolves.toMatchObject({ kind: 'LIMIT' });
+      await client.fortuneServiceSetting.update({
+        where: { id: setting.id },
+        data: { guidanceSettings: { followUpLimit: 1 } },
+      });
+      await expect(followUps.reserve(anotherQuestion)).resolves.toMatchObject({ kind: 'RESERVED' });
+      await expect(
+        followUps.reserve({ ...anotherQuestion, requestId: randomUUID() }),
+      ).resolves.toMatchObject({ kind: 'LIMIT' });
       const personalized = await repository.claimAiGeneration(guided);
       expect(personalized?.personalization).toMatchObject({
         participantProfile: { question: profile.question, style: 'DIRECT' },
@@ -1359,6 +1407,13 @@ describe('database ownership boundaries', () => {
       await expect(profiles.update({ ...input, profile: { consented: false } })).resolves.toBe(
         true,
       );
+      await expect(followUps.read(input)).resolves.toBeNull();
+      expect(
+        await client.fortuneReadingFollowUp.findMany({ where: { readingId: reading.id } }),
+      ).toMatchObject([
+        { status: 'ERASED', question: null, answer: null, actionStep: null },
+        { status: 'ERASED', question: null, answer: null, actionStep: null },
+      ]);
       await expect(
         repository.completeAiGeneration({
           ...guided,

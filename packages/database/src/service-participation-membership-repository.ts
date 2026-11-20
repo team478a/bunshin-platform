@@ -4,6 +4,7 @@ import { enqueueRegistrationCompleteEmail } from './service-registration-email';
 import { groupMembershipRecord } from './service-records';
 import { latestServiceLegalDocuments } from './service-legal-latest';
 import { recordOemRegistration, endOemRegistration } from './oem-billing-history';
+import { eraseFortuneFollowUps } from './fortune-follow-ups';
 
 export class PrismaServiceParticipationMembershipRepository {
   constructor(private readonly client: PrismaClient = prisma) {}
@@ -216,7 +217,7 @@ export class PrismaServiceParticipationMembershipRepository {
         where: { id: membership.id },
         data: { status: 'REVOKED', revokedAt: input.now },
       });
-      await tx.fortuneParticipant.updateMany({
+      const clearedProfiles = await tx.fortuneParticipant.updateMany({
         where: {
           workspaceId: membership.workspaceId,
           groupId: membership.groupId,
@@ -231,6 +232,12 @@ export class PrismaServiceParticipationMembershipRepository {
           profileConsentedAt: null,
         },
       });
+      if (clearedProfiles.count > 0)
+        await eraseFortuneFollowUps(tx, {
+          workspaceId: membership.workspaceId,
+          groupId: membership.groupId,
+          memberUserId: input.actorUserId,
+        });
       await endOemRegistration(
         tx,
         membership,

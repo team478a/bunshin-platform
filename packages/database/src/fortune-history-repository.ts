@@ -5,6 +5,7 @@ import type {
   FortuneReflectionAnswer,
 } from '@bunshin/capability-fortune';
 import type { PrismaClient } from '@prisma/client';
+import { eraseFortuneFollowUps } from './fortune-follow-ups';
 import { fortuneReadingRetentionCutoff } from './fortune-retention';
 import { fortuneReadingView, fortuneTarget } from './fortune-shared';
 
@@ -177,27 +178,36 @@ export class PrismaFortuneHistoryRepository {
     readingId: string;
     deletedAt: Date;
   }): Promise<boolean> {
-    const scope = await fortuneTarget(this.db, input.serviceSlug, input.actorUserId);
-    if (!scope) return false;
-    const result = await this.db.fortuneReading.updateMany({
-      where: {
-        id: input.readingId,
-        serviceSettingId: scope.id,
-        memberUserId: input.actorUserId,
-        status: { not: 'DELETED' },
-      },
-      data: {
-        status: 'DELETED',
-        readingText: null,
-        actionStep: null,
-        pendingConsultation: null,
-        reflectionPrompt: null,
-        reflectionAnswer: null,
-        modelName: null,
-        failureCode: null,
-        deletedAt: input.deletedAt,
-      },
+    return this.db.$transaction(async (tx) => {
+      const scope = await fortuneTarget(tx, input.serviceSlug, input.actorUserId);
+      if (!scope) return false;
+      const result = await tx.fortuneReading.updateMany({
+        where: {
+          id: input.readingId,
+          serviceSettingId: scope.id,
+          memberUserId: input.actorUserId,
+          status: { not: 'DELETED' },
+        },
+        data: {
+          status: 'DELETED',
+          readingText: null,
+          actionStep: null,
+          pendingConsultation: null,
+          reflectionPrompt: null,
+          reflectionAnswer: null,
+          modelName: null,
+          failureCode: null,
+          deletedAt: input.deletedAt,
+        },
+      });
+      if (result.count === 1) {
+        await eraseFortuneFollowUps(tx, {
+          id: input.readingId,
+          serviceSettingId: scope.id,
+          memberUserId: input.actorUserId,
+        });
+      }
+      return result.count === 1;
     });
-    return result.count === 1;
   }
 }
