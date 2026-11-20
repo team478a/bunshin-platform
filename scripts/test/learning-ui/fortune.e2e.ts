@@ -154,3 +154,104 @@ test('mobile Fortune can skip intake and still use the standard reading when AI 
   await expect(screen.getByText('承認済みの標準鑑定です。')).toBeVisible();
   await expect(screen.getByText(/今回の占いは、あなたに合っていましたか/)).toHaveCount(0);
 });
+
+test('mobile Fortune asks one adaptive question at a time and only draws on confirmation', async ({
+  app,
+  screen,
+  browser,
+}) => {
+  const state: FortuneBrowserFixture = { joined: true, completed: true, profile: emptyProfile };
+  const intake: unknown[] = [];
+  const draws: unknown[] = [];
+  await browser.route('**/__fortune_fixture', (route) =>
+    route.fulfill({ json: { ...state, profile: { ...state.profile } } }),
+  );
+  await browser.route(`${endpoints}/intake`, (route) => {
+    intake.push(JSON.parse(route.request.postData ?? '{}'));
+    const data =
+      intake.length === 1 ? { kind: 'QUESTION', key: 'VALUES' } : { kind: 'QUESTION', key: 'GOAL' };
+    return route.fulfill({ json: { data } });
+  });
+  await browser.route(`${endpoints}/today`, (route) => {
+    draws.push(JSON.parse(route.request.postData ?? '{}'));
+    state.reading = reading;
+    return route.fulfill({ json: { data: { ...reading } } });
+  });
+  await browser.route(`${endpoints}/**/follow-ups`, (route) =>
+    route.fulfill({ json: { data: null } }),
+  );
+  await app.open('/fortune.html?dynamic-intake');
+  await screen.getByRole('button', 'AIと相談を整理してから占う').tap();
+  await screen.getByRole('button', /仕事や今後の動き/).tap();
+  await screen.getByLabel('今回の相談（任意）').fill('仕事について迷っています');
+  await screen.getByRole('button', 'AIに相談してみる').tap();
+  await expect(
+    screen.getByRole('heading', '考えるとき、どんなことを大切にしたいですか？'),
+  ).toBeVisible();
+  await screen.getByRole('button', '自分で納得して選べること').tap();
+  await expect(
+    screen.getByRole('heading', '今回の占いで、何を整理できると役立ちそうですか？'),
+  ).toBeVisible();
+  await expect(
+    screen.getByRole('heading', '考えるとき、どんなことを大切にしたいですか？'),
+  ).toBeHidden();
+  expect(draws).toEqual([]);
+  await screen.getByRole('button', 'ここまでで占う').tap();
+  await expect(screen.getByRole('heading', '今日の提案')).toBeVisible();
+  expect(intake).toEqual([
+    { theme: 'WORK', consultation: '仕事について迷っています', answers: [] },
+    {
+      theme: 'WORK',
+      consultation: '仕事について迷っています',
+      answers: [{ key: 'VALUES', answer: '自分で納得して選べること' }],
+    },
+  ]);
+  expect(draws).toEqual([
+    {
+      theme: 'WORK',
+      consultation: '仕事について迷っています\n【大切なこと】自分で納得して選べること',
+    },
+  ]);
+});
+
+test('mobile Fortune can skip questions and proceed if question selection fails', async ({
+  app,
+  screen,
+  browser,
+}) => {
+  const state: FortuneBrowserFixture = { joined: true, completed: true, profile: emptyProfile };
+  const requests: unknown[] = [];
+  await browser.route('**/__fortune_fixture', (route) =>
+    route.fulfill({ json: { ...state, profile: { ...state.profile } } }),
+  );
+  await browser.route(`${endpoints}/intake`, (route) => {
+    requests.push(JSON.parse(route.request.postData ?? '{}'));
+    return requests.length === 1
+      ? route.fulfill({ json: { data: { kind: 'QUESTION', key: 'REASON' } } })
+      : route.fulfill({ status: 503, json: {} });
+  });
+  await browser.route(`${endpoints}/today`, (route) => {
+    expect(JSON.parse(route.request.postData ?? '{}')).toEqual({ theme: 'WORK' });
+    state.reading = { ...reading, status: 'READY_BASIC' };
+    delete state.reading.reflectionPrompt;
+    return route.fulfill({ json: { data: { ...state.reading } } });
+  });
+  await browser.route(`${endpoints}/**/follow-ups`, (route) =>
+    route.fulfill({ json: { data: null } }),
+  );
+  await app.open('/fortune.html?dynamic-intake');
+  await screen.getByRole('button', 'AIと相談を整理してから占う').tap();
+  await screen.getByRole('button', /仕事や今後の動き/).tap();
+  await screen.getByRole('button', 'AIに相談してみる').tap();
+  await screen.getByRole('button', '質問をスキップする').tap();
+  await expect(
+    screen.getByText('追加の質問を表示できませんでした。通常の占いへ進めます。'),
+  ).toBeVisible();
+  await screen.getByRole('button', 'ここまでで占う').tap();
+  await expect(screen.getByRole('heading', '今日の提案')).toBeVisible();
+  expect(requests.at(-1)).toEqual({
+    theme: 'WORK',
+    consultation: '',
+    answers: [{ key: 'REASON', answer: null }],
+  });
+});

@@ -16,6 +16,9 @@ const state = vi.hoisted(() => ({
   savePersonalFit: vi.fn(),
   ask: vi.fn(),
   recordUse: vi.fn(),
+  reserveIntake: vi.fn(),
+  finishIntake: vi.fn(),
+  selectIntake: vi.fn(),
 }));
 
 vi.mock('../src/auth/current-user', () => ({
@@ -28,12 +31,19 @@ vi.mock('../src/fortune/personal-profile', () => ({
   fortunePersonalProfileRepository: () => Promise.resolve({ update: state.updateProfile }),
 }));
 vi.mock('../src/fortune/follow-ups', () => ({ askFortuneFollowUp: state.ask }));
+vi.mock('../src/providers/openai-fortune-intake', () => ({
+  selectFortuneIntakeQuestion: state.selectIntake,
+}));
 vi.mock('../src/services/service-membership', () => ({
   recordServiceUse: state.recordUse,
 }));
 vi.mock('@bunshin/database', () => ({
   PrismaFortuneRepository: class {
     savePersonalFit = state.savePersonalFit;
+  },
+  PrismaFortuneIntakeRepository: class {
+    reserve = state.reserveIntake;
+    finish = state.finishIntake;
   },
   prisma: {},
 }));
@@ -43,6 +53,7 @@ import {
   drawFortuneResponse,
   getFortuneTodayResponse,
   joinFortuneResponse,
+  nextFortuneIntakeResponse,
   updateFortuneFeedbackResponse,
   updateFortunePersonalFitResponse,
   updateFortunePersonalizationResponse,
@@ -79,6 +90,47 @@ describe('fortune HTTP contract', () => {
     state.draw.mockResolvedValue({ id: 'reading-1' });
     state.feedback.mockResolvedValue({ id: 'reading-1', feedbackRating: 'HELPFUL' });
     state.recordUse.mockResolvedValue({ id: 'membership-1' });
+  });
+
+  it('validates intake input, excludes skipped question keys and returns ordinary continuation if AI fails', async () => {
+    const submit = (body: object) =>
+      nextFortuneIntakeResponse(
+        request('/api/fortune/intake', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(body),
+        }),
+        'fortune',
+      );
+    const skipped = { key: 'VALUES', answer: null };
+    const body = { theme: 'WORK', consultation: '仕事について迷っています', answers: [skipped] };
+    expect((await submit({ ...body, answers: [skipped, skipped] })).status).toBe(400);
+    expect((await submit({ ...body, actorUserId: 'another-user' })).status).toBe(400);
+    state.reserveIntake.mockResolvedValue({ kind: 'RESERVED', id: 'turn', profileRevision: null });
+    state.selectIntake.mockRejectedValue(new Error('provider unavailable'));
+    state.finishIntake.mockResolvedValue({ kind: 'DONE' });
+    const response = await submit(body);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ data: { kind: 'DONE' } });
+    expect(state.reserveIntake).toHaveBeenCalledExactlyOnceWith({
+      actorUserId: 'user-1',
+      serviceSlug: 'fortune',
+      theme: 'WORK',
+      answered: ['VALUES'],
+    });
+    expect(state.selectIntake).toHaveBeenCalledWith(
+      expect.objectContaining({
+        candidates: ['SITUATION', 'REASON', 'DESIRED', 'GOAL'],
+      }),
+    );
+    expect(state.finishIntake).toHaveBeenCalledWith({
+      id: 'turn',
+      profileRevision: null,
+      actorUserId: 'user-1',
+      serviceSlug: 'fortune',
+      key: null,
+    });
+    expect(state.draw).not.toHaveBeenCalled();
   });
 
   it('uses the session identity and rejects profile fields without consent', async () => {

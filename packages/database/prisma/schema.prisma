@@ -3470,6 +3470,7 @@ model FortuneParticipant {
   notificationHour           Int?                  @map("notification_hour")
   ageConfirmedAt             DateTime              @map("age_confirmed_at") @db.Timestamptz(6)
   joinedAt                   DateTime              @default(now()) @map("joined_at") @db.Timestamptz(6)
+  intakeTurns                FortuneIntakeTurn[]
   createdAt                  DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt                  DateTime              @updatedAt @map("updated_at") @db.Timestamptz(6)
   serviceSetting             FortuneServiceSetting @relation(fields: [workspaceId, groupId, serviceSettingId], references: [workspaceId, groupId, id], onDelete: Cascade)
@@ -3526,6 +3527,22 @@ model FortuneCardMeaning {
 }
 
 /// 行を削除せずDELETEDへ遷移させることで、結果削除後も同日再抽選を防ぐ。
+model FortuneIntakeTurn {
+  id            String             @id @default(uuid()) @db.Uuid
+  participantId String             @map("participant_id") @db.Uuid
+  localDate     DateTime           @map("local_date") @db.Date
+  theme         FortuneTheme
+  step          Int
+  questionKey   String?            @map("question_key") @db.VarChar(16)
+  resolvedAt    DateTime?          @map("resolved_at") @db.Timestamptz(6)
+  createdAt     DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  participant   FortuneParticipant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+
+  @@unique([participantId, localDate, step])
+  @@index([localDate])
+  @@map("fortune_intake_turns")
+}
+
 model FortuneReading {
   id                 String                   @id @default(uuid()) @db.Uuid
   workspaceId        String                   @map("workspace_id") @db.Uuid

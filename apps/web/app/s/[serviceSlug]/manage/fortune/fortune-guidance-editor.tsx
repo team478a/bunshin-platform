@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
+import { FORTUNE_INTAKE_MAX_QUESTIONS, fortuneIntakeOptions } from '@bunshin/capability-fortune';
 import {
   defaultFortuneGuide,
   defaultFortuneGuidanceSettings,
@@ -29,6 +30,7 @@ export function FortuneGuidanceEditor({
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const guide = settings.guide ?? defaultFortuneGuide;
+  const intake = fortuneIntakeOptions(settings);
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -52,6 +54,11 @@ export function FortuneGuidanceEditor({
             styleQuestion: text('styleQuestion'),
             guideName: text('guideName'),
             followUpLimit: Number(text('followUpLimit')),
+            intake: {
+              enabled: fields.get('intakeEnabled') === 'on',
+              questions: Number(text('intakeQuestions')),
+              calls: Number(text('intakeCalls')),
+            },
             guide: {
               ...Object.fromEntries(guideFields.map(([key]) => [key, text(key)])),
               imageUrl: text('imageUrl'),
@@ -117,6 +124,32 @@ export function FortuneGuidanceEditor({
           <label className="form-field">
             <span>案内役の画像・アイコンURL（HTTPS、任意）</span>
             <input name="imageUrl" type="url" defaultValue={guide.imageUrl} maxLength={500} />
+          </label>
+          <label className="fortune-check">
+            <input type="checkbox" name="intakeEnabled" defaultChecked={intake.enabled} />
+            <span>鑑定前の動的ヒアリングを有効にする</span>
+          </label>
+          <label className="form-field">
+            <span>鑑定前の追加質問数（1人・1日あたり）</span>
+            <input
+              type="number"
+              name="intakeQuestions"
+              min={1}
+              max={FORTUNE_INTAKE_MAX_QUESTIONS}
+              defaultValue={intake.questions}
+              required
+            />
+          </label>
+          <label className="form-field">
+            <span>質問選択のAI利用上限（1人・1日あたり）</span>
+            <input
+              type="number"
+              name="intakeCalls"
+              min={1}
+              max={FORTUNE_INTAKE_MAX_QUESTIONS}
+              defaultValue={intake.calls}
+              required
+            />
           </label>
           {Object.entries(settings.themeLabels).map(([key, value]) => (
             <label key={key} className="form-field">
