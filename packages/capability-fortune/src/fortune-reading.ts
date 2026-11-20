@@ -27,6 +27,9 @@ export const FORTUNE_REFLECTION_ANSWERS = [
 ] as const;
 export type FortuneReflectionAnswer = (typeof FORTUNE_REFLECTION_ANSWERS)[number];
 
+export const FORTUNE_PERSONAL_FIT_RATINGS = ['VERY', 'SOMEWHAT', 'NOT_MUCH'] as const;
+export type FortunePersonalFitRating = (typeof FORTUNE_PERSONAL_FIT_RATINGS)[number];
+
 export interface FortuneReadingView {
   id: string;
   localDate: string;
@@ -41,6 +44,7 @@ export interface FortuneReadingView {
   feedbackRating: FortuneFeedbackRating | null;
   feedbackIssue: FortuneFeedbackIssue | null;
   reflectionPrompt?: string;
+  personalFitRating?: FortunePersonalFitRating;
   reflectionAnswer?: FortuneReflectionAnswer;
   createdAt: Date;
 }

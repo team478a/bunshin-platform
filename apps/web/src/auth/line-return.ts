@@ -17,6 +17,7 @@ const learningProgramAdminPagePattern = new RegExp(
 const learningRequestPagePattern = new RegExp(
   `^/s/${serviceSlugPattern}/programs/${uuidPattern}/learning-request$`,
 );
+const fortuneWeeklyLinePagePattern = new RegExp(`^/s/${serviceSlugPattern}/today/from-line$`);
 const serviceOverviewAdminPagePattern = new RegExp(
   `^/s/${serviceSlugPattern}/manage/improvement-overview$`,
 );
@@ -136,6 +137,7 @@ export function safeLineAuthReturnPath(value: string | null | undefined): string
         return null;
       return `${url.pathname}?week=${week}`;
     }
+    if (fortuneWeeklyLinePagePattern.test(url.pathname) && url.search === '') return url.pathname;
     if (/^\/s\/[a-z0-9]+(?:-[a-z0-9]+)*$/.test(url.pathname) && url.search === '')
       return url.pathname;
     if (/^\/s\/[a-z0-9]+(?:-[a-z0-9]+)*$/.test(url.pathname)) {

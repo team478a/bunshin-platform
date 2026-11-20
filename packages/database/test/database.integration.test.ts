@@ -1333,6 +1333,26 @@ describe('database ownership boundaries', () => {
         where: { id: reading.id },
         data: { localDate: new Date(Date.now() - 86_400_000) },
       });
+      await expect(repository.savePersonalFit({ ...input, rating: 'VERY' })).resolves.toBe(false);
+      await client.fortuneReading.update({
+        where: { id: reading.id },
+        data: { status: 'READY_AI' },
+      });
+      await expect(repository.savePersonalFit({ ...input, rating: 'VERY' })).resolves.toBe(false);
+      await repository.markReadingViewed({ ...input, viewedAt: new Date() });
+      await expect(
+        repository.savePersonalFit({ ...input, actorUserId: other.user.id, rating: 'VERY' }),
+      ).resolves.toBe(false);
+      await expect(
+        repository.savePersonalFit({ ...input, serviceSlug: 'foreign-fortune', rating: 'VERY' }),
+      ).resolves.toBe(false);
+      await expect(repository.savePersonalFit({ ...input, rating: 'VERY' })).resolves.toBe(true);
+      await expect(repository.findReading(input)).resolves.toMatchObject({
+        personalFitRating: 'VERY',
+        feedbackRating: null,
+      });
+      await expect(repository.savePersonalFit({ ...input, rating: null })).resolves.toBe(true);
+      expect(await repository.findReading(input)).not.toHaveProperty('personalFitRating');
       await expect(
         repository.saveReflection({ ...input, actorUserId: other.user.id, answer: 'NOT_TRIED' }),
       ).resolves.toBe(false);
@@ -1411,6 +1431,19 @@ describe('database ownership boundaries', () => {
           output,
         }),
       ).resolves.toMatchObject({ status: 'READY_BASIC', body: 'Approved' });
+      await expect(repository.savePersonalFit({ ...input, rating: 'SOMEWHAT' })).resolves.toBe(
+        true,
+      );
+      await expect(repository.deleteReading({ ...input, deletedAt: new Date() })).resolves.toBe(
+        true,
+      );
+      expect(
+        await client.fortuneReading.findUniqueOrThrow({
+          where: { id: reading.id },
+          select: { personalFitRating: true, personalFitRatedAt: true },
+        }),
+      ).toEqual({ personalFitRating: null, personalFitRatedAt: null });
+      await expect(repository.savePersonalFit({ ...input, rating: 'VERY' })).resolves.toBe(false);
     } finally {
       await client.job.deleteMany({
         where: { workspaceId: base.workspaceId, jobType: 'FORTUNE_READING_GENERATE' },

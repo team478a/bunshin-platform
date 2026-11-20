@@ -3,6 +3,7 @@ import {
   FortunePolicyError,
   FORTUNE_FEEDBACK_ISSUES,
   FORTUNE_FEEDBACK_RATINGS,
+  FORTUNE_PERSONAL_FIT_RATINGS,
   FORTUNE_THEMES,
   FORTUNE_PROFILE_STYLES,
   FORTUNE_REFLECTION_ANSWERS,
@@ -54,6 +55,9 @@ const notificationSlotBody = z
   })
   .strict();
 const reflectionBody = z.object({ answer: z.enum(FORTUNE_REFLECTION_ANSWERS).nullable() }).strict();
+const personalFitBody = z
+  .object({ rating: z.enum(FORTUNE_PERSONAL_FIT_RATINGS).nullable() })
+  .strict();
 const followUpBody = z
   .object({ requestId: uuid, question: z.string().trim().min(1).max(300) })
   .strict();
@@ -258,6 +262,24 @@ export const updateFortuneReflectionResponse = (
       answer: body.answer,
     });
     if (!saved) throw new ApplicationError('NOT_FOUND', '振り返りを保存できません。');
+    return { saved };
+  });
+
+export const updateFortunePersonalFitResponse = (
+  request: Request,
+  serviceSlug: string,
+  readingId: string,
+) =>
+  json(request, serviceSlug, async (actorUserId, parsedSlug) => {
+    const { rating } = await requireJson(request, personalFitBody);
+    const db = await import('@bunshin/database');
+    const saved = await new db.PrismaFortuneRepository(db.prisma).savePersonalFit({
+      serviceSlug: parsedSlug,
+      actorUserId,
+      readingId: uuid.parse(readingId),
+      rating,
+    });
+    if (!saved) throw new ApplicationError('NOT_FOUND', '個別化の評価を保存できません。');
     return { saved };
   });
 

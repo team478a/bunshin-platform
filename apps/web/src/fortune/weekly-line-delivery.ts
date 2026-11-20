@@ -47,6 +47,9 @@ export function fortuneWeeklyDeliveryKey(now: Date, timeZone: string) {
   return localParts(now, timeZone).date;
 }
 
+export const fortuneWeeklyLinePath = (serviceSlug: string) =>
+  `/s/${encodeURIComponent(serviceSlug)}/today/from-line`;
+
 export function buildFortuneWeeklyLineMessage(input: { serviceName: string; serviceUrl: string }) {
   return [
     `【${input.serviceName}】今週の占いのお知らせです。`,
