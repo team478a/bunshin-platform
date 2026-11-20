@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { toJapanLocalDate } from '@bunshin/capability-fortune';
+import { fortuneIntakeOptions, toJapanLocalDate } from '@bunshin/capability-fortune';
 import { PublicShell } from '../../../ui/public-shell';
 import { fortuneDailyReadingService } from '../../../../src/fortune/runtime';
 import { resolveFortuneGuidanceSettings } from '../../../../src/fortune/guidance-settings';
@@ -8,6 +8,7 @@ import { FortuneDrawButtons, FortuneJoinButton } from '../fortune-actions';
 import { FortuneNav, ReadingCard } from '../fortune-ui';
 import { FortuneReflection } from '../fortune-reflection';
 import { FortuneProfileForm } from '../fortune-profile-form';
+import { FortuneDynamicIntake } from '../fortune-dynamic-intake';
 import { fortunePersonalProfileRepository } from '../../../../src/fortune/personal-profile';
 import '@fontsource-variable/noto-sans-jp';
 import './fortune-today.css';
@@ -40,6 +41,10 @@ export default async function FortuneTodayPage({
       : null;
   const showIntake = Boolean(profile?.enabled && !profile.completed && !today.reading);
   const showGuide = setting.personalProfileEnabled && setting.aiEnabled;
+  const DrawButtons =
+    showGuide && !showIntake && fortuneIntakeOptions(setting.guidanceSettings).enabled
+      ? FortuneDynamicIntake
+      : FortuneDrawButtons;
   const nextAction = !today.participant
     ? '年齢確認へ'
     : showIntake
@@ -111,7 +116,7 @@ export default async function FortuneTodayPage({
             <section className="settings-card">
               <h2>何について占いますか？</h2>
               <p>今日いちばん気になるものを選んでください。</p>
-              <FortuneDrawButtons
+              <DrawButtons
                 serviceSlug={serviceSlug}
                 {...(profile?.enabled ? { themeLabels: guidance.themeLabels } : {})}
                 askConsultation={Boolean(

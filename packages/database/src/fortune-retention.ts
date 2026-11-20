@@ -8,6 +8,12 @@ export function fortuneReadingRetentionCutoff(at: Date, historyRetentionDays: nu
   return cutoff;
 }
 
+export async function purgeExpiredFortuneIntake(db: PrismaClient, at: Date) {
+  return db.fortuneIntakeTurn.deleteMany({
+    where: { localDate: { lt: dateOnly(toJapanLocalDate(at)) } },
+  });
+}
+
 export async function purgeExpiredFortuneProfiles(db: PrismaClient, at: Date): Promise<number> {
   return db.$executeRaw(Prisma.sql`
     WITH expired AS (

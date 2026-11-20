@@ -73,7 +73,9 @@ export {
 } from './fortune';
 export { PrismaFortunePersonalProfileRepository } from './fortune-personal-profile';
 export { PrismaFortuneFollowUpRepository } from './fortune-follow-ups';
+export { PrismaFortuneIntakeRepository } from './fortune-intake';
 export { purgeExpiredFortuneProfiles } from './fortune-retention';
+export { purgeExpiredFortuneIntake } from './fortune-retention';
 export { recoverStaleFortuneReadings } from './fortune-generation-recovery';
 export {
   PrismaFortuneGenerationQueue,

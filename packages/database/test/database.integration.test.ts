@@ -10,6 +10,7 @@ import { registerOpsMorningDigestRunIntegrationCases } from './ops-morning-diges
 import { registerMigrationBoundsIntegrationCases } from './migration-bounds.integration-cases';
 import { registerDeploymentDatabaseGateIntegrationCases } from './deployment-database-gate.integration-cases';
 import { randomUUID } from 'node:crypto';
+import { toJapanLocalDate } from '@bunshin/capability-fortune';
 import { registerImprovementTriageIntegrationCases } from './improvement-triage.integration-cases';
 import { registerImprovementRetentionJobIntegrationCases } from './improvement-retention-jobs.integration-cases';
 import { registerTrainingSupportSkillLifecycleIntegrationCases } from './training-support-skill-lifecycle.integration-cases';
@@ -131,6 +132,8 @@ import {
   PrismaFortuneRepository,
   PrismaFortunePersonalProfileRepository,
   PrismaFortuneFollowUpRepository,
+  PrismaFortuneIntakeRepository,
+  purgeExpiredFortuneIntake,
   verifyFortuneGenerationJob,
   PrismaTrainingPersonalDataExportRepository,
   PrismaTrainingPersonalDataDeletionRepository,
@@ -1296,6 +1299,55 @@ describe('database ownership boundaries', () => {
       ).resolves.toBe(false);
       await expect(profiles.update({ ...input, profile })).resolves.toBe(true);
       await expect(profiles.read(input)).resolves.toMatchObject({ profile });
+      const intake = new PrismaFortuneIntakeRepository(client);
+      const intakeInput = { ...input, theme: 'WORK', answered: [] } as const;
+      await expect(intake.reserve(intakeInput)).resolves.toEqual({ kind: 'DONE' });
+      await client.fortuneServiceSetting.update({
+        where: { id: setting.id },
+        data: { guidanceSettings: { intake: { enabled: true, questions: 3, calls: 2 } } },
+      });
+      await expect(intake.reserve({ ...intakeInput, actorUserId: other.user.id })).resolves.toEqual(
+        { kind: 'DONE' },
+      );
+      await expect(
+        intake.reserve({ ...intakeInput, serviceSlug: 'foreign-fortune' }),
+      ).resolves.toEqual({ kind: 'DONE' });
+      const claims = await Promise.all([intake.reserve(intakeInput), intake.reserve(intakeInput)]);
+      const firstIntake = claims.find((claim) => claim.kind === 'RESERVED');
+      if (!firstIntake) throw new Error('intake claim missing');
+      expect(claims.map(({ kind }) => kind).sort()).toEqual(['RESERVED', 'WAIT']);
+      expect(firstIntake.profile).toMatchObject({ interest: '仕事' });
+      await expect(
+        intake.finish({
+          ...firstIntake,
+          ...input,
+          actorUserId: other.user.id,
+          key: 'VALUES',
+        }),
+      ).resolves.toEqual({ kind: 'DONE' });
+      await expect(intake.finish({ ...firstIntake, ...input, key: 'VALUES' })).resolves.toEqual({
+        kind: 'QUESTION',
+        key: 'VALUES',
+      });
+      await expect(intake.reserve(intakeInput)).resolves.toEqual({
+        kind: 'QUESTION',
+        key: 'VALUES',
+      });
+      await expect(intake.reserve({ ...intakeInput, answered: ['GOAL'] })).resolves.toEqual({
+        kind: 'DONE',
+      });
+      const second = await intake.reserve({ ...intakeInput, answered: ['VALUES'] });
+      if (second.kind !== 'RESERVED') throw new Error('second intake claim missing');
+      await expect(intake.finish({ ...second, ...input, key: 'GOAL' })).resolves.toEqual({
+        kind: 'QUESTION',
+        key: 'GOAL',
+      });
+      await expect(
+        intake.reserve({ ...intakeInput, answered: ['VALUES', 'GOAL'] }),
+      ).resolves.toEqual({ kind: 'DONE' });
+      expect(
+        await client.fortuneIntakeTurn.count({ where: { participantId: participant.id } }),
+      ).toBe(2);
       const followUps = new PrismaFortuneFollowUpRepository(client);
       const question = '別の見方を教えてください';
       await expect(followUps.read({ ...input, actorUserId: other.user.id })).resolves.toBeNull();
@@ -1383,7 +1435,7 @@ describe('database ownership boundaries', () => {
           serviceSettingId: setting.id,
           participantId: participant.id,
           memberUserId: owner.user.id,
-          localDate: new Date(),
+          localDate: new Date(`${toJapanLocalDate(new Date())}T00:00:00Z`),
           theme: 'WORK',
           cardCode: 'THE_FOOL',
           orientation: 'UPRIGHT',
@@ -1393,6 +1445,11 @@ describe('database ownership boundaries', () => {
         },
       });
       const guided = { ...input, readingId: today.id };
+      await expect(intake.reserve(intakeInput)).resolves.toEqual({ kind: 'DONE' });
+      await purgeExpiredFortuneIntake(client, new Date(Date.now() + 86_400_000));
+      expect(
+        await client.fortuneIntakeTurn.count({ where: { participantId: participant.id } }),
+      ).toBe(0);
       const anotherQuestion = { ...guided, requestId: randomUUID(), question };
       await client.fortuneServiceSetting.update({
         where: { id: setting.id },
