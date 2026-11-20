@@ -232,6 +232,7 @@ enum ServiceMembershipEventType {
   NOTIFICATION_OPTED_IN
   NOTIFICATION_OPTED_OUT
   SERVICE_WITHDRAWN
+  FORTUNE_WEEKLY_LINE_RETURN
 }
 
 enum GroupInvitationStatus {
@@ -3546,6 +3547,8 @@ model FortuneReading {
   pendingConsultation String?                 @map("pending_consultation") @db.VarChar(500)
   reflectionPrompt   String?                  @map("reflection_prompt") @db.VarChar(200)
   reflectionAnswer   String?                  @map("reflection_answer") @db.VarChar(24)
+  personalFitRating  String?                  @map("personal_fit_rating") @db.VarChar(12)
+  personalFitRatedAt DateTime?                @map("personal_fit_rated_at") @db.Timestamptz(6)
   failureCode        String?                  @map("failure_code") @db.VarChar(80)
   generatedAt        DateTime?                @map("generated_at") @db.Timestamptz(6)
   firstViewedAt      DateTime?                @map("first_viewed_at") @db.Timestamptz(6)

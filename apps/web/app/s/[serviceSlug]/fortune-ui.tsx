@@ -3,6 +3,7 @@ import Link from 'next/link';
 import type { FortuneReadingView } from '@bunshin/capability-fortune';
 import { FortuneFeedbackButtons } from './fortune-actions';
 import { FortuneFollowUps } from './fortune-follow-ups';
+import { FortunePersonalFit } from './fortune-personal-fit';
 
 export const themeLabel = (theme: FortuneReadingView['theme']) =>
   ({ LOVE: '恋愛', WORK: '仕事', RELATIONSHIPS: '人間関係' })[theme];
@@ -52,16 +53,25 @@ export function ReadingCard({
       )}
       {!linked && reading.body && <p className="fortune-reading-body">{reading.body}</p>}
       {!linked && reading.actionStep && (
-        <div className="fortune-action-step">
-          <strong>今日できること</strong>
+        <section className="fortune-action-step">
+          <h3>今日の提案</h3>
           <p>{reading.actionStep}</p>
-        </div>
+        </section>
       )}
       {!linked && reading.reflectionPrompt && (
-        <div className="fortune-action-step">
-          <strong>次に振り返ること</strong>
+        <details className="fortune-action">
+          <summary>次回の振り返りを見る</summary>
           <p>{reading.reflectionPrompt}</p>
-        </div>
+        </details>
+      )}
+      {!linked && reading.status === 'READY_AI' && (showFollowUps || reading.personalFitRating) && (
+        <FortunePersonalFit
+          key={reading.id}
+          serviceSlug={serviceSlug}
+          readingId={reading.id}
+          rating={reading.personalFitRating}
+          canRate={showFollowUps}
+        />
       )}
       {!linked && reading.body && reading.status !== 'GENERATING' && (
         <FortuneFeedbackButtons

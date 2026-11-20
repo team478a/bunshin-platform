@@ -37,6 +37,9 @@ export interface FortuneOperationsQuality {
     return30Rate: number | null;
     reflectionRate: number | null;
     suggestionUseRate: number | null;
+    personalFit: { very: number; somewhat: number; notMuch: number };
+    followUpUseRate: number | null;
+    followUpReadings: number;
   };
   aiOperations: FortuneAiOperationsSummary;
   assessment: FortuneQualityAssessment;
@@ -57,6 +60,7 @@ export async function fortuneOperationsQuality(
       aiEnabled: true,
       personalProfileEnabled: true,
       reflectionEnabled: true,
+      historyRetentionDays: true,
     },
   });
   if (!setting) return null;
@@ -202,40 +206,71 @@ export async function fortuneOperationsQuality(
           status: { in: ['READY_BASIC', 'READY_AI'] as const },
         };
         const cohortStart = new Date(now.getTime() - 60 * 86_400_000);
-        const [firstCompleted, retainedViews, reflections] = await Promise.all([
-          db.prisma.fortuneReading.findMany({
-            where: {
-              serviceSettingId: setting.id,
-              status: { in: [...readyScope.status.in] },
-              createdAt: { gte: periodStart },
-              participant: {
-                groupMembership: {
-                  serviceMembershipEvents: {
-                    some: { eventType: 'REGISTRATION_COMPLETED', occurredAt: { gte: periodStart } },
+        const eligibleFollowUps = {
+          serviceSettingId: setting.id,
+          status: { in: [...readyScope.status.in] },
+          deletedAt: null,
+          localDate: { gte: db.fortuneReadingRetentionCutoff(now, setting.historyRetentionDays) },
+          firstViewedAt: { gte: periodStart, lt: now },
+        };
+        const [firstCompleted, retainedViews, reflections, fit, followUpViews, followUpReadings] =
+          await Promise.all([
+            db.prisma.fortuneReading.findMany({
+              where: {
+                serviceSettingId: setting.id,
+                status: { in: [...readyScope.status.in] },
+                createdAt: { gte: periodStart },
+                participant: {
+                  groupMembership: {
+                    serviceMembershipEvents: {
+                      some: {
+                        eventType: 'REGISTRATION_COMPLETED',
+                        occurredAt: { gte: periodStart },
+                      },
+                    },
                   },
                 },
               },
-            },
-            distinct: ['participantId'],
-            select: { participantId: true },
-          }),
-          db.prisma.fortuneReading.findMany({
-            where: {
-              serviceSettingId: setting.id,
-              status: { in: [...readyScope.status.in] },
-              createdAt: { gte: cohortStart },
-              firstViewedAt: { not: null },
-            },
-            select: { memberUserId: true, localDate: true },
-          }),
-          setting.reflectionEnabled
-            ? db.prisma.fortuneReading.groupBy({
-                by: ['reflectionAnswer'],
-                where: { ...readingScope, status: { in: [...readyScope.status.in] } },
-                _count: { _all: true },
-              })
-            : [],
-        ]);
+              distinct: ['participantId'],
+              select: { participantId: true },
+            }),
+            db.prisma.fortuneReading.findMany({
+              where: {
+                serviceSettingId: setting.id,
+                status: { in: [...readyScope.status.in] },
+                createdAt: { gte: cohortStart },
+                firstViewedAt: { not: null },
+              },
+              select: { memberUserId: true, localDate: true },
+            }),
+            setting.reflectionEnabled
+              ? db.prisma.fortuneReading.groupBy({
+                  by: ['reflectionAnswer'],
+                  where: { ...readingScope, status: { in: [...readyScope.status.in] } },
+                  _count: { _all: true },
+                })
+              : [],
+            db.prisma.fortuneReading.groupBy({
+              by: ['personalFitRating'],
+              where: {
+                serviceSettingId: setting.id,
+                status: 'READY_AI',
+                deletedAt: null,
+                localDate: eligibleFollowUps.localDate,
+                personalFitRatedAt: { gte: periodStart, lt: now },
+              },
+              _count: { _all: true },
+            }),
+            db.prisma.fortuneReading.count({ where: eligibleFollowUps }),
+            db.prisma.fortuneReading.count({
+              where: {
+                ...eligibleFollowUps,
+                followUps: { some: { status: { not: 'ERASED' }, createdAt: { lt: now } } },
+              },
+            }),
+          ]);
+        const fitCount = (rating: 'VERY' | 'SOMEWHAT' | 'NOT_MUCH') =>
+          fit.find((row) => row.personalFitRating === rating)?._count._all ?? 0;
         const cohortDates = new Map<string, Set<string>>();
         for (const { memberUserId, localDate } of retainedViews) {
           const dates = cohortDates.get(memberUserId) ?? new Set<string>();
@@ -267,6 +302,13 @@ export async function fortuneOperationsQuality(
             ? fortuneRate(reflected, aiReadingCount + basicReadingCount)
             : null,
           suggestionUseRate: fortuneRate(tried, reflected),
+          personalFit: {
+            very: fitCount('VERY'),
+            somewhat: fitCount('SOMEWHAT'),
+            notMuch: fitCount('NOT_MUCH'),
+          },
+          followUpUseRate: fortuneRate(followUpReadings, followUpViews),
+          followUpReadings,
         };
       })()
     : undefined;

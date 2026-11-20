@@ -13,6 +13,7 @@ const state = vi.hoisted(() => ({
   reading: vi.fn(),
   delete: vi.fn(),
   feedback: vi.fn(),
+  savePersonalFit: vi.fn(),
   ask: vi.fn(),
   recordUse: vi.fn(),
 }));
@@ -30,6 +31,12 @@ vi.mock('../src/fortune/follow-ups', () => ({ askFortuneFollowUp: state.ask }));
 vi.mock('../src/services/service-membership', () => ({
   recordServiceUse: state.recordUse,
 }));
+vi.mock('@bunshin/database', () => ({
+  PrismaFortuneRepository: class {
+    savePersonalFit = state.savePersonalFit;
+  },
+  prisma: {},
+}));
 
 import {
   askFortuneFollowUpResponse,
@@ -37,6 +44,7 @@ import {
   getFortuneTodayResponse,
   joinFortuneResponse,
   updateFortuneFeedbackResponse,
+  updateFortunePersonalFitResponse,
   updateFortunePersonalizationResponse,
   updateFortunePersonalProfileResponse,
 } from '../src/http/fortune';
@@ -121,6 +129,33 @@ describe('fortune HTTP contract', () => {
       requestId,
       question: '別の見方は？',
     });
+  });
+
+  it('allows only authenticated same-origin submissions of the optional fit rating', async () => {
+    const readingId = '22222222-2222-4222-8222-222222222222';
+    const submit = (data: object, origin = 'http://localhost:3000') =>
+      updateFortunePersonalFitResponse(
+        request('/api/fortune/personal-fit', {
+          method: 'PUT',
+          headers: { 'content-type': 'application/json', origin },
+          body: JSON.stringify(data),
+        }),
+        'fortune',
+        readingId,
+      );
+    state.savePersonalFit.mockResolvedValue(true);
+    expect((await submit({ rating: 'VERY', userId: 'someone-else' })).status).toBe(400);
+    expect((await submit({ rating: 'HELPFUL' })).status).toBe(400);
+    expect((await submit({ rating: 'VERY' }, 'https://unrelated.example')).status).toBe(403);
+    expect((await submit({ rating: 'VERY' })).status).toBe(200);
+    expect((await submit({ rating: null })).status).toBe(200);
+    state.user = null;
+    expect((await submit({ rating: 'VERY' })).status).toBe(401);
+    expect(state.savePersonalFit.mock.calls).toEqual(
+      ['VERY', null].map((rating) => [
+        { serviceSlug: 'fortune', actorUserId: 'user-1', readingId, rating },
+      ]),
+    );
   });
 
   it('accepts only an authenticated participant Bunshin choice without authority fields', async () => {

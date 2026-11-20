@@ -72,7 +72,11 @@ export {
   PrismaMemberProductProfileRepository,
 } from './member-product';
 export { PrismaPointExpirationRepository } from './point-expiration';
-export { PrismaFortuneRepository, purgeExpiredFortuneReadings } from './fortune';
+export {
+  PrismaFortuneRepository,
+  fortuneReadingRetentionCutoff,
+  purgeExpiredFortuneReadings,
+} from './fortune';
 export { PrismaFortunePersonalProfileRepository } from './fortune-personal-profile';
 export { PrismaFortuneFollowUpRepository } from './fortune-follow-ups';
 export { purgeExpiredFortuneProfiles } from './fortune-retention';
