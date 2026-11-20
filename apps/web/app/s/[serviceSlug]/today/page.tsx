@@ -102,7 +102,11 @@ export default async function FortuneTodayPage({
               <p>今日は引き直せません。明日になると新しいカードを引けます。</p>
             </section>
           ) : today.reading ? (
-            <ReadingCard reading={today.reading} serviceSlug={serviceSlug} />
+            <ReadingCard
+              reading={today.reading}
+              serviceSlug={serviceSlug}
+              showFollowUps={showGuide}
+            />
           ) : (
             <section className="settings-card">
               <h2>何について占いますか？</h2>

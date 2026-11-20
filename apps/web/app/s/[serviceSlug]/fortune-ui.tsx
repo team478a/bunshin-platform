@@ -2,6 +2,7 @@ import type { Route } from 'next';
 import Link from 'next/link';
 import type { FortuneReadingView } from '@bunshin/capability-fortune';
 import { FortuneFeedbackButtons } from './fortune-actions';
+import { FortuneFollowUps } from './fortune-follow-ups';
 
 export const themeLabel = (theme: FortuneReadingView['theme']) =>
   ({ LOVE: '恋愛', WORK: '仕事', RELATIONSHIPS: '人間関係' })[theme];
@@ -20,10 +21,12 @@ export function FortuneNav({ serviceSlug }: { serviceSlug: string }) {
 export function ReadingCard({
   reading,
   linked = false,
+  showFollowUps = false,
   serviceSlug,
 }: {
   reading: FortuneReadingView;
   linked?: boolean;
+  showFollowUps?: boolean;
   serviceSlug: string;
 }) {
   const card = (
@@ -78,6 +81,11 @@ export function ReadingCard({
       {card}
     </Link>
   ) : (
-    card
+    <>
+      {card}
+      {showFollowUps && (reading.status === 'READY_AI' || reading.status === 'READY_BASIC') && (
+        <FortuneFollowUps key={reading.id} serviceSlug={serviceSlug} readingId={reading.id} />
+      )}
+    </>
   );
 }

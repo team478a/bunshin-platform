@@ -3549,12 +3549,29 @@ model FortuneReading {
   memberUser         User                     @relation("FortuneReadingUser", fields: [memberUserId], references: [id], onDelete: Restrict)
   knowledgeVersion   FortuneKnowledgeVersion? @relation(fields: [knowledgeVersionId], references: [id], onDelete: Restrict)
   feedback           FortuneFeedback?
+  followUps          FortuneReadingFollowUp[]
 
   @@unique([serviceSettingId, participantId, localDate])
   @@unique([workspaceId, groupId, serviceSettingId, participantId, memberUserId, id])
   @@index([memberUserId, createdAt])
   @@index([serviceSettingId, status, createdAt])
   @@map("fortune_readings")
+}
+
+model FortuneReadingFollowUp {
+  id         String         @db.Uuid
+  readingId  String         @map("reading_id") @db.Uuid
+  turn       Int
+  status     String         @db.VarChar(12)
+  question   String?        @db.VarChar(300)
+  answer     String?        @db.Text
+  actionStep String?        @map("action_step") @db.VarChar(200)
+  createdAt  DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  reading    FortuneReading @relation(fields: [readingId], references: [id], onDelete: Cascade)
+
+  @@id([readingId, id])
+  @@unique([readingId, turn])
+  @@map("fortune_reading_follow_ups")
 }
 
 /// 本人が閲覧した結果へ付ける選択式評価。自由文や占い本文を複製しない。

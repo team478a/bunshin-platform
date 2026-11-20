@@ -51,6 +51,7 @@ export function FortuneGuidanceEditor({
             consultationQuestion: text('consultationQuestion'),
             styleQuestion: text('styleQuestion'),
             guideName: text('guideName'),
+            followUpLimit: Number(text('followUpLimit')),
             guide: {
               ...Object.fromEntries(guideFields.map(([key]) => [key, text(key)])),
               imageUrl: text('imageUrl'),
@@ -105,6 +106,14 @@ export function FortuneGuidanceEditor({
               <textarea name={key} defaultValue={guide[key]} maxLength={240} rows={2} />
             </label>
           ))}
+          <label className="form-field">
+            <span>1回の鑑定への追加質問</span>
+            <select name="followUpLimit" defaultValue={settings.followUpLimit ?? 2}>
+              <option value="0">利用しない</option>
+              <option value="1">1回まで</option>
+              <option value="2">2回まで</option>
+            </select>
+          </label>
           <label className="form-field">
             <span>案内役の画像・アイコンURL（HTTPS、任意）</span>
             <input name="imageUrl" type="url" defaultValue={guide.imageUrl} maxLength={500} />

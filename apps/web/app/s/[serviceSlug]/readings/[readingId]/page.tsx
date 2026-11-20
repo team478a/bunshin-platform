@@ -13,7 +13,7 @@ export default async function FortuneReadingPage({
   params: Promise<{ serviceSlug: string; readingId: string }>;
 }) {
   const { serviceSlug, readingId } = await params;
-  const { actor } = await resolveFortunePage(
+  const { actor, setting } = await resolveFortunePage(
     serviceSlug,
     `/s/${serviceSlug}/readings/${readingId}`,
   );
@@ -32,7 +32,11 @@ export default async function FortuneReadingPage({
         <header className="app-page__heading">
           <h1>占い結果</h1>
         </header>
-        <ReadingCard reading={reading} serviceSlug={serviceSlug} />
+        <ReadingCard
+          reading={reading}
+          serviceSlug={serviceSlug}
+          showFollowUps={setting.aiEnabled && setting.personalProfileEnabled}
+        />
         <FortuneDeleteButton serviceSlug={serviceSlug} readingId={readingId} />
         <FortuneNav serviceSlug={serviceSlug} />
       </main>
