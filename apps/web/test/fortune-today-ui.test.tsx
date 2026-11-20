@@ -1,0 +1,134 @@
+import { renderToStaticMarkup } from 'react-dom/server';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  emptyFortunePersonalProfile,
+  toJapanLocalDate,
+  type FortuneReadingView,
+} from '@bunshin/capability-fortune';
+import FortuneTodayPage from '../app/s/[serviceSlug]/today/page';
+import {
+  defaultFortuneGuide,
+  defaultFortuneGuidanceSettings,
+} from '../src/fortune/guidance-settings';
+
+const state = vi.hoisted(() => ({
+  page: vi.fn(),
+  today: vi.fn(),
+  history: vi.fn(),
+  profile: vi.fn(),
+}));
+
+vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
+vi.mock('../src/fortune/page-context', () => ({ resolveFortunePage: state.page }));
+vi.mock('../src/fortune/runtime', () => ({
+  fortuneDailyReadingService: () => ({ today: state.today, history: state.history }),
+}));
+vi.mock('../src/fortune/personal-profile', () => ({
+  fortunePersonalProfileRepository: () => ({ read: state.profile }),
+}));
+
+const renderToday = async () =>
+  renderToStaticMarkup(
+    await FortuneTodayPage({ params: Promise.resolve({ serviceSlug: 'tarot' }) }),
+  );
+
+const setting = {
+  minimumAge: 18,
+  aiEnabled: true,
+  personalProfileEnabled: true,
+  reflectionEnabled: true,
+  guidanceSettings: {
+    ...defaultFortuneGuidanceSettings,
+    guideName: '月の案内役',
+    guide: {
+      ...defaultFortuneGuide,
+      introduction: '今日の気持ちを整理しましょう。',
+      imageUrl: 'https://images.example/guide.webp',
+    },
+  },
+};
+
+const reading: FortuneReadingView = {
+  id: 'today',
+  localDate: toJapanLocalDate(new Date()),
+  theme: 'WORK',
+  cardCode: 'THE_FOOL',
+  cardNameJa: '愚者',
+  orientation: 'UPRIGHT',
+  status: 'READY_AI',
+  title: '新しい視点',
+  body: '今日のカードから得られるヒントです。',
+  actionStep: '気になることを一つ書く。',
+  feedbackRating: null,
+  feedbackIssue: null,
+  createdAt: new Date(),
+};
+
+describe('fortune member home', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    state.page.mockResolvedValue({ actor: { userId: 'reader' }, setting });
+    state.today.mockResolvedValue({ participant: null, reading: null });
+    state.profile.mockResolvedValue({
+      enabled: true,
+      completed: false,
+      profile: emptyFortunePersonalProfile,
+    });
+    state.history.mockResolvedValue([]);
+  });
+
+  it('identifies the configurable AI guide and directs a first-time visitor to age confirmation', async () => {
+    const markup = await renderToday();
+    expect(markup).toContain('AI案内役');
+    expect(markup).toContain('月の案内役');
+    expect(markup).toContain('今日の気持ちを整理しましょう。');
+    expect(markup).toContain('images.example/guide.webp');
+    expect(markup).toContain('年齢確認へ');
+    expect(markup).not.toContain('name="interest"');
+    expect(state.history).not.toHaveBeenCalled();
+  });
+
+  it('offers optional intake to an age-confirmed participant and keeps single-reading entry available', async () => {
+    state.today.mockResolvedValue({ participant: { id: 'participant' }, reading: null });
+    const markup = await renderToday();
+    expect(markup).toContain('はじめる');
+    expect(markup).toContain('スキップ');
+    expect(markup).toContain('何について占いますか？');
+    expect(state.history).not.toHaveBeenCalled();
+  });
+
+  it('puts today’s result first and shows the optional previous reflection only after consent', async () => {
+    state.today.mockResolvedValue({ participant: { id: 'participant' }, reading });
+    state.profile.mockResolvedValue({
+      enabled: true,
+      completed: true,
+      profile: { ...emptyFortunePersonalProfile, consented: true },
+    });
+    state.history.mockResolvedValue([
+      {
+        ...reading,
+        id: 'previous',
+        localDate: toJapanLocalDate(new Date(Date.now() - 86_400_000)),
+        reflectionPrompt: '前回の行動で何に気づきましたか？',
+      },
+    ]);
+    const markup = await renderToday();
+    expect(markup).toContain('今日の鑑定を見る');
+    expect(markup).toContain(reading.actionStep);
+    expect(markup).toContain('前回の行動で何に気づきましたか？');
+    expect(markup.indexOf(reading.actionStep!)).toBeLessThan(
+      markup.indexOf('前回の提案を振り返る'),
+    );
+    expect(markup).not.toContain('何について占いますか？');
+  });
+
+  it('still shows age confirmation when AI is off and does not present an AI guide', async () => {
+    state.page.mockResolvedValue({
+      actor: { userId: 'reader' },
+      setting: { ...setting, aiEnabled: false },
+    });
+    const markup = await renderToday();
+    expect(markup).toContain('最初に年齢を確認します');
+    expect(markup).not.toContain('月の案内役');
+  });
+});

@@ -2,6 +2,41 @@ import { FORTUNE_PROFILE_STYLES } from '@bunshin/capability-fortune';
 import { z } from 'zod';
 
 const label = z.string().trim().min(1).max(100);
+const guideText = z.string().trim().max(240);
+
+const guideSchema = z
+  .object({
+    introduction: guideText,
+    personality: guideText,
+    language: guideText,
+    readingRules: guideText,
+    questionApproach: guideText,
+    suggestionPolicy: guideText,
+    imageUrl: z
+      .string()
+      .trim()
+      .max(500)
+      .refine((value) => {
+        if (!value) return true;
+        try {
+          const url = new URL(value);
+          return url.protocol === 'https:' && !url.username && !url.password;
+        } catch {
+          return false;
+        }
+      }),
+  })
+  .strict();
+
+export const defaultFortuneGuide: z.infer<typeof guideSchema> = {
+  introduction: '',
+  personality: '',
+  language: '',
+  readingRules: '',
+  questionApproach: '',
+  suggestionPolicy: '',
+  imageUrl: '',
+};
 
 export const fortuneGuidanceSettingsSchema = z
   .object({
@@ -9,6 +44,7 @@ export const fortuneGuidanceSettingsSchema = z
     consultationQuestion: label,
     styleQuestion: label,
     guideName: label,
+    guide: guideSchema.optional(),
     defaultStyle: z.enum(FORTUNE_PROFILE_STYLES).nullable(),
     themeLabels: z.object({ LOVE: label, WORK: label, RELATIONSHIPS: label }).strict(),
     styleLabels: z.object({ GENTLE: label, DIRECT: label, REFLECTIVE: label }).strict(),

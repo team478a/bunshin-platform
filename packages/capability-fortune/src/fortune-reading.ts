@@ -68,6 +68,7 @@ export interface FortuneAiGenerationClaim {
   reflectionEnabled?: boolean;
   personalProfileRevision?: Date;
   defaultStyle?: FortuneProfileStyle;
+  guidanceSettings?: unknown;
   consultation?: string;
   personalization?: {
     participantProfile?: Omit<FortunePersonalProfile, 'consented'>;
