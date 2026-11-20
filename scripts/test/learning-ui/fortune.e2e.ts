@@ -34,12 +34,23 @@ test('mobile Fortune completes guided reading, two follow-ups, rating and next-d
   );
   await browser.route(`${endpoints}/**`, async (route) => {
     const path = new URL(route.request.url).pathname.split('/').at(-1)!;
-    const body = JSON.parse(route.request.postData ?? '{}');
+    const body = JSON.parse(route.request.postData ?? '{}') as Partial<
+      FortuneBrowserFixture['profile'] & {
+        rating: NonNullable<FortuneBrowserFixture['reading']>['personalFitRating'] | null;
+      }
+    >;
     if (route.request.method !== 'GET') writes.push({ path, body });
     if (path === 'participation') state.joined = true;
     if (path === 'profile') {
       state.completed = true;
-      state.profile = body.consented ? body : emptyProfile;
+      state.profile = body.consented
+        ? {
+            consented: true,
+            interest: body.interest ?? null,
+            question: body.question ?? null,
+            style: body.style ?? null,
+          }
+        : emptyProfile;
     }
     if (path === 'today') state.reading = reading;
     if (path === 'personal-fit' && state.reading) {
@@ -47,13 +58,15 @@ test('mobile Fortune completes guided reading, two follow-ups, rating and next-d
       else state.reading = reading;
     }
     if (path === 'follow-ups') {
-      if (route.request.method === 'POST')
+      if (route.request.method === 'POST') {
+        if (!body.question) throw new Error('Expected a follow-up question in the test request');
         turns.push({
           turn: turns.length + 1,
           question: body.question,
           answer: '今ある経験を使える場面を一つ思い出してみましょう。',
           status: 'READY',
         });
+      }
       return route.fulfill({ json: { data: { remaining: 2 - turns.length, turns } } });
     }
     return route.fulfill({ json: { data: { saved: true } } });
@@ -127,8 +140,8 @@ test('mobile Fortune can skip intake and still use the standard reading when AI 
     await route.fulfill({ json: { data: { saved: true } } });
   });
   await browser.route(`${endpoints}/today`, (route) => {
-    const { reflectionPrompt, ...basic } = reading;
-    state.reading = { ...basic, status: 'READY_BASIC', body: '承認済みの標準鑑定です。' };
+    state.reading = { ...reading, status: 'READY_BASIC', body: '承認済みの標準鑑定です。' };
+    delete state.reading.reflectionPrompt;
     return route.fulfill({ json: { data: { ...state.reading } } });
   });
   await browser.route(`${endpoints}/**/follow-ups`, (route) =>

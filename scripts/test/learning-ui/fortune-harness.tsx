@@ -24,7 +24,9 @@ function FortuneHarness() {
   const [state, setState] = useState<FortuneBrowserFixture>();
   useEffect(() => {
     const refresh = () => {
-      void fetch('/__fortune_fixture').then(async (response) => setState(await response.json()));
+      void fetch('/__fortune_fixture').then(async (response) =>
+        setState((await response.json()) as FortuneBrowserFixture),
+      );
     };
     refresh();
     window.addEventListener('fortune-fixture-refresh', refresh);
