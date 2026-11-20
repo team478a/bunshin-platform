@@ -6,6 +6,7 @@ const state = vi.hoisted(() => ({
   user: null as { userId: string } | null,
   join: vi.fn(),
   updatePersonalization: vi.fn(),
+  updateProfile: vi.fn(),
   today: vi.fn(),
   draw: vi.fn(),
   history: vi.fn(),
@@ -21,6 +22,9 @@ vi.mock('../src/auth/current-user', () => ({
 vi.mock('../src/fortune/runtime', () => ({
   fortuneDailyReadingService: () => Promise.resolve(state),
 }));
+vi.mock('../src/fortune/personal-profile', () => ({
+  fortunePersonalProfileRepository: () => Promise.resolve({ update: state.updateProfile }),
+}));
 vi.mock('../src/services/service-membership', () => ({
   recordServiceUse: state.recordUse,
 }));
@@ -31,6 +35,7 @@ import {
   joinFortuneResponse,
   updateFortuneFeedbackResponse,
   updateFortunePersonalizationResponse,
+  updateFortunePersonalProfileResponse,
 } from '../src/http/fortune';
 
 const request = (path: string, init?: RequestInit) =>
@@ -63,6 +68,27 @@ describe('fortune HTTP contract', () => {
     state.draw.mockResolvedValue({ id: 'reading-1' });
     state.feedback.mockResolvedValue({ id: 'reading-1', feedbackRating: 'HELPFUL' });
     state.recordUse.mockResolvedValue({ id: 'membership-1' });
+  });
+
+  it('uses the session identity and rejects profile fields without consent', async () => {
+    state.updateProfile.mockResolvedValue(true);
+    const submit = (body: object, origin = 'http://localhost:3000') =>
+      updateFortunePersonalProfileResponse(
+        request('/api/services/fortune/fortune/profile', {
+          method: 'PUT',
+          headers: { 'content-type': 'application/json', origin },
+          body: JSON.stringify(body),
+        }),
+        'fortune',
+      );
+    expect((await submit({ consented: false })).status).toBe(200);
+    expect((await submit({ consented: false, question: 'private' })).status).toBe(400);
+    expect((await submit({ consented: false }, 'https://other.example')).status).toBe(403);
+    expect(state.updateProfile).toHaveBeenCalledExactlyOnceWith({
+      serviceSlug: 'fortune',
+      actorUserId: 'user-1',
+      profile: { consented: false },
+    });
   });
 
   it('accepts only an authenticated participant Bunshin choice without authority fields', async () => {

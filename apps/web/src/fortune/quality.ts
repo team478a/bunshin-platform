@@ -21,6 +21,7 @@ export interface FortuneAiOperationsSummary {
   pricedCalls: number;
   unpricedCalls: number;
   estimatedCostUsdMicros: number;
+  uniqueAiUsers: number;
 }
 
 export const FORTUNE_MEMBERSHIP_EVENT_TYPES = [
@@ -69,6 +70,7 @@ export function summarizeFortuneAiOperations(input: {
   processingGenerations: number;
   usage: Array<{
     status: 'SUCCESS' | 'FAILED';
+    actorUserId?: string;
     inputTokens: number | null;
     outputTokens: number | null;
     estimatedCostUsdMicros: bigint | number | null;
@@ -84,6 +86,8 @@ export function summarizeFortuneAiOperations(input: {
     failedCalls: input.usage.filter((row) => row.status === 'FAILED').length,
     inputTokens: input.usage.reduce((sum, row) => sum + (row.inputTokens ?? 0), 0),
     outputTokens: input.usage.reduce((sum, row) => sum + (row.outputTokens ?? 0), 0),
+    uniqueAiUsers: new Set(input.usage.flatMap((row) => (row.actorUserId ? [row.actorUserId] : [])))
+      .size,
     pricedCalls: input.usage.filter((row) => row.estimatedCostUsdMicros !== null).length,
     unpricedCalls: input.usage.filter((row) => row.estimatedCostUsdMicros === null).length,
     estimatedCostUsdMicros: input.usage.reduce(
@@ -91,6 +95,20 @@ export function summarizeFortuneAiOperations(input: {
       0,
     ),
   };
+}
+
+export const fortuneRate = (numerator: number, denominator: number) =>
+  denominator > 0 ? numerator / denominator : null;
+
+export function fortuneReturnRate(viewedDates: Map<string, Set<string>>, now: Date, days: number) {
+  const period = days * 86_400_000;
+  const cohort = [...viewedDates.values()]
+    .map((dates) => [...dates].sort())
+    .filter(([first]) => first && Date.parse(first) <= now.getTime() - period);
+  const returned = cohort.filter(
+    ([first, second]) => first && second && Date.parse(second) - Date.parse(first) <= period,
+  );
+  return fortuneRate(returned.length, cohort.length);
 }
 
 export function assessFortuneQuality(input: {

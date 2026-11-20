@@ -8,6 +8,20 @@ export function fortuneReadingRetentionCutoff(at: Date, historyRetentionDays: nu
   return cutoff;
 }
 
+export async function purgeExpiredFortuneProfiles(db: PrismaClient, at: Date): Promise<number> {
+  return db.$executeRaw(Prisma.sql`
+    UPDATE "fortune_participants" AS participant
+    SET "profile_interest" = NULL, "profile_question" = NULL,
+        "profile_style" = NULL, "profile_consented_at" = NULL
+    FROM "fortune_service_settings" AS setting
+    WHERE participant."service_setting_id" = setting."id"
+      AND participant."profile_consented_at" IS NOT NULL
+      AND participant."profile_updated_at" < (
+        ${dateOnly(toJapanLocalDate(at))}::timestamptz - GREATEST(setting."history_retention_days" - 1, 0) * INTERVAL '1 day'
+      )
+  `);
+}
+
 export async function purgeExpiredFortuneReadings(db: PrismaClient, at: Date): Promise<number> {
   const today = dateOnly(toJapanLocalDate(at));
   return db.$executeRaw(

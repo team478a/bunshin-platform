@@ -4,7 +4,7 @@ import { FORTUNE_WEEKLY_NOTIFICATION_TOPIC } from '@bunshin/capability-fortune';
 import { getServerEnvironment } from '@bunshin/config';
 import {
   buildFortuneWeeklyLineMessage,
-  fortuneWeeklyDeliveryKey,
+  fortuneWeeklyLocalSlot,
   isFortuneWeeklyNotificationDue,
 } from '../fortune/weekly-line-delivery';
 
@@ -35,6 +35,10 @@ export async function scheduleFortuneWeeklyLineDeliveries(input: {
     where: {
       enabled: true,
       weeklyNotificationEnabled: true,
+      bunshin: {
+        status: 'ACTIVE',
+        capabilityAssignments: { some: { capabilityType: 'FORTUNE', status: 'ACTIVE' } },
+      },
       group: { status: 'ACTIVE', workspace: { status: 'ACTIVE' } },
       configuration: {
         registration: { is: { lineEnabled: true } },
@@ -51,6 +55,7 @@ export async function scheduleFortuneWeeklyLineDeliveries(input: {
       timeZone: true,
       weeklyNotificationDay: true,
       weeklyNotificationHour: true,
+      personalProfileEnabled: true,
       configuration: { select: { slug: true, displayName: true } },
     },
     orderBy: { id: 'asc' },
@@ -59,24 +64,24 @@ export async function scheduleFortuneWeeklyLineDeliveries(input: {
   summary.services = settings.length;
 
   for (const setting of settings) {
-    if (
-      !isFortuneWeeklyNotificationDue({
-        now,
-        timeZone: setting.timeZone,
-        weekday: setting.weeklyNotificationDay,
-        hour: setting.weeklyNotificationHour,
-      })
-    )
-      continue;
-    summary.due += 1;
+    const defaultDue = isFortuneWeeklyNotificationDue({
+      now,
+      timeZone: setting.timeZone,
+      weekday: setting.weeklyNotificationDay,
+      hour: setting.weeklyNotificationHour,
+    });
+    if (!setting.personalProfileEnabled && !defaultDue) continue;
     try {
-      const deliveryDate = fortuneWeeklyDeliveryKey(now, setting.timeZone);
-      const automationKey = `fortune-weekly:${input.environment}:${setting.groupId}:${deliveryDate}`;
+      const slot = fortuneWeeklyLocalSlot(now, setting.timeZone);
+      const deliveryDate = slot.date;
+      const prefix = `fortune-weekly:${input.environment}:${setting.groupId}:`;
+      const automationKey = `${prefix}${deliveryDate}${setting.personalProfileEnabled ? `:${slot.hour.toString().padStart(2, '0')}` : ''}`;
       const existing = await db.prisma.serviceLineBroadcast.findUnique({
         where: { automationKey },
         select: { id: true, status: true, updatedByUserId: true },
       });
       if (existing) {
+        summary.due += 1;
         if (existing.status === 'SCHEDULED') {
           await new EnqueueJob(new db.PrismaJobRepository()).enqueue({
             environment: input.environment,
@@ -94,6 +99,22 @@ export async function scheduleFortuneWeeklyLineDeliveries(input: {
         summary.skipped += 1;
         continue;
       }
+      const reservations = {
+        workspaceId: setting.workspaceId,
+        groupId: setting.groupId,
+        broadcast: {
+          automationKey: {
+            startsWith: prefix,
+            gte: `${prefix}${slot.weekStart}`,
+            lte: `${prefix}${deliveryDate}z`,
+          },
+        },
+      };
+      const scheduledThisWeek = await db.prisma.serviceLineBroadcastRecipient.findMany({
+        where: reservations,
+        distinct: ['groupMembershipId'],
+        select: { groupMembershipId: true },
+      });
       const [actor, preferences] = await Promise.all([
         db.prisma.groupMembership.findFirst({
           where: {
@@ -115,12 +136,32 @@ export async function scheduleFortuneWeeklyLineDeliveries(input: {
             enabled: true,
             consentedAt: { not: null },
             optedOutAt: null,
+            ...(scheduledThisWeek.length
+              ? {
+                  groupMembershipId: {
+                    notIn: scheduledThisWeek.map((row) => row.groupMembershipId),
+                  },
+                }
+              : {}),
             groupMembership: {
               status: 'ACTIVE',
               consentedAt: { not: null },
               serviceRole: 'PARTICIPANT',
               fortuneParticipation: {
-                is: { serviceSettingId: setting.id },
+                is: {
+                  serviceSettingId: setting.id,
+                  ...(setting.personalProfileEnabled
+                    ? {
+                        OR: [
+                          {
+                            notificationWeekday: slot.weekday,
+                            notificationHour: { lte: slot.hour },
+                          },
+                          ...(defaultDue ? [{ notificationWeekday: null }] : []),
+                        ],
+                      }
+                    : {}),
+                },
               },
             },
             user: { status: 'ACTIVE' },
@@ -129,8 +170,9 @@ export async function scheduleFortuneWeeklyLineDeliveries(input: {
           take: 500,
         }),
       ]);
+      if (defaultDue || preferences.length > 0) summary.due += 1;
       if (!actor || !preferences.length) {
-        summary.skipped += 1;
+        if (defaultDue || preferences.length > 0) summary.skipped += 1;
         continue;
       }
       const serviceUrl = new URL(
@@ -142,6 +184,20 @@ export async function scheduleFortuneWeeklyLineDeliveries(input: {
         serviceUrl,
       });
       const broadcast = await db.prisma.$transaction(async (tx) => {
+        // Serialize reservation across overlapping scheduler runs and different slots of this service.
+        await tx.$queryRaw`SELECT 1 AS locked FROM pg_advisory_xact_lock(hashtextextended(${prefix + slot.weekStart}, 0))`;
+        const alreadyReserved = await tx.serviceLineBroadcastRecipient.findMany({
+          where: {
+            ...reservations,
+            groupMembershipId: { in: preferences.map((row) => row.groupMembershipId) },
+          },
+          select: { groupMembershipId: true },
+        });
+        const reserved = new Set(alreadyReserved.map((row) => row.groupMembershipId));
+        const recipients = preferences.filter(
+          (preference) => !reserved.has(preference.groupMembershipId),
+        );
+        if (!recipients.length) return null;
         const row = await tx.serviceLineBroadcast.create({
           data: {
             workspaceId: setting.workspaceId,
@@ -161,7 +217,7 @@ export async function scheduleFortuneWeeklyLineDeliveries(input: {
           },
         });
         const inserted = await tx.serviceLineBroadcastRecipient.createMany({
-          data: preferences.map((preference) => ({
+          data: recipients.map((preference) => ({
             workspaceId: setting.workspaceId,
             groupId: setting.groupId,
             broadcastId: row.id,
@@ -189,6 +245,10 @@ export async function scheduleFortuneWeeklyLineDeliveries(input: {
         });
         return { id: row.id, recipients: inserted.count };
       });
+      if (!broadcast) {
+        summary.skipped += 1;
+        continue;
+      }
       await new EnqueueJob(new db.PrismaJobRepository()).enqueue({
         environment: input.environment,
         workspaceId: setting.workspaceId,

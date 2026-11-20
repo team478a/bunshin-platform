@@ -2,6 +2,8 @@ import 'server-only';
 import { fortuneOperatorScope } from './operator-scope';
 import {
   assessFortuneQuality,
+  fortuneRate,
+  fortuneReturnRate,
   summarizeFortuneMembershipActivity,
   summarizeFortuneAiOperations,
   type FortuneAiOperationsSummary,
@@ -28,6 +30,14 @@ export interface FortuneOperationsQuality {
   feedbackIssues: Array<{ code: string; count: number }>;
   failures: Array<{ code: string; count: number }>;
   membershipActivity: FortuneMembershipActivitySummary;
+  personalGuidance?: {
+    firstCompletionRate: number | null;
+    secondUseRate: number | null;
+    return7Rate: number | null;
+    return30Rate: number | null;
+    reflectionRate: number | null;
+    suggestionUseRate: number | null;
+  };
   aiOperations: FortuneAiOperationsSummary;
   assessment: FortuneQualityAssessment;
 }
@@ -41,7 +51,13 @@ export async function fortuneOperationsQuality(
   const db = await import('@bunshin/database');
   const setting = await db.prisma.fortuneServiceSetting.findFirst({
     where: { workspaceId: service.workspaceId, groupId: service.serviceId },
-    select: { id: true, bunshinId: true, aiEnabled: true },
+    select: {
+      id: true,
+      bunshinId: true,
+      aiEnabled: true,
+      personalProfileEnabled: true,
+      reflectionEnabled: true,
+    },
   });
   if (!setting) return null;
 
@@ -146,6 +162,7 @@ export async function fortuneOperationsQuality(
       },
       select: {
         status: true,
+        actorUserId: true,
         inputTokens: true,
         outputTokens: true,
         estimatedCostUsdMicros: true,
@@ -177,8 +194,85 @@ export async function fortuneOperationsQuality(
   const helpfulFeedbackCount = feedbackCount('HELPFUL');
   const somewhatFeedbackCount = feedbackCount('SOMEWHAT');
   const notHelpfulFeedbackCount = feedbackCount('NOT_HELPFUL');
+  const membershipActivity = summarizeFortuneMembershipActivity(membershipEvents);
+  const personalGuidance = setting.personalProfileEnabled
+    ? await (async () => {
+        const readyScope = {
+          serviceSettingId: setting.id,
+          status: { in: ['READY_BASIC', 'READY_AI'] as const },
+        };
+        const cohortStart = new Date(now.getTime() - 60 * 86_400_000);
+        const [firstCompleted, retainedViews, reflections] = await Promise.all([
+          db.prisma.fortuneReading.findMany({
+            where: {
+              serviceSettingId: setting.id,
+              status: { in: [...readyScope.status.in] },
+              createdAt: { gte: periodStart },
+              participant: {
+                groupMembership: {
+                  serviceMembershipEvents: {
+                    some: { eventType: 'REGISTRATION_COMPLETED', occurredAt: { gte: periodStart } },
+                  },
+                },
+              },
+            },
+            distinct: ['participantId'],
+            select: { participantId: true },
+          }),
+          db.prisma.fortuneReading.findMany({
+            where: {
+              serviceSettingId: setting.id,
+              status: { in: [...readyScope.status.in] },
+              createdAt: { gte: cohortStart },
+              firstViewedAt: { not: null },
+            },
+            select: { memberUserId: true, localDate: true },
+          }),
+          setting.reflectionEnabled
+            ? db.prisma.fortuneReading.groupBy({
+                by: ['reflectionAnswer'],
+                where: { ...readingScope, status: { in: [...readyScope.status.in] } },
+                _count: { _all: true },
+              })
+            : [],
+        ]);
+        const cohortDates = new Map<string, Set<string>>();
+        for (const { memberUserId, localDate } of retainedViews) {
+          const dates = cohortDates.get(memberUserId) ?? new Set<string>();
+          dates.add(localDate.toISOString().slice(0, 10));
+          cohortDates.set(memberUserId, dates);
+        }
+        const reflected = reflections
+          .filter((row) => row.reflectionAnswer !== null)
+          .reduce((sum, row) => sum + row._count._all, 0);
+        const tried = reflections
+          .filter(
+            (row) =>
+              row.reflectionAnswer === 'TRIED_CHANGED' ||
+              row.reflectionAnswer === 'TRIED_NO_CHANGE',
+          )
+          .reduce((sum, row) => sum + row._count._all, 0);
+        return {
+          firstCompletionRate: fortuneRate(
+            firstCompleted.length,
+            membershipActivity.registeredParticipants,
+          ),
+          secondUseRate: fortuneRate(
+            [...viewedByUser.values()].filter((dates) => dates.size >= 2).length,
+            viewedByUser.size,
+          ),
+          return7Rate: fortuneReturnRate(cohortDates, now, 7),
+          return30Rate: fortuneReturnRate(cohortDates, now, 30),
+          reflectionRate: setting.reflectionEnabled
+            ? fortuneRate(reflected, aiReadingCount + basicReadingCount)
+            : null,
+          suggestionUseRate: fortuneRate(tried, reflected),
+        };
+      })()
+    : undefined;
   return {
     periodDays: 30,
+    ...(personalGuidance ? { personalGuidance } : {}),
     activeParticipants,
     activeReaders: readers.length,
     viewedReaders: viewedByUser.size,
@@ -199,7 +293,7 @@ export async function fortuneOperationsQuality(
     failures: failureRows.flatMap((row) =>
       row.failureCode ? [{ code: row.failureCode, count: row._count._all }] : [],
     ),
-    membershipActivity: summarizeFortuneMembershipActivity(membershipEvents),
+    membershipActivity,
     aiOperations: summarizeFortuneAiOperations({
       monthKey,
       commercialStatus: commercialSetting?.status ?? null,

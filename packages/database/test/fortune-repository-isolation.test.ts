@@ -165,6 +165,57 @@ describe('fortune repository isolation', () => {
     expect(tx.fortuneReading.upsert).not.toHaveBeenCalled();
   });
 
+  it('skips stored personal context when the participant did not consent', async () => {
+    const tx = targetClient({ ...scope, personalProfileEnabled: true });
+    tx.fortuneParticipant.findFirst.mockResolvedValue({
+      profileUpdatedAt: new Date(),
+      profileConsentedAt: null,
+    });
+    tx.fortuneReading.updateMany.mockResolvedValue({ count: 1 });
+    tx.fortuneReading.findFirst.mockResolvedValue({
+      ...reading,
+      pendingConsultation: '今日だけの相談',
+    });
+    const client = {
+      $transaction: vi.fn((callback: (transaction: typeof tx) => unknown) =>
+        Promise.resolve(callback(tx)),
+      ),
+    };
+    await expect(
+      repository(client).claimAiGeneration({ serviceSlug, actorUserId, readingId }),
+    ).resolves.toMatchObject({
+      personalGuidance: true,
+      consultation: '今日だけの相談',
+      personalization: { recentReadings: [] },
+    });
+    expect(tx.fortuneParticipant.findFirst).toHaveBeenCalledTimes(1);
+    expect(tx.fortuneReading.findMany).not.toHaveBeenCalled();
+    expect(tx.fortuneReading.update.mock.calls[0]?.[0].data.personalizationContext).toMatchObject({
+      sources: ['CURRENT_CONSULTATION'],
+    });
+  });
+
+  it('limits reflection writes to the participant, service, retention window and consent', async () => {
+    const tx = targetClient({ ...scope, reflectionEnabled: true });
+    tx.fortuneReading.updateMany.mockResolvedValue({ count: 0 });
+    await expect(
+      repository(tx).saveReflection({ serviceSlug, actorUserId, readingId, answer: 'NOT_TRIED' }),
+    ).resolves.toBe(false);
+    expect(tx.fortuneReading.updateMany).toHaveBeenCalledWith({
+      where: expect.objectContaining({
+        workspaceId: scope.workspaceId,
+        groupId: scope.groupId,
+        serviceSettingId: scope.id,
+        memberUserId: actorUserId,
+        localDate: { gte: expect.any(Date) },
+        deletedAt: null,
+        participant: expect.objectContaining({ profileConsentedAt: { not: null } }),
+        serviceSetting: { personalProfileEnabled: true, reflectionEnabled: true },
+      }),
+      data: { reflectionAnswer: 'NOT_TRIED' },
+    });
+  });
+
   it('uses only the participant-selected owned Bunshin when claiming AI generation', async () => {
     const tx = targetClient();
     tx.fortuneParticipant.findFirst.mockResolvedValue({

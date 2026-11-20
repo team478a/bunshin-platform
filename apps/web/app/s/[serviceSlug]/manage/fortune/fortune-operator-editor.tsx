@@ -23,6 +23,8 @@ export function FortuneOperatorEditor({
   standardKnowledgeReady,
   enabled,
   aiEnabled,
+  personalProfileEnabled,
+  reflectionEnabled,
   weeklyNotificationEnabled,
   weeklyNotificationDay,
   weeklyNotificationHour,
@@ -39,6 +41,8 @@ export function FortuneOperatorEditor({
   standardKnowledgeReady: boolean;
   enabled: boolean;
   aiEnabled: boolean;
+  personalProfileEnabled: boolean;
+  reflectionEnabled: boolean;
   weeklyNotificationEnabled: boolean;
   weeklyNotificationDay: number;
   weeklyNotificationHour: number;
@@ -270,6 +274,46 @@ export function FortuneOperatorEditor({
               有効にすると、承認済み標準解釈を土台に、その日のカード・正逆・テーマに合わせて文章を整えます。
               AIが利用できない場合や安全検査に通らない場合は、標準解釈をそのまま表示します。
             </p>
+            <div className="fortune-action">
+              <button
+                className="button button--secondary"
+                type="button"
+                disabled={busy}
+                onClick={() =>
+                  void run(async () => {
+                    await send(serviceSlug, {
+                      action: 'SET_PERSONAL_PROFILE_ENABLED',
+                      enabled: !personalProfileEnabled,
+                    });
+                    setMessage(
+                      personalProfileEnabled
+                        ? '初回ヒアリングを停止しました。'
+                        : '初回ヒアリングを有効にしました。',
+                    );
+                  })
+                }
+              >
+                {personalProfileEnabled ? '初回ヒアリングを停止する' : '初回ヒアリングを有効にする'}
+              </button>
+              <button
+                className="button button--secondary"
+                type="button"
+                disabled={busy || (!reflectionEnabled && !personalProfileEnabled)}
+                onClick={() =>
+                  void run(async () => {
+                    await send(serviceSlug, {
+                      action: 'SET_REFLECTION_ENABLED',
+                      enabled: !reflectionEnabled,
+                    });
+                    setMessage(
+                      reflectionEnabled ? '振り返りを停止しました。' : '振り返りを有効にしました。',
+                    );
+                  })
+                }
+              >
+                {reflectionEnabled ? '振り返りを停止する' : '振り返りを有効にする'}
+              </button>
+            </div>
             <p>{aiEnabled ? '現在、AI個別化は有効です。' : '現在、標準解釈だけを表示します。'}</p>
             <button
               className={`button ${aiEnabled ? 'button--secondary' : 'button--primary'}`}

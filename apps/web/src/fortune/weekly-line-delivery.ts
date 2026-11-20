@@ -36,6 +36,13 @@ export function isFortuneWeeklyNotificationDue(input: {
   return local.weekday === input.weekday && local.hour >= input.hour;
 }
 
+export function fortuneWeeklyLocalSlot(now: Date, timeZone: string) {
+  const local = localParts(now, timeZone);
+  const monday = new Date(`${local.date}T00:00:00Z`);
+  monday.setUTCDate(monday.getUTCDate() - ((local.weekday + 6) % 7));
+  return { ...local, weekStart: monday.toISOString().slice(0, 10) };
+}
+
 export function fortuneWeeklyDeliveryKey(now: Date, timeZone: string) {
   return localParts(now, timeZone).date;
 }

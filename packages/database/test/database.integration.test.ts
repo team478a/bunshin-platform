@@ -129,6 +129,7 @@ import {
   recoverStaleFortuneReadings,
   PrismaFortuneGenerationQueue,
   PrismaFortuneRepository,
+  PrismaFortunePersonalProfileRepository,
   verifyFortuneGenerationJob,
   PrismaTrainingPersonalDataExportRepository,
   PrismaTrainingPersonalDataDeletionRepository,
@@ -1276,11 +1277,73 @@ describe('database ownership boundaries', () => {
       ).toBe('READY_BASIC');
       await expect(queue.enqueue(input)).resolves.toMatchObject({ status: 'READY_BASIC' });
       expect(await client.job.count({ where: { id: job.id } })).toBe(1);
+
+      const profiles = new PrismaFortunePersonalProfileRepository(client);
+      const profile = {
+        consented: true,
+        interest: '仕事',
+        question: '今の働き方を考えたい',
+        style: 'DIRECT',
+      } as const;
+      await expect(profiles.update({ ...input, profile })).resolves.toBe(false);
+      await client.fortuneServiceSetting.update({
+        where: { id: setting.id },
+        data: { personalProfileEnabled: true, reflectionEnabled: true },
+      });
+      await expect(
+        profiles.update({ ...input, actorUserId: other.user.id, profile }),
+      ).resolves.toBe(false);
+      await expect(profiles.update({ ...input, profile })).resolves.toBe(true);
+      await expect(profiles.read(input)).resolves.toMatchObject({ profile });
+      await client.fortuneReading.update({
+        where: { id: reading.id },
+        data: { localDate: new Date(Date.now() - 86_400_000) },
+      });
+      await expect(
+        repository.saveReflection({ ...input, actorUserId: other.user.id, answer: 'NOT_TRIED' }),
+      ).resolves.toBe(false);
+      await expect(repository.saveReflection({ ...input, answer: 'TRIED_CHANGED' })).resolves.toBe(
+        true,
+      );
+      const today = await client.fortuneReading.create({
+        data: {
+          ...base,
+          groupId: group.id,
+          serviceSettingId: setting.id,
+          participantId: participant.id,
+          memberUserId: owner.user.id,
+          localDate: new Date(),
+          theme: 'WORK',
+          cardCode: 'THE_FOOL',
+          orientation: 'UPRIGHT',
+          status: 'READY_BASIC',
+          readingText: 'Approved',
+          actionStep: 'Action',
+        },
+      });
+      const guided = { ...input, readingId: today.id };
+      const personalized = await repository.claimAiGeneration(guided);
+      expect(personalized?.personalization).toMatchObject({
+        participantProfile: { question: profile.question, style: 'DIRECT' },
+        recentReadings: [{ id: reading.id, reflectionAnswer: 'TRIED_CHANGED' }],
+      });
+      if (!personalized?.personalProfileRevision)
+        throw new Error('fortune profile revision missing');
+      await expect(profiles.update({ ...input, profile: { consented: false } })).resolves.toBe(
+        true,
+      );
+      await expect(
+        repository.completeAiGeneration({
+          ...guided,
+          personalProfileRevision: personalized.personalProfileRevision,
+          output,
+        }),
+      ).resolves.toMatchObject({ status: 'READY_BASIC', body: 'Approved' });
     } finally {
       await client.job.deleteMany({
         where: { workspaceId: base.workspaceId, jobType: 'FORTUNE_READING_GENERATE' },
       });
-      await client.fortuneReading.deleteMany({ where: { id: reading.id } });
+      await client.fortuneReading.deleteMany({ where: { serviceSettingId: setting.id } });
       await client.fortuneParticipant.deleteMany({ where: { id: participant.id } });
       await client.fortuneServiceSetting.deleteMany({ where: { id: setting.id } });
     }

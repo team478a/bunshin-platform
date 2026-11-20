@@ -1,4 +1,5 @@
 import { SelectBunshinMemories } from '@bunshin/application';
+import { FORTUNE_PROFILE_STYLES, FORTUNE_REFLECTION_ANSWERS } from '@bunshin/capability-fortune';
 import type {
   CreateFortuneReadingResult,
   FortuneFeedbackIssue,
@@ -11,6 +12,8 @@ import type {
 import type { Prisma, PrismaClient } from '@prisma/client';
 import { dateOnly, fortuneReadingView, fortuneTarget } from './fortune-shared';
 import { lockFortuneGenerationLease } from './fortune-generation-jobs';
+import { PrismaFortunePersonalProfileRepository } from './fortune-personal-profile';
+import { fortuneReadingRetentionCutoff } from './fortune-retention';
 
 export class PrismaFortuneGenerationRepository {
   constructor(private readonly db: PrismaClient) {}
@@ -43,6 +46,7 @@ export class PrismaFortuneGenerationRepository {
     actorUserId: string;
     localDate: string;
     theme: FortuneTheme;
+    consultation?: string;
     cardCode: string;
     orientation: FortuneOrientation;
   }): Promise<CreateFortuneReadingResult> {
@@ -104,10 +108,25 @@ export class PrismaFortuneGenerationRepository {
           status: 'READY_BASIC',
           readingText: meaning.body,
           actionStep: meaning.actionStep,
+          ...(scope.personalProfileEnabled && scope.aiEnabled && input.consultation
+            ? { pendingConsultation: input.consultation }
+            : {}),
           promptVersion: knowledge.promptVersion,
           generatedAt: new Date(),
         },
       });
+      if (scope.personalProfileEnabled && !participant.profileUpdatedAt) {
+        // Drawing directly is also a valid way to finish the optional intake.
+        await tx.fortuneParticipant.updateMany({
+          where: {
+            id: participant.id,
+            serviceSettingId: scope.id,
+            userId: input.actorUserId,
+            profileUpdatedAt: null,
+          },
+          data: { profileUpdatedAt: new Date() },
+        });
+      }
       return { kind: 'READY', reading: await fortuneReadingView(tx, reading) };
     });
   }
@@ -157,55 +176,65 @@ export class PrismaFortuneGenerationRepository {
         },
       });
       if (!reading) return null;
-      const [participantProfile, recentReadings] = await Promise.all([
-        tx.fortuneParticipant.findFirst({
-          where: {
-            id: reading.participantId,
-            serviceSettingId: scope.id,
-            userId: input.actorUserId,
-            workspaceId: scope.workspaceId,
-            personalizationBunshin: {
-              is: {
-                groupId: scope.groupId,
-                ownerUserId: input.actorUserId,
-                status: 'ACTIVE',
-              },
-            },
-          },
-          select: {
-            personalizationBunshin: {
-              select: {
-                id: true,
-                name: true,
-                objectiveSummary: true,
-                audienceSummary: true,
-                personalitySummary: true,
-                updatedAt: true,
-                memories: {
-                  where: { active: true, deletedAt: null },
-                  orderBy: [{ importance: 'desc' }, { updatedAt: 'desc' }],
-                  take: 10,
+      const personal = await new PrismaFortunePersonalProfileRepository(tx).read(input);
+      const personalProfileRevision = personal?.enabled ? personal.revision : null;
+      const useEarlierContext = personal?.enabled
+        ? Boolean(personalProfileRevision)
+        : !personal?.completed;
+      const [participantProfile, recentReadings] = useEarlierContext
+        ? await Promise.all([
+            tx.fortuneParticipant.findFirst({
+              where: {
+                id: reading.participantId,
+                serviceSettingId: scope.id,
+                userId: input.actorUserId,
+                workspaceId: scope.workspaceId,
+                personalizationBunshin: {
+                  is: {
+                    groupId: scope.groupId,
+                    ownerUserId: input.actorUserId,
+                    status: 'ACTIVE',
+                  },
                 },
               },
-            },
-          },
-        }),
-        tx.fortuneReading.findMany({
-          where: {
-            id: { not: reading.id },
-            serviceSettingId: scope.id,
-            participantId: reading.participantId,
-            memberUserId: input.actorUserId,
-            status: { in: ['READY_AI', 'READY_BASIC'] },
-            deletedAt: null,
-          },
-          orderBy: [{ localDate: 'desc' }, { createdAt: 'desc' }],
-          take: 7,
-          include: {
-            feedback: { select: { id: true, rating: true, issueCode: true } },
-          },
-        }),
-      ]);
+              select: {
+                personalizationBunshin: {
+                  select: {
+                    id: true,
+                    name: true,
+                    objectiveSummary: true,
+                    audienceSummary: true,
+                    personalitySummary: true,
+                    updatedAt: true,
+                    memories: {
+                      where: { active: true, deletedAt: null },
+                      orderBy: [{ importance: 'desc' }, { updatedAt: 'desc' }],
+                      take: 10,
+                    },
+                  },
+                },
+              },
+            }),
+            tx.fortuneReading.findMany({
+              where: {
+                id: { not: reading.id },
+                serviceSettingId: scope.id,
+                participantId: reading.participantId,
+                memberUserId: input.actorUserId,
+                status: { in: ['READY_AI', 'READY_BASIC'] },
+                deletedAt: null,
+                localDate: {
+                  gte: fortuneReadingRetentionCutoff(new Date(), scope.historyRetentionDays),
+                },
+              },
+              orderBy: [{ localDate: 'desc' }, { createdAt: 'desc' }],
+              take: 7,
+              include: {
+                feedback: { select: { id: true, rating: true, issueCode: true } },
+              },
+            }),
+          ])
+        : ([null, []] as const);
       const bunshinProfile = participantProfile?.personalizationBunshin ?? null;
       const selectedMemories = bunshinProfile
         ? await new SelectBunshinMemories({
@@ -225,6 +254,8 @@ export class PrismaFortuneGenerationRepository {
               reading.cardCode,
               reading.readingText,
               reading.actionStep,
+              personalProfileRevision ? personal?.profile.interest : null,
+              personalProfileRevision ? personal?.profile.question : null,
               bunshinProfile.objectiveSummary,
               bunshinProfile.audienceSummary,
               bunshinProfile.personalitySummary,
@@ -242,12 +273,24 @@ export class PrismaFortuneGenerationRepository {
         where: { id: reading.id },
         data: {
           personalizationContext: {
-            version: 'fortune-personalization-v2',
+            version: personal?.enabled
+              ? 'fortune-personalization-v3'
+              : 'fortune-personalization-v2',
+            ...(personalProfileRevision
+              ? { participantProfileUpdatedAt: personalProfileRevision.toISOString() }
+              : {}),
             sources: [
+              ...(personalProfileRevision ? ['PARTICIPANT_FORTUNE_PROFILE'] : []),
+              ...(personal?.enabled && reading.pendingConsultation ? ['CURRENT_CONSULTATION'] : []),
               ...(bunshinProfile ? ['PARTICIPANT_BUNSHIN_PROFILE'] : []),
               ...(selectedMemories.length > 0 ? ['PARTICIPANT_BUNSHIN_MEMORY'] : []),
               ...(recentReadings.length > 0 ? ['RECENT_READING'] : []),
               ...(feedbackIds.length > 0 ? ['READING_FEEDBACK'] : []),
+              ...(personalProfileRevision &&
+              scope.reflectionEnabled &&
+              recentReadings.some((item) => item.reflectionAnswer)
+                ? ['READING_REFLECTION']
+                : []),
             ],
             ...(bunshinProfile
               ? {
@@ -263,7 +306,13 @@ export class PrismaFortuneGenerationRepository {
           },
         },
       });
+      const settings = scope.guidanceSettings;
+      const defaultStyle =
+        settings && typeof settings === 'object' && !Array.isArray(settings)
+          ? FORTUNE_PROFILE_STYLES.find((style) => settings['defaultStyle'] === style)
+          : undefined;
       return {
+        ...(personal?.enabled && defaultStyle ? { defaultStyle } : {}),
         ...(lease
           ? {
               generationRevision: contextualized.updatedAt,
@@ -274,7 +323,22 @@ export class PrismaFortuneGenerationRepository {
         groupId: scope.groupId,
         bunshinId: scope.bunshinId,
         reading: await fortuneReadingView(tx, reading),
+        ...(personal?.enabled ? { personalGuidance: true } : {}),
+        ...(personal?.enabled && scope.reflectionEnabled ? { reflectionEnabled: true } : {}),
+        ...(personal?.enabled && reading.pendingConsultation
+          ? { consultation: reading.pendingConsultation }
+          : {}),
+        ...(personal?.profile && personalProfileRevision ? { personalProfileRevision } : {}),
         personalization: {
+          ...(personal?.profile && personalProfileRevision
+            ? {
+                participantProfile: {
+                  interest: personal.profile.interest,
+                  question: personal.profile.question,
+                  style: personal.profile.style,
+                },
+              }
+            : {}),
           ...(bunshinProfile
             ? {
                 bunshinProfile: {
@@ -296,6 +360,13 @@ export class PrismaFortuneGenerationRepository {
               }
             : {}),
           recentReadings: recentReadings.map((item) => ({
+            ...(personalProfileRevision && scope.reflectionEnabled && item.reflectionAnswer
+              ? {
+                  reflectionAnswer: FORTUNE_REFLECTION_ANSWERS.find(
+                    (answer) => answer === item.reflectionAnswer,
+                  )!,
+                }
+              : {}),
             id: item.id,
             localDate: item.localDate.toISOString().slice(0, 10),
             theme: item.theme,
@@ -359,10 +430,27 @@ export class PrismaFortuneGenerationRepository {
               deletedAt: null,
             }
           : {}),
+        ...(input.personalProfileRevision
+          ? {
+              serviceSetting: { personalProfileEnabled: true },
+              participant: {
+                profileConsentedAt: { not: null },
+                profileUpdatedAt: {
+                  equals: input.personalProfileRevision,
+                  gte: fortuneReadingRetentionCutoff(new Date(), scope.historyRetentionDays),
+                },
+                groupMembership: { status: 'ACTIVE', consentedAt: { not: null } },
+              },
+            }
+          : {}),
       },
       data: {
         status: 'READY_AI',
+        pendingConsultation: null,
         readingText: input.output.body,
+        ...(scope.reflectionEnabled && input.output.reflectionPrompt
+          ? { reflectionPrompt: input.output.reflectionPrompt }
+          : {}),
         actionStep: input.output.actionStep,
         modelName: input.output.model,
         promptVersion: input.output.promptVersion,
@@ -370,7 +458,10 @@ export class PrismaFortuneGenerationRepository {
         generatedAt: new Date(),
       },
     });
-    if (updated.count !== 1) return null;
+    if (updated.count !== 1)
+      return input.personalProfileRevision
+        ? this.saveFallback({ ...input, failureCode: 'FORTUNE_PROFILE_CHANGED' }, db)
+        : null;
     const row = await db.fortuneReading.findFirst({
       where: {
         id: input.readingId,
@@ -429,7 +520,12 @@ export class PrismaFortuneGenerationRepository {
             }
           : {}),
       },
-      data: { status: 'READY_BASIC', failureCode: input.failureCode, modelName: null },
+      data: {
+        status: 'READY_BASIC',
+        failureCode: input.failureCode,
+        modelName: null,
+        pendingConsultation: null,
+      },
     });
     if (updated.count !== 1) return null;
     const row = await db.fortuneReading.findFirst({

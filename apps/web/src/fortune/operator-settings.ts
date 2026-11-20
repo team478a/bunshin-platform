@@ -1,5 +1,6 @@
 import 'server-only';
 import { ApplicationError } from '@bunshin/shared';
+import type { FortuneGuidanceSettings } from './guidance-settings';
 import { fortuneOperatorScope } from './operator-scope';
 import { fortuneOperatorStatus } from './operator-status';
 
@@ -20,6 +21,45 @@ export async function setFortuneEnabled(input: {
   });
   if (updated.count !== 1) throw new ApplicationError('NOT_FOUND', 'fortune setting not found');
   return { enabled: input.enabled };
+}
+
+export async function saveFortuneGuidanceSettings(input: {
+  serviceSlug: string;
+  actorUserId: string;
+  settings: FortuneGuidanceSettings;
+}) {
+  const service = await fortuneOperatorScope(input.serviceSlug, input.actorUserId);
+  const db = await import('@bunshin/database');
+  const updated = await db.prisma.fortuneServiceSetting.updateMany({
+    where: {
+      workspaceId: service.workspaceId,
+      groupId: service.serviceId,
+      configurationId: service.configuration.id,
+    },
+    data: { guidanceSettings: input.settings },
+  });
+  if (updated.count !== 1) throw new ApplicationError('NOT_FOUND', 'fortune setting not found');
+  return { saved: true };
+}
+
+export async function setFortuneGuidanceSetting(input: {
+  field: 'personalProfileEnabled' | 'reflectionEnabled';
+  serviceSlug: string;
+  actorUserId: string;
+  enabled: boolean;
+}) {
+  const service = await fortuneOperatorScope(input.serviceSlug, input.actorUserId);
+  const db = await import('@bunshin/database');
+  const updated = await db.prisma.fortuneServiceSetting.updateMany({
+    where: {
+      workspaceId: service.workspaceId,
+      groupId: service.serviceId,
+      configurationId: service.configuration.id,
+    },
+    data: { [input.field]: input.enabled },
+  });
+  if (updated.count !== 1) throw new ApplicationError('NOT_FOUND', 'fortune setting not found');
+  return { [input.field]: input.enabled };
 }
 
 export async function setFortuneAiEnabled(input: {

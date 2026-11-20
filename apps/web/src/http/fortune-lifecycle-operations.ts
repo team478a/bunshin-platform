@@ -14,7 +14,9 @@ export async function runExpiredFortuneReadingPurge(
   now = new Date(),
 ): Promise<FortuneLifecycleSummary> {
   const db = await import('@bunshin/database');
-  return { deleted: await db.purgeExpiredFortuneReadings(db.prisma, now) };
+  const deleted = await db.purgeExpiredFortuneReadings(db.prisma, now);
+  await db.purgeExpiredFortuneProfiles(db.prisma, now);
+  return { deleted };
 }
 
 export async function fortuneLifecycleOperationsResponse(request: Request): Promise<Response> {

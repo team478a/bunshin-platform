@@ -35,6 +35,9 @@ export function ReadingCard({
         {reading.cardNameJa}{' '}
         <small>（{reading.orientation === 'UPRIGHT' ? '正位置' : '逆位置'}）</small>
       </h2>
+      {!linked && reading.status === 'READY_AI' && (
+        <p className="fortune-note">AIが文章を整えた鑑定です。</p>
+      )}
       {reading.title && <h3>{reading.title}</h3>}
       {reading.status === 'GENERATING' && (
         <p role="status">
@@ -49,6 +52,12 @@ export function ReadingCard({
         <div className="fortune-action-step">
           <strong>今日できること</strong>
           <p>{reading.actionStep}</p>
+        </div>
+      )}
+      {!linked && reading.reflectionPrompt && (
+        <div className="fortune-action-step">
+          <strong>次に振り返ること</strong>
+          <p>{reading.reflectionPrompt}</p>
         </div>
       )}
       {!linked && reading.body && reading.status !== 'GENERATING' && (
