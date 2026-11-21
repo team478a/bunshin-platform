@@ -284,52 +284,6 @@ try {
     status: 400,
   });
   await request(participant, today, { method: 'POST', body: { theme: 'WORK' }, status: 403 });
-  const effectiveAt = new Date(Date.now() - 60_000);
-  await db.serviceLegalDocument.createMany({
-    data: [
-      ['TERMS', '合成利用規約'],
-      ['PRIVACY', '合成プライバシーポリシー'],
-    ].map(([type, title]) => ({
-      workspaceId: primary.member.workspaceId,
-      groupId: primary.member.groupId,
-      configurationId: primary.configurationId,
-      type,
-      version: 1,
-      title,
-      content: '隔離テスト用の合成文書です。',
-      status: 'PUBLISHED',
-      effectiveAt,
-      publishedAt: effectiveAt,
-      createdByUserId: owner.userId,
-    })),
-  });
-  const invited = await actor('invited');
-  const invitation = await request(
-    owner,
-    `/api/workspaces/${primary.member.workspaceId}/groups/${primary.member.groupId}/invitations`,
-    { method: 'POST', body: { role: 'PARTICIPANT', serviceSlug: primary.slug }, status: 201 },
-  );
-  const invitationUrl = new URL((await invitation.json()).data.invitationUrl);
-  assert.equal(invitationUrl.origin, origin);
-  assert.ok(invitationUrl.pathname.startsWith(`/s/${primary.slug}/join/`));
-  await browser(primary, invited, 'invite', invitationUrl.pathname);
-  assert.ok(
-    await db.groupMembership.findFirst({
-      where: { groupId: primary.member.groupId, userId: invited.userId, status: 'ACTIVE' },
-      select: { id: true },
-    }),
-    'Invite acceptance creates a service membership',
-  );
-  assert.equal(
-    await db.serviceLegalConsent.count({
-      where: { groupId: primary.member.groupId, userId: invited.userId },
-    }),
-    2,
-    'Both published fixture documents were acknowledged',
-  );
-  console.log(
-    'PASS scoped invitation acceptance and policy consent open the mobile Fortune age gate',
-  );
   await browser(primary, participant);
   const first = await db.fortuneReading.findFirstOrThrow({
     where: { serviceSettingId: setting.id },
@@ -537,6 +491,52 @@ try {
   assert.ok(!dashboard.includes(priorText) && !dashboard.includes(currentText));
   console.log(
     'PASS confirmed context, next-day reuse and withdrawal, deep results, isolated metrics and recorded cost',
+  );
+  const effectiveAt = new Date(Date.now() - 60_000);
+  await db.serviceLegalDocument.createMany({
+    data: [
+      ['TERMS', '合成利用規約'],
+      ['PRIVACY', '合成プライバシーポリシー'],
+    ].map(([type, title]) => ({
+      workspaceId: primary.member.workspaceId,
+      groupId: primary.member.groupId,
+      configurationId: primary.configurationId,
+      type,
+      version: 1,
+      title,
+      content: '隔離テスト用の合成文書です。',
+      status: 'PUBLISHED',
+      effectiveAt,
+      publishedAt: effectiveAt,
+      createdByUserId: owner.userId,
+    })),
+  });
+  const invited = await actor('invited');
+  const invitation = await request(
+    owner,
+    `/api/workspaces/${primary.member.workspaceId}/groups/${primary.member.groupId}/invitations`,
+    { method: 'POST', body: { role: 'PARTICIPANT', serviceSlug: primary.slug }, status: 201 },
+  );
+  const invitationUrl = new URL((await invitation.json()).data.invitationUrl);
+  assert.equal(invitationUrl.origin, origin);
+  assert.ok(invitationUrl.pathname.startsWith(`/s/${primary.slug}/join/`));
+  await browser(primary, invited, 'invite', invitationUrl.pathname);
+  assert.ok(
+    await db.groupMembership.findFirst({
+      where: { groupId: primary.member.groupId, userId: invited.userId, status: 'ACTIVE' },
+      select: { id: true },
+    }),
+    'Invite acceptance creates a service membership',
+  );
+  assert.equal(
+    await db.serviceLegalConsent.count({
+      where: { groupId: primary.member.groupId, userId: invited.userId },
+    }),
+    2,
+    'Both published fixture documents were acknowledged',
+  );
+  console.log(
+    'PASS scoped invitation acceptance and policy consent open the mobile Fortune age gate',
   );
 } catch (error) {
   console.error(error instanceof Error ? error.message : 'Isolated Fortune test failed');
