@@ -29,6 +29,7 @@ import {
   readServiceOnboardingAnswers,
 } from '../../../../src/services/service-onboarding-response';
 import { PublicShell } from '../../../ui/public-shell';
+import { isFortuneServicePackage } from '../../../../src/services/service-creation-templates';
 import {
   BusinessRoadmapSummary,
   ProfileRefinementSection,
@@ -197,9 +198,39 @@ export default async function ServiceMemberHome({
     },
     select: { id: true },
   });
-  if (fortune && membership.serviceRole === 'PARTICIPANT') {
-    const destination = needsLegalConsent ? 'legal-consent' : 'today';
-    redirect(`/s/${service.configuration.slug}/${destination}`);
+  if (
+    membership.serviceRole === 'PARTICIPANT' &&
+    (fortune || isFortuneServicePackage(service.configuration.registration.onboardingConfig))
+  ) {
+    if (needsLegalConsent) redirect(`/s/${service.configuration.slug}/legal-consent`);
+    if (fortune) redirect(`/s/${service.configuration.slug}/today`);
+    return (
+      <PublicShell narrow showPlatformBrand={false}>
+        <header className="service-entry__header">
+          {service.configuration.brand.logoUrl && (
+            <div
+              className="service-entry__logo"
+              role="img"
+              aria-label={`${service.configuration.displayName}のロゴ`}
+              style={{
+                backgroundImage: `url(${JSON.stringify(service.configuration.brand.logoUrl)})`,
+              }}
+            />
+          )}
+          <h1>{service.configuration.displayName}</h1>
+        </header>
+        <section className="service-entry__card" aria-labelledby="fortune-unavailable-title">
+          <h2 id="fortune-unavailable-title">占いは現在ご利用いただけません</h2>
+          <p>使い方は今すぐ確認できます。</p>
+          <Link
+            className="button button--primary button--full"
+            href={`/s/${service.configuration.slug}/manual`}
+          >
+            占いの使い方を見る
+          </Link>
+        </section>
+      </PublicShell>
+    );
   }
   const onboarding = readServiceOnboardingSettings(
     service.configuration.registration.onboardingConfig,
