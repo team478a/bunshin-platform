@@ -119,6 +119,12 @@ async function service(label, owner, participant) {
         consentedAt: new Date(),
       },
     });
+  await db.workspaceMembership.createMany({
+    data: [
+      { workspaceId: workspace.id, userId: owner.userId, role: 'OWNER' },
+      { workspaceId: workspace.id, userId: participant.userId, role: 'MEMBER' },
+    ],
+  });
   await membership(owner, 'SERVICE_OWNER');
   const member = await membership(participant, 'PARTICIPANT');
   const bunshin = await db.bunshin.create({
