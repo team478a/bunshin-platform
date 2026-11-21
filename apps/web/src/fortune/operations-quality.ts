@@ -403,7 +403,7 @@ export async function fortuneOperationsQuality(
       processingGenerations: 0,
       usage: aiUsage.filter((row) => versions.includes(row.promptVersion)),
     });
-  const intakeAi = aiFor([FORTUNE_INTAKE_PROMPT_VERSION]);
+  const intakeAi = aiFor(['fortune-dynamic-intake-v1', FORTUNE_INTAKE_PROMPT_VERSION]);
   const readingAi = aiFor(['fortune-deep-reading-v1', FORTUNE_DEEP_READING_PROMPT_VERSION]);
   const deepGuidance =
     fortuneDeepReadingEnabled(setting.guidanceSettings) ||
