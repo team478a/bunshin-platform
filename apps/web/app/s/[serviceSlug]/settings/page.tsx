@@ -101,7 +101,7 @@ export default async function FortuneSettingsPage({
             )}
           </section>
         )}
-        <section className="settings-card">
+        <section className="settings-card" id="fortune-notifications">
           <h2>お知らせ</h2>
           {!setting.weeklyNotificationEnabled ? (
             <p>現在、このサービスでは週1回のお知らせを配信していません。</p>

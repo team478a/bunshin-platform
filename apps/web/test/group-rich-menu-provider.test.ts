@@ -101,6 +101,36 @@ describe('dedicated group LINE rich menu', () => {
     ]);
   });
 
+  it('maps the Fortune image quadrants to destinations in the same service', async () => {
+    const request = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(Response.json({ richmenus: [] }))
+      .mockResolvedValueOnce(Response.json({ richMenuId: 'richmenu-fortune' }))
+      .mockResolvedValueOnce(new Response(null, { status: 200 }))
+      .mockResolvedValueOnce(new Response(null, { status: 200 }));
+    await publishDefaultGroupRichMenu({
+      request,
+      accessToken: 'synthetic',
+      groupId: 'group-1',
+      groupName: '占い',
+      appUrl: 'https://app.example.com',
+      serviceSlug: 'fortune',
+      image: Buffer.from([1]),
+      layout: 'FORTUNE',
+    });
+    const definition = JSON.parse(request.mock.calls[1]?.[1]?.body as string) as {
+      chatBarText: string;
+      areas: Array<{ bounds: { x: number; y: number }; action: { uri: string } }>;
+    };
+    expect(definition.chatBarText).toBe('占いメニュー');
+    expect(definition.areas.map(({ bounds, action }) => [bounds.x, bounds.y, action.uri])).toEqual([
+      [0, 0, 'https://app.example.com/s/fortune/today'],
+      [1250, 0, 'https://app.example.com/s/fortune/history'],
+      [0, 843, 'https://app.example.com/s/fortune/settings#fortune-notifications'],
+      [1250, 843, 'https://app.example.com/s/fortune/manual'],
+    ]);
+  });
+
   it('creates a replacement menu and removes the previous image-backed menu', async () => {
     const request = vi
       .fn<typeof fetch>()
