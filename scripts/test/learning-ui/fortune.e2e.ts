@@ -163,6 +163,7 @@ test('mobile Fortune asks one adaptive question at a time and only draws on conf
   const state: FortuneBrowserFixture = { joined: true, completed: true, profile: emptyProfile };
   const intake: unknown[] = [];
   const draws: unknown[] = [];
+  const saves: unknown[] = [];
   await browser.route('**/__fortune_fixture', (route) =>
     route.fulfill({ json: { ...state, profile: { ...state.profile } } }),
   );
@@ -171,6 +172,21 @@ test('mobile Fortune asks one adaptive question at a time and only draws on conf
     const data =
       intake.length === 1 ? { kind: 'QUESTION', key: 'VALUES' } : { kind: 'QUESTION', key: 'GOAL' };
     return route.fulfill({ json: { data } });
+  });
+  await browser.route(`${endpoints}/understanding`, (route) => {
+    if (route.request.method === 'PUT') saves.push(JSON.parse(route.request.postData ?? '{}'));
+    return route.fulfill({
+      json: {
+        data: {
+          items: [],
+          revision: null,
+          profileRevision: '2026-11-21T00:00:00.000Z',
+          savedAt: null,
+          expiresAt: null,
+          canSave: true,
+        },
+      },
+    });
   });
   await browser.route(`${endpoints}/today`, (route) => {
     draws.push(JSON.parse(route.request.postData ?? '{}'));
@@ -197,6 +213,30 @@ test('mobile Fortune asks one adaptive question at a time and only draws on conf
   ).toBeHidden();
   expect(draws).toEqual([]);
   await screen.getByRole('button', 'ここまでで占う').tap();
+  await expect(screen.getByRole('heading', '今回の相談内容を確認')).toBeVisible();
+  await expect(screen.getByText('未確認の候補', { exact: true })).toBeVisible();
+  await screen.getByRole('button', '大切にしたいことを訂正する').tap();
+  await screen.getByLabel('大切にしたいことを訂正').fill('生活とのバランスを大切にする');
+  await screen.getByRole('button', '訂正を反映する').tap();
+  await screen.getByText('次回のために選んで保存（任意）').tap();
+  await screen.getByLabel('大切にしたいことを保存').tap();
+  await screen.getByRole('button', '選んだ内容を保存する').tap();
+  await expect(screen.getByText('選んだ内容を保存しました。')).toBeVisible();
+  expect(saves).toEqual([
+    {
+      revision: null,
+      profileRevision: '2026-11-21T00:00:00.000Z',
+      items: [
+        {
+          field: 'VALUES',
+          state: 'CONFIRMED',
+          text: '生活とのバランスを大切にする',
+          source: 'CORRECTION',
+        },
+      ],
+    },
+  ]);
+  await screen.getByRole('button', 'この内容で占う').tap();
   await expect(screen.getByRole('heading', '今日の提案')).toBeVisible();
   expect(intake).toEqual([
     { theme: 'WORK', consultation: '仕事について迷っています', answers: [] },
@@ -209,7 +249,7 @@ test('mobile Fortune asks one adaptive question at a time and only draws on conf
   expect(draws).toEqual([
     {
       theme: 'WORK',
-      consultation: '仕事について迷っています\n【大切なこと】自分で納得して選べること',
+      consultation: '仕事について迷っています\n【大切なこと】生活とのバランスを大切にする',
     },
   ]);
 });
@@ -254,4 +294,72 @@ test('mobile Fortune can skip questions and proceed if question selection fails'
     consultation: '',
     answers: [{ key: 'REASON', answer: null }],
   });
+});
+
+test('mobile Fortune can edit and remove saved understanding in settings', async ({
+  app,
+  screen,
+  browser,
+}) => {
+  const snapshot = {
+    items: [{ field: 'VALUES', state: 'CONFIRMED', text: '仕事を優先する', source: 'ANSWER' }],
+    revision: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    profileRevision: '2026-11-21T00:00:00.000Z',
+    expiresAt: '2026-12-01T00:00:00.000Z',
+    savedAt: '2026-11-21T00:00:00.000Z',
+    canSave: true,
+  } as const;
+  const writes: Array<{ method: string; body: unknown }> = [];
+  await browser.route('**/__fortune_fixture', (route) =>
+    route.fulfill({ json: { understanding: snapshot } }),
+  );
+  await browser.route(`${endpoints}/understanding`, (route) => {
+    const body: unknown = JSON.parse(route.request.postData ?? 'null');
+    writes.push({ method: route.request.method, body });
+    return route.request.method === 'DELETE'
+      ? route.fulfill({ json: { data: { deleted: true } } })
+      : route.fulfill({
+          json: {
+            data: {
+              ...snapshot,
+              items: [
+                {
+                  field: 'VALUES',
+                  state: 'CONFIRMED',
+                  text: '家族との時間を大切にする',
+                  source: 'CORRECTION',
+                },
+              ],
+            },
+          },
+        });
+  });
+  await app.open('/fortune.html');
+  await expect(screen.getByRole('heading', '保存した相談内容')).toBeVisible();
+  await screen.getByRole('button', '大切にしたいことを訂正する').tap();
+  await screen.getByLabel('大切にしたいことを訂正').fill('家族との時間を大切にする');
+  await screen.getByRole('button', '訂正を反映する').tap();
+  await screen.getByRole('button', '変更を保存する').tap();
+  await expect(screen.getByText('訂正を保存しました。')).toBeVisible();
+  await screen.getByRole('button', '保存した内容をすべて削除する').tap();
+  await expect(screen.getByText('保存した相談内容を削除しました。')).toBeVisible();
+  await expect(screen.getByText('家族との時間を大切にする')).toBeHidden();
+  expect(writes).toEqual([
+    {
+      method: 'PUT',
+      body: {
+        revision: snapshot.revision,
+        profileRevision: snapshot.profileRevision,
+        items: [
+          {
+            field: 'VALUES',
+            state: 'CONFIRMED',
+            text: '家族との時間を大切にする',
+            source: 'CORRECTION',
+          },
+        ],
+      },
+    },
+    { method: 'DELETE', body: null },
+  ]);
 });

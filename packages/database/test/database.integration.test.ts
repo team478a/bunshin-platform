@@ -138,7 +138,9 @@ import {
   PrismaFortunePersonalProfileRepository,
   PrismaFortuneFollowUpRepository,
   PrismaFortuneIntakeRepository,
+  PrismaFortuneUnderstandingRepository,
   purgeExpiredFortuneIntake,
+  purgeExpiredFortuneUnderstanding,
   verifyFortuneGenerationJob,
   PrismaTrainingPersonalDataExportRepository,
   PrismaTrainingPersonalDataDeletionRepository,
@@ -1316,6 +1318,50 @@ describe('database ownership boundaries', () => {
         where: { id: setting.id },
         data: { guidanceSettings: { intake: { enabled: true, questions: 3, calls: 2 } } },
       });
+      const understanding = new PrismaFortuneUnderstandingRepository(client);
+      const blankUnderstanding = await understanding.read(input);
+      if (!blankUnderstanding?.profileRevision) throw new Error('understanding consent missing');
+      const understandingInput = {
+        ...input,
+        revision: blankUnderstanding.revision,
+        profileRevision: new Date(blankUnderstanding.profileRevision),
+        items: [
+          { field: 'VALUES', state: 'CONFIRMED', text: '生活を大切にする', source: 'ANSWER' },
+        ] as const,
+      };
+      const saveUnderstanding = { ...understandingInput, items: [...understandingInput.items] };
+      await expect(
+        understanding.save({ ...saveUnderstanding, actorUserId: other.user.id }),
+      ).resolves.toBe('UNAVAILABLE');
+      await expect(
+        understanding.read({ ...input, serviceSlug: 'foreign-fortune' }),
+      ).resolves.toBeNull();
+      const understandingWrites = await Promise.all([
+        understanding.save(saveUnderstanding),
+        understanding.save(saveUnderstanding),
+      ]);
+      expect(understandingWrites.sort()).toEqual(['CONFLICT', 'SAVED']);
+      const stored = await understanding.read(input);
+      expect(stored).toMatchObject({ items: saveUnderstanding.items, canSave: true });
+      await expect(understanding.delete({ ...input, actorUserId: other.user.id })).resolves.toBe(
+        false,
+      );
+      await expect(understanding.delete(input)).resolves.toBe(true);
+      await expect(understanding.save(saveUnderstanding)).resolves.toBe('CONFLICT');
+      const afterDeletion = await understanding.read(input);
+      expect(afterDeletion?.items).toEqual([]);
+      await expect(
+        understanding.save({ ...saveUnderstanding, revision: afterDeletion?.revision ?? null }),
+      ).resolves.toBe('SAVED');
+      const future = new Date(Date.now() + 91 * 86_400_000);
+      const expired = new PrismaFortuneUnderstandingRepository(client, () => future);
+      await expect(expired.read(input)).resolves.toMatchObject({ items: [], canSave: false });
+      expect(await purgeExpiredFortuneUnderstanding(client, future)).toBeGreaterThanOrEqual(1);
+      const afterExpiry = await understanding.read(input);
+      expect(afterExpiry?.items).toEqual([]);
+      await expect(
+        understanding.save({ ...saveUnderstanding, revision: afterExpiry?.revision ?? null }),
+      ).resolves.toBe('SAVED');
       await expect(intake.reserve({ ...intakeInput, actorUserId: other.user.id })).resolves.toEqual(
         { kind: 'DONE' },
       );
@@ -1484,6 +1530,12 @@ describe('database ownership boundaries', () => {
       await expect(profiles.update({ ...input, profile: { consented: false } })).resolves.toBe(
         true,
       );
+      await expect(understanding.read(input)).resolves.toMatchObject({ items: [], canSave: false });
+      expect(
+        (await client.fortuneParticipant.findUniqueOrThrow({ where: { id: participant.id } }))
+          .understandingItems,
+      ).toBeNull();
+      await expect(understanding.save(saveUnderstanding)).resolves.toBe('UNAVAILABLE');
       await expect(followUps.read(input)).resolves.toBeNull();
       expect(
         await client.fortuneReadingFollowUp.findMany({ where: { readingId: reading.id } }),

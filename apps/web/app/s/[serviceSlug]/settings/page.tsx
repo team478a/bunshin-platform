@@ -4,7 +4,11 @@ import { resolveFortuneGuidanceSettings } from '../../../../src/fortune/guidance
 import { resolveFortunePage } from '../../../../src/fortune/page-context';
 import { FortuneNav } from '../fortune-ui';
 import { FortuneProfileForm } from '../fortune-profile-form';
-import { fortunePersonalProfileRepository } from '../../../../src/fortune/personal-profile';
+import {
+  fortunePersonalProfileRepository,
+  fortuneUnderstandingRepository,
+} from '../../../../src/fortune/personal-profile';
+import { FortuneSavedUnderstanding } from '../fortune-understanding';
 import { FortuneNotificationSlot } from '../fortune-notification-slot';
 import { FortuneNotificationSetting } from '../fortune-notification-setting';
 import { FortunePersonalizationSetting, FortuneWithdrawButton } from '../fortune-actions';
@@ -29,6 +33,11 @@ export default async function FortuneSettingsPage({
       ).read({ serviceSlug, actorUserId: actor.userId })
     : null;
   const db = await import('@bunshin/database');
+  const understanding = profile?.profile.consented
+    ? await (
+        await fortuneUnderstandingRepository()
+      ).read({ serviceSlug, actorUserId: actor.userId })
+    : null;
   const personalizationCandidates = today.participant
     ? await db.prisma.bunshin.findMany({
         where: {
@@ -65,6 +74,13 @@ export default async function FortuneSettingsPage({
             enabled={profile.enabled}
           />
         )}
+        {understanding?.items.length ? (
+          <FortuneSavedUnderstanding
+            serviceSlug={serviceSlug}
+            initial={understanding}
+            key={understanding.revision}
+          />
+        ) : null}
         {today.participant && (
           <section className="settings-card">
             <h2>あなたに合わせた占い</h2>

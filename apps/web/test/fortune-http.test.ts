@@ -19,6 +19,9 @@ const state = vi.hoisted(() => ({
   reserveIntake: vi.fn(),
   finishIntake: vi.fn(),
   selectIntake: vi.fn(),
+  saveUnderstanding: vi.fn(),
+  deleteUnderstanding: vi.fn(),
+  readUnderstanding: vi.fn(),
 }));
 
 vi.mock('../src/auth/current-user', () => ({
@@ -29,6 +32,12 @@ vi.mock('../src/fortune/runtime', () => ({
 }));
 vi.mock('../src/fortune/personal-profile', () => ({
   fortunePersonalProfileRepository: () => Promise.resolve({ update: state.updateProfile }),
+  fortuneUnderstandingRepository: () =>
+    Promise.resolve({
+      read: state.readUnderstanding,
+      save: state.saveUnderstanding,
+      delete: state.deleteUnderstanding,
+    }),
 }));
 vi.mock('../src/fortune/follow-ups', () => ({ askFortuneFollowUp: state.ask }));
 vi.mock('../src/providers/openai-fortune-intake', () => ({
@@ -54,6 +63,8 @@ import {
   getFortuneTodayResponse,
   joinFortuneResponse,
   nextFortuneIntakeResponse,
+  updateFortuneUnderstandingResponse,
+  deleteFortuneUnderstandingResponse,
   updateFortuneFeedbackResponse,
   updateFortunePersonalFitResponse,
   updateFortunePersonalizationResponse,
@@ -90,6 +101,60 @@ describe('fortune HTTP contract', () => {
     state.draw.mockResolvedValue({ id: 'reading-1' });
     state.feedback.mockResolvedValue({ id: 'reading-1', feedbackRating: 'HELPFUL' });
     state.recordUse.mockResolvedValue({ id: 'membership-1' });
+  });
+
+  it('persists only bounded confirmed values under the authenticated participant', async () => {
+    const item = {
+      field: 'VALUES',
+      state: 'CONFIRMED',
+      text: ' 生活を大切にする ',
+      source: 'CORRECTION',
+    };
+    const body = { items: [item], revision: null, profileRevision: '2026-11-21T00:00:00.000Z' };
+    const submit = (data: object) =>
+      updateFortuneUnderstandingResponse(
+        request('/api/fortune/understanding', {
+          method: 'PUT',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(data),
+        }),
+        'fortune',
+      );
+    expect((await submit({ ...body, actorUserId: 'stranger' })).status).toBe(400);
+    expect((await submit({ ...body, items: [{ ...item, state: 'INFERRED' }] })).status).toBe(400);
+    expect((await submit({ ...body, items: [item, item] })).status).toBe(400);
+    expect((await submit({ ...body, items: [{ ...item, text: 'a'.repeat(51) }] })).status).toBe(
+      400,
+    );
+    expect(state.saveUnderstanding).not.toHaveBeenCalled();
+    state.saveUnderstanding.mockResolvedValue('SAVED');
+    state.readUnderstanding.mockResolvedValue({ items: [] });
+    expect((await submit(body)).status).toBe(200);
+    expect(state.saveUnderstanding).toHaveBeenCalledExactlyOnceWith({
+      serviceSlug: 'fortune',
+      actorUserId: 'user-1',
+      revision: null,
+      profileRevision: new Date(body.profileRevision),
+      items: [{ ...item, text: '生活を大切にする' }],
+    });
+    state.saveUnderstanding.mockResolvedValue('CONFLICT');
+    expect((await submit(body)).status).toBe(409);
+  });
+
+  it('checks origin before deleting and takes ownership only from the session', async () => {
+    const remove = (origin: string) =>
+      deleteFortuneUnderstandingResponse(
+        request('/api/fortune/understanding', { method: 'DELETE', headers: { origin } }),
+        'fortune',
+      );
+    expect((await remove('https://unrelated.example')).status).toBe(403);
+    expect(state.deleteUnderstanding).not.toHaveBeenCalled();
+    state.deleteUnderstanding.mockResolvedValue(true);
+    expect((await remove('http://localhost:3000')).status).toBe(200);
+    expect(state.deleteUnderstanding).toHaveBeenCalledExactlyOnceWith({
+      serviceSlug: 'fortune',
+      actorUserId: 'user-1',
+    });
   });
 
   it('validates intake input, excludes skipped question keys and returns ordinary continuation if AI fails', async () => {

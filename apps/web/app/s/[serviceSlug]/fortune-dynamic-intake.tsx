@@ -4,12 +4,16 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState, type ComponentProps } from 'react';
 import {
   FORTUNE_INTAKE_QUESTIONS,
-  fortuneIntakeConsultation,
+  buildFortuneUnderstanding,
+  confirmedFortuneUnderstanding,
+  fortuneUnderstandingConsultation,
   type FortuneIntakeAnswer,
   type FortuneIntakeKey,
   type FortuneTheme,
+  type FortuneUnderstandingItem,
 } from '@bunshin/capability-fortune';
 import { FortuneDrawButtons } from './fortune-actions';
+import { FortuneUnderstandingReview } from './fortune-understanding';
 
 type Step =
   { kind: 'START' | 'DONE' | 'WAIT' | 'UNAVAILABLE' } | { kind: 'QUESTION'; key: FortuneIntakeKey };
@@ -74,6 +78,7 @@ function IntakeConversation({
   const [asking, setAsking] = useState(false);
   const [drawing, setDrawing] = useState(false);
   const [error, setError] = useState(false);
+  const [review, setReview] = useState<FortuneUnderstandingItem[] | null>(null);
   const active = useRef<AbortController | null>(null);
   useEffect(() => () => active.current?.abort(), []);
   const question = step.kind === 'QUESTION' ? FORTUNE_INTAKE_QUESTIONS[step.key] : null;
@@ -108,12 +113,12 @@ function IntakeConversation({
     if (step.kind === 'QUESTION') void ask([...answers, { key: step.key, answer: value }]);
   }
 
-  async function draw() {
+  async function draw(items: readonly FortuneUnderstandingItem[]) {
     active.current?.abort();
     setDrawing(true);
     setError(false);
     try {
-      const combined = fortuneIntakeConsultation(consultation, answers);
+      const combined = fortuneUnderstandingConsultation(items);
       const response = await fetch(`/api/services/${serviceSlug}/fortune/today`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -126,6 +131,57 @@ function IntakeConversation({
     } finally {
       setDrawing(false);
     }
+  }
+
+  function reviewBeforeDrawing() {
+    const items = buildFortuneUnderstanding(theme, consultation, answers);
+    if (!confirmedFortuneUnderstanding(items).length) {
+      void draw(items);
+      return;
+    }
+    active.current?.abort();
+    setReview(items);
+  }
+
+  if (review) {
+    return (
+      <div className="fortune-action">
+        <FortuneUnderstandingReview
+          serviceSlug={serviceSlug}
+          items={review}
+          drawing={drawing}
+          update={(item) =>
+            setReview(
+              (current) =>
+                current?.map((value) => (value.field === item.field ? item : value)) ?? null,
+            )
+          }
+        />
+        <div className="button-row">
+          <button
+            className="button button--primary"
+            type="button"
+            disabled={drawing}
+            onClick={() => void draw(review)}
+          >
+            {drawing ? 'カードを引いています…' : 'この内容で占う'}
+          </button>
+          <button
+            className="button button--secondary"
+            type="button"
+            disabled={drawing}
+            onClick={() => setReview(null)}
+          >
+            入力に戻る
+          </button>
+        </div>
+        {error && (
+          <p className="form-error" role="alert">
+            占いを開始できませんでした。もう一度お試しください。
+          </p>
+        )}
+      </div>
+    );
   }
 
   return (
@@ -209,7 +265,7 @@ function IntakeConversation({
           className="button button--primary"
           type="button"
           disabled={drawing}
-          onClick={() => void draw()}
+          onClick={reviewBeforeDrawing}
         >
           {drawing ? 'カードを引いています…' : 'ここまでで占う'}
         </button>
