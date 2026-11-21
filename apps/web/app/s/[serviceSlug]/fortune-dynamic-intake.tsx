@@ -227,7 +227,7 @@ function IntakeConversation({
           <ul>
             {priorUnderstanding.map(({ field, text }) => (
               <li key={field}>
-                {fortuneUnderstandingFieldLabels[field]}　{text}
+                {fortuneUnderstandingFieldLabels[field]} {text}
               </li>
             ))}
           </ul>
