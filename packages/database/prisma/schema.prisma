@@ -3463,6 +3463,7 @@ model FortuneParticipant {
   ageConfirmedAt             DateTime              @map("age_confirmed_at") @db.Timestamptz(6)
   joinedAt                   DateTime              @default(now()) @map("joined_at") @db.Timestamptz(6)
   intakeTurns                FortuneIntakeTurn[]
+  intakeSessions             FortuneIntakeSession[]
   understandingItems         Json?                 @map("understanding_items")
   understandingRevision      String?               @map("understanding_revision") @db.Uuid
   understandingSavedAt       DateTime?             @map("understanding_saved_at") @db.Timestamptz(6)
@@ -3537,6 +3538,18 @@ model FortuneIntakeTurn {
   @@unique([participantId, localDate, step])
   @@index([localDate])
   @@map("fortune_intake_turns")
+}
+
+model FortuneIntakeSession {
+  participantId  String             @map("participant_id") @db.Uuid
+  localDate      DateTime           @map("local_date") @db.Date
+  questionsShown Int                @default(0) @map("questions_shown")
+  outcome        String?            @db.VarChar(8)
+  participant    FortuneParticipant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+
+  @@id([participantId, localDate])
+  @@index([localDate])
+  @@map("fortune_intake_sessions")
 }
 
 model FortuneReading {

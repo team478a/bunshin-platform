@@ -1,11 +1,14 @@
 'use client';
 
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState, type ComponentProps } from 'react';
 import {
   FORTUNE_INTAKE_QUESTIONS,
   buildFortuneUnderstanding,
   confirmedFortuneUnderstanding,
+  fortuneUnderstandingFieldLabels,
+  type ConfirmedFortuneUnderstanding,
   type FortuneIntakeAnswer,
   type FortuneIntakeKey,
   type FortuneTheme,
@@ -19,9 +22,11 @@ type Step =
 
 export function FortuneDynamicIntake({
   deepReadingEnabled = false,
+  priorUnderstanding,
   ...props
 }: Omit<ComponentProps<typeof FortuneDrawButtons>, 'onSelectTheme'> & {
   deepReadingEnabled?: boolean;
+  priorUnderstanding?: ConfirmedFortuneUnderstanding[];
 }) {
   const [started, setStarted] = useState(false);
   const [theme, setTheme] = useState<FortuneTheme>();
@@ -43,6 +48,7 @@ export function FortuneDynamicIntake({
           serviceSlug={props.serviceSlug}
           theme={theme}
           deepReadingEnabled={deepReadingEnabled}
+          {...(priorUnderstanding ? { priorUnderstanding } : {})}
           onExit={() => {
             setStarted(false);
             setTheme(undefined);
@@ -50,7 +56,19 @@ export function FortuneDynamicIntake({
         />
       ) : (
         <>
-          <FortuneDrawButtons {...props} askConsultation={false} onSelectTheme={setTheme} />
+          <FortuneDrawButtons
+            {...props}
+            askConsultation={false}
+            onSelectTheme={(selected) => {
+              setTheme(selected);
+              if (deepReadingEnabled) {
+                void fetch(`/api/services/${props.serviceSlug}/fortune/intake`, {
+                  method: 'PATCH',
+                  keepalive: true,
+                }).catch(() => undefined);
+              }
+            }}
+          />
           <button
             className="button button--secondary"
             type="button"
@@ -69,11 +87,13 @@ function IntakeConversation({
   theme,
   onExit,
   deepReadingEnabled,
+  priorUnderstanding,
 }: {
   serviceSlug: string;
   theme: FortuneTheme;
   onExit: () => void;
   deepReadingEnabled: boolean;
+  priorUnderstanding?: ConfirmedFortuneUnderstanding[];
 }) {
   const router = useRouter();
   const [step, setStep] = useState<Step>({ kind: 'START' });
@@ -130,6 +150,9 @@ function IntakeConversation({
         body: JSON.stringify({
           theme,
           ...(reviewedUnderstanding.length ? { reviewedUnderstanding } : {}),
+          ...(deepReadingEnabled
+            ? { intakeOutcome: reviewedUnderstanding.length ? 'REVIEWED' : 'SKIPPED' }
+            : {}),
         }),
       });
       if (!response.ok) throw new Error('reading unavailable');
@@ -159,6 +182,7 @@ function IntakeConversation({
           items={review}
           drawing={drawing}
           deepReadingEnabled={deepReadingEnabled}
+          {...(priorUnderstanding ? { priorUnderstanding } : {})}
           update={(item) =>
             setReview(
               (current) =>
@@ -196,6 +220,22 @@ function IntakeConversation({
   return (
     <div className="fortune-action">
       <p>AIが必要な質問を選びます。回答は任意で、今回の質問選びと鑑定に使います。</p>
+      {step.kind === 'START' && priorUnderstanding && (
+        <details>
+          <summary>前に保存した相談内容</summary>
+          <p>今回の深層鑑定に使います。当時から変わったことは、今回の相談に書いてください。</p>
+          <ul>
+            {priorUnderstanding.map(({ field, text }) => (
+              <li key={field}>
+                {fortuneUnderstandingFieldLabels[field]} {text}
+              </li>
+            ))}
+          </ul>
+          <Link href={`/s/${serviceSlug}/settings#fortune-understanding`}>
+            保存内容を確認・変更する
+          </Link>
+        </details>
+      )}
       {step.kind === 'START' && (
         <label className="form-field">
           <span>今回の相談（任意）</span>

@@ -221,6 +221,83 @@ export default async function FortuneManagementPage({
               )}
           </section>
         )}
+        {quality?.deepGuidance && (
+          <section className="settings-card">
+            <h2>深層鑑定の利用状況</h2>
+            <p>直近30日（サービスの保存期間が短い場合はその期間内）</p>
+            <dl>
+              <div>
+                <dt>ヒアリング開始</dt>
+                <dd>{quality.deepGuidance.starts}件</dd>
+              </div>
+              <div>
+                <dt>相談を確認して鑑定へ進んだ割合</dt>
+                <dd>
+                  {percent(quality.deepGuidance.completionRate)}（{quality.deepGuidance.reviewed}
+                  件）
+                </dd>
+              </div>
+              <div>
+                <dt>平均質問数</dt>
+                <dd>{quality.deepGuidance.questionAverage?.toFixed(1) ?? '集計対象なし'}</dd>
+              </div>
+              <div>
+                <dt>スキップ・途中終了</dt>
+                <dd>
+                  {percent(quality.deepGuidance.skipRate)}（スキップ {quality.deepGuidance.skipped}
+                  件 / 翌日以降の未完了 {quality.deepGuidance.abandoned}件）
+                </dd>
+              </div>
+              <div>
+                <dt>深層鑑定の結果</dt>
+                <dd>{quality.deepGuidance.readings}件</dd>
+              </div>
+              <div>
+                <dt>深層鑑定を閲覧した方の別日再訪</dt>
+                <dd>
+                  {percent(quality.deepGuidance.returnRate)}（{quality.deepGuidance.returnedReaders}
+                  人）
+                </dd>
+              </div>
+              <div>
+                <dt>自分に合っていたか</dt>
+                <dd>
+                  とても {quality.deepGuidance.fit.very}件 / ある程度{' '}
+                  {quality.deepGuidance.fit.somewhat}件 / あまり {quality.deepGuidance.fit.notMuch}
+                  件
+                </dd>
+              </div>
+            </dl>
+            <h3>AIの利用と概算原価（{quality.aiOperations.monthKey}、UTC）</h3>
+            <dl>
+              {(
+                [
+                  ['ヒアリングの質問選択', quality.deepGuidance.intakeAi],
+                  ['深層鑑定の生成', quality.deepGuidance.readingAi],
+                ] as const
+              ).map(([label, ai]) => (
+                <div key={label}>
+                  <dt>{label}</dt>
+                  <dd>
+                    成功 {ai.successfulCalls}回 / 失敗 {ai.failedCalls}回（成功率{' '}
+                    {percent(fortuneRate(ai.successfulCalls, ai.successfulCalls + ai.failedCalls))}
+                    ）
+                  </dd>
+                  <dd>
+                    入力 {ai.inputTokens.toLocaleString('ja-JP')} / 出力{' '}
+                    {ai.outputTokens.toLocaleString('ja-JP')} トークン
+                  </dd>
+                  <dd>
+                    {ai.pricedCalls
+                      ? `約 $${(ai.estimatedCostUsdMicros / 1_000_000).toFixed(4)} USD`
+                      : '原価の記録なし'}
+                    {ai.unpricedCalls > 0 && `（価格未設定 ${ai.unpricedCalls}回）`}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          </section>
+        )}
         {quality && (
           <>
             <section className="settings-card">

@@ -1614,6 +1614,47 @@ describe('database ownership boundaries', () => {
         (await client.fortuneReading.findUniqueOrThrow({ where: { id: failed.id } }))
           .pendingUnderstanding,
       ).toBeNull();
+      const tomorrow = new Date(Date.now() + 86_400_000);
+      const continuing = await deepService.draw({
+        ...deepInput,
+        now: tomorrow,
+        reviewedUnderstanding: [
+          { field: 'GOAL', state: 'CONFIRMED', source: 'ANSWER', text: '今の仕事を整理したい' },
+        ],
+      });
+      const continuingTarget = { ...input, readingId: continuing.id };
+      const continuingClaim = await repository.claimAiGeneration(continuingTarget);
+      expect(continuingClaim?.personalization?.priorUnderstanding?.items).toEqual(
+        saveUnderstanding.items,
+      );
+      if (!continuingClaim?.priorUnderstandingRevision || !continuingClaim.personalProfileRevision)
+        throw new Error('expected saved understanding to be in scope');
+      await expect(understanding.delete(input)).resolves.toBe(true);
+      await expect(
+        repository.completeAiGeneration({
+          ...continuingTarget,
+          personalProfileRevision: continuingClaim.personalProfileRevision,
+          priorUnderstandingRevision: continuingClaim.priorUnderstandingRevision,
+          output: {
+            ...output,
+            deep: { alternatives: ['条件を整理する'], actionReason: '違いを比較できる' },
+          },
+        }),
+      ).resolves.toMatchObject({ id: continuing.id, status: 'READY_BASIC', body: approved });
+      await expect(
+        intake.recordProgress({ ...input, actorUserId: other.user.id }),
+      ).resolves.toBeUndefined();
+      await Promise.all([
+        intake.recordProgress({ ...input, questionsShown: 2, outcome: 'REVIEWED' }),
+        intake.recordProgress({ ...input, questionsShown: 1 }),
+      ]);
+      await expect(
+        client.fortuneIntakeSession.findMany({ where: { participantId: participant.id } }),
+      ).resolves.toMatchObject([{ questionsShown: 2, outcome: 'REVIEWED' }]);
+      await purgeExpiredFortuneIntake(client, new Date(Date.now() + 31 * 86_400_000));
+      await expect(
+        client.fortuneIntakeSession.count({ where: { participantId: participant.id } }),
+      ).resolves.toBe(0);
       const abandoned = await deepService.draw({
         ...deepInput,
         now: new Date(Date.now() - 6 * 86_400_000),

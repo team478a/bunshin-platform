@@ -13,7 +13,10 @@ import { FortuneNav, ReadingCard } from '../fortune-ui';
 import { FortuneReflection } from '../fortune-reflection';
 import { FortuneProfileForm } from '../fortune-profile-form';
 import { FortuneDynamicIntake } from '../fortune-dynamic-intake';
-import { fortunePersonalProfileRepository } from '../../../../src/fortune/personal-profile';
+import {
+  fortunePersonalProfileRepository,
+  fortuneUnderstandingRepository,
+} from '../../../../src/fortune/personal-profile';
 import '@fontsource-variable/noto-sans-jp';
 import './fortune-today.css';
 
@@ -49,6 +52,19 @@ export default async function FortuneTodayPage({
     showGuide && !showIntake && fortuneIntakeOptions(setting.guidanceSettings).enabled
       ? FortuneDynamicIntake
       : FortuneDrawButtons;
+  const deepEnabled = showGuide && fortuneDeepReadingEnabled(setting.guidanceSettings);
+  const saved =
+    deepEnabled && profile?.profile.consented && !today.reading
+      ? await (
+          await fortuneUnderstandingRepository()
+        ).read({ serviceSlug, actorUserId: actor.userId })
+      : null;
+  const priorUnderstanding =
+    saved?.savedAt &&
+    saved.items.length &&
+    toJapanLocalDate(new Date(saved.savedAt)) < toJapanLocalDate(new Date())
+      ? saved.items
+      : undefined;
   const nextAction = !today.participant
     ? '年齢確認へ'
     : showIntake
@@ -122,9 +138,8 @@ export default async function FortuneTodayPage({
               <p>今日いちばん気になるものを選んでください。</p>
               <DrawButtons
                 serviceSlug={serviceSlug}
-                {...(fortuneDeepReadingEnabled(setting.guidanceSettings)
-                  ? { deepReadingEnabled: true }
-                  : {})}
+                {...(deepEnabled ? { deepReadingEnabled: true } : {})}
+                {...(priorUnderstanding ? { priorUnderstanding } : {})}
                 {...(profile?.enabled ? { themeLabels: guidance.themeLabels } : {})}
                 askConsultation={Boolean(
                   setting.aiEnabled &&
