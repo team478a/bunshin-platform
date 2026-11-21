@@ -189,6 +189,25 @@ async function browser(fixture, participant, stage = 'basic', invitationPath) {
   assert.equal(code, 0, 'Mobile browser E2E');
 }
 
+function stopApp(app) {
+  if (!app?.pid || app.exitCode !== null) return;
+  if (process.platform !== 'win32') {
+    app.kill('SIGTERM');
+    return;
+  }
+  try {
+    execFileSync('taskkill', ['/PID', String(app.pid), '/T', '/F'], { stdio: 'ignore' });
+  } catch (error) {
+    // The process can exit between checking exitCode and starting taskkill.
+    try {
+      process.kill(app.pid, 0);
+    } catch (probeError) {
+      if (probeError?.code === 'ESRCH') return;
+    }
+    throw error;
+  }
+}
+
 let app;
 try {
   const [identity] = await db.$queryRawUnsafe(
@@ -542,10 +561,9 @@ try {
   console.error(error instanceof Error ? error.message : 'Isolated Fortune test failed');
   process.exitCode = 1;
 } finally {
-  if (app?.pid && app.exitCode === null) {
-    if (process.platform === 'win32')
-      execFileSync('taskkill', ['/PID', String(app.pid), '/T', '/F'], { stdio: 'ignore' });
-    else app.kill('SIGTERM');
+  try {
+    stopApp(app);
+  } finally {
+    await db.$disconnect();
   }
-  await db.$disconnect();
 }
