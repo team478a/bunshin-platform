@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApplicationError } from '@bunshin/shared';
+import { serviceAuthLoginPath } from '../src/auth/line-return';
 
 const m = vi.hoisted(() => ({
   actor: vi.fn(),
@@ -9,6 +10,9 @@ const m = vi.hoisted(() => ({
   fortune: vi.fn(),
 }));
 vi.mock('next/navigation', () => ({
+  redirect: (path: string) => {
+    throw new Error(`REDIRECT:${path}`);
+  },
   notFound: () => {
     throw new Error('ROUTE_NOT_FOUND');
   },
@@ -130,6 +134,30 @@ describe('private service legal document', () => {
 });
 
 describe('visitor manual and help', () => {
+  const oracleParams = Promise.resolve({ serviceSlug: 'watashi-fortune' });
+
+  it('returns an anonymous LINE visitor to the Oracle manual after login', async () => {
+    m.actor.mockResolvedValue(null);
+    m.visible.mockRejectedValue(new ApplicationError('NOT_FOUND', 'service not visible'));
+    await expect(ServiceManualPage({ params: oracleParams })).rejects.toThrow(
+      `REDIRECT:${serviceAuthLoginPath('/s/watashi-fortune/manual')}`,
+    );
+    expect(m.fortune).not.toHaveBeenCalled();
+  });
+  it('keeps the private Oracle manual inaccessible to a signed-in nonmember', async () => {
+    m.visible.mockRejectedValue(new ApplicationError('NOT_FOUND', 'service not visible'));
+    await expect(ServiceManualPage({ params: oracleParams })).rejects.toThrow('ROUTE_NOT_FOUND');
+    expect(m.fortune).not.toHaveBeenCalled();
+  });
+  it('renders the Oracle manual for a member after login', async () => {
+    m.visible.mockResolvedValue({
+      ...privateService,
+      configuration: { ...privateService.configuration, slug: 'watashi-fortune' },
+    });
+    m.fortune.mockResolvedValue({ enabled: false, guidanceSettings: null });
+    expect(await ServiceManualPage({ params: oracleParams })).toBeTruthy();
+    expect(m.visible).toHaveBeenCalledWith('watashi-fortune', 'user-a');
+  });
   it('lets an existing private member open the manual and use a private service title', async () => {
     expect(await ServiceManualPage({ params })).toBeTruthy();
     expect((await manualMetadata({ params })).title).toBe('千ノ国メディア｜かんたんマニュアル');

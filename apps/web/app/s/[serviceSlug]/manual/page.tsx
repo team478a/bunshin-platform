@@ -1,7 +1,9 @@
 import { cache } from 'react';
 import type { Metadata } from 'next';
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import { currentUserProvider } from '../../../../src/auth/current-user';
+import { serviceAuthLoginPath } from '../../../../src/auth/line-return';
+import { isOracleLineService } from '../../../../src/line/fortune-rich-menu-content';
 import { isRouteNotFound } from '../../../../src/navigation/route-not-found';
 import { resolveVisitorServiceContext } from '../../../../src/services/public-service';
 import { isFortuneServicePackage } from '../../../../src/services/service-creation-templates';
@@ -61,8 +63,11 @@ export default async function ServiceManualPage({
 }: {
   params: Promise<{ serviceSlug: string }>;
 }) {
+  const { serviceSlug } = await params;
   const actor = await (await currentUserProvider()).getCurrentUser();
-  const result = await manualService((await params).serviceSlug, actor?.userId ?? null);
+  const result = await manualService(serviceSlug, actor?.userId ?? null);
+  if (!result && !actor && isOracleLineService(serviceSlug))
+    redirect(serviceAuthLoginPath(`/s/${serviceSlug}/manual`));
   if (!result) notFound();
   if (result.kind === 'SENNOKUNI') return <SennokuniManual />;
   const content = (
