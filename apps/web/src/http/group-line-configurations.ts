@@ -1,4 +1,6 @@
 import 'server-only';
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import {
   ActivateGroupLineConfiguration,
   CreateGroupLineConfigurationVersion,
@@ -19,8 +21,9 @@ import {
   lineEndpointUrls,
   LineConnectionTestAdapter,
 } from '../line/secure-configuration';
+import { ORACLE_LINE_MENU_IMAGE_PATH } from '../line/fortune-rich-menu-content';
 import { renderDefaultLineRichMenu } from '../line/default-rich-menu';
-import { richMenuLayoutForService } from '../line/rich-menu-layout';
+import { fortuneLineMenuKind, richMenuLayoutForService } from '../line/rich-menu-layout';
 import {
   isGroupRichMenuPublicationActive,
   publishDefaultGroupRichMenu,
@@ -240,7 +243,13 @@ async function resolveRichMenuTarget(
       group: {
         select: {
           name: true,
-          serviceConfiguration: { select: { slug: true, displayName: true } },
+          serviceConfiguration: {
+            select: {
+              slug: true,
+              displayName: true,
+              registration: { select: { onboardingConfig: true } },
+            },
+          },
         },
       },
     },
@@ -288,12 +297,18 @@ export function publishDefaultGroupRichMenuResponse(request: Request, groupIdVal
       groupId,
       input.target?.configurationId,
     );
-    const serviceSlug = stored.group.serviceConfiguration?.slug ?? null;
-    // 商品情報か発信企画があるServiceだけ、発信パートナー向けの4ボタン（今日の投稿・グループの企画・
-    // 公式素材・マイページ）にする。それ以外のServiceは従来の標準メニューのまま。
-    const layout = serviceSlug
-      ? await richMenuLayoutForService(db, input.workspaceId, groupId)
-      : 'DEFAULT';
+    const service = stored.group.serviceConfiguration;
+    const serviceSlug = service?.slug ?? null;
+    const fortune = fortuneLineMenuKind(serviceSlug, service?.registration?.onboardingConfig);
+    const layout = fortune
+      ? 'FORTUNE'
+      : serviceSlug
+        ? await richMenuLayoutForService(db, input.workspaceId, groupId)
+        : 'DEFAULT';
+    const oracle = fortune === 'ORACLE';
+    const image = oracle
+      ? await readFile(join(process.cwd(), 'public', ORACLE_LINE_MENU_IMAGE_PATH.slice(1)))
+      : await renderDefaultLineRichMenu(layout);
     const published = await publishDefaultGroupRichMenu({
       accessToken: new AesGcmLineSecretCrypto().decrypt(stored.encryptedAccessToken),
       groupId,
@@ -301,7 +316,7 @@ export function publishDefaultGroupRichMenuResponse(request: Request, groupIdVal
       groupName: stored.group.serviceConfiguration?.displayName ?? stored.group.name,
       appUrl: getServerEnvironment().APP_URL,
       serviceSlug,
-      image: await renderDefaultLineRichMenu(layout),
+      image,
       layout,
     });
     await db.prisma.groupLineConfigurationAudit.create({
@@ -315,11 +330,11 @@ export function publishDefaultGroupRichMenuResponse(request: Request, groupIdVal
         reason,
         afterData: {
           lineRichMenuId: published.lineRichMenuId,
-          template: layout === 'PARTNER' ? 'PARTNER_V1' : 'DEFAULT_V1',
+          template: oracle ? 'ORACLE_V1' : `${layout}_V1`,
           cleanupFailedIds: published.cleanupFailedIds,
         },
       },
     });
-    return { ...published, name: '標準リッチメニュー' };
+    return { ...published, name: fortune ? '占いリッチメニュー' : '標準リッチメニュー' };
   });
 }

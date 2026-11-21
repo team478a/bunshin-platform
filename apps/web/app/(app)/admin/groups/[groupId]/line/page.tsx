@@ -6,6 +6,7 @@ import {
   currentLineEnvironment,
   lineEndpointUrls,
 } from '../../../../../../src/line/secure-configuration';
+import { fortuneLineMenuKind } from '../../../../../../src/line/rich-menu-layout';
 import { GroupLineEditor } from './group-line-editor';
 
 export const dynamic = 'force-dynamic';
@@ -17,7 +18,14 @@ export default async function GroupLinePage({ params }: { params: Promise<{ grou
   const db = await import('@bunshin/database');
   const group = await db.prisma.group.findUnique({
     where: { id: groupId },
-    select: { id: true, workspaceId: true, name: true },
+    select: {
+      id: true,
+      workspaceId: true,
+      name: true,
+      serviceConfiguration: {
+        select: { slug: true, registration: { select: { onboardingConfig: true } } },
+      },
+    },
   });
   if (!group) notFound();
   const result = await new ListGroupLineConfigurations(
@@ -31,6 +39,10 @@ export default async function GroupLinePage({ params }: { params: Promise<{ grou
     })
     .catch(() => null);
   if (!result) notFound();
+  const fortuneMenu = fortuneLineMenuKind(
+    group.serviceConfiguration?.slug,
+    group.serviceConfiguration?.registration?.onboardingConfig,
+  );
   const base = lineEndpointUrls();
   return (
     <main className="app-page">
@@ -86,6 +98,7 @@ export default async function GroupLinePage({ params }: { params: Promise<{ grou
         environment={currentLineEnvironment()}
         webhookOrigin={new URL(base.webhookUrl).origin}
         initialMode={result.mode}
+        {...(fortuneMenu ? { fortuneMenu } : {})}
         initialConfigurations={result.configurations.map((item) => ({
           ...item,
           lastVerifiedAt: item.lastVerifiedAt?.toISOString() ?? null,

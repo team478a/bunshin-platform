@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 vi.mock('server-only', () => ({}));
 import sharp from 'sharp';
+import { readFile } from 'node:fs/promises';
 import {
   DEFAULT_LINE_RICH_MENU,
   renderDefaultLineRichMenu,
@@ -31,6 +32,20 @@ describe('default LINE rich menu', () => {
     expect(metadata).toMatchObject({ format: 'png', width: 2500, height: 1686 });
     expect(image.byteLength).toBeLessThanOrEqual(1_000_000);
     expect(image.equals(await renderDefaultLineRichMenu())).toBe(false);
+  }, 20_000);
+
+  it('占い用の汎用画像とオラクルの正式画像をLINE仕様内で用意する', async () => {
+    for (const image of [
+      await renderDefaultLineRichMenu('FORTUNE'),
+      await readFile('public/tsuki-to-hoshi-oracle-line-menu.png'),
+    ]) {
+      expect(await sharp(image).metadata()).toMatchObject({
+        format: 'png',
+        width: 2500,
+        height: 1686,
+      });
+      expect(image.byteLength).toBeLessThanOrEqual(1_000_000);
+    }
   }, 20_000);
 
   it('既存の課題タイトルを利用者専用PNGに安全に反映する', async () => {

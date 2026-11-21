@@ -7,6 +7,7 @@ import {
   currentLineEnvironment,
   lineEndpointUrls,
 } from '../../../../../src/line/secure-configuration';
+import { fortuneLineMenuKind } from '../../../../../src/line/rich-menu-layout';
 import { resolveManagedServiceContext } from '../../../../../src/services/public-service';
 import { PublicShell } from '../../../../ui/public-shell';
 import { ServiceLineBroadcastEditor } from './service-line-broadcast-editor';
@@ -81,6 +82,10 @@ export default async function ServiceLinePage({
       attemptCount: delivery.attemptCount,
       failedAt: delivery.updatedAt.toISOString(),
     }));
+  const fortuneMenu = fortuneLineMenuKind(
+    service.configuration.slug,
+    service.configuration.registration.onboardingConfig,
+  );
   const urls = lineEndpointUrls();
   const endpoint = `/api/services/${encodeURIComponent(service.configuration.slug)}/line-configurations`;
   const template = await searchParams;
@@ -129,6 +134,7 @@ export default async function ServiceLinePage({
           }))}
           endpoint={endpoint}
           scopeLabel="サービス"
+          {...(fortuneMenu ? { fortuneMenu } : {})}
         />
         <ServiceLineBroadcastEditor
           serviceSlug={service.configuration.slug}

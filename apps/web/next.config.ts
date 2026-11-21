@@ -19,6 +19,8 @@ const config: NextConfig = {
       '../../node_modules/.pnpm/harfbuzzjs@*/node_modules/harfbuzzjs/hb.wasm',
     ],
     '/api/admin/groups/*/line-rich-menu/default': [
+      './public/tsuki-to-hoshi-oracle-line-menu.png',
+      './assets/fonts/noto-sans-jp/*.otf',
       '../../node_modules/.pnpm/harfbuzzjs@*/node_modules/harfbuzzjs/hb.wasm',
     ],
     '/api/admin/line-rich-menus/default': [
