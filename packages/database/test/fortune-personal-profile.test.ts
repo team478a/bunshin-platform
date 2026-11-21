@@ -1,4 +1,4 @@
-import type { PrismaClient } from '@prisma/client';
+import { Prisma, type PrismaClient } from '@prisma/client';
 import { describe, expect, it, vi } from 'vitest';
 import { PrismaFortunePersonalProfileRepository } from '../src/fortune-personal-profile';
 
@@ -55,6 +55,10 @@ describe('fortune personal profile', () => {
         profileStyle: 'DIRECT',
         profileConsentedAt: now,
         profileUpdatedAt: now,
+        understandingItems: Prisma.DbNull,
+        understandingRevision: null,
+        understandingSavedAt: null,
+        understandingExpiresAt: null,
       },
     });
     updateMany.mockResolvedValueOnce({ count: 0 });
@@ -86,6 +90,10 @@ describe('fortune personal profile', () => {
           profileStyle: null,
           profileConsentedAt: null,
           profileUpdatedAt: now,
+          understandingItems: Prisma.DbNull,
+          understandingRevision: null,
+          understandingSavedAt: null,
+          understandingExpiresAt: null,
         },
       }),
     );

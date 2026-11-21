@@ -3463,6 +3463,10 @@ model FortuneParticipant {
   ageConfirmedAt             DateTime              @map("age_confirmed_at") @db.Timestamptz(6)
   joinedAt                   DateTime              @default(now()) @map("joined_at") @db.Timestamptz(6)
   intakeTurns                FortuneIntakeTurn[]
+  understandingItems         Json?                 @map("understanding_items")
+  understandingRevision      String?               @map("understanding_revision") @db.Uuid
+  understandingSavedAt       DateTime?             @map("understanding_saved_at") @db.Timestamptz(6)
+  understandingExpiresAt     DateTime?             @map("understanding_expires_at") @db.Timestamptz(6)
   createdAt                  DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt                  DateTime              @updatedAt @map("updated_at") @db.Timestamptz(6)
   serviceSetting             FortuneServiceSetting @relation(fields: [workspaceId, groupId, serviceSettingId], references: [workspaceId, groupId, id], onDelete: Cascade)

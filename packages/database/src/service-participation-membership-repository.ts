@@ -5,6 +5,7 @@ import { groupMembershipRecord } from './service-records';
 import { latestServiceLegalDocuments } from './service-legal-latest';
 import { recordOemRegistration, endOemRegistration } from './oem-billing-history';
 import { eraseFortuneFollowUps } from './fortune-follow-ups';
+import { clearFortuneUnderstanding } from './fortune-retention';
 
 export class PrismaServiceParticipationMembershipRepository {
   constructor(private readonly client: PrismaClient = prisma) {}
@@ -230,6 +231,7 @@ export class PrismaServiceParticipationMembershipRepository {
           profileQuestion: null,
           profileStyle: null,
           profileConsentedAt: null,
+          ...clearFortuneUnderstanding,
         },
       });
       if (clearedProfiles.count > 0)

@@ -9,6 +9,9 @@ import {
   FORTUNE_THEMES,
   FORTUNE_PROFILE_STYLES,
   FORTUNE_REFLECTION_ANSWERS,
+  FORTUNE_UNDERSTANDING_FIELDS,
+  FORTUNE_UNDERSTANDING_SOURCES,
+  parseConfirmedFortuneUnderstanding,
 } from '@bunshin/capability-fortune';
 import { requestIdFromHeader } from '@bunshin/observability';
 import { ApplicationError, toApiError } from '@bunshin/shared';
@@ -16,7 +19,10 @@ import { z } from 'zod';
 import { currentUserProvider } from '../auth/current-user';
 import { requireSameOrigin } from '../auth/request-security';
 import { fortuneDailyReadingService } from '../fortune/runtime';
-import { fortunePersonalProfileRepository } from '../fortune/personal-profile';
+import {
+  fortunePersonalProfileRepository,
+  fortuneUnderstandingRepository,
+} from '../fortune/personal-profile';
 import { recordServiceUse } from '../services/service-membership';
 import { askFortuneFollowUp, fortuneFollowUpRepository } from '../fortune/follow-ups';
 import { selectFortuneIntakeQuestion } from '../providers/openai-fortune-intake';
@@ -71,6 +77,25 @@ const notificationSlotBody = z
       .object({ weekday: z.number().int().min(0).max(6), hour: z.number().int().min(0).max(23) })
       .strict()
       .nullable(),
+  })
+  .strict();
+const understandingBody = z
+  .object({
+    revision: uuid.nullable(),
+    profileRevision: z.string().datetime(),
+    items: z
+      .array(
+        z
+          .object({
+            field: z.enum(FORTUNE_UNDERSTANDING_FIELDS),
+            state: z.literal('CONFIRMED'),
+            text: z.string().trim().min(1).max(200),
+            source: z.enum(FORTUNE_UNDERSTANDING_SOURCES),
+          })
+          .strict(),
+      )
+      .min(1)
+      .max(FORTUNE_UNDERSTANDING_FIELDS.length),
   })
   .strict();
 const reflectionBody = z.object({ answer: z.enum(FORTUNE_REFLECTION_ANSWERS).nullable() }).strict();
@@ -201,6 +226,60 @@ export const updateFortuneNotificationSlotResponse = (request: Request, serviceS
     });
     if (!saved) throw new ApplicationError('FORBIDDEN', '通知の曜日と時刻を変更できません。');
     return { saved };
+  });
+
+export const getFortuneUnderstandingResponse = (request: Request, serviceSlug: string) =>
+  json(request, serviceSlug, async (actorUserId, parsedSlug) => {
+    const snapshot = await (
+      await fortuneUnderstandingRepository()
+    ).read({
+      serviceSlug: parsedSlug,
+      actorUserId,
+    });
+    if (!snapshot) throw new ApplicationError('NOT_FOUND', '相談の保存内容を確認できません。');
+    return snapshot;
+  });
+
+export const updateFortuneUnderstandingResponse = (request: Request, serviceSlug: string) =>
+  json(request, serviceSlug, async (actorUserId, parsedSlug) => {
+    const body = await requireJson(request, understandingBody);
+    const items = body.items
+      .map(parseConfirmedFortuneUnderstanding)
+      .filter((item) => item !== null);
+    if (
+      items.length !== body.items.length ||
+      new Set(items.map(({ field }) => field)).size !== items.length
+    )
+      throw new ApplicationError('VALIDATION_ERROR', '保存する項目を確認してください。');
+    const actor = { serviceSlug: parsedSlug, actorUserId };
+    const repository = await fortuneUnderstandingRepository();
+    const result = await repository.save({
+      ...actor,
+      items,
+      revision: body.revision,
+      profileRevision: new Date(body.profileRevision),
+    });
+    if (result === 'CONFLICT')
+      throw new ApplicationError(
+        'CONFLICT',
+        '保存設定が変更されました。ページを読み直してください。',
+      );
+    if (result === 'UNAVAILABLE')
+      throw new ApplicationError('FORBIDDEN', '保存には個別化への同意が必要です。');
+    return repository.read(actor);
+  });
+
+export const deleteFortuneUnderstandingResponse = (request: Request, serviceSlug: string) =>
+  json(request, serviceSlug, async (actorUserId, parsedSlug) => {
+    requireSameOrigin(request);
+    const deleted = await (
+      await fortuneUnderstandingRepository()
+    ).delete({
+      serviceSlug: parsedSlug,
+      actorUserId,
+    });
+    if (!deleted) throw new ApplicationError('NOT_FOUND', '相談の保存内容を削除できません。');
+    return { deleted };
   });
 
 export const getFortuneTodayResponse = (request: Request, serviceSlug: string) =>

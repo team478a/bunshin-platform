@@ -4,7 +4,7 @@ import {
   type FortunePersonalProfileUpdate,
 } from '@bunshin/capability-fortune';
 import type { Prisma, PrismaClient } from '@prisma/client';
-import { fortuneReadingRetentionCutoff } from './fortune-retention';
+import { clearFortuneUnderstanding, fortuneReadingRetentionCutoff } from './fortune-retention';
 import { fortuneTarget } from './fortune-shared';
 import { eraseFortuneFollowUps } from './fortune-follow-ups';
 
@@ -117,6 +117,7 @@ export class PrismaFortunePersonalProfileRepository {
           profileStyle: profile.consented ? profile.style : null,
           profileConsentedAt: profile.consented ? now : null,
           profileUpdatedAt: now,
+          ...clearFortuneUnderstanding,
         },
       });
       if (result.count === 1 && !profile.consented) {

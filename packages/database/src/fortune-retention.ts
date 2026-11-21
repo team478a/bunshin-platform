@@ -2,6 +2,13 @@ import { toJapanLocalDate } from '@bunshin/capability-fortune';
 import { Prisma, type PrismaClient } from '@prisma/client';
 import { dateOnly } from './fortune-shared';
 
+export const clearFortuneUnderstanding = {
+  understandingItems: Prisma.DbNull,
+  understandingRevision: null,
+  understandingSavedAt: null,
+  understandingExpiresAt: null,
+};
+
 export function fortuneReadingRetentionCutoff(at: Date, historyRetentionDays: number) {
   const cutoff = dateOnly(toJapanLocalDate(at));
   cutoff.setUTCDate(cutoff.getUTCDate() - Math.max(0, Math.trunc(historyRetentionDays) - 1));
@@ -33,9 +40,26 @@ export async function purgeExpiredFortuneProfiles(db: PrismaClient, at: Date): P
     )
     UPDATE "fortune_participants" AS participant
     SET "profile_interest" = NULL, "profile_question" = NULL,
-        "profile_style" = NULL, "profile_consented_at" = NULL
+        "profile_style" = NULL, "profile_consented_at" = NULL,
+        "understanding_items" = NULL, "understanding_revision" = NULL,
+        "understanding_saved_at" = NULL, "understanding_expires_at" = NULL
     FROM expired WHERE participant."id" = expired."id"
   `);
+}
+
+export async function purgeExpiredFortuneUnderstanding(db: PrismaClient, at: Date) {
+  return db.$executeRaw`
+    UPDATE "fortune_participants" AS participant
+    SET "understanding_items" = NULL, "understanding_revision" = gen_random_uuid(),
+        "understanding_saved_at" = NULL, "understanding_expires_at" = NULL
+    FROM "fortune_service_settings" AS setting
+    WHERE setting."id" = participant."service_setting_id"
+      AND participant."understanding_expires_at" IS NOT NULL
+      AND (
+        participant."understanding_expires_at" <= ${at}
+        OR participant."profile_updated_at" + setting."history_retention_days" * INTERVAL '24 hours' <= ${at}
+      )
+  `;
 }
 
 export async function purgeExpiredFortuneReadings(db: PrismaClient, at: Date): Promise<number> {
