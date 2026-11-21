@@ -1,12 +1,10 @@
 import 'server-only';
 import type { ServiceFoundationRecord } from '@bunshin/application';
 import { createLogger } from '@bunshin/observability';
-import { z } from 'zod';
 import { isFortuneServicePackage } from '../services/service-creation-templates';
-import { fortuneAppearanceSchema } from './appearance';
+import { readFortuneAppearance } from './appearance';
 
 const logger = createLogger();
-const appearanceFromGuidance = z.object({ appearance: fortuneAppearanceSchema.optional() });
 
 export async function publicFortuneAppearance(configuration: ServiceFoundationRecord) {
   if (
@@ -28,5 +26,5 @@ export async function publicFortuneAppearance(configuration: ServiceFoundationRe
       logger.warn('fortune public appearance unavailable');
       return null;
     });
-  return appearanceFromGuidance.safeParse(setting?.guidanceSettings).data?.appearance;
+  return readFortuneAppearance(setting?.guidanceSettings);
 }

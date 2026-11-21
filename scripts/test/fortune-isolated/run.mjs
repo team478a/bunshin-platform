@@ -557,12 +557,19 @@ try {
   console.log(
     'PASS scoped invitation acceptance and policy consent open the mobile Fortune age gate',
   );
+  const priorGuidance = (
+    await db.fortuneServiceSetting.findUniqueOrThrow({ where: { id: setting.id } })
+  ).guidanceSettings;
   await browser(primary, owner, 'appearance-editor');
   await browser(primary, participant, 'appearance-viewer');
-  assert.equal(
-    (await db.fortuneServiceSetting.findUniqueOrThrow({ where: { id: setting.id } }))
-      .guidanceSettings.appearance.palette,
-    'night',
+  const { appearance, ...remainingGuidance } = (
+    await db.fortuneServiceSetting.findUniqueOrThrow({ where: { id: setting.id } })
+  ).guidanceSettings;
+  assert.equal(appearance.palette, 'night');
+  assert.deepEqual(
+    remainingGuidance,
+    priorGuidance,
+    'Editing appearance preserves existing AI settings',
   );
   assert.equal(
     (

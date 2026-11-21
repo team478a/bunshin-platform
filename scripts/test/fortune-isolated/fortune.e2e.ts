@@ -41,20 +41,19 @@ test(
     );
     await app.open(entry);
     if (appearanceEditor) {
-      await screen.getByText('ヒアリング・AI案内役・デザイン', { exact: true }).tap();
       await screen.getByText('利用者画面のデザイン', { exact: true }).tap();
-      await screen.getByLabel('基本の配色').selectOption('night');
-      await screen.getByLabel('カードの角丸').selectOption('square');
-      await screen.getByLabel('スマートフォンプレビューの場面').selectOption('deep');
+      await screen.getByLabel('基本の配色').selectOption({ value: 'night' });
+      await screen.getByLabel('カードの角丸').selectOption({ value: 'square' });
+      await screen.getByLabel('スマートフォンプレビューの場面').selectOption({ value: 'deep' });
       await expect(screen.getByRole('heading', '深層パーソナル鑑定')).toBeVisible();
       await expect(
         browser.locator('.fortune-appearance-preview [data-corners="square"]'),
       ).toBeVisible();
       await screen.getByLabel('保存後に占い画面へ適用する').tap();
       const saved = browser.waitForResponse(`**/api/services/${slug}/fortune-operations`);
-      await screen.getByRole('button', '案内とデザインを保存').tap();
+      await screen.getByRole('button', 'デザインを保存').tap();
       expect((await saved).status).toBe(200);
-      await expect(screen.getByText('占いの案内とデザインを保存しました。')).toBeVisible();
+      await expect(screen.getByText('占いのデザインを保存しました。')).toBeVisible();
       return;
     }
     if (appearanceViewer) {

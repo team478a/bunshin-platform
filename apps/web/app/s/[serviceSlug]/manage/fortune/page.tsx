@@ -11,6 +11,7 @@ import { buildFortuneLaunchSteps } from '../../../../../src/fortune/launch-readi
 import { buildFortuneOperationalValidation } from '../../../../../src/fortune/operational-validation';
 import { fortuneFailureLabel, fortuneRate } from '../../../../../src/fortune/quality';
 import { PublicShell } from '../../../../ui/public-shell';
+import { FortuneAppearanceEditor } from './fortune-appearance-editor';
 import { FortuneGuidanceEditor } from './fortune-guidance-editor';
 import { FortuneOperatorEditor } from './fortune-operator-editor';
 
@@ -180,11 +181,15 @@ export default async function FortuneManagementPage({
           bunshins={status.bunshins}
         />
         {status.configured && status.guidanceSettings && (
-          <FortuneGuidanceEditor
-            serviceSlug={serviceSlug}
-            settings={status.guidanceSettings}
-            brand={status.appearanceBrand}
-          />
+          <>
+            <FortuneAppearanceEditor
+              serviceSlug={serviceSlug}
+              initial={status.guidanceSettings.appearance}
+              brand={status.appearanceBrand}
+              characters={status.guidanceSettings.characters}
+            />
+            <FortuneGuidanceEditor serviceSlug={serviceSlug} settings={status.guidanceSettings} />
+          </>
         )}
         {status.configured && (
           <section className="settings-card fortune-readiness-card">

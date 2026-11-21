@@ -21,6 +21,11 @@ export const fortuneAppearanceSchema = z
   })
   .strict();
 
+const appearanceFromGuidance = z.object({ appearance: fortuneAppearanceSchema.optional() });
+
+export const readFortuneAppearance = (guidance: unknown) =>
+  appearanceFromGuidance.safeParse(guidance).data?.appearance;
+
 export type FortuneAppearanceSettings = z.infer<typeof fortuneAppearanceSchema>;
 export type FortuneAppearanceBrand = {
   logoUrl: string | null;
