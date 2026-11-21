@@ -2,7 +2,8 @@ import 'server-only';
 import { randomUUID } from 'node:crypto';
 import type { LineRichMenuAction } from '@bunshin/application';
 import { ApplicationError } from '@bunshin/shared';
-import { DEFAULT_LINE_RICH_MENU } from './default-rich-menu';
+import { FORTUNE_LINE_MENU } from './fortune-rich-menu-content';
+import { DEFAULT_LINE_RICH_MENU, type LineRichMenuLayout } from './default-rich-menu';
 
 const endpoint = 'https://api.line.me';
 
@@ -70,12 +71,19 @@ export async function publishDefaultGroupRichMenu(input: {
   serviceSlug: string | null;
   image: Buffer;
   operationId?: string;
+  /** Service用レイアウトも既存の4区画を共用する。 */
+  layout?: LineRichMenuLayout;
 }) {
+  if (input.layout === 'FORTUNE' && !input.serviceSlug)
+    throw new ApplicationError('VALIDATION_ERROR', '占いサービスを確認できませんでした');
   const request = input.request ?? fetch;
   const headers = { authorization: `Bearer ${input.accessToken}` };
   const providerNamePrefix = `bunshin-group:${input.groupId}:default:`;
   const providerName = defaultMenuName(input.groupId, input.operationId ?? randomUUID());
-  const chatBarText = `${input.groupName.replace(/公式$/, '').trim()}メニュー`.slice(0, 14);
+  const chatBarText =
+    input.layout === 'FORTUNE'
+      ? '占いメニュー'
+      : `${input.groupName.replace(/公式$/, '').trim()}メニュー`.slice(0, 14);
   const listed = await request(`${endpoint}/v2/bot/richmenu/list`, {
     headers,
     signal: AbortSignal.timeout(10_000),
@@ -101,7 +109,16 @@ export async function publishDefaultGroupRichMenu(input: {
       chatBarText,
       areas: DEFAULT_LINE_RICH_MENU.areas.map((area) => ({
         bounds: { x: area.x, y: area.y, width: area.width, height: area.height },
-        action: { type: 'uri', uri: actionUrl(area.action, input.appUrl, input.serviceSlug) },
+        action: {
+          type: 'uri',
+          uri:
+            input.layout === 'FORTUNE' && input.serviceSlug
+              ? new URL(
+                  `/s/${input.serviceSlug}/${FORTUNE_LINE_MENU[area.action].path}`,
+                  input.appUrl,
+                ).toString()
+              : actionUrl(area.action, input.appUrl, input.serviceSlug),
+        },
       })),
     }),
     signal: AbortSignal.timeout(10_000),

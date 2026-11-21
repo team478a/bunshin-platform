@@ -146,6 +146,12 @@ export function FortuneManual({
               <li>カード名、今日のヒント、今日できることを読みます。</li>
               <li>下にある3つの感想から、一番近いものを選びます。</li>
             </ol>
+            <p className="easy-manual__tip">
+              <ActionLabel>AIと相談を整理してから占う</ActionLabel>
+              が表示されている場合は、テーマを選んでAIと相談してからカードを引けます。鑑定結果の下に
+              <ActionLabel>この鑑定についてAIに聞く</ActionLabel>
+              があれば、鑑定について追加で質問できます。
+            </p>
             <p className="easy-manual__warning">
               <strong>1日1回です：</strong>
               テーマを選んだ後の引き直しはできません。翌日になると新しいカードを引けます。

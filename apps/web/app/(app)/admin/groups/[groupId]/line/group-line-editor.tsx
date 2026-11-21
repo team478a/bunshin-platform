@@ -1,5 +1,9 @@
 'use client';
 import { useRef, useState } from 'react';
+import {
+  FORTUNE_LINE_MENU_ITEMS,
+  ORACLE_LINE_MENU_IMAGE_PATH,
+} from '../../../../../../src/line/fortune-rich-menu-content';
 
 type Item = {
   id: string;
@@ -40,6 +44,7 @@ export function GroupLineEditor(props: {
   initialConfigurations: Item[];
   endpoint?: string;
   scopeLabel?: string;
+  fortuneMenu?: 'ORACLE' | 'FORTUNE';
   targetName: string;
 }) {
   const [mode, setMode] = useState(props.initialMode);
@@ -49,6 +54,7 @@ export function GroupLineEditor(props: {
   const [busy, setBusy] = useState(false);
   const endpoint = props.endpoint ?? `/api/admin/groups/${props.groupId}/line-configurations`;
   const scopeLabel = props.scopeLabel ?? 'グループ';
+  const menuName = props.fortuneMenu ? '占いリッチメニュー' : '標準リッチメニュー';
   async function call(url: string, method: string, data: unknown) {
     setBusy(true);
     setMessage('処理しています…');
@@ -145,7 +151,7 @@ export function GroupLineEditor(props: {
       setPublicationMessage(
         data['cleanupFailedIds'].length
           ? '既定メニューを公開しました。一部の旧メニューを整理できませんでした。'
-          : '専用LINEへ標準リッチメニューを公開しました。',
+          : `専用LINEへ${menuName}を公開しました。`,
       );
     } catch {
       setPublicationUnknown(true);
@@ -393,11 +399,40 @@ export function GroupLineEditor(props: {
       </section>
       <section className="settings-card line-settings-card">
         <p className="eyebrow">4. LINEのメニューを公開する</p>
-        <h2>標準リッチメニュー</h2>
-        <p>
-          今日やること、投稿パートナーを見る、お知らせ設定、アカウントの4ボタンを、この{scopeLabel}
-          専用LINEへ自動で設定します。
-        </p>
+        {props.fortuneMenu ? (
+          <>
+            <h2>占いリッチメニュー</h2>
+            <p>
+              {FORTUNE_LINE_MENU_ITEMS.map(({ title }) => title).join('・')}
+              の4ボタンを、このサービスの専用LINEに設定します。
+            </p>
+            {props.fortuneMenu === 'ORACLE' && (
+              <figure>
+                <img
+                  src={ORACLE_LINE_MENU_IMAGE_PATH}
+                  alt="月と星のオラクルのLINEリッチメニュー。左上から今日の占い、鑑定履歴、通知設定、使い方。"
+                  width={2500}
+                  height={1686}
+                  loading="lazy"
+                  style={{ width: '100%', height: 'auto', maxWidth: '36rem' }}
+                />
+                <figcaption>
+                  <a href={ORACLE_LINE_MENU_IMAGE_PATH} download>
+                    画像をダウンロード
+                  </a>
+                </figcaption>
+              </figure>
+            )}
+          </>
+        ) : (
+          <>
+            <h2>標準リッチメニュー</h2>
+            <p>
+              今日やること、投稿パートナーを見る、お知らせ設定、アカウントの4ボタンを、この
+              {scopeLabel}専用LINEへ自動で設定します。
+            </p>
+          </>
+        )}
         {publication ? (
           <section aria-label="リッチメニュー公開の確認">
             <h3>公開先と変更内容</h3>
@@ -405,7 +440,7 @@ export function GroupLineEditor(props: {
               {props.targetName}の専用LINE（{props.environment}）
             </p>
             <p>Messaging APIチャネル {publication.configuration.messagingChannelId}</p>
-            <p>このチャネルの既定メニューを標準リッチメニューに切り替えます。</p>
+            <p>このチャネルの既定メニューを{menuName}に切り替えます。</p>
             {publicationUnknown ? (
               <button
                 type="button"

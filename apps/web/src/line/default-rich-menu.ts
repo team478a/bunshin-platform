@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import type { LineRichMenuArea } from '@bunshin/application';
 import { Resvg } from '@resvg/resvg-js';
 import sharp from 'sharp';
+import { renderFortuneLineRichMenu } from './fortune-rich-menu-art';
 
 export const DEFAULT_LINE_RICH_MENU = {
   name: '標準メニュー',
@@ -37,7 +38,12 @@ const items = [
   { title: 'アカウント', subtitle: '登録情報を確認', symbol: '○', color: '#059669' },
 ] as const;
 
-export async function renderDefaultLineRichMenu(): Promise<Buffer> {
+export type LineRichMenuLayout = 'DEFAULT' | 'FORTUNE';
+
+export async function renderDefaultLineRichMenu(
+  layout: LineRichMenuLayout = 'DEFAULT',
+): Promise<Buffer> {
+  if (layout === 'FORTUNE') return renderFortuneLineRichMenu();
   const fontDirectory = join(process.cwd(), 'assets/fonts/noto-sans-jp');
   const regularFont = join(fontDirectory, 'NotoSansCJKjp-Regular.otf');
   const boldFont = join(fontDirectory, 'NotoSansCJKjp-Bold.otf');

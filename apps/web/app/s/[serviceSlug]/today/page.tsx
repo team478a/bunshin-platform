@@ -53,10 +53,9 @@ export default async function FortuneTodayPage({
       : null;
   const showIntake = Boolean(profile?.enabled && !profile.completed && !today.reading);
   const showGuide = setting.personalProfileEnabled && setting.aiEnabled;
-  const DrawButtons =
-    showGuide && !showIntake && fortuneIntakeOptions(setting.guidanceSettings).enabled
-      ? FortuneDynamicIntake
-      : FortuneDrawButtons;
+  const showDynamicIntake =
+    showGuide && !showIntake && fortuneIntakeOptions(setting.guidanceSettings).enabled;
+  const DrawButtons = showDynamicIntake ? FortuneDynamicIntake : FortuneDrawButtons;
   const deepEnabled = showGuide && fortuneDeepReadingEnabled(setting.guidanceSettings);
   const saved =
     deepEnabled && profile?.profile.consented && !today.reading
@@ -76,7 +75,9 @@ export default async function FortuneTodayPage({
       ? 'はじめる'
       : today.reading
         ? '今日の鑑定を見る'
-        : '今日のカードを引く';
+        : showDynamicIntake
+          ? '占い方を選ぶ'
+          : '今日のカードを引く';
   const { guide, characters } = guidance;
   const welcome = showIntake || !today.participant ? characters?.intake : characters?.daily;
   const content = (
@@ -149,8 +150,8 @@ export default async function FortuneTodayPage({
             />
           ) : (
             <section className="settings-card">
-              <h2>何について占いますか？</h2>
-              <p>今日いちばん気になるものを選んでください。</p>
+              <h2>{showDynamicIntake ? '今日の占い方を選ぶ' : '何について占いますか？'}</h2>
+              {!showDynamicIntake && <p>今日いちばん気になるものを選んでください。</p>}
               <DrawButtons
                 serviceSlug={serviceSlug}
                 {...(deepEnabled ? { deepReadingEnabled: true } : {})}
