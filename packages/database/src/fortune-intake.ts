@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import {
+  fortuneDeepReadingEnabled,
   fortuneIntakeOptions,
   fortuneIntakeQuestionKey,
   toJapanLocalDate,
@@ -55,6 +56,54 @@ export class PrismaFortuneIntakeRepository {
       select: { id: true },
     });
     return reading ? null : { scope, participant, options, localDate, now };
+  }
+
+  async recordProgress(
+    input: Actor & {
+      questionsShown?: number;
+      outcome?: 'REVIEWED' | 'SKIPPED';
+      localDate?: string;
+    },
+  ) {
+    const scope = await fortuneTarget(this.db, input.serviceSlug, input.actorUserId);
+    const membership = scope?.group.memberships[0];
+    if (
+      !scope?.aiEnabled ||
+      !scope.personalProfileEnabled ||
+      !membership ||
+      !fortuneDeepReadingEnabled(scope.guidanceSettings)
+    )
+      return;
+    const participant = await this.db.fortuneParticipant.findFirst({
+      where: {
+        serviceSettingId: scope.id,
+        groupMembershipId: membership.id,
+        userId: input.actorUserId,
+      },
+      select: { id: true },
+    });
+    if (!participant) return;
+    const localDate = dateOnly(input.localDate ?? toJapanLocalDate(this.now()));
+    const session = { participantId: participant.id, localDate };
+    const questionsShown = input.questionsShown ?? 0;
+    await this.db.$transaction(async (tx) => {
+      await tx.fortuneIntakeSession.createMany({
+        data: { ...session, questionsShown, ...(input.outcome ? { outcome: input.outcome } : {}) },
+        skipDuplicates: true,
+      });
+      if (questionsShown) {
+        await tx.fortuneIntakeSession.updateMany({
+          where: { ...session, questionsShown: { lt: questionsShown } },
+          data: { questionsShown },
+        });
+      }
+      if (input.outcome) {
+        await tx.fortuneIntakeSession.updateMany({
+          where: { ...session, outcome: null },
+          data: { outcome: input.outcome },
+        });
+      }
+    });
   }
 
   async reserve(input: Actor & { theme: FortuneTheme; answered: readonly FortuneIntakeKey[] }) {

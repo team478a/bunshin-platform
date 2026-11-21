@@ -56,6 +56,8 @@ const env = {
   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: anon,
   NEXT_TELEMETRY_DISABLED: '1',
   LOG_LEVEL: 'error',
+  OPENAI_API_KEY: 'synthetic-fortune-e2e-key',
+  OPENAI_REQUEST_COST_USD_MICROS: '25',
 };
 
 async function actor(label) {
@@ -150,7 +152,7 @@ async function request(actor, path, { method = 'GET', body, status = 200 } = {})
   return response;
 }
 
-async function browser(fixture, participant) {
+async function browser(fixture, participant, stage = 'basic') {
   const test = spawn(
     process.execPath,
     [
@@ -167,6 +169,7 @@ async function browser(fixture, participant) {
         ...env,
         E2E_TELEMETRY_DISABLED: '1',
         BUNSHIN_FORTUNE_TEST_SLUG: fixture.slug,
+        BUNSHIN_FORTUNE_TEST_STAGE: stage,
         BUNSHIN_FORTUNE_TEST_SESSION: JSON.stringify(participant.cookies),
       },
       stdio: 'inherit',
@@ -188,13 +191,17 @@ try {
   assert.equal(existingApp, null, 'Local application port is already in use');
   const next = join(webRoot, 'node_modules/next/dist/bin/next');
   const guard = join(root, 'scripts/test/feedback-e2e-network-guard.cjs');
-  assert.ok(existsSync(next) && existsSync(guard));
+  const mock = join(root, 'scripts/test/fortune-isolated/openai-fixture.cjs');
+  assert.ok(existsSync(next) && existsSync(guard) && existsSync(mock));
   app = spawn(
     process.execPath,
     [next, 'dev', '--webpack', '--hostname', '127.0.0.1', '--port', '19000'],
     {
       cwd: webRoot,
-      env: { ...env, NODE_OPTIONS: `--require "${guard.replaceAll('\\', '/')}"` },
+      env: {
+        ...env,
+        NODE_OPTIONS: `--require "${guard.replaceAll('\\', '/')}" --require "${mock.replaceAll('\\', '/')}"`,
+      },
       stdio: 'inherit',
     },
   );
@@ -382,6 +389,100 @@ try {
   await request(participant, entry, { status: 307 });
   assert.equal(await returns(), 0);
   console.log('PASS real return route, opt-in and opt-out persisted without sending LINE messages');
+  await db.fortuneServiceSetting.update({
+    where: { id: setting.id },
+    data: { guidanceSettings: { intake: { enabled: true }, deepReadingEnabled: true } },
+  });
+  await put(`${base}/profile`, {
+    consented: true,
+    interest: '仕事',
+    question: null,
+    style: 'DIRECT',
+  });
+  const saved = (await (await request(participant, `${base}/understanding`)).json()).data;
+  const priorText = '以前は家族との時間を重視していた';
+  await put(`${base}/understanding`, {
+    revision: saved.revision,
+    profileRevision: saved.profileRevision,
+    items: [{ field: 'VALUES', state: 'CONFIRMED', source: 'ANSWER', text: priorText }],
+  });
+  await db.fortuneParticipant.update({
+    where: {
+      serviceSettingId_userId: { serviceSettingId: setting.id, userId: participant.userId },
+    },
+    data: { understandingSavedAt: previousDay },
+  });
+  const otherPage = await request(other, `/s/${primary.slug}/today`);
+  assert.ok(!(await otherPage.text()).includes(priorText));
+  const otherService = (
+    await (
+      await request(participant, `/api/services/${secondary.slug}/fortune/understanding`)
+    ).json()
+  ).data;
+  assert.deepEqual(otherService.items, []);
+  await request(null, `${base}/intake`, { method: 'PATCH', status: 401 });
+  const currentText = '今は働き方を整理したい';
+  const create = async (text) =>
+    (
+      await (
+        await request(participant, today, {
+          method: 'POST',
+          status: 201,
+          body: {
+            theme: 'WORK',
+            intakeOutcome: 'REVIEWED',
+            reviewedUnderstanding: [
+              { field: 'CONSULTATION', state: 'CONFIRMED', source: 'CONSULTATION', text },
+            ],
+          },
+        })
+      ).json()
+    ).data;
+  await browser(primary, participant, 'deep');
+  const deep = (await (await request(participant, today)).json()).data.reading;
+  assert.equal(deep.status, 'READY_AI');
+  assert.equal(deep.deepReading.consultationSummary, currentText);
+  assert.equal((await create(currentText)).id, deep.id);
+  const indexed = await db.fortuneReading.findUniqueOrThrow({ where: { id: deep.id } });
+  assert.equal(indexed.pendingUnderstanding, null);
+  assert.ok(indexed.personalizationContext.sources.includes('SAVED_FORTUNE_UNDERSTANDING'));
+  assert.ok(!JSON.stringify(indexed.personalizationContext).includes(priorText));
+  const checkpoint = await db.fortuneIntakeSession.findFirstOrThrow({
+    where: { participantId: indexed.participantId },
+  });
+  assert.equal(checkpoint.outcome, 'REVIEWED');
+  assert.equal(checkpoint.questionsShown, 1);
+  await db.fortuneReading.update({
+    where: { id: deep.id },
+    data: { localDate: new Date(first.localDate.getTime() - 2 * 86_400_000) },
+  });
+  await put(`${base}/profile`, { consented: false });
+  assert.ok(
+    !(await (await request(participant, `/s/${primary.slug}/today`)).text()).includes(priorText),
+  );
+  const afterWithdrawal = await create('いま考えられることを整理したい');
+  assert.equal(afterWithdrawal.status, 'READY_AI');
+  assert.equal(afterWithdrawal.deepReading.consultationSummary, 'いま考えられることを整理したい');
+  const ai = await db.aiUsageEvent.findMany({
+    where: { bunshinId: primary.bunshinId, promptVersion: 'fortune-deep-reading-v2' },
+  });
+  assert.equal(ai.length, 2);
+  assert.ok(
+    ai.every(
+      (event) =>
+        event.status === 'SUCCESS' &&
+        event.inputTokens === 192 &&
+        event.outputTokens === 84 &&
+        event.estimatedCostUsdMicros === 25n,
+    ),
+  );
+  const dashboard = await (await request(owner, `/s/${primary.slug}/manage/fortune`)).text();
+  assert.match(dashboard, /深層鑑定の利用状況/);
+  assert.match(dashboard, /0\.0001/);
+  assert.ok(!dashboard.includes(priorText) && !dashboard.includes(currentText));
+  console.log(
+    'PASS confirmed context, next-day reuse and withdrawal, deep results, isolated metrics and recorded cost',
+  );
 } catch (error) {
   console.error(error instanceof Error ? error.message : 'Isolated Fortune test failed');
   process.exitCode = 1;

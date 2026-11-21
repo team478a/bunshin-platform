@@ -1,6 +1,7 @@
 import { SelectBunshinMemories } from '@bunshin/application';
 import {
   buildFortuneDeepReadingDetails,
+  toJapanLocalDate,
   fortuneDeepReadingEnabled,
   parseFortuneReviewedItems,
   FORTUNE_PROFILE_STYLES,
@@ -16,6 +17,7 @@ import type {
 import { Prisma, type PrismaClient } from '@prisma/client';
 import { dateOnly, fortuneReadingView, fortuneTarget } from './fortune-shared';
 import { lockFortuneGenerationLease } from './fortune-generation-jobs';
+import { PrismaFortuneUnderstandingRepository } from './fortune-understanding';
 import { PrismaFortunePersonalProfileRepository } from './fortune-personal-profile';
 import { fortuneReadingRetentionCutoff } from './fortune-retention';
 
@@ -187,6 +189,21 @@ export class PrismaFortuneGenerationRepository {
           ? parseFortuneReviewedItems(reading.pendingUnderstanding)
           : null;
       const personalProfileRevision = personal?.enabled ? personal.revision : null;
+      const saved =
+        reviewed && personalProfileRevision
+          ? await new PrismaFortuneUnderstandingRepository(tx).read(input)
+          : null;
+      const priorItems =
+        saved?.canSave &&
+        saved.savedAt &&
+        saved.revision &&
+        dateOnly(toJapanLocalDate(new Date(saved.savedAt))) < reading.localDate
+          ? saved.items.filter(({ field }) => !reviewed?.some((item) => item.field === field))
+          : [];
+      const priorUnderstanding =
+        saved?.savedAt && saved.revision && priorItems.length
+          ? { savedAt: saved.savedAt, items: priorItems, revision: saved.revision }
+          : null;
       const useSelectedBunshin = personal?.enabled
         ? Boolean(personalProfileRevision)
         : !personal?.completed;
@@ -300,6 +317,7 @@ export class PrismaFortuneGenerationRepository {
               ...(personal?.enabled && (reading.pendingConsultation || reviewed)
                 ? ['CURRENT_CONSULTATION']
                 : []),
+              ...(priorUnderstanding ? ['SAVED_FORTUNE_UNDERSTANDING'] : []),
               ...(bunshinProfile ? ['PARTICIPANT_BUNSHIN_PROFILE'] : []),
               ...(selectedMemories.length > 0 ? ['PARTICIPANT_BUNSHIN_MEMORY'] : []),
               ...(recentReadings.length > 0 ? ['RECENT_READING'] : []),
@@ -349,7 +367,16 @@ export class PrismaFortuneGenerationRepository {
           : {}),
         ...(reviewed ? { reviewedUnderstanding: reviewed } : {}),
         ...(personal?.profile && personalProfileRevision ? { personalProfileRevision } : {}),
+        ...(priorUnderstanding ? { priorUnderstandingRevision: priorUnderstanding.revision } : {}),
         personalization: {
+          ...(priorUnderstanding
+            ? {
+                priorUnderstanding: {
+                  savedAt: priorUnderstanding.savedAt,
+                  items: priorUnderstanding.items,
+                },
+              }
+            : {}),
           ...(personal?.profile && personalProfileRevision
             ? {
                 participantProfile: {
@@ -392,8 +419,8 @@ export class PrismaFortuneGenerationRepository {
             theme: item.theme,
             cardCode: item.cardCode,
             orientation: item.orientation,
-            body: item.readingText,
-            actionStep: item.actionStep,
+            body: item.deepReading ? null : item.readingText,
+            actionStep: item.deepReading ? null : item.actionStep,
             feedbackRating: item.feedback?.rating ?? null,
             feedbackIssue: (item.feedback?.issueCode as FortuneFeedbackIssue | null) ?? null,
           })),
@@ -472,6 +499,12 @@ export class PrismaFortuneGenerationRepository {
           ? {
               participant: {
                 profileConsentedAt: { not: null },
+                ...(input.priorUnderstandingRevision
+                  ? {
+                      understandingRevision: input.priorUnderstandingRevision,
+                      understandingExpiresAt: { gt: new Date() },
+                    }
+                  : {}),
                 profileUpdatedAt: {
                   equals: input.personalProfileRevision,
                   gte: fortuneReadingRetentionCutoff(new Date(), scope.historyRetentionDays),

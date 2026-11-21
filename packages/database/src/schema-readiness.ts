@@ -1,1 +1,1 @@
-export const LATEST_DATABASE_MIGRATION = '20261121050000_fortune_deep_reading';
+export const LATEST_DATABASE_MIGRATION = '20261121060000_fortune_intake_quality';

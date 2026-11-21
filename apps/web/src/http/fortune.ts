@@ -13,8 +13,9 @@ import {
   FORTUNE_UNDERSTANDING_SOURCES,
   parseFortuneReviewedItems,
   fortuneUnderstandingConsultation,
+  toJapanLocalDate,
 } from '@bunshin/capability-fortune';
-import { requestIdFromHeader } from '@bunshin/observability';
+import { createLogger, requestIdFromHeader } from '@bunshin/observability';
 import { ApplicationError, toApiError } from '@bunshin/shared';
 import { z } from 'zod';
 import { currentUserProvider } from '../auth/current-user';
@@ -27,6 +28,8 @@ import {
 import { recordServiceUse } from '../services/service-membership';
 import { askFortuneFollowUp, fortuneFollowUpRepository } from '../fortune/follow-ups';
 import { selectFortuneIntakeQuestion } from '../providers/openai-fortune-intake';
+
+const logger = createLogger();
 
 const slug = z
   .string()
@@ -67,6 +70,7 @@ const drawBody = z
     theme: z.enum(FORTUNE_THEMES),
     consultation: z.string().trim().max(500).optional(),
     reviewedUnderstanding: reviewedItemsBody.optional(),
+    intakeOutcome: z.enum(['REVIEWED', 'SKIPPED']).optional(),
   })
   .strict();
 const intakeBody = z
@@ -299,16 +303,49 @@ export const drawFortuneResponse = (request: Request, serviceSlug: string) =>
       const consultation = reviewed
         ? fortuneUnderstandingConsultation(reviewed)
         : body.consultation;
-      return (await fortuneDailyReadingService()).draw({
+      if (body.intakeOutcome && (body.intakeOutcome === 'REVIEWED') !== Boolean(reviewed))
+        throw new ApplicationError('VALIDATION_ERROR', '今回の相談内容を確認してください。');
+      const result = await (
+        await fortuneDailyReadingService()
+      ).draw({
         serviceSlug: parsedSlug,
         actorUserId,
         theme: body.theme,
         ...(consultation ? { consultation } : {}),
         ...(reviewed ? { reviewedUnderstanding: reviewed } : {}),
       });
+      if (body.intakeOutcome)
+        await recordFortuneIntakeProgress({
+          serviceSlug: parsedSlug,
+          actorUserId,
+          outcome: body.intakeOutcome,
+          localDate: result.localDate,
+        });
+      return result;
     },
     201,
   );
+
+async function recordFortuneIntakeProgress(input: {
+  serviceSlug: string;
+  actorUserId: string;
+  outcome?: 'REVIEWED' | 'SKIPPED';
+  localDate?: string;
+  questionsShown?: number;
+}) {
+  try {
+    const db = await import('@bunshin/database');
+    await new db.PrismaFortuneIntakeRepository(db.prisma).recordProgress(input);
+  } catch {
+    logger.warn('fortune intake progress could not be recorded');
+  }
+}
+
+export const startFortuneIntakeResponse = (request: Request, serviceSlug: string) =>
+  json(request, serviceSlug, async (actorUserId, parsedSlug) => {
+    await recordFortuneIntakeProgress({ serviceSlug: parsedSlug, actorUserId });
+    return { ok: true };
+  });
 
 export const nextFortuneIntakeResponse = (request: Request, serviceSlug: string) =>
   json(request, serviceSlug, async (actorUserId, parsedSlug) => {
@@ -319,8 +356,14 @@ export const nextFortuneIntakeResponse = (request: Request, serviceSlug: string)
     const db = await import('@bunshin/database');
     const repo = new db.PrismaFortuneIntakeRepository(db.prisma);
     const actor = { serviceSlug: parsedSlug, actorUserId };
+    const localDate = toJapanLocalDate(new Date());
+    const recordQuestion = async () =>
+      recordFortuneIntakeProgress({ ...actor, localDate, questionsShown: answered.length + 1 });
     const reservation = await repo.reserve({ ...actor, theme: body.theme, answered });
-    if (reservation.kind !== 'RESERVED') return reservation;
+    if (reservation.kind !== 'RESERVED') {
+      if (reservation.kind === 'QUESTION') await recordQuestion();
+      return reservation;
+    }
     const claim = { ...actor, id: reservation.id, profileRevision: reservation.profileRevision };
     const key = await selectFortuneIntakeQuestion({
       ...reservation,
@@ -329,7 +372,9 @@ export const nextFortuneIntakeResponse = (request: Request, serviceSlug: string)
       candidates: FORTUNE_INTAKE_KEYS.filter((question) => !answered.includes(question)),
       allowed: () => repo.allowed(claim),
     }).catch(() => null);
-    return repo.finish({ ...claim, key });
+    const step = await repo.finish({ ...claim, key });
+    if (step.kind === 'QUESTION') await recordQuestion();
+    return step;
   });
 
 export const listFortuneHistoryResponse = (request: Request, serviceSlug: string) =>

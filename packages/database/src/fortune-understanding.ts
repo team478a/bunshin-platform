@@ -5,7 +5,7 @@ import {
   type ConfirmedFortuneUnderstanding,
   type FortuneUnderstandingSnapshot,
 } from '@bunshin/capability-fortune';
-import type { PrismaClient } from '@prisma/client';
+import type { Prisma } from '@prisma/client';
 import { clearFortuneUnderstanding, fortuneReadingRetentionCutoff } from './fortune-retention';
 import { fortuneTarget } from './fortune-shared';
 
@@ -13,7 +13,7 @@ type Actor = { serviceSlug: string; actorUserId: string };
 
 export class PrismaFortuneUnderstandingRepository {
   constructor(
-    private readonly db: PrismaClient,
+    private readonly db: Prisma.TransactionClient,
     private readonly now = () => new Date(),
   ) {}
 
