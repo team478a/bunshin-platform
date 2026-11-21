@@ -79,7 +79,9 @@ describe('OpenAI deep Fortune generation', () => {
       actorUserId: 'user',
       claim,
     });
-    const payload = JSON.parse(String(provider.mock.calls[0]?.[1]?.body)) as {
+    const requestBody = provider.mock.calls[0]?.[1]?.body;
+    if (typeof requestBody !== 'string') throw new Error('Expected a JSON request body');
+    const payload = JSON.parse(requestBody) as {
       input: Array<{ role: string; content: string }>;
       text: { format: { name: string; schema: { required: string[] } } };
     };
