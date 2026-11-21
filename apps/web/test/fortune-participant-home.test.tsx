@@ -1,3 +1,4 @@
+import type * as Application from '@bunshin/application';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ServiceMemberHome from '../app/s/[serviceSlug]/home/page';
@@ -20,8 +21,8 @@ vi.mock('../src/auth/current-user', () => ({
   currentUserProvider: () => ({ getCurrentUser: () => ({ userId: 'member' }) }),
 }));
 vi.mock('../src/services/public-service', () => ({ resolveMemberServiceContext: state.service }));
-vi.mock(import('@bunshin/application'), async (importOriginal) => ({
-  ...(await importOriginal()),
+vi.mock('@bunshin/application', async (importOriginal) => ({
+  ...(await importOriginal<typeof Application>()),
   ServiceParticipationService: class {
     findLegalConsentView = state.legal;
   },
