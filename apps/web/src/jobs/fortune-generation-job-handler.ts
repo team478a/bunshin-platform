@@ -104,7 +104,10 @@ export function createFortuneGenerationJobHandler(
               throw new FortuneGenerationJobError('FORTUNE_SCOPE_REVOKED', false);
           },
         });
-        output = { ...output, ...validateFortuneReadingOutput(output) };
+        output = {
+          ...output,
+          ...validateFortuneReadingOutput(output, Boolean(claim.reviewedUnderstanding?.length)),
+        };
       } catch (error) {
         const failure = generationFailure(error);
         if (!failure.retryable || input.attemptCount >= Math.min(input.maxAttempts, 3))

@@ -12,7 +12,11 @@ import { registerOpsMorningDigestRunIntegrationCases } from './ops-morning-diges
 import { registerMigrationBoundsIntegrationCases } from './migration-bounds.integration-cases';
 import { registerDeploymentDatabaseGateIntegrationCases } from './deployment-database-gate.integration-cases';
 import { randomUUID } from 'node:crypto';
-import { toJapanLocalDate } from '@bunshin/capability-fortune';
+import {
+  FortuneDailyReadingService,
+  TAROT_DECK,
+  toJapanLocalDate,
+} from '@bunshin/capability-fortune';
 import { registerImprovementTriageIntegrationCases } from './improvement-triage.integration-cases';
 import { registerImprovementRetentionJobIntegrationCases } from './improvement-retention-jobs.integration-cases';
 import { registerTrainingSupportSkillLifecycleIntegrationCases } from './training-support-skill-lifecycle.integration-cases';
@@ -1527,9 +1531,110 @@ describe('database ownership boundaries', () => {
       });
       if (!personalized?.personalProfileRevision)
         throw new Error('fortune profile revision missing');
+      await client.fortuneServiceSetting.update({
+        where: { id: setting.id },
+        data: { guidanceSettings: { intake: { enabled: true }, deepReadingEnabled: true } },
+      });
+      const approved = '一歩進める前に足元を確かめる。';
+      const cardCode = TAROT_DECK[0]!.code;
+      await client.fortuneKnowledgeVersion.create({
+        data: {
+          serviceSettingId: setting.id,
+          version: 1,
+          status: 'APPROVED',
+          approvedByUserId: owner.user.id,
+          approvedAt: new Date(),
+          promptVersion: 'standard-fixture',
+          cardMeanings: {
+            create: {
+              cardCode,
+              orientation: 'UPRIGHT',
+              theme: 'WORK',
+              safetyReviewed: true,
+              title: '標準解釈',
+              body: approved,
+              actionStep: '考えていることを書き出す。',
+            },
+          },
+        },
+      });
+      let randomCalls = 0;
+      const deepService = new FortuneDailyReadingService(repository, {
+        nextInt: () => {
+          randomCalls++;
+          return 0;
+        },
+      });
+      const deepInput = {
+        ...input,
+        theme: 'WORK' as const,
+        now: new Date(Date.now() - 4 * 86_400_000),
+        reviewedUnderstanding: [
+          { field: 'VALUES', source: 'ANSWER', state: 'CONFIRMED', text: '家族との時間' } as const,
+        ],
+      };
+      const deepBasic = await deepService.draw(deepInput);
+      expect(deepBasic).toMatchObject({
+        cardCode,
+        orientation: 'UPRIGHT',
+        body: approved,
+      });
+      expect((await deepService.draw(deepInput)).id).toBe(deepBasic.id);
+      expect(randomCalls).toBe(2);
+      const deepTarget = { ...input, readingId: deepBasic.id };
+      const deepClaim = await repository.claimAiGeneration(deepTarget);
+      expect(deepClaim?.reviewedUnderstanding).toEqual(deepInput.reviewedUnderstanding);
+      await expect(
+        repository.completeAiGeneration({
+          ...deepTarget,
+          output: {
+            ...output,
+            deep: { alternatives: ['条件を整理する'], actionReason: '違いを比較できる' },
+          },
+        }),
+      ).resolves.toMatchObject({
+        id: deepBasic.id,
+        cardCode,
+        status: 'READY_AI',
+        deepReading: {
+          importantValue: '家族との時間',
+          approvedPerspective: approved,
+          consultationSummary: null,
+        },
+      });
+      expect(
+        (await client.fortuneReading.findUniqueOrThrow({ where: { id: deepBasic.id } }))
+          .pendingUnderstanding,
+      ).toBeNull();
+      const failed = await deepService.draw({
+        ...deepInput,
+        now: new Date(Date.now() - 5 * 86_400_000),
+      });
+      const failedTarget = { ...input, readingId: failed.id };
+      await repository.claimAiGeneration(failedTarget);
+      await expect(
+        repository.fallbackAiGeneration({ ...failedTarget, failureCode: 'AI_UNAVAILABLE' }),
+      ).resolves.toMatchObject({
+        id: failed.id,
+        cardCode,
+        status: 'READY_BASIC',
+        body: approved,
+      });
+      expect(
+        (await client.fortuneReading.findUniqueOrThrow({ where: { id: failed.id } }))
+          .pendingUnderstanding,
+      ).toBeNull();
+      const abandoned = await deepService.draw({
+        ...deepInput,
+        now: new Date(Date.now() - 6 * 86_400_000),
+      });
       await expect(profiles.update({ ...input, profile: { consented: false } })).resolves.toBe(
         true,
       );
+      expect(
+        (await client.fortuneReading.findUniqueOrThrow({ where: { id: abandoned.id } }))
+          .pendingUnderstanding,
+      ).toBeNull();
       await expect(understanding.read(input)).resolves.toMatchObject({ items: [], canSave: false });
       expect(
         (await client.fortuneParticipant.findUniqueOrThrow({ where: { id: participant.id } }))
@@ -1571,7 +1676,7 @@ describe('database ownership boundaries', () => {
       await client.fortuneParticipant.deleteMany({ where: { id: participant.id } });
       await client.fortuneServiceSetting.deleteMany({ where: { id: setting.id } });
     }
-  });
+  }, 20_000);
 
   it('exports only the owners training records even after completion and program archive', async () => {
     const accounts = new CreateUserWithPersonalWorkspace(new PrismaAccountUnitOfWork(client));

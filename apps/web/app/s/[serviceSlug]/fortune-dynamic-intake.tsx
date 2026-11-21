@@ -6,7 +6,6 @@ import {
   FORTUNE_INTAKE_QUESTIONS,
   buildFortuneUnderstanding,
   confirmedFortuneUnderstanding,
-  fortuneUnderstandingConsultation,
   type FortuneIntakeAnswer,
   type FortuneIntakeKey,
   type FortuneTheme,
@@ -18,9 +17,12 @@ import { FortuneUnderstandingReview } from './fortune-understanding';
 type Step =
   { kind: 'START' | 'DONE' | 'WAIT' | 'UNAVAILABLE' } | { kind: 'QUESTION'; key: FortuneIntakeKey };
 
-export function FortuneDynamicIntake(
-  props: Omit<ComponentProps<typeof FortuneDrawButtons>, 'onSelectTheme'>,
-) {
+export function FortuneDynamicIntake({
+  deepReadingEnabled = false,
+  ...props
+}: Omit<ComponentProps<typeof FortuneDrawButtons>, 'onSelectTheme'> & {
+  deepReadingEnabled?: boolean;
+}) {
   const [started, setStarted] = useState(false);
   const [theme, setTheme] = useState<FortuneTheme>();
   return (
@@ -40,6 +42,7 @@ export function FortuneDynamicIntake(
         <IntakeConversation
           serviceSlug={props.serviceSlug}
           theme={theme}
+          deepReadingEnabled={deepReadingEnabled}
           onExit={() => {
             setStarted(false);
             setTheme(undefined);
@@ -65,10 +68,12 @@ function IntakeConversation({
   serviceSlug,
   theme,
   onExit,
+  deepReadingEnabled,
 }: {
   serviceSlug: string;
   theme: FortuneTheme;
   onExit: () => void;
+  deepReadingEnabled: boolean;
 }) {
   const router = useRouter();
   const [step, setStep] = useState<Step>({ kind: 'START' });
@@ -118,11 +123,14 @@ function IntakeConversation({
     setDrawing(true);
     setError(false);
     try {
-      const combined = fortuneUnderstandingConsultation(items);
+      const reviewedUnderstanding = confirmedFortuneUnderstanding(items);
       const response = await fetch(`/api/services/${serviceSlug}/fortune/today`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ theme, ...(combined ? { consultation: combined } : {}) }),
+        body: JSON.stringify({
+          theme,
+          ...(reviewedUnderstanding.length ? { reviewedUnderstanding } : {}),
+        }),
       });
       if (!response.ok) throw new Error('reading unavailable');
       router.refresh();
@@ -150,6 +158,7 @@ function IntakeConversation({
           serviceSlug={serviceSlug}
           items={review}
           drawing={drawing}
+          deepReadingEnabled={deepReadingEnabled}
           update={(item) =>
             setReview(
               (current) =>

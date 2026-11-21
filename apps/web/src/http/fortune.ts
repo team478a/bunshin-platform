@@ -11,7 +11,8 @@ import {
   FORTUNE_REFLECTION_ANSWERS,
   FORTUNE_UNDERSTANDING_FIELDS,
   FORTUNE_UNDERSTANDING_SOURCES,
-  parseConfirmedFortuneUnderstanding,
+  parseFortuneReviewedItems,
+  fortuneUnderstandingConsultation,
 } from '@bunshin/capability-fortune';
 import { requestIdFromHeader } from '@bunshin/observability';
 import { ApplicationError, toApiError } from '@bunshin/shared';
@@ -52,8 +53,21 @@ const personalProfileBody = z.discriminatedUnion('consented', [
     })
     .strict(),
 ]);
+const reviewedItemBody = z
+  .object({
+    field: z.enum(FORTUNE_UNDERSTANDING_FIELDS),
+    state: z.literal('CONFIRMED'),
+    text: z.string().trim().min(1).max(200),
+    source: z.enum(FORTUNE_UNDERSTANDING_SOURCES),
+  })
+  .strict();
+const reviewedItemsBody = z.array(reviewedItemBody).min(1).max(FORTUNE_UNDERSTANDING_FIELDS.length);
 const drawBody = z
-  .object({ theme: z.enum(FORTUNE_THEMES), consultation: z.string().trim().max(500).optional() })
+  .object({
+    theme: z.enum(FORTUNE_THEMES),
+    consultation: z.string().trim().max(500).optional(),
+    reviewedUnderstanding: reviewedItemsBody.optional(),
+  })
   .strict();
 const intakeBody = z
   .object({
@@ -83,19 +97,7 @@ const understandingBody = z
   .object({
     revision: uuid.nullable(),
     profileRevision: z.string().datetime(),
-    items: z
-      .array(
-        z
-          .object({
-            field: z.enum(FORTUNE_UNDERSTANDING_FIELDS),
-            state: z.literal('CONFIRMED'),
-            text: z.string().trim().min(1).max(200),
-            source: z.enum(FORTUNE_UNDERSTANDING_SOURCES),
-          })
-          .strict(),
-      )
-      .min(1)
-      .max(FORTUNE_UNDERSTANDING_FIELDS.length),
+    items: reviewedItemsBody,
   })
   .strict();
 const reflectionBody = z.object({ answer: z.enum(FORTUNE_REFLECTION_ANSWERS).nullable() }).strict();
@@ -243,14 +245,8 @@ export const getFortuneUnderstandingResponse = (request: Request, serviceSlug: s
 export const updateFortuneUnderstandingResponse = (request: Request, serviceSlug: string) =>
   json(request, serviceSlug, async (actorUserId, parsedSlug) => {
     const body = await requireJson(request, understandingBody);
-    const items = body.items
-      .map(parseConfirmedFortuneUnderstanding)
-      .filter((item) => item !== null);
-    if (
-      items.length !== body.items.length ||
-      new Set(items.map(({ field }) => field)).size !== items.length
-    )
-      throw new ApplicationError('VALIDATION_ERROR', '保存する項目を確認してください。');
+    const items = parseFortuneReviewedItems(body.items);
+    if (!items) throw new ApplicationError('VALIDATION_ERROR', '保存する項目を確認してください。');
     const actor = { serviceSlug: parsedSlug, actorUserId };
     const repository = await fortuneUnderstandingRepository();
     const result = await repository.save({
@@ -297,11 +293,18 @@ export const drawFortuneResponse = (request: Request, serviceSlug: string) =>
     serviceSlug,
     async (actorUserId, parsedSlug) => {
       const body = await requireJson(request, drawBody);
+      const reviewed = parseFortuneReviewedItems(body.reviewedUnderstanding);
+      if (body.reviewedUnderstanding && (!reviewed || body.consultation !== undefined))
+        throw new ApplicationError('VALIDATION_ERROR', '今回の相談内容を確認してください。');
+      const consultation = reviewed
+        ? fortuneUnderstandingConsultation(reviewed)
+        : body.consultation;
       return (await fortuneDailyReadingService()).draw({
         serviceSlug: parsedSlug,
         actorUserId,
         theme: body.theme,
-        ...(body.consultation ? { consultation: body.consultation } : {}),
+        ...(consultation ? { consultation } : {}),
+        ...(reviewed ? { reviewedUnderstanding: reviewed } : {}),
       });
     },
     201,

@@ -7,4 +7,5 @@ export * from './tarot';
 export * from './fortune-personal-profile';
 export * from './fortune-intake';
 export * from './fortune-understanding';
+export * from './fortune-deep-reading';
 export { STANDARD_FORTUNE_PROMPT_VERSION } from './standard-knowledge';

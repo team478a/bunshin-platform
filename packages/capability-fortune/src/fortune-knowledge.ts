@@ -2,11 +2,13 @@ import { buildStandardFortuneKnowledgePackFromDeck } from './standard-knowledge'
 import { FORTUNE_THEMES, type FortuneTheme } from './fortune-definition';
 import { FortunePolicyError } from './fortune-policy-error';
 import { FORTUNE_ORIENTATIONS, TAROT_DECK, type FortuneOrientation } from './tarot';
+import type { FortuneDeepProposal } from './fortune-deep-reading';
 
 export interface FortuneReadingOutput {
   body: string;
   actionStep: string;
   reflectionPrompt?: string;
+  deep?: FortuneDeepProposal;
 }
 
 export interface FortuneKnowledgeMeaningInput {
@@ -124,7 +126,16 @@ const prohibitedPatterns = [
 const hasProhibitedReadingPattern = (text: string) =>
   prohibitedPatterns.some((pattern) => pattern.test(text));
 
-export function validateFortuneReadingOutput(output: FortuneReadingOutput): FortuneReadingOutput {
+const deepProhibitedPatterns = [
+  /https?:\/\/|www\./iu,
+  /(?:退職|離職|離婚|別れ).{0,10}(?:すべき|してください|しなさい)/u,
+  /(?:服用|薬).{0,10}(?:中止し|やめて|増やして)/u,
+];
+
+export function validateFortuneReadingOutput(
+  output: FortuneReadingOutput,
+  requireDeep = false,
+): FortuneReadingOutput {
   const body = output.body.trim();
   const actionStep = output.actionStep.trim();
   if (body.length < 1 || body.length > 700 || actionStep.length < 1 || actionStep.length > 200) {
@@ -140,11 +151,45 @@ export function validateFortuneReadingOutput(output: FortuneReadingOutput): Fort
   ) {
     throw new FortunePolicyError('INVALID_READING_OUTPUT', '振り返りの質問の長さが規定外です');
   }
-  if (hasProhibitedReadingPattern(`${body}\n${actionStep}\n${reflectionPrompt ?? ''}`)) {
+  const deep = output.deep && {
+    alternatives: output.deep.alternatives.map((option) => option.trim()),
+    actionReason: output.deep.actionReason.trim(),
+  };
+  if (requireDeep && !deep)
+    throw new FortunePolicyError('INVALID_READING_OUTPUT', '深層鑑定の項目がありません');
+  if (
+    deep &&
+    (deep.alternatives.length < 1 ||
+      deep.alternatives.length > 2 ||
+      new Set(deep.alternatives).size !== deep.alternatives.length ||
+      deep.alternatives.some((option) => !option || option.length > 180) ||
+      !deep.actionReason ||
+      deep.actionReason.length > 180)
+  )
+    throw new FortunePolicyError(
+      'INVALID_READING_OUTPUT',
+      '深層鑑定の選択肢または提案理由が規定外です',
+    );
+  const generatedText = [
+    body,
+    actionStep,
+    reflectionPrompt,
+    ...(deep?.alternatives ?? []),
+    deep?.actionReason,
+  ].join('\n');
+  if (
+    hasProhibitedReadingPattern(generatedText) ||
+    (deep && deepProhibitedPatterns.some((pattern) => pattern.test(generatedText)))
+  ) {
     throw new FortunePolicyError(
       'UNSAFE_READING_OUTPUT',
       '断定、診断、投資判断、販売誘導を含む占い結果は公開できません',
     );
   }
-  return { body, actionStep, ...(reflectionPrompt ? { reflectionPrompt } : {}) };
+  return {
+    body,
+    actionStep,
+    ...(reflectionPrompt ? { reflectionPrompt } : {}),
+    ...(deep ? { deep } : {}),
+  };
 }

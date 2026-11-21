@@ -54,6 +54,7 @@ export function FortuneGuidanceEditor({
             styleQuestion: text('styleQuestion'),
             guideName: text('guideName'),
             followUpLimit: Number(text('followUpLimit')),
+            deepReadingEnabled: fields.get('deepReadingEnabled') === 'on',
             intake: {
               enabled: fields.get('intakeEnabled') === 'on',
               questions: Number(text('intakeQuestions')),
@@ -128,6 +129,14 @@ export function FortuneGuidanceEditor({
           <label className="fortune-check">
             <input type="checkbox" name="intakeEnabled" defaultChecked={intake.enabled} />
             <span>鑑定前の動的ヒアリングを有効にする</span>
+          </label>
+          <label className="fortune-check">
+            <input
+              type="checkbox"
+              name="deepReadingEnabled"
+              defaultChecked={settings.deepReadingEnabled ?? false}
+            />
+            <span>確認済みの相談を使う深層鑑定を有効にする</span>
           </label>
           <label className="form-field">
             <span>鑑定前の追加質問数（1人・1日あたり）</span>

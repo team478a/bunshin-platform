@@ -17,6 +17,7 @@ export async function runExpiredFortuneReadingPurge(
   const deleted = await db.purgeExpiredFortuneReadings(db.prisma, now);
   await db.purgeExpiredFortuneProfiles(db.prisma, now);
   await db.purgeExpiredFortuneIntake(db.prisma, now);
+  await db.purgeExpiredFortuneDeepInputs(db.prisma, now);
   await db.purgeExpiredFortuneUnderstanding(db.prisma, now);
   return { deleted };
 }
