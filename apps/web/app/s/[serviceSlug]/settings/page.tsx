@@ -1,7 +1,9 @@
+import { FortuneAppearance } from '../fortune-appearance';
 import { PublicShell } from '../../../ui/public-shell';
 import { fortuneDailyReadingService } from '../../../../src/fortune/runtime';
 import { resolveFortuneGuidanceSettings } from '../../../../src/fortune/guidance-settings';
 import { resolveFortunePage } from '../../../../src/fortune/page-context';
+import { FortuneCharacterBadge } from '../fortune-character';
 import { FortuneNav } from '../fortune-ui';
 import { FortuneProfileForm } from '../fortune-profile-form';
 import {
@@ -50,12 +52,16 @@ export default async function FortuneSettingsPage({
         orderBy: { updatedAt: 'desc' },
       })
     : [];
-  return (
+  const guidance = resolveFortuneGuidanceSettings(setting.guidanceSettings);
+  const content = (
     <PublicShell showPlatformBrand={false}>
       <main className="app-page fortune-page">
         <header className="app-page__heading">
           <h1>占いの設定</h1>
           <p>現在の利用状況を確認できます。</p>
+          {guidance.characters?.intake && (
+            <FortuneCharacterBadge character={guidance.characters.intake} compact />
+          )}
         </header>
         <section className="settings-card">
           <h2>年齢確認</h2>
@@ -70,7 +76,7 @@ export default async function FortuneSettingsPage({
             key={String(profile.profile.consented)}
             serviceSlug={serviceSlug}
             profile={profile.profile}
-            guidance={resolveFortuneGuidanceSettings(setting.guidanceSettings)}
+            guidance={guidance}
             enabled={profile.enabled}
           />
         )}
@@ -132,5 +138,10 @@ export default async function FortuneSettingsPage({
         <FortuneNav serviceSlug={serviceSlug} />
       </main>
     </PublicShell>
+  );
+  return (
+    <FortuneAppearance settings={guidance.appearance} brand={service.configuration.brand}>
+      {content}
+    </FortuneAppearance>
   );
 }

@@ -1,3 +1,4 @@
+import { defaultFortuneAppearance } from '../src/fortune/appearance';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   defaultFortuneGuidanceSettings,
@@ -15,6 +16,7 @@ const state = vi.hoisted(() => ({
   setEnabled: vi.fn(),
   setAiEnabled: vi.fn(),
   saveGuidance: vi.fn(),
+  saveAppearance: vi.fn(),
   setWeeklyNotification: vi.fn(),
 }));
 vi.mock('../src/auth/current-user', () => ({
@@ -29,6 +31,7 @@ vi.mock('../src/fortune/operator', () => ({
   setFortuneEnabled: state.setEnabled,
   setFortuneAiEnabled: state.setAiEnabled,
   saveFortuneGuidanceSettings: state.saveGuidance,
+  saveFortuneAppearanceSettings: state.saveAppearance,
   setFortuneWeeklyNotification: state.setWeeklyNotification,
 }));
 
@@ -71,6 +74,7 @@ describe('fortune operator HTTP boundary', () => {
     state.updateStandard.mockResolvedValue({ updated: true, fromVersion: 1, toVersion: 2 });
     state.setEnabled.mockResolvedValue({ enabled: true });
     state.saveGuidance.mockResolvedValue({ saved: true });
+    state.saveAppearance.mockResolvedValue({ saved: true });
     state.setWeeklyNotification.mockResolvedValue({
       weeklyNotificationEnabled: true,
       weeklyNotificationDay: 3,
@@ -89,9 +93,20 @@ describe('fortune operator HTTP boundary', () => {
       introduction: '一緒に考えを整理しましょう。',
       imageUrl: 'https://images.example/guide.webp',
     };
+    const characters = {
+      daily: {
+        id: 'daily-guide',
+        name: '合成の案内役',
+        enabled: true,
+        imageUrl: 'https://images.example/daily.webp',
+        iconUrl: '',
+        expressions: { thinking: 'https://images.example/thinking.png' },
+      },
+    };
     for (const settings of [
       defaultFortuneGuidanceSettings,
       { ...defaultFortuneGuidanceSettings, guide },
+      { ...defaultFortuneGuidanceSettings, guide, characters },
     ]) {
       const result = await updateFortuneOperationsResponse(
         request({ action: 'SAVE_GUIDANCE_SETTINGS', settings }),
@@ -106,6 +121,36 @@ describe('fortune operator HTTP boundary', () => {
     }
   });
 
+  it('accepts appearance settings only through the authenticated service manager path', async () => {
+    const settings = { ...defaultFortuneAppearance, enabled: true, action: '#271d4e' };
+    const result = await updateFortuneOperationsResponse(
+      request({ action: 'SAVE_APPEARANCE_SETTINGS', settings }),
+      'fortune',
+    );
+    expect(result.status).toBe(200);
+    expect(state.saveAppearance).toHaveBeenLastCalledWith({
+      serviceSlug: 'fortune',
+      actorUserId: 'manager-1',
+      settings,
+    });
+    const invalid = await updateFortuneOperationsResponse(
+      request({
+        action: 'SAVE_APPEARANCE_SETTINGS',
+        settings: { ...settings, background: 'url(https://example.invalid)' },
+      }),
+      'fortune',
+    );
+    expect(invalid.status).toBe(400);
+    state.user = null;
+    const unauthenticated = await updateFortuneOperationsResponse(
+      request({ action: 'SAVE_APPEARANCE_SETTINGS', settings }),
+      'fortune',
+    );
+    expect(unauthenticated.status).toBe(401);
+    expect(state.saveAppearance).toHaveBeenCalledTimes(1);
+    expect(state.saveGuidance).not.toHaveBeenCalled();
+  });
+
   it('rejects non-HTTPS avatar URLs before calling the operator service', async () => {
     const result = await updateFortuneOperationsResponse(
       request({
@@ -118,6 +163,30 @@ describe('fortune operator HTTP boundary', () => {
       'fortune',
     );
     expect(result.status).toBe(400);
+    expect(state.saveGuidance).not.toHaveBeenCalled();
+  });
+
+  it('rejects unsafe expression image URLs in a role without saving it', async () => {
+    const response = await updateFortuneOperationsResponse(
+      request({
+        action: 'SAVE_GUIDANCE_SETTINGS',
+        settings: {
+          ...defaultFortuneGuidanceSettings,
+          characters: {
+            deep: {
+              id: 'deep-guide',
+              name: '合成の案内役',
+              enabled: true,
+              imageUrl: '',
+              iconUrl: '',
+              expressions: { thinking: 'https://user:secret@images.example/guide.webp' },
+            },
+          },
+        },
+      }),
+      'fortune',
+    );
+    expect(response.status).toBe(400);
     expect(state.saveGuidance).not.toHaveBeenCalled();
   });
 

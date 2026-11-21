@@ -1,5 +1,6 @@
 import 'server-only';
 import { ApplicationError } from '@bunshin/shared';
+import type { FortuneAppearanceSettings } from './appearance';
 import type { FortuneGuidanceSettings } from './guidance-settings';
 import { fortuneOperatorScope } from './operator-scope';
 import { fortuneOperatorStatus } from './operator-status';
@@ -30,15 +31,40 @@ export async function saveFortuneGuidanceSettings(input: {
 }) {
   const service = await fortuneOperatorScope(input.serviceSlug, input.actorUserId);
   const db = await import('@bunshin/database');
-  const updated = await db.prisma.fortuneServiceSetting.updateMany({
-    where: {
-      workspaceId: service.workspaceId,
-      groupId: service.serviceId,
-      configurationId: service.configuration.id,
-    },
-    data: { guidanceSettings: input.settings },
-  });
-  if (updated.count !== 1) throw new ApplicationError('NOT_FOUND', 'fortune setting not found');
+  const updated = await db.prisma.$executeRaw`
+    UPDATE fortune_service_settings
+    SET guidance_settings = ${JSON.stringify(input.settings)}::jsonb ||
+      CASE WHEN jsonb_typeof(guidance_settings->'appearance') = 'object'
+        THEN jsonb_build_object('appearance', guidance_settings->'appearance')
+        ELSE '{}'::jsonb
+      END,
+      updated_at = NOW()
+    WHERE workspace_id = ${service.workspaceId}::uuid
+      AND group_id = ${service.serviceId}::uuid
+      AND configuration_id = ${service.configuration.id}::uuid
+  `;
+  if (updated !== 1) throw new ApplicationError('NOT_FOUND', 'fortune setting not found');
+  return { saved: true };
+}
+
+export async function saveFortuneAppearanceSettings(input: {
+  serviceSlug: string;
+  actorUserId: string;
+  settings: FortuneAppearanceSettings;
+}) {
+  const service = await fortuneOperatorScope(input.serviceSlug, input.actorUserId);
+  const db = await import('@bunshin/database');
+  const updated = await db.prisma.$executeRaw`
+    UPDATE fortune_service_settings
+    SET guidance_settings = jsonb_set(
+      CASE WHEN jsonb_typeof(guidance_settings) = 'object' THEN guidance_settings ELSE '{}'::jsonb END,
+      '{appearance}', ${JSON.stringify(input.settings)}::jsonb
+    ), updated_at = NOW()
+    WHERE workspace_id = ${service.workspaceId}::uuid
+      AND group_id = ${service.serviceId}::uuid
+      AND configuration_id = ${service.configuration.id}::uuid
+  `;
+  if (updated !== 1) throw new ApplicationError('NOT_FOUND', 'fortune setting not found');
   return { saved: true };
 }
 

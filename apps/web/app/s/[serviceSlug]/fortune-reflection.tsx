@@ -3,6 +3,9 @@
 import { useState } from 'react';
 import type { FortuneReflectionAnswer } from '@bunshin/capability-fortune';
 
+import type { FortuneCharacter } from '../../../src/fortune/guidance-settings';
+import { FortuneCharacterBadge } from './fortune-character';
+
 const labels = {
   TRIED_CHANGED: '試して変化があった',
   TRIED_NO_CHANGE: '試した。変化はこれから',
@@ -12,8 +15,10 @@ const labels = {
 export function FortuneReflection({
   serviceSlug,
   reading,
+  character,
 }: {
   serviceSlug: string;
+  character?: FortuneCharacter;
   reading: {
     id: string;
     actionStep: string | null;
@@ -52,6 +57,7 @@ export function FortuneReflection({
   return (
     <details className="settings-card fortune-action">
       <summary>前回の提案を振り返る（任意）</summary>
+      {character && <FortuneCharacterBadge character={character} compact />}
       {reading.actionStep && <p>{reading.actionStep}</p>}
       <p>{reading.reflectionPrompt ?? '前回の提案を試して、何か変化はありましたか？'}</p>
       <div className="button-row">

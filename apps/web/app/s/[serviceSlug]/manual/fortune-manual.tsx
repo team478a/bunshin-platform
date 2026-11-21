@@ -3,6 +3,9 @@ import type { Route } from 'next';
 import Link from 'next/link';
 import { PublicShell } from '../../../ui/public-shell';
 
+import type { FortuneCharacter } from '../../../../src/fortune/guidance-settings';
+import { FortuneCharacterBadge } from '../fortune-character';
+
 function ActionLabel({ children }: { children: React.ReactNode }) {
   return <strong className="easy-manual__action">{children}</strong>;
 }
@@ -20,10 +23,12 @@ export function FortuneManual({
   serviceSlug,
   serviceName,
   contactEmail,
+  character,
 }: {
   serviceSlug: string;
   serviceName: string;
   contactEmail: string | null;
+  character?: FortuneCharacter;
 }) {
   const serviceBase = `/s/${serviceSlug}`;
   const style = {
@@ -42,6 +47,7 @@ export function FortuneManual({
             <br />
             かんたん使い方
           </h1>
+          {character && <FortuneCharacterBadge character={character} compact />}
           <p>ボタンの名前を見比べながら、上から順番に進めてください。</p>
           <a className="button button--primary button--full" href="#step-1">
             はじめから見る
