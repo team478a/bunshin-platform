@@ -2,10 +2,13 @@ import { test } from '@e2e-dev/web';
 import { expect } from 'e2e';
 
 const deepStage = process.env['BUNSHIN_FORTUNE_TEST_STAGE'] === 'deep';
+const invitationPath = process.env['BUNSHIN_FORTUNE_TEST_INVITATION'];
 test(
   deepStage
     ? 'a returning participant can check saved context and receive a deep reading on mobile'
-    : 'a verified participant can join, skip intake and draw a standard reading on mobile',
+    : invitationPath
+      ? 'an invited visitor can accept the invitation and reach the mobile age gate'
+      : 'a verified participant can join, skip intake and draw a standard reading on mobile',
   async ({ app, browser, screen }) => {
     const slug = process.env['BUNSHIN_FORTUNE_TEST_SLUG'];
     if (!slug?.startsWith('isolated-fortune-'))
@@ -20,12 +23,34 @@ test(
       if (new URL(route.request.url).origin === url) await route.continue();
       else await route.abort();
     });
-    await app.open(`/s/${slug}/today`);
+    const entry = invitationPath || `/s/${slug}/today`;
+    if (invitationPath && !invitationPath.startsWith(`/s/${slug}/join/`)) {
+      throw new Error('An invitation scoped to the disposable service is required');
+    }
+    await app.open(entry);
     await expect(screen.getByRole('heading', { name: /ログイン/ })).toBeVisible();
     await browser.setCookies(
       cookies.map(({ name, value }) => ({ name, value, url, httpOnly: true })),
     );
-    await app.open(`/s/${slug}/today`);
+    await app.open(entry);
+    if (invitationPath) {
+      await screen.getByLabel(/サービスへの参加に同意します/).tap();
+      await screen.getByRole('button', '同意して参加する').tap();
+      await expect(screen.getByRole('heading', '利用規約などの確認')).toBeVisible({
+        timeout: 45_000,
+      });
+      await screen.getByLabel('合成利用規約に同意します').tap();
+      await screen.getByLabel('合成プライバシーポリシーに同意します').tap();
+      await screen.getByRole('button', '現在の文書へ同意する').tap();
+      await expect(screen.getByText('現在有効な文書への同意は完了しています。')).toBeVisible({
+        timeout: 30_000,
+      });
+      await screen.getByRole('link', 'サービスのホームに戻る').tap();
+      await expect(screen.getByRole('heading', '最初に年齢を確認します')).toBeVisible({
+        timeout: 45_000,
+      });
+      return;
+    }
     if (deepStage) {
       await screen.getByRole('button', 'AIと相談を整理してから占う').tap();
       await screen.getByRole('button', /仕事や今後の動き/).tap();
