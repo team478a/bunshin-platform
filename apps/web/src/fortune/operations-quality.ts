@@ -351,7 +351,7 @@ export async function fortuneOperationsQuality(
     localDate: { gte: db.fortuneReadingRetentionCutoff(now, setting.historyRetentionDays) },
     deepReading: { not: db.Prisma.DbNull },
   };
-  const [intakes, deepReadings, deepFit, deepViews] = await db.prisma.$transaction([
+  const [intakes, deepReadings, deepFit, deepViews] = await Promise.all([
     db.prisma.fortuneIntakeSession.groupBy({
       by: ['outcome', 'localDate'],
       where: intakeScope,

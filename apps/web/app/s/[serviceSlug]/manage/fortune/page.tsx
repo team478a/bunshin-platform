@@ -225,7 +225,7 @@ export default async function FortuneManagementPage({
           <section className="settings-card">
             <h2>深層鑑定の利用状況</h2>
             <p>直近30日（サービスの保存期間が短い場合はその期間内）</p>
-            <dl className="admin-detail-list">
+            <dl>
               <div>
                 <dt>ヒアリング開始</dt>
                 <dd>{quality.deepGuidance.starts}件</dd>
@@ -269,7 +269,7 @@ export default async function FortuneManagementPage({
               </div>
             </dl>
             <h3>AIの利用と概算原価（{quality.aiOperations.monthKey}、UTC）</h3>
-            <dl className="admin-detail-list">
+            <dl>
               {(
                 [
                   ['ヒアリングの質問選択', quality.deepGuidance.intakeAi],
