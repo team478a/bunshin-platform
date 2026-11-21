@@ -71,7 +71,7 @@ describe('Fortune dynamic question provider', () => {
       expect.anything(),
       expect.objectContaining({
         status: 'SUCCESS',
-        promptVersion: 'fortune-dynamic-intake-v1',
+        promptVersion: 'fortune-dynamic-intake-v2',
         idempotencyKey: 'fortune-intake:turn',
         inputTokens: 50,
         outputTokens: 9,
@@ -96,8 +96,27 @@ describe('Fortune dynamic question provider', () => {
   );
 
   it('ends without a question when the consultation is sufficient', async () => {
-    provider({ key: 'DONE' });
-    await expect(selectFortuneIntakeQuestion(input)).resolves.toBeNull();
+    const request = provider({ key: 'DONE' });
+    const consultation =
+      '週末までに残業を減らしたい。締切を守れるよう、会議と作業時間のどちらを調整するか考えたい。';
+    await expect(
+      selectFortuneIntakeQuestion({
+        ...input,
+        consultation,
+        answers: [{ key: 'VALUES', answer: '締切を守る' }],
+        candidates: ['REASON', 'DESIRED'],
+      }),
+    ).resolves.toBeNull();
+    expect(request).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ body: expect.stringContaining('今回本人が整理したいこと') }),
+    );
+    expect(request).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        body: expect.stringContaining('"enum":["REASON","DESIRED","DONE"]'),
+      }),
+    );
     expect(mocks.usage).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({ status: 'SUCCESS' }),
