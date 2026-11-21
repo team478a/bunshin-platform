@@ -1,4 +1,5 @@
 // Offline Fortune fixtures. All other requests stay behind the existing network guard.
+require('../feedback-e2e-network-guard.cjs');
 const guardedFetch = globalThis.fetch;
 globalThis.fetch = function (input, options) {
   if (

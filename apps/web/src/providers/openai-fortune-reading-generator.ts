@@ -3,7 +3,7 @@ import type {
   FortuneAiReadingGenerator,
   FortuneAiReadingResult,
 } from '@bunshin/capability-fortune';
-import { validateFortuneReadingOutput } from '@bunshin/capability-fortune';
+import { toJapanLocalDate, validateFortuneReadingOutput } from '@bunshin/capability-fortune';
 import { ApplicationError } from '@bunshin/shared';
 import { z } from 'zod';
 import { recordOpenAiUsageAndSettle } from '../ai/openai-cost-admission';
@@ -33,7 +33,7 @@ export function fortuneReadingPromptInput(
     ? {
         ...personalization,
         priorUnderstanding: personalization.priorUnderstanding && {
-          savedOn: personalization.priorUnderstanding.savedAt.slice(0, 10),
+          savedOn: toJapanLocalDate(new Date(personalization.priorUnderstanding.savedAt)),
           items: personalization.priorUnderstanding.items.map(({ field, text }) => ({
             field,
             text,
@@ -192,7 +192,7 @@ export class OpenAiFortuneReadingGenerator implements FortuneAiReadingGenerator 
       )
         throw new ApplicationError('FORBIDDEN', 'fortune personalization permission changed');
       if (input.claim.priorUnderstandingRevision) {
-        const saved = await (await fortuneUnderstandingRepository()).read(input);
+        const saved = await (await fortuneUnderstandingRepository()).read(input, true);
         if (
           !saved?.canSave ||
           !saved.items.length ||

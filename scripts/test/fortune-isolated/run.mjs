@@ -190,9 +190,8 @@ try {
   const existingApp = await fetch(origin, { signal: AbortSignal.timeout(1_000) }).catch(() => null);
   assert.equal(existingApp, null, 'Local application port is already in use');
   const next = join(webRoot, 'node_modules/next/dist/bin/next');
-  const guard = join(root, 'scripts/test/feedback-e2e-network-guard.cjs');
   const mock = join(root, 'scripts/test/fortune-isolated/openai-fixture.cjs');
-  assert.ok(existsSync(next) && existsSync(guard) && existsSync(mock));
+  assert.ok(existsSync(next) && existsSync(mock));
   app = spawn(
     process.execPath,
     [next, 'dev', '--webpack', '--hostname', '127.0.0.1', '--port', '19000'],
@@ -200,7 +199,7 @@ try {
       cwd: webRoot,
       env: {
         ...env,
-        NODE_OPTIONS: `--require "${guard.replaceAll('\\', '/')}" --require "${mock.replaceAll('\\', '/')}"`,
+        NODE_OPTIONS: `--require "${mock.replaceAll('\\', '/')}"`,
       },
       stdio: 'inherit',
     },

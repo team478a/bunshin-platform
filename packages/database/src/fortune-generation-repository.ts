@@ -191,7 +191,7 @@ export class PrismaFortuneGenerationRepository {
       const personalProfileRevision = personal?.enabled ? personal.revision : null;
       const saved =
         reviewed && personalProfileRevision
-          ? await new PrismaFortuneUnderstandingRepository(tx).read(input)
+          ? await new PrismaFortuneUnderstandingRepository(tx).read(input, true)
           : null;
       const priorItems =
         saved?.canSave &&
