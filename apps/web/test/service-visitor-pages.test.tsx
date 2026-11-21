@@ -1,3 +1,4 @@
+import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApplicationError } from '@bunshin/shared';
 import { serviceAuthLoginPath } from '../src/auth/line-return';
@@ -144,9 +145,12 @@ describe('visitor manual and help', () => {
     );
     expect(m.fortune).not.toHaveBeenCalled();
   });
-  it('keeps the private Oracle manual inaccessible to a signed-in nonmember', async () => {
+  it('shows access guidance without looking up the private manual for a signed-in nonmember', async () => {
     m.visible.mockRejectedValue(new ApplicationError('NOT_FOUND', 'service not visible'));
-    await expect(ServiceManualPage({ params: oracleParams })).rejects.toThrow('ROUTE_NOT_FOUND');
+    const html = renderToStaticMarkup(await ServiceManualPage({ params: oracleParams }));
+    expect(html).toContain('サービスの利用設定を確認できません');
+    expect(html).toContain('公開設定と参加登録を確認');
+    expect(html).not.toContain('月と星のオラクル');
     expect(m.fortune).not.toHaveBeenCalled();
   });
   it('renders the Oracle manual for a member after login', async () => {
