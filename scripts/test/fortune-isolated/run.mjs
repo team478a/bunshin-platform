@@ -90,7 +90,10 @@ async function actor(label) {
 
 async function service(label, owner, participant) {
   const workspace = await db.workspace.create({
-    data: { name: `Synthetic ${label}`, type: 'PERSONAL' },
+    data: { name: `Synthetic ${label}`, type: 'ORGANIZATION' },
+  });
+  await db.organizationEntitlement.create({
+    data: { workspaceId: workspace.id, fortunePackageEnabled: true, updatedByUserId: owner.userId },
   });
   const group = await db.group.create({ data: { workspaceId: workspace.id, name: label } });
   const scope = { workspaceId: workspace.id, groupId: group.id };
@@ -140,7 +143,7 @@ async function service(label, owner, participant) {
       personalitySummary: 'Synthetic',
     },
   });
-  return { slug, member, bunshinId: bunshin.id };
+  return { slug, member, configurationId: config.id, bunshinId: bunshin.id };
 }
 
 async function request(actor, path, { method = 'GET', body, status = 200 } = {}) {
@@ -158,7 +161,7 @@ async function request(actor, path, { method = 'GET', body, status = 200 } = {})
   return response;
 }
 
-async function browser(fixture, participant, stage = 'basic') {
+async function browser(fixture, participant, stage = 'basic', invitationPath) {
   const test = spawn(
     process.execPath,
     [
@@ -176,6 +179,7 @@ async function browser(fixture, participant, stage = 'basic') {
         E2E_TELEMETRY_DISABLED: '1',
         BUNSHIN_FORTUNE_TEST_SLUG: fixture.slug,
         BUNSHIN_FORTUNE_TEST_STAGE: stage,
+        BUNSHIN_FORTUNE_TEST_INVITATION: invitationPath ?? '',
         BUNSHIN_FORTUNE_TEST_SESSION: JSON.stringify(participant.cookies),
       },
       stdio: 'inherit',
@@ -183,6 +187,25 @@ async function browser(fixture, participant, stage = 'basic') {
   );
   const [code] = await once(test, 'exit');
   assert.equal(code, 0, 'Mobile browser E2E');
+}
+
+function stopApp(app) {
+  if (!app?.pid || app.exitCode !== null) return;
+  if (process.platform !== 'win32') {
+    app.kill('SIGTERM');
+    return;
+  }
+  try {
+    execFileSync('taskkill', ['/PID', String(app.pid), '/T', '/F'], { stdio: 'ignore' });
+  } catch (error) {
+    // The process can exit between checking exitCode and starting taskkill.
+    try {
+      process.kill(app.pid, 0);
+    } catch (probeError) {
+      if (probeError?.code === 'ESRCH') return;
+    }
+    throw error;
+  }
 }
 
 let app;
@@ -488,14 +511,59 @@ try {
   console.log(
     'PASS confirmed context, next-day reuse and withdrawal, deep results, isolated metrics and recorded cost',
   );
+  const effectiveAt = new Date(Date.now() - 60_000);
+  await db.serviceLegalDocument.createMany({
+    data: [
+      ['TERMS', '合成利用規約'],
+      ['PRIVACY', '合成プライバシーポリシー'],
+    ].map(([type, title]) => ({
+      workspaceId: primary.member.workspaceId,
+      groupId: primary.member.groupId,
+      configurationId: primary.configurationId,
+      type,
+      version: 1,
+      title,
+      content: '隔離テスト用の合成文書です。',
+      status: 'PUBLISHED',
+      effectiveAt,
+      publishedAt: effectiveAt,
+      createdByUserId: owner.userId,
+    })),
+  });
+  const invited = await actor('invited');
+  const invitation = await request(
+    owner,
+    `/api/workspaces/${primary.member.workspaceId}/groups/${primary.member.groupId}/invitations`,
+    { method: 'POST', body: { role: 'PARTICIPANT', serviceSlug: primary.slug }, status: 201 },
+  );
+  const invitationUrl = new URL((await invitation.json()).data.invitationUrl);
+  assert.equal(invitationUrl.origin, origin);
+  assert.ok(invitationUrl.pathname.startsWith(`/s/${primary.slug}/join/`));
+  await browser(primary, invited, 'invite', invitationUrl.pathname);
+  assert.ok(
+    await db.groupMembership.findFirst({
+      where: { groupId: primary.member.groupId, userId: invited.userId, status: 'ACTIVE' },
+      select: { id: true },
+    }),
+    'Invite acceptance creates a service membership',
+  );
+  assert.equal(
+    await db.serviceLegalConsent.count({
+      where: { groupId: primary.member.groupId, userId: invited.userId },
+    }),
+    2,
+    'Both published fixture documents were acknowledged',
+  );
+  console.log(
+    'PASS scoped invitation acceptance and policy consent open the mobile Fortune age gate',
+  );
 } catch (error) {
   console.error(error instanceof Error ? error.message : 'Isolated Fortune test failed');
   process.exitCode = 1;
 } finally {
-  if (app?.pid && app.exitCode === null) {
-    if (process.platform === 'win32')
-      execFileSync('taskkill', ['/PID', String(app.pid), '/T', '/F'], { stdio: 'ignore' });
-    else app.kill('SIGTERM');
+  try {
+    stopApp(app);
+  } finally {
+    await db.$disconnect();
   }
-  await db.$disconnect();
 }
