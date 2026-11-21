@@ -185,6 +185,22 @@ export default async function ServiceMemberHome({
   const needsLegalConsent =
     legalConsent?.legalDocuments.some(({ id }) => !legalConsent.acceptedDocumentIds.includes(id)) ??
     false;
+  const fortune = await db.prisma.fortuneServiceSetting.findFirst({
+    where: {
+      workspaceId: service.workspaceId,
+      groupId: service.serviceId,
+      enabled: true,
+      bunshin: {
+        status: 'ACTIVE',
+        capabilityAssignments: { some: { capabilityType: 'FORTUNE', status: 'ACTIVE' } },
+      },
+    },
+    select: { id: true },
+  });
+  if (fortune && membership.serviceRole === 'PARTICIPANT') {
+    const base = `/s/${service.configuration.slug}`;
+    redirect((needsLegalConsent ? `${base}/legal-consent` : `${base}/today`) as Route);
+  }
   const onboarding = readServiceOnboardingSettings(
     service.configuration.registration.onboardingConfig,
     service.configuration.registration.surveyConfig,
