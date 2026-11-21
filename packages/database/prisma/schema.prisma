@@ -232,6 +232,7 @@ enum ServiceMembershipEventType {
   NOTIFICATION_OPTED_IN
   NOTIFICATION_OPTED_OUT
   SERVICE_WITHDRAWN
+  FORTUNE_WEEKLY_LINE_RETURN
 }
 
 enum GroupInvitationStatus {
@@ -3461,6 +3462,12 @@ model FortuneParticipant {
   notificationHour           Int?                  @map("notification_hour")
   ageConfirmedAt             DateTime              @map("age_confirmed_at") @db.Timestamptz(6)
   joinedAt                   DateTime              @default(now()) @map("joined_at") @db.Timestamptz(6)
+  intakeTurns                FortuneIntakeTurn[]
+  intakeSessions             FortuneIntakeSession[]
+  understandingItems         Json?                 @map("understanding_items")
+  understandingRevision      String?               @map("understanding_revision") @db.Uuid
+  understandingSavedAt       DateTime?             @map("understanding_saved_at") @db.Timestamptz(6)
+  understandingExpiresAt     DateTime?             @map("understanding_expires_at") @db.Timestamptz(6)
   createdAt                  DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt                  DateTime              @updatedAt @map("updated_at") @db.Timestamptz(6)
   serviceSetting             FortuneServiceSetting @relation(fields: [workspaceId, groupId, serviceSettingId], references: [workspaceId, groupId, id], onDelete: Cascade)
@@ -3517,6 +3524,34 @@ model FortuneCardMeaning {
 }
 
 /// 行を削除せずDELETEDへ遷移させることで、結果削除後も同日再抽選を防ぐ。
+model FortuneIntakeTurn {
+  id            String             @id @default(uuid()) @db.Uuid
+  participantId String             @map("participant_id") @db.Uuid
+  localDate     DateTime           @map("local_date") @db.Date
+  theme         FortuneTheme
+  step          Int
+  questionKey   String?            @map("question_key") @db.VarChar(16)
+  resolvedAt    DateTime?          @map("resolved_at") @db.Timestamptz(6)
+  createdAt     DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  participant   FortuneParticipant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+
+  @@unique([participantId, localDate, step])
+  @@index([localDate])
+  @@map("fortune_intake_turns")
+}
+
+model FortuneIntakeSession {
+  participantId  String             @map("participant_id") @db.Uuid
+  localDate      DateTime           @map("local_date") @db.Date
+  questionsShown Int                @default(0) @map("questions_shown")
+  outcome        String?            @db.VarChar(8)
+  participant    FortuneParticipant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+
+  @@id([participantId, localDate])
+  @@index([localDate])
+  @@map("fortune_intake_sessions")
+}
+
 model FortuneReading {
   id                 String                   @id @default(uuid()) @db.Uuid
   workspaceId        String                   @map("workspace_id") @db.Uuid
@@ -3536,8 +3571,12 @@ model FortuneReading {
   promptVersion      String?                  @map("prompt_version") @db.VarChar(80)
   personalizationContext Json?                @map("personalization_context")
   pendingConsultation String?                 @map("pending_consultation") @db.VarChar(500)
+  pendingUnderstanding Json?                  @map("pending_understanding")
+  deepReading         Json?                   @map("deep_reading")
   reflectionPrompt   String?                  @map("reflection_prompt") @db.VarChar(200)
   reflectionAnswer   String?                  @map("reflection_answer") @db.VarChar(24)
+  personalFitRating  String?                  @map("personal_fit_rating") @db.VarChar(12)
+  personalFitRatedAt DateTime?                @map("personal_fit_rated_at") @db.Timestamptz(6)
   failureCode        String?                  @map("failure_code") @db.VarChar(80)
   generatedAt        DateTime?                @map("generated_at") @db.Timestamptz(6)
   firstViewedAt      DateTime?                @map("first_viewed_at") @db.Timestamptz(6)
@@ -3549,12 +3588,29 @@ model FortuneReading {
   memberUser         User                     @relation("FortuneReadingUser", fields: [memberUserId], references: [id], onDelete: Restrict)
   knowledgeVersion   FortuneKnowledgeVersion? @relation(fields: [knowledgeVersionId], references: [id], onDelete: Restrict)
   feedback           FortuneFeedback?
+  followUps          FortuneReadingFollowUp[]
 
   @@unique([serviceSettingId, participantId, localDate])
   @@unique([workspaceId, groupId, serviceSettingId, participantId, memberUserId, id])
   @@index([memberUserId, createdAt])
   @@index([serviceSettingId, status, createdAt])
   @@map("fortune_readings")
+}
+
+model FortuneReadingFollowUp {
+  id         String         @db.Uuid
+  readingId  String         @map("reading_id") @db.Uuid
+  turn       Int
+  status     String         @db.VarChar(12)
+  question   String?        @db.VarChar(300)
+  answer     String?        @db.Text
+  actionStep String?        @map("action_step") @db.VarChar(200)
+  createdAt  DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  reading    FortuneReading @relation(fields: [readingId], references: [id], onDelete: Cascade)
+
+  @@id([readingId, id])
+  @@unique([readingId, turn])
+  @@map("fortune_reading_follow_ups")
 }
 
 /// 本人が閲覧した結果へ付ける選択式評価。自由文や占い本文を複製しない。

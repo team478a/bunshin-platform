@@ -138,10 +138,12 @@ export function FortuneDrawButtons({
   serviceSlug,
   askConsultation = false,
   themeLabels,
+  onSelectTheme,
 }: {
   serviceSlug: string;
   askConsultation?: boolean;
   themeLabels?: Record<(typeof choices)[number]['value'], string>;
+  onSelectTheme?: (theme: (typeof choices)[number]['value']) => void;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
@@ -167,7 +169,11 @@ export function FortuneDrawButtons({
           className="fortune-theme-button"
           disabled={busy !== null}
           type="button"
-          onClick={() =>
+          onClick={() => {
+            if (onSelectTheme) {
+              onSelectTheme(choice.value);
+              return;
+            }
             void (async () => {
               setBusy(choice.value);
               setError('');
@@ -187,8 +193,8 @@ export function FortuneDrawButtons({
               } finally {
                 setBusy(null);
               }
-            })()
-          }
+            })();
+          }}
         >
           <strong>
             {busy === choice.value

@@ -31,6 +31,7 @@ export const FORTUNE_MEMBERSHIP_EVENT_TYPES = [
   'NOTIFICATION_OPTED_IN',
   'NOTIFICATION_OPTED_OUT',
   'SERVICE_WITHDRAWN',
+  'FORTUNE_WEEKLY_LINE_RETURN',
 ] as const;
 
 export type FortuneMembershipEventType = (typeof FORTUNE_MEMBERSHIP_EVENT_TYPES)[number];
@@ -42,6 +43,7 @@ export interface FortuneMembershipActivitySummary {
   notificationOptInParticipants: number;
   notificationOptOutParticipants: number;
   withdrawnParticipants: number;
+  weeklyLineReturnParticipants: number;
 }
 
 export function summarizeFortuneMembershipActivity(
@@ -59,6 +61,7 @@ export function summarizeFortuneMembershipActivity(
     notificationOptInParticipants: count('NOTIFICATION_OPTED_IN'),
     notificationOptOutParticipants: count('NOTIFICATION_OPTED_OUT'),
     withdrawnParticipants: count('SERVICE_WITHDRAWN'),
+    weeklyLineReturnParticipants: count('FORTUNE_WEEKLY_LINE_RETURN'),
   };
 }
 

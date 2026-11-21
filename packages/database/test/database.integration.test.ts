@@ -10,6 +10,11 @@ import { registerOpsMorningDigestRunIntegrationCases } from './ops-morning-diges
 import { registerMigrationBoundsIntegrationCases } from './migration-bounds.integration-cases';
 import { registerDeploymentDatabaseGateIntegrationCases } from './deployment-database-gate.integration-cases';
 import { randomUUID } from 'node:crypto';
+import {
+  FortuneDailyReadingService,
+  TAROT_DECK,
+  toJapanLocalDate,
+} from '@bunshin/capability-fortune';
 import { registerImprovementTriageIntegrationCases } from './improvement-triage.integration-cases';
 import { registerImprovementRetentionJobIntegrationCases } from './improvement-retention-jobs.integration-cases';
 import { registerTrainingSupportSkillLifecycleIntegrationCases } from './training-support-skill-lifecycle.integration-cases';
@@ -130,6 +135,11 @@ import {
   PrismaFortuneGenerationQueue,
   PrismaFortuneRepository,
   PrismaFortunePersonalProfileRepository,
+  PrismaFortuneFollowUpRepository,
+  PrismaFortuneIntakeRepository,
+  PrismaFortuneUnderstandingRepository,
+  purgeExpiredFortuneIntake,
+  purgeExpiredFortuneUnderstanding,
   verifyFortuneGenerationJob,
   PrismaTrainingPersonalDataExportRepository,
   PrismaTrainingPersonalDataDeletionRepository,
@@ -1295,16 +1305,179 @@ describe('database ownership boundaries', () => {
       ).resolves.toBe(false);
       await expect(profiles.update({ ...input, profile })).resolves.toBe(true);
       await expect(profiles.read(input)).resolves.toMatchObject({ profile });
+      const intake = new PrismaFortuneIntakeRepository(client);
+      const intakeInput = { ...input, theme: 'WORK', answered: [] } as const;
+      await expect(intake.reserve(intakeInput)).resolves.toEqual({ kind: 'DONE' });
+      await client.fortuneServiceSetting.update({
+        where: { id: setting.id },
+        data: { guidanceSettings: { intake: { enabled: true, questions: 3, calls: 2 } } },
+      });
+      const understanding = new PrismaFortuneUnderstandingRepository(client);
+      const blankUnderstanding = await understanding.read(input);
+      if (!blankUnderstanding?.profileRevision) throw new Error('understanding consent missing');
+      const understandingInput = {
+        ...input,
+        revision: blankUnderstanding.revision,
+        profileRevision: new Date(blankUnderstanding.profileRevision),
+        items: [
+          { field: 'VALUES', state: 'CONFIRMED', text: '生活を大切にする', source: 'ANSWER' },
+        ] as const,
+      };
+      const saveUnderstanding = { ...understandingInput, items: [...understandingInput.items] };
+      await expect(
+        understanding.save({ ...saveUnderstanding, actorUserId: other.user.id }),
+      ).resolves.toBe('UNAVAILABLE');
+      await expect(
+        understanding.read({ ...input, serviceSlug: 'foreign-fortune' }),
+      ).resolves.toBeNull();
+      const understandingWrites = await Promise.all([
+        understanding.save(saveUnderstanding),
+        understanding.save(saveUnderstanding),
+      ]);
+      expect(understandingWrites.sort()).toEqual(['CONFLICT', 'SAVED']);
+      const stored = await understanding.read(input);
+      expect(stored).toMatchObject({ items: saveUnderstanding.items, canSave: true });
+      await expect(understanding.delete({ ...input, actorUserId: other.user.id })).resolves.toBe(
+        false,
+      );
+      await expect(understanding.delete(input)).resolves.toBe(true);
+      await expect(understanding.save(saveUnderstanding)).resolves.toBe('CONFLICT');
+      const afterDeletion = await understanding.read(input);
+      expect(afterDeletion?.items).toEqual([]);
+      await expect(
+        understanding.save({ ...saveUnderstanding, revision: afterDeletion?.revision ?? null }),
+      ).resolves.toBe('SAVED');
+      const future = new Date(Date.now() + 91 * 86_400_000);
+      const expired = new PrismaFortuneUnderstandingRepository(client, () => future);
+      await expect(expired.read(input)).resolves.toMatchObject({ items: [], canSave: false });
+      expect(await purgeExpiredFortuneUnderstanding(client, future)).toBeGreaterThanOrEqual(1);
+      const afterExpiry = await understanding.read(input);
+      expect(afterExpiry?.items).toEqual([]);
+      await expect(
+        understanding.save({ ...saveUnderstanding, revision: afterExpiry?.revision ?? null }),
+      ).resolves.toBe('SAVED');
+      await expect(intake.reserve({ ...intakeInput, actorUserId: other.user.id })).resolves.toEqual(
+        { kind: 'DONE' },
+      );
+      await expect(
+        intake.reserve({ ...intakeInput, serviceSlug: 'foreign-fortune' }),
+      ).resolves.toEqual({ kind: 'DONE' });
+      const claims = await Promise.all([intake.reserve(intakeInput), intake.reserve(intakeInput)]);
+      const firstIntake = claims.find((claim) => claim.kind === 'RESERVED');
+      if (!firstIntake) throw new Error('intake claim missing');
+      expect(claims.map(({ kind }) => kind).sort()).toEqual(['RESERVED', 'WAIT']);
+      expect(firstIntake.profile).toMatchObject({ interest: '仕事' });
+      await expect(
+        intake.finish({
+          ...firstIntake,
+          ...input,
+          actorUserId: other.user.id,
+          key: 'VALUES',
+        }),
+      ).resolves.toEqual({ kind: 'DONE' });
+      await expect(intake.finish({ ...firstIntake, ...input, key: 'VALUES' })).resolves.toEqual({
+        kind: 'QUESTION',
+        key: 'VALUES',
+      });
+      await expect(intake.reserve(intakeInput)).resolves.toEqual({
+        kind: 'QUESTION',
+        key: 'VALUES',
+      });
+      await expect(intake.reserve({ ...intakeInput, answered: ['GOAL'] })).resolves.toEqual({
+        kind: 'DONE',
+      });
+      const second = await intake.reserve({ ...intakeInput, answered: ['VALUES'] });
+      if (second.kind !== 'RESERVED') throw new Error('second intake claim missing');
+      await expect(intake.finish({ ...second, ...input, key: 'GOAL' })).resolves.toEqual({
+        kind: 'QUESTION',
+        key: 'GOAL',
+      });
+      await expect(
+        intake.reserve({ ...intakeInput, answered: ['VALUES', 'GOAL'] }),
+      ).resolves.toEqual({ kind: 'DONE' });
+      expect(
+        await client.fortuneIntakeTurn.count({ where: { participantId: participant.id } }),
+      ).toBe(2);
+      const followUps = new PrismaFortuneFollowUpRepository(client);
+      const question = '別の見方を教えてください';
+      await expect(followUps.read({ ...input, actorUserId: other.user.id })).resolves.toBeNull();
+      await expect(
+        followUps.read({ ...input, serviceSlug: 'foreign-fortune' }),
+      ).resolves.toBeNull();
+      const requests = Array.from({ length: 3 }, () => ({
+        ...input,
+        requestId: randomUUID(),
+        question,
+      }));
+      const reservations = await Promise.all(requests.map((request) => followUps.reserve(request)));
+      expect(reservations.map(({ kind }) => kind).sort()).toEqual([
+        'LIMIT',
+        'RESERVED',
+        'RESERVED',
+      ]);
+      for (const [index, reservation] of reservations.entries()) {
+        if (reservation.kind !== 'RESERVED') continue;
+        const request = requests[index]!;
+        await expect(followUps.reserve(request)).resolves.toMatchObject({ kind: 'REPLAY' });
+        await expect(
+          followUps.complete({
+            ...request,
+            revision: reservation.claim.personalProfileRevision,
+            output: { body: '別の見方があります。', actionStep: '考えを一つ書き出しましょう。' },
+          }),
+        ).resolves.toMatchObject({ remaining: 0 });
+      }
+      expect(await followUps.read(input)).toMatchObject({
+        remaining: 0,
+        turns: [{ status: 'READY' }, { status: 'READY' }],
+      });
       await client.fortuneReading.update({
         where: { id: reading.id },
         data: { localDate: new Date(Date.now() - 86_400_000) },
       });
+      await expect(repository.savePersonalFit({ ...input, rating: 'VERY' })).resolves.toBe(false);
+      await client.fortuneReading.update({
+        where: { id: reading.id },
+        data: { status: 'READY_AI' },
+      });
+      await expect(repository.savePersonalFit({ ...input, rating: 'VERY' })).resolves.toBe(false);
+      await repository.markReadingViewed({ ...input, viewedAt: new Date() });
+      await expect(
+        repository.savePersonalFit({ ...input, actorUserId: other.user.id, rating: 'VERY' }),
+      ).resolves.toBe(false);
+      await expect(
+        repository.savePersonalFit({ ...input, serviceSlug: 'foreign-fortune', rating: 'VERY' }),
+      ).resolves.toBe(false);
+      await expect(repository.savePersonalFit({ ...input, rating: 'VERY' })).resolves.toBe(true);
+      await expect(repository.findReading(input)).resolves.toMatchObject({
+        personalFitRating: 'VERY',
+        feedbackRating: null,
+      });
+      await expect(repository.savePersonalFit({ ...input, rating: null })).resolves.toBe(true);
+      expect(await repository.findReading(input)).not.toHaveProperty('personalFitRating');
       await expect(
         repository.saveReflection({ ...input, actorUserId: other.user.id, answer: 'NOT_TRIED' }),
       ).resolves.toBe(false);
       await expect(repository.saveReflection({ ...input, answer: 'TRIED_CHANGED' })).resolves.toBe(
         true,
       );
+      await client.fortuneReading.create({
+        data: {
+          ...base,
+          groupId: group.id,
+          serviceSettingId: setting.id,
+          participantId: participant.id,
+          memberUserId: owner.user.id,
+          localDate: new Date(Date.now() - 2 * 86_400_000),
+          theme: 'LOVE',
+          cardCode: 'THE_FOOL',
+          orientation: 'UPRIGHT',
+          status: 'READY_BASIC',
+          readingText: 'Unrelated theme',
+          actionStep: 'Unrelated action',
+          reflectionAnswer: 'NOT_TRIED',
+        },
+      });
       const today = await client.fortuneReading.create({
         data: {
           ...base,
@@ -1312,7 +1485,7 @@ describe('database ownership boundaries', () => {
           serviceSettingId: setting.id,
           participantId: participant.id,
           memberUserId: owner.user.id,
-          localDate: new Date(),
+          localDate: new Date(`${toJapanLocalDate(new Date())}T00:00:00Z`),
           theme: 'WORK',
           cardCode: 'THE_FOOL',
           orientation: 'UPRIGHT',
@@ -1322,6 +1495,25 @@ describe('database ownership boundaries', () => {
         },
       });
       const guided = { ...input, readingId: today.id };
+      await expect(intake.reserve(intakeInput)).resolves.toEqual({ kind: 'DONE' });
+      await purgeExpiredFortuneIntake(client, new Date(Date.now() + 86_400_000));
+      expect(
+        await client.fortuneIntakeTurn.count({ where: { participantId: participant.id } }),
+      ).toBe(0);
+      const anotherQuestion = { ...guided, requestId: randomUUID(), question };
+      await client.fortuneServiceSetting.update({
+        where: { id: setting.id },
+        data: { guidanceSettings: { followUpLimit: 0 } },
+      });
+      await expect(followUps.reserve(anotherQuestion)).resolves.toMatchObject({ kind: 'LIMIT' });
+      await client.fortuneServiceSetting.update({
+        where: { id: setting.id },
+        data: { guidanceSettings: { followUpLimit: 1 } },
+      });
+      await expect(followUps.reserve(anotherQuestion)).resolves.toMatchObject({ kind: 'RESERVED' });
+      await expect(
+        followUps.reserve({ ...anotherQuestion, requestId: randomUUID() }),
+      ).resolves.toMatchObject({ kind: 'LIMIT' });
       const personalized = await repository.claimAiGeneration(guided);
       expect(personalized?.personalization).toMatchObject({
         participantProfile: { question: profile.question, style: 'DIRECT' },
@@ -1329,9 +1521,164 @@ describe('database ownership boundaries', () => {
       });
       if (!personalized?.personalProfileRevision)
         throw new Error('fortune profile revision missing');
+      await client.fortuneServiceSetting.update({
+        where: { id: setting.id },
+        data: { guidanceSettings: { intake: { enabled: true }, deepReadingEnabled: true } },
+      });
+      const approved = '一歩進める前に足元を確かめる。';
+      const cardCode = TAROT_DECK[0]!.code;
+      await client.fortuneKnowledgeVersion.create({
+        data: {
+          serviceSettingId: setting.id,
+          version: 1,
+          status: 'APPROVED',
+          approvedByUserId: owner.user.id,
+          approvedAt: new Date(),
+          promptVersion: 'standard-fixture',
+          cardMeanings: {
+            create: {
+              cardCode,
+              orientation: 'UPRIGHT',
+              theme: 'WORK',
+              safetyReviewed: true,
+              title: '標準解釈',
+              body: approved,
+              actionStep: '考えていることを書き出す。',
+            },
+          },
+        },
+      });
+      let randomCalls = 0;
+      const deepService = new FortuneDailyReadingService(repository, {
+        nextInt: () => {
+          randomCalls++;
+          return 0;
+        },
+      });
+      const deepInput = {
+        ...input,
+        theme: 'WORK' as const,
+        now: new Date(Date.now() - 4 * 86_400_000),
+        reviewedUnderstanding: [
+          { field: 'VALUES', source: 'ANSWER', state: 'CONFIRMED', text: '家族との時間' } as const,
+        ],
+      };
+      const deepBasic = await deepService.draw(deepInput);
+      expect(deepBasic).toMatchObject({
+        cardCode,
+        orientation: 'UPRIGHT',
+        body: approved,
+      });
+      expect((await deepService.draw(deepInput)).id).toBe(deepBasic.id);
+      expect(randomCalls).toBe(2);
+      const deepTarget = { ...input, readingId: deepBasic.id };
+      const deepClaim = await repository.claimAiGeneration(deepTarget);
+      expect(deepClaim?.reviewedUnderstanding).toEqual(deepInput.reviewedUnderstanding);
+      await expect(
+        repository.completeAiGeneration({
+          ...deepTarget,
+          output: {
+            ...output,
+            deep: { alternatives: ['条件を整理する'], actionReason: '違いを比較できる' },
+          },
+        }),
+      ).resolves.toMatchObject({
+        id: deepBasic.id,
+        cardCode,
+        status: 'READY_AI',
+        deepReading: {
+          importantValue: '家族との時間',
+          approvedPerspective: approved,
+          consultationSummary: null,
+        },
+      });
+      expect(
+        (await client.fortuneReading.findUniqueOrThrow({ where: { id: deepBasic.id } }))
+          .pendingUnderstanding,
+      ).toBeNull();
+      const failed = await deepService.draw({
+        ...deepInput,
+        now: new Date(Date.now() - 5 * 86_400_000),
+      });
+      const failedTarget = { ...input, readingId: failed.id };
+      await repository.claimAiGeneration(failedTarget);
+      await expect(
+        repository.fallbackAiGeneration({ ...failedTarget, failureCode: 'AI_UNAVAILABLE' }),
+      ).resolves.toMatchObject({
+        id: failed.id,
+        cardCode,
+        status: 'READY_BASIC',
+        body: approved,
+      });
+      expect(
+        (await client.fortuneReading.findUniqueOrThrow({ where: { id: failed.id } }))
+          .pendingUnderstanding,
+      ).toBeNull();
+      const tomorrow = new Date(Date.now() + 86_400_000);
+      const continuing = await deepService.draw({
+        ...deepInput,
+        now: tomorrow,
+        reviewedUnderstanding: [
+          { field: 'GOAL', state: 'CONFIRMED', source: 'ANSWER', text: '今の仕事を整理したい' },
+        ],
+      });
+      const continuingTarget = { ...input, readingId: continuing.id };
+      const continuingClaim = await repository.claimAiGeneration(continuingTarget);
+      expect(continuingClaim?.personalization?.priorUnderstanding?.items).toEqual(
+        saveUnderstanding.items,
+      );
+      if (!continuingClaim?.priorUnderstandingRevision || !continuingClaim.personalProfileRevision)
+        throw new Error('expected saved understanding to be in scope');
+      await expect(understanding.delete(input)).resolves.toBe(true);
+      await expect(
+        repository.completeAiGeneration({
+          ...continuingTarget,
+          personalProfileRevision: continuingClaim.personalProfileRevision,
+          priorUnderstandingRevision: continuingClaim.priorUnderstandingRevision,
+          output: {
+            ...output,
+            deep: { alternatives: ['条件を整理する'], actionReason: '違いを比較できる' },
+          },
+        }),
+      ).resolves.toMatchObject({ id: continuing.id, status: 'READY_BASIC', body: approved });
+      await expect(
+        intake.recordProgress({ ...input, actorUserId: other.user.id }),
+      ).resolves.toBeUndefined();
+      await Promise.all([
+        intake.recordProgress({ ...input, questionsShown: 2, outcome: 'REVIEWED' }),
+        intake.recordProgress({ ...input, questionsShown: 1 }),
+      ]);
+      await expect(
+        client.fortuneIntakeSession.findMany({ where: { participantId: participant.id } }),
+      ).resolves.toMatchObject([{ questionsShown: 2, outcome: 'REVIEWED' }]);
+      await purgeExpiredFortuneIntake(client, new Date(Date.now() + 31 * 86_400_000));
+      await expect(
+        client.fortuneIntakeSession.count({ where: { participantId: participant.id } }),
+      ).resolves.toBe(0);
+      const abandoned = await deepService.draw({
+        ...deepInput,
+        now: new Date(Date.now() - 6 * 86_400_000),
+      });
       await expect(profiles.update({ ...input, profile: { consented: false } })).resolves.toBe(
         true,
       );
+      expect(
+        (await client.fortuneReading.findUniqueOrThrow({ where: { id: abandoned.id } }))
+          .pendingUnderstanding,
+      ).toBeNull();
+      await expect(understanding.read(input)).resolves.toMatchObject({ items: [], canSave: false });
+      expect(
+        (await client.fortuneParticipant.findUniqueOrThrow({ where: { id: participant.id } }))
+          .understandingItems,
+      ).toBeNull();
+      await expect(understanding.save(saveUnderstanding)).resolves.toBe('UNAVAILABLE');
+      await expect(followUps.read(input)).resolves.toBeNull();
+      expect(
+        await client.fortuneReadingFollowUp.findMany({ where: { readingId: reading.id } }),
+      ).toMatchObject([
+        { status: 'ERASED', question: null, answer: null, actionStep: null },
+        { status: 'ERASED', question: null, answer: null, actionStep: null },
+      ]);
       await expect(
         repository.completeAiGeneration({
           ...guided,
@@ -1339,6 +1686,19 @@ describe('database ownership boundaries', () => {
           output,
         }),
       ).resolves.toMatchObject({ status: 'READY_BASIC', body: 'Approved' });
+      await expect(repository.savePersonalFit({ ...input, rating: 'SOMEWHAT' })).resolves.toBe(
+        true,
+      );
+      await expect(repository.deleteReading({ ...input, deletedAt: new Date() })).resolves.toBe(
+        true,
+      );
+      expect(
+        await client.fortuneReading.findUniqueOrThrow({
+          where: { id: reading.id },
+          select: { personalFitRating: true, personalFitRatedAt: true },
+        }),
+      ).toEqual({ personalFitRating: null, personalFitRatedAt: null });
+      await expect(repository.savePersonalFit({ ...input, rating: 'VERY' })).resolves.toBe(false);
     } finally {
       await client.job.deleteMany({
         where: { workspaceId: base.workspaceId, jobType: 'FORTUNE_READING_GENERATE' },
@@ -1347,7 +1707,7 @@ describe('database ownership boundaries', () => {
       await client.fortuneParticipant.deleteMany({ where: { id: participant.id } });
       await client.fortuneServiceSetting.deleteMany({ where: { id: setting.id } });
     }
-  });
+  }, 20_000);
 
   it('exports only the owners training records even after completion and program archive', async () => {
     const accounts = new CreateUserWithPersonalWorkspace(new PrismaAccountUnitOfWork(client));

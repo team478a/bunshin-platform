@@ -7,6 +7,8 @@ import type {
   FortuneGenerationJobLease,
 } from './fortune-generation-queue';
 import { drawTarotCard, type FortuneOrientation, type SecureRandomSource } from './tarot';
+import type { FortuneDeepReadingDetails } from './fortune-deep-reading';
+import type { ConfirmedFortuneUnderstanding } from './fortune-understanding';
 
 export type FortuneReadingState = 'GENERATING' | 'READY_AI' | 'READY_BASIC' | 'FAILED' | 'DELETED';
 
@@ -27,6 +29,9 @@ export const FORTUNE_REFLECTION_ANSWERS = [
 ] as const;
 export type FortuneReflectionAnswer = (typeof FORTUNE_REFLECTION_ANSWERS)[number];
 
+export const FORTUNE_PERSONAL_FIT_RATINGS = ['VERY', 'SOMEWHAT', 'NOT_MUCH'] as const;
+export type FortunePersonalFitRating = (typeof FORTUNE_PERSONAL_FIT_RATINGS)[number];
+
 export interface FortuneReadingView {
   id: string;
   localDate: string;
@@ -41,6 +46,8 @@ export interface FortuneReadingView {
   feedbackRating: FortuneFeedbackRating | null;
   feedbackIssue: FortuneFeedbackIssue | null;
   reflectionPrompt?: string;
+  deepReading?: FortuneDeepReadingDetails & { approvedPerspective: string };
+  personalFitRating?: FortunePersonalFitRating;
   reflectionAnswer?: FortuneReflectionAnswer;
   createdAt: Date;
 }
@@ -67,9 +74,13 @@ export interface FortuneAiGenerationClaim {
   personalGuidance?: boolean;
   reflectionEnabled?: boolean;
   personalProfileRevision?: Date;
+  priorUnderstandingRevision?: string;
   defaultStyle?: FortuneProfileStyle;
+  guidanceSettings?: unknown;
   consultation?: string;
+  reviewedUnderstanding?: ConfirmedFortuneUnderstanding[];
   personalization?: {
+    priorUnderstanding?: { savedAt: string; items: ConfirmedFortuneUnderstanding[] };
     participantProfile?: Omit<FortunePersonalProfile, 'consented'>;
     bunshinProfile?: {
       name: string;
@@ -141,6 +152,7 @@ export interface FortuneRepository {
     localDate: string;
     theme: FortuneTheme;
     consultation?: string;
+    reviewedUnderstanding?: ConfirmedFortuneUnderstanding[];
     cardCode: string;
     orientation: FortuneOrientation;
   }): Promise<CreateFortuneReadingResult>;
@@ -158,6 +170,7 @@ export interface FortuneRepository {
     readingId: string;
     output: FortuneAiReadingResult;
     personalProfileRevision?: Date;
+    priorUnderstandingRevision?: string;
   }): Promise<FortuneReadingView | null>;
   fallbackAiGeneration(input: {
     jobLease?: FortuneGenerationJobLease;
@@ -265,6 +278,7 @@ export class FortuneDailyReadingService {
     actorUserId: string;
     theme: unknown;
     consultation?: string;
+    reviewedUnderstanding?: ConfirmedFortuneUnderstanding[];
     now?: Date;
   }) {
     const localDate = toJapanLocalDate(input.now ?? new Date());
@@ -286,6 +300,9 @@ export class FortuneDailyReadingService {
       localDate,
       theme,
       ...(input.consultation ? { consultation: input.consultation } : {}),
+      ...(input.reviewedUnderstanding?.length
+        ? { reviewedUnderstanding: input.reviewedUnderstanding }
+        : {}),
       cardCode: draw.card.code,
       orientation: draw.orientation,
     });
@@ -307,7 +324,10 @@ export class FortuneDailyReadingService {
           actorUserId: input.actorUserId,
           claim,
         });
-        const safe = validateFortuneReadingOutput(generated);
+        const safe = validateFortuneReadingOutput(
+          generated,
+          Boolean(claim.reviewedUnderstanding?.length),
+        );
         return (
           (await this.repository.completeAiGeneration({
             serviceSlug: input.serviceSlug,
@@ -316,6 +336,9 @@ export class FortuneDailyReadingService {
             output: { ...generated, ...safe },
             ...(claim.personalProfileRevision
               ? { personalProfileRevision: claim.personalProfileRevision }
+              : {}),
+            ...(claim.priorUnderstandingRevision
+              ? { priorUnderstandingRevision: claim.priorUnderstandingRevision }
               : {}),
           })) ?? result.reading
         );

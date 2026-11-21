@@ -1,10 +1,12 @@
 import type {
   FortuneFeedbackIssue,
   FortuneFeedbackRating,
+  FortunePersonalFitRating,
   FortuneReadingView,
   FortuneReflectionAnswer,
 } from '@bunshin/capability-fortune';
-import type { PrismaClient } from '@prisma/client';
+import { Prisma, type PrismaClient } from '@prisma/client';
+import { eraseFortuneFollowUps } from './fortune-follow-ups';
 import { fortuneReadingRetentionCutoff } from './fortune-retention';
 import { fortuneReadingView, fortuneTarget } from './fortune-shared';
 
@@ -171,33 +173,76 @@ export class PrismaFortuneHistoryRepository {
     return result.count === 1;
   }
 
+  async savePersonalFit(input: {
+    serviceSlug: string;
+    actorUserId: string;
+    readingId: string;
+    rating: FortunePersonalFitRating | null;
+  }) {
+    const scope = await fortuneTarget(this.db, input.serviceSlug, input.actorUserId);
+    if (!scope) return false;
+    const now = this.now();
+    const result = await this.db.fortuneReading.updateMany({
+      where: {
+        id: input.readingId,
+        workspaceId: scope.workspaceId,
+        groupId: scope.groupId,
+        serviceSettingId: scope.id,
+        memberUserId: input.actorUserId,
+        status: 'READY_AI',
+        deletedAt: null,
+        localDate: { gte: fortuneReadingRetentionCutoff(now, scope.historyRetentionDays) },
+        firstViewedAt: { not: null },
+        participant: { groupMembership: { status: 'ACTIVE', consentedAt: { not: null } } },
+        ...(input.rating
+          ? { serviceSetting: { enabled: true, aiEnabled: true, personalProfileEnabled: true } }
+          : {}),
+      },
+      data: { personalFitRating: input.rating, personalFitRatedAt: input.rating ? now : null },
+    });
+    return result.count === 1;
+  }
+
   async deleteReading(input: {
     serviceSlug: string;
     actorUserId: string;
     readingId: string;
     deletedAt: Date;
   }): Promise<boolean> {
-    const scope = await fortuneTarget(this.db, input.serviceSlug, input.actorUserId);
-    if (!scope) return false;
-    const result = await this.db.fortuneReading.updateMany({
-      where: {
-        id: input.readingId,
-        serviceSettingId: scope.id,
-        memberUserId: input.actorUserId,
-        status: { not: 'DELETED' },
-      },
-      data: {
-        status: 'DELETED',
-        readingText: null,
-        actionStep: null,
-        pendingConsultation: null,
-        reflectionPrompt: null,
-        reflectionAnswer: null,
-        modelName: null,
-        failureCode: null,
-        deletedAt: input.deletedAt,
-      },
+    return this.db.$transaction(async (tx) => {
+      const scope = await fortuneTarget(tx, input.serviceSlug, input.actorUserId);
+      if (!scope) return false;
+      const result = await tx.fortuneReading.updateMany({
+        where: {
+          id: input.readingId,
+          serviceSettingId: scope.id,
+          memberUserId: input.actorUserId,
+          status: { not: 'DELETED' },
+        },
+        data: {
+          status: 'DELETED',
+          readingText: null,
+          actionStep: null,
+          pendingConsultation: null,
+          pendingUnderstanding: Prisma.DbNull,
+          deepReading: Prisma.DbNull,
+          reflectionPrompt: null,
+          reflectionAnswer: null,
+          personalFitRating: null,
+          personalFitRatedAt: null,
+          modelName: null,
+          failureCode: null,
+          deletedAt: input.deletedAt,
+        },
+      });
+      if (result.count === 1) {
+        await eraseFortuneFollowUps(tx, {
+          id: input.readingId,
+          serviceSettingId: scope.id,
+          memberUserId: input.actorUserId,
+        });
+      }
+      return result.count === 1;
     });
-    return result.count === 1;
   }
 }

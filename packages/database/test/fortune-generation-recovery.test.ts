@@ -1,4 +1,4 @@
-import type { PrismaClient } from '@prisma/client';
+import { Prisma, type PrismaClient } from '@prisma/client';
 import { describe, expect, it, vi } from 'vitest';
 import { recoverStaleFortuneReadings } from '../src';
 
@@ -91,6 +91,7 @@ describe('interrupted fortune generation recovery', () => {
         failureCode: 'AI_GENERATION_INTERRUPTED',
         modelName: null,
         pendingConsultation: null,
+        pendingUnderstanding: Prisma.DbNull,
       },
     });
   });
@@ -114,6 +115,7 @@ describe('interrupted fortune generation recovery', () => {
           failureCode: 'AI_GENERATION_INTERRUPTED_MISSING_BASIC',
           modelName: null,
           pendingConsultation: null,
+          pendingUnderstanding: Prisma.DbNull,
         },
       }),
     );

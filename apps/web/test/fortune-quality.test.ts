@@ -127,6 +127,8 @@ describe('fortune operations quality', () => {
       { eventType: 'NOTIFICATION_OPTED_IN', groupMembershipId: 'member-1' },
       { eventType: 'NOTIFICATION_OPTED_OUT', groupMembershipId: 'member-2' },
       { eventType: 'SERVICE_WITHDRAWN', groupMembershipId: 'member-3' },
+      { eventType: 'FORTUNE_WEEKLY_LINE_RETURN', groupMembershipId: 'member-1' },
+      { eventType: 'FORTUNE_WEEKLY_LINE_RETURN', groupMembershipId: 'member-1' },
     ]);
 
     expect(result).toEqual({
@@ -136,6 +138,7 @@ describe('fortune operations quality', () => {
       notificationOptInParticipants: 1,
       notificationOptOutParticipants: 1,
       withdrawnParticipants: 1,
+      weeklyLineReturnParticipants: 1,
     });
   });
 });

@@ -19,6 +19,12 @@ describe('LINE authentication return path', () => {
     expect(serviceAuthLoginPath('/s//evil.example/manage/points')).toBe('/login');
   });
   const id = '11111111-1111-4111-8111-111111111111';
+  it('preserves the weekly Fortune entry across authentication', () => {
+    const path = '/s/fortune/today/from-line';
+    expect(safeLineAuthReturnPath(path)).toBe(path);
+    expect(serviceAuthReturnSlug(path)).toBe('fortune');
+    expect(safeLineAuthReturnPath(`${path}?service=another`)).toBeNull();
+  });
   it.each(['media', 'sns-support', 'fortune', 'ai-training', 'oem'])(
     'keeps %s flows isolated',
     (slug) => {

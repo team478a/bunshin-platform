@@ -166,7 +166,8 @@ describe('fortune repository isolation', () => {
   });
 
   it('skips stored personal context when the participant did not consent', async () => {
-    const tx = targetClient({ ...scope, personalProfileEnabled: true });
+    const guidanceSettings = { guideName: 'このサービスの案内役', defaultStyle: 'GENTLE' };
+    const tx = targetClient({ ...scope, personalProfileEnabled: true, guidanceSettings });
     tx.fortuneParticipant.findFirst.mockResolvedValue({
       profileUpdatedAt: new Date(),
       profileConsentedAt: null,
@@ -185,6 +186,8 @@ describe('fortune repository isolation', () => {
       repository(client).claimAiGeneration({ serviceSlug, actorUserId, readingId }),
     ).resolves.toMatchObject({
       personalGuidance: true,
+      guidanceSettings,
+      defaultStyle: 'GENTLE',
       consultation: '今日だけの相談',
       personalization: { recentReadings: [] },
     });
@@ -216,7 +219,7 @@ describe('fortune repository isolation', () => {
     });
   });
 
-  it('uses only the participant-selected owned Bunshin when claiming AI generation', async () => {
+  it('uses only the participant-selected owned Bunshin and does not read history without consent', async () => {
     const tx = targetClient();
     tx.fortuneParticipant.findFirst.mockResolvedValue({
       personalizationBunshin: {
@@ -255,18 +258,6 @@ describe('fortune repository isolation', () => {
     });
     tx.fortuneReading.updateMany.mockResolvedValue({ count: 1 });
     tx.fortuneReading.findFirst.mockResolvedValue(reading);
-    tx.fortuneReading.findMany.mockResolvedValue([
-      {
-        ...reading,
-        id: '00000000-0000-4000-8000-000000000399',
-        status: 'READY_AI',
-        feedback: {
-          id: '00000000-0000-4000-8000-000000000398',
-          rating: 'NOT_HELPFUL',
-          issueCode: 'TOO_VAGUE',
-        },
-      },
-    ]);
     const client = {
       $transaction: vi.fn((callback: (transaction: typeof tx) => unknown) =>
         Promise.resolve(callback(tx)),
@@ -292,13 +283,7 @@ describe('fortune repository isolation', () => {
             summary: '朝に仕事の優先順位を整理する習慣',
           },
         ],
-        recentReadings: [
-          {
-            id: '00000000-0000-4000-8000-000000000399',
-            feedbackRating: 'NOT_HELPFUL',
-            feedbackIssue: 'TOO_VAGUE',
-          },
-        ],
+        recentReadings: [],
       },
     });
     expect(tx.fortuneReading.updateMany).toHaveBeenCalledWith({
@@ -310,15 +295,7 @@ describe('fortune repository isolation', () => {
       },
       data: { status: 'GENERATING', failureCode: null },
     });
-    expect(tx.fortuneReading.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: expect.objectContaining({
-          serviceSettingId: scope.id,
-          participantId: reading.participantId,
-          memberUserId: actorUserId,
-        }),
-      }),
-    );
+    expect(tx.fortuneReading.findMany).not.toHaveBeenCalled();
     expect(tx.fortuneParticipant.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
@@ -341,18 +318,13 @@ describe('fortune repository isolation', () => {
       data: {
         personalizationContext: {
           version: 'fortune-personalization-v2',
-          sources: [
-            'PARTICIPANT_BUNSHIN_PROFILE',
-            'PARTICIPANT_BUNSHIN_MEMORY',
-            'RECENT_READING',
-            'READING_FEEDBACK',
-          ],
+          sources: ['PARTICIPANT_BUNSHIN_PROFILE', 'PARTICIPANT_BUNSHIN_MEMORY'],
           bunshin: {
             id: '00000000-0000-4000-8000-000000000397',
             updatedAt: '2026-09-25T00:00:00.000Z',
           },
-          recentReadingIds: ['00000000-0000-4000-8000-000000000399'],
-          feedbackIds: ['00000000-0000-4000-8000-000000000398'],
+          recentReadingIds: [],
+          feedbackIds: [],
           memoryIds: ['00000000-0000-4000-8000-000000000396'],
         },
       },

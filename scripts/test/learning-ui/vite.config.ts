@@ -10,6 +10,8 @@ export default defineConfig({
     alias: {
       react: path.resolve(root, '../../../apps/web/node_modules/react'),
       'react-dom': path.resolve(root, '../../../apps/web/node_modules/react-dom'),
+      'next/navigation': path.resolve(root, 'fortune-navigation-fixture.tsx'),
+      'next/link': path.resolve(root, 'fortune-navigation-fixture.tsx'),
     },
   },
   server: { host: '127.0.0.1', port: 4178, strictPort: true, watch: { ignored: ['**/.e2e/**'] } },

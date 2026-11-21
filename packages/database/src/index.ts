@@ -66,9 +66,19 @@ export {
   PrismaMemberProductProfileRepository,
 } from './member-product';
 export { PrismaPointExpirationRepository } from './point-expiration';
-export { PrismaFortuneRepository, purgeExpiredFortuneReadings } from './fortune';
+export {
+  PrismaFortuneRepository,
+  fortuneReadingRetentionCutoff,
+  purgeExpiredFortuneReadings,
+} from './fortune';
 export { PrismaFortunePersonalProfileRepository } from './fortune-personal-profile';
+export { PrismaFortuneFollowUpRepository } from './fortune-follow-ups';
+export { PrismaFortuneIntakeRepository } from './fortune-intake';
+export { PrismaFortuneUnderstandingRepository } from './fortune-understanding';
 export { purgeExpiredFortuneProfiles } from './fortune-retention';
+export { purgeExpiredFortuneIntake } from './fortune-retention';
+export { purgeExpiredFortuneDeepInputs } from './fortune-retention';
+export { purgeExpiredFortuneUnderstanding } from './fortune-retention';
 export { recoverStaleFortuneReadings } from './fortune-generation-recovery';
 export {
   PrismaFortuneGenerationQueue,

@@ -1,4 +1,4 @@
-import type { PrismaClient } from '@prisma/client';
+import { Prisma, type PrismaClient } from '@prisma/client';
 import { describe, expect, it, vi } from 'vitest';
 import { PrismaFortunePersonalProfileRepository } from '../src/fortune-personal-profile';
 
@@ -15,14 +15,18 @@ function fixture(enabled = true) {
   });
   const findFirst = vi.fn();
   const updateMany = vi.fn().mockResolvedValue({ count: 1 });
+  const erase = vi.fn();
   const db = {
     fortuneServiceSetting: { findFirst: findSetting },
     fortuneParticipant: { findFirst, updateMany },
+    fortuneReadingFollowUp: { updateMany: erase },
+    fortuneReading: { updateMany: vi.fn() },
   } as unknown as PrismaClient;
   return {
     findSetting,
     findFirst,
     updateMany,
+    erase,
     repo: new PrismaFortunePersonalProfileRepository(db, () => now),
   };
 }
@@ -52,6 +56,10 @@ describe('fortune personal profile', () => {
         profileStyle: 'DIRECT',
         profileConsentedAt: now,
         profileUpdatedAt: now,
+        understandingItems: Prisma.DbNull,
+        understandingRevision: null,
+        understandingSavedAt: null,
+        understandingExpiresAt: null,
       },
     });
     updateMany.mockResolvedValueOnce({ count: 0 });
@@ -59,7 +67,7 @@ describe('fortune personal profile', () => {
   });
 
   it('allows revocation when disabled and clears all optional input', async () => {
-    const { repo, updateMany } = fixture(false);
+    const { repo, updateMany, erase } = fixture(false);
     await expect(
       repo.update({
         ...actor,
@@ -68,6 +76,13 @@ describe('fortune personal profile', () => {
     ).resolves.toBe(false);
     expect(updateMany).not.toHaveBeenCalled();
     await expect(repo.update({ ...actor, profile: { consented: false } })).resolves.toBe(true);
+    expect(erase).toHaveBeenCalledWith({
+      where: {
+        status: { not: 'ERASED' },
+        reading: { serviceSettingId: 'setting', memberUserId: 'member' },
+      },
+      data: { status: 'ERASED', question: null, answer: null, actionStep: null },
+    });
     expect(updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
         data: {
@@ -76,6 +91,10 @@ describe('fortune personal profile', () => {
           profileStyle: null,
           profileConsentedAt: null,
           profileUpdatedAt: now,
+          understandingItems: Prisma.DbNull,
+          understandingRevision: null,
+          understandingSavedAt: null,
+          understandingExpiresAt: null,
         },
       }),
     );

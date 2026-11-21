@@ -9,6 +9,7 @@
       "react/*": ["../../../apps/web/node_modules/@types/react/*"],
       "react-dom/*": ["../../../apps/web/node_modules/@types/react-dom/*"],
       "@bunshin/application": ["../../../packages/application/src/index.ts"],
+      "@bunshin/capability-fortune": ["../../../packages/capability-fortune/src/index.ts"],
       "@bunshin/capability-training": ["../../../packages/capability-training/src/index.ts"]
     }
   },

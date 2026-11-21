@@ -13,7 +13,15 @@ const state = vi.hoisted(() => ({
   reading: vi.fn(),
   delete: vi.fn(),
   feedback: vi.fn(),
+  savePersonalFit: vi.fn(),
+  ask: vi.fn(),
   recordUse: vi.fn(),
+  reserveIntake: vi.fn(),
+  finishIntake: vi.fn(),
+  selectIntake: vi.fn(),
+  saveUnderstanding: vi.fn(),
+  deleteUnderstanding: vi.fn(),
+  readUnderstanding: vi.fn(),
 }));
 
 vi.mock('../src/auth/current-user', () => ({
@@ -24,16 +32,41 @@ vi.mock('../src/fortune/runtime', () => ({
 }));
 vi.mock('../src/fortune/personal-profile', () => ({
   fortunePersonalProfileRepository: () => Promise.resolve({ update: state.updateProfile }),
+  fortuneUnderstandingRepository: () =>
+    Promise.resolve({
+      read: state.readUnderstanding,
+      save: state.saveUnderstanding,
+      delete: state.deleteUnderstanding,
+    }),
+}));
+vi.mock('../src/fortune/follow-ups', () => ({ askFortuneFollowUp: state.ask }));
+vi.mock('../src/providers/openai-fortune-intake', () => ({
+  selectFortuneIntakeQuestion: state.selectIntake,
 }));
 vi.mock('../src/services/service-membership', () => ({
   recordServiceUse: state.recordUse,
 }));
+vi.mock('@bunshin/database', () => ({
+  PrismaFortuneRepository: class {
+    savePersonalFit = state.savePersonalFit;
+  },
+  PrismaFortuneIntakeRepository: class {
+    reserve = state.reserveIntake;
+    finish = state.finishIntake;
+  },
+  prisma: {},
+}));
 
 import {
+  askFortuneFollowUpResponse,
   drawFortuneResponse,
   getFortuneTodayResponse,
   joinFortuneResponse,
+  nextFortuneIntakeResponse,
+  updateFortuneUnderstandingResponse,
+  deleteFortuneUnderstandingResponse,
   updateFortuneFeedbackResponse,
+  updateFortunePersonalFitResponse,
   updateFortunePersonalizationResponse,
   updateFortunePersonalProfileResponse,
 } from '../src/http/fortune';
@@ -70,6 +103,128 @@ describe('fortune HTTP contract', () => {
     state.recordUse.mockResolvedValue({ id: 'membership-1' });
   });
 
+  it('passes verified reviewed items to the same daily draw and rejects unverified or mixed input', async () => {
+    const item = { field: 'VALUES', state: 'CONFIRMED', text: '家族の時間', source: 'ANSWER' };
+    const submit = (body: object) =>
+      drawFortuneResponse(
+        request('/api/fortune/today', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(body),
+        }),
+        'fortune',
+      );
+    const input = { theme: 'WORK', reviewedUnderstanding: [item] };
+    expect(
+      (await submit({ ...input, reviewedUnderstanding: [{ ...item, state: 'INFERRED' }] })).status,
+    ).toBe(400);
+    expect((await submit({ ...input, consultation: '別の相談' })).status).toBe(400);
+    expect((await submit({ ...input, reviewedUnderstanding: [item, item] })).status).toBe(400);
+    expect((await submit(input)).status).toBe(201);
+    expect(state.draw).toHaveBeenCalledExactlyOnceWith({
+      serviceSlug: 'fortune',
+      actorUserId: 'user-1',
+      theme: 'WORK',
+      consultation: '【大切なこと】家族の時間',
+      reviewedUnderstanding: [item],
+    });
+  });
+
+  it('persists only bounded confirmed values under the authenticated participant', async () => {
+    const item = {
+      field: 'VALUES',
+      state: 'CONFIRMED',
+      text: ' 生活を大切にする ',
+      source: 'CORRECTION',
+    };
+    const body = { items: [item], revision: null, profileRevision: '2026-11-21T00:00:00.000Z' };
+    const submit = (data: object) =>
+      updateFortuneUnderstandingResponse(
+        request('/api/fortune/understanding', {
+          method: 'PUT',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(data),
+        }),
+        'fortune',
+      );
+    expect((await submit({ ...body, actorUserId: 'stranger' })).status).toBe(400);
+    expect((await submit({ ...body, items: [{ ...item, state: 'INFERRED' }] })).status).toBe(400);
+    expect((await submit({ ...body, items: [item, item] })).status).toBe(400);
+    expect((await submit({ ...body, items: [{ ...item, text: 'a'.repeat(51) }] })).status).toBe(
+      400,
+    );
+    expect(state.saveUnderstanding).not.toHaveBeenCalled();
+    state.saveUnderstanding.mockResolvedValue('SAVED');
+    state.readUnderstanding.mockResolvedValue({ items: [] });
+    expect((await submit(body)).status).toBe(200);
+    expect(state.saveUnderstanding).toHaveBeenCalledExactlyOnceWith({
+      serviceSlug: 'fortune',
+      actorUserId: 'user-1',
+      revision: null,
+      profileRevision: new Date(body.profileRevision),
+      items: [{ ...item, text: '生活を大切にする' }],
+    });
+    state.saveUnderstanding.mockResolvedValue('CONFLICT');
+    expect((await submit(body)).status).toBe(409);
+  });
+
+  it('checks origin before deleting and takes ownership only from the session', async () => {
+    const remove = (origin: string) =>
+      deleteFortuneUnderstandingResponse(
+        request('/api/fortune/understanding', { method: 'DELETE', headers: { origin } }),
+        'fortune',
+      );
+    expect((await remove('https://unrelated.example')).status).toBe(403);
+    expect(state.deleteUnderstanding).not.toHaveBeenCalled();
+    state.deleteUnderstanding.mockResolvedValue(true);
+    expect((await remove('http://localhost:3000')).status).toBe(200);
+    expect(state.deleteUnderstanding).toHaveBeenCalledExactlyOnceWith({
+      serviceSlug: 'fortune',
+      actorUserId: 'user-1',
+    });
+  });
+
+  it('validates intake input, excludes skipped question keys and returns ordinary continuation if AI fails', async () => {
+    const submit = (body: object) =>
+      nextFortuneIntakeResponse(
+        request('/api/fortune/intake', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(body),
+        }),
+        'fortune',
+      );
+    const skipped = { key: 'VALUES', answer: null };
+    const body = { theme: 'WORK', consultation: '仕事について迷っています', answers: [skipped] };
+    expect((await submit({ ...body, answers: [skipped, skipped] })).status).toBe(400);
+    expect((await submit({ ...body, actorUserId: 'another-user' })).status).toBe(400);
+    state.reserveIntake.mockResolvedValue({ kind: 'RESERVED', id: 'turn', profileRevision: null });
+    state.selectIntake.mockRejectedValue(new Error('provider unavailable'));
+    state.finishIntake.mockResolvedValue({ kind: 'DONE' });
+    const response = await submit(body);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ data: { kind: 'DONE' } });
+    expect(state.reserveIntake).toHaveBeenCalledExactlyOnceWith({
+      actorUserId: 'user-1',
+      serviceSlug: 'fortune',
+      theme: 'WORK',
+      answered: ['VALUES'],
+    });
+    expect(state.selectIntake).toHaveBeenCalledWith(
+      expect.objectContaining({
+        candidates: ['SITUATION', 'REASON', 'DESIRED', 'GOAL'],
+      }),
+    );
+    expect(state.finishIntake).toHaveBeenCalledWith({
+      id: 'turn',
+      profileRevision: null,
+      actorUserId: 'user-1',
+      serviceSlug: 'fortune',
+      key: null,
+    });
+    expect(state.draw).not.toHaveBeenCalled();
+  });
+
   it('uses the session identity and rejects profile fields without consent', async () => {
     state.updateProfile.mockResolvedValue(true);
     const submit = (body: object, origin = 'http://localhost:3000') =>
@@ -89,6 +244,62 @@ describe('fortune HTTP contract', () => {
       actorUserId: 'user-1',
       profile: { consented: false },
     });
+  });
+
+  it('uses only the session identity and rejects invalid follow-up input before invoking AI', async () => {
+    const requestId = '11111111-1111-4111-8111-111111111111';
+    const readingId = '22222222-2222-4222-8222-222222222222';
+    const submit = (data: object, origin = 'http://localhost:3000') =>
+      askFortuneFollowUpResponse(
+        request('/api/fortune/follow-ups', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', origin },
+          body: JSON.stringify(data),
+        }),
+        'fortune',
+        readingId,
+      );
+    state.ask.mockResolvedValue({ remaining: 1, turns: [] });
+    expect((await submit({ requestId, question: ' ' })).status).toBe(400);
+    expect((await submit({ requestId, question: 'a'.repeat(301) })).status).toBe(400);
+    expect(
+      (await submit({ requestId, question: 'hello' }, 'https://unrelated.example')).status,
+    ).toBe(403);
+    expect((await submit({ requestId, question: ' 別の見方は？ ' })).status).toBe(200);
+    expect(state.ask).toHaveBeenCalledExactlyOnceWith({
+      serviceSlug: 'fortune',
+      readingId,
+      actorUserId: 'user-1',
+      requestId,
+      question: '別の見方は？',
+    });
+  });
+
+  it('allows only authenticated same-origin submissions of the optional fit rating', async () => {
+    const readingId = '22222222-2222-4222-8222-222222222222';
+    const submit = (data: object, origin = 'http://localhost:3000') =>
+      updateFortunePersonalFitResponse(
+        request('/api/fortune/personal-fit', {
+          method: 'PUT',
+          headers: { 'content-type': 'application/json', origin },
+          body: JSON.stringify(data),
+        }),
+        'fortune',
+        readingId,
+      );
+    state.savePersonalFit.mockResolvedValue(true);
+    expect((await submit({ rating: 'VERY', userId: 'someone-else' })).status).toBe(400);
+    expect((await submit({ rating: 'HELPFUL' })).status).toBe(400);
+    expect((await submit({ rating: 'VERY' }, 'https://unrelated.example')).status).toBe(403);
+    expect((await submit({ rating: 'VERY' })).status).toBe(200);
+    expect((await submit({ rating: null })).status).toBe(200);
+    state.user = null;
+    expect((await submit({ rating: 'VERY' })).status).toBe(401);
+    expect(state.savePersonalFit.mock.calls).toEqual(
+      ['VERY', null].map((rating) => [
+        { serviceSlug: 'fortune', actorUserId: 'user-1', readingId, rating },
+      ]),
+    );
   });
 
   it('accepts only an authenticated participant Bunshin choice without authority fields', async () => {

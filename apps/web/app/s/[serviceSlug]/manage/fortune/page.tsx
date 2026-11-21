@@ -221,6 +221,83 @@ export default async function FortuneManagementPage({
               )}
           </section>
         )}
+        {quality?.deepGuidance && (
+          <section className="settings-card">
+            <h2>深層鑑定の利用状況</h2>
+            <p>直近30日（サービスの保存期間が短い場合はその期間内）</p>
+            <dl>
+              <div>
+                <dt>ヒアリング開始</dt>
+                <dd>{quality.deepGuidance.starts}件</dd>
+              </div>
+              <div>
+                <dt>相談を確認して鑑定へ進んだ割合</dt>
+                <dd>
+                  {percent(quality.deepGuidance.completionRate)}（{quality.deepGuidance.reviewed}
+                  件）
+                </dd>
+              </div>
+              <div>
+                <dt>平均質問数</dt>
+                <dd>{quality.deepGuidance.questionAverage?.toFixed(1) ?? '集計対象なし'}</dd>
+              </div>
+              <div>
+                <dt>スキップ・途中終了</dt>
+                <dd>
+                  {percent(quality.deepGuidance.skipRate)}（スキップ {quality.deepGuidance.skipped}
+                  件 / 翌日以降の未完了 {quality.deepGuidance.abandoned}件）
+                </dd>
+              </div>
+              <div>
+                <dt>深層鑑定の結果</dt>
+                <dd>{quality.deepGuidance.readings}件</dd>
+              </div>
+              <div>
+                <dt>深層鑑定を閲覧した方の別日再訪</dt>
+                <dd>
+                  {percent(quality.deepGuidance.returnRate)}（{quality.deepGuidance.returnedReaders}
+                  人）
+                </dd>
+              </div>
+              <div>
+                <dt>自分に合っていたか</dt>
+                <dd>
+                  とても {quality.deepGuidance.fit.very}件 / ある程度{' '}
+                  {quality.deepGuidance.fit.somewhat}件 / あまり {quality.deepGuidance.fit.notMuch}
+                  件
+                </dd>
+              </div>
+            </dl>
+            <h3>AIの利用と概算原価（{quality.aiOperations.monthKey}、UTC）</h3>
+            <dl>
+              {(
+                [
+                  ['ヒアリングの質問選択', quality.deepGuidance.intakeAi],
+                  ['深層鑑定の生成', quality.deepGuidance.readingAi],
+                ] as const
+              ).map(([label, ai]) => (
+                <div key={label}>
+                  <dt>{label}</dt>
+                  <dd>
+                    成功 {ai.successfulCalls}回 / 失敗 {ai.failedCalls}回（成功率{' '}
+                    {percent(fortuneRate(ai.successfulCalls, ai.successfulCalls + ai.failedCalls))}
+                    ）
+                  </dd>
+                  <dd>
+                    入力 {ai.inputTokens.toLocaleString('ja-JP')} / 出力{' '}
+                    {ai.outputTokens.toLocaleString('ja-JP')} トークン
+                  </dd>
+                  <dd>
+                    {ai.pricedCalls
+                      ? `約 $${(ai.estimatedCostUsdMicros / 1_000_000).toFixed(4)} USD`
+                      : '原価の記録なし'}
+                    {ai.unpricedCalls > 0 && `（価格未設定 ${ai.unpricedCalls}回）`}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          </section>
+        )}
         {quality && (
           <>
             <section className="settings-card">
@@ -352,6 +429,21 @@ export default async function FortuneManagementPage({
                       <dt>提案を試した割合（振り返り回答者の自己申告）</dt>
                       <dd>{percent(quality.personalGuidance.suggestionUseRate)}</dd>
                     </div>
+                    <div>
+                      <dt>追加質問の利用率（期間中に初めて閲覧した鑑定）</dt>
+                      <dd>
+                        {percent(quality.personalGuidance.followUpUseRate)}（
+                        {quality.personalGuidance.followUpReadings}件）
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>自分に合っていたか（任意評価）</dt>
+                      <dd>
+                        とても {quality.personalGuidance.personalFit.very}件 / ある程度{' '}
+                        {quality.personalGuidance.personalFit.somewhat}件 / あまり{' '}
+                        {quality.personalGuidance.personalFit.notMuch}件
+                      </dd>
+                    </div>
                   </>
                 )}
                 <div>
@@ -363,11 +455,14 @@ export default async function FortuneManagementPage({
                   <dd>{quality.membershipActivity.notificationOptOutParticipants}人</dd>
                 </div>
                 <div>
+                  <dt>週次LINE用リンクから再訪した人</dt>
+                  <dd>{quality.membershipActivity.weeklyLineReturnParticipants}人</dd>
+                </div>
+                <div>
                   <dt>サービスを退会した人</dt>
                   <dd>{quality.membershipActivity.withdrawnParticipants}人</dd>
                 </div>
               </dl>
-              <p>同じ人が期間中に同じ操作を複数回行っても、この画面では1人として数えます。</p>
             </section>
             <section className="settings-card">
               <p className="eyebrow">直近{quality.periodDays}日</p>

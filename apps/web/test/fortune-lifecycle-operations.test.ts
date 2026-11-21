@@ -2,13 +2,22 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
 
-const fake = vi.hoisted(() => ({ purge: vi.fn(), purgeProfiles: vi.fn() }));
+const fake = vi.hoisted(() => ({
+  purge: vi.fn(),
+  purgeProfiles: vi.fn(),
+  purgeIntake: vi.fn(),
+  purgeDeepInputs: vi.fn(),
+  purgeUnderstanding: vi.fn(),
+}));
 
 vi.mock('server-only', () => ({}));
 vi.mock('@bunshin/database', () => ({
   prisma: { marker: 'database-client' },
   purgeExpiredFortuneReadings: fake.purge,
   purgeExpiredFortuneProfiles: fake.purgeProfiles,
+  purgeExpiredFortuneIntake: fake.purgeIntake,
+  purgeExpiredFortuneDeepInputs: fake.purgeDeepInputs,
+  purgeExpiredFortuneUnderstanding: fake.purgeUnderstanding,
 }));
 
 import { runExpiredFortuneReadingPurge } from '../src/http/fortune-lifecycle-operations';
@@ -21,6 +30,9 @@ describe('fortune lifecycle operations', () => {
     await expect(runExpiredFortuneReadingPurge(now)).resolves.toEqual({ deleted: 12 });
     expect(fake.purge).toHaveBeenCalledWith({ marker: 'database-client' }, now);
     expect(fake.purgeProfiles).toHaveBeenCalledWith({ marker: 'database-client' }, now);
+    expect(fake.purgeIntake).toHaveBeenCalledWith({ marker: 'database-client' }, now);
+    expect(fake.purgeDeepInputs).toHaveBeenCalledWith({ marker: 'database-client' }, now);
+    expect(fake.purgeUnderstanding).toHaveBeenCalledWith({ marker: 'database-client' }, now);
   });
 
   it('runs physical deletion only from the protected production cron', () => {

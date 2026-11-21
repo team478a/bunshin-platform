@@ -4,7 +4,12 @@ import type {
   FortuneReadingView,
   FortuneTheme,
 } from '@bunshin/capability-fortune';
-import { FORTUNE_REFLECTION_ANSWERS, TAROT_DECK } from '@bunshin/capability-fortune';
+import {
+  FORTUNE_PERSONAL_FIT_RATINGS,
+  FORTUNE_REFLECTION_ANSWERS,
+  parseFortuneDeepReadingDetails,
+  TAROT_DECK,
+} from '@bunshin/capability-fortune';
 import type { Prisma, PrismaClient } from '@prisma/client';
 
 type Db = PrismaClient | Prisma.TransactionClient;
@@ -75,7 +80,9 @@ export async function fortuneReadingView(
     readingText: string | null;
     actionStep: string | null;
     reflectionPrompt?: string | null;
+    deepReading?: unknown;
     reflectionAnswer?: string | null;
+    personalFitRating?: string | null;
     knowledgeVersionId: string | null;
     createdAt: Date;
   },
@@ -88,6 +95,10 @@ export async function fortuneReadingView(
   const reflectionAnswer = FORTUNE_REFLECTION_ANSWERS.find(
     (answer) => answer === row.reflectionAnswer,
   );
+  const personalFitRating = FORTUNE_PERSONAL_FIT_RATINGS.find(
+    (rating) => rating === row.personalFitRating,
+  );
+  const deep = row.status === 'READY_AI' ? parseFortuneDeepReadingDetails(row.deepReading) : null;
   return {
     id: row.id,
     localDate: row.localDate.toISOString().slice(0, 10),
@@ -103,6 +114,8 @@ export async function fortuneReadingView(
       ? { reflectionPrompt: row.reflectionPrompt }
       : {}),
     ...(reflectionAnswer ? { reflectionAnswer } : {}),
+    ...(personalFitRating ? { personalFitRating } : {}),
+    ...(deep && meaning ? { deepReading: { ...deep, approvedPerspective: meaning.body } } : {}),
     feedbackRating: feedback?.rating ?? null,
     feedbackIssue: (feedback?.issueCode as FortuneFeedbackIssue | null | undefined) ?? null,
     createdAt: row.createdAt,

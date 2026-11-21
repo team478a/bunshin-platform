@@ -2,10 +2,21 @@
 
 import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
+import { FORTUNE_INTAKE_MAX_QUESTIONS, fortuneIntakeOptions } from '@bunshin/capability-fortune';
 import {
+  defaultFortuneGuide,
   defaultFortuneGuidanceSettings,
   type FortuneGuidanceSettings,
 } from '../../../../../src/fortune/guidance-settings';
+
+const guideFields = [
+  ['introduction', '利用者向けの紹介文'],
+  ['personality', '基本の性格・雰囲気'],
+  ['language', '言葉遣い'],
+  ['readingRules', '鑑定時の表現ルール'],
+  ['questionApproach', '質問の進め方'],
+  ['suggestionPolicy', '提案内容の方針'],
+] as const;
 
 export function FortuneGuidanceEditor({
   serviceSlug,
@@ -18,6 +29,8 @@ export function FortuneGuidanceEditor({
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const guide = settings.guide ?? defaultFortuneGuide;
+  const intake = fortuneIntakeOptions(settings);
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -40,6 +53,17 @@ export function FortuneGuidanceEditor({
             consultationQuestion: text('consultationQuestion'),
             styleQuestion: text('styleQuestion'),
             guideName: text('guideName'),
+            followUpLimit: Number(text('followUpLimit')),
+            deepReadingEnabled: fields.get('deepReadingEnabled') === 'on',
+            intake: {
+              enabled: fields.get('intakeEnabled') === 'on',
+              questions: Number(text('intakeQuestions')),
+              calls: Number(text('intakeCalls')),
+            },
+            guide: {
+              ...Object.fromEntries(guideFields.map(([key]) => [key, text(key)])),
+              imageUrl: text('imageUrl'),
+            },
             defaultStyle: text('defaultStyle') || null,
             themeLabels: Object.fromEntries(
               Object.keys(settings.themeLabels).map((key) => [key, text(key)]),
@@ -81,6 +105,61 @@ export function FortuneGuidanceEditor({
               <input name={key} defaultValue={settings[key]} maxLength={100} required />
             </label>
           ))}
+          <p>
+            案内役はAIとして表示します。紹介や表現ルールには、ご本人の選択を尊重する案内を入力してください。
+          </p>
+          {guideFields.map(([key, label]) => (
+            <label key={key} className="form-field">
+              <span>{label}</span>
+              <textarea name={key} defaultValue={guide[key]} maxLength={240} rows={2} />
+            </label>
+          ))}
+          <label className="form-field">
+            <span>1回の鑑定への追加質問</span>
+            <select name="followUpLimit" defaultValue={settings.followUpLimit ?? 2}>
+              <option value="0">利用しない</option>
+              <option value="1">1回まで</option>
+              <option value="2">2回まで</option>
+            </select>
+          </label>
+          <label className="form-field">
+            <span>案内役の画像・アイコンURL（HTTPS、任意）</span>
+            <input name="imageUrl" type="url" defaultValue={guide.imageUrl} maxLength={500} />
+          </label>
+          <label className="fortune-check">
+            <input type="checkbox" name="intakeEnabled" defaultChecked={intake.enabled} />
+            <span>鑑定前の動的ヒアリングを有効にする</span>
+          </label>
+          <label className="fortune-check">
+            <input
+              type="checkbox"
+              name="deepReadingEnabled"
+              defaultChecked={settings.deepReadingEnabled ?? false}
+            />
+            <span>確認済みの相談を使う深層鑑定を有効にする</span>
+          </label>
+          <label className="form-field">
+            <span>鑑定前の追加質問数（1人・1日あたり）</span>
+            <input
+              type="number"
+              name="intakeQuestions"
+              min={1}
+              max={FORTUNE_INTAKE_MAX_QUESTIONS}
+              defaultValue={intake.questions}
+              required
+            />
+          </label>
+          <label className="form-field">
+            <span>質問選択のAI利用上限（1人・1日あたり）</span>
+            <input
+              type="number"
+              name="intakeCalls"
+              min={1}
+              max={FORTUNE_INTAKE_MAX_QUESTIONS}
+              defaultValue={intake.calls}
+              required
+            />
+          </label>
           {Object.entries(settings.themeLabels).map(([key, value]) => (
             <label key={key} className="form-field">
               <span>
