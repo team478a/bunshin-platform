@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
+import { FortuneAppearance } from '../fortune-appearance';
 import { PublicShell } from '../../../ui/public-shell';
 import { fortuneDailyReadingService } from '../../../../src/fortune/runtime';
+import { resolveFortuneGuidanceSettings } from '../../../../src/fortune/guidance-settings';
 import { resolveFortunePage } from '../../../../src/fortune/page-context';
 import { FortuneNav, ReadingCard } from '../fortune-ui';
 
@@ -12,13 +14,17 @@ export default async function FortuneHistoryPage({
   params: Promise<{ serviceSlug: string }>;
 }) {
   const { serviceSlug } = await params;
-  const { actor, setting } = await resolveFortunePage(serviceSlug, `/s/${serviceSlug}/history`);
+  const { actor, service, setting } = await resolveFortunePage(
+    serviceSlug,
+    `/s/${serviceSlug}/history`,
+  );
   const fortune = await fortuneDailyReadingService();
   const today = await fortune.today({ serviceSlug, actorUserId: actor.userId });
   const readings = today.participant
     ? await fortune.history({ serviceSlug, actorUserId: actor.userId })
     : [];
-  return (
+  const { appearance } = resolveFortuneGuidanceSettings(setting.guidanceSettings);
+  const content = (
     <PublicShell showPlatformBrand={false}>
       <main className="app-page fortune-page">
         <header className="app-page__heading">
@@ -40,5 +46,10 @@ export default async function FortuneHistoryPage({
         <FortuneNav serviceSlug={serviceSlug} />
       </main>
     </PublicShell>
+  );
+  return (
+    <FortuneAppearance settings={appearance} brand={service.configuration.brand}>
+      {content}
+    </FortuneAppearance>
   );
 }

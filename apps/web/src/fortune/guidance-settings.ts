@@ -1,5 +1,6 @@
 import { FORTUNE_INTAKE_MAX_QUESTIONS, FORTUNE_PROFILE_STYLES } from '@bunshin/capability-fortune';
 import { z } from 'zod';
+import { readFortuneAppearance } from './appearance';
 
 const label = z.string().trim().min(1).max(100);
 const guideText = z.string().trim().max(240);
@@ -115,5 +116,14 @@ export const defaultFortuneGuidanceSettings: FortuneGuidanceSettings = {
   styleLabels: { GENTLE: 'やさしく', DIRECT: '簡潔に', REFLECTIVE: 'じっくり考える' },
 };
 
-export const resolveFortuneGuidanceSettings = (value: unknown) =>
-  fortuneGuidanceSettingsSchema.safeParse(value).data ?? defaultFortuneGuidanceSettings;
+export function resolveFortuneGuidanceSettings(value: unknown) {
+  const appearance = readFortuneAppearance(value);
+  const guidance =
+    value && typeof value === 'object' && 'appearance' in value
+      ? Object.fromEntries(Object.entries(value).filter(([key]) => key !== 'appearance'))
+      : value;
+  return {
+    ...(fortuneGuidanceSettingsSchema.safeParse(guidance).data ?? defaultFortuneGuidanceSettings),
+    ...(appearance ? { appearance } : {}),
+  };
+}

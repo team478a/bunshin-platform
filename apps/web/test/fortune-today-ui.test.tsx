@@ -6,6 +6,7 @@ import {
   type FortuneReadingView,
 } from '@bunshin/capability-fortune';
 import FortuneTodayPage from '../app/s/[serviceSlug]/today/page';
+import { defaultFortuneAppearance } from '../src/fortune/appearance';
 import {
   defaultFortuneGuide,
   defaultFortuneGuidanceSettings,
@@ -48,6 +49,16 @@ const setting = {
   },
 };
 
+const service = {
+  configuration: {
+    brand: {
+      logoUrl: 'https://images.example/fortune.jpg',
+      primaryColor: '#000066',
+      secondaryColor: '#ffc861',
+    },
+  },
+};
+
 const reading: FortuneReadingView = {
   id: 'today',
   localDate: toJapanLocalDate(new Date()),
@@ -67,7 +78,7 @@ const reading: FortuneReadingView = {
 describe('fortune member home', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    state.page.mockResolvedValue({ actor: { userId: 'reader' }, setting });
+    state.page.mockResolvedValue({ actor: { userId: 'reader' }, setting, service });
     state.today.mockResolvedValue({ participant: null, reading: null });
     state.profile.mockResolvedValue({
       enabled: true,
@@ -80,12 +91,32 @@ describe('fortune member home', () => {
   it('identifies the configurable AI guide and directs a first-time visitor to age confirmation', async () => {
     const markup = await renderToday();
     expect(markup).toContain('AI案内役');
+    expect(markup).not.toContain('class="fortune-appearance"');
     expect(markup).toContain('月の案内役');
     expect(markup).toContain('今日の気持ちを整理しましょう。');
     expect(markup).toContain('images.example/guide.webp');
     expect(markup).toContain('年齢確認へ');
     expect(markup).not.toContain('name="interest"');
     expect(state.history).not.toHaveBeenCalled();
+  });
+
+  it('shows the optional service theme alongside the existing entry action', async () => {
+    state.page.mockResolvedValue({
+      actor: { userId: 'reader' },
+      service,
+      setting: {
+        ...setting,
+        guidanceSettings: {
+          ...setting.guidanceSettings,
+          appearance: { ...defaultFortuneAppearance, enabled: true, corners: 'square' },
+        },
+      },
+    });
+    const markup = await renderToday();
+    expect(markup).toContain('class="fortune-appearance"');
+    expect(markup).toContain('data-corners="square"');
+    expect(markup).toContain('images.example/fortune.jpg');
+    expect(markup).toContain('年齢確認へ');
   });
 
   it('offers optional intake to an age-confirmed participant and keeps single-reading entry available', async () => {
@@ -125,6 +156,7 @@ describe('fortune member home', () => {
   it('still shows age confirmation when AI is off and does not present an AI guide', async () => {
     state.page.mockResolvedValue({
       actor: { userId: 'reader' },
+      service,
       setting: { ...setting, aiEnabled: false },
     });
     const markup = await renderToday();

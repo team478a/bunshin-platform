@@ -4,6 +4,7 @@ import {
   fortuneIntakeOptions,
   toJapanLocalDate,
 } from '@bunshin/capability-fortune';
+import { FortuneAppearance } from '../fortune-appearance';
 import { PublicShell } from '../../../ui/public-shell';
 import { fortuneDailyReadingService } from '../../../../src/fortune/runtime';
 import { resolveFortuneGuidanceSettings } from '../../../../src/fortune/guidance-settings';
@@ -30,7 +31,10 @@ export default async function FortuneTodayPage({
   params: Promise<{ serviceSlug: string }>;
 }) {
   const { serviceSlug } = await params;
-  const { actor, setting } = await resolveFortunePage(serviceSlug, `/s/${serviceSlug}/today`);
+  const { actor, service, setting } = await resolveFortunePage(
+    serviceSlug,
+    `/s/${serviceSlug}/today`,
+  );
   const readings = await fortuneDailyReadingService();
   const today = await readings.today({ serviceSlug, actorUserId: actor.userId, recordView: true });
   const profile = today.participant
@@ -75,7 +79,7 @@ export default async function FortuneTodayPage({
         : '今日のカードを引く';
   const { guide, characters } = guidance;
   const welcome = showIntake || !today.participant ? characters?.intake : characters?.daily;
-  return (
+  const content = (
     <PublicShell showPlatformBrand={false}>
       <div className="app-page fortune-page fortune-today">
         <header className="app-page__heading">
@@ -189,5 +193,10 @@ export default async function FortuneTodayPage({
         <FortuneNav serviceSlug={serviceSlug} />
       </div>
     </PublicShell>
+  );
+  return (
+    <FortuneAppearance settings={guidance.appearance} brand={service.configuration.brand}>
+      {content}
+    </FortuneAppearance>
   );
 }

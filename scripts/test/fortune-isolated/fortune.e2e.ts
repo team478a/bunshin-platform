@@ -1,14 +1,21 @@
 import { test } from '@e2e-dev/web';
 import { expect } from 'e2e';
 
-const deepStage = process.env['BUNSHIN_FORTUNE_TEST_STAGE'] === 'deep';
+const stage = process.env['BUNSHIN_FORTUNE_TEST_STAGE'];
+const deepStage = stage === 'deep';
+const appearanceEditor = stage === 'appearance-editor';
+const appearanceViewer = stage === 'appearance-viewer';
 const invitationPath = process.env['BUNSHIN_FORTUNE_TEST_INVITATION'];
 test(
-  deepStage
-    ? 'a returning participant can check saved context and receive a deep reading on mobile'
-    : invitationPath
-      ? 'an invited visitor can accept the invitation and reach the mobile age gate'
-      : 'a verified participant can join, skip intake and draw a standard reading on mobile',
+  appearanceEditor
+    ? 'an owner previews and saves the service theme on mobile'
+    : appearanceViewer
+      ? 'a saved theme reaches mobile participants across the Fortune pages'
+      : deepStage
+        ? 'a returning participant can check saved context and receive a deep reading on mobile'
+        : invitationPath
+          ? 'an invited visitor can accept the invitation and reach the mobile age gate'
+          : 'a verified participant can join, skip intake and draw a standard reading on mobile',
   async ({ app, browser, screen }) => {
     const slug = process.env['BUNSHIN_FORTUNE_TEST_SLUG'];
     if (!slug?.startsWith('isolated-fortune-'))
@@ -23,7 +30,7 @@ test(
       if (new URL(route.request.url).origin === url) await route.continue();
       else await route.abort();
     });
-    const entry = invitationPath || `/s/${slug}/today`;
+    const entry = invitationPath || `/s/${slug}/${appearanceEditor ? 'manage/fortune' : 'today'}`;
     if (invitationPath && !invitationPath.startsWith(`/s/${slug}/join/`)) {
       throw new Error('An invitation scoped to the disposable service is required');
     }
@@ -33,6 +40,43 @@ test(
       cookies.map(({ name, value }) => ({ name, value, url, httpOnly: true })),
     );
     await app.open(entry);
+    if (appearanceEditor) {
+      await screen.getByText('利用者画面のデザイン', { exact: true }).tap();
+      await screen.getByLabel('基本の配色').selectOption({ value: 'night' });
+      await screen.getByLabel('カードの角丸').selectOption({ value: 'square' });
+      await screen.getByLabel('スマートフォンプレビューの場面').selectOption({ value: 'deep' });
+      await expect(screen.getByRole('heading', '深層パーソナル鑑定')).toBeVisible();
+      await expect(
+        browser.locator('.fortune-appearance-preview [data-corners="square"]'),
+      ).toBeVisible();
+      await screen.getByLabel('保存後に占い画面へ適用する').tap();
+      const saved = browser.waitForResponse(`**/api/services/${slug}/fortune-operations`);
+      await screen.getByRole('button', 'デザインを保存').tap();
+      expect((await saved).status).toBe(200);
+      await expect(screen.getByText('占いのデザインを保存しました。')).toBeVisible();
+      return;
+    }
+    if (appearanceViewer) {
+      const appearance = browser.locator('.fortune-appearance[data-corners="square"]');
+      await expect(appearance).toBeVisible();
+      const layout = await browser.evaluate(() => {
+        const region = document.querySelector('.fortune-appearance');
+        return {
+          viewport: window.innerWidth,
+          content: document.documentElement.scrollWidth,
+          background: region ? getComputedStyle(region).backgroundColor : null,
+        };
+      });
+      expect(layout.viewport).toBe(390);
+      expect(layout.content).toBeLessThanOrEqual(layout.viewport);
+      expect(layout.background).toBe('rgb(23, 22, 43)');
+      await app.screenshot('fortune-night-390px');
+      await app.open(`/s/${slug}/history`);
+      await expect(appearance).toBeVisible();
+      await app.open(`/s/${slug}/settings`);
+      await expect(appearance).toBeVisible();
+      return;
+    }
     if (invitationPath) {
       await screen.getByLabel(/サービスへの参加に同意します/).tap();
       await screen.getByRole('button', '同意して参加する').tap();

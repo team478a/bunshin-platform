@@ -2,6 +2,8 @@ import { cache, type CSSProperties } from 'react';
 import type { Metadata, Route } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { publicFortuneAppearance } from '../../../src/fortune/public-appearance';
+import { FortuneAppearance } from './fortune-appearance';
 import { PublicShell } from '../../ui/public-shell';
 import { resolvePublicServiceContext } from '../../../src/services/public-service';
 import { currentUserProvider } from '../../../src/auth/current-user';
@@ -133,11 +135,12 @@ export default async function ServiceEntryPage({
     '--service-font': configuration.brand.fontFamily,
   } as CSSProperties;
 
-  return (
+  const appearance = await publicFortuneAppearance(configuration);
+  const content = (
     <PublicShell showPlatformBrand={false}>
       <article className="service-entry" style={style}>
         <header className="service-entry__header">
-          {configuration.brand.logoUrl && (
+          {configuration.brand.logoUrl && (!appearance?.enabled || appearance.showLogo) && (
             <div
               className="service-entry__logo"
               role="img"
@@ -251,5 +254,10 @@ export default async function ServiceEntryPage({
         </footer>
       </article>
     </PublicShell>
+  );
+  return (
+    <FortuneAppearance settings={appearance} brand={configuration.brand} showMastheadLogo={false}>
+      {content}
+    </FortuneAppearance>
   );
 }

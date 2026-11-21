@@ -1,3 +1,4 @@
+import { FortuneAppearance } from '../fortune-appearance';
 import { PublicShell } from '../../../ui/public-shell';
 import { fortuneDailyReadingService } from '../../../../src/fortune/runtime';
 import { resolveFortuneGuidanceSettings } from '../../../../src/fortune/guidance-settings';
@@ -52,7 +53,7 @@ export default async function FortuneSettingsPage({
       })
     : [];
   const guidance = resolveFortuneGuidanceSettings(setting.guidanceSettings);
-  return (
+  const content = (
     <PublicShell showPlatformBrand={false}>
       <main className="app-page fortune-page">
         <header className="app-page__heading">
@@ -137,5 +138,10 @@ export default async function FortuneSettingsPage({
         <FortuneNav serviceSlug={serviceSlug} />
       </main>
     </PublicShell>
+  );
+  return (
+    <FortuneAppearance settings={guidance.appearance} brand={service.configuration.brand}>
+      {content}
+    </FortuneAppearance>
   );
 }
