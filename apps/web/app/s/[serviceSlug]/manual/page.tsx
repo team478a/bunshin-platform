@@ -9,6 +9,7 @@ import { resolveVisitorServiceContext } from '../../../../src/services/public-se
 import { isFortuneServicePackage } from '../../../../src/services/service-creation-templates';
 import { resolveFortuneGuidanceSettings } from '../../../../src/fortune/guidance-settings';
 import { FortuneAppearance } from '../fortune-appearance';
+import { ServiceHomeAccessGuidance } from '../home/service-home-access-guidance';
 import { FortuneManual } from './fortune-manual';
 import { SennokuniManual } from './sennokuni-manual';
 
@@ -66,8 +67,10 @@ export default async function ServiceManualPage({
   const { serviceSlug } = await params;
   const actor = await (await currentUserProvider()).getCurrentUser();
   const result = await manualService(serviceSlug, actor?.userId ?? null);
-  if (!result && !actor && isOracleLineService(serviceSlug))
-    redirect(serviceAuthLoginPath(`/s/${serviceSlug}/manual`));
+  if (!result && isOracleLineService(serviceSlug)) {
+    if (!actor) redirect(serviceAuthLoginPath(`/s/${serviceSlug}/manual`));
+    return <ServiceHomeAccessGuidance state="LINK_UNAVAILABLE" serviceSlug={serviceSlug} />;
+  }
   if (!result) notFound();
   if (result.kind === 'SENNOKUNI') return <SennokuniManual />;
   const content = (
