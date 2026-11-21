@@ -11,6 +11,12 @@ import {
   type FortuneGuidanceSettings,
 } from '../../../../../src/fortune/guidance-settings';
 
+import {
+  defaultFortuneAppearance,
+  type FortuneAppearanceBrand,
+} from '../../../../../src/fortune/appearance';
+import { FortuneAppearanceEditor } from './fortune-appearance-editor';
+
 const guideFields = [
   ['introduction', '利用者向けの紹介文'],
   ['personality', '基本の性格・雰囲気'],
@@ -23,12 +29,15 @@ const guideFields = [
 export function FortuneGuidanceEditor({
   serviceSlug,
   settings,
+  brand,
 }: {
   serviceSlug: string;
   settings: FortuneGuidanceSettings;
+  brand: FortuneAppearanceBrand | undefined;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
+  const [appearance, setAppearance] = useState(settings.appearance ?? defaultFortuneAppearance);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const guide = settings.guide ?? defaultFortuneGuide;
@@ -92,6 +101,7 @@ export function FortuneGuidanceEditor({
               imageUrl: text('imageUrl'),
             },
             characters,
+            appearance,
             defaultStyle: text('defaultStyle') || null,
             themeLabels: Object.fromEntries(
               Object.keys(settings.themeLabels).map((key) => [key, text(key)]),
@@ -106,7 +116,7 @@ export function FortuneGuidanceEditor({
         setError('設定を保存できませんでした。入力内容を確認してください。');
         return;
       }
-      setMessage('鑑定の案内設定を保存しました。');
+      setMessage('占いの案内とデザインを保存しました。');
       router.refresh();
     } catch {
       setError('通信できませんでした。');
@@ -117,9 +127,16 @@ export function FortuneGuidanceEditor({
 
   return (
     <details className="settings-card">
-      <summary>ヒアリングとAI案内役の設定</summary>
+      <summary>ヒアリング・AI案内役・デザイン</summary>
       <form className="form-stack" onSubmit={(event) => void save(event)}>
         <fieldset className="form-stack" disabled={busy}>
+          <FortuneAppearanceEditor
+            value={appearance}
+            onChange={setAppearance}
+            brand={brand}
+            characters={settings.characters}
+            busy={busy}
+          />
           {(
             [
               ['interestQuestion', '関心を聞く質問'],

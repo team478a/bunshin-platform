@@ -180,7 +180,11 @@ export default async function FortuneManagementPage({
           bunshins={status.bunshins}
         />
         {status.configured && status.guidanceSettings && (
-          <FortuneGuidanceEditor serviceSlug={serviceSlug} settings={status.guidanceSettings} />
+          <FortuneGuidanceEditor
+            serviceSlug={serviceSlug}
+            settings={status.guidanceSettings}
+            brand={status.appearanceBrand}
+          />
         )}
         {status.configured && (
           <section className="settings-card fortune-readiness-card">

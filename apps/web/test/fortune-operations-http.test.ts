@@ -1,3 +1,4 @@
+import { defaultFortuneAppearance } from '../src/fortune/appearance';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   defaultFortuneGuidanceSettings,
@@ -115,6 +116,35 @@ describe('fortune operator HTTP boundary', () => {
         settings,
       });
     }
+  });
+
+  it('accepts appearance settings only through the authenticated service manager path', async () => {
+    const settings = {
+      ...defaultFortuneGuidanceSettings,
+      appearance: { ...defaultFortuneAppearance, enabled: true, action: '#271d4e' },
+    };
+    const result = await updateFortuneOperationsResponse(
+      request({ action: 'SAVE_GUIDANCE_SETTINGS', settings }),
+      'fortune',
+    );
+    expect(result.status).toBe(200);
+    expect(state.saveGuidance).toHaveBeenLastCalledWith({
+      serviceSlug: 'fortune',
+      actorUserId: 'manager-1',
+      settings,
+    });
+    const invalid = await updateFortuneOperationsResponse(
+      request({
+        action: 'SAVE_GUIDANCE_SETTINGS',
+        settings: {
+          ...settings,
+          appearance: { ...settings.appearance, background: 'url(https://example.invalid)' },
+        },
+      }),
+      'fortune',
+    );
+    expect(invalid.status).toBe(400);
+    expect(state.saveGuidance).toHaveBeenCalledTimes(1);
   });
 
   it('rejects non-HTTPS avatar URLs before calling the operator service', async () => {

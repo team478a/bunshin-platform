@@ -557,6 +557,34 @@ try {
   console.log(
     'PASS scoped invitation acceptance and policy consent open the mobile Fortune age gate',
   );
+  await browser(primary, owner, 'appearance-editor');
+  await browser(primary, participant, 'appearance-viewer');
+  assert.equal(
+    (await db.fortuneServiceSetting.findUniqueOrThrow({ where: { id: setting.id } }))
+      .guidanceSettings.appearance.palette,
+    'night',
+  );
+  assert.equal(
+    (
+      await db.fortuneServiceSetting.findUniqueOrThrow({
+        where: { groupId: secondary.member.groupId },
+      })
+    ).guidanceSettings?.appearance,
+    undefined,
+  );
+  await db.serviceConfiguration.update({
+    where: { id: primary.configurationId },
+    data: { visibility: 'PUBLIC' },
+  });
+  await db.serviceRegistrationPolicy.update({
+    where: { groupId: primary.member.groupId },
+    data: { onboardingConfig: { fortunePackage: { key: 'FORTUNE_DAILY_GUIDANCE', version: 2 } } },
+  });
+  for (const route of [`/s/${primary.slug}`, `/s/${primary.slug}/login`]) {
+    const page = await request(null, route);
+    assert.match(await page.text(), /class="fortune-appearance" data-backdrop="glow"/);
+  }
+  console.log('PASS scoped appearance editing, public branding, and 390px participant layout');
 } catch (error) {
   console.error(error instanceof Error ? error.message : 'Isolated Fortune test failed');
   process.exitCode = 1;

@@ -1,5 +1,6 @@
 import { FortunePolicyError } from '@bunshin/capability-fortune';
 import { notFound } from 'next/navigation';
+import { FortuneAppearance } from '../../fortune-appearance';
 import { PublicShell } from '../../../../ui/public-shell';
 import { fortuneDailyReadingService } from '../../../../../src/fortune/runtime';
 import { resolveFortuneGuidanceSettings } from '../../../../../src/fortune/guidance-settings';
@@ -14,7 +15,7 @@ export default async function FortuneReadingPage({
   params: Promise<{ serviceSlug: string; readingId: string }>;
 }) {
   const { serviceSlug, readingId } = await params;
-  const { actor, setting } = await resolveFortunePage(
+  const { actor, service, setting } = await resolveFortunePage(
     serviceSlug,
     `/s/${serviceSlug}/readings/${readingId}`,
   );
@@ -27,8 +28,8 @@ export default async function FortuneReadingPage({
     if (error instanceof FortunePolicyError && error.code === 'READING_NOT_FOUND') notFound();
     throw error;
   }
-  const { characters } = resolveFortuneGuidanceSettings(setting.guidanceSettings);
-  return (
+  const { characters, appearance } = resolveFortuneGuidanceSettings(setting.guidanceSettings);
+  const content = (
     <PublicShell showPlatformBrand={false}>
       <main className="app-page fortune-page">
         <header className="app-page__heading">
@@ -44,5 +45,10 @@ export default async function FortuneReadingPage({
         <FortuneNav serviceSlug={serviceSlug} />
       </main>
     </PublicShell>
+  );
+  return (
+    <FortuneAppearance settings={appearance} brand={service.configuration.brand}>
+      {content}
+    </FortuneAppearance>
   );
 }

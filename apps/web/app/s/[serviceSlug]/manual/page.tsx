@@ -6,6 +6,7 @@ import { isRouteNotFound } from '../../../../src/navigation/route-not-found';
 import { resolveVisitorServiceContext } from '../../../../src/services/public-service';
 import { isFortuneServicePackage } from '../../../../src/services/service-creation-templates';
 import { resolveFortuneGuidanceSettings } from '../../../../src/fortune/guidance-settings';
+import { FortuneAppearance } from '../fortune-appearance';
 import { FortuneManual } from './fortune-manual';
 import { SennokuniManual } from './sennokuni-manual';
 
@@ -29,10 +30,13 @@ const manualService = cache(async (serviceSlug: string, actorUserId: string | nu
   const fortune =
     isFortuneServicePackage(service.configuration.registration.onboardingConfig) ||
     fortuneSetting !== null;
-  const character = fortuneSetting?.enabled
-    ? resolveFortuneGuidanceSettings(fortuneSetting.guidanceSettings).characters?.intake
+  const guidance = fortuneSetting
+    ? resolveFortuneGuidanceSettings(fortuneSetting.guidanceSettings)
     : undefined;
-  return fortune ? { service, kind: 'FORTUNE' as const, character } : null;
+  const character = fortuneSetting?.enabled ? guidance?.characters?.intake : undefined;
+  return fortune
+    ? { service, kind: 'FORTUNE' as const, character, appearance: guidance?.appearance }
+    : null;
 });
 
 export async function generateMetadata({
@@ -61,12 +65,17 @@ export default async function ServiceManualPage({
   const result = await manualService((await params).serviceSlug, actor?.userId ?? null);
   if (!result) notFound();
   if (result.kind === 'SENNOKUNI') return <SennokuniManual />;
-  return (
+  const content = (
     <FortuneManual
       serviceSlug={result.service.configuration.slug}
       serviceName={result.service.configuration.displayName}
       contactEmail={result.service.configuration.contactEmail}
       {...(result.character ? { character: result.character } : {})}
     />
+  );
+  return (
+    <FortuneAppearance settings={result.appearance} brand={result.service.configuration.brand}>
+      {content}
+    </FortuneAppearance>
   );
 }
