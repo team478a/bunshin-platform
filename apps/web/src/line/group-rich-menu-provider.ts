@@ -220,7 +220,7 @@ export async function createPersonalLearningGroupRichMenu(input: {
       selected: true,
       name: `bunshin-learning:${input.groupId}:${randomUUID()}`.slice(0, 100),
       chatBarText: '学習メニュー',
-      areas: DEFAULT_LINE_RICH_MENU.areas.map((area) => ({
+      areas: DEFAULT_LINE_RICH_MENU.areas.map((area, index) => ({
         bounds: { x: area.x, y: area.y, width: area.width, height: area.height },
         action: {
           type: 'uri',
