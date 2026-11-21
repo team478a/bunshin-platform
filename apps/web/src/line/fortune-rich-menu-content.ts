@@ -1,7 +1,7 @@
 import type { LineRichMenuAction } from '@bunshin/application';
 
 export const FORTUNE_LINE_MENU = {
-  OPEN_TODAY: { title: '今日の占い', subtitle: '今日のカードを引く', path: 'today' },
+  OPEN_TODAY: { title: '今日の占い', subtitle: 'カード鑑定・AI相談', path: 'today' },
   OPEN_BUNSHINS: { title: '鑑定履歴', subtitle: '過去の結果を読む', path: 'history' },
   OPEN_NOTIFICATION_SETTINGS: {
     title: '通知設定',

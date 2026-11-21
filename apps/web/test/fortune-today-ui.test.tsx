@@ -128,6 +128,33 @@ describe('fortune member home', () => {
     expect(state.history).not.toHaveBeenCalled();
   });
 
+  it('offers AI consultation before the card choices when intake is enabled', async () => {
+    state.today.mockResolvedValue({ participant: { id: 'participant' }, reading: null });
+    state.profile.mockResolvedValue({
+      enabled: true,
+      completed: true,
+      profile: emptyFortunePersonalProfile,
+    });
+    state.page.mockResolvedValue({
+      actor: { userId: 'reader' },
+      service,
+      setting: {
+        ...setting,
+        guidanceSettings: { ...setting.guidanceSettings, intake: { enabled: true } },
+      },
+    });
+    const markup = await renderToday();
+    expect(markup).toContain('今日の占い方を選ぶ');
+    expect(markup).toContain('AIと相談を整理してから占う');
+    expect(markup).toContain('カードを引いて占う');
+    expect(markup.indexOf('AIと相談を整理してから占う')).toBeLessThan(
+      markup.indexOf('カードを引いて占う'),
+    );
+
+    state.today.mockResolvedValue({ participant: { id: 'participant' }, reading });
+    expect(await renderToday()).not.toContain('AIと相談を整理してから占う');
+  });
+
   it('puts today’s result first and shows the optional previous reflection only after consent', async () => {
     state.today.mockResolvedValue({ participant: { id: 'participant' }, reading });
     state.profile.mockResolvedValue({
