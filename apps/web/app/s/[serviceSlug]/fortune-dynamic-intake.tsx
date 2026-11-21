@@ -38,14 +38,11 @@ export function FortuneDynamicIntake({
     <>
       {!started ? (
         <>
-          <FortuneDrawButtons {...props} />
-          <button
-            className="button button--secondary"
-            type="button"
-            onClick={() => setStarted(true)}
-          >
+          <button className="button button--primary" type="button" onClick={() => setStarted(true)}>
             AIと相談を整理してから占う
           </button>
+          <h3>カードを引いて占う</h3>
+          <FortuneDrawButtons {...props} />
         </>
       ) : theme ? (
         <IntakeConversation
@@ -61,6 +58,7 @@ export function FortuneDynamicIntake({
         />
       ) : (
         <>
+          <h3>AIに相談するテーマを選ぶ</h3>
           <FortuneDrawButtons
             {...props}
             askConsultation={false}
