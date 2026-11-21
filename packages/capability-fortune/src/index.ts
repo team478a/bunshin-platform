@@ -6,4 +6,5 @@ export * from './fortune-generation-queue';
 export * from './tarot';
 export * from './fortune-personal-profile';
 export * from './fortune-intake';
+export * from './fortune-understanding';
 export { STANDARD_FORTUNE_PROMPT_VERSION } from './standard-knowledge';

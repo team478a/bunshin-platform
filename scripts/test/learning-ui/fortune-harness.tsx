@@ -1,12 +1,17 @@
 import { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import type { FortunePersonalProfile, FortuneReadingView } from '@bunshin/capability-fortune';
+import type {
+  FortunePersonalProfile,
+  FortuneReadingView,
+  FortuneUnderstandingSnapshot,
+} from '@bunshin/capability-fortune';
 import {
   FortuneDrawButtons,
   FortuneJoinButton,
 } from '../../../apps/web/app/s/[serviceSlug]/fortune-actions';
 import { FortuneProfileForm } from '../../../apps/web/app/s/[serviceSlug]/fortune-profile-form';
 import { FortuneDynamicIntake } from '../../../apps/web/app/s/[serviceSlug]/fortune-dynamic-intake';
+import { FortuneSavedUnderstanding } from '../../../apps/web/app/s/[serviceSlug]/fortune-understanding';
 import { FortuneReflection } from '../../../apps/web/app/s/[serviceSlug]/fortune-reflection';
 import { ReadingCard } from '../../../apps/web/app/s/[serviceSlug]/fortune-ui';
 import '../../../apps/web/app/styles.css';
@@ -19,6 +24,7 @@ export interface FortuneBrowserFixture {
   profile: FortunePersonalProfile;
   reading?: SerializedReading;
   previous?: SerializedReading;
+  understanding?: FortuneUnderstandingSnapshot;
 }
 
 function FortuneHarness() {
@@ -35,6 +41,12 @@ function FortuneHarness() {
   }, []);
   if (!state) return null;
   const serviceSlug = 'fixture-fortune';
+  if (state.understanding)
+    return (
+      <main className="app-page fortune-page">
+        <FortuneSavedUnderstanding serviceSlug={serviceSlug} initial={state.understanding} />
+      </main>
+    );
   const DrawButtons = new URLSearchParams(window.location.search).has('dynamic-intake')
     ? FortuneDynamicIntake
     : FortuneDrawButtons;
