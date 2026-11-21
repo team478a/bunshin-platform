@@ -54,6 +54,9 @@
   line-height: 1.2;
 }
 
+.fortune-appearance .fortune-today__guide {
+  margin-bottom: 1rem;
+}
 .fortune-appearance .fortune-page .app-page__heading {
   text-align: center;
 }
