@@ -5,6 +5,7 @@ import { currentUserProvider } from '../../../../src/auth/current-user';
 import { isRouteNotFound } from '../../../../src/navigation/route-not-found';
 import { resolveVisitorServiceContext } from '../../../../src/services/public-service';
 import { isFortuneServicePackage } from '../../../../src/services/service-creation-templates';
+import { resolveFortuneGuidanceSettings } from '../../../../src/fortune/guidance-settings';
 import { FortuneManual } from './fortune-manual';
 import { SennokuniManual } from './sennokuni-manual';
 
@@ -21,14 +22,17 @@ const manualService = cache(async (serviceSlug: string, actorUserId: string | nu
   }
   if (serviceSlug === SENNOKUNI_SLUG) return { service, kind: 'SENNOKUNI' as const };
   const db = await import('@bunshin/database');
-  const hasFortuneSetting = await db.prisma.fortuneServiceSetting.findFirst({
+  const fortuneSetting = await db.prisma.fortuneServiceSetting.findFirst({
     where: { workspaceId: service.workspaceId, groupId: service.serviceId },
-    select: { id: true },
+    select: { enabled: true, guidanceSettings: true },
   });
   const fortune =
     isFortuneServicePackage(service.configuration.registration.onboardingConfig) ||
-    hasFortuneSetting !== null;
-  return fortune ? { service, kind: 'FORTUNE' as const } : null;
+    fortuneSetting !== null;
+  const character = fortuneSetting?.enabled
+    ? resolveFortuneGuidanceSettings(fortuneSetting.guidanceSettings).characters?.intake
+    : undefined;
+  return fortune ? { service, kind: 'FORTUNE' as const, character } : null;
 });
 
 export async function generateMetadata({
@@ -62,6 +66,7 @@ export default async function ServiceManualPage({
       serviceSlug={result.service.configuration.slug}
       serviceName={result.service.configuration.displayName}
       contactEmail={result.service.configuration.contactEmail}
+      {...(result.character ? { character: result.character } : {})}
     />
   );
 }
