@@ -36,8 +36,18 @@ export function fortuneReadingRetentionCutoff(at: Date, historyRetentionDays: nu
 }
 
 export async function purgeExpiredFortuneIntake(db: PrismaClient, at: Date) {
-  return db.fortuneIntakeTurn.deleteMany({
-    where: { localDate: { lt: dateOnly(toJapanLocalDate(at)) } },
+  const today = dateOnly(toJapanLocalDate(at));
+  return db.$transaction(async (tx) => {
+    await tx.$executeRaw(Prisma.sql`
+      DELETE FROM "fortune_intake_sessions" AS session
+      USING "fortune_participants" AS participant, "fortune_service_settings" AS setting
+      WHERE session."participant_id" = participant."id"
+        AND participant."service_setting_id" = setting."id"
+        AND session."local_date" < (
+          ${today}::date - GREATEST(LEAST(setting."history_retention_days", 30) - 1, 0)
+        )
+    `);
+    return tx.fortuneIntakeTurn.deleteMany({ where: { localDate: { lt: today } } });
   });
 }
 

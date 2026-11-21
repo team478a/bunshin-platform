@@ -126,6 +126,9 @@ export function createFortuneGenerationJobHandler(
         ...(claim.personalProfileRevision
           ? { personalProfileRevision: claim.personalProfileRevision }
           : {}),
+        ...(claim.priorUnderstandingRevision
+          ? { priorUnderstandingRevision: claim.priorUnderstandingRevision }
+          : {}),
       });
     },
   };

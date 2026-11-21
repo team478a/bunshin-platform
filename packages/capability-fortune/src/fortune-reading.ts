@@ -74,11 +74,13 @@ export interface FortuneAiGenerationClaim {
   personalGuidance?: boolean;
   reflectionEnabled?: boolean;
   personalProfileRevision?: Date;
+  priorUnderstandingRevision?: string;
   defaultStyle?: FortuneProfileStyle;
   guidanceSettings?: unknown;
   consultation?: string;
   reviewedUnderstanding?: ConfirmedFortuneUnderstanding[];
   personalization?: {
+    priorUnderstanding?: { savedAt: string; items: ConfirmedFortuneUnderstanding[] };
     participantProfile?: Omit<FortunePersonalProfile, 'consented'>;
     bunshinProfile?: {
       name: string;
@@ -168,6 +170,7 @@ export interface FortuneRepository {
     readingId: string;
     output: FortuneAiReadingResult;
     personalProfileRevision?: Date;
+    priorUnderstandingRevision?: string;
   }): Promise<FortuneReadingView | null>;
   fallbackAiGeneration(input: {
     jobLease?: FortuneGenerationJobLease;
@@ -333,6 +336,9 @@ export class FortuneDailyReadingService {
             output: { ...generated, ...safe },
             ...(claim.personalProfileRevision
               ? { personalProfileRevision: claim.personalProfileRevision }
+              : {}),
+            ...(claim.priorUnderstandingRevision
+              ? { priorUnderstandingRevision: claim.priorUnderstandingRevision }
               : {}),
           })) ?? result.reading
         );

@@ -296,7 +296,7 @@ export function FortuneSavedUnderstanding({
 
   return (
     <section className="settings-card fortune-action">
-      <h2>保存した相談内容</h2>
+      <h2 id="fortune-understanding">保存した相談内容</h2>
       {snapshot.items.length > 0 && (
         <p className="fortune-note">
           プロフィールを保存し直すと、ここに保存した相談内容も消去されます。

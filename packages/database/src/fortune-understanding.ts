@@ -1,11 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import {
+  fortuneDeepReadingEnabled,
   fortuneIntakeOptions,
   parseConfirmedFortuneUnderstanding,
   type ConfirmedFortuneUnderstanding,
   type FortuneUnderstandingSnapshot,
 } from '@bunshin/capability-fortune';
-import type { PrismaClient } from '@prisma/client';
+import type { Prisma } from '@prisma/client';
 import { clearFortuneUnderstanding, fortuneReadingRetentionCutoff } from './fortune-retention';
 import { fortuneTarget } from './fortune-shared';
 
@@ -13,7 +14,7 @@ type Actor = { serviceSlug: string; actorUserId: string };
 
 export class PrismaFortuneUnderstandingRepository {
   constructor(
-    private readonly db: PrismaClient,
+    private readonly db: Prisma.TransactionClient,
     private readonly now = () => new Date(),
   ) {}
 
@@ -65,12 +66,22 @@ export class PrismaFortuneUnderstandingRepository {
       profileExpiresAt &&
       profileExpiresAt > now,
     );
-    return { participant, where, now, days, profileRevision, profileExpiresAt, visible, canSave };
+    return {
+      participant,
+      where,
+      now,
+      days,
+      profileRevision,
+      profileExpiresAt,
+      visible,
+      canSave,
+      canGenerate: canSave && scope.aiEnabled && fortuneDeepReadingEnabled(scope.guidanceSettings),
+    };
   }
 
-  async read(input: Actor): Promise<FortuneUnderstandingSnapshot | null> {
+  async read(input: Actor, forGeneration = false): Promise<FortuneUnderstandingSnapshot | null> {
     const result = await this.participant(input);
-    if (!result) return null;
+    if (!result || (forGeneration && !result.canGenerate)) return null;
     const { participant, visible, canSave, profileRevision, profileExpiresAt } = result;
     const stored = Array.isArray(participant.understandingItems)
       ? participant.understandingItems
