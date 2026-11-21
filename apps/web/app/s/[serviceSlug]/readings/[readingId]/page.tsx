@@ -2,6 +2,7 @@ import { FortunePolicyError } from '@bunshin/capability-fortune';
 import { notFound } from 'next/navigation';
 import { PublicShell } from '../../../../ui/public-shell';
 import { fortuneDailyReadingService } from '../../../../../src/fortune/runtime';
+import { resolveFortuneGuidanceSettings } from '../../../../../src/fortune/guidance-settings';
 import { resolveFortunePage } from '../../../../../src/fortune/page-context';
 import { FortuneDeleteButton } from '../../fortune-actions';
 import { FortuneNav, ReadingCard } from '../../fortune-ui';
@@ -26,6 +27,7 @@ export default async function FortuneReadingPage({
     if (error instanceof FortunePolicyError && error.code === 'READING_NOT_FOUND') notFound();
     throw error;
   }
+  const { characters } = resolveFortuneGuidanceSettings(setting.guidanceSettings);
   return (
     <PublicShell showPlatformBrand={false}>
       <main className="app-page fortune-page">
@@ -34,6 +36,7 @@ export default async function FortuneReadingPage({
         </header>
         <ReadingCard
           reading={reading}
+          {...(characters ? { characters } : {})}
           serviceSlug={serviceSlug}
           showFollowUps={setting.aiEnabled && setting.personalProfileEnabled}
         />

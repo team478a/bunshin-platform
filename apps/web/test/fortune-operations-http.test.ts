@@ -89,9 +89,20 @@ describe('fortune operator HTTP boundary', () => {
       introduction: '一緒に考えを整理しましょう。',
       imageUrl: 'https://images.example/guide.webp',
     };
+    const characters = {
+      daily: {
+        id: 'daily-guide',
+        name: '合成の案内役',
+        enabled: true,
+        imageUrl: 'https://images.example/daily.webp',
+        iconUrl: '',
+        expressions: { thinking: 'https://images.example/thinking.png' },
+      },
+    };
     for (const settings of [
       defaultFortuneGuidanceSettings,
       { ...defaultFortuneGuidanceSettings, guide },
+      { ...defaultFortuneGuidanceSettings, guide, characters },
     ]) {
       const result = await updateFortuneOperationsResponse(
         request({ action: 'SAVE_GUIDANCE_SETTINGS', settings }),
@@ -118,6 +129,30 @@ describe('fortune operator HTTP boundary', () => {
       'fortune',
     );
     expect(result.status).toBe(400);
+    expect(state.saveGuidance).not.toHaveBeenCalled();
+  });
+
+  it('rejects unsafe expression image URLs in a role without saving it', async () => {
+    const response = await updateFortuneOperationsResponse(
+      request({
+        action: 'SAVE_GUIDANCE_SETTINGS',
+        settings: {
+          ...defaultFortuneGuidanceSettings,
+          characters: {
+            deep: {
+              id: 'deep-guide',
+              name: '合成の案内役',
+              enabled: true,
+              imageUrl: '',
+              iconUrl: '',
+              expressions: { thinking: 'https://user:secret@images.example/guide.webp' },
+            },
+          },
+        },
+      }),
+      'fortune',
+    );
+    expect(response.status).toBe(400);
     expect(state.saveGuidance).not.toHaveBeenCalled();
   });
 

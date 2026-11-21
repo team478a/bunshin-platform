@@ -12,6 +12,7 @@ import { FortuneDrawButtons, FortuneJoinButton } from '../fortune-actions';
 import { FortuneNav, ReadingCard } from '../fortune-ui';
 import { FortuneReflection } from '../fortune-reflection';
 import { FortuneProfileForm } from '../fortune-profile-form';
+import { FortuneCharacterBadge } from '../fortune-character';
 import { FortuneDynamicIntake } from '../fortune-dynamic-intake';
 import {
   fortunePersonalProfileRepository,
@@ -72,30 +73,39 @@ export default async function FortuneTodayPage({
       : today.reading
         ? '今日の鑑定を見る'
         : '今日のカードを引く';
-  const guide = guidance.guide;
+  const { guide, characters } = guidance;
+  const welcome = showIntake || !today.participant ? characters?.intake : characters?.daily;
   return (
     <PublicShell showPlatformBrand={false}>
       <div className="app-page fortune-page fortune-today">
         <header className="app-page__heading">
           <h1>今日の占い</h1>
         </header>
-        {showGuide && (
+        {(showGuide || welcome?.enabled) && (
           <section className="fortune-today__guide" aria-label="AI案内役">
-            <div className="fortune-today__guide-profile">
-              {guide?.imageUrl && (
-                <img
-                  src={guide.imageUrl}
-                  alt=""
-                  width={56}
-                  height={56}
-                  referrerPolicy="no-referrer"
-                />
-              )}
-              <div>
-                <p className="eyebrow">AI案内役</p>
-                <h2>{guidance.guideName}</h2>
+            {welcome?.enabled ? (
+              <FortuneCharacterBadge
+                character={welcome}
+                expression="welcome"
+                {...(guide?.imageUrl ? { fallbackImage: guide.imageUrl } : {})}
+              />
+            ) : (
+              <div className="fortune-today__guide-profile">
+                {guide?.imageUrl && (
+                  <img
+                    src={guide.imageUrl}
+                    alt=""
+                    width={56}
+                    height={56}
+                    referrerPolicy="no-referrer"
+                  />
+                )}
+                <div>
+                  <p className="eyebrow">AI案内役</p>
+                  <h2>{guidance.guideName}</h2>
+                </div>
               </div>
-            </div>
+            )}
             <p>
               {guide?.introduction ||
                 '今日のカードから、今のあなたが考えを整理するヒントをお届けします。'}
@@ -131,6 +141,7 @@ export default async function FortuneTodayPage({
               reading={today.reading}
               serviceSlug={serviceSlug}
               showFollowUps={showGuide}
+              {...(characters ? { characters } : {})}
             />
           ) : (
             <section className="settings-card">
@@ -139,6 +150,7 @@ export default async function FortuneTodayPage({
               <DrawButtons
                 serviceSlug={serviceSlug}
                 {...(deepEnabled ? { deepReadingEnabled: true } : {})}
+                {...(characters ? { characters } : {})}
                 {...(priorUnderstanding ? { priorUnderstanding } : {})}
                 {...(profile?.enabled ? { themeLabels: guidance.themeLabels } : {})}
                 askConsultation={Boolean(
@@ -152,7 +164,12 @@ export default async function FortuneTodayPage({
           )}
         </div>
         {previous && setting.reflectionEnabled && profile?.profile.consented && (
-          <FortuneReflection key={previous.id} serviceSlug={serviceSlug} reading={previous} />
+          <FortuneReflection
+            key={previous.id}
+            serviceSlug={serviceSlug}
+            reading={previous}
+            {...(characters?.intake ? { character: characters.intake } : {})}
+          />
         )}
         {profile?.enabled && profile.completed && (profile.profile.interest || previous) && (
           <section className="settings-card">
