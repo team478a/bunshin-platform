@@ -20,8 +20,8 @@ vi.mock('../src/auth/current-user', () => ({
   currentUserProvider: () => ({ getCurrentUser: () => ({ userId: 'member' }) }),
 }));
 vi.mock('../src/services/public-service', () => ({ resolveMemberServiceContext: state.service }));
-vi.mock('@bunshin/application', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@bunshin/application')>()),
+vi.mock(import('@bunshin/application'), async (importOriginal) => ({
+  ...(await importOriginal()),
   ServiceParticipationService: class {
     findLegalConsentView = state.legal;
   },
