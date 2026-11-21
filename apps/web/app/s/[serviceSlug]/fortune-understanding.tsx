@@ -149,11 +149,13 @@ export function FortuneUnderstandingReview({
   items,
   update,
   drawing,
+  deepReadingEnabled = false,
 }: {
   serviceSlug: string;
   items: FortuneUnderstandingItem[];
   update: (item: FortuneUnderstandingItem) => void;
   drawing: boolean;
+  deepReadingEnabled?: boolean;
 }) {
   const [snapshot, setSnapshot] = useState<FortuneUnderstandingSnapshot | null>(null);
   const [selected, setSelected] = useState<FortuneUnderstandingField[]>([]);
@@ -197,6 +199,7 @@ export function FortuneUnderstandingReview({
   return (
     <section className="fortune-action" aria-label="相談内容の確認">
       <h3>今回の相談内容を確認</h3>
+      {deepReadingEnabled && <p>確認済みの相談内容は、深層鑑定の結果と一緒に表示されます。</p>}
       <p>候補は、使うと選んだ場合に今回の鑑定へ反映します。</p>
       <UnderstandingItems
         items={items}

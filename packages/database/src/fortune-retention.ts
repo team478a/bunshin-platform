@@ -9,6 +9,26 @@ export const clearFortuneUnderstanding = {
   understandingExpiresAt: null,
 };
 
+export async function discardPendingFortuneDeepInputs(
+  db: Prisma.TransactionClient,
+  scope:
+    | { memberUserId: string; serviceSettingId: string }
+    | {
+        memberUserId: string;
+        workspaceId: string;
+        groupId: string;
+      },
+) {
+  return db.fortuneReading.updateMany({
+    where: { ...scope, pendingUnderstanding: { not: Prisma.DbNull } },
+    data: {
+      pendingUnderstanding: Prisma.DbNull,
+      status: 'READY_BASIC',
+      failureCode: 'FORTUNE_PROFILE_CHANGED',
+    },
+  });
+}
+
 export function fortuneReadingRetentionCutoff(at: Date, historyRetentionDays: number) {
   const cutoff = dateOnly(toJapanLocalDate(at));
   cutoff.setUTCDate(cutoff.getUTCDate() - Math.max(0, Math.trunc(historyRetentionDays) - 1));
@@ -18,6 +38,20 @@ export function fortuneReadingRetentionCutoff(at: Date, historyRetentionDays: nu
 export async function purgeExpiredFortuneIntake(db: PrismaClient, at: Date) {
   return db.fortuneIntakeTurn.deleteMany({
     where: { localDate: { lt: dateOnly(toJapanLocalDate(at)) } },
+  });
+}
+
+export async function purgeExpiredFortuneDeepInputs(db: PrismaClient, at: Date) {
+  return db.fortuneReading.updateMany({
+    where: {
+      localDate: { lt: dateOnly(toJapanLocalDate(at)) },
+      pendingUnderstanding: { not: Prisma.DbNull },
+    },
+    data: {
+      pendingUnderstanding: Prisma.DbNull,
+      status: 'READY_BASIC',
+      failureCode: 'FORTUNE_DEEP_CONTEXT_EXPIRED',
+    },
   });
 }
 
@@ -31,6 +65,12 @@ export async function purgeExpiredFortuneProfiles(db: PrismaClient, at: Date): P
           ${dateOnly(toJapanLocalDate(at))}::timestamptz - GREATEST(setting."history_retention_days" - 1, 0) * INTERVAL '1 day'
         )
       FOR UPDATE OF participant
+    ), discarded AS (
+      UPDATE "fortune_readings" AS reading
+      SET "pending_understanding" = NULL, "status" = 'READY_BASIC',
+          "failure_code" = 'FORTUNE_PROFILE_CHANGED', "updated_at" = ${at}
+      FROM expired
+      WHERE reading."participant_id" = expired."id" AND reading."pending_understanding" IS NOT NULL
     ), erased AS (
       UPDATE "fortune_reading_follow_ups" AS follow_up
       SET "status" = 'ERASED', "question" = NULL, "answer" = NULL, "action_step" = NULL

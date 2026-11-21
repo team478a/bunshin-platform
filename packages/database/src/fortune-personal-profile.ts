@@ -4,7 +4,11 @@ import {
   type FortunePersonalProfileUpdate,
 } from '@bunshin/capability-fortune';
 import type { Prisma, PrismaClient } from '@prisma/client';
-import { clearFortuneUnderstanding, fortuneReadingRetentionCutoff } from './fortune-retention';
+import {
+  clearFortuneUnderstanding,
+  discardPendingFortuneDeepInputs,
+  fortuneReadingRetentionCutoff,
+} from './fortune-retention';
 import { fortuneTarget } from './fortune-shared';
 import { eraseFortuneFollowUps } from './fortune-follow-ups';
 
@@ -122,6 +126,12 @@ export class PrismaFortunePersonalProfileRepository {
       });
       if (result.count === 1 && !profile.consented) {
         await eraseFortuneFollowUps(db, {
+          serviceSettingId: scope.id,
+          memberUserId: input.actorUserId,
+        });
+      }
+      if (result.count === 1) {
+        await discardPendingFortuneDeepInputs(db, {
           serviceSettingId: scope.id,
           memberUserId: input.actorUserId,
         });

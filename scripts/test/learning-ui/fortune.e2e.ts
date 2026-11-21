@@ -190,8 +190,17 @@ test('mobile Fortune asks one adaptive question at a time and only draws on conf
   });
   await browser.route(`${endpoints}/today`, (route) => {
     draws.push(JSON.parse(route.request.postData ?? '{}'));
-    state.reading = reading;
-    return route.fulfill({ json: { data: { ...reading } } });
+    state.reading = {
+      ...reading,
+      deepReading: {
+        consultationSummary: '仕事について迷っています',
+        importantValue: '生活とのバランスを大切にする',
+        approvedPerspective: '小さな一歩から始める象徴です。',
+        alternatives: ['今の条件を整理する', '他の選択肢を調べる'],
+        actionReason: '自分の得意なことを判断材料にできます。',
+      },
+    };
+    return route.fulfill({ json: { data: { ...state.reading } } });
   });
   await browser.route(`${endpoints}/**/follow-ups`, (route) =>
     route.fulfill({ json: { data: null } }),
@@ -237,6 +246,10 @@ test('mobile Fortune asks one adaptive question at a time and only draws on conf
     },
   ]);
   await screen.getByRole('button', 'この内容で占う').tap();
+  await expect(screen.getByRole('heading', '今回確認した相談')).toBeVisible();
+  await expect(screen.getByRole('heading', 'カードからの象徴的な視点')).toBeVisible();
+  await expect(screen.getByRole('heading', '考えられる選択肢')).toBeVisible();
+  await expect(screen.getByText('自分の得意なことを判断材料にできます。')).toBeVisible();
   await expect(screen.getByRole('heading', '今日の提案')).toBeVisible();
   expect(intake).toEqual([
     { theme: 'WORK', consultation: '仕事について迷っています', answers: [] },
@@ -249,7 +262,20 @@ test('mobile Fortune asks one adaptive question at a time and only draws on conf
   expect(draws).toEqual([
     {
       theme: 'WORK',
-      consultation: '仕事について迷っています\n【大切なこと】生活とのバランスを大切にする',
+      reviewedUnderstanding: [
+        {
+          field: 'CONSULTATION',
+          state: 'CONFIRMED',
+          source: 'CONSULTATION',
+          text: '仕事について迷っています',
+        },
+        {
+          field: 'VALUES',
+          state: 'CONFIRMED',
+          source: 'CORRECTION',
+          text: '生活とのバランスを大切にする',
+        },
+      ],
     },
   ]);
 });

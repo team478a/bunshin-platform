@@ -1,4 +1,4 @@
-import type { PrismaClient } from '@prisma/client';
+import { Prisma, type PrismaClient } from '@prisma/client';
 import {
   FORTUNE_GENERATION_JOB_TYPE,
   fortuneGenerationPayloadReference,
@@ -73,6 +73,7 @@ export async function recoverStaleFortuneReadings(
           : 'AI_GENERATION_INTERRUPTED_MISSING_BASIC',
         modelName: null,
         pendingConsultation: null,
+        pendingUnderstanding: Prisma.DbNull,
       },
     });
     if (result.count === 1) {

@@ -20,6 +20,7 @@ function fixture(enabled = true) {
     fortuneServiceSetting: { findFirst: findSetting },
     fortuneParticipant: { findFirst, updateMany },
     fortuneReadingFollowUp: { updateMany: erase },
+    fortuneReading: { updateMany: vi.fn() },
   } as unknown as PrismaClient;
   return {
     findSetting,
