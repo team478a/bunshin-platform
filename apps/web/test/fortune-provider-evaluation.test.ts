@@ -12,6 +12,7 @@ import { OpenAiFortuneReadingGenerator } from '../src/providers/openai-fortune-r
 
 const state = vi.hoisted(() => ({
   live: process.env['FORTUNE_EVAL_LIVE'] === '1',
+  intakeOnly: process.env['FORTUNE_EVAL_INTAKE_ONLY'] === '1',
   model: 'gpt-5.2-2025-12-11',
   usage: [] as RecordAiUsageInput[],
 }));
@@ -120,19 +121,21 @@ const readingCases = [
 afterEach(() => vi.unstubAllGlobals());
 
 test(
-  'compares the Fortune intake and deep reading providers on six synthetic cases',
+  'evaluates Fortune provider behavior on synthetic cases',
   async () => {
     if (state.live && !process.env['OPENAI_API_KEY'])
       throw new Error('FORTUNE_EVAL_LIVE requires OPENAI_API_KEY in the test process');
 
     const originalFetch = globalThis.fetch;
+    const selectedReadings = state.intakeOnly ? [] : readingCases;
+    const maxRequests = intakeCases.length + selectedReadings.length;
     let attempted = 0;
     vi.stubGlobal('fetch', (input: RequestInfo | URL, init?: RequestInit) => {
       if (
         input !== endpoint ||
         init?.method !== 'POST' ||
         typeof init.body !== 'string' ||
-        attempted >= 6
+        attempted >= maxRequests
       )
         throw new Error('Fortune evaluation transport rejected a request');
       const raw: unknown = JSON.parse(init.body);
@@ -180,7 +183,7 @@ test(
     if (!meaning) throw new Error('Standard tarot fixture is unavailable');
     const generator = new OpenAiFortuneReadingGenerator();
     const readings = [];
-    for (const scenario of readingCases) {
+    for (const scenario of selectedReadings) {
       const prior = scenario.id === 'current-wishes-first';
       const approvedContext: ConfirmedFortuneUnderstanding = {
         field: 'CONSULTATION',
@@ -278,8 +281,8 @@ test(
         ),
       );
     }
-    expect(attempted).toBe(6);
-    expect(usage).toHaveLength(6);
+    expect(attempted).toBe(maxRequests);
+    expect(usage).toHaveLength(maxRequests);
     expect(questions.map(({ passed }) => passed)).toEqual([true, true]);
     expect(readings.every(({ result }) => result?.deep)).toBe(true);
   },
