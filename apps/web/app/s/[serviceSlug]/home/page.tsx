@@ -198,8 +198,8 @@ export default async function ServiceMemberHome({
     select: { id: true },
   });
   if (fortune && membership.serviceRole === 'PARTICIPANT') {
-    const base = `/s/${service.configuration.slug}`;
-    redirect(needsLegalConsent ? `${base}/legal-consent` : `${base}/today`);
+    const destination = needsLegalConsent ? 'legal-consent' : 'today';
+    redirect(`/s/${service.configuration.slug}/${destination}`);
   }
   const onboarding = readServiceOnboardingSettings(
     service.configuration.registration.onboardingConfig,
