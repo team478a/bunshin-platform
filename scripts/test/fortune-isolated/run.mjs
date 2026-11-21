@@ -90,7 +90,10 @@ async function actor(label) {
 
 async function service(label, owner, participant) {
   const workspace = await db.workspace.create({
-    data: { name: `Synthetic ${label}`, type: 'PERSONAL' },
+    data: { name: `Synthetic ${label}`, type: 'ORGANIZATION' },
+  });
+  await db.organizationEntitlement.create({
+    data: { workspaceId: workspace.id, fortunePackageEnabled: true, updatedByUserId: owner.userId },
   });
   const group = await db.group.create({ data: { workspaceId: workspace.id, name: label } });
   const scope = { workspaceId: workspace.id, groupId: group.id };
