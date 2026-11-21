@@ -1,6 +1,8 @@
 import type { Route } from 'next';
 import Link from 'next/link';
 import type { FortuneReadingView } from '@bunshin/capability-fortune';
+import type { FortuneGuidanceSettings } from '../../../src/fortune/guidance-settings';
+import { FortuneCharacterBadge } from './fortune-character';
 import { FortuneFeedbackButtons } from './fortune-actions';
 import { FortuneFollowUps } from './fortune-follow-ups';
 import { FortunePersonalFit } from './fortune-personal-fit';
@@ -24,15 +26,25 @@ export function ReadingCard({
   linked = false,
   showFollowUps = false,
   serviceSlug,
+  characters,
 }: {
   reading: FortuneReadingView;
   linked?: boolean;
   showFollowUps?: boolean;
+  characters?: FortuneGuidanceSettings['characters'];
   serviceSlug: string;
 }) {
   const deep = linked ? undefined : reading.deepReading;
+  const character = linked ? undefined : deep ? characters?.deep : characters?.daily;
   const card = (
     <article className="settings-card fortune-reading-card">
+      {character && (
+        <FortuneCharacterBadge
+          character={character}
+          expression={reading.status === 'GENERATING' ? 'thinking' : 'result'}
+          compact={!deep}
+        />
+      )}
       <p className="eyebrow">
         {reading.localDate.replaceAll('-', '/')}・{themeLabel(reading.theme)}
       </p>

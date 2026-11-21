@@ -6,6 +6,8 @@ import { FORTUNE_INTAKE_MAX_QUESTIONS, fortuneIntakeOptions } from '@bunshin/cap
 import {
   defaultFortuneGuide,
   defaultFortuneGuidanceSettings,
+  fortuneCharacterExpressions,
+  fortuneCharacterRoles,
   type FortuneGuidanceSettings,
 } from '../../../../../src/fortune/guidance-settings';
 
@@ -39,6 +41,31 @@ export function FortuneGuidanceEditor({
       const value = fields.get(key);
       return typeof value === 'string' ? value : '';
     };
+    const characters = Object.fromEntries(
+      Object.keys(fortuneCharacterRoles).flatMap((role) => {
+        const id = text(`${role}.id`).trim();
+        const name = text(`${role}.name`).trim();
+        const enabled = fields.get(`${role}.enabled`) === 'on';
+        const imageUrl = text(`${role}.imageUrl`).trim();
+        const iconUrl = text(`${role}.iconUrl`).trim();
+        const expressions = Object.fromEntries(
+          Object.keys(fortuneCharacterExpressions).map((expression) => [
+            expression,
+            text(`${role}.${expression}`).trim(),
+          ]),
+        );
+        if (
+          !id &&
+          !name &&
+          !enabled &&
+          !imageUrl &&
+          !iconUrl &&
+          !Object.values(expressions).some(Boolean)
+        )
+          return [];
+        return [[role, { id, name, enabled, imageUrl, iconUrl, expressions }]];
+      }),
+    );
     setBusy(true);
     setMessage('');
     setError('');
@@ -64,6 +91,7 @@ export function FortuneGuidanceEditor({
               ...Object.fromEntries(guideFields.map(([key]) => [key, text(key)])),
               imageUrl: text('imageUrl'),
             },
+            characters,
             defaultStyle: text('defaultStyle') || null,
             themeLabels: Object.fromEntries(
               Object.keys(settings.themeLabels).map((key) => [key, text(key)]),
@@ -199,6 +227,72 @@ export function FortuneGuidanceEditor({
               ))}
             </select>
           </label>
+          <details>
+            <summary>画面別のキャラクター</summary>
+            <p>配信用のHTTPS画像URLを入力できます。PNG・WebPの透過画像に対応します。</p>
+            {Object.entries(fortuneCharacterRoles).map(([role, label]) => {
+              const character = settings.characters?.[role as keyof typeof fortuneCharacterRoles];
+              return (
+                <details key={role} className="settings-card">
+                  <summary>{label}</summary>
+                  <div className="form-stack">
+                    <label className="fortune-check">
+                      <input
+                        type="checkbox"
+                        name={`${role}.enabled`}
+                        defaultChecked={character?.enabled}
+                      />
+                      <span>表示する</span>
+                    </label>
+                    <label className="form-field">
+                      <span>識別ID（半角英小文字・数字・ハイフン・下線）</span>
+                      <input
+                        name={`${role}.id`}
+                        defaultValue={character?.id}
+                        maxLength={64}
+                        pattern={'[a-z0-9][a-z0-9_\\-]*'}
+                      />
+                    </label>
+                    <label className="form-field">
+                      <span>表示名</span>
+                      <input name={`${role}.name`} defaultValue={character?.name} maxLength={100} />
+                    </label>
+                    {(
+                      [
+                        ['imageUrl', '通常画像'],
+                        ['iconUrl', '小型アイコン'],
+                      ] as const
+                    ).map(([field, title]) => (
+                      <label key={field} className="form-field">
+                        <span>{title}（任意）</span>
+                        <input
+                          name={`${role}.${field}`}
+                          type="url"
+                          defaultValue={character?.[field]}
+                          maxLength={500}
+                        />
+                      </label>
+                    ))}
+                    {Object.entries(fortuneCharacterExpressions).map(([expression, title]) => (
+                      <label key={expression} className="form-field">
+                        <span>表情画像・{title}（任意）</span>
+                        <input
+                          name={`${role}.${expression}`}
+                          type="url"
+                          defaultValue={
+                            character?.expressions[
+                              expression as keyof typeof fortuneCharacterExpressions
+                            ]
+                          }
+                          maxLength={500}
+                        />
+                      </label>
+                    ))}
+                  </div>
+                </details>
+              );
+            })}
+          </details>
           <button type="submit" className="button button--primary">
             {busy ? '保存中…' : '案内設定を保存'}
           </button>

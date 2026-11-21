@@ -14,6 +14,8 @@ import {
   type FortuneTheme,
   type FortuneUnderstandingItem,
 } from '@bunshin/capability-fortune';
+import type { FortuneGuidanceSettings } from '../../../src/fortune/guidance-settings';
+import { FortuneCharacterBadge } from './fortune-character';
 import { FortuneDrawButtons } from './fortune-actions';
 import { FortuneUnderstandingReview } from './fortune-understanding';
 
@@ -23,10 +25,12 @@ type Step =
 export function FortuneDynamicIntake({
   deepReadingEnabled = false,
   priorUnderstanding,
+  characters,
   ...props
 }: Omit<ComponentProps<typeof FortuneDrawButtons>, 'onSelectTheme'> & {
   deepReadingEnabled?: boolean;
   priorUnderstanding?: ConfirmedFortuneUnderstanding[];
+  characters?: FortuneGuidanceSettings['characters'];
 }) {
   const [started, setStarted] = useState(false);
   const [theme, setTheme] = useState<FortuneTheme>();
@@ -48,6 +52,7 @@ export function FortuneDynamicIntake({
           serviceSlug={props.serviceSlug}
           theme={theme}
           deepReadingEnabled={deepReadingEnabled}
+          {...(characters ? { characters } : {})}
           {...(priorUnderstanding ? { priorUnderstanding } : {})}
           onExit={() => {
             setStarted(false);
@@ -88,12 +93,14 @@ function IntakeConversation({
   onExit,
   deepReadingEnabled,
   priorUnderstanding,
+  characters,
 }: {
   serviceSlug: string;
   theme: FortuneTheme;
   onExit: () => void;
   deepReadingEnabled: boolean;
   priorUnderstanding?: ConfirmedFortuneUnderstanding[];
+  characters?: FortuneGuidanceSettings['characters'];
 }) {
   const router = useRouter();
   const [step, setStep] = useState<Step>({ kind: 'START' });
@@ -177,11 +184,18 @@ function IntakeConversation({
   if (review) {
     return (
       <div className="fortune-action">
+        {deepReadingEnabled && characters?.deep && (
+          <FortuneCharacterBadge
+            character={characters.deep}
+            {...(drawing ? { expression: 'thinking' as const } : {})}
+          />
+        )}
         <FortuneUnderstandingReview
           serviceSlug={serviceSlug}
           items={review}
           drawing={drawing}
           deepReadingEnabled={deepReadingEnabled}
+          {...(characters ? { characters } : {})}
           {...(priorUnderstanding ? { priorUnderstanding } : {})}
           update={(item) =>
             setReview(
@@ -219,6 +233,13 @@ function IntakeConversation({
 
   return (
     <div className="fortune-action">
+      {characters?.intake && (
+        <FortuneCharacterBadge
+          character={characters.intake}
+          compact
+          {...(asking ? { expression: 'thinking' as const } : {})}
+        />
+      )}
       <p>AIが必要な質問を選びます。回答は任意で、今回の質問選びと鑑定に使います。</p>
       {step.kind === 'START' && priorUnderstanding && (
         <details>

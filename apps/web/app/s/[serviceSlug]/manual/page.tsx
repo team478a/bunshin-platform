@@ -5,6 +5,8 @@ import { currentUserProvider } from '../../../../src/auth/current-user';
 import { isRouteNotFound } from '../../../../src/navigation/route-not-found';
 import { resolveVisitorServiceContext } from '../../../../src/services/public-service';
 import { isFortuneServicePackage } from '../../../../src/services/service-creation-templates';
+import { resolveFortuneGuidanceSettings } from '../../../../src/fortune/guidance-settings';
+import { FortuneAppearance } from '../fortune-appearance';
 import { FortuneManual } from './fortune-manual';
 import { SennokuniManual } from './sennokuni-manual';
 
@@ -21,14 +23,20 @@ const manualService = cache(async (serviceSlug: string, actorUserId: string | nu
   }
   if (serviceSlug === SENNOKUNI_SLUG) return { service, kind: 'SENNOKUNI' as const };
   const db = await import('@bunshin/database');
-  const hasFortuneSetting = await db.prisma.fortuneServiceSetting.findFirst({
+  const fortuneSetting = await db.prisma.fortuneServiceSetting.findFirst({
     where: { workspaceId: service.workspaceId, groupId: service.serviceId },
-    select: { id: true },
+    select: { enabled: true, guidanceSettings: true },
   });
   const fortune =
     isFortuneServicePackage(service.configuration.registration.onboardingConfig) ||
-    hasFortuneSetting !== null;
-  return fortune ? { service, kind: 'FORTUNE' as const } : null;
+    fortuneSetting !== null;
+  const guidance = fortuneSetting
+    ? resolveFortuneGuidanceSettings(fortuneSetting.guidanceSettings)
+    : undefined;
+  const character = fortuneSetting?.enabled ? guidance?.characters?.intake : undefined;
+  return fortune
+    ? { service, kind: 'FORTUNE' as const, character, appearance: guidance?.appearance }
+    : null;
 });
 
 export async function generateMetadata({
@@ -57,11 +65,17 @@ export default async function ServiceManualPage({
   const result = await manualService((await params).serviceSlug, actor?.userId ?? null);
   if (!result) notFound();
   if (result.kind === 'SENNOKUNI') return <SennokuniManual />;
-  return (
+  const content = (
     <FortuneManual
       serviceSlug={result.service.configuration.slug}
       serviceName={result.service.configuration.displayName}
       contactEmail={result.service.configuration.contactEmail}
+      {...(result.character ? { character: result.character } : {})}
     />
+  );
+  return (
+    <FortuneAppearance settings={result.appearance} brand={result.service.configuration.brand}>
+      {content}
+    </FortuneAppearance>
   );
 }

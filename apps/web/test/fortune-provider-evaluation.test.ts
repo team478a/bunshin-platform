@@ -13,7 +13,7 @@ import { OpenAiFortuneReadingGenerator } from '../src/providers/openai-fortune-r
 const state = vi.hoisted(() => ({
   live: process.env['FORTUNE_EVAL_LIVE'] === '1',
   intakeOnly: process.env['FORTUNE_EVAL_INTAKE_ONLY'] === '1',
-  model: 'gpt-5.2-2025-12-11',
+  model: process.env['FORTUNE_EVAL_MODEL'] ?? 'gpt-5.2-2025-12-11',
   usage: [] as RecordAiUsageInput[],
 }));
 vi.mock('server-only', () => ({}));
@@ -49,6 +49,12 @@ vi.mock('../src/fortune/personal-profile', () => ({
 }));
 
 const endpoint = 'https://api.openai.com/v1/responses';
+const listPricing = {
+  'gpt-5.2-2025-12-11': { input: 1.75, output: 14 },
+  'gpt-5.6-terra': { input: 2, output: 12 },
+} as const;
+const pricing = Object.entries(listPricing).find(([model]) => model === state.model)?.[1];
+const budgetUsdMicros = 360_000;
 const requestSchema = z.object({
   model: z.literal(state.model),
   store: z.literal(false),
@@ -126,10 +132,12 @@ test(
     if (state.live && !process.env['OPENAI_API_KEY'])
       throw new Error('FORTUNE_EVAL_LIVE requires OPENAI_API_KEY in the test process');
 
+    if (!pricing) throw new Error('No pricing is configured for the evaluation model');
     const originalFetch = globalThis.fetch;
     const selectedReadings = state.intakeOnly ? [] : readingCases;
     const maxRequests = intakeCases.length + selectedReadings.length;
     let attempted = 0;
+    let reservedUsdMicros = 0;
     vi.stubGlobal('fetch', (input: RequestInfo | URL, init?: RequestInit) => {
       if (
         input !== endpoint ||
@@ -140,6 +148,13 @@ test(
         throw new Error('Fortune evaluation transport rejected a request');
       const raw: unknown = JSON.parse(init.body);
       const request = requestSchema.parse(raw);
+      const conservativeInputTokens = Buffer.byteLength(init.body, 'utf8') + 512;
+      const reserve = Math.ceil(
+        conservativeInputTokens * pricing.input * 1.25 + request.max_output_tokens * pricing.output,
+      );
+      if (reservedUsdMicros + reserve > budgetUsdMicros)
+        throw new Error('Fortune evaluation budget exceeded before sending the request');
+      reservedUsdMicros += reserve;
       attempted++;
       if (state.live) return originalFetch(input, { ...init, redirect: 'error' });
       const output =
@@ -254,11 +269,11 @@ test(
         status,
         errorCode,
         latencyMs,
-        // Standard rates for the pinned GPT-5.2 snapshot, conservatively ignoring cache discounts.
+        // Standard list prices, conservatively ignoring cache discounts.
         listPriceUsdMicros:
           inputTokens === null || outputTokens === null
             ? null
-            : Math.round(1.75 * inputTokens + 14 * outputTokens),
+            : Math.round(pricing.input * inputTokens + pricing.output * outputTokens),
       }),
     );
     if (state.live) {
@@ -267,6 +282,7 @@ test(
           {
             model: state.model,
             attempted,
+            reservedUsdMicros,
             questions,
             readings,
             usage,

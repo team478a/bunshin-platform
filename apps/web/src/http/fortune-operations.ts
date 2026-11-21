@@ -11,6 +11,7 @@ import {
   importStandardFortuneKnowledge,
   installStandardFortunePackage,
   setFortuneAiEnabled,
+  saveFortuneAppearanceSettings,
   saveFortuneGuidanceSettings,
   setFortuneEnabled,
   setFortuneGuidanceSetting,
@@ -18,6 +19,7 @@ import {
   updateStandardFortunePackage,
 } from '../fortune/operator';
 
+import { fortuneAppearanceSchema } from '../fortune/appearance';
 import { fortuneGuidanceSettingsSchema } from '../fortune/guidance-settings';
 
 const slug = z
@@ -47,6 +49,9 @@ const body = z.discriminatedUnion('action', [
       action: z.literal('SAVE_GUIDANCE_SETTINGS'),
       settings: fortuneGuidanceSettingsSchema,
     })
+    .strict(),
+  z
+    .object({ action: z.literal('SAVE_APPEARANCE_SETTINGS'), settings: fortuneAppearanceSchema })
     .strict(),
   z
     .object({
@@ -161,6 +166,15 @@ export async function updateFortuneOperationsResponse(request: Request, serviceS
     if (value.action === 'SAVE_GUIDANCE_SETTINGS')
       return result(
         await saveFortuneGuidanceSettings({
+          serviceSlug: parsedSlug,
+          actorUserId,
+          settings: value.settings,
+        }),
+        requestId,
+      );
+    if (value.action === 'SAVE_APPEARANCE_SETTINGS')
+      return result(
+        await saveFortuneAppearanceSettings({
           serviceSlug: parsedSlug,
           actorUserId,
           settings: value.settings,

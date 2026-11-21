@@ -1,0 +1,245 @@
+.fortune-appearance {
+  --color-primary: var(--fortune-action);
+  --color-primary-strong: var(--fortune-action);
+  --color-text: var(--fortune-canvas-text);
+  --color-text-muted: var(--fortune-canvas-text);
+  --color-surface: var(--fortune-surface);
+  --color-border: color-mix(in srgb, var(--fortune-surface-text) 25%, var(--fortune-surface));
+  --fortune-radius: 1.25rem;
+  min-width: 0;
+  background: var(--fortune-canvas);
+  color: var(--fortune-canvas-text);
+  font-family: 'Noto Sans JP Variable', 'Noto Sans JP', sans-serif;
+}
+
+.fortune-appearance[data-corners='square'] {
+  --fortune-radius: 0.25rem;
+}
+
+.fortune-appearance[data-corners='soft'] {
+  --fortune-radius: 0.75rem;
+}
+
+.fortune-appearance > .public-shell {
+  background: transparent;
+}
+
+.fortune-appearance__masthead {
+  display: grid;
+  justify-items: center;
+  gap: 0.35rem;
+  padding: 1.1rem 1.25rem 0;
+  text-align: center;
+}
+
+.fortune-appearance[data-backdrop='glow'] .fortune-appearance__masthead {
+  background: radial-gradient(
+    ellipse at top,
+    color-mix(in srgb, var(--fortune-accent) 21%, transparent),
+    transparent 75%
+  );
+}
+
+.fortune-appearance__logo {
+  display: block;
+  width: min(100%, 17.5rem);
+  height: auto;
+  max-height: 5.5rem;
+  object-fit: contain;
+}
+
+.fortune-appearance__ornament {
+  color: var(--fortune-accent);
+  font-size: 1.75rem;
+  line-height: 1.2;
+}
+
+.fortune-appearance .fortune-today__guide {
+  margin-bottom: 1rem;
+}
+.fortune-appearance .fortune-page .app-page__heading {
+  text-align: center;
+}
+
+.fortune-appearance[data-heading='serif'] .fortune-page :is(h1, h2, h3) {
+  font-family: 'Yu Mincho', 'Hiragino Mincho ProN', 'Noto Serif CJK JP', serif;
+}
+
+.fortune-appearance .fortune-page :is(.settings-card, .fortune-today__guide, .fortune-theme-button),
+.fortune-appearance .fortune-page .fortune-nav {
+  --color-text: var(--fortune-surface-text);
+  --color-text-muted: var(--fortune-surface-text);
+  background: var(--fortune-surface);
+  color: var(--fortune-surface-text);
+  border-color: var(--color-border);
+}
+
+.fortune-appearance
+  .fortune-page
+  :is(.settings-card, .fortune-today__guide, .fortune-theme-button) {
+  border-radius: var(--fortune-radius);
+  box-shadow: none;
+}
+
+.fortune-appearance[data-cards='shadow'] .fortune-page :is(.settings-card, .fortune-today__guide) {
+  box-shadow: 0 0.75rem 1.5rem rgb(0 0 0 / 13%);
+}
+
+.fortune-appearance[data-cards='flat'] .fortune-page :is(.settings-card, .fortune-today__guide) {
+  border-color: transparent;
+}
+
+.fortune-appearance .fortune-page :is(.fortune-action-step, .fortune-check) {
+  border: 1px solid var(--color-border);
+  border-radius: var(--fortune-radius);
+  background: var(--fortune-surface);
+  color: var(--fortune-surface-text);
+}
+
+.fortune-appearance
+  .fortune-page
+  :is(
+    .eyebrow,
+    .fortune-note,
+    .fortune-theme-button span,
+    .fortune-reading-card h2 small,
+    .fortune-nav a,
+    .fortune-notification-setting p:not([class])
+  ) {
+  color: var(--color-text-muted);
+}
+
+.fortune-appearance .fortune-page .button--primary:not(:disabled) {
+  color: var(--fortune-action-text);
+  border-color: var(--fortune-action);
+  background: var(--fortune-action);
+  box-shadow: none;
+}
+
+.fortune-appearance
+  .fortune-page
+  :is(
+    .button--secondary,
+    .form-field input:not([type='checkbox']),
+    .form-field textarea,
+    .form-field select
+  ) {
+  color: var(--fortune-surface-text);
+  background: var(--fortune-surface);
+  border-color: var(--color-border);
+}
+
+.fortune-appearance .fortune-page :is(.button--primary, .button--secondary):not(:disabled):hover {
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.fortune-appearance .fortune-page :focus-visible {
+  outline: 2px solid var(--color-text);
+  outline-offset: 3px;
+}
+
+.fortune-appearance .fortune-page .fortune-nav {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.fortune-appearance-preview {
+  width: min(100%, 390px);
+  margin-inline: auto;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: 1rem;
+}
+
+.fortune-appearance-preview .fortune-page {
+  padding: 1rem;
+}
+
+.fortune-appearance-preview .button {
+  width: 100%;
+}
+
+.fortune-appearance :is(.service-entry, .easy-manual) {
+  color: var(--fortune-canvas-text);
+  font-family: inherit;
+}
+
+.fortune-appearance
+  :is(.service-entry__header, .service-entry__details, .service-auth-brand, .easy-manual)
+  :is(h1, p, a:not(.button), small, .eyebrow) {
+  color: inherit;
+}
+
+.fortune-appearance
+  :is(
+    .service-entry__card,
+    .auth-panel,
+    .easy-manual__hero,
+    .easy-manual__before,
+    .easy-manual__card,
+    .easy-manual__nav
+  ) {
+  --color-text: var(--fortune-surface-text);
+  --color-text-muted: var(--fortune-surface-text);
+  background: var(--fortune-surface);
+  color: var(--fortune-surface-text);
+  border-color: var(--color-border);
+  border-radius: var(--fortune-radius);
+  box-shadow: none;
+}
+
+.fortune-appearance[data-cards='shadow']
+  :is(.service-entry__card, .auth-panel, .easy-manual__card) {
+  box-shadow: 0 0.75rem 1.5rem rgb(0 0 0 / 13%);
+}
+
+.fortune-appearance[data-cards='flat'] :is(.service-entry__card, .auth-panel, .easy-manual__card) {
+  border-color: transparent;
+}
+
+.fortune-appearance
+  :is(.service-entry__card, .auth-panel, .easy-manual)
+  :is(h2, .field__label, a:not(.button), .auth-panel__help, .easy-manual__action) {
+  color: inherit;
+}
+
+.fortune-appearance[data-heading='serif']
+  :is(.service-entry, .auth-panel, .easy-manual)
+  :is(h1, h2, h3) {
+  font-family: 'Yu Mincho', 'Hiragino Mincho ProN', 'Noto Serif CJK JP', serif;
+}
+
+.fortune-appearance .auth-panel .echo-motif {
+  display: none;
+}
+
+.fortune-appearance .auth-panel :is(.field__control, .button--secondary) {
+  color: var(--fortune-surface-text);
+  background: var(--fortune-surface);
+  border-color: var(--color-border);
+}
+
+.fortune-appearance :is(.service-entry, .easy-manual) .button--primary:not(:disabled) {
+  background: var(--fortune-action);
+  color: var(--fortune-action-text);
+  border-color: var(--fortune-action);
+  box-shadow: none;
+}
+
+.fortune-appearance .fortune-page .form-error {
+  color: #8f2020;
+  background: #fff1ef;
+  border-radius: 0.4rem;
+  padding: 0.4rem;
+}
+
+.fortune-appearance .fortune-page .form-success {
+  color: #16513a;
+  background: #e9f7ef;
+  border-radius: 0.4rem;
+  padding: 0.4rem;
+}
+
+.fortune-appearance .fortune-page a:not(.button, .fortune-reading-link, .fortune-nav a) {
+  color: var(--color-text);
+}

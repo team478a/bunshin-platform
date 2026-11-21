@@ -1,3 +1,5 @@
+import { publicFortuneAppearance } from '../../src/fortune/public-appearance';
+import { FortuneAppearance } from '../s/[serviceSlug]/fortune-appearance';
 import { PublicShell } from '../ui/public-shell';
 import { safeLineAuthReturnPath, videoAuthReturnProjectId } from '../../src/auth/line-return';
 import { PendingSubmitButton } from '../ui/pending-submit-button';
@@ -38,12 +40,15 @@ export default async function LoginPage({
   }
   const serviceBrand = serviceAuthBrandForSlug(serviceSlug, serviceConfiguration);
   const serviceName = serviceBrand?.serviceName;
-  return (
+  const appearance = serviceConfiguration
+    ? await publicFortuneAppearance(serviceConfiguration)
+    : undefined;
+  const content = (
     <PublicShell narrow showPlatformBrand={!serviceBrand}>
       {serviceBrand && (
         <ServiceAuthBranding
           serviceName={serviceBrand.serviceName}
-          logoUrl={serviceBrand.logoUrl}
+          logoUrl={appearance?.enabled && !appearance.showLogo ? null : serviceBrand.logoUrl}
           poweredBy={serviceBrand.poweredBy}
         />
       )}
@@ -166,5 +171,14 @@ export default async function LoginPage({
         <p className="auth-panel__help">メールログインではパスワードの入力は必要ありません。</p>
       </section>
     </PublicShell>
+  );
+  return (
+    <FortuneAppearance
+      settings={appearance}
+      brand={serviceConfiguration?.brand}
+      showMastheadLogo={false}
+    >
+      {content}
+    </FortuneAppearance>
   );
 }

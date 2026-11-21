@@ -6,6 +6,7 @@ import {
   fortunePackageReleaseStatus,
   type FortunePackageReleaseStatus,
 } from '../services/service-creation-templates';
+import type { FortuneAppearanceBrand, FortuneAppearanceSettings } from './appearance';
 import { isFortuneLineReady } from './launch-readiness';
 import { resolveFortuneGuidanceSettings, type FortuneGuidanceSettings } from './guidance-settings';
 import { fortuneOperatorScope } from './operator-scope';
@@ -17,7 +18,8 @@ export interface FortuneOperatorStatus {
   aiEnabled: boolean;
   personalProfileEnabled: boolean;
   reflectionEnabled: boolean;
-  guidanceSettings?: FortuneGuidanceSettings;
+  guidanceSettings?: FortuneGuidanceSettings & { appearance?: FortuneAppearanceSettings };
+  appearanceBrand?: FortuneAppearanceBrand;
   weeklyNotificationEnabled: boolean;
   weeklyNotificationDay: number;
   weeklyNotificationHour: number;
@@ -185,6 +187,7 @@ export async function fortuneOperatorStatus(
     packageRelease,
     configured: Boolean(configuration.fortuneSetting),
     enabled: configuration.fortuneSetting?.enabled ?? false,
+    appearanceBrand: service.configuration.brand,
     aiEnabled: configuration.fortuneSetting?.aiEnabled ?? false,
     personalProfileEnabled: configuration.fortuneSetting?.personalProfileEnabled ?? false,
     reflectionEnabled: configuration.fortuneSetting?.reflectionEnabled ?? false,
