@@ -17,14 +17,30 @@ import {
 
 const requireModule = createRequire(import.meta.url);
 const expectedProjectRef = 'vtkzinaudznwbsjoyszk';
-const expectedConfirmation = `APPLY_FORTUNE_GUIDANCE_SCHEMA_TO_${expectedProjectRef}`;
-const approvedNames = [
+const approvedGuidanceNames = [
   '20261120010000_fortune_personal_profile',
   '20261120020000_fortune_pending_consultation',
   '20261120030000_fortune_reading_reflection',
   '20261120040000_fortune_personal_home',
 ];
-const preconditionSql = '';
+const approvedDeepReadingNames = [
+  '20261121010000_fortune_reading_follow_ups',
+  '20261121020000_fortune_experience_quality',
+  '20261121030000_fortune_dynamic_intake',
+  '20261121040000_fortune_structured_understanding',
+  '20261121050000_fortune_deep_reading',
+  '20261121060000_fortune_intake_quality',
+];
+const releaseSettings = new Map([
+  [
+    'personal-guidance',
+    { approval: 'APPLY_FORTUNE_GUIDANCE_SCHEMA_TO', approvedNames: approvedGuidanceNames },
+  ],
+  [
+    'deep-reading',
+    { approval: 'APPLY_FORTUNE_DEEP_READING_SCHEMA_TO', approvedNames: approvedDeepReadingNames },
+  ],
+]);
 
 export async function runFortuneGuidanceRelease20261120Migration(
   execute = runMigrationProcess,
@@ -34,7 +50,11 @@ export async function runFortuneGuidanceRelease20261120Migration(
     console.error('[database] RELEASE_MIGRATION_ENVIRONMENT_INVALID: production context required.');
     return 1;
   }
-  if (environment.MIGRATION_APPLY_CONFIRMATION !== expectedConfirmation) {
+  const release = releaseSettings.get(environment.MIGRATION_APPLY_RELEASE ?? 'personal-guidance');
+  if (
+    !release ||
+    environment.MIGRATION_APPLY_CONFIRMATION !== `${release.approval}_${expectedProjectRef}`
+  ) {
     console.error('[database] RELEASE_MIGRATION_CONFIRMATION_INVALID: no migration started.');
     return 1;
   }
@@ -99,10 +119,9 @@ export async function runFortuneGuidanceRelease20261120Migration(
     const migrations = loadReleaseMigrations(new URL('../prisma/migrations/', import.meta.url));
     script = buildPsqlReleaseScript({
       migrations,
-      approvedNames,
+      approvedNames: release.approvedNames,
       bounds,
       mode,
-      preconditionSql,
       resolveExecutable: process.execPath,
       prismaCli: requireModule.resolve('prisma/build/index.js'),
       schemaPath: fileURLToPath(new URL('../prisma/schema.prisma', import.meta.url)),
@@ -145,7 +164,7 @@ export async function runFortuneGuidanceRelease20261120Migration(
     return 1;
   }
   console.log(
-    `[database] ${marker}: target ${expectedProjectRef}; approved migration count 4; mode ${mode}.`,
+    `[database] ${marker}: target ${expectedProjectRef}; approved migration count ${release.approvedNames.length}; mode ${mode}.`,
   );
   return 0;
 }
