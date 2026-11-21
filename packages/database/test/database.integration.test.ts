@@ -12,7 +12,11 @@ import { registerOpsMorningDigestRunIntegrationCases } from './ops-morning-diges
 import { registerMigrationBoundsIntegrationCases } from './migration-bounds.integration-cases';
 import { registerDeploymentDatabaseGateIntegrationCases } from './deployment-database-gate.integration-cases';
 import { randomUUID } from 'node:crypto';
-import { FortuneDailyReadingService, toJapanLocalDate } from '@bunshin/capability-fortune';
+import {
+  FortuneDailyReadingService,
+  TAROT_DECK,
+  toJapanLocalDate,
+} from '@bunshin/capability-fortune';
 import { registerImprovementTriageIntegrationCases } from './improvement-triage.integration-cases';
 import { registerImprovementRetentionJobIntegrationCases } from './improvement-retention-jobs.integration-cases';
 import { registerTrainingSupportSkillLifecycleIntegrationCases } from './training-support-skill-lifecycle.integration-cases';
@@ -1532,6 +1536,7 @@ describe('database ownership boundaries', () => {
         data: { guidanceSettings: { intake: { enabled: true }, deepReadingEnabled: true } },
       });
       const approved = '一歩進める前に足元を確かめる。';
+      const cardCode = TAROT_DECK[0]!.code;
       await client.fortuneKnowledgeVersion.create({
         data: {
           serviceSettingId: setting.id,
@@ -1542,7 +1547,7 @@ describe('database ownership boundaries', () => {
           promptVersion: 'standard-fixture',
           cardMeanings: {
             create: {
-              cardCode: 'THE_FOOL',
+              cardCode,
               orientation: 'UPRIGHT',
               theme: 'WORK',
               safetyReviewed: true,
@@ -1570,7 +1575,7 @@ describe('database ownership boundaries', () => {
       };
       const deepBasic = await deepService.draw(deepInput);
       expect(deepBasic).toMatchObject({
-        cardCode: 'THE_FOOL',
+        cardCode,
         orientation: 'UPRIGHT',
         body: approved,
       });
@@ -1589,7 +1594,7 @@ describe('database ownership boundaries', () => {
         }),
       ).resolves.toMatchObject({
         id: deepBasic.id,
-        cardCode: 'THE_FOOL',
+        cardCode,
         status: 'READY_AI',
         deepReading: {
           importantValue: '家族との時間',
@@ -1611,7 +1616,7 @@ describe('database ownership boundaries', () => {
         repository.fallbackAiGeneration({ ...failedTarget, failureCode: 'AI_UNAVAILABLE' }),
       ).resolves.toMatchObject({
         id: failed.id,
-        cardCode: 'THE_FOOL',
+        cardCode,
         status: 'READY_BASIC',
         body: approved,
       });
