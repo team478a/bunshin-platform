@@ -5,7 +5,7 @@ import type {
   FortuneReadingView,
   FortuneReflectionAnswer,
 } from '@bunshin/capability-fortune';
-import type { PrismaClient } from '@prisma/client';
+import { Prisma, type PrismaClient } from '@prisma/client';
 import { eraseFortuneFollowUps } from './fortune-follow-ups';
 import { fortuneReadingRetentionCutoff } from './fortune-retention';
 import { fortuneReadingView, fortuneTarget } from './fortune-shared';
@@ -224,6 +224,8 @@ export class PrismaFortuneHistoryRepository {
           readingText: null,
           actionStep: null,
           pendingConsultation: null,
+          pendingUnderstanding: Prisma.DbNull,
+          deepReading: Prisma.DbNull,
           reflectionPrompt: null,
           reflectionAnswer: null,
           personalFitRating: null,

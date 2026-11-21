@@ -7,6 +7,8 @@ import type {
   FortuneGenerationJobLease,
 } from './fortune-generation-queue';
 import { drawTarotCard, type FortuneOrientation, type SecureRandomSource } from './tarot';
+import type { FortuneDeepReadingDetails } from './fortune-deep-reading';
+import type { ConfirmedFortuneUnderstanding } from './fortune-understanding';
 
 export type FortuneReadingState = 'GENERATING' | 'READY_AI' | 'READY_BASIC' | 'FAILED' | 'DELETED';
 
@@ -44,6 +46,7 @@ export interface FortuneReadingView {
   feedbackRating: FortuneFeedbackRating | null;
   feedbackIssue: FortuneFeedbackIssue | null;
   reflectionPrompt?: string;
+  deepReading?: FortuneDeepReadingDetails & { approvedPerspective: string };
   personalFitRating?: FortunePersonalFitRating;
   reflectionAnswer?: FortuneReflectionAnswer;
   createdAt: Date;
@@ -74,6 +77,7 @@ export interface FortuneAiGenerationClaim {
   defaultStyle?: FortuneProfileStyle;
   guidanceSettings?: unknown;
   consultation?: string;
+  reviewedUnderstanding?: ConfirmedFortuneUnderstanding[];
   personalization?: {
     participantProfile?: Omit<FortunePersonalProfile, 'consented'>;
     bunshinProfile?: {
@@ -146,6 +150,7 @@ export interface FortuneRepository {
     localDate: string;
     theme: FortuneTheme;
     consultation?: string;
+    reviewedUnderstanding?: ConfirmedFortuneUnderstanding[];
     cardCode: string;
     orientation: FortuneOrientation;
   }): Promise<CreateFortuneReadingResult>;
@@ -270,6 +275,7 @@ export class FortuneDailyReadingService {
     actorUserId: string;
     theme: unknown;
     consultation?: string;
+    reviewedUnderstanding?: ConfirmedFortuneUnderstanding[];
     now?: Date;
   }) {
     const localDate = toJapanLocalDate(input.now ?? new Date());
@@ -291,6 +297,9 @@ export class FortuneDailyReadingService {
       localDate,
       theme,
       ...(input.consultation ? { consultation: input.consultation } : {}),
+      ...(input.reviewedUnderstanding?.length
+        ? { reviewedUnderstanding: input.reviewedUnderstanding }
+        : {}),
       cardCode: draw.card.code,
       orientation: draw.orientation,
     });
@@ -312,7 +321,10 @@ export class FortuneDailyReadingService {
           actorUserId: input.actorUserId,
           claim,
         });
-        const safe = validateFortuneReadingOutput(generated);
+        const safe = validateFortuneReadingOutput(
+          generated,
+          Boolean(claim.reviewedUnderstanding?.length),
+        );
         return (
           (await this.repository.completeAiGeneration({
             serviceSlug: input.serviceSlug,

@@ -5,7 +5,7 @@ import { groupMembershipRecord } from './service-records';
 import { latestServiceLegalDocuments } from './service-legal-latest';
 import { recordOemRegistration, endOemRegistration } from './oem-billing-history';
 import { eraseFortuneFollowUps } from './fortune-follow-ups';
-import { clearFortuneUnderstanding } from './fortune-retention';
+import { clearFortuneUnderstanding, discardPendingFortuneDeepInputs } from './fortune-retention';
 
 export class PrismaServiceParticipationMembershipRepository {
   constructor(private readonly client: PrismaClient = prisma) {}
@@ -240,6 +240,11 @@ export class PrismaServiceParticipationMembershipRepository {
           groupId: membership.groupId,
           memberUserId: input.actorUserId,
         });
+      await discardPendingFortuneDeepInputs(tx, {
+        workspaceId: membership.workspaceId,
+        groupId: membership.groupId,
+        memberUserId: input.actorUserId,
+      });
       await endOemRegistration(
         tx,
         membership,

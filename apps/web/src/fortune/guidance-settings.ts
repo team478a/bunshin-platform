@@ -46,6 +46,7 @@ export const fortuneGuidanceSettingsSchema = z
     guideName: label,
     guide: guideSchema.optional(),
     followUpLimit: z.number().int().min(0).max(2).optional(),
+    deepReadingEnabled: z.boolean().optional(),
     intake: z
       .object({
         enabled: z.boolean(),

@@ -103,6 +103,33 @@ describe('fortune HTTP contract', () => {
     state.recordUse.mockResolvedValue({ id: 'membership-1' });
   });
 
+  it('passes verified reviewed items to the same daily draw and rejects unverified or mixed input', async () => {
+    const item = { field: 'VALUES', state: 'CONFIRMED', text: '家族の時間', source: 'ANSWER' };
+    const submit = (body: object) =>
+      drawFortuneResponse(
+        request('/api/fortune/today', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(body),
+        }),
+        'fortune',
+      );
+    const input = { theme: 'WORK', reviewedUnderstanding: [item] };
+    expect(
+      (await submit({ ...input, reviewedUnderstanding: [{ ...item, state: 'INFERRED' }] })).status,
+    ).toBe(400);
+    expect((await submit({ ...input, consultation: '別の相談' })).status).toBe(400);
+    expect((await submit({ ...input, reviewedUnderstanding: [item, item] })).status).toBe(400);
+    expect((await submit(input)).status).toBe(201);
+    expect(state.draw).toHaveBeenCalledExactlyOnceWith({
+      serviceSlug: 'fortune',
+      actorUserId: 'user-1',
+      theme: 'WORK',
+      consultation: '【大切なこと】家族の時間',
+      reviewedUnderstanding: [item],
+    });
+  });
+
   it('persists only bounded confirmed values under the authenticated participant', async () => {
     const item = {
       field: 'VALUES',

@@ -1,5 +1,9 @@
 import type { Metadata } from 'next';
-import { fortuneIntakeOptions, toJapanLocalDate } from '@bunshin/capability-fortune';
+import {
+  fortuneDeepReadingEnabled,
+  fortuneIntakeOptions,
+  toJapanLocalDate,
+} from '@bunshin/capability-fortune';
 import { PublicShell } from '../../../ui/public-shell';
 import { fortuneDailyReadingService } from '../../../../src/fortune/runtime';
 import { resolveFortuneGuidanceSettings } from '../../../../src/fortune/guidance-settings';
@@ -118,6 +122,9 @@ export default async function FortuneTodayPage({
               <p>今日いちばん気になるものを選んでください。</p>
               <DrawButtons
                 serviceSlug={serviceSlug}
+                {...(fortuneDeepReadingEnabled(setting.guidanceSettings)
+                  ? { deepReadingEnabled: true }
+                  : {})}
                 {...(profile?.enabled ? { themeLabels: guidance.themeLabels } : {})}
                 askConsultation={Boolean(
                   setting.aiEnabled &&
