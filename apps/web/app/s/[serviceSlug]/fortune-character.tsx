@@ -44,7 +44,7 @@ export function FortuneCharacterBadge({
 function CharacterImage({ sources }: { sources: string[] }) {
   const [failed, setFailed] = useState(0);
   const src = sources[failed];
-  const useNextImage = () => setFailed((index) => (index === failed ? index + 1 : index));
+  const showNextImage = () => setFailed((index) => (index === failed ? index + 1 : index));
   return (
     <span className="fortune-character__image">
       {src && (
@@ -58,9 +58,9 @@ function CharacterImage({ sources }: { sources: string[] }) {
           decoding="async"
           referrerPolicy="no-referrer"
           ref={(image) => {
-            if (image?.complete && image.naturalWidth === 0) useNextImage();
+            if (image?.complete && image.naturalWidth === 0) showNextImage();
           }}
-          onError={useNextImage}
+          onError={showNextImage}
         />
       )}
     </span>
