@@ -76,6 +76,12 @@ export default async function FortuneTodayPage({
     setting.aiEnabled &&
     setting.personalProfileEnabled &&
     fortuneDeepReadingEnabled(setting.guidanceSettings);
+  const canUpgrade = Boolean(
+    today.reading &&
+    ['READY_BASIC', 'READY_AI'].includes(today.reading.status) &&
+    !today.reading.deepReading,
+  );
+  const showUpgrade = paidView && canUpgrade && profile?.profile.consented;
   const showIntake = Boolean(profile?.enabled && !profile.completed && !today.reading);
   const showGuide = setting.personalProfileEnabled && setting.aiEnabled;
   const showDynamicIntake =
@@ -87,7 +93,7 @@ export default async function FortuneTodayPage({
   const deepEnabled =
     showGuide && (!commerce || paidView) && fortuneDeepReadingEnabled(setting.guidanceSettings);
   const saved =
-    deepEnabled && profile?.profile.consented && !today.reading
+    deepEnabled && profile?.profile.consented && (!today.reading || canUpgrade)
       ? await (
           await fortuneUnderstandingRepository()
         ).read({ serviceSlug, actorUserId: actor.userId })
@@ -171,12 +177,31 @@ export default async function FortuneTodayPage({
               <p>今日は引き直せません。明日になると新しいカードを引けます。</p>
             </section>
           ) : today.reading ? (
-            <ReadingCard
-              reading={today.reading}
-              serviceSlug={serviceSlug}
-              showFollowUps={showGuide && (!commerce || Boolean(today.reading.deepReading))}
-              {...(characters ? { characters } : {})}
-            />
+            <>
+              <ReadingCard
+                reading={today.reading}
+                serviceSlug={serviceSlug}
+                showFollowUps={showGuide && (!commerce || Boolean(today.reading.deepReading))}
+                {...(characters ? { characters } : {})}
+              />
+              {showUpgrade && (
+                <section className="settings-card">
+                  <h2>今日のカードで深層鑑定を受ける</h2>
+                  <p>引いたカードとテーマを使います。今回の相談を確認してから鑑定します。</p>
+                  <FortuneDynamicIntake
+                    serviceSlug={serviceSlug}
+                    selectedTheme={today.reading.theme}
+                    paidReading
+                    deepReadingEnabled
+                    {...(characters ? { characters } : {})}
+                    {...(priorUnderstanding ? { priorUnderstanding } : {})}
+                  />
+                </section>
+              )}
+              {paidView && today.reading.deepReading && (
+                <p>今日の深層鑑定は提供済みです。未利用の鑑定は明日以降にご利用いただけます。</p>
+              )}
+            </>
           ) : paidView && !profile?.profile.consented ? null : (
             <section className="settings-card">
               <h2>
@@ -216,9 +241,11 @@ export default async function FortuneTodayPage({
             <h2>深層鑑定</h2>
             <Link href={`/s/${serviceSlug}/fortune-purchase` as Route}>
               {hasPurchase
-                ? '購入済みの深層鑑定を利用する'
+                ? '購入済みの深層鑑定を確認する'
                 : product
-                  ? '提供内容と価格を見る'
+                  ? canUpgrade
+                    ? '今日のカードを使う深層鑑定の内容と価格を見る'
+                    : '提供内容と価格を見る'
                   : '購入履歴を見る'}
             </Link>
           </section>

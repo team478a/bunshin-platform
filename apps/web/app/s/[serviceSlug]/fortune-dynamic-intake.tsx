@@ -25,17 +25,19 @@ type Step =
 export function FortuneDynamicIntake({
   deepReadingEnabled = false,
   paidReading = false,
+  selectedTheme,
   priorUnderstanding,
   characters,
   ...props
 }: Omit<ComponentProps<typeof FortuneDrawButtons>, 'onSelectTheme'> & {
   deepReadingEnabled?: boolean;
   paidReading?: boolean;
+  selectedTheme?: FortuneTheme;
   priorUnderstanding?: ConfirmedFortuneUnderstanding[];
   characters?: FortuneGuidanceSettings['characters'];
 }) {
   const [started, setStarted] = useState(false);
-  const [theme, setTheme] = useState<FortuneTheme>();
+  const [theme, setTheme] = useState<FortuneTheme | undefined>(selectedTheme);
   return (
     <>
       {!started ? (
@@ -60,7 +62,7 @@ export function FortuneDynamicIntake({
           {...(priorUnderstanding ? { priorUnderstanding } : {})}
           onExit={() => {
             setStarted(false);
-            setTheme(undefined);
+            setTheme(selectedTheme);
           }}
         />
       ) : (
@@ -84,7 +86,7 @@ export function FortuneDynamicIntake({
             type="button"
             onClick={() => setStarted(false)}
           >
-            通常の占いに戻る
+            相談をやめる
           </button>
         </>
       )}
@@ -224,7 +226,13 @@ function IntakeConversation({
             disabled={drawing}
             onClick={() => void draw(review)}
           >
-            {drawing ? 'カードを引いています…' : 'この内容で占う'}
+            {drawing
+              ? paidReading
+                ? '鑑定を準備しています…'
+                : 'カードを引いています…'
+              : paidReading
+                ? 'この内容で深層鑑定する'
+                : 'この内容で占う'}
           </button>
           <button
             className="button button--secondary"
