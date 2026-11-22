@@ -24,15 +24,19 @@ export function isFortuneCardImageUrl(value: string) {
 
 export function readFortuneDeck(value: unknown): FortuneDeckCard[] {
   if (!Array.isArray(value)) return [];
-  return value.filter(
-    (card): card is FortuneDeckCard =>
-      typeof card?.code === 'string' &&
-      (isStandardFortuneCard(card.code) || isCustomFortuneCardCode(card.code)) &&
-      typeof card.nameJa === 'string' &&
-      typeof card.imageUrl === 'string' &&
-      isFortuneCardImageUrl(card.imageUrl) &&
-      typeof card.enabled === 'boolean',
-  );
+  const entries: unknown[] = value;
+  return entries.filter((card): card is FortuneDeckCard => {
+    if (!card || typeof card !== 'object') return false;
+    const { code, nameJa, imageUrl, enabled } = card as Record<string, unknown>;
+    return (
+      typeof code === 'string' &&
+      (isStandardFortuneCard(code) || isCustomFortuneCardCode(code)) &&
+      typeof nameJa === 'string' &&
+      typeof imageUrl === 'string' &&
+      isFortuneCardImageUrl(imageUrl) &&
+      typeof enabled === 'boolean'
+    );
+  });
 }
 
 export function fortuneDrawPool(deck: unknown): ReadonlyArray<{ code: string }> {
