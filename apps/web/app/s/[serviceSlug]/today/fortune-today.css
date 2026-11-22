@@ -62,6 +62,7 @@
   padding: 1.1rem 0 2.15rem;
   border-radius: 0.9rem;
   perspective: 800px;
+  scroll-margin-top: 1rem;
 }
 
 .fortune-draw-stage > p {

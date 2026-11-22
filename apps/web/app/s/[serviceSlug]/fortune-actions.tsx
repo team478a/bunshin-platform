@@ -155,6 +155,7 @@ export function FortuneDrawButtons({
   const [theme, setTheme] = useState<(typeof choices)[number]['value']>();
   const [busy, setBusy] = useState(false);
   const [reveal, setReveal] = useState<FortuneCardFace>();
+  const stage = useRef<HTMLDivElement>(null);
   const pending = useRef(false);
   const refreshStarted = useRef(false);
   const [consultation, setConsultation] = useState('');
@@ -177,6 +178,7 @@ export function FortuneDrawButtons({
     pending.current = true;
     setBusy(true);
     setError('');
+    stage.current?.scrollIntoView({ block: 'start', behavior: 'instant' });
     try {
       const reading = await request<FortuneReadingView>(
         `/api/services/${serviceSlug}/fortune/today`,
@@ -208,7 +210,7 @@ export function FortuneDrawButtons({
   return (
     <div className="fortune-theme-list">
       {!onSelectTheme && (
-        <div className="fortune-draw-stage">
+        <div className="fortune-draw-stage" ref={stage}>
           <div
             className={`fortune-draw-card${reveal ? ' fortune-draw-card--turning' : ''}`}
             onAnimationEnd={(event) => {
@@ -231,6 +233,11 @@ export function FortuneDrawButtons({
             <p role="status">{reveal ? reveal.cardNameJa : '今日のカードを開いています…'}</p>
           )}
         </div>
+      )}
+      {error && (
+        <p className="form-error" role="alert">
+          {error}
+        </p>
       )}
       {askConsultation && (
         <label className="form-field">
@@ -266,11 +273,6 @@ export function FortuneDrawButtons({
         >
           今日の一枚をめくる
         </button>
-      )}
-      {error && (
-        <p className="form-error" role="alert">
-          {error}
-        </p>
       )}
     </div>
   );
