@@ -1,3 +1,4 @@
+import { fortunePurchaseScope, usesFortuneCommerce } from './fortune-commerce-entitlement';
 import { Prisma, type PrismaClient } from '@prisma/client';
 import { FORTUNE_PROFILE_STYLES, type FortuneReadingOutput } from '@bunshin/capability-fortune';
 import { fortuneReadingRetentionCutoff } from './fortune-retention';
@@ -32,6 +33,25 @@ async function eligible(db: Db, input: Scope, now: Date) {
     },
   });
   if (!reading?.participant.profileUpdatedAt) return null;
+  if (usesFortuneCommerce(input.serviceSlug, scope)) {
+    const purchase = await db.fortuneCommercePurchase.findFirst({
+      where: {
+        ...fortunePurchaseScope(scope, input.actorUserId),
+        readingId: reading.id,
+        status: 'PAID',
+        deliveredAt: { not: null },
+      },
+      select: { id: true, followUpLimit: true },
+    });
+    if (!purchase) return null;
+    return {
+      scope,
+      reading,
+      revision: reading.participant.profileUpdatedAt,
+      limit: purchase.followUpLimit,
+      purchaseId: purchase.id,
+    };
+  }
   const settings = scope.guidanceSettings;
   const configured =
     settings && typeof settings === 'object' && !Array.isArray(settings)
@@ -119,6 +139,7 @@ export class PrismaFortuneFollowUpRepository {
           reading: await fortuneReadingView(tx, reading),
           personalProfileRevision: revision,
           personalGuidance: true,
+          ...(record.purchaseId ? { purchaseId: record.purchaseId } : {}),
           guidanceSettings: scope.guidanceSettings,
           ...(style ? { defaultStyle: style } : {}),
         },

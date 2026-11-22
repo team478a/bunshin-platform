@@ -1,9 +1,15 @@
 import 'server-only';
 
 import { ApplicationError } from '@bunshin/shared';
+type StripeCheckoutUrl = `https://checkout.stripe.com/${string}`;
+
+function isStripeCheckoutUrl(value: unknown): value is StripeCheckoutUrl {
+  return typeof value === 'string' && value.startsWith('https://checkout.stripe.com/');
+}
+
 export type StripeCheckoutSession = {
   id: string;
-  url: string;
+  url: StripeCheckoutUrl;
   expiresAt: Date | null;
 };
 
@@ -18,6 +24,7 @@ export class StripeCheckoutAdapter {
     amountYen: number;
     successUrl: string;
     cancelUrl: string;
+    fortune?: { terms: string };
   }): Promise<StripeCheckoutSession> {
     const body = new URLSearchParams({
       mode: 'payment',
@@ -34,6 +41,12 @@ export class StripeCheckoutAdapter {
       'payment_intent_data[metadata][purchase_id]': input.purchaseId,
       'payment_intent_data[metadata][workspace_id]': input.workspaceId,
     });
+    if (input.fortune) {
+      body.set('payment_method_types[0]', 'card');
+      body.set('metadata[purchase_kind]', 'fortune');
+      body.set('payment_intent_data[metadata][purchase_kind]', 'fortune');
+      body.set('custom_text[submit][message]', input.fortune.terms);
+    }
     const response = await fetch('https://api.stripe.com/v1/checkout/sessions', {
       method: 'POST',
       headers: {
@@ -60,8 +73,7 @@ export class StripeCheckoutAdapter {
     if (
       typeof payload.id !== 'string' ||
       !payload.id.startsWith('cs_') ||
-      typeof payload.url !== 'string' ||
-      !payload.url.startsWith('https://checkout.stripe.com/')
+      !isStripeCheckoutUrl(payload.url)
     ) {
       throw new ApplicationError('INTERNAL_ERROR', 'Stripe response is invalid');
     }
@@ -140,8 +152,7 @@ export class StripeCommercialInvoiceCheckoutAdapter {
     if (
       typeof payload.id !== 'string' ||
       !payload.id.startsWith('cs_') ||
-      typeof payload.url !== 'string' ||
-      !payload.url.startsWith('https://checkout.stripe.com/')
+      !isStripeCheckoutUrl(payload.url)
     ) {
       throw new ApplicationError('INTERNAL_ERROR', 'Stripe response is invalid');
     }

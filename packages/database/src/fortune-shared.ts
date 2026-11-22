@@ -35,6 +35,7 @@ export async function fortuneTarget(db: Db, serviceSlug: string, actorUserId: st
       },
     },
     include: {
+      commerceProduct: { select: { serviceSettingId: true } },
       group: {
         include: {
           memberships: {

@@ -29,6 +29,8 @@ import { recordServiceUse } from '../services/service-membership';
 import { askFortuneFollowUp, fortuneFollowUpRepository } from '../fortune/follow-ups';
 import { selectFortuneIntakeQuestion } from '../providers/openai-fortune-intake';
 
+import { recordFortuneFunnel } from '../fortune/funnel';
+
 const logger = createLogger();
 
 const slug = z
@@ -70,6 +72,7 @@ const drawBody = z
     theme: z.enum(FORTUNE_THEMES),
     consultation: z.string().trim().max(500).optional(),
     reviewedUnderstanding: reviewedItemsBody.optional(),
+    paidReading: z.literal(true).optional(),
     intakeOutcome: z.enum(['REVIEWED', 'SKIPPED']).optional(),
   })
   .strict();
@@ -300,11 +303,17 @@ export const drawFortuneResponse = (request: Request, serviceSlug: string) =>
       const reviewed = parseFortuneReviewedItems(body.reviewedUnderstanding);
       if (body.reviewedUnderstanding && (!reviewed || body.consultation !== undefined))
         throw new ApplicationError('VALIDATION_ERROR', '今回の相談内容を確認してください。');
+      if (body.paidReading && !reviewed)
+        throw new ApplicationError(
+          'VALIDATION_ERROR',
+          '深層鑑定に使う相談内容を確認してください。',
+        );
       const consultation = reviewed
         ? fortuneUnderstandingConsultation(reviewed)
         : body.consultation;
       if (body.intakeOutcome && (body.intakeOutcome === 'REVIEWED') !== Boolean(reviewed))
         throw new ApplicationError('VALIDATION_ERROR', '今回の相談内容を確認してください。');
+      if (!body.paidReading) await recordFortuneFunnel(parsedSlug, actorUserId, 'FREE_START');
       const result = await (
         await fortuneDailyReadingService()
       ).draw({
@@ -313,7 +322,10 @@ export const drawFortuneResponse = (request: Request, serviceSlug: string) =>
         theme: body.theme,
         ...(consultation ? { consultation } : {}),
         ...(reviewed ? { reviewedUnderstanding: reviewed } : {}),
+        ...(body.paidReading ? { paidReading: true } : {}),
       });
+      if (!body.paidReading && result.status === 'READY_BASIC')
+        await recordFortuneFunnel(parsedSlug, actorUserId, 'FREE_COMPLETE');
       if (body.intakeOutcome)
         await recordFortuneIntakeProgress({
           serviceSlug: parsedSlug,

@@ -9,6 +9,7 @@ import type {
 } from '@bunshin/capability-fortune';
 import { ApplicationError } from '@bunshin/shared';
 import type { Prisma, PrismaClient } from '@prisma/client';
+import { fortunePurchaseScope, usesFortuneCommerce } from './fortune-commerce-entitlement';
 import { fortuneReadingView, fortuneTarget } from './fortune-shared';
 
 export async function lockFortuneGenerationLease(
@@ -69,7 +70,12 @@ export class PrismaFortuneGenerationQueue implements FortuneAiGenerationQueue {
         },
       });
       if (!reading) return null;
+      const commerce = usesFortuneCommerce(input.serviceSlug, scope);
+      if (commerce && !reading.pendingUnderstanding) return null;
       const reference = fortuneGenerationPayloadReference(scope.id, reading.id);
+      const idempotencyKey = commerce
+        ? `${reference}:paid:${reading.updatedAt.toISOString()}`
+        : reference;
       // Empty-update Prisma upsert can race on concurrent inserts. Let the DB
       // ignore duplicates atomically, then validate the persisted job's scope.
       await tx.job.createMany({
@@ -81,7 +87,7 @@ export class PrismaFortuneGenerationQueue implements FortuneAiGenerationQueue {
           capabilityType: 'FORTUNE',
           jobType: FORTUNE_GENERATION_JOB_TYPE,
           payloadReference: reference,
-          idempotencyKey: reference,
+          idempotencyKey,
           correlationId: `fortune:${reading.id}`,
           requestedBy: input.actorUserId,
           maxAttempts: 3,
@@ -89,7 +95,7 @@ export class PrismaFortuneGenerationQueue implements FortuneAiGenerationQueue {
       });
       const job = await tx.job.findUniqueOrThrow({
         where: {
-          environment_idempotencyKey: { environment: this.environment, idempotencyKey: reference },
+          environment_idempotencyKey: { environment: this.environment, idempotencyKey },
         },
       });
       if (
@@ -153,6 +159,18 @@ export function verifyFortuneGenerationJob(
       scope.bunshinId !== input.jobLease.bunshinId
     )
       return false;
+    if (usesFortuneCommerce(input.serviceSlug, scope)) {
+      const purchase = await tx.fortuneCommercePurchase.findFirst({
+        where: {
+          ...fortunePurchaseScope(scope, input.actorUserId),
+          readingId: input.readingId,
+          status: 'PAID',
+          deliveredAt: null,
+        },
+        select: { id: true },
+      });
+      if (!purchase) return false;
+    }
     return Boolean(
       await tx.fortuneReading.findFirst({
         where: {

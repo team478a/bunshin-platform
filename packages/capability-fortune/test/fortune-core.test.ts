@@ -114,6 +114,34 @@ describe('daily fortune flow', () => {
     createdAt: new Date('2026-09-17T00:00:00.000Z'),
   };
 
+  it('uses the saved day, card, orientation and theme for a paid upgrade', async () => {
+    const random = { nextInt: vi.fn().mockReturnValue(0) };
+    const createBasicReading = vi.fn().mockResolvedValue({ kind: 'READY', reading: basicReading });
+    const repository = {
+      findReadingForDate: vi.fn().mockResolvedValue(basicReading),
+      createBasicReading,
+    } as unknown as FortuneRepository;
+    const service = new FortuneDailyReadingService(repository, random);
+    const result = await service.draw({
+      serviceSlug: 'fortune',
+      actorUserId: 'participant',
+      theme: 'WORK',
+      paidReading: true,
+      now: new Date('2026-09-17T00:30:00.000Z'),
+    });
+    expect(random.nextInt).not.toHaveBeenCalled();
+    expect(result.id).toBe(basicReading.id);
+    expect(createBasicReading).toHaveBeenCalledWith(
+      expect.objectContaining({
+        paidReading: true,
+        localDate: basicReading.localDate,
+        theme: basicReading.theme,
+        cardCode: basicReading.cardCode,
+        orientation: basicReading.orientation,
+      }),
+    );
+  });
+
   it('queues AI without waiting on a provider and preserves the saved daily draw', async () => {
     const queued = { ...basicReading, status: 'GENERATING' as const };
     const enqueue = vi.fn().mockResolvedValue(queued);

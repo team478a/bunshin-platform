@@ -24,16 +24,20 @@ type Step =
 
 export function FortuneDynamicIntake({
   deepReadingEnabled = false,
+  paidReading = false,
+  selectedTheme,
   priorUnderstanding,
   characters,
   ...props
 }: Omit<ComponentProps<typeof FortuneDrawButtons>, 'onSelectTheme'> & {
   deepReadingEnabled?: boolean;
+  paidReading?: boolean;
+  selectedTheme?: FortuneTheme;
   priorUnderstanding?: ConfirmedFortuneUnderstanding[];
   characters?: FortuneGuidanceSettings['characters'];
 }) {
   const [started, setStarted] = useState(false);
-  const [theme, setTheme] = useState<FortuneTheme>();
+  const [theme, setTheme] = useState<FortuneTheme | undefined>(selectedTheme);
   return (
     <>
       {!started ? (
@@ -41,19 +45,24 @@ export function FortuneDynamicIntake({
           <button className="button button--primary" type="button" onClick={() => setStarted(true)}>
             AIと相談を整理してから占う
           </button>
-          <h3>カードを引いて占う</h3>
-          <FortuneDrawButtons {...props} />
+          {!paidReading && (
+            <>
+              <h3>カードを引いて占う</h3>
+              <FortuneDrawButtons {...props} />
+            </>
+          )}
         </>
       ) : theme ? (
         <IntakeConversation
           serviceSlug={props.serviceSlug}
           theme={theme}
           deepReadingEnabled={deepReadingEnabled}
+          paidReading={paidReading}
           {...(characters ? { characters } : {})}
           {...(priorUnderstanding ? { priorUnderstanding } : {})}
           onExit={() => {
             setStarted(false);
-            setTheme(undefined);
+            setTheme(selectedTheme);
           }}
         />
       ) : (
@@ -77,7 +86,7 @@ export function FortuneDynamicIntake({
             type="button"
             onClick={() => setStarted(false)}
           >
-            通常の占いに戻る
+            相談をやめる
           </button>
         </>
       )}
@@ -90,6 +99,7 @@ function IntakeConversation({
   theme,
   onExit,
   deepReadingEnabled,
+  paidReading,
   priorUnderstanding,
   characters,
 }: {
@@ -97,6 +107,7 @@ function IntakeConversation({
   theme: FortuneTheme;
   onExit: () => void;
   deepReadingEnabled: boolean;
+  paidReading: boolean;
   priorUnderstanding?: ConfirmedFortuneUnderstanding[];
   characters?: FortuneGuidanceSettings['characters'];
 }) {
@@ -149,11 +160,16 @@ function IntakeConversation({
     setError(false);
     try {
       const reviewedUnderstanding = confirmedFortuneUnderstanding(items);
+      if (paidReading && !reviewedUnderstanding.length) {
+        setError(true);
+        return;
+      }
       const response = await fetch(`/api/services/${serviceSlug}/fortune/today`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           theme,
+          ...(paidReading ? { paidReading: true } : {}),
           ...(reviewedUnderstanding.length ? { reviewedUnderstanding } : {}),
           ...(deepReadingEnabled
             ? { intakeOutcome: reviewedUnderstanding.length ? 'REVIEWED' : 'SKIPPED' }
@@ -161,6 +177,7 @@ function IntakeConversation({
         }),
       });
       if (!response.ok) throw new Error('reading unavailable');
+      if (paidReading) router.replace(`/s/${serviceSlug}/today`);
       router.refresh();
     } catch {
       setError(true);
@@ -209,7 +226,13 @@ function IntakeConversation({
             disabled={drawing}
             onClick={() => void draw(review)}
           >
-            {drawing ? 'カードを引いています…' : 'この内容で占う'}
+            {drawing
+              ? paidReading
+                ? '鑑定を準備しています…'
+                : 'カードを引いています…'
+              : paidReading
+                ? 'この内容で深層鑑定する'
+                : 'この内容で占う'}
           </button>
           <button
             className="button button--secondary"

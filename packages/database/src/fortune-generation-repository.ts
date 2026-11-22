@@ -1,3 +1,9 @@
+import { ApplicationError } from '@bunshin/shared';
+import {
+  fortunePurchaseScope,
+  reserveFortunePurchase,
+  usesFortuneCommerce,
+} from './fortune-commerce-entitlement';
 import { SelectBunshinMemories } from '@bunshin/application';
 import {
   buildFortuneDeepReadingDetails,
@@ -57,6 +63,28 @@ export class PrismaFortuneGenerationRepository {
         where: { serviceSettingId: scope.id, userId: input.actorUserId },
       });
       if (!participant) return { kind: 'NOT_PARTICIPANT' };
+      const commerce = usesFortuneCommerce(input.serviceSlug, scope);
+      const paidRequest = input.paidReading === true;
+      if (
+        (paidRequest && !commerce) ||
+        (commerce && !paidRequest && input.reviewedUnderstanding?.length)
+      )
+        throw new ApplicationError('FORBIDDEN', '深層鑑定は購入画面からご利用ください。');
+      if (paidRequest) {
+        if (
+          !scope.personalProfileEnabled ||
+          !scope.aiEnabled ||
+          !fortuneDeepReadingEnabled(scope.guidanceSettings) ||
+          !participant.profileConsentedAt
+        )
+          throw new ApplicationError('FORBIDDEN', '深層鑑定には個別化への同意が必要です。');
+        await tx.$queryRaw`SELECT id FROM fortune_participants
+          WHERE id = ${participant.id}::uuid AND service_setting_id = ${scope.id}::uuid
+            AND profile_consented_at IS NOT NULL FOR UPDATE`.then((rows) => {
+          if (!Array.isArray(rows) || rows.length !== 1)
+            throw new ApplicationError('FORBIDDEN', '個別化設定をご確認ください。');
+        });
+      }
       const knowledge = await tx.fortuneKnowledgeVersion.findFirst({
         where: {
           serviceSettingId: scope.id,
@@ -114,14 +142,71 @@ export class PrismaFortuneGenerationRepository {
           status: 'READY_BASIC',
           readingText: meaning.body,
           actionStep: meaning.actionStep,
-          ...(reviewed ? { pendingUnderstanding: reviewed } : {}),
-          ...(!reviewed && scope.personalProfileEnabled && scope.aiEnabled && input.consultation
+          ...(!commerce && reviewed ? { pendingUnderstanding: reviewed } : {}),
+          ...(!commerce &&
+          !reviewed &&
+          scope.personalProfileEnabled &&
+          scope.aiEnabled &&
+          input.consultation
             ? { pendingConsultation: input.consultation }
             : {}),
           promptVersion: knowledge.promptVersion,
           generatedAt: new Date(),
         },
       });
+      if (paidRequest && !reviewed)
+        throw new ApplicationError(
+          'VALIDATION_ERROR',
+          '深層鑑定に使う相談内容を確認してください。',
+        );
+      if (paidRequest && reviewed) {
+        if (reading.status === 'DELETED')
+          throw new ApplicationError(
+            'CONFLICT',
+            '今日の結果は削除済みです。明日以降にご利用ください。',
+          );
+        if (
+          !reading.deepReading &&
+          reading.status !== 'GENERATING' &&
+          !reading.pendingUnderstanding
+        ) {
+          await reserveFortunePurchase(tx, {
+            ...fortunePurchaseScope(scope, input.actorUserId),
+            readingId: reading.id,
+            membershipId: participant.groupMembershipId,
+          });
+          const basic =
+            reading.knowledgeVersionId === knowledge.id &&
+            reading.cardCode === input.cardCode &&
+            reading.orientation === input.orientation &&
+            reading.theme === input.theme
+              ? meaning
+              : await tx.fortuneCardMeaning.findFirst({
+                  where: {
+                    knowledgeVersionId: reading.knowledgeVersionId ?? knowledge.id,
+                    cardCode: reading.cardCode,
+                    orientation: reading.orientation,
+                    theme: reading.theme,
+                    safetyReviewed: true,
+                  },
+                });
+          if (!basic)
+            throw new ApplicationError('CONFLICT', '今日のカードの基本解釈を確認できません。');
+          const staged = await tx.fortuneReading.update({
+            where: { id: reading.id },
+            data: {
+              status: 'READY_BASIC',
+              readingText: basic.body,
+              actionStep: basic.actionStep,
+              reflectionPrompt: null,
+              pendingConsultation: null,
+              pendingUnderstanding: reviewed,
+              failureCode: null,
+            },
+          });
+          return { kind: 'READY', reading: await fortuneReadingView(tx, staged) };
+        }
+      }
       if (scope.personalProfileEnabled && !participant.profileUpdatedAt) {
         // Drawing directly is also a valid way to finish the optional intake.
         await tx.fortuneParticipant.updateMany({
@@ -153,6 +238,20 @@ export class PrismaFortuneGenerationRepository {
           !(await lockFortuneGenerationLease(tx, lease, input.actorUserId, input.readingId)))
       )
         return null;
+      const commerce = usesFortuneCommerce(input.serviceSlug, scope);
+      if (commerce && !lease) {
+        const staged = await tx.fortuneReading.findFirst({
+          where: {
+            id: input.readingId,
+            serviceSettingId: scope.id,
+            memberUserId: input.actorUserId,
+            pendingUnderstanding: { not: Prisma.DbNull },
+            status: 'READY_BASIC',
+          },
+          select: { id: true },
+        });
+        if (!staged) return null;
+      }
       const claimed = await tx.fortuneReading.updateMany({
         where: {
           id: input.readingId,
@@ -183,6 +282,25 @@ export class PrismaFortuneGenerationRepository {
         },
       });
       if (!reading) return null;
+      let purchaseId: string | undefined;
+      if (commerce) {
+        const entitlement =
+          reading.pendingUnderstanding &&
+          (await tx.fortuneCommercePurchase.findFirst({
+            where: {
+              ...fortunePurchaseScope(scope, input.actorUserId),
+              readingId: reading.id,
+              status: 'PAID',
+              deliveredAt: null,
+            },
+            select: { id: true },
+          }));
+        if (!entitlement) {
+          await this.saveFallback({ ...input, failureCode: 'FORTUNE_PURCHASE_REQUIRED' }, tx);
+          return null;
+        }
+        purchaseId = entitlement.id;
+      }
       const personal = await new PrismaFortunePersonalProfileRepository(tx).read(input);
       const reviewed =
         personal?.enabled && fortuneDeepReadingEnabled(scope.guidanceSettings)
@@ -355,11 +473,14 @@ export class PrismaFortuneGenerationRepository {
               generationRevision: contextualized.updatedAt,
               jobAttempt: { jobId: lease.jobId, attemptCount: lease.attemptCount },
             }
-          : {}),
+          : commerce
+            ? { generationRevision: contextualized.updatedAt }
+            : {}),
         workspaceId: scope.workspaceId,
         groupId: scope.groupId,
         bunshinId: scope.bunshinId,
         reading: await fortuneReadingView(tx, reading),
+        ...(purchaseId ? { purchaseId } : {}),
         ...(personal?.enabled ? { personalGuidance: true } : {}),
         ...(personal?.enabled && scope.reflectionEnabled ? { reflectionEnabled: true } : {}),
         ...(personal?.enabled && reading.pendingConsultation
@@ -446,7 +567,9 @@ export class PrismaFortuneGenerationRepository {
           return null;
         return this.saveComplete(input, tx);
       });
-    return this.saveComplete(input);
+    return input.generationRevision
+      ? this.db.$transaction((tx) => this.saveComplete(input, tx))
+      : this.saveComplete(input);
   }
 
   private async saveComplete(
@@ -463,6 +586,20 @@ export class PrismaFortuneGenerationRepository {
         scope.bunshinId !== input.jobLease.bunshinId)
     )
       return null;
+    const commerce = usesFortuneCommerce(input.serviceSlug, scope);
+    if (commerce && (!input.output.deep || !input.generationRevision))
+      return this.saveFallback({ ...input, failureCode: 'FORTUNE_DEEP_CONTEXT_CHANGED' }, db);
+    if (commerce) {
+      const reserved = await db.$queryRaw<
+        Array<{ id: string }>
+      >`SELECT id FROM fortune_commerce_purchases
+        WHERE workspace_id = ${scope.workspaceId}::uuid AND group_id = ${scope.groupId}::uuid
+          AND service_setting_id = ${scope.id}::uuid AND buyer_user_id = ${input.actorUserId}::uuid
+          AND reading_id = ${input.readingId}::uuid AND status = 'PAID' AND delivered_at IS NULL
+        FOR UPDATE`;
+      if (!reserved.length)
+        return this.saveFallback({ ...input, failureCode: 'FORTUNE_PURCHASE_REQUIRED' }, db);
+    }
     const deepProposal = input.output.deep;
     const pending =
       deepProposal &&
@@ -487,7 +624,7 @@ export class PrismaFortuneGenerationRepository {
         memberUserId: input.actorUserId,
         status: 'GENERATING',
         ...(reviewed ? { pendingUnderstanding: { equals: reviewed } } : {}),
-        ...(input.jobLease
+        ...(input.generationRevision
           ? {
               updatedAt: input.generationRevision,
               workspaceId: scope.workspaceId,
@@ -556,6 +693,19 @@ export class PrismaFortuneGenerationRepository {
             db,
           )
         : null;
+    if (commerce) {
+      const delivered = await db.fortuneCommercePurchase.updateMany({
+        where: {
+          ...fortunePurchaseScope(scope, input.actorUserId),
+          readingId: input.readingId,
+          status: 'PAID',
+          deliveredAt: null,
+        },
+        data: { deliveredAt: new Date() },
+      });
+      if (delivered.count !== 1)
+        throw new ApplicationError('CONFLICT', '鑑定の購入状況が変更されました。');
+    }
     const row = await db.fortuneReading.findFirst({
       where: {
         id: input.readingId,
@@ -605,7 +755,7 @@ export class PrismaFortuneGenerationRepository {
         serviceSettingId: scope.id,
         memberUserId: input.actorUserId,
         status: 'GENERATING',
-        ...(input.jobLease
+        ...(input.generationRevision
           ? {
               updatedAt: input.generationRevision,
               workspaceId: scope.workspaceId,
