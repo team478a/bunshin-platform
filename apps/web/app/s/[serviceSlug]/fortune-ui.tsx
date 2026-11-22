@@ -2,8 +2,10 @@ import type { Route } from 'next';
 import Link from 'next/link';
 import type { FortuneReadingView } from '@bunshin/capability-fortune';
 import type { FortuneGuidanceSettings } from '../../../src/fortune/guidance-settings';
+import { dailyCardDetails } from '../../../src/fortune/daily-card-details';
 import { FortuneCharacterBadge } from './fortune-character';
 import { FortuneFeedbackButtons } from './fortune-actions';
+import { FortuneCardArt } from './fortune-card-art';
 import { FortuneFollowUps } from './fortune-follow-ups';
 import { FortunePersonalFit } from './fortune-personal-fit';
 
@@ -27,6 +29,7 @@ export function ReadingCard({
   linked = false,
   showFollowUps = false,
   showCreditFollowUps = false,
+  dailyPresentation = false,
   serviceSlug,
   characters,
 }: {
@@ -34,33 +37,49 @@ export function ReadingCard({
   linked?: boolean;
   showFollowUps?: boolean;
   showCreditFollowUps?: boolean;
+  dailyPresentation?: boolean;
   characters?: FortuneGuidanceSettings['characters'];
   serviceSlug: string;
 }) {
   const deep = linked ? undefined : reading.deepReading;
   const character = linked ? undefined : deep ? characters?.deep : characters?.daily;
-  const card = (
-    <article className="settings-card fortune-reading-card">
-      {character && (
-        <FortuneCharacterBadge
-          character={character}
-          expression={reading.status === 'GENERATING' ? 'thinking' : 'result'}
-          compact={!deep}
-        />
+  const daily = dailyPresentation && !linked && !deep;
+  const insight =
+    daily && reading.body ? dailyCardDetails(reading.cardCode, reading.theme) : undefined;
+  const dateAndTheme = `${reading.localDate.replaceAll('-', '/')}・${themeLabel(reading.theme)}`;
+  const position = reading.orientation === 'UPRIGHT' ? '正位置' : '逆位置';
+  const title = daily
+    ? reading.title?.replace(`${themeLabel(reading.theme)}：`, '')
+    : reading.title;
+  const content = (
+    <>
+      {insight && (
+        <section className="fortune-daily-result__symbol">
+          <h3>カードの象徴</h3>
+          <p>{insight.imageDetail}</p>
+        </section>
       )}
-      <p className="eyebrow">
-        {reading.localDate.replaceAll('-', '/')}・{themeLabel(reading.theme)}
-      </p>
-      <h2>
-        {reading.cardNameJa}{' '}
-        <small>（{reading.orientation === 'UPRIGHT' ? '正位置' : '逆位置'}）</small>
-      </h2>
+      {!daily && (
+        <>
+          {character && (
+            <FortuneCharacterBadge
+              character={character}
+              expression={reading.status === 'GENERATING' ? 'thinking' : 'result'}
+              compact={!deep}
+            />
+          )}
+          <p className="eyebrow">{dateAndTheme}</p>
+          <h2>
+            {reading.cardNameJa} <small>（{position}）</small>
+          </h2>
+        </>
+      )}
       {!linked && reading.status === 'READY_AI' && (
         <p className="fortune-note">
           {deep ? '深層パーソナル鑑定・AI' : 'AIが文章を整えた鑑定です。'}
         </p>
       )}
-      {reading.title && <h3>{reading.title}</h3>}
+      {!daily && title && <h3>{title}</h3>}
       {reading.status === 'GENERATING' && (
         <p role="status">
           AIが結果を整えています。先に標準の結果をご覧いただけます。しばらくしてページを更新してください。
@@ -96,6 +115,19 @@ export function ReadingCard({
             <h3>今の状況に当てはめると</h3>
             <p className="fortune-reading-body">{reading.body}</p>
           </section>
+        ) : daily ? (
+          <section>
+            <h3>{themeLabel(reading.theme)}について</h3>
+            <p className="fortune-reading-body">{reading.body}</p>
+            {insight && (
+              <div className="fortune-daily-result__question">
+                <p>{insight.situation}</p>
+                <p>
+                  <strong>{insight.question}</strong>
+                </p>
+              </div>
+            )}
+          </section>
         ) : (
           <p className="fortune-reading-body">{reading.body}</p>
         ))}
@@ -111,7 +143,7 @@ export function ReadingCard({
       )}
       {!linked && reading.actionStep && (
         <section className="fortune-action-step">
-          <h3>今日の提案</h3>
+          <h3>{daily ? '今日の一歩' : '今日の提案'}</h3>
           <p>{reading.actionStep}</p>
           {deep && <p>{deep.actionReason}</p>}
         </section>
@@ -131,15 +163,43 @@ export function ReadingCard({
           canRate={showFollowUps}
         />
       )}
-      {!linked && reading.body && reading.status !== 'GENERATING' && (
-        <FortuneFeedbackButtons
-          serviceSlug={serviceSlug}
-          readingId={reading.id}
-          current={reading.feedbackRating}
-          currentIssue={reading.feedbackIssue}
-        />
-      )}
+      {!linked &&
+        reading.body &&
+        reading.status !== 'GENERATING' &&
+        (daily ? (
+          <details className="fortune-daily-result__feedback">
+            <summary>この鑑定を評価する</summary>
+            <FortuneFeedbackButtons
+              serviceSlug={serviceSlug}
+              readingId={reading.id}
+              current={reading.feedbackRating}
+              currentIssue={reading.feedbackIssue}
+            />
+          </details>
+        ) : (
+          <FortuneFeedbackButtons
+            serviceSlug={serviceSlug}
+            readingId={reading.id}
+            current={reading.feedbackRating}
+            currentIssue={reading.feedbackIssue}
+          />
+        ))}
+    </>
+  );
+  const card = daily ? (
+    <article className="fortune-daily-result">
+      <header className="fortune-daily-result__hero">
+        <p>{dateAndTheme}</p>
+        <FortuneCardArt card={reading} />
+        <h2>
+          {reading.cardNameJa} <small>{position}</small>
+        </h2>
+        {title && <p className="fortune-daily-result__message">{title}</p>}
+      </header>
+      <div className="fortune-daily-result__content">{content}</div>
     </article>
+  ) : (
+    <article className="settings-card fortune-reading-card">{content}</article>
   );
   return linked ? (
     <Link

@@ -1,12 +1,15 @@
 import { renderToStaticMarkup } from 'react-dom/server';
+import { existsSync } from 'node:fs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   emptyFortunePersonalProfile,
+  TAROT_DECK,
   toJapanLocalDate,
   type FortuneReadingView,
 } from '@bunshin/capability-fortune';
 import FortuneTodayPage from '../app/s/[serviceSlug]/today/page';
 import { defaultFortuneAppearance } from '../src/fortune/appearance';
+import { dailyCardArtwork, dailyCardDetails } from '../src/fortune/daily-card-details';
 import {
   defaultFortuneGuide,
   defaultFortuneGuidanceSettings,
@@ -63,7 +66,7 @@ const reading: FortuneReadingView = {
   id: 'today',
   localDate: toJapanLocalDate(new Date()),
   theme: 'WORK',
-  cardCode: 'THE_FOOL',
+  cardCode: 'MAJOR_00',
   cardNameJa: '愚者',
   orientation: 'UPRIGHT',
   status: 'READY_AI',
@@ -171,13 +174,32 @@ describe('fortune member home', () => {
       },
     ]);
     const markup = await renderToday();
-    expect(markup).toContain('今日の鑑定を見る');
+    expect(markup).toContain('カードの象徴');
+    expect(markup).toContain('仕事について');
+    expect(markup).toContain('小さく試してから決められることは？');
+    expect(markup).toContain('/fortune/tarot/MAJOR_00.webp');
+    expect(markup).toContain('<summary>この鑑定を評価する</summary>');
     expect(markup).toContain(reading.actionStep);
     expect(markup).toContain('前回の行動で何に気づきましたか？');
     expect(markup.indexOf(reading.actionStep!)).toBeLessThan(
       markup.indexOf('前回の提案を振り返る'),
     );
     expect(markup).not.toContain('何について占いますか？');
+  });
+
+  it('has a local illustration and a card-specific question for every card', () => {
+    const questions = new Set();
+    for (const card of TAROT_DECK) {
+      const artwork = dailyCardArtwork(card.code);
+      const insight = dailyCardDetails(card.code, 'RELATIONSHIPS');
+      expect(artwork).toBeTruthy();
+      expect(existsSync(new URL(`../public${artwork}`, import.meta.url))).toBe(true);
+      expect(insight?.imageDetail).toBeTruthy();
+      questions.add(insight?.question);
+    }
+    expect(questions.size).toBe(TAROT_DECK.length);
+    expect(dailyCardArtwork('unknown')).toBeUndefined();
+    expect(dailyCardDetails('unknown', 'WORK')).toBeUndefined();
   });
 
   it('still shows age confirmation when AI is off and does not present an AI guide', async () => {

@@ -191,11 +191,25 @@ test(
     await screen.getByRole('button', 'スキップ').tap();
     expect((await saved).status).toBe(200);
     await expect(screen.getByRole('heading', 'あなたに合う占いにする')).toBeHidden();
+    const reveal = screen.getByRole('button', '今日の一枚をめくる');
+    await expect(reveal).toBeDisabled();
     await screen.getByRole('button', /仕事や今後の動き/).tap();
-    await expect(screen.getByRole('heading', '今日の提案')).toBeVisible({ timeout: 30_000 });
+    await expect(reveal).toBeEnabled();
+    await reveal.tap();
+    await expect(screen.getByRole('heading', '今日の一歩')).toBeVisible({ timeout: 30_000 });
+    await expect(screen.getByRole('heading', 'カードの象徴')).toBeVisible();
     await expect(screen.getByText(/最初の10分で行うこと/)).toBeVisible();
+    const artwork = browser.locator('.fortune-daily-result__hero img');
+    await expect(artwork).toBeVisible();
+    const imageSrc = await artwork.getAttribute('src');
+    expect(imageSrc).toMatch(/^\/fortune\/tarot\/.+\.webp$/);
+    await expect(screen.getByRole('button', '参考になった')).toBeHidden();
+    await screen.getByText('この鑑定を評価する', { exact: true }).tap();
+    await expect(screen.getByRole('button', '参考になった')).toBeVisible();
     await app.open(`/s/${slug}/today`);
-    await expect(screen.getByRole('heading', '今日の提案')).toBeVisible({ timeout: 30_000 });
+    await expect(screen.getByRole('heading', '今日の一歩')).toBeVisible({ timeout: 30_000 });
+    expect(await artwork.getAttribute('src')).toBe(imageSrc);
+    await expect(reveal).toHaveCount(0);
     await expect(screen.getByRole('heading', '何について占いますか？')).toHaveCount(0);
   },
 );

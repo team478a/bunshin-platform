@@ -2,16 +2,22 @@
 
 import type { Route } from 'next';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
-import type { FortuneFeedbackIssue, FortuneFeedbackRating } from '@bunshin/capability-fortune';
+import { useEffect, useRef, useState } from 'react';
+import type {
+  FortuneFeedbackIssue,
+  FortuneFeedbackRating,
+  FortuneReadingView,
+} from '@bunshin/capability-fortune';
+import { FortuneCardArt, FortuneCardBack, type FortuneCardFace } from './fortune-card-art';
 
-async function request(url: string, init: RequestInit) {
+async function request<T = unknown>(url: string, init: RequestInit) {
   const response = await fetch(url, {
     ...init,
     headers: { 'content-type': 'application/json', ...init.headers },
   });
-  const body = (await response.json()) as { error?: { message?: string } };
+  const body = (await response.json()) as { data: T; error?: { message?: string } };
   if (!response.ok) throw new Error(body.error?.message ?? '操作を完了できませんでした。');
+  return body.data;
 }
 
 export function FortuneJoinButton({
@@ -146,11 +152,86 @@ export function FortuneDrawButtons({
   onSelectTheme?: (theme: (typeof choices)[number]['value']) => void;
 }) {
   const router = useRouter();
-  const [busy, setBusy] = useState<string | null>(null);
+  const [theme, setTheme] = useState<(typeof choices)[number]['value']>();
+  const [busy, setBusy] = useState(false);
+  const [reveal, setReveal] = useState<FortuneCardFace>();
+  const pending = useRef(false);
+  const refreshStarted = useRef(false);
   const [consultation, setConsultation] = useState('');
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!reveal) return;
+    // A hidden tab or interrupted CSS animation may not fire animationend.
+    const timer = window.setTimeout(() => {
+      if (!refreshStarted.current) {
+        refreshStarted.current = true;
+        router.refresh();
+      }
+    }, 1300);
+    return () => window.clearTimeout(timer);
+  }, [reveal, router]);
+
+  async function draw() {
+    if (!theme || pending.current) return;
+    pending.current = true;
+    setBusy(true);
+    setError('');
+    try {
+      const reading = await request<FortuneReadingView>(
+        `/api/services/${serviceSlug}/fortune/today`,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            theme,
+            ...(askConsultation && consultation.trim()
+              ? { consultation: consultation.trim() }
+              : {}),
+          }),
+        },
+      );
+      if (
+        reading.status === 'DELETED' ||
+        window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      ) {
+        router.refresh();
+      } else {
+        setReveal(reading);
+      }
+    } catch (cause) {
+      pending.current = false;
+      setBusy(false);
+      setError(cause instanceof Error ? cause.message : '占いを完了できませんでした。');
+    }
+  }
+
   return (
     <div className="fortune-theme-list">
+      {!onSelectTheme && (
+        <div className="fortune-draw-stage">
+          <div
+            className={`fortune-draw-card${reveal ? ' fortune-draw-card--turning' : ''}`}
+            onAnimationEnd={(event) => {
+              if (event.target !== event.currentTarget || !reveal || refreshStarted.current) return;
+              refreshStarted.current = true;
+              router.refresh();
+            }}
+            aria-hidden="true"
+          >
+            <div className="fortune-draw-card__back">
+              <FortuneCardBack />
+            </div>
+            {reveal && (
+              <div className="fortune-draw-card__front">
+                <FortuneCardArt card={reveal} />
+              </div>
+            )}
+          </div>
+          {busy && (
+            <p role="status">{reveal ? reveal.cardNameJa : '今日のカードを開いています…'}</p>
+          )}
+        </div>
+      )}
       {askConsultation && (
         <label className="form-field">
           <span>今日、特に知りたいこと（任意）</span>
@@ -159,7 +240,7 @@ export function FortuneDrawButtons({
             onChange={(event) => setConsultation(event.target.value)}
             maxLength={500}
             rows={2}
-            disabled={busy !== null}
+            disabled={busy}
           />
         </label>
       )}
@@ -167,43 +248,25 @@ export function FortuneDrawButtons({
         <button
           key={choice.value}
           className="fortune-theme-button"
-          disabled={busy !== null}
+          disabled={busy}
           type="button"
-          onClick={() => {
-            if (onSelectTheme) {
-              onSelectTheme(choice.value);
-              return;
-            }
-            void (async () => {
-              setBusy(choice.value);
-              setError('');
-              try {
-                await request(`/api/services/${serviceSlug}/fortune/today`, {
-                  method: 'POST',
-                  body: JSON.stringify({
-                    theme: choice.value,
-                    ...(askConsultation && consultation.trim()
-                      ? { consultation: consultation.trim() }
-                      : {}),
-                  }),
-                });
-                router.refresh();
-              } catch (cause) {
-                setError(cause instanceof Error ? cause.message : '占いを完了できませんでした。');
-              } finally {
-                setBusy(null);
-              }
-            })();
-          }}
+          aria-pressed={onSelectTheme ? undefined : theme === choice.value}
+          onClick={() => (onSelectTheme ? onSelectTheme(choice.value) : setTheme(choice.value))}
         >
-          <strong>
-            {busy === choice.value
-              ? 'カードを引いています…'
-              : (themeLabels?.[choice.value] ?? choice.label)}
-          </strong>
+          <strong>{themeLabels?.[choice.value] ?? choice.label}</strong>
           <span>{choice.note}</span>
         </button>
       ))}
+      {!onSelectTheme && (
+        <button
+          className="button button--primary button--full fortune-draw-button"
+          type="button"
+          disabled={!theme || busy}
+          onClick={() => void draw()}
+        >
+          今日の一枚をめくる
+        </button>
+      )}
       {error && (
         <p className="form-error" role="alert">
           {error}

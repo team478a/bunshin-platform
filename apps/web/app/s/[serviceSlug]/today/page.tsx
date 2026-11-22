@@ -118,11 +118,9 @@ export default async function FortuneTodayPage({
     ? '年齢確認へ'
     : showIntake
       ? 'はじめる'
-      : today.reading
-        ? '今日の鑑定を見る'
-        : showDynamicIntake
-          ? '占い方を選ぶ'
-          : '今日のカードを引く';
+      : showDynamicIntake
+        ? '占い方を選ぶ'
+        : '今日のカードを引く';
   const { guide, characters } = guidance;
   const welcome = showIntake || !today.participant ? characters?.intake : characters?.daily;
   const content = (
@@ -134,7 +132,7 @@ export default async function FortuneTodayPage({
             <Link href={`/s/${serviceSlug}/activity` as Route}>友だちに紹介する</Link>
           )}
         </header>
-        {(showGuide || welcome?.enabled) && (
+        {!today.reading && (showGuide || welcome?.enabled) && (
           <section className="fortune-today__guide" aria-label="AI案内役">
             {welcome?.enabled ? (
               <FortuneCharacterBadge
@@ -194,6 +192,7 @@ export default async function FortuneTodayPage({
               <ReadingCard
                 reading={today.reading}
                 serviceSlug={serviceSlug}
+                dailyPresentation
                 showFollowUps={showGuide && (!commerce || Boolean(today.reading.deepReading))}
                 showCreditFollowUps={showGuide && setting.followUpCreditEnabled}
                 {...(characters ? { characters } : {})}
