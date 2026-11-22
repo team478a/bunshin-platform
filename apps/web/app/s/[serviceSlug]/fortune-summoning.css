@@ -91,6 +91,26 @@
   font-size: 2rem;
 }
 
+.fortune-summoning[data-cinematic] .fortune-summoning__back {
+  background:
+    radial-gradient(circle at 50% 18%, var(--gold) 1px, transparent 2px),
+    radial-gradient(circle at 50% 82%, var(--gold) 1px, transparent 2px),
+    repeating-conic-gradient(from 12deg, #c3a16b18 0deg 1deg, transparent 1deg 15deg),
+    radial-gradient(ellipse, #493168, var(--night) 72%);
+}
+
+.fortune-summoning__seal {
+  display: grid;
+  width: 55%;
+  aspect-ratio: 1;
+  place-items: center;
+  border: 3px double var(--gold);
+  border-radius: 50%;
+  background: var(--night);
+  color: #e9cc98;
+  line-height: 1;
+}
+
 .fortune-summoning__face {
   background: var(--ivory);
   color: var(--night);
@@ -111,6 +131,14 @@
 }
 .fortune-summoning[data-phase='reveal'] .fortune-summoning__back {
   animation: fortune-summoning-glint 460ms ease-out;
+}
+
+.fortune-summoning[data-cinematic][data-phase='reveal'] .fortune-summoning__card {
+  animation: fortune-summoning-cinematic-flip 2200ms ease-in-out both;
+}
+
+.fortune-summoning[data-cinematic][data-phase='reveal'] .fortune-summoning__back {
+  animation-duration: 1050ms;
 }
 
 .fortune-summoning p {
@@ -170,6 +198,18 @@
     transform: rotateY(180deg);
   }
 }
+
+@keyframes fortune-summoning-cinematic-flip {
+  0%,
+  25% {
+    transform: rotateY(0deg);
+  }
+  68%,
+  100% {
+    transform: rotateY(180deg);
+  }
+}
+
 @keyframes fortune-summoning-glint {
   65% {
     box-shadow: 0 0 25px var(--gold);
