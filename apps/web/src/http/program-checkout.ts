@@ -1,6 +1,7 @@
 import 'server-only';
 import { requestIdFromHeader } from '@bunshin/observability';
 import { ApplicationError, toApiError } from '@bunshin/shared';
+import { processFortuneStripeEvent } from '../fortune/stripe-events';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { currentUserProvider } from '../auth/current-user';
@@ -130,7 +131,9 @@ export async function stripeProgramWebhookResponse(request: Request, rawConfigur
     }
     const event = JSON.parse(rawBody) as StripeProgramEvent;
     const payloadDigest = createHash('sha256').update(rawBody).digest('hex');
-    await processStripeProgramEvent(db.prisma, configuration.id, event, payloadDigest);
+    const handled = await processFortuneStripeEvent(db.prisma, configuration, event, payloadDigest);
+    if (!handled)
+      await processStripeProgramEvent(db.prisma, configuration.id, event, payloadDigest);
     return json({ received: true }, requestId);
   } catch (error) {
     return failure(error, requestId);

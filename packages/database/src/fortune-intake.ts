@@ -9,6 +9,7 @@ import {
 } from '@bunshin/capability-fortune';
 import type { PrismaClient } from '@prisma/client';
 import { fortuneReadingRetentionCutoff } from './fortune-retention';
+import { fortunePurchaseScope, usesFortuneCommerce } from './fortune-commerce-entitlement';
 import { dateOnly, fortuneTarget } from './fortune-shared';
 
 type Actor = { serviceSlug: string; actorUserId: string };
@@ -43,6 +44,26 @@ export class PrismaFortuneIntakeRepository {
       },
     });
     if (!participant) return null;
+    const commerce = usesFortuneCommerce(input.serviceSlug, scope);
+    let purchaseId: string | undefined;
+    if (commerce) {
+      const purchase = await this.db.fortuneCommercePurchase.findFirst({
+        where: {
+          ...fortunePurchaseScope(scope, input.actorUserId),
+          groupMembershipId: membership.id,
+          status: 'PAID',
+          deliveredAt: null,
+        },
+        select: { id: true },
+      });
+      if (
+        !purchase ||
+        !participant.profileConsentedAt ||
+        !fortuneDeepReadingEnabled(scope.guidanceSettings)
+      )
+        return null;
+      purchaseId = purchase.id;
+    }
     const now = this.now();
     const localDate = dateOnly(toJapanLocalDate(now));
     const reading = await this.db.fortuneReading.findUnique({
@@ -53,9 +74,22 @@ export class PrismaFortuneIntakeRepository {
           localDate,
         },
       },
-      select: { id: true },
+      select: { id: true, status: true, theme: true, deepReading: true },
     });
-    return reading ? null : { scope, participant, options, localDate, now };
+    if (
+      reading &&
+      (!commerce || reading.deepReading || !['READY_BASIC', 'READY_AI'].includes(reading.status))
+    )
+      return null;
+    return {
+      scope,
+      participant,
+      options,
+      localDate,
+      now,
+      selectedTheme: reading?.theme,
+      purchaseId,
+    };
   }
 
   async recordProgress(
@@ -109,7 +143,8 @@ export class PrismaFortuneIntakeRepository {
   async reserve(input: Actor & { theme: FortuneTheme; answered: readonly FortuneIntakeKey[] }) {
     const target = await this.target(input);
     if (!target) return done;
-    const { scope, participant, options, localDate, now } = target;
+    const { scope, participant, options, localDate, now, selectedTheme } = target;
+    if (selectedTheme && selectedTheme !== input.theme) return done;
     if (input.answered.length >= Math.min(options.questions, options.calls)) return done;
     const turns = await this.db.fortuneIntakeTurn.findMany({
       where: { participantId: participant.id, localDate },
@@ -148,6 +183,7 @@ export class PrismaFortuneIntakeRepository {
     return {
       kind: 'RESERVED',
       id,
+      ...(target.purchaseId ? { purchaseId: target.purchaseId } : {}),
       workspaceId: scope.workspaceId,
       groupId: scope.groupId,
       bunshinId: scope.bunshinId,
