@@ -95,14 +95,11 @@ function active(turn: { status: string; createdAt: Date }, now: Date) {
   return turn.status === 'PENDING' && turn.createdAt > fortuneFollowUpReservationCutoff(now);
 }
 
-function remainingExchanges(record: Eligible, now: Date) {
-  return Math.max(
-    0,
-    record.scope.followUpCreditLimit -
-      record.reading.followUps.filter(
-        (turn) => turn.creditCost !== null && (turn.status === 'READY' || active(turn, now)),
-      ).length,
-  );
+function remainingExchanges(record: Eligible, now: Date, completedExchanges: number) {
+  const held = record.reading.followUps.filter(
+    (turn) => turn.creditCost !== null && active(turn, now),
+  ).length;
+  return Math.max(0, record.scope.followUpCreditLimit - completedExchanges - held);
 }
 
 function creditScope({ scope, reading }: Eligible) {
@@ -119,7 +116,9 @@ async function view(db: Db, record: Eligible, now: Date) {
   const { followUpCreditEnabled, followUpCreditCost, creditDisplayName } = record.scope;
   const balance =
     remaining === 0 && followUpCreditEnabled
-      ? await readFortuneFollowUpCreditBalance(db, creditScope(record), now)
+      ? await readFortuneFollowUpCreditBalance(db, creditScope(record), now, {
+          readingId: record.reading.id,
+        })
       : null;
   return {
     remaining,
@@ -129,7 +128,7 @@ async function view(db: Db, record: Eligible, now: Date) {
             cost: followUpCreditCost,
             name: creditDisplayName ?? FORTUNE_FOLLOW_UP_CREDIT_NAME,
             available: balance.available,
-            remaining: remainingExchanges(record, now),
+            remaining: remainingExchanges(record, now, balance.completedExchanges),
           },
         }
       : {}),
@@ -224,18 +223,16 @@ export class PrismaFortuneFollowUpRepository {
       } else {
         if (included > 0 || !scope.followUpCreditEnabled || creditCost !== scope.followUpCreditCost)
           return { kind: 'OFFER_CHANGED' } as const;
-        if (
-          remainingExchanges(record, now) === 0 ||
-          reading.followUps.some((turn) => active(turn, now))
-        )
-          return { kind: 'LIMIT' } as const;
+        if (reading.followUps.some((turn) => active(turn, now))) return { kind: 'LIMIT' } as const;
         const accountScope = creditScope(record);
         await lockFortuneCreditAccount(tx, accountScope);
-        if (
-          (await readFortuneFollowUpCreditBalance(tx, accountScope, new Date())).available <
-          creditCost
-        )
-          return { kind: 'INSUFFICIENT_CREDIT' } as const;
+        const checkedAt = new Date();
+        const balance = await readFortuneFollowUpCreditBalance(tx, accountScope, checkedAt, {
+          readingId: reading.id,
+        });
+        if (remainingExchanges(record, checkedAt, balance.completedExchanges) === 0)
+          return { kind: 'LIMIT' } as const;
+        if (balance.available < creditCost) return { kind: 'INSUFFICIENT_CREDIT' } as const;
       }
       const style = FORTUNE_PROFILE_STYLES.find(
         (value) => value === reading.participant.profileStyle,

@@ -22,13 +22,14 @@ export async function readFortuneFollowUpCreditBalance(
   db: PrismaClient | Tx,
   scope: Scope,
   now: Date,
-  completing?: { readingId: string; requestId: string },
+  exchange?: { readingId: string; requestId?: string },
 ) {
   const account = await db.serviceCreditAccount.findFirst({
     where: scope,
     select: { id: true, availableCredits: true },
   });
-  if (!account) return { accountId: null, available: 0, lots: [], recordedAt: now };
+  if (!account)
+    return { accountId: null, available: 0, lots: [], recordedAt: now, completedExchanges: 0 };
 
   const [entries, held] = await Promise.all([
     db.serviceCreditLedger.findMany({
@@ -47,6 +48,7 @@ export async function readFortuneFollowUpCreditBalance(
         sourceId: true,
         lotAllocations: true,
         createdAt: true,
+        idempotencyKey: true,
       },
     }),
     db.fortuneReadingFollowUp.aggregate({
@@ -60,8 +62,8 @@ export async function readFortuneFollowUpCreditBalance(
           memberUserId: scope.userId,
           participant: { groupMembershipId: scope.groupMembershipId },
         },
-        ...(completing
-          ? { NOT: { readingId: completing.readingId, id: completing.requestId } }
+        ...(exchange?.requestId
+          ? { NOT: { readingId: exchange.readingId, id: exchange.requestId } }
           : {}),
       },
       _sum: { creditCost: true },
@@ -83,7 +85,12 @@ export async function readFortuneFollowUpCreditBalance(
   const recordedAt = new Date(
     Math.max(now.getTime(), (entries.at(-1)?.createdAt.getTime() ?? 0) + 1),
   );
-  return { accountId: account.id, available, lots, recordedAt };
+  const prefix = exchange && `${FORTUNE_FOLLOW_UP_CREDIT_KEY}${exchange.readingId}:`;
+  const completedExchanges = prefix
+    ? entries.filter((entry) => entry.type === 'CONSUME' && entry.idempotencyKey.startsWith(prefix))
+        .length
+    : 0;
+  return { accountId: account.id, available, lots, recordedAt, completedExchanges };
 }
 
 /** Caller holds the account lock and completes the answer in this transaction. */

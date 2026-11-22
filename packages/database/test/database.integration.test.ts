@@ -1580,6 +1580,17 @@ describe('database ownership boundaries', () => {
       expect(
         await client.serviceCreditLedger.findUnique({ where: { id: expiredGrant.id } }),
       ).toMatchObject({ amount: 3 });
+      await client.fortuneReadingFollowUp.updateMany({
+        where: { readingId: reading.id, id: success.requestId },
+        data: { status: 'ERASED', question: null, answer: null, actionStep: null },
+      });
+      await client.fortuneServiceSetting.update({
+        where: { id: setting.id },
+        data: { followUpCreditLimit: 1 },
+      });
+      await expect(followUps.reserve({ ...quote, requestId: randomUUID() })).resolves.toEqual({
+        kind: 'LIMIT',
+      });
       await client.fortuneReading.update({
         where: { id: reading.id },
         data: { localDate: new Date(Date.now() - 86_400_000) },
