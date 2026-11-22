@@ -5,6 +5,7 @@ import type { FortuneGuidanceSettings } from '../../../src/fortune/guidance-sett
 import { FortuneCharacterBadge } from './fortune-character';
 import { FortuneFeedbackButtons } from './fortune-actions';
 import { FortuneFollowUps } from './fortune-follow-ups';
+import { FortuneOracleBook } from './fortune-oracle-book';
 import { FortunePersonalFit } from './fortune-personal-fit';
 
 export const themeLabel = (theme: FortuneReadingView['theme']) =>
@@ -27,6 +28,7 @@ export function ReadingCard({
   linked = false,
   showFollowUps = false,
   showCreditFollowUps = false,
+  oracleBook = false,
   serviceSlug,
   characters,
 }: {
@@ -34,33 +36,29 @@ export function ReadingCard({
   linked?: boolean;
   showFollowUps?: boolean;
   showCreditFollowUps?: boolean;
+  oracleBook?: boolean;
   characters?: FortuneGuidanceSettings['characters'];
   serviceSlug: string;
 }) {
   const deep = linked ? undefined : reading.deepReading;
   const character = linked ? undefined : deep ? characters?.deep : characters?.daily;
-  const card = (
-    <article className="settings-card fortune-reading-card">
-      {character && (
-        <FortuneCharacterBadge
-          character={character}
-          expression={reading.status === 'GENERATING' ? 'thinking' : 'result'}
-          compact={!deep}
-        />
-      )}
-      <p className="eyebrow">
-        {reading.localDate.replaceAll('-', '/')}・{themeLabel(reading.theme)}
-      </p>
-      <h2>
-        {reading.cardNameJa}{' '}
-        <small>（{reading.orientation === 'UPRIGHT' ? '正位置' : '逆位置'}）</small>
-      </h2>
+  const showBook = oracleBook && Boolean(deep) && reading.status === 'READY_AI';
+  const context = `${reading.localDate.replaceAll('-', '/')}・${themeLabel(reading.theme)}`;
+  const characterBadge = character && (
+    <FortuneCharacterBadge
+      character={character}
+      expression={reading.status === 'GENERATING' ? 'thinking' : 'result'}
+      compact={!deep}
+    />
+  );
+  const content = (
+    <>
       {!linked && reading.status === 'READY_AI' && (
         <p className="fortune-note">
           {deep ? '深層パーソナル鑑定・AI' : 'AIが文章を整えた鑑定です。'}
         </p>
       )}
-      {reading.title && <h3>{reading.title}</h3>}
+      {!showBook && reading.title && <h3>{reading.title}</h3>}
       {reading.status === 'GENERATING' && (
         <p role="status">
           AIが結果を整えています。先に標準の結果をご覧いただけます。しばらくしてページを更新してください。
@@ -139,6 +137,22 @@ export function ReadingCard({
           currentIssue={reading.feedbackIssue}
         />
       )}
+    </>
+  );
+  const card = showBook ? (
+    <FortuneOracleBook reading={reading} context={context}>
+      {characterBadge}
+      {content}
+    </FortuneOracleBook>
+  ) : (
+    <article className="settings-card fortune-reading-card">
+      {characterBadge}
+      <p className="eyebrow">{context}</p>
+      <h2>
+        {reading.cardNameJa}{' '}
+        <small>（{reading.orientation === 'UPRIGHT' ? '正位置' : '逆位置'}）</small>
+      </h2>
+      {content}
     </article>
   );
   return linked ? (

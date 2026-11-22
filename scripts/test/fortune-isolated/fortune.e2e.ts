@@ -212,15 +212,44 @@ test(
       await expect(entrance).toBeVisible();
       await expect(screen.getByText('月の案内役', { exact: true })).toBeVisible();
       await app.screenshot('fortune-selene-fallback-390px');
+      await expect(browser.locator('.fortune-oracle-opening')).toBeVisible();
       await expect(screen.getByRole('heading', '考えられる選択肢')).toBeVisible({
         timeout: 75_000,
       });
+      const book = browser.locator('article.fortune-oracle-book');
+      await expect(book).toBeVisible();
       await expect(screen.getByText('今は働き方を整理したい', { exact: true })).toBeVisible();
+      await expect(screen.getByRole('heading', 'この鑑定についてAIに聞く')).toBeVisible();
+      await screen.getByText('次回の振り返りを見る', { exact: true }).tap();
+      await expect(screen.getByText('書き出してみて、気持ちに変化はありましたか？')).toBeVisible();
+      const layout = await browser.evaluate(() => {
+        const book = document.querySelector('.fortune-oracle-book');
+        const reading = book?.querySelector('.fortune-reading-body');
+        const select = window.getSelection();
+        if (reading) select?.selectAllChildren(reading);
+        const selected = select?.toString();
+        select?.removeAllRanges();
+        book?.scrollIntoView({ block: 'start', behavior: 'instant' });
+        return { selected, width: document.documentElement.scrollWidth };
+      });
+      expect(layout.selected).toContain('今は働き方を整理したい');
+      expect(layout.width).toBeLessThanOrEqual(390);
+      await app.screenshot('fortune-oracle-book-390px');
       await app.open(`/s/${slug}/today`);
       await expect(screen.getByRole('heading', '考えられる選択肢')).toBeVisible({
         timeout: 30_000,
       });
       await expect(browser.locator('.fortune-moon-stage')).toHaveCount(0);
+      await expect(browser.locator('.fortune-oracle-opening')).toHaveCount(0);
+      await app.open(`/s/${slug}/history`);
+      await expect(book).toHaveCount(0);
+      const readingPath = await browser.evaluate(() =>
+        document.querySelector('.fortune-reading-link')?.getAttribute('href'),
+      );
+      expect(readingPath).toMatch(/\/readings\//);
+      await app.open(readingPath!);
+      await expect(book).toBeVisible({ timeout: 45_000 });
+      await expect(browser.locator('.fortune-oracle-opening')).toHaveCount(0);
       return;
     }
     const join = screen.getByRole('button', '確認して始める');
@@ -254,6 +283,7 @@ test(
     }));
     expect(summoned.card).toMatch(/^\/fortune\/tarot\/.+\.webp$/);
     await expect(browser.locator('.fortune-moon-stage')).toHaveCount(0);
+    await expect(browser.locator('.fortune-oracle-book')).toHaveCount(0);
     expect(summoned.name).toBe(summoned.result?.replace(' （', '・').replace('）', ''));
     expect(summoned.width).toBeLessThanOrEqual(390);
     await expect(screen.getByText(/最初の10分で行うこと/)).toBeVisible();

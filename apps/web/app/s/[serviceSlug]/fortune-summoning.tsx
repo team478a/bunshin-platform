@@ -1,15 +1,19 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { TAROT_DECK, type FortuneReadingView } from '@bunshin/capability-fortune';
+import type { FortuneReadingView } from '@bunshin/capability-fortune';
 import type { FortuneCharacter } from '../../../src/fortune/guidance-settings';
+import { FortuneCardArtwork, type FortuneCardFace } from './fortune-card-artwork';
 import { FortuneMoonGate } from './fortune-moon-gate';
+import { FortuneOracleBookOpening } from './fortune-oracle-book';
 import './fortune-summoning.css';
 
-type Card = Pick<FortuneReadingView, 'cardCode' | 'cardNameJa' | 'orientation' | 'status'>;
-type DrawResult = Card & Pick<FortuneReadingView, 'deepReading'>;
+type DrawResult = FortuneCardFace & Pick<FortuneReadingView, 'status' | 'deepReading' | 'title'>;
 type Scene =
-  { phase: 'pending' } | { phase: 'reveal'; card: Card } | { phase: 'gate' | 'entrance' };
+  | { phase: 'pending' }
+  | { phase: 'reveal'; card: FortuneCardFace }
+  | { phase: 'gate' | 'entrance' }
+  | { phase: 'book'; card: FortuneCardFace & Pick<FortuneReadingView, 'title'> };
 type Operation = { skipped: boolean; finish?: () => void };
 
 export function useFortuneSummoning(enabled: boolean, deep?: { character?: FortuneCharacter }) {
@@ -54,13 +58,14 @@ export function useFortuneSummoning(enabled: boolean, deep?: { character?: Fortu
       });
     if (!active.skipped) setScene({ phase: 'pending' });
     try {
-      const { deepReading, cardCode, cardNameJa, orientation, status } = await request();
-      const card = { cardCode, cardNameJa, orientation, status };
-      if (!active.skipped && card.status !== 'DELETED' && card.status !== 'FAILED') {
+      const { deepReading, cardCode, cardNameJa, orientation, status, title } = await request();
+      const card = { cardCode, cardNameJa, orientation };
+      if (!active.skipped && status !== 'DELETED' && status !== 'FAILED') {
         await play({ phase: 'reveal', card }, 1250);
         if (deep && status === 'READY_AI' && deepReading) {
           if (!active.skipped) await play({ phase: 'gate' }, 2200);
           if (!active.skipped) await play({ phase: 'entrance' }, 2150);
+          if (!active.skipped) await play({ phase: 'book', card: { ...card, title } }, 900);
         }
       }
       if (operation.current === active) complete();
@@ -98,7 +103,6 @@ function FortuneSummoning({
 }) {
   const stage = useRef<HTMLDivElement>(null);
   const skipButton = useRef<HTMLButtonElement>(null);
-  const [imageFailed, setImageFailed] = useState(false);
   useEffect(() => {
     const transition = stage.current;
     const previous = document.activeElement;
@@ -111,14 +115,12 @@ function FortuneSummoning({
   }, []);
   const card = scene.phase === 'reveal' ? scene.card : null;
   const moonPhase = scene.phase === 'gate' || scene.phase === 'entrance' ? scene.phase : null;
-  const image =
-    card && TAROT_DECK.some((entry) => entry.code === card.cardCode)
-      ? `/fortune/tarot/${card.cardCode}.webp`
-      : null;
   return (
     <div className="fortune-summoning" data-phase={scene.phase} ref={stage}>
       {moonPhase ? (
         <FortuneMoonGate phase={moonPhase} finish={finish} {...(character ? { character } : {})} />
+      ) : scene.phase === 'book' ? (
+        <FortuneOracleBookOpening card={scene.card} finish={finish} />
       ) : (
         <>
           <div className="fortune-summoning__stars" aria-hidden="true">
@@ -145,18 +147,7 @@ function FortuneSummoning({
             <span className="fortune-summoning__back">✦</span>
             {card && (
               <span className="fortune-summoning__face">
-                {image && !imageFailed ? (
-                  <img
-                    src={image}
-                    alt=""
-                    width={300}
-                    height={527}
-                    data-reversed={card.orientation === 'REVERSED' || undefined}
-                    onError={() => setImageFailed(true)}
-                  />
-                ) : (
-                  card.cardNameJa
-                )}
+                <FortuneCardArtwork card={card} />
               </span>
             )}
           </div>
@@ -169,7 +160,9 @@ function FortuneSummoning({
             ? '月の門が開きます'
             : moonPhase === 'entrance'
               ? '深層鑑定をお届けします'
-              : 'カードを準備しています…'}
+              : scene.phase === 'book'
+                ? '神託の書を開いています'
+                : 'カードを準備しています…'}
       </p>
       <button type="button" onClick={skip} ref={skipButton}>
         演出をスキップ
