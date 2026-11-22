@@ -89,3 +89,6 @@ ALTER TABLE "fortune_commerce_purchases" ADD CONSTRAINT "fortune_commerce_purcha
         AND "refunded_amount_yen" BETWEEN 0 AND "amount_yen"
         AND ("status" <> 'PAID' OR "paid_at" IS NOT NULL)
         AND ("delivered_at" IS NULL OR "reading_id" IS NOT NULL));
+
+ALTER TABLE "fortune_commerce_products" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "fortune_commerce_purchases" ENABLE ROW LEVEL SECURITY;

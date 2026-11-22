@@ -89,6 +89,7 @@ describe('fortune repository isolation', () => {
         },
       },
       include: {
+        commerceProduct: { select: { serviceSettingId: true } },
         group: {
           include: {
             memberships: {
