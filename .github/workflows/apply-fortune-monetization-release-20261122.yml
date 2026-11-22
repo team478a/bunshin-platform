@@ -43,7 +43,7 @@ jobs:
       - name: Check out the exact Fortune application release for its schema and migration history
         uses: actions/checkout@v5
         with:
-          ref: a0a980968d16691823a889f55eb397e4c17e6a21
+          ref: a9cf6e669c06ed04ce441037a780f133ed6e1ae8
           path: release
           persist-credentials: false
 
