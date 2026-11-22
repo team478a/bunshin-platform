@@ -47,6 +47,7 @@ test(
     await app.open(entry);
     if (referral) {
       await screen.getByRole('link', '友だちに紹介する').tap();
+      await browser.waitForURL(`${url}/s/${slug}/activity`, { timeout: 45_000 });
       await expect(screen.getByRole('heading', '友だちに紹介する')).toBeVisible();
       await expect(screen.getByText('紹介経由で登録しました')).toBeVisible();
       const stats = browser.locator('[aria-label="紹介の状況"]');
