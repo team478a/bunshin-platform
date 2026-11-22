@@ -1,6 +1,14 @@
+import { ApplicationError } from '@bunshin/shared';
 import { fortunePurchaseScope, usesFortuneCommerce } from './fortune-commerce-entitlement';
 import { Prisma, type PrismaClient } from '@prisma/client';
 import { FORTUNE_PROFILE_STYLES, type FortuneReadingOutput } from '@bunshin/capability-fortune';
+import {
+  FORTUNE_FOLLOW_UP_CREDIT_NAME,
+  fortuneFollowUpReservationCutoff,
+  lockFortuneCreditAccount,
+  readFortuneFollowUpCreditBalance,
+  settleFortuneFollowUpCredits,
+} from './fortune-follow-up-credits';
 import { fortuneReadingRetentionCutoff } from './fortune-retention';
 import { fortuneReadingView, fortuneTarget } from './fortune-shared';
 
@@ -28,7 +36,9 @@ async function eligible(db: Db, input: Scope, now: Date) {
       },
     },
     include: {
-      participant: { select: { profileUpdatedAt: true, profileStyle: true } },
+      participant: {
+        select: { profileUpdatedAt: true, profileStyle: true, groupMembershipId: true },
+      },
       followUps: { orderBy: { turn: 'asc' } },
     },
   });
@@ -38,18 +48,23 @@ async function eligible(db: Db, input: Scope, now: Date) {
       where: {
         ...fortunePurchaseScope(scope, input.actorUserId),
         readingId: reading.id,
-        status: 'PAID',
-        deliveredAt: { not: null },
       },
-      select: { id: true, followUpLimit: true },
+      select: { id: true, followUpLimit: true, status: true, deliveredAt: true },
     });
-    if (!purchase) return null;
+    const delivered = purchase?.status === 'PAID' && purchase.deliveredAt !== null;
+    if ((purchase || reading.deepReading !== null) && !delivered) return null;
+    if (
+      !delivered &&
+      !scope.followUpCreditEnabled &&
+      !reading.followUps.some((turn) => turn.creditCost !== null)
+    )
+      return null;
     return {
       scope,
       reading,
       revision: reading.participant.profileUpdatedAt,
-      limit: purchase.followUpLimit,
-      purchaseId: purchase.id,
+      limit: delivered ? purchase.followUpLimit : 0,
+      purchaseId: delivered ? purchase.id : null,
     };
   }
   const settings = scope.guidanceSettings;
@@ -58,16 +73,68 @@ async function eligible(db: Db, input: Scope, now: Date) {
       ? settings.followUpLimit
       : undefined;
   const limit = configured === 0 || configured === 1 ? configured : 2;
-  return { scope, reading, revision: reading.participant.profileUpdatedAt, limit };
+  return {
+    scope,
+    reading,
+    revision: reading.participant.profileUpdatedAt,
+    limit,
+    purchaseId: null,
+  };
 }
 
 type Eligible = NonNullable<Awaited<ReturnType<typeof eligible>>>;
 
-function view(record: Eligible, now: Date) {
+function remainingIncluded(record: Eligible) {
+  return Math.max(
+    0,
+    record.limit - record.reading.followUps.filter((turn) => turn.creditCost === null).length,
+  );
+}
+
+function active(turn: { status: string; createdAt: Date }, now: Date) {
+  return turn.status === 'PENDING' && turn.createdAt > fortuneFollowUpReservationCutoff(now);
+}
+
+function remainingExchanges(record: Eligible, now: Date) {
+  return Math.max(
+    0,
+    record.scope.followUpCreditLimit -
+      record.reading.followUps.filter(
+        (turn) => turn.creditCost !== null && (turn.status === 'READY' || active(turn, now)),
+      ).length,
+  );
+}
+
+function creditScope({ scope, reading }: Eligible) {
   return {
-    remaining: Math.max(0, record.limit - record.reading.followUps.length),
+    workspaceId: scope.workspaceId,
+    groupId: scope.groupId,
+    groupMembershipId: reading.participant.groupMembershipId,
+    userId: reading.memberUserId,
+  };
+}
+
+async function view(db: Db, record: Eligible, now: Date) {
+  const remaining = remainingIncluded(record);
+  const { followUpCreditEnabled, followUpCreditCost, creditDisplayName } = record.scope;
+  const balance =
+    remaining === 0 && followUpCreditEnabled
+      ? await readFortuneFollowUpCreditBalance(db, creditScope(record), now)
+      : null;
+  return {
+    remaining,
+    ...(balance
+      ? {
+          creditOffer: {
+            cost: followUpCreditCost,
+            name: creditDisplayName ?? FORTUNE_FOLLOW_UP_CREDIT_NAME,
+            available: balance.available,
+            remaining: remainingExchanges(record, now),
+          },
+        }
+      : {}),
     turns: record.reading.followUps.flatMap(
-      ({ status, turn, question, answer, actionStep, createdAt }) =>
+      ({ status, turn, question, answer, actionStep, createdAt, creditCost }) =>
         status === 'ERASED' || question === null
           ? []
           : [
@@ -77,15 +144,39 @@ function view(record: Eligible, now: Date) {
                 status:
                   status === 'READY'
                     ? ('READY' as const)
-                    : status === 'PENDING' && now.getTime() - createdAt.getTime() < 120_000
+                    : active({ status, createdAt }, now)
                       ? ('PENDING' as const)
                       : ('FAILED' as const),
                 answer,
                 actionStep,
+                ...(creditCost === null ? {} : { creditCost }),
               },
             ],
     ),
   };
+}
+
+async function lockPurchase(db: Prisma.TransactionClient, record: Eligible) {
+  if (record.purchaseId)
+    await db.$queryRaw`SELECT id FROM fortune_commerce_purchases
+      WHERE id=${record.purchaseId}::uuid AND workspace_id=${record.scope.workspaceId}::uuid
+        AND group_id=${record.scope.groupId}::uuid FOR UPDATE`;
+}
+
+async function releaseExchange(tx: Prisma.TransactionClient, input: Scope & { requestId: string }) {
+  await tx.fortuneReadingFollowUp.updateMany({
+    where: {
+      id: input.requestId,
+      readingId: input.readingId,
+      status: 'PENDING',
+      creditCost: { not: null },
+      reading: {
+        memberUserId: input.actorUserId,
+        serviceSetting: { configuration: { slug: input.serviceSlug } },
+      },
+    },
+    data: { status: 'FAILED' },
+  });
 }
 
 async function lockReading(db: Prisma.TransactionClient, record: Eligible) {
@@ -103,10 +194,12 @@ export class PrismaFortuneFollowUpRepository {
   async read(input: Scope) {
     const now = new Date();
     const record = await eligible(this.db, input, now);
-    return record ? view(record, now) : null;
+    return record ? view(this.db, record, now) : null;
   }
 
-  async reserve(input: Scope & { requestId: string; question: string }) {
+  async reserve(
+    input: Scope & { requestId: string; question: string; expectedCreditCost?: number },
+  ) {
     return this.db.$transaction(async (tx) => {
       const now = new Date();
       const initial = await eligible(tx, input, now);
@@ -114,10 +207,36 @@ export class PrismaFortuneFollowUpRepository {
       await lockReading(tx, initial);
       const record = await eligible(tx, input, now);
       if (!record) return { kind: 'UNAVAILABLE' } as const;
-      const { scope, reading, revision, limit } = record;
-      if (reading.followUps.some((turn) => turn.id === input.requestId))
-        return { kind: 'REPLAY', view: view(record, now) } as const;
-      if (reading.followUps.length >= limit) return { kind: 'LIMIT' } as const;
+      const { scope, reading, revision } = record;
+      const creditCost = input.expectedCreditCost ?? null;
+      const previous = reading.followUps.find((turn) => turn.id === input.requestId);
+      if (previous) {
+        if (
+          previous.creditCost !== creditCost ||
+          (previous.question !== null && previous.question !== input.question)
+        )
+          return { kind: 'REQUEST_CONFLICT' } as const;
+        return { kind: 'REPLAY', view: await view(tx, record, now) } as const;
+      }
+      const included = remainingIncluded(record);
+      if (creditCost === null) {
+        if (included === 0) return { kind: 'LIMIT' } as const;
+      } else {
+        if (included > 0 || !scope.followUpCreditEnabled || creditCost !== scope.followUpCreditCost)
+          return { kind: 'OFFER_CHANGED' } as const;
+        if (
+          remainingExchanges(record, now) === 0 ||
+          reading.followUps.some((turn) => active(turn, now))
+        )
+          return { kind: 'LIMIT' } as const;
+        const accountScope = creditScope(record);
+        await lockFortuneCreditAccount(tx, accountScope);
+        if (
+          (await readFortuneFollowUpCreditBalance(tx, accountScope, new Date())).available <
+          creditCost
+        )
+          return { kind: 'INSUFFICIENT_CREDIT' } as const;
+      }
       const style = FORTUNE_PROFILE_STYLES.find(
         (value) => value === reading.participant.profileStyle,
       );
@@ -125,7 +244,8 @@ export class PrismaFortuneFollowUpRepository {
         data: {
           id: input.requestId,
           readingId: reading.id,
-          turn: reading.followUps.length + 1,
+          turn: (reading.followUps.at(-1)?.turn ?? 0) + 1,
+          creditCost,
           question: input.question,
           status: 'PENDING',
         },
@@ -151,13 +271,15 @@ export class PrismaFortuneFollowUpRepository {
   }
 
   async allowed(input: Scope & { requestId: string; revision: Date }) {
-    const record = await eligible(this.db, input, new Date());
+    const now = new Date();
+    const record = await eligible(this.db, input, now);
+    const turn = record?.reading.followUps.find((item) => item.id === input.requestId);
+    if (record?.revision.getTime() !== input.revision.getTime() || turn?.status !== 'PENDING')
+      return false;
+    if (turn.creditCost !== null) return active(turn, now);
     return (
-      record?.revision.getTime() === input.revision.getTime() &&
-      record.reading.followUps.some(
-        (turn) =>
-          turn.id === input.requestId && turn.status === 'PENDING' && turn.turn <= record.limit,
-      )
+      record.reading.followUps.filter((item) => item.creditCost === null && item.turn <= turn.turn)
+        .length <= record.limit
     );
   }
 
@@ -165,20 +287,52 @@ export class PrismaFortuneFollowUpRepository {
     input: Scope & { requestId: string; revision: Date; output: FortuneReadingOutput | null },
   ) {
     return this.db.$transaction(async (tx) => {
-      const now = new Date();
-      const initial = await eligible(tx, input, now);
-      if (!initial) return null;
+      const initial = await eligible(tx, input, new Date());
+      if (!initial) {
+        await releaseExchange(tx, input);
+        return null;
+      }
       await lockReading(tx, initial);
+      // A webhook revoking a purchase uses the same purchase lock before touching credits.
+      await lockPurchase(tx, initial);
+      const now = new Date();
       const record = await eligible(tx, input, now);
-      if (!record || record.revision.getTime() !== input.revision.getTime()) return null;
-      await tx.fortuneReadingFollowUp.updateMany({
+      if (!record || record.revision.getTime() !== input.revision.getTime()) {
+        await releaseExchange(tx, input);
+        return null;
+      }
+      const turn = record.reading.followUps.find((item) => item.id === input.requestId);
+      if (!turn || turn.status !== 'PENDING') return view(tx, record, now);
+      let output = input.output;
+      if (turn.creditCost !== null && output) {
+        const accountScope = creditScope(record);
+        await lockFortuneCreditAccount(tx, accountScope);
+        const settledAt = new Date();
+        if (
+          !active(turn, settledAt) ||
+          !(await settleFortuneFollowUpCredits(
+            tx,
+            accountScope,
+            {
+              readingId: input.readingId,
+              requestId: input.requestId,
+              creditCost: turn.creditCost,
+            },
+            settledAt,
+          ))
+        )
+          output = null;
+      }
+      const changed = await tx.fortuneReadingFollowUp.updateMany({
         where: { id: input.requestId, readingId: input.readingId, status: 'PENDING' },
-        data: input.output
-          ? { status: 'READY', answer: input.output.body, actionStep: input.output.actionStep }
+        data: output
+          ? { status: 'READY', answer: output.body, actionStep: output.actionStep }
           : { status: 'FAILED' },
       });
+      if (changed.count !== 1)
+        throw new ApplicationError('CONFLICT', '追加質問の状態が変わりました。');
       const completed = await eligible(tx, input, now);
-      return completed ? view(completed, now) : null;
+      return completed ? view(tx, completed, now) : null;
     });
   }
 }

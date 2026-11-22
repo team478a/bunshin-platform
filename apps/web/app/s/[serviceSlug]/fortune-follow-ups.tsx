@@ -1,17 +1,21 @@
 'use client';
 
+import type { Route } from 'next';
+import Link from 'next/link';
 import { useEffect, useState, type FormEvent } from 'react';
 
 const suggestions = ['もう少し詳しく知りたい', '別の見方はある？', '具体的にどうすればいい？'];
 
 type Conversation = {
   remaining: number;
+  creditOffer?: { cost: number; name: string; available: number; remaining: number };
   turns: {
     turn: number;
     question: string;
     status: 'PENDING' | 'READY' | 'FAILED';
     answer: string | null;
     actionStep: string | null;
+    creditCost?: number;
   }[];
 };
 
@@ -31,7 +35,11 @@ export function FortuneFollowUps({
   const url = `/api/services/${serviceSlug}/fortune/readings/${readingId}/follow-ups`;
   const [conversation, setConversation] = useState<Conversation | null>(null);
   const [question, setQuestion] = useState('');
-  const [draft, setDraft] = useState<{ requestId: string; question: string }>();
+  const [draft, setDraft] = useState<{
+    requestId: string;
+    question: string;
+    expectedCreditCost?: number;
+  }>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
@@ -46,12 +54,27 @@ export function FortuneFollowUps({
     return () => controller.abort();
   }, [url]);
 
+  const creditOffer = conversation?.creditOffer;
+  const expectedCreditCost = creditOffer?.cost;
+  const canExchange =
+    creditOffer &&
+    creditOffer.remaining > 0 &&
+    creditOffer.available >= creditOffer.cost &&
+    !conversation?.turns.some((turn) => turn.status === 'PENDING');
+  const canAsk = (conversation?.remaining ?? 0) > 0 || canExchange;
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const text = question.trim();
-    if (!text || busy) return;
+    if (!text || busy || !canAsk) return;
     const next =
-      draft?.question === text ? draft : { requestId: crypto.randomUUID(), question: text };
+      draft?.question === text && draft.expectedCreditCost === expectedCreditCost
+        ? draft
+        : {
+            requestId: crypto.randomUUID(),
+            question: text,
+            ...(expectedCreditCost === undefined ? {} : { expectedCreditCost }),
+          };
     setDraft(next);
     setBusy(true);
     setError('');
@@ -73,7 +96,10 @@ export function FortuneFollowUps({
     }
   }
 
-  if (!conversation || (conversation.remaining === 0 && conversation.turns.length === 0))
+  if (
+    !conversation ||
+    (conversation.remaining === 0 && conversation.turns.length === 0 && !creditOffer)
+  )
     return null;
   return (
     <section className="settings-card">
@@ -87,7 +113,12 @@ export function FortuneFollowUps({
             <p role="status">AIが回答を作成中です。しばらくしてページを更新してください。</p>
           )}
           {turn.status === 'FAILED' && (
-            <p>AIの回答を表示できませんでした。元の鑑定は引き続きご覧いただけます。</p>
+            <p>
+              AIの回答を表示できませんでした。
+              {turn.creditCost
+                ? 'クレジットは消費されていません。'
+                : '元の鑑定は引き続きご覧いただけます。'}
+            </p>
           )}
           {turn.status === 'READY' && (
             <>
@@ -97,8 +128,22 @@ export function FortuneFollowUps({
           )}
         </div>
       ))}
-      <p>あと{conversation.remaining}回質問できます。質問と回答はこの鑑定に保存されます。</p>
       {conversation.remaining > 0 && (
+        <p>あと{conversation.remaining}回質問できます。質問と回答はこの鑑定に保存されます。</p>
+      )}
+      {creditOffer && (
+        <>
+          <p>
+            追加質問1回に{creditOffer.name}を{creditOffer.cost}使います。 利用可能残高は
+            {creditOffer.available}、この鑑定であと{creditOffer.remaining}回交換できます。
+          </p>
+          <p>回答が保存された時点で消費します。質問と回答はこの鑑定に保存されます。</p>
+          <p>
+            <Link href={`/s/${serviceSlug}/credits` as Route}>残高・履歴と利用条件を見る</Link>
+          </p>
+        </>
+      )}
+      {canAsk && (
         <form className="form-stack" onSubmit={(event) => void submit(event)}>
           <div className="button-row">
             {suggestions.map((suggestion) => (
@@ -129,7 +174,11 @@ export function FortuneFollowUps({
             className="button button--primary"
             disabled={busy || !question.trim()}
           >
-            {busy ? 'AIが回答中です…' : '質問する'}
+            {busy
+              ? 'AIが回答中です…'
+              : creditOffer
+                ? `${creditOffer.cost}クレジットで質問する`
+                : '質問する'}
           </button>
         </form>
       )}

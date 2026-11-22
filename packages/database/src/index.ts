@@ -402,3 +402,8 @@ export {
   PrismaSocialPublicationIntents,
   type ApproveSocialPublicationInput,
 } from './social-publication-intents';
+export {
+  FORTUNE_FOLLOW_UP_CREDIT_KEY,
+  FORTUNE_FOLLOW_UP_CREDIT_NAME,
+  readFortuneFollowUpCreditBalance,
+} from './fortune-follow-up-credits';
