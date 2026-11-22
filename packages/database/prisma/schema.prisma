@@ -3441,6 +3441,7 @@ model FortuneServiceSetting {
   configuration             ServiceConfiguration      @relation(fields: [workspaceId, groupId, configurationId], references: [workspaceId, groupId, id], onDelete: Cascade)
   bunshin                   Bunshin                   @relation(fields: [workspaceId, bunshinId], references: [workspaceId, id], onDelete: Restrict)
   participants              FortuneParticipant[]
+  commerceProduct           FortuneCommerceProduct?
   knowledgeVersions         FortuneKnowledgeVersion[]
   readings                  FortuneReading[]
   feedback                  FortuneFeedback[]
@@ -3451,6 +3452,69 @@ model FortuneServiceSetting {
   @@unique([workspaceId, bunshinId])
   @@index([workspaceId, enabled])
   @@map("fortune_service_settings")
+}
+
+model FortuneCommerceProduct {
+  serviceSettingId String @id @map("service_setting_id") @db.Uuid
+  workspaceId String @map("workspace_id") @db.Uuid
+  groupId String @map("group_id") @db.Uuid
+  name String @db.VarChar(120)
+  description String @db.VarChar(1000)
+  deliveryTerms String @map("delivery_terms") @db.VarChar(500)
+  refundTerms String @map("refund_terms") @db.VarChar(500)
+  amountYen Int @map("amount_yen")
+  followUpLimit Int @default(2) @map("follow_up_limit")
+  enabled Boolean @default(false)
+  revision String @default(uuid()) @db.Uuid
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  serviceSetting FortuneServiceSetting @relation(fields: [workspaceId, groupId, serviceSettingId], references: [workspaceId, groupId, id], onDelete: Restrict)
+  purchases FortuneCommercePurchase[]
+
+  @@unique([workspaceId, groupId, serviceSettingId])
+  @@map("fortune_commerce_products")
+}
+
+model FortuneCommercePurchase {
+  id String @id @default(uuid()) @db.Uuid
+  workspaceId String @map("workspace_id") @db.Uuid
+  groupId String @map("group_id") @db.Uuid
+  serviceSettingId String @map("service_setting_id") @db.Uuid
+  groupMembershipId String @map("group_membership_id") @db.Uuid
+  buyerUserId String @map("buyer_user_id") @db.Uuid
+  paymentConfigurationId String @map("payment_configuration_id") @db.Uuid
+  productRevision String @map("product_revision") @db.Uuid
+  productName String @map("product_name") @db.VarChar(120)
+  description String @db.VarChar(1000)
+  deliveryTerms String @map("delivery_terms") @db.VarChar(500)
+  refundTerms String @map("refund_terms") @db.VarChar(500)
+  followUpLimit Int @map("follow_up_limit")
+  amountYen Int @map("amount_yen")
+  liveMode Boolean @map("live_mode")
+  status FortuneCommercePurchaseStatus @default(PENDING)
+  providerCheckoutSessionId String? @unique @map("provider_checkout_session_id") @db.VarChar(200)
+  providerPaymentIntentId String? @unique @map("provider_payment_intent_id") @db.VarChar(200)
+  refundedAmountYen Int @default(0) @map("refunded_amount_yen")
+  readingId String? @unique @map("reading_id") @db.Uuid
+  deliveredAt DateTime? @map("delivered_at") @db.Timestamptz(6)
+  paidAt DateTime? @map("paid_at") @db.Timestamptz(6)
+  refundedAt DateTime? @map("refunded_at") @db.Timestamptz(6)
+  paymentFailedAt DateTime? @map("payment_failed_at") @db.Timestamptz(6)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  groupMembership GroupMembership @relation(fields: [workspaceId, groupId, groupMembershipId, buyerUserId], references: [workspaceId, groupId, id, userId], onDelete: Restrict)
+  product FortuneCommerceProduct @relation(fields: [workspaceId, groupId, serviceSettingId], references: [workspaceId, groupId, serviceSettingId], onDelete: Restrict)
+  paymentConfiguration OrganizationPaymentConfiguration @relation(fields: [workspaceId, paymentConfigurationId], references: [workspaceId, id], onDelete: Restrict)
+
+  @@index([workspaceId, groupId, buyerUserId, status])
+  @@index([workspaceId, groupId, paidAt])
+  @@map("fortune_commerce_purchases")
+}
+
+enum FortuneCommercePurchaseStatus {
+  PENDING
+  PAID
+  EXPIRED
+  REFUNDED
 }
 
 model FortuneParticipant {
@@ -3825,6 +3889,8 @@ model GroupMembership {
   aiTrainingUsageConsents         AiTrainingUsageConsent[]
   learningNudgePreferences        PersonalLearningNudgePreference[]
 
+  fortuneCommercePurchases FortuneCommercePurchase[]
+
   @@unique([groupId, userId])
   @@unique([workspaceId, groupId, id])
   @@unique([workspaceId, groupId, id, userId])
@@ -4145,6 +4211,7 @@ model OrganizationPaymentConfiguration {
   updatedBy              User                                    @relation("OrganizationPaymentConfigurationUpdater", fields: [updatedByUserId], references: [id], onDelete: Restrict)
   audits                 OrganizationPaymentConfigurationAudit[]
   purchases              ProgramPurchase[]
+  fortunePurchases       FortuneCommercePurchase[]
   webhookEvents          PaymentWebhookEvent[]
 
   @@unique([workspaceId, environment, provider])

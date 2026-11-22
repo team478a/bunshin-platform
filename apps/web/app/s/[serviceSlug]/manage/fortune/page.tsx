@@ -13,6 +13,7 @@ import { fortuneFailureLabel, fortuneRate } from '../../../../../src/fortune/qua
 import { PublicShell } from '../../../../ui/public-shell';
 import { FortuneAppearanceEditor } from './fortune-appearance-editor';
 import { FortuneGuidanceEditor } from './fortune-guidance-editor';
+import { FortuneCommerceProduct } from './commerce-product';
 import { FortuneOperatorEditor } from './fortune-operator-editor';
 
 export const dynamic = 'force-dynamic';
@@ -21,10 +22,13 @@ const percent = (value: number | null) =>
 
 export default async function FortuneManagementPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ serviceSlug: string }>;
+  searchParams: Promise<{ commerce?: string }>;
 }) {
   const { serviceSlug } = await params;
+  const { commerce } = await searchParams;
   const actor = await (await currentUserProvider()).getCurrentUser();
   if (!actor) redirect(`/login?returnTo=${encodeURIComponent(`/s/${serviceSlug}/manage/fortune`)}`);
   const status = await fortuneOperatorStatus(serviceSlug, actor.userId).catch(() => null);
@@ -49,6 +53,13 @@ export default async function FortuneManagementPage({
             初めての運営手順を見る
           </Link>
         </header>
+        {status.configured && (
+          <FortuneCommerceProduct
+            serviceSlug={serviceSlug}
+            actorUserId={actor.userId}
+            {...(commerce ? { result: commerce } : {})}
+          />
+        )}
         <section className="settings-card">
           <p className="eyebrow">導入情報</p>
           <h2>占いパッケージ</h2>

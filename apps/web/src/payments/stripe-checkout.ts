@@ -18,6 +18,7 @@ export class StripeCheckoutAdapter {
     amountYen: number;
     successUrl: string;
     cancelUrl: string;
+    fortune?: { terms: string };
   }): Promise<StripeCheckoutSession> {
     const body = new URLSearchParams({
       mode: 'payment',
@@ -34,6 +35,12 @@ export class StripeCheckoutAdapter {
       'payment_intent_data[metadata][purchase_id]': input.purchaseId,
       'payment_intent_data[metadata][workspace_id]': input.workspaceId,
     });
+    if (input.fortune) {
+      body.set('payment_method_types[0]', 'card');
+      body.set('metadata[purchase_kind]', 'fortune');
+      body.set('payment_intent_data[metadata][purchase_kind]', 'fortune');
+      body.set('custom_text[submit][message]', input.fortune.terms);
+    }
     const response = await fetch('https://api.stripe.com/v1/checkout/sessions', {
       method: 'POST',
       headers: {

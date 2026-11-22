@@ -153,6 +153,7 @@ export interface FortuneRepository {
     theme: FortuneTheme;
     consultation?: string;
     reviewedUnderstanding?: ConfirmedFortuneUnderstanding[];
+    paidReading?: boolean;
     cardCode: string;
     orientation: FortuneOrientation;
   }): Promise<CreateFortuneReadingResult>;
@@ -279,6 +280,7 @@ export class FortuneDailyReadingService {
     theme: unknown;
     consultation?: string;
     reviewedUnderstanding?: ConfirmedFortuneUnderstanding[];
+    paidReading?: boolean;
     now?: Date;
   }) {
     const localDate = toJapanLocalDate(input.now ?? new Date());
@@ -287,13 +289,13 @@ export class FortuneDailyReadingService {
       actorUserId: input.actorUserId,
       localDate,
     });
-    if (existing) {
+    if (existing && !input.paidReading) {
       if (this.aiQueue && existing.status === 'READY_BASIC')
         return (await this.aiQueue.enqueue({ ...input, readingId: existing.id })) ?? existing;
       return existing;
     }
-    const theme = parseFortuneTheme(input.theme);
-    const draw = drawTarotCard(this.random);
+    const theme = existing?.theme ?? parseFortuneTheme(input.theme);
+    const draw = existing ? null : drawTarotCard(this.random);
     const result = await this.repository.createBasicReading({
       serviceSlug: input.serviceSlug,
       actorUserId: input.actorUserId,
@@ -303,8 +305,9 @@ export class FortuneDailyReadingService {
       ...(input.reviewedUnderstanding?.length
         ? { reviewedUnderstanding: input.reviewedUnderstanding }
         : {}),
-      cardCode: draw.card.code,
-      orientation: draw.orientation,
+      ...(input.paidReading ? { paidReading: true } : {}),
+      cardCode: existing?.cardCode ?? draw!.card.code,
+      orientation: existing?.orientation ?? draw!.orientation,
     });
     if (result.kind === 'READY') {
       if (this.aiQueue)
@@ -334,6 +337,7 @@ export class FortuneDailyReadingService {
             actorUserId: input.actorUserId,
             readingId: result.reading.id,
             output: { ...generated, ...safe },
+            ...(claim.generationRevision ? { generationRevision: claim.generationRevision } : {}),
             ...(claim.personalProfileRevision
               ? { personalProfileRevision: claim.personalProfileRevision }
               : {}),
@@ -347,6 +351,7 @@ export class FortuneDailyReadingService {
           serviceSlug: input.serviceSlug,
           actorUserId: input.actorUserId,
           readingId: result.reading.id,
+          ...(claim.generationRevision ? { generationRevision: claim.generationRevision } : {}),
           failureCode:
             error instanceof FortunePolicyError &&
             ['INVALID_READING_OUTPUT', 'UNSAFE_READING_OUTPUT'].includes(error.code)
