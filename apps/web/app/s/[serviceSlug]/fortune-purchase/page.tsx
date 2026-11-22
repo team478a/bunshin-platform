@@ -48,7 +48,7 @@ export default async function FortunePurchasePage({
     const { actor, service } = await resolveFortunePage(serviceSlug, path);
     const revision = z.string().uuid().safeParse(form.get('revision'));
     if (!revision.success) redirect(`${path}?result=changed` as Route);
-    let url: string;
+    let url: Awaited<ReturnType<typeof startFortuneCheckout>>;
     try {
       url = await startFortuneCheckout(
         prisma,

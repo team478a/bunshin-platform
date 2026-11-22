@@ -1,9 +1,15 @@
 import 'server-only';
 
 import { ApplicationError } from '@bunshin/shared';
+type StripeCheckoutUrl = `https://checkout.stripe.com/${string}`;
+
+function isStripeCheckoutUrl(value: unknown): value is StripeCheckoutUrl {
+  return typeof value === 'string' && value.startsWith('https://checkout.stripe.com/');
+}
+
 export type StripeCheckoutSession = {
   id: string;
-  url: string;
+  url: StripeCheckoutUrl;
   expiresAt: Date | null;
 };
 
@@ -67,8 +73,7 @@ export class StripeCheckoutAdapter {
     if (
       typeof payload.id !== 'string' ||
       !payload.id.startsWith('cs_') ||
-      typeof payload.url !== 'string' ||
-      !payload.url.startsWith('https://checkout.stripe.com/')
+      !isStripeCheckoutUrl(payload.url)
     ) {
       throw new ApplicationError('INTERNAL_ERROR', 'Stripe response is invalid');
     }
@@ -147,8 +152,7 @@ export class StripeCommercialInvoiceCheckoutAdapter {
     if (
       typeof payload.id !== 'string' ||
       !payload.id.startsWith('cs_') ||
-      typeof payload.url !== 'string' ||
-      !payload.url.startsWith('https://checkout.stripe.com/')
+      !isStripeCheckoutUrl(payload.url)
     ) {
       throw new ApplicationError('INTERNAL_ERROR', 'Stripe response is invalid');
     }
