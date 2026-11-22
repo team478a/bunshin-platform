@@ -128,7 +128,7 @@ export function FortuneFollowUps({
           )}
         </div>
       ))}
-      {conversation.remaining > 0 && (
+      {(conversation.remaining > 0 || !creditOffer) && (
         <p>あと{conversation.remaining}回質問できます。質問と回答はこの鑑定に保存されます。</p>
       )}
       {creditOffer && (
