@@ -277,9 +277,7 @@ export function FortuneWithdrawButton({ serviceSlug }: { serviceSlug: string }) 
       ) : (
         <div className="notice notice--danger">
           <strong>この占いサービスから退会しますか？</strong>
-          <p>
-            他のサービスとワタシワークスのアカウントは残ります。退会後は占い結果を見られなくなります。
-          </p>
+          <p>他のサービスは引き続き利用できます。退会後は占い結果を見られなくなります。</p>
           <div className="fortune-withdraw-actions">
             <button
               className="button button--danger"

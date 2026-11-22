@@ -5,6 +5,7 @@ import { notFound } from 'next/navigation';
 import { currentUserProvider } from '../../../../src/auth/current-user';
 import { isRouteNotFound } from '../../../../src/navigation/route-not-found';
 import { resolveVisitorServiceContext } from '../../../../src/services/public-service';
+import { ORACLE_SERVICE_SLUG } from '../../../../src/services/service-auth-brand';
 import { readServiceOnboardingSettings } from '../../../../src/services/service-onboarding-settings';
 import { isPromptOnlyImageService } from '../../../../src/services/service-image-policy';
 import { PublicShell } from '../../../ui/public-shell';
@@ -420,7 +421,9 @@ export default async function ServiceHelpPage({
         )}
 
         <footer className="service-entry__details">
-          <span>運営：{service.configuration.operatorName}</span>
+          {serviceSlug !== ORACLE_SERVICE_SLUG && (
+            <span>運営：{service.configuration.operatorName}</span>
+          )}
           {service.configuration.contactEmail ? (
             <a href={`mailto:${service.configuration.contactEmail}`}>運営者へ問い合わせる</a>
           ) : (

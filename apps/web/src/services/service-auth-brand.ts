@@ -1,5 +1,8 @@
 import type { ServiceFoundationRecord } from '@bunshin/application';
 
+export const ORACLE_SERVICE_SLUG = 'watashi-fortune';
+export const ORACLE_SERVICE_NAME = '月と星のオラクル';
+
 export interface ServiceAuthBrand {
   serviceName: string;
   logoUrl: string | null;
