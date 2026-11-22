@@ -317,11 +317,32 @@ try {
     showLogo: true,
     summoning: true,
   };
-  await request(owner, `/api/services/${primary.slug}/fortune-operations`, {
+  const cinematicCharacters = Object.fromEntries(
+    [
+      ['daily', 'noah', 'ノア'],
+      ['intake', 'stella', 'ステラ'],
+      ['deep', 'selene', 'セレーネ'],
+    ].map(([role, id, name]) => [
+      role,
+      { id, name, enabled: true, imageUrl: '', iconUrl: '', expressions: {} },
+    ]),
+  );
+  const operationsPath = `/api/services/${primary.slug}/fortune-operations`;
+  const { data: initialFortuneOperations } = await (await request(owner, operationsPath)).json();
+  const configuredGuidance = {
+    ...initialFortuneOperations.guidanceSettings,
+    characters: cinematicCharacters,
+  };
+  delete configuredGuidance.appearance;
+  await request(owner, operationsPath, {
+    method: 'POST',
+    body: { action: 'SAVE_GUIDANCE_SETTINGS', settings: configuredGuidance },
+  });
+  await request(owner, operationsPath, {
     method: 'POST',
     body: {
       action: 'SAVE_APPEARANCE_SETTINGS',
-      settings: summoningAppearance,
+      settings: { ...summoningAppearance, summoning: 'standard' },
     },
   });
   await browser(primary, participant);
@@ -438,15 +459,20 @@ try {
   await request(participant, entry, { status: 307 });
   assert.equal(await returns(), 0);
   console.log('PASS real return route, opt-in and opt-out persisted without sending LINE messages');
-  await db.fortuneServiceSetting.update({
-    where: { id: setting.id },
-    data: {
-      guidanceSettings: {
-        intake: { enabled: true },
+  await request(owner, operationsPath, {
+    method: 'POST',
+    body: {
+      action: 'SAVE_GUIDANCE_SETTINGS',
+      settings: {
+        ...configuredGuidance,
+        intake: { enabled: true, questions: 3, calls: 3 },
         deepReadingEnabled: true,
-        appearance: summoningAppearance,
       },
     },
+  });
+  await request(owner, operationsPath, {
+    method: 'POST',
+    body: { action: 'SAVE_APPEARANCE_SETTINGS', settings: summoningAppearance },
   });
   await put(`${base}/profile`, {
     consented: true,
@@ -593,7 +619,8 @@ try {
     await db.fortuneServiceSetting.findUniqueOrThrow({ where: { id: setting.id } })
   ).guidanceSettings;
   assert.equal(appearance.palette, 'night');
-  assert.equal(appearance.summoning, priorAppearance.summoning);
+  assert.equal(priorAppearance.summoning, true);
+  assert.equal(appearance.summoning, 'standard');
   assert.deepEqual(
     remainingGuidance,
     priorGuidance,

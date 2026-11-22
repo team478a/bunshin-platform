@@ -2,8 +2,10 @@
 
 import { useEffect, useRef, useState } from 'react';
 import type { FortuneReadingView } from '@bunshin/capability-fortune';
+import type { FortuneSummoningMode } from '../../../src/fortune/appearance';
 import type { FortuneCharacter } from '../../../src/fortune/guidance-settings';
 import { FortuneCardArtwork, type FortuneCardFace } from './fortune-card-artwork';
+import { FortuneCharacterBadge } from './fortune-character';
 import { FortuneMoonGate } from './fortune-moon-gate';
 import { FortuneOracleBookOpening } from './fortune-oracle-book';
 import './fortune-summoning.css';
@@ -14,9 +16,12 @@ type Scene =
   | { phase: 'reveal'; card: FortuneCardFace }
   | { phase: 'gate' | 'entrance' }
   | { phase: 'book'; card: FortuneCardFace & Pick<FortuneReadingView, 'title'> };
-type Operation = { skipped: boolean; finish?: () => void };
+type Operation = { skipped: boolean; finish?: () => void; dispose: () => void };
 
-export function useFortuneSummoning(enabled: boolean, deep?: { character?: FortuneCharacter }) {
+export function useFortuneSummoning(
+  mode: FortuneSummoningMode,
+  options?: { deep?: boolean; character?: FortuneCharacter },
+) {
   const [scene, setScene] = useState<Scene | null>(null);
   const operation = useRef<Operation | null>(null);
 
@@ -27,6 +32,7 @@ export function useFortuneSummoning(enabled: boolean, deep?: { character?: Fortu
         operation.current = null;
         active.skipped = true;
         active.finish?.();
+        active.dispose();
       }
     },
     [],
@@ -42,8 +48,13 @@ export function useFortuneSummoning(enabled: boolean, deep?: { character?: Fortu
 
   async function run(request: () => Promise<DrawResult>, complete: () => void) {
     if (operation.current) return;
+    const motion = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const onMotionChange = (event: MediaQueryListEvent) => {
+      if (event.matches) skip();
+    };
     const active: Operation = {
-      skipped: !enabled || window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+      skipped: mode === 'off' || motion.matches,
+      dispose: () => motion.removeEventListener?.('change', onMotionChange),
     };
     operation.current = active;
     const play = (nextScene: Scene, fallbackMs: number) =>
@@ -56,13 +67,16 @@ export function useFortuneSummoning(enabled: boolean, deep?: { character?: Fortu
         active.finish = finish;
         setScene(nextScene);
       });
-    if (!active.skipped) setScene({ phase: 'pending' });
+    if (!active.skipped) {
+      motion.addEventListener?.('change', onMotionChange);
+      setScene({ phase: 'pending' });
+    }
     try {
       const { deepReading, cardCode, cardNameJa, orientation, status, title } = await request();
       const card = { cardCode, cardNameJa, orientation };
       if (!active.skipped && status !== 'DELETED' && status !== 'FAILED') {
         await play({ phase: 'reveal', card }, 1250);
-        if (deep && status === 'READY_AI' && deepReading) {
+        if (mode === 'cinematic' && options?.deep && status === 'READY_AI' && deepReading) {
           if (!active.skipped) await play({ phase: 'gate' }, 2200);
           if (!active.skipped) await play({ phase: 'entrance' }, 2150);
           if (!active.skipped) await play({ phase: 'book', card: { ...card, title } }, 900);
@@ -70,6 +84,7 @@ export function useFortuneSummoning(enabled: boolean, deep?: { character?: Fortu
       }
       if (operation.current === active) complete();
     } finally {
+      active.dispose();
       if (operation.current === active) {
         operation.current = null;
         setScene(null);
@@ -82,9 +97,10 @@ export function useFortuneSummoning(enabled: boolean, deep?: { character?: Fortu
     panel: scene && (
       <FortuneSummoning
         scene={scene}
+        cinematic={mode === 'cinematic'}
         skip={skip}
         finish={() => operation.current?.finish?.()}
-        {...(deep?.character ? { character: deep.character } : {})}
+        {...(options?.character ? { character: options.character } : {})}
       />
     ),
   };
@@ -92,11 +108,13 @@ export function useFortuneSummoning(enabled: boolean, deep?: { character?: Fortu
 
 function FortuneSummoning({
   scene,
+  cinematic,
   skip,
   finish,
   character,
 }: {
   scene: Scene;
+  cinematic: boolean;
   skip: () => void;
   finish: () => void;
   character?: FortuneCharacter;
@@ -123,16 +141,20 @@ function FortuneSummoning({
         <FortuneOracleBookOpening card={scene.card} finish={finish} />
       ) : (
         <>
-          <div className="fortune-summoning__stars" aria-hidden="true">
-            {Array.from({ length: 8 }, (_, index) => (
-              <i key={index} style={{ rotate: `${index * 45}deg` }} />
-            ))}
-          </div>
-          <div className="fortune-summoning__orbit" aria-hidden="true">
-            {Array.from({ length: 6 }, (_, index) => (
-              <i key={index} style={{ rotate: `${index * 60}deg` }} />
-            ))}
-          </div>
+          {cinematic && (
+            <>
+              <div className="fortune-summoning__stars" aria-hidden="true">
+                {Array.from({ length: 8 }, (_, index) => (
+                  <i key={index} style={{ rotate: `${index * 45}deg` }} />
+                ))}
+              </div>
+              <div className="fortune-summoning__orbit" aria-hidden="true">
+                {Array.from({ length: 6 }, (_, index) => (
+                  <i key={index} style={{ rotate: `${index * 60}deg` }} />
+                ))}
+              </div>
+            </>
+          )}
           <div
             className="fortune-summoning__card"
             aria-hidden="true"
@@ -152,6 +174,9 @@ function FortuneSummoning({
             )}
           </div>
         </>
+      )}
+      {scene.phase === 'pending' && character?.enabled && (
+        <FortuneCharacterBadge character={character} expression="thinking" compact />
       )}
       <p role="status">
         {card

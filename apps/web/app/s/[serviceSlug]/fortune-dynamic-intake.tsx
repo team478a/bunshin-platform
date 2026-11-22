@@ -16,6 +16,7 @@ import {
   type FortuneUnderstandingItem,
 } from '@bunshin/capability-fortune';
 import type { FortuneGuidanceSettings } from '../../../src/fortune/guidance-settings';
+import type { FortuneSummoningMode } from '../../../src/fortune/appearance';
 import { FortuneCharacterBadge } from './fortune-character';
 import { FortuneDrawButtons } from './fortune-actions';
 import { useFortuneSummoning } from './fortune-summoning';
@@ -58,7 +59,7 @@ export function FortuneDynamicIntake({
         <IntakeConversation
           serviceSlug={props.serviceSlug}
           theme={theme}
-          summoning={props.summoning ?? false}
+          summoning={props.summoning ?? 'off'}
           deepReadingEnabled={deepReadingEnabled}
           paidReading={paidReading}
           {...(characters ? { characters } : {})}
@@ -70,6 +71,9 @@ export function FortuneDynamicIntake({
         />
       ) : (
         <>
+          {props.summoning && props.summoning !== 'off' && characters?.intake && (
+            <FortuneCharacterBadge character={characters.intake} expression="welcome" compact />
+          )}
           <h3>AIに相談するテーマを選ぶ</h3>
           <FortuneDrawButtons
             {...props}
@@ -109,7 +113,7 @@ function IntakeConversation({
 }: {
   serviceSlug: string;
   theme: FortuneTheme;
-  summoning: boolean;
+  summoning: FortuneSummoningMode;
   onExit: () => void;
   deepReadingEnabled: boolean;
   paidReading: boolean;
@@ -123,10 +127,11 @@ function IntakeConversation({
   const [draft, setDraft] = useState('');
   const [asking, setAsking] = useState(false);
   const [drawing, setDrawing] = useState(false);
-  const summoningScene = useFortuneSummoning(
-    summoning,
-    deepReadingEnabled ? (characters?.deep ? { character: characters.deep } : {}) : undefined,
-  );
+  const drawCharacter = deepReadingEnabled ? characters?.deep : characters?.daily;
+  const summoningScene = useFortuneSummoning(summoning, {
+    deep: deepReadingEnabled,
+    ...(drawCharacter ? { character: drawCharacter } : {}),
+  });
   const [error, setError] = useState(false);
   const [review, setReview] = useState<FortuneUnderstandingItem[] | null>(null);
   const active = useRef<AbortController | null>(null);
@@ -214,11 +219,17 @@ function IntakeConversation({
   }
 
   if (review) {
+    const reviewCharacter =
+      summoning === 'off'
+        ? deepReadingEnabled
+          ? characters?.deep
+          : undefined
+        : characters?.intake;
     return (
       <div className="fortune-action">
-        {deepReadingEnabled && characters?.deep && (
+        {reviewCharacter && (
           <FortuneCharacterBadge
-            character={characters.deep}
+            character={reviewCharacter}
             {...(drawing ? { expression: 'thinking' as const } : {})}
           />
         )}
