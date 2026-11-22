@@ -4,6 +4,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { PrismaServiceReferralManagementRepository } from '../src/service-referral-management';
 import { PrismaServiceReferralRewardRepository } from '../src/service-referral-reward-repository';
 import { PrismaServiceReferralRewardRuleRepository } from '../src/service-referral-reward-rule-repository';
+import { revokeFortuneReferralAfterRefund } from '../src/fortune-referral-refund';
+import { PrismaFortuneHistoryRepository } from '../src/fortune-history-repository';
 import { readConfirmedReferralCount } from '../src/service-referral-count';
 const at = new Date('2026-11-01T00:00:00Z');
 const now = new Date('2026-11-03T00:00:00Z');
@@ -21,6 +23,13 @@ export function registerReferralManagementIntegrationCases(client: PrismaClient)
       await client.serviceReferralQualificationPolicyVersion.deleteMany({ where });
       await client.serviceReferralRewardRule.deleteMany({ where });
       await client.serviceReferralCode.deleteMany({ where });
+      await client.fortuneCommercePurchase.deleteMany({ where });
+      await client.fortuneCommerceProduct.deleteMany({ where });
+      await client.organizationPaymentConfiguration.deleteMany({ where });
+      await client.fortuneReading.deleteMany({ where });
+      await client.fortuneParticipant.deleteMany({ where });
+      await client.fortuneServiceSetting.deleteMany({ where });
+      await client.bunshinCapabilityAssignment.deleteMany({ where });
       await client.bunshin.deleteMany({ where });
       await client.platformAdmin.deleteMany({ where: { userId: { in: userIds } } });
       await client.workspace.deleteMany({ where: { id: { in: workspaceIds } } });
@@ -79,6 +88,179 @@ export function registerReferralManagementIntegrationCases(client: PrismaClient)
           now,
         ),
       );
+    it('requires viewed free results and real purchase evidence, grants both sides once and revokes unused credit on refund', async () => {
+      const f = await fixture();
+      const scope = { workspaceId: f.workspace.id, groupId: f.group.id };
+      const config = await client.serviceConfiguration.update({
+        where: { groupId: f.group.id },
+        data: { visibility: 'PUBLIC' },
+      });
+      await client.serviceRegistrationPolicy.create({
+        data: { ...scope, configurationId: config.id, referralEnabled: true, mode: 'PUBLIC' },
+      });
+      const setting = await client.fortuneServiceSetting.create({
+        data: { ...scope, configurationId: config.id, bunshinId: f.bunshin.id, enabled: true },
+      });
+      await client.bunshinCapabilityAssignment.create({
+        data: {
+          workspaceId: scope.workspaceId,
+          bunshinId: f.bunshin.id,
+          capabilityType: 'FORTUNE',
+          status: 'ACTIVE',
+          assignedByUserId: f.referrer.id,
+        },
+      });
+      const participant = await client.fortuneParticipant.create({
+        data: {
+          ...scope,
+          serviceSettingId: setting.id,
+          groupMembershipId: f.member.id,
+          userId: f.owner.id,
+          ageConfirmedAt: at,
+        },
+      });
+      const reading = await client.fortuneReading.create({
+        data: {
+          ...scope,
+          serviceSettingId: setting.id,
+          participantId: participant.id,
+          memberUserId: f.owner.id,
+          theme: 'LOVE',
+          orientation: 'UPRIGHT',
+          cardCode: 'THE_FOOL',
+          localDate: at,
+          status: 'READY_BASIC',
+        },
+      });
+      const product = await client.fortuneCommerceProduct.create({
+        data: {
+          ...scope,
+          serviceSettingId: setting.id,
+          name: 'Synthetic',
+          description: 'Synthetic',
+          amountYen: 1980,
+          deliveryTerms: 'Synthetic',
+          refundTerms: 'Synthetic',
+        },
+      });
+      const stripe = await client.organizationPaymentConfiguration.create({
+        data: {
+          workspaceId: scope.workspaceId,
+          environment: 'PRODUCTION',
+          encryptedSecretKey: 'synthetic-only',
+          secretKeyMask: 'synthetic',
+          updatedByUserId: f.referrer.id,
+        },
+      });
+      const paidAt = new Date(at.getTime() + 1000);
+      const payment = await client.fortuneCommercePurchase.create({
+        data: {
+          ...scope,
+          serviceSettingId: setting.id,
+          groupMembershipId: f.member.id,
+          buyerUserId: f.owner.id,
+          paymentConfigurationId: stripe.id,
+          productRevision: product.revision,
+          productName: product.name,
+          description: product.description,
+          deliveryTerms: product.deliveryTerms,
+          refundTerms: product.refundTerms,
+          amountYen: product.amountYen,
+          followUpLimit: 2,
+          liveMode: true,
+          createdAt: at,
+        },
+      });
+      const rule = await f.repo.savePolicy(f.scope, {
+        expectedPolicyVersionId: null,
+        authority: 'HEADQUARTERS',
+        status: 'ACTIVE',
+        timezone: 'Asia/Tokyo',
+        conditions: {
+          requireFirstFreeReading: true,
+          minimumActiveDays: 1,
+          minimumPaidPurchases: 1,
+        },
+        reason: 'Synthetic approval',
+      });
+      const rewards = new PrismaServiceReferralRewardRuleRepository(client);
+      for (const recipient of ['REFERRER', 'REFERRED'] as const) {
+        await rewards.saveVersion({
+          ...scope,
+          actorUserId: f.referrer.id,
+          status: 'ACTIVE',
+          now,
+          rule: {
+            ruleKey: `qualified-${recipient.toLowerCase()}`,
+            milestone: 'QUALIFICATION_CONFIRMED',
+            recipient,
+            creditAmount: 2,
+            monthlyGrantLimit: 1,
+            expiresAfterDays: 30,
+          },
+        });
+      }
+      await review(f);
+      await expect(confirm(f, rule.id)).rejects.toMatchObject({ code: 'CONFLICT' });
+      const history = new PrismaFortuneHistoryRepository(client, () => now);
+      await history.markReadingViewed({
+        serviceSlug: config.slug,
+        actorUserId: f.owner.id,
+        readingId: reading.id,
+        viewedAt: paidAt,
+      });
+      await expect(confirm(f, rule.id)).rejects.toMatchObject({ code: 'CONFLICT' });
+      await client.fortuneCommercePurchase.update({
+        where: { id: payment.id },
+        data: {
+          paidAt,
+          status: 'PAID',
+          providerPaymentIntentId: `pi_${randomUUID()}`,
+          liveMode: false,
+        },
+      });
+      await expect(confirm(f, rule.id)).rejects.toMatchObject({ code: 'CONFLICT' });
+      await client.fortuneCommercePurchase.update({
+        where: { id: payment.id },
+        data: { liveMode: true },
+      });
+      const command = randomUUID();
+      const [first, second] = await Promise.all([
+        confirm(f, rule.id, command),
+        confirm(f, rule.id, command),
+      ]);
+      expect(first).toEqual(second);
+      expect(
+        await client.serviceReferralReward.count({ where: { ...scope, status: 'GRANTED' } }),
+      ).toBe(2);
+      expect(
+        (await client.serviceCreditAccount.findMany({ where: scope })).map(
+          (r) => r.availableCredits,
+        ),
+      ).toEqual([2, 2]);
+      await client.$transaction(async (tx) => {
+        await tx.fortuneCommercePurchase.update({
+          where: { id: payment.id },
+          data: { refundedAmountYen: 100 },
+        });
+        await revokeFortuneReferralAfterRefund(tx, scope, payment, 'evt_synthetic', now);
+        await revokeFortuneReferralAfterRefund(tx, scope, payment, 'evt_synthetic_repeat', now);
+      });
+      expect(await count(f)).toBe(0);
+      expect(
+        await client.serviceReferralReward.count({ where: { ...scope, status: 'REVOKED' } }),
+      ).toBe(2);
+      expect(
+        await client.serviceReferralQualificationAudit.count({
+          where: { ...scope, kind: 'PAYMENT_REVOKE', actorUserId: null },
+        }),
+      ).toBe(1);
+      expect(
+        (await client.serviceCreditAccount.findMany({ where: scope })).map(
+          (r) => r.availableCredits,
+        ),
+      ).toEqual([0, 0]);
+    });
     it('legacy records stay unassessed; no configured policy means unknown count', async () => {
       const f = await fixture();
       expect((await f.repo.overview(f.scope)).referrals[0]).toMatchObject({

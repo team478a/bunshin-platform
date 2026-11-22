@@ -2,7 +2,7 @@
 
 import { useState, type FormEvent } from 'react';
 
-type Milestone = 'ONBOARDING_COMPLETED' | 'FIRST_POST_REPORTED';
+type Milestone = 'ONBOARDING_COMPLETED' | 'FIRST_POST_REPORTED' | 'QUALIFICATION_CONFIRMED';
 
 interface Rule {
   id: string;
@@ -17,7 +17,14 @@ interface Rule {
   createdAt: string;
 }
 
-const cards: { milestone: Milestone; ruleKey: string; title: string; description: string }[] = [
+type Card = {
+  milestone: Milestone;
+  ruleKey: string;
+  title: string;
+  description: string;
+  recipient?: Rule['recipient'];
+};
+const cards: Card[] = [
   {
     milestone: 'ONBOARDING_COMPLETED',
     ruleKey: 'onboarding-completed',
@@ -32,12 +39,31 @@ const cards: { milestone: Milestone; ruleKey: string; title: string; description
   },
 ];
 
+const fortuneCards: Card[] = [
+  {
+    milestone: 'QUALIFICATION_CONFIRMED',
+    ruleKey: 'qualified-referrer',
+    title: '紹介した人への特典',
+    description: '有効紹介の確定時に付与する数量を設定します。',
+    recipient: 'REFERRER',
+  },
+  {
+    milestone: 'QUALIFICATION_CONFIRMED',
+    ruleKey: 'qualified-referred',
+    title: '紹介された人への特典',
+    description: '有効紹介の確定時に付与する数量を設定します。',
+    recipient: 'REFERRED',
+  },
+];
+
 export function ReferralRewardRuleEditor({
   serviceSlug,
   rules,
+  fortune = false,
 }: {
   serviceSlug: string;
   rules: Rule[];
+  fortune?: boolean;
 }) {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
@@ -61,7 +87,7 @@ export function ReferralRewardRuleEditor({
           body: JSON.stringify({
             ruleKey: card.ruleKey,
             milestone: card.milestone,
-            recipient: data.get('recipient'),
+            recipient: card.recipient ?? data.get('recipient'),
             creditAmount: Number(data.get('creditAmount')),
             expiresAfterDays: numeric('expiresAfterDays'),
             monthlyGrantLimit: numeric('monthlyGrantLimit'),
@@ -89,7 +115,7 @@ export function ReferralRewardRuleEditor({
       >
         {message}
       </p>
-      {cards.map((card) => {
+      {(fortune ? fortuneCards : cards).map((card) => {
         const rule = rules.find((item) => item.ruleKey === card.ruleKey);
         return (
           <section className="settings-card" key={card.ruleKey}>
@@ -97,19 +123,23 @@ export function ReferralRewardRuleEditor({
             <p>{card.description}</p>
             <p>現在：{rule?.status === 'ACTIVE' ? `有効（第${rule.version}版）` : '停止中'}</p>
             <form className="form-stack" onSubmit={(event) => void submit(event, card)}>
+              {!card.recipient && (
+                <label className="field">
+                  <span className="field__label">誰に渡すか</span>
+                  <select
+                    className="field__control"
+                    name="recipient"
+                    defaultValue={rule?.recipient ?? 'REFERRER'}
+                  >
+                    <option value="REFERRER">紹介した人</option>
+                    <option value="REFERRED">紹介された人</option>
+                  </select>
+                </label>
+              )}
               <label className="field">
-                <span className="field__label">誰に渡すか</span>
-                <select
-                  className="field__control"
-                  name="recipient"
-                  defaultValue={rule?.recipient ?? 'REFERRER'}
-                >
-                  <option value="REFERRER">紹介した人</option>
-                  <option value="REFERRED">紹介された人</option>
-                </select>
-              </label>
-              <label className="field">
-                <span className="field__label">渡す画像作成回数</span>
+                <span className="field__label">
+                  {fortune ? '付与するクレジット数' : '渡す画像作成回数'}
+                </span>
                 <input
                   className="field__control"
                   name="creditAmount"

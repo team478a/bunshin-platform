@@ -665,6 +665,69 @@ try {
   console.log(
     'PASS private referral denial, public attribution, no self or duplicate attribution, and mobile referral sharing',
   );
+
+  const adminPath = `/api/services/${primary.slug}/referral-management`;
+  await request(referred, adminPath, { status: 403 });
+  await db.platformAdmin.create({
+    data: { userId: owner.userId, role: 'SUPER_ADMIN', status: 'ACTIVE' },
+  });
+  const operatorCommand = async (body) =>
+    (await (await request(owner, adminPath, { method: 'POST', body })).json()).data;
+  const policy = await operatorCommand({
+    kind: 'POLICY',
+    authority: 'HEADQUARTERS',
+    status: 'ACTIVE',
+    timezone: 'Asia/Tokyo',
+    expectedPolicyVersionId: null,
+    reason: '隔離環境の合成設定',
+    conditions: { requireFirstFreeReading: true, minimumActiveDays: 0, minimumPaidPurchases: 0 },
+  });
+  await request(owner, `/api/services/${primary.slug}/referral-reward-rules`, {
+    method: 'POST',
+    status: 201,
+    body: {
+      ruleKey: 'qualified-referrer',
+      milestone: 'QUALIFICATION_CONFIRMED',
+      recipient: 'REFERRER',
+      creditAmount: 2,
+      expiresAfterDays: 30,
+      monthlyGrantLimit: 2,
+      enabled: true,
+    },
+  });
+  await request(referred, today);
+  const target = { referralId: referrals[0].id, reason: '隔離環境の合成審査' };
+  await operatorCommand({
+    ...target,
+    kind: 'REVIEW',
+    expectedRevision: 0,
+    review: 'CLEAR',
+    commandId: randomUUID(),
+  });
+  const confirm = {
+    ...target,
+    kind: 'CONFIRM',
+    expectedRevision: 1,
+    expectedPolicyVersionId: policy.id,
+    commandId: randomUUID(),
+  };
+  assert.equal((await operatorCommand(confirm)).state, 'CONFIRMED');
+  assert.equal((await operatorCommand(confirm)).state, 'CONFIRMED');
+  assert.equal(await db.serviceReferralReward.count({ where: { ...scope, status: 'GRANTED' } }), 1);
+  await browser(primary, owner, 'referral-admin');
+  await operatorCommand({
+    ...target,
+    kind: 'REVOKE',
+    expectedRevision: 2,
+    commandId: randomUUID(),
+  });
+  const balance = await db.serviceCreditAccount.findFirstOrThrow({
+    where: { ...scope, userId: participant.userId },
+  });
+  assert.equal(balance.availableCredits, 0);
+  console.log(
+    'PASS free reading evidence, scoped operator settings, exact-once credit and revocation',
+  );
 } catch (error) {
   console.error(error instanceof Error ? error.message : 'Isolated Fortune test failed');
   process.exitCode = 1;

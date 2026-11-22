@@ -10,8 +10,13 @@ import { resolveManagedServiceContext } from '../services/public-service';
 
 const input = z
   .object({
-    ruleKey: z.enum(['onboarding-completed', 'first-post-reported']),
-    milestone: z.enum(['ONBOARDING_COMPLETED', 'FIRST_POST_REPORTED']),
+    ruleKey: z.enum([
+      'onboarding-completed',
+      'first-post-reported',
+      'qualified-referrer',
+      'qualified-referred',
+    ]),
+    milestone: z.enum(['ONBOARDING_COMPLETED', 'FIRST_POST_REPORTED', 'QUALIFICATION_CONFIRMED']),
     recipient: z.enum(['REFERRER', 'REFERRED']),
     creditAmount: z.number().int().min(1).max(100_000),
     expiresAfterDays: z.number().int().min(1).max(3_650).nullable(),
@@ -21,7 +26,13 @@ const input = z
   .strict()
   .superRefine((value, context) => {
     const expectedKey =
-      value.milestone === 'ONBOARDING_COMPLETED' ? 'onboarding-completed' : 'first-post-reported';
+      value.milestone === 'QUALIFICATION_CONFIRMED'
+        ? value.recipient === 'REFERRER'
+          ? 'qualified-referrer'
+          : 'qualified-referred'
+        : value.milestone === 'ONBOARDING_COMPLETED'
+          ? 'onboarding-completed'
+          : 'first-post-reported';
     if (value.ruleKey !== expectedKey)
       context.addIssue({
         code: z.ZodIssueCode.custom,
@@ -43,6 +54,15 @@ export async function saveServiceReferralRewardRuleResponse(request: Request, se
       input.parseAsync(await request.json()),
     ]);
     const db = await import('@bunshin/database');
+    const fortune = await db.prisma.fortuneServiceSetting.findFirst({
+      where: { workspaceId: service.workspaceId, groupId: service.serviceId },
+      select: { id: true },
+    });
+    if (Boolean(fortune) !== (value.milestone === 'QUALIFICATION_CONFIRMED'))
+      throw new ApplicationError(
+        'VALIDATION_ERROR',
+        'このサービスでは選択した特典条件を利用できません。',
+      );
     const saved = await new ServiceReferralRewardRuleService(
       new db.PrismaServiceReferralRewardRuleRepository(),
     ).save({

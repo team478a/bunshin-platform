@@ -10,7 +10,11 @@ export const SERVICE_REFERRAL_STATUSES = [
 ] as const;
 export type ServiceReferralStatus = (typeof SERVICE_REFERRAL_STATUSES)[number];
 
-export const SERVICE_REFERRAL_MILESTONES = ['ONBOARDING_COMPLETED', 'FIRST_POST_REPORTED'] as const;
+export const SERVICE_REFERRAL_MILESTONES = [
+  'ONBOARDING_COMPLETED',
+  'FIRST_POST_REPORTED',
+  'QUALIFICATION_CONFIRMED',
+] as const;
 export type ServiceReferralMilestone = (typeof SERVICE_REFERRAL_MILESTONES)[number];
 
 export const SERVICE_REFERRAL_REWARD_RECIPIENTS = ['REFERRER', 'REFERRED'] as const;

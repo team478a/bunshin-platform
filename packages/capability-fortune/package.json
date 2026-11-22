@@ -13,7 +13,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@bunshin/capability-contract": "workspace:*"
+    "@bunshin/application": "workspace:*",
+    "@bunshin/capability-contract": "workspace:*",
+    "@bunshin/shared": "workspace:*"
   },
   "devDependencies": {
     "vitest": "^4.1.0"

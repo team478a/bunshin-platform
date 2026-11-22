@@ -72,7 +72,7 @@ export class PrismaFortuneHistoryRepository {
       const scope = await fortuneTarget(tx, input.serviceSlug, input.actorUserId);
       if (!scope) return null;
       const cutoff = fortuneReadingRetentionCutoff(input.viewedAt, scope.historyRetentionDays);
-      await tx.fortuneReading.updateMany({
+      const viewed = await tx.fortuneReading.updateMany({
         where: {
           id: input.readingId,
           serviceSettingId: scope.id,
@@ -92,6 +92,22 @@ export class PrismaFortuneHistoryRepository {
           localDate: { gte: cutoff },
         },
       });
+      if (viewed.count === 1 && row && row.deepReading === null) {
+        const paid = await tx.fortuneCommercePurchase.findFirst({
+          where: {
+            workspaceId: scope.workspaceId,
+            groupId: scope.groupId,
+            serviceSettingId: scope.id,
+            readingId: row.id,
+          },
+          select: { id: true },
+        });
+        if (!paid)
+          await tx.fortuneReading.update({
+            where: { id: row.id },
+            data: { freeFirstViewedAt: input.viewedAt },
+          });
+      }
       return row ? fortuneReadingView(tx, row) : null;
     });
   }
