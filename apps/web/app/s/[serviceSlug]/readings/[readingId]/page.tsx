@@ -40,6 +40,7 @@ export default async function FortuneReadingPage({
           {...(characters ? { characters } : {})}
           serviceSlug={serviceSlug}
           showFollowUps={setting.aiEnabled && setting.personalProfileEnabled}
+          oracleBook={appearance?.summoning === true}
         />
         <FortuneDeleteButton serviceSlug={serviceSlug} readingId={readingId} />
         <FortuneNav serviceSlug={serviceSlug} />
