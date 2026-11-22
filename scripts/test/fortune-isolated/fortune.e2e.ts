@@ -195,20 +195,37 @@ test(
     await expect(reveal).toBeDisabled();
     await screen.getByRole('button', /仕事や今後の動き/).tap();
     await expect(reveal).toBeEnabled();
+    await browser.evaluate(() => {
+      document.addEventListener('animationstart', (event) => {
+        if (event.animationName === 'fortune-card-flip')
+          document.documentElement.dataset.fortuneCardRevealed = 'true';
+      });
+    });
     await reveal.tap();
     await expect(screen.getByRole('heading', '今日の一歩')).toBeVisible({ timeout: 30_000 });
     await expect(screen.getByRole('heading', 'カードの象徴')).toBeVisible();
     await expect(screen.getByText(/最初の10分で行うこと/)).toBeVisible();
     const artwork = browser.locator('.fortune-daily-result__hero img');
     await expect(artwork).toBeVisible();
-    const imageSrc = await artwork.getAttribute('src');
-    expect(imageSrc).toMatch(/^\/fortune\/tarot\/.+\.webp$/);
+    const imageSrc = await browser.evaluate(() => ({
+      src: document.querySelector('.fortune-daily-result__hero img')?.getAttribute('src'),
+      revealed: document.documentElement.dataset.fortuneCardRevealed,
+      reducedMotion: matchMedia('(prefers-reduced-motion: reduce)').matches,
+      pageWidth: document.documentElement.scrollWidth,
+    }));
+    expect(imageSrc.src).toMatch(/^\/fortune\/tarot\/.+\.webp$/);
+    expect(imageSrc.revealed).toBe(imageSrc.reducedMotion ? undefined : 'true');
+    expect(imageSrc.pageWidth).toBeLessThanOrEqual(390);
     await expect(screen.getByRole('button', '参考になった')).toBeHidden();
     await screen.getByText('この鑑定を評価する', { exact: true }).tap();
     await expect(screen.getByRole('button', '参考になった')).toBeVisible();
     await app.open(`/s/${slug}/today`);
     await expect(screen.getByRole('heading', '今日の一歩')).toBeVisible({ timeout: 30_000 });
-    expect(await artwork.getAttribute('src')).toBe(imageSrc);
+    expect(
+      await browser.evaluate(() =>
+        document.querySelector('.fortune-daily-result__hero img')?.getAttribute('src'),
+      ),
+    ).toBe(imageSrc.src);
     await expect(reveal).toHaveCount(0);
     await expect(screen.getByRole('heading', '何について占いますか？')).toHaveCount(0);
   },
