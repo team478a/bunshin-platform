@@ -47,9 +47,9 @@ export interface FortuneMembershipActivitySummary {
 }
 
 export function summarizeFortuneMembershipActivity(
-  events: Array<{ eventType: FortuneMembershipEventType; groupMembershipId: string }>,
+  events: Array<{ eventType: string; groupMembershipId: string }>,
 ): FortuneMembershipActivitySummary {
-  const participants = new Map<FortuneMembershipEventType, Set<string>>(
+  const participants = new Map<string, Set<string>>(
     FORTUNE_MEMBERSHIP_EVENT_TYPES.map((eventType) => [eventType, new Set<string>()]),
   );
   for (const event of events) participants.get(event.eventType)?.add(event.groupMembershipId);

@@ -1,4 +1,5 @@
 import type { Route } from 'next';
+import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { prisma } from '@bunshin/database';
 import { ZodError } from 'zod';
@@ -52,6 +53,12 @@ export async function FortuneCommerceProduct({
     <section className="settings-card" id="fortune-commerce">
       <h2>深層鑑定の販売</h2>
       <p>販売条件の変更は次回の購入から適用されます。</p>
+      <p>売上を受け取るStripeの接続は、運営団体のオーナーまたは管理者が設定できます。</p>
+      <p>
+        <Link href={`/organizations/${service.workspaceId}/payment` as Route}>
+          Stripeの決済設定を開く
+        </Link>
+      </p>
       {result === 'invalid' && <p role="alert">商品名、金額、提供条件を確認してください。</p>}
       {result === 'saved' && <p role="status">販売条件を保存しました。</p>}
       <form action={save} className="app-form">
