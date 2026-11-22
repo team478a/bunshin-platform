@@ -12,11 +12,13 @@ import {
   type FortuneIntakeAnswer,
   type FortuneIntakeKey,
   type FortuneTheme,
+  type FortuneReadingView,
   type FortuneUnderstandingItem,
 } from '@bunshin/capability-fortune';
 import type { FortuneGuidanceSettings } from '../../../src/fortune/guidance-settings';
 import { FortuneCharacterBadge } from './fortune-character';
 import { FortuneDrawButtons } from './fortune-actions';
+import { useFortuneSummoning } from './fortune-summoning';
 import { FortuneUnderstandingReview } from './fortune-understanding';
 
 type Step =
@@ -56,6 +58,7 @@ export function FortuneDynamicIntake({
         <IntakeConversation
           serviceSlug={props.serviceSlug}
           theme={theme}
+          summoning={props.summoning ?? false}
           deepReadingEnabled={deepReadingEnabled}
           paidReading={paidReading}
           {...(characters ? { characters } : {})}
@@ -97,6 +100,7 @@ export function FortuneDynamicIntake({
 function IntakeConversation({
   serviceSlug,
   theme,
+  summoning,
   onExit,
   deepReadingEnabled,
   paidReading,
@@ -105,6 +109,7 @@ function IntakeConversation({
 }: {
   serviceSlug: string;
   theme: FortuneTheme;
+  summoning: boolean;
   onExit: () => void;
   deepReadingEnabled: boolean;
   paidReading: boolean;
@@ -118,6 +123,7 @@ function IntakeConversation({
   const [draft, setDraft] = useState('');
   const [asking, setAsking] = useState(false);
   const [drawing, setDrawing] = useState(false);
+  const summoningScene = useFortuneSummoning(summoning);
   const [error, setError] = useState(false);
   const [review, setReview] = useState<FortuneUnderstandingItem[] | null>(null);
   const active = useRef<AbortController | null>(null);
@@ -164,21 +170,29 @@ function IntakeConversation({
         setError(true);
         return;
       }
-      const response = await fetch(`/api/services/${serviceSlug}/fortune/today`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          theme,
-          ...(paidReading ? { paidReading: true } : {}),
-          ...(reviewedUnderstanding.length ? { reviewedUnderstanding } : {}),
-          ...(deepReadingEnabled
-            ? { intakeOutcome: reviewedUnderstanding.length ? 'REVIEWED' : 'SKIPPED' }
-            : {}),
-        }),
-      });
-      if (!response.ok) throw new Error('reading unavailable');
-      if (paidReading) router.replace(`/s/${serviceSlug}/today`);
-      router.refresh();
+      await summoningScene.run(
+        async () => {
+          const response = await fetch(`/api/services/${serviceSlug}/fortune/today`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              theme,
+              ...(paidReading ? { paidReading: true } : {}),
+              ...(reviewedUnderstanding.length ? { reviewedUnderstanding } : {}),
+              ...(deepReadingEnabled
+                ? { intakeOutcome: reviewedUnderstanding.length ? 'REVIEWED' : 'SKIPPED' }
+                : {}),
+            }),
+          });
+          if (!response.ok) throw new Error('reading unavailable');
+          const { data } = (await response.json()) as { data: FortuneReadingView };
+          return data;
+        },
+        () => {
+          if (paidReading) router.replace(`/s/${serviceSlug}/today`);
+          router.refresh();
+        },
+      );
     } catch {
       setError(true);
     } finally {
@@ -219,6 +233,7 @@ function IntakeConversation({
             )
           }
         />
+        {summoningScene.panel}
         <div className="button-row">
           <button
             className="button button--primary"
@@ -254,6 +269,7 @@ function IntakeConversation({
 
   return (
     <div className="fortune-action">
+      {summoningScene.panel}
       {characters?.intake && (
         <FortuneCharacterBadge
           character={characters.intake}
