@@ -580,6 +580,24 @@ try {
     ).guidanceSettings?.appearance,
     undefined,
   );
+  const referralEndpoint = `/api/services/${primary.slug}/referral-code`;
+  await request(participant, referralEndpoint, { method: 'POST', status: 403 });
+  const scope = { workspaceId: primary.member.workspaceId, groupId: primary.member.groupId };
+  await db.serviceRegistrationPolicy.update({
+    where: { groupId: scope.groupId },
+    data: { referralEnabled: true },
+  });
+  const issueCode = async () =>
+    (await (await request(participant, referralEndpoint, { method: 'POST' })).json()).data;
+  const referral = await issueCode();
+  assert.equal((await issueCode()).code, referral.code);
+  const referralPath = new URL(referral.referralUrl).pathname;
+  await request(null, referralPath, { status: 404 });
+  assert.doesNotMatch(
+    await (await request(participant, `/s/${primary.slug}/activity`)).text(),
+    /あなた専用の紹介URL/,
+  );
+
   await db.serviceConfiguration.update({
     where: { id: primary.configurationId },
     data: { visibility: 'PUBLIC' },
@@ -605,6 +623,61 @@ try {
   );
   console.log(
     'PASS scoped appearance, public branding, original logo, and 390px participant layout',
+  );
+
+  await db.serviceRegistrationPolicy.update({
+    where: { groupId: scope.groupId },
+    data: { mode: 'PUBLIC' },
+  });
+  const landing = await request(null, referralPath, { status: 303 });
+  const landingUrl = new URL(landing.headers.get('location'), origin);
+  assert.equal(landingUrl.pathname, `/s/${primary.slug}`);
+  assert.equal(landingUrl.searchParams.get('ref'), referral.code);
+  const referralClickId = landingUrl.searchParams.get('rc');
+  assert.ok(referralClickId);
+  const legalDocumentIds = (
+    await db.serviceLegalDocument.findMany({
+      where: scope,
+      select: { id: true },
+    })
+  ).map(({ id }) => id);
+  const referred = await actor('referred');
+  const register = (actor, clickId) =>
+    request(actor, `/api/services/${primary.slug}/participation`, {
+      method: 'POST',
+      body: { legalDocumentIds, referralCode: referral.code, referralClickId: clickId },
+      status: 201,
+    });
+  await register(referred, referralClickId);
+  await register(referred, referralClickId);
+  await register(participant, null);
+  const referrals = await db.serviceReferral.findMany({ where: scope });
+  assert.equal(referrals.length, 1);
+  assert.equal(referrals[0].referralClickId, referralClickId);
+  assert.equal(referrals[0].referredUserId, referred.userId);
+  assert.equal(referrals[0].qualificationState, 'UNASSESSED');
+  assert.equal(await db.serviceReferralClick.count({ where: scope }), 1);
+  assert.equal(await db.serviceReferralReward.count({ where: scope }), 0);
+  await request(referred, `${base}/participation`, {
+    method: 'POST',
+    body: { ageConfirmed: true },
+    status: 201,
+  });
+  const referredReading = await request(referred, today, {
+    method: 'POST',
+    body: { theme: 'LOVE' },
+    status: 201,
+  });
+  const { data: freeReading } = await referredReading.json();
+  assert.ok(['READY_BASIC', 'READY_AI'].includes(freeReading.status));
+  const otherMember = await request(referred, `/s/${primary.slug}/activity`);
+  assert.ok(
+    !(await otherMember.text()).includes(referral.referralUrl),
+    'Referral URL is private to its owner',
+  );
+  await browser(primary, participant, 'referral');
+  console.log(
+    'PASS private referral denial, public attribution, no self or duplicate attribution, and mobile referral sharing',
   );
 } catch (error) {
   console.error(error instanceof Error ? error.message : 'Isolated Fortune test failed');
