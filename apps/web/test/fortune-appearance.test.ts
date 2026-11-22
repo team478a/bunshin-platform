@@ -5,9 +5,28 @@ import {
   fortuneContrast,
   fortuneReadableText,
   resolveFortuneAppearanceColors,
+  resolveFortuneSummoningMode,
 } from '../src/fortune/appearance';
 
 describe('Fortune appearance', () => {
+  it('maps missing and legacy settings and accepts the lightweight mode', () => {
+    expect(resolveFortuneSummoningMode(undefined)).toBe('off');
+    expect(resolveFortuneSummoningMode({ ...defaultFortuneAppearance, summoning: false })).toBe(
+      'off',
+    );
+    expect(resolveFortuneSummoningMode({ ...defaultFortuneAppearance, summoning: true })).toBe(
+      'cinematic',
+    );
+    const standard = fortuneAppearanceSchema.parse({
+      ...defaultFortuneAppearance,
+      summoning: 'standard',
+    });
+    expect(resolveFortuneSummoningMode(standard)).toBe('standard');
+    expect(fortuneAppearanceSchema.safeParse({ ...standard, summoning: 'loud' }).success).toBe(
+      false,
+    );
+  });
+
   it('applies individual choices ahead of optional site brand and preset colors', () => {
     const brand = { logoUrl: null, primaryColor: '#000088', secondaryColor: '#ffee55' };
     const settings = {
