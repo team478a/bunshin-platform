@@ -1431,6 +1431,156 @@ describe('database ownership boundaries', () => {
         remaining: 0,
         turns: [{ status: 'READY' }, { status: 'READY' }],
       });
+      const creditScope = {
+        ...base,
+        groupId: group.id,
+        groupMembershipId: membership.id,
+        userId: owner.user.id,
+      };
+      const quote = { ...input, requestId: randomUUID(), question, expectedCreditCost: 2 };
+      await expect(followUps.reserve(quote)).resolves.toEqual({ kind: 'OFFER_CHANGED' });
+      await client.fortuneServiceSetting.update({
+        where: { id: setting.id },
+        data: { followUpCreditEnabled: true, followUpCreditCost: 2, followUpCreditLimit: 2 },
+      });
+      const account = await client.serviceCreditAccount.create({
+        data: { ...creditScope, availableCredits: 5 },
+      });
+      const before = new Date(Date.now() - 60_000);
+      const expiredGrant = await client.serviceCreditLedger.create({
+        data: {
+          ...base,
+          groupId: group.id,
+          userId: owner.user.id,
+          accountId: account.id,
+          type: 'GRANT',
+          amount: 3,
+          balanceAfter: 3,
+          sourceType: 'SYSTEM',
+          expiresAt: new Date(before.getTime() + 1),
+          createdAt: before,
+          idempotencyKey: randomUUID(),
+        },
+      });
+      const grant = await client.serviceCreditLedger.create({
+        data: {
+          ...base,
+          groupId: group.id,
+          userId: owner.user.id,
+          accountId: account.id,
+          type: 'GRANT',
+          amount: 2,
+          balanceAfter: 5,
+          sourceType: 'REFERRAL',
+          createdAt: new Date(before.getTime() + 2),
+          idempotencyKey: randomUUID(),
+        },
+      });
+      await expect(followUps.reserve({ ...quote, actorUserId: other.user.id })).resolves.toEqual({
+        kind: 'UNAVAILABLE',
+      });
+      const secondReading = await client.fortuneReading.create({
+        data: {
+          ...base,
+          groupId: group.id,
+          serviceSettingId: setting.id,
+          participantId: participant.id,
+          memberUserId: owner.user.id,
+          localDate: new Date(reading.localDate.getTime() - 3 * 86_400_000),
+          theme: 'LOVE',
+          cardCode: 'THE_FOOL',
+          orientation: 'UPRIGHT',
+          status: 'READY_BASIC',
+          readingText: 'Approved',
+          actionStep: 'Small step',
+        },
+      });
+      await client.fortuneReadingFollowUp.createMany({
+        data: [1, 2].map((turn) => ({
+          readingId: secondReading.id,
+          id: randomUUID(),
+          turn,
+          status: 'READY',
+          question: 'Included',
+          answer: 'Answer',
+        })),
+      });
+      const held = await followUps.reserve(quote);
+      if (held.kind !== 'RESERVED') throw new Error('exchange reservation missing');
+      await expect(followUps.reserve(quote)).resolves.toMatchObject({ kind: 'REPLAY' });
+      await expect(
+        followUps.reserve({ ...quote, question: 'Different question' }),
+      ).resolves.toEqual({ kind: 'REQUEST_CONFLICT' });
+      await expect(followUps.read(input)).resolves.toMatchObject({ creditOffer: { available: 0 } });
+      await expect(
+        followUps.reserve({
+          ...quote,
+          readingId: secondReading.id,
+          requestId: randomUUID(),
+        }),
+      ).resolves.toEqual({ kind: 'INSUFFICIENT_CREDIT' });
+      await client.fortuneReading.delete({ where: { id: secondReading.id } });
+      await expect(
+        followUps.complete({
+          ...quote,
+          revision: held.claim.personalProfileRevision,
+          output: null,
+        }),
+      ).resolves.toMatchObject({
+        creditOffer: { available: 2 },
+        turns: expect.arrayContaining([
+          { status: 'FAILED', creditCost: 2, turn: 3, question, answer: null, actionStep: null },
+        ]),
+      });
+
+      const stale = { ...quote, requestId: randomUUID() };
+      const staleHold = await followUps.reserve(stale);
+      if (staleHold.kind !== 'RESERVED') throw new Error('exchange reservation missing');
+      await client.fortuneReadingFollowUp.updateMany({
+        where: { readingId: reading.id, id: stale.requestId },
+        data: { createdAt: new Date(Date.now() - 121_000) },
+      });
+      const answer = { body: '別の見方があります。', actionStep: '考えを一つ書き出しましょう。' };
+      await expect(
+        followUps.complete({
+          ...stale,
+          revision: staleHold.claim.personalProfileRevision,
+          output: answer,
+        }),
+      ).resolves.toMatchObject({ creditOffer: { available: 2 } });
+      const success = { ...quote, requestId: randomUUID() };
+      const finalHold = await followUps.reserve(success);
+      if (finalHold.kind !== 'RESERVED') throw new Error('exchange reservation missing');
+      const complete = {
+        ...success,
+        revision: finalHold.claim.personalProfileRevision,
+        output: answer,
+      };
+      await Promise.all([followUps.complete(complete), followUps.complete(complete)]);
+      await expect(followUps.reserve(success)).resolves.toMatchObject({ kind: 'REPLAY' });
+      await expect(followUps.reserve({ ...quote, requestId: randomUUID() })).resolves.toEqual({
+        kind: 'INSUFFICIENT_CREDIT',
+      });
+      expect(
+        await client.serviceCreditLedger.findMany({
+          where: { accountId: account.id, type: 'CONSUME' },
+          select: { amount: true, lotAllocations: true },
+        }),
+      ).toEqual([{ amount: -2, lotAllocations: { [grant.id]: 2 } }]);
+      expect(
+        await client.serviceCreditLedger.findUnique({ where: { id: expiredGrant.id } }),
+      ).toMatchObject({ amount: 3 });
+      await client.fortuneReadingFollowUp.updateMany({
+        where: { readingId: reading.id, id: success.requestId },
+        data: { status: 'ERASED', question: null, answer: null, actionStep: null },
+      });
+      await client.fortuneServiceSetting.update({
+        where: { id: setting.id },
+        data: { followUpCreditLimit: 1 },
+      });
+      await expect(followUps.reserve({ ...quote, requestId: randomUUID() })).resolves.toEqual({
+        kind: 'LIMIT',
+      });
       await client.fortuneReading.update({
         where: { id: reading.id },
         data: { localDate: new Date(Date.now() - 86_400_000) },
@@ -1676,8 +1826,12 @@ describe('database ownership boundaries', () => {
       expect(
         await client.fortuneReadingFollowUp.findMany({ where: { readingId: reading.id } }),
       ).toMatchObject([
-        { status: 'ERASED', question: null, answer: null, actionStep: null },
-        { status: 'ERASED', question: null, answer: null, actionStep: null },
+        ...Array.from({ length: 5 }, () => ({
+          status: 'ERASED',
+          question: null,
+          answer: null,
+          actionStep: null,
+        })),
       ]);
       await expect(
         repository.completeAiGeneration({
@@ -1703,6 +1857,8 @@ describe('database ownership boundaries', () => {
       await client.job.deleteMany({
         where: { workspaceId: base.workspaceId, jobType: 'FORTUNE_READING_GENERATE' },
       });
+      await client.serviceCreditLedger.deleteMany({ where: { ...base, groupId: group.id } });
+      await client.serviceCreditAccount.deleteMany({ where: { ...base, groupId: group.id } });
       await client.fortuneReading.deleteMany({ where: { serviceSettingId: setting.id } });
       await client.fortuneParticipant.deleteMany({ where: { id: participant.id } });
       await client.fortuneServiceSetting.deleteMany({ where: { id: setting.id } });

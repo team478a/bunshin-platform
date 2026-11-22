@@ -195,6 +195,7 @@ export default async function FortuneTodayPage({
                 reading={today.reading}
                 serviceSlug={serviceSlug}
                 showFollowUps={showGuide && (!commerce || Boolean(today.reading.deepReading))}
+                showCreditFollowUps={showGuide && setting.followUpCreditEnabled}
                 {...(characters ? { characters } : {})}
               />
               {showUpgrade && (

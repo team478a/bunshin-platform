@@ -112,7 +112,11 @@ const personalFitBody = z
   .object({ rating: z.enum(FORTUNE_PERSONAL_FIT_RATINGS).nullable() })
   .strict();
 const followUpBody = z
-  .object({ requestId: uuid, question: z.string().trim().min(1).max(300) })
+  .object({
+    requestId: uuid,
+    question: z.string().trim().min(1).max(300),
+    expectedCreditCost: z.number().int().min(1).max(100_000).optional(),
+  })
   .strict();
 const feedbackBody = z
   .object({
@@ -484,7 +488,11 @@ export const askFortuneFollowUpResponse = (
   json(request, serviceSlug, async (actorUserId, parsedSlug) => {
     const body = await requireJson(request, followUpBody);
     return askFortuneFollowUp({
-      ...body,
+      requestId: body.requestId,
+      question: body.question,
+      ...(body.expectedCreditCost === undefined
+        ? {}
+        : { expectedCreditCost: body.expectedCreditCost }),
       serviceSlug: parsedSlug,
       actorUserId,
       readingId: uuid.parse(readingId),

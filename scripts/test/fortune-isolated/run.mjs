@@ -709,6 +709,19 @@ try {
       enabled: true,
     },
   });
+  await request(owner, `/api/services/${primary.slug}/referral-reward-rules`, {
+    method: 'POST',
+    status: 201,
+    body: {
+      ruleKey: 'qualified-referred',
+      milestone: 'QUALIFICATION_CONFIRMED',
+      recipient: 'REFERRED',
+      creditAmount: 2,
+      expiresAfterDays: 30,
+      monthlyGrantLimit: 2,
+      enabled: true,
+    },
+  });
   await request(referred, today);
   const target = { referralId: referrals[0].id, reason: '隔離環境の合成審査' };
   await operatorCommand({
@@ -727,8 +740,58 @@ try {
   };
   assert.equal((await operatorCommand(confirm)).state, 'CONFIRMED');
   assert.equal((await operatorCommand(confirm)).state, 'CONFIRMED');
-  assert.equal(await db.serviceReferralReward.count({ where: { ...scope, status: 'GRANTED' } }), 1);
+  assert.equal(await db.serviceReferralReward.count({ where: { ...scope, status: 'GRANTED' } }), 2);
   await browser(primary, owner, 'referral-admin');
+
+  await db.fortuneCommerceProduct.create({
+    data: {
+      ...scope,
+      serviceSettingId: setting.id,
+      name: '合成商品',
+      description: '合成条件',
+      deliveryTerms: '合成条件',
+      refundTerms: '合成条件',
+      amountYen: 1980,
+      enabled: false,
+    },
+  });
+  await request(referred, `${base}/profile`, {
+    method: 'PUT',
+    body: { consented: true, interest: '仕事', question: '働き方を整理したい', style: 'DIRECT' },
+  });
+  await browser(primary, owner, 'credit-editor');
+  assert.equal(
+    await db.serviceConfigurationAudit.count({
+      where: {
+        ...scope,
+        action: 'FORTUNE_CREDIT_EXCHANGE_UPDATED',
+        performedByUserId: owner.userId,
+      },
+    }),
+    1,
+  );
+
+  const exchangePath = `${base}/readings/${freeReading.id}/follow-ups`;
+  const attempt = {
+    requestId: randomUUID(),
+    question: '失敗時の残高を確認したい',
+    expectedCreditCost: 2,
+  };
+  const failed = await request(referred, exchangePath, { method: 'POST', body: attempt });
+  assert.equal((await failed.json()).data.turns.at(-1).status, 'FAILED');
+  const creditAccount = () =>
+    db.serviceCreditAccount.findFirstOrThrow({ where: { ...scope, userId: referred.userId } });
+  assert.equal((await creditAccount()).availableCredits, 2);
+  await browser(primary, referred, 'credit-exchange');
+  assert.equal((await creditAccount()).availableCredits, 0);
+  const consume = await db.serviceCreditLedger.findMany({
+    where: { ...scope, userId: referred.userId, type: 'CONSUME' },
+  });
+  assert.equal(consume.length, 1);
+  assert.equal(consume[0].amount, -2);
+  console.log(
+    'PASS credit quote, failure release, one completed exchange, and private ledger on mobile',
+  );
   await operatorCommand({
     ...target,
     kind: 'REVOKE',

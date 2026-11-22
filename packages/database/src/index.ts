@@ -385,3 +385,8 @@ export {
   PrismaExternalReadGrantRepository,
   type ExternalGrantServerPolicy,
 } from './external-read-grants';
+export {
+  FORTUNE_FOLLOW_UP_CREDIT_KEY,
+  FORTUNE_FOLLOW_UP_CREDIT_NAME,
+  readFortuneFollowUpCreditBalance,
+} from './fortune-follow-up-credits';

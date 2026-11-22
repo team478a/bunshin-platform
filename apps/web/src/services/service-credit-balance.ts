@@ -13,7 +13,17 @@ const sourceLabel: Record<ServiceCreditLedgerDisplayEntry['sourceType'], string>
   SYSTEM: 'システムによる調整',
 };
 
-export function serviceCreditLedgerSummary(entry: ServiceCreditLedgerDisplayEntry) {
+export function serviceCreditLedgerSummary(
+  entry: ServiceCreditLedgerDisplayEntry,
+  context?: 'fortune',
+  followUpExchange = false,
+) {
+  if (context === 'fortune') {
+    if (entry.type === 'CONSUME')
+      return followUpExchange ? '追加質問に使いました' : 'クレジットを使いました';
+    if (entry.type === 'REFUND') return 'クレジットが戻りました';
+    if (entry.type === 'ADJUST') return 'クレジットを調整しました';
+  }
   if (entry.type === 'CONSUME') return '画像作成に使いました';
   if (entry.type === 'EXPIRE') return '使える期限が過ぎました';
   if (entry.type === 'REFUND') return '画像作成回数が戻りました';

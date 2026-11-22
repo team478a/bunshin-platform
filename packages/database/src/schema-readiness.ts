@@ -1,1 +1,1 @@
-export const LATEST_DATABASE_MIGRATION = '20261122120000_referral_confirmation_reward';
+export const LATEST_DATABASE_MIGRATION = '20261122130000_fortune_follow_up_credits';
