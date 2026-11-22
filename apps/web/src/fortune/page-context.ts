@@ -16,6 +16,7 @@ export async function resolveFortunePage(serviceSlug: string, returnTo: string) 
       },
     },
     select: {
+      commerceProduct: { select: { enabled: true } },
       minimumAge: true,
       historyRetentionDays: true,
       weeklyNotificationEnabled: true,

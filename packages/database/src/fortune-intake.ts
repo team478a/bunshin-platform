@@ -9,6 +9,7 @@ import {
 } from '@bunshin/capability-fortune';
 import type { PrismaClient } from '@prisma/client';
 import { fortuneReadingRetentionCutoff } from './fortune-retention';
+import { fortunePurchaseScope, usesFortuneCommerce } from './fortune-commerce-entitlement';
 import { dateOnly, fortuneTarget } from './fortune-shared';
 
 type Actor = { serviceSlug: string; actorUserId: string };
@@ -43,6 +44,23 @@ export class PrismaFortuneIntakeRepository {
       },
     });
     if (!participant) return null;
+    if (usesFortuneCommerce(input.serviceSlug, scope)) {
+      const purchase = await this.db.fortuneCommercePurchase.findFirst({
+        where: {
+          ...fortunePurchaseScope(scope, input.actorUserId),
+          groupMembershipId: membership.id,
+          status: 'PAID',
+          deliveredAt: null,
+        },
+        select: { id: true },
+      });
+      if (
+        !purchase ||
+        !participant.profileConsentedAt ||
+        !fortuneDeepReadingEnabled(scope.guidanceSettings)
+      )
+        return null;
+    }
     const now = this.now();
     const localDate = dateOnly(toJapanLocalDate(now));
     const reading = await this.db.fortuneReading.findUnique({

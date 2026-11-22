@@ -1,4 +1,10 @@
-import type { Metadata } from 'next';
+import type { Metadata, Route } from 'next';
+import Link from 'next/link';
+import { prisma } from '@bunshin/database';
+import {
+  availableFortuneProduct,
+  hasAvailableFortunePurchase,
+} from '../../../../src/fortune/commerce';
 import {
   fortuneDeepReadingEnabled,
   fortuneIntakeOptions,
@@ -27,8 +33,10 @@ export const metadata: Metadata = { title: '今日の占い' };
 
 export default async function FortuneTodayPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ serviceSlug: string }>;
+  searchParams?: Promise<{ paid?: string }>;
 }) {
   const { serviceSlug } = await params;
   const { actor, service, setting } = await resolveFortunePage(
@@ -51,12 +59,33 @@ export default async function FortuneTodayPage({
             ['READY_AI', 'READY_BASIC'].includes(reading.status),
         )
       : null;
+  const commerce = serviceSlug === 'watashi-fortune' || Boolean(setting.commerceProduct);
+  const scope = { workspaceId: service.workspaceId, groupId: service.serviceId };
+  const [hasPurchase, product] =
+    commerce && today.participant
+      ? await Promise.all([
+          hasAvailableFortunePurchase(prisma, scope, actor.userId),
+          setting.commerceProduct?.enabled
+            ? availableFortuneProduct(prisma, scope, actor.userId)
+            : null,
+        ])
+      : [false, null];
+  const paidView =
+    hasPurchase &&
+    (await searchParams)?.paid === '1' &&
+    setting.aiEnabled &&
+    setting.personalProfileEnabled &&
+    fortuneDeepReadingEnabled(setting.guidanceSettings);
   const showIntake = Boolean(profile?.enabled && !profile.completed && !today.reading);
   const showGuide = setting.personalProfileEnabled && setting.aiEnabled;
   const showDynamicIntake =
-    showGuide && !showIntake && fortuneIntakeOptions(setting.guidanceSettings).enabled;
+    showGuide &&
+    !showIntake &&
+    (!commerce || (paidView && profile?.profile.consented)) &&
+    fortuneIntakeOptions(setting.guidanceSettings).enabled;
   const DrawButtons = showDynamicIntake ? FortuneDynamicIntake : FortuneDrawButtons;
-  const deepEnabled = showGuide && fortuneDeepReadingEnabled(setting.guidanceSettings);
+  const deepEnabled =
+    showGuide && (!commerce || paidView) && fortuneDeepReadingEnabled(setting.guidanceSettings);
   const saved =
     deepEnabled && profile?.profile.consented && !today.reading
       ? await (
@@ -145,20 +174,28 @@ export default async function FortuneTodayPage({
             <ReadingCard
               reading={today.reading}
               serviceSlug={serviceSlug}
-              showFollowUps={showGuide}
+              showFollowUps={showGuide && (!commerce || Boolean(today.reading.deepReading))}
               {...(characters ? { characters } : {})}
             />
-          ) : (
+          ) : paidView && !profile?.profile.consented ? null : (
             <section className="settings-card">
-              <h2>{showDynamicIntake ? '今日の占い方を選ぶ' : '何について占いますか？'}</h2>
+              <h2>
+                {paidView
+                  ? '深層鑑定を始める'
+                  : showDynamicIntake
+                    ? '今日の占い方を選ぶ'
+                    : '何について占いますか？'}
+              </h2>
               {!showDynamicIntake && <p>今日いちばん気になるものを選んでください。</p>}
               <DrawButtons
                 serviceSlug={serviceSlug}
                 {...(deepEnabled ? { deepReadingEnabled: true } : {})}
+                {...(paidView ? { paidReading: true } : {})}
                 {...(characters ? { characters } : {})}
                 {...(priorUnderstanding ? { priorUnderstanding } : {})}
                 {...(profile?.enabled ? { themeLabels: guidance.themeLabels } : {})}
                 askConsultation={Boolean(
+                  !commerce &&
                   setting.aiEnabled &&
                   profile?.enabled &&
                   profile.completed &&
@@ -168,6 +205,24 @@ export default async function FortuneTodayPage({
             </section>
           )}
         </div>
+        {paidView && !profile?.profile.consented && (
+          <p>
+            深層鑑定に使う情報の取り扱いを
+            <Link href={`/s/${serviceSlug}/settings` as Route}>個別化設定</Link>で確認してください。
+          </p>
+        )}
+        {commerce && today.participant && (hasPurchase || product || setting.commerceProduct) && (
+          <section className="settings-card">
+            <h2>深層鑑定</h2>
+            <Link href={`/s/${serviceSlug}/fortune-purchase` as Route}>
+              {hasPurchase
+                ? '購入済みの深層鑑定を利用する'
+                : product
+                  ? '提供内容と価格を見る'
+                  : '購入履歴を見る'}
+            </Link>
+          </section>
+        )}
         {previous && setting.reflectionEnabled && profile?.profile.consented && (
           <FortuneReflection
             key={previous.id}
