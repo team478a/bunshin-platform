@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   buildStandardFortuneKnowledgePack,
   drawTarotCard,
+  fortuneDrawPool,
   FortuneDailyReadingService,
   FortunePolicyError,
   FORTUNE_ORIENTATIONS,
@@ -113,6 +114,34 @@ describe('daily fortune flow', () => {
     feedbackIssue: null,
     createdAt: new Date('2026-09-17T00:00:00.000Z'),
   };
+
+  it('draws eligible custom cards from the service deck and pins the approved version', async () => {
+    const imageUrl = 'https://example.invalid/cards/oracle.webp';
+    const deck = fortuneDrawPool([
+      { code: 'MAJOR_17', nameJa: '星', imageUrl, enabled: true },
+      { code: 'CUSTOM_DAWN', nameJa: '夜明け', imageUrl, enabled: true },
+      { code: 'CUSTOM_DUSK', nameJa: '夕暮れ', imageUrl, enabled: false },
+    ]);
+    expect(deck).toHaveLength(79);
+    const createBasicReading = vi.fn().mockResolvedValue({ kind: 'READY', reading: basicReading });
+    const repository = {
+      findReadingForDate: vi.fn().mockResolvedValue(null),
+      findDrawDeck: vi.fn().mockResolvedValue({ knowledgeVersionId: 'deck-one', pool: deck }),
+      createBasicReading,
+    } as unknown as FortuneRepository;
+    await new FortuneDailyReadingService(repository, { nextInt: (limit) => limit - 1 }).draw({
+      serviceSlug: 'fortune-a',
+      actorUserId: 'user-a',
+      theme: 'LOVE',
+    });
+    expect(createBasicReading).toHaveBeenCalledWith(
+      expect.objectContaining({
+        knowledgeVersionId: 'deck-one',
+        cardCode: 'CUSTOM_DAWN',
+        orientation: 'REVERSED',
+      }),
+    );
+  });
 
   it('uses the saved day, card, orientation and theme for a paid upgrade', async () => {
     const random = { nextInt: vi.fn().mockReturnValue(0) };

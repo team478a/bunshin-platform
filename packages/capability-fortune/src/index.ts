@@ -4,6 +4,7 @@ export * from './fortune-policy-error';
 export * from './fortune-reading';
 export * from './fortune-generation-queue';
 export * from './tarot';
+export * from './fortune-deck';
 export * from './fortune-personal-profile';
 export * from './fortune-intake';
 export * from './fortune-understanding';

@@ -1,5 +1,5 @@
 import 'server-only';
-import { FORTUNE_KNOWLEDGE_MEANING_COUNT } from '@bunshin/capability-fortune';
+import { FORTUNE_KNOWLEDGE_MEANING_COUNT, readFortuneDeck } from '@bunshin/capability-fortune';
 import { ApplicationError } from '@bunshin/shared';
 import { currentLineEnvironment } from '../line/secure-configuration';
 import {
@@ -99,7 +99,25 @@ export async function fortuneOperatorStatus(
               take: 1,
               select: {
                 version: true,
-                _count: { select: { cardMeanings: { where: { safetyReviewed: true } } } },
+                deck: true,
+                cardMeanings: {
+                  where: { safetyReviewed: true, cardCode: { startsWith: 'CUSTOM_' } },
+                  select: {
+                    cardCode: true,
+                    orientation: true,
+                    theme: true,
+                    title: true,
+                    body: true,
+                    actionStep: true,
+                  },
+                },
+                _count: {
+                  select: {
+                    cardMeanings: {
+                      where: { safetyReviewed: true, cardCode: { not: { startsWith: 'CUSTOM_' } } },
+                    },
+                  },
+                },
               },
             },
           },
@@ -200,6 +218,8 @@ export async function fortuneOperatorStatus(
     timeZone: configuration.fortuneSetting?.timeZone ?? 'Asia/Tokyo',
     bunshinId: configuration.fortuneSetting?.bunshinId ?? null,
     approvedVersion: approved?.version ?? null,
+    deck: readFortuneDeck(approved?.deck),
+    customMeanings: approved?.cardMeanings ?? [],
     approvedMeaningCount,
     requiredMeaningCount: FORTUNE_KNOWLEDGE_MEANING_COUNT,
     termsReady,

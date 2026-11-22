@@ -42,16 +42,6 @@
   box-shadow: 0 0.5rem 1.35rem #100d25ad;
 }
 
-.fortune-oracle-book__illustration img {
-  display: block;
-  width: 100%;
-  height: auto;
-}
-
-.fortune-oracle-book__illustration img[data-reversed] {
-  transform: rotate(180deg);
-}
-
 .fortune-oracle-book__title {
   min-width: 0;
   overflow-wrap: anywhere;
