@@ -47,7 +47,10 @@ export function FortuneDeckEditor({
     event.preventDefault();
     if (pending) return;
     const form = new FormData(event.currentTarget);
-    const field = (name: string) => String(form.get(name) ?? '').trim();
+    const field = (name: string) => {
+      const value = form.get(name);
+      return typeof value === 'string' ? value.trim() : '';
+    };
     const change: FortuneDeckChange = standard
       ? { kind: 'standard', code: standard.code, imageUrl: field('imageUrl') }
       : {
