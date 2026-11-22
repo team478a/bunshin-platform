@@ -123,7 +123,10 @@ function IntakeConversation({
   const [draft, setDraft] = useState('');
   const [asking, setAsking] = useState(false);
   const [drawing, setDrawing] = useState(false);
-  const summoningScene = useFortuneSummoning(summoning);
+  const summoningScene = useFortuneSummoning(
+    summoning,
+    deepReadingEnabled ? (characters?.deep ? { character: characters.deep } : {}) : undefined,
+  );
   const [error, setError] = useState(false);
   const [review, setReview] = useState<FortuneUnderstandingItem[] | null>(null);
   const active = useRef<AbortController | null>(null);
