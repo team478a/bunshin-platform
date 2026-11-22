@@ -328,8 +328,11 @@ try {
     ]),
   );
   const operationsPath = `/api/services/${primary.slug}/fortune-operations`;
-  const { data: operations } = await (await request(owner, operationsPath)).json();
-  const configuredGuidance = { ...operations.guidanceSettings, characters: cinematicCharacters };
+  const { data: initialFortuneOperations } = await (await request(owner, operationsPath)).json();
+  const configuredGuidance = {
+    ...initialFortuneOperations.guidanceSettings,
+    characters: cinematicCharacters,
+  };
   delete configuredGuidance.appearance;
   await request(owner, operationsPath, {
     method: 'POST',
