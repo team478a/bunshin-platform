@@ -11,17 +11,20 @@ export function FortuneCharacterBadge({
   character,
   expression,
   compact = false,
+  stage = false,
   fallbackImage,
 }: {
   character: FortuneCharacter;
   expression?: Expression;
   compact?: boolean;
+  stage?: boolean;
   fallbackImage?: string;
 }) {
   if (!character.enabled) return null;
   const sources = [
     ...new Set(
       [
+        stage && character.imageUrl,
         expression && character.expressions[expression],
         compact && character.iconUrl,
         character.imageUrl,
@@ -31,8 +34,18 @@ export function FortuneCharacterBadge({
     ),
   ];
   return (
-    <div className={compact ? 'fortune-character fortune-character--compact' : 'fortune-character'}>
-      {sources.length > 0 && <CharacterImage key={JSON.stringify(sources)} sources={sources} />}
+    <div
+      className={
+        stage
+          ? 'fortune-character fortune-character--stage'
+          : compact
+            ? 'fortune-character fortune-character--compact'
+            : 'fortune-character'
+      }
+    >
+      {sources.length > 0 && (
+        <CharacterImage key={JSON.stringify(sources)} sources={sources} eager={stage} />
+      )}
       <div>
         <p className="eyebrow">AI案内役</p>
         <p className="fortune-character__name">{character.name}</p>
@@ -41,7 +54,7 @@ export function FortuneCharacterBadge({
   );
 }
 
-function CharacterImage({ sources }: { sources: string[] }) {
+function CharacterImage({ sources, eager }: { sources: string[]; eager: boolean }) {
   const [failed, setFailed] = useState(0);
   const src = sources[failed];
   const showNextImage = () => setFailed((index) => (index === failed ? index + 1 : index));
@@ -54,7 +67,7 @@ function CharacterImage({ sources }: { sources: string[] }) {
           alt=""
           width={80}
           height={80}
-          loading="lazy"
+          loading={eager ? 'eager' : 'lazy'}
           decoding="async"
           referrerPolicy="no-referrer"
           ref={(image) => {
