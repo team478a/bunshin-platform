@@ -62,15 +62,22 @@ export default async function FortuneTodayPage({
       : null;
   const commerce = serviceSlug === 'watashi-fortune' || Boolean(setting.commerceProduct);
   const scope = { workspaceId: service.workspaceId, groupId: service.serviceId };
-  const [hasPurchase, product] =
+  const [hasPurchase, product, opportunity] =
     commerce && today.participant
       ? await Promise.all([
           hasAvailableFortunePurchase(prisma, scope, actor.userId),
           setting.commerceProduct?.enabled
             ? availableFortuneProduct(prisma, scope, actor.userId)
             : null,
+          prisma.fortuneProductHypothesis.findFirst({
+            where: {
+              ...scope,
+              OR: [{ published: true }, { interests: { some: { memberUserId: actor.userId } } }],
+            },
+            select: { id: true },
+          }),
         ])
-      : [false, null];
+      : [false, null, null];
   if (product && !hasPurchase) await recordFortuneFunnel(serviceSlug, actor.userId, 'PAID_OFFER');
   const paidView =
     hasPurchase &&
@@ -251,6 +258,11 @@ export default async function FortuneTodayPage({
                   : '購入履歴を見る'}
             </Link>
           </section>
+        )}
+        {opportunity && (
+          <p>
+            <Link href={`/s/${serviceSlug}/fortune-opportunities` as Route}>今後の企画を見る</Link>
+          </p>
         )}
         {previous && setting.reflectionEnabled && profile?.profile.consented && (
           <FortuneReflection
