@@ -107,6 +107,14 @@ export function FortuneAppearanceEditor({
             />
             <span>保存後に占い画面へ適用する</span>
           </label>
+          <label className="fortune-check">
+            <input
+              type="checkbox"
+              checked={value.summoning ?? false}
+              onChange={(event) => change('summoning', event.target.checked)}
+            />
+            <span>タロットカードの召喚演出を使う</span>
+          </label>
           <label className="form-field">
             <span>基本の配色</span>
             <select

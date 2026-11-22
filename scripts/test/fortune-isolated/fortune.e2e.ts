@@ -38,9 +38,21 @@ test(
       value: string;
     }>;
     if (!cookies.length) throw new Error('Real local Auth session required');
+    let allowDeepDraw = () => {};
+    const deepDrawGate = new Promise<void>((resolve) => {
+      allowDeepDraw = resolve;
+    });
     await browser.route('**/*', async (route) => {
-      if (new URL(route.request.url).origin === url) await route.continue();
-      else await route.abort();
+      const target = new URL(route.request.url);
+      if (target.origin !== url) return route.abort();
+      if (
+        deepStage &&
+        route.request.method === 'POST' &&
+        target.pathname === `/api/services/${slug}/fortune/today`
+      ) {
+        await deepDrawGate;
+      }
+      await route.continue();
     });
     const entry =
       invitationPath ||
@@ -176,9 +188,27 @@ test(
       await screen.getByRole('button', '質問をスキップする').tap();
       await expect(screen.getByText('ここまでの内容で占えます。')).toBeVisible();
       await screen.getByRole('button', 'ここまでで占う').tap();
-      await screen.getByRole('button', 'この内容で占う').tap();
+      try {
+        await screen.getByRole('button', 'この内容で占う').tap();
+        const skip = screen.getByRole('button', '演出をスキップ');
+        await expect(skip).toBeVisible();
+        const clearOfNav = await browser.evaluate(() => {
+          const button = document.querySelector('.fortune-summoning button');
+          const nav = document.querySelector('.fortune-nav');
+          return Boolean(
+            button &&
+            nav &&
+            button.getBoundingClientRect().bottom <= nav.getBoundingClientRect().top,
+          );
+        });
+        expect(clearOfNav).toBe(true);
+        await app.screenshot('fortune-deep-summoning-390px');
+        await skip.tap();
+      } finally {
+        allowDeepDraw();
+      }
       await expect(screen.getByRole('heading', '考えられる選択肢')).toBeVisible({
-        timeout: 30_000,
+        timeout: 75_000,
       });
       await expect(screen.getByText('今は働き方を整理したい', { exact: true })).toBeVisible();
       return;
@@ -191,11 +221,34 @@ test(
     await screen.getByRole('button', 'スキップ').tap();
     expect((await saved).status).toBe(200);
     await expect(screen.getByRole('heading', 'あなたに合う占いにする')).toBeHidden();
+    await browser.evaluate(() => {
+      document.addEventListener('animationstart', (event) => {
+        if (event.animationName !== 'fortune-summoning-flip') return;
+        const scene = document.querySelector('.fortune-summoning');
+        const image = scene?.querySelector('img');
+        if (image instanceof HTMLImageElement)
+          document.documentElement.dataset.summonedCard = image.getAttribute('src') ?? '';
+        document.documentElement.dataset.summonedName =
+          scene?.querySelector('p')?.textContent ?? '';
+      });
+    });
     await screen.getByRole('button', /仕事や今後の動き/).tap();
-    await expect(screen.getByRole('heading', '今日の提案')).toBeVisible({ timeout: 30_000 });
+    await expect(screen.getByRole('button', '演出をスキップ')).toBeVisible();
+    await app.screenshot('fortune-summoning-390px');
+    await expect(screen.getByRole('heading', '今日の提案')).toBeVisible({ timeout: 75_000 });
+    const summoned = await browser.evaluate(() => ({
+      card: document.documentElement.dataset.summonedCard,
+      name: document.documentElement.dataset.summonedName,
+      result: document.querySelector('.fortune-reading-card h2')?.textContent,
+      width: document.documentElement.scrollWidth,
+    }));
+    expect(summoned.card).toMatch(/^\/fortune\/tarot\/.+\.webp$/);
+    expect(summoned.name).toBe(summoned.result?.replace(' （', '・').replace('）', ''));
+    expect(summoned.width).toBeLessThanOrEqual(390);
     await expect(screen.getByText(/最初の10分で行うこと/)).toBeVisible();
     await app.open(`/s/${slug}/today`);
     await expect(screen.getByRole('heading', '今日の提案')).toBeVisible({ timeout: 30_000 });
+    await expect(screen.getByRole('button', '演出をスキップ')).toHaveCount(0);
     await expect(screen.getByRole('heading', '何について占いますか？')).toHaveCount(0);
   },
 );
