@@ -2,6 +2,7 @@ import {
   evaluateServiceReferralQualificationGate,
   normalizeServiceReferralQualificationPolicy,
   type ReferralQualificationConditions,
+  type ServiceReferralQualificationGate,
   type ServiceReferralQualificationMemberEvidence,
   type ServiceReferralQualificationPolicy,
 } from '@bunshin/application';
@@ -68,7 +69,7 @@ export function evaluateFortuneReferralQualification(
     paidPurchases: number;
   },
   asOf: Date,
-) {
+): Exclude<ServiceReferralQualificationGate['decision'], 'CONTINUE'> | 'QUALIFIED' {
   const conditions = normalizeFortuneReferralConditions(rawConditions);
   const memberPolicy = normalizeServiceReferralQualificationPolicy({
     ...policy,

@@ -12,9 +12,9 @@ type SocialConditions = Pick<
 >;
 
 function japanDate(value: unknown) {
-  return typeof value === 'number'
-    ? new Date(value + 9 * 60 * 60 * 1000).toISOString().slice(0, 10)
-    : '';
+  if (typeof value !== 'number') return '';
+  const date = new Date(value + 9 * 60 * 60 * 1000);
+  return Number.isNaN(date.getTime()) ? '' : date.toISOString().slice(0, 10);
 }
 
 export function ReferralManagementEditor({

@@ -92,10 +92,10 @@ export function registerReferralManagementIntegrationCases(client: PrismaClient)
       const scope = { workspaceId: f.workspace.id, groupId: f.group.id };
       const config = await client.serviceConfiguration.update({
         where: { groupId: f.group.id },
-        data: {
-          visibility: 'PUBLIC',
-          registration: { create: { ...scope, referralEnabled: true, mode: 'PUBLIC' } },
-        },
+        data: { visibility: 'PUBLIC' },
+      });
+      await client.serviceRegistrationPolicy.create({
+        data: { ...scope, configurationId: config.id, referralEnabled: true, mode: 'PUBLIC' },
       });
       const setting = await client.fortuneServiceSetting.create({
         data: { ...scope, configurationId: config.id, bunshinId: f.bunshin.id, enabled: true },
