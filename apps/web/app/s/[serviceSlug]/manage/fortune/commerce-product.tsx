@@ -53,9 +53,7 @@ export async function FortuneCommerceProduct({
     <section className="settings-card" id="fortune-commerce">
       <h2>深層鑑定の販売</h2>
       <p>販売条件の変更は次回の購入から適用されます。</p>
-      <p>
-        売上を受け取るStripeの接続は、運営団体のオーナーまたは管理者が設定できます。
-      </p>
+      <p>売上を受け取るStripeの接続は、運営団体のオーナーまたは管理者が設定できます。</p>
       <p>
         <Link href={`/organizations/${service.workspaceId}/payment` as Route}>
           Stripeの決済設定を開く
