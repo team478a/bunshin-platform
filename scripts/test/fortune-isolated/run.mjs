@@ -317,11 +317,25 @@ try {
     showLogo: true,
     summoning: true,
   };
+  const cinematicCharacters = Object.fromEntries(
+    [
+      ['daily', 'noah', 'ノア'],
+      ['intake', 'stella', 'ステラ'],
+      ['deep', 'selene', 'セレーネ'],
+    ].map(([role, id, name]) => [
+      role,
+      { id, name, enabled: true, imageUrl: '', iconUrl: '', expressions: {} },
+    ]),
+  );
+  await db.fortuneServiceSetting.update({
+    where: { id: setting.id },
+    data: { guidanceSettings: { characters: cinematicCharacters } },
+  });
   await request(owner, `/api/services/${primary.slug}/fortune-operations`, {
     method: 'POST',
     body: {
       action: 'SAVE_APPEARANCE_SETTINGS',
-      settings: summoningAppearance,
+      settings: { ...summoningAppearance, summoning: 'standard' },
     },
   });
   await browser(primary, participant);
@@ -444,6 +458,7 @@ try {
       guidanceSettings: {
         intake: { enabled: true },
         deepReadingEnabled: true,
+        characters: cinematicCharacters,
         appearance: summoningAppearance,
       },
     },
@@ -593,7 +608,8 @@ try {
     await db.fortuneServiceSetting.findUniqueOrThrow({ where: { id: setting.id } })
   ).guidanceSettings;
   assert.equal(appearance.palette, 'night');
-  assert.equal(appearance.summoning, priorAppearance.summoning);
+  assert.equal(priorAppearance.summoning, true);
+  assert.equal(appearance.summoning, 'standard');
   assert.deepEqual(
     remainingGuidance,
     priorGuidance,

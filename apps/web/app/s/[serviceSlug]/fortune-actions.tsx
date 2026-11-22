@@ -9,6 +9,8 @@ import type {
   FortuneReadingView,
 } from '@bunshin/capability-fortune';
 import { useFortuneSummoning } from './fortune-summoning';
+import type { FortuneSummoningMode } from '../../../src/fortune/appearance';
+import type { FortuneCharacter } from '../../../src/fortune/guidance-settings';
 
 async function request<T = unknown>(url: string, init: RequestInit) {
   const response = await fetch(url, {
@@ -143,13 +145,15 @@ const choices = [
 export function FortuneDrawButtons({
   serviceSlug,
   askConsultation = false,
-  summoning = false,
+  summoning = 'off',
+  dailyCharacter,
   themeLabels,
   onSelectTheme,
 }: {
   serviceSlug: string;
   askConsultation?: boolean;
-  summoning?: boolean;
+  summoning?: FortuneSummoningMode;
+  dailyCharacter?: FortuneCharacter;
   themeLabels?: Record<(typeof choices)[number]['value'], string>;
   onSelectTheme?: (theme: (typeof choices)[number]['value']) => void;
 }) {
@@ -157,7 +161,10 @@ export function FortuneDrawButtons({
   const [busy, setBusy] = useState<string | null>(null);
   const [consultation, setConsultation] = useState('');
   const [error, setError] = useState('');
-  const summoningScene = useFortuneSummoning(summoning);
+  const summoningScene = useFortuneSummoning(
+    summoning,
+    dailyCharacter ? { character: dailyCharacter } : undefined,
+  );
   return (
     <div className="fortune-theme-list">
       {summoningScene.panel}
@@ -202,7 +209,13 @@ export function FortuneDrawButtons({
                   () => router.refresh(),
                 );
               } catch (cause) {
-                setError(cause instanceof Error ? cause.message : '占いを完了できませんでした。');
+                setError(
+                  cause instanceof TypeError
+                    ? '占いに接続できませんでした。もう一度お試しください。'
+                    : cause instanceof Error
+                      ? cause.message
+                      : '占いを完了できませんでした。',
+                );
               } finally {
                 setBusy(null);
               }

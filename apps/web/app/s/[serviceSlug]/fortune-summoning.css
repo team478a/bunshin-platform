@@ -120,6 +120,10 @@
   line-height: 1.6;
 }
 
+.fortune-summoning > .fortune-character p.eyebrow {
+  color: #e9cc98;
+}
+
 .fortune-summoning button {
   z-index: 1;
   min-height: 44px;
