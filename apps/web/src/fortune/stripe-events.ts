@@ -75,7 +75,10 @@ export async function processFortuneStripeEvent(
     )
       throw new ApplicationError('CONFLICT', 'fortune Stripe object mismatch');
 
-    const now = new Date();
+    const now =
+      typeof event.created === 'number' && Number.isSafeInteger(event.created) && event.created > 0
+        ? new Date(event.created * 1000)
+        : new Date();
     if (completed) {
       if (
         object.payment_status !== 'paid' ||
@@ -117,6 +120,10 @@ export async function processFortuneStripeEvent(
         object.refunded !== (amount === current.amountYen)
       )
         throw new ApplicationError('VALIDATION_ERROR', 'fortune refund amount mismatch');
+      await tx.fortuneCommerceRefund.createMany({
+        data: { purchaseId: current.id, observedAmountYen: amount, occurredAt: now },
+        skipDuplicates: true,
+      });
       if (amount > current.refundedAmountYen) {
         await tx.fortuneCommercePurchase.update({
           where: { id: current.id },

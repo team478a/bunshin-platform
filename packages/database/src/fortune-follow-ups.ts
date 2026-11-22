@@ -41,7 +41,7 @@ async function eligible(db: Db, input: Scope, now: Date) {
         status: 'PAID',
         deliveredAt: { not: null },
       },
-      select: { followUpLimit: true },
+      select: { id: true, followUpLimit: true },
     });
     if (!purchase) return null;
     return {
@@ -49,6 +49,7 @@ async function eligible(db: Db, input: Scope, now: Date) {
       reading,
       revision: reading.participant.profileUpdatedAt,
       limit: purchase.followUpLimit,
+      purchaseId: purchase.id,
     };
   }
   const settings = scope.guidanceSettings;
@@ -138,6 +139,7 @@ export class PrismaFortuneFollowUpRepository {
           reading: await fortuneReadingView(tx, reading),
           personalProfileRevision: revision,
           personalGuidance: true,
+          ...(record.purchaseId ? { purchaseId: record.purchaseId } : {}),
           guidanceSettings: scope.guidanceSettings,
           ...(style ? { defaultStyle: style } : {}),
         },

@@ -31,7 +31,16 @@ const approvedDeepReadingNames = [
   '20261121050000_fortune_deep_reading',
   '20261121060000_fortune_intake_quality',
 ];
+const approvedMonetizationNames = [
+  '20261122090000_fortune_commerce',
+  '20261122100000_fortune_revenue',
+  '20261122110000_fortune_experiments',
+];
 const releaseSettings = new Map([
+  [
+    'monetization',
+    { approval: 'APPLY_FORTUNE_MONETIZATION_SCHEMA_TO', approvedNames: approvedMonetizationNames },
+  ],
   [
     'personal-guidance',
     { approval: 'APPLY_FORTUNE_GUIDANCE_SCHEMA_TO', approvedNames: approvedGuidanceNames },

@@ -10,6 +10,7 @@ import {
   fortunePurchaseHistory,
   startFortuneCheckout,
 } from '../../../../src/fortune/commerce';
+import { recordFortuneFunnel } from '../../../../src/fortune/funnel';
 import { resolveFortunePage } from '../../../../src/fortune/page-context';
 import { PublicShell } from '../../../ui/public-shell';
 
@@ -42,12 +43,14 @@ export default async function FortunePurchasePage({
   const selected = history.find(({ id }) => id === result.purchase);
   const available = history.some(({ status, deliveredAt }) => status === 'PAID' && !deliveredAt);
   const purchaseId = randomUUID();
+  if (target && !available) await recordFortuneFunnel(serviceSlug, actor.userId, 'PRODUCT_DETAIL');
 
   async function start(form: FormData) {
     'use server';
     const { actor, service } = await resolveFortunePage(serviceSlug, path);
     const revision = z.string().uuid().safeParse(form.get('revision'));
     if (!revision.success) redirect(`${path}?result=changed` as Route);
+    await recordFortuneFunnel(serviceSlug, actor.userId, 'PURCHASE_CLICK');
     let url: Awaited<ReturnType<typeof startFortuneCheckout>>;
     try {
       url = await startFortuneCheckout(

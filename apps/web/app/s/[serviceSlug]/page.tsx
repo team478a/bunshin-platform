@@ -3,6 +3,7 @@ import type { Metadata, Route } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { publicFortuneAppearance } from '../../../src/fortune/public-appearance';
+import { FortuneVisit } from './fortune-visit';
 import { FortuneAppearance } from './fortune-appearance';
 import { PublicShell } from '../../ui/public-shell';
 import { resolvePublicServiceContext } from '../../../src/services/public-service';
@@ -138,6 +139,9 @@ export default async function ServiceEntryPage({
   const appearance = await publicFortuneAppearance(configuration);
   const content = (
     <PublicShell showPlatformBrand={false}>
+      {(serviceSlug === 'watashi-fortune' || appearance) && (
+        <FortuneVisit serviceSlug={serviceSlug} />
+      )}
       <article className="service-entry" style={style}>
         <header className="service-entry__header">
           {configuration.brand.logoUrl && (!appearance?.enabled || appearance.showLogo) && (

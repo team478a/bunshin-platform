@@ -24,8 +24,8 @@ export function OrganizationPaymentSettings({
         <ol>
           <li>Stripe管理画面でAPIの秘密鍵を確認します。</li>
           <li>下のフォームで保存し、「Stripeとの接続を確認する」を押します。</li>
-          <li>接続確認後に「決済接続を有効にする」を押します。</li>
-          <li>購入受付を始める前に、次の設定でWebhookを登録します。</li>
+          <li>下に表示されるURLをStripeに登録し、Webhook署名シークレットを保存します。</li>
+          <li>接続を確認し、「決済接続を有効にする」を押します。</li>
         </ol>
         {webhookUrl ? (
           <div className="settings-card__notice">
@@ -33,8 +33,8 @@ export function OrganizationPaymentSettings({
             <p className="break-all">{webhookUrl}</p>
             <p>
               送信イベントは checkout.session.completed、checkout.session.expired、
-              charge.refunded、charge.dispute.created、charge.dispute.updated、
-              charge.dispute.closed を選んでください。
+              payment_intent.payment_failed、charge.refunded、charge.dispute.created、
+              charge.dispute.updated、charge.dispute.closed を選んでください。
             </p>
           </div>
         ) : null}
