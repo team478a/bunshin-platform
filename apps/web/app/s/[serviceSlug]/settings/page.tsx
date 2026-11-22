@@ -130,9 +130,7 @@ export default async function FortuneSettingsPage({
         </section>
         <section className="settings-card">
           <h2>この占いサービスの退会</h2>
-          <p>
-            この占いサービスだけを退会します。他のサービスとワタシワークスのアカウントは残ります。
-          </p>
+          <p>退会はこの占いサービスのみに適用されます。他のサービスは引き続き利用できます。</p>
           <FortuneWithdrawButton serviceSlug={serviceSlug} />
         </section>
         <FortuneNav serviceSlug={serviceSlug} />

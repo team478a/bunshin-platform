@@ -66,6 +66,32 @@ describe('public service context', () => {
     });
   });
 
+  it('uses the Oracle name and omits platform attribution on public and member surfaces', async () => {
+    const stored = { ...configuration, slug: 'watashi-fortune', displayName: 'ワタシワークス占い' };
+    state.findPublicBySlug.mockResolvedValue(stored);
+    state.findMemberBySlug.mockResolvedValue(stored);
+
+    await expect(resolvePublicServiceContext(stored.slug)).resolves.toMatchObject({
+      configuration: { displayName: '月と星のオラクル', poweredByEnabled: false },
+    });
+    await expect(resolveMemberServiceContext(stored.slug, 'member-1')).resolves.toMatchObject({
+      configuration: { displayName: '月と星のオラクル', poweredByEnabled: false },
+    });
+    expect(stored.displayName).toBe('ワタシワークス占い');
+    expect(stored.poweredByEnabled).toBe(true);
+  });
+
+  it('honors an updated Oracle display name', async () => {
+    state.findPublicBySlug.mockResolvedValue({
+      ...configuration,
+      slug: 'watashi-fortune',
+      displayName: '月と星のオラクル 新版',
+    });
+    await expect(resolvePublicServiceContext('watashi-fortune')).resolves.toMatchObject({
+      configuration: { displayName: '月と星のオラクル 新版', poweredByEnabled: false },
+    });
+  });
+
   it('applies public registration while retaining the configured channels', async () => {
     state.findPublicBySlug.mockResolvedValue({
       ...configuration,
