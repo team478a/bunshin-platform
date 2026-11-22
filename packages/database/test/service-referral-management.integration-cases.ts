@@ -29,6 +29,7 @@ export function registerReferralManagementIntegrationCases(client: PrismaClient)
       await client.fortuneReading.deleteMany({ where });
       await client.fortuneParticipant.deleteMany({ where });
       await client.fortuneServiceSetting.deleteMany({ where });
+      await client.bunshinCapabilityAssignment.deleteMany({ where });
       await client.bunshin.deleteMany({ where });
       await client.platformAdmin.deleteMany({ where: { userId: { in: userIds } } });
       await client.workspace.deleteMany({ where: { id: { in: workspaceIds } } });

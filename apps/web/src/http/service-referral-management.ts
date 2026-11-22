@@ -33,7 +33,12 @@ export const referralManagementInput = z.discriminatedUnion('kind', [
             registeredFrom: z.number().int().positive().max(8_640_000_000_000_000).optional(),
             registeredBefore: z.number().int().positive().max(8_640_000_000_000_000).optional(),
           })
-          .strict(),
+          .strict()
+          .transform(({ registeredFrom, registeredBefore, ...thresholds }) => ({
+            ...thresholds,
+            ...(registeredFrom === undefined ? {} : { registeredFrom }),
+            ...(registeredBefore === undefined ? {} : { registeredBefore }),
+          })),
       ]),
       reason,
     })
