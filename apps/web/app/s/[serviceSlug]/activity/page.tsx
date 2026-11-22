@@ -59,6 +59,9 @@ export default async function ServiceMemberActivityPage({
     service.configuration.registration.onboardingConfig,
     service.configuration.registration.surveyConfig,
   );
+  if (onboarding.businessProfileEnabled) {
+    redirect(`/s/${serviceSlug}/weekly-report` as Route);
+  }
   const isFortune =
     isFortuneServicePackage(service.configuration.registration.onboardingConfig) ||
     Boolean(
@@ -67,9 +70,6 @@ export default async function ServiceMemberActivityPage({
         select: { id: true },
       }),
     );
-  if (!isFortune && onboarding.businessProfileEnabled) {
-    redirect(`/s/${serviceSlug}/weekly-report` as Route);
-  }
   const promptOnlyImages = isPromptOnlyImageService(service.configuration.slug);
 
   const referralAvailable = isFortune
