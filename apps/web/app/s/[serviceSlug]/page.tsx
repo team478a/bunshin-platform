@@ -12,7 +12,10 @@ import { isRouteNotFound } from '../../../src/navigation/route-not-found';
 import { ParticipationForm } from './participation-form';
 import { PendingSubmitButton } from '../../ui/pending-submit-button';
 import { ServiceHomeAccessGuidance } from './home/service-home-access-guidance';
-import { serviceAuthBrandForSlug } from '../../../src/services/service-auth-brand';
+import {
+  ORACLE_SERVICE_SLUG,
+  serviceAuthBrandForSlug,
+} from '../../../src/services/service-auth-brand';
 import { serviceAuthLoginPath } from '../../../src/auth/line-return';
 
 export const dynamic = 'force-dynamic';
@@ -137,11 +140,10 @@ export default async function ServiceEntryPage({
   } as CSSProperties;
 
   const appearance = await publicFortuneAppearance(configuration);
+  const isOracle = serviceSlug === ORACLE_SERVICE_SLUG;
   const content = (
     <PublicShell showPlatformBrand={false}>
-      {(serviceSlug === 'watashi-fortune' || appearance) && (
-        <FortuneVisit serviceSlug={serviceSlug} />
-      )}
+      {(isOracle || appearance) && <FortuneVisit serviceSlug={serviceSlug} />}
       <article className="service-entry" style={style}>
         <header className="service-entry__header">
           {configuration.brand.logoUrl && (!appearance?.enabled || appearance.showLogo) && (
@@ -152,14 +154,17 @@ export default async function ServiceEntryPage({
               style={{ backgroundImage: `url(${JSON.stringify(configuration.brand.logoUrl)})` }}
             />
           )}
-          <p className="eyebrow">公式サービス</p>
+          {!isOracle && <p className="eyebrow">公式サービス</p>}
           <h1>{configuration.displayName}</h1>
           <p>{configuration.description}</p>
         </header>
 
         {query.withdrawn === '1' && (
           <p className="notice notice--success" role="status">
-            このサービスの退会が完了しました。ワタシワークスのアカウントと他のサービスはそのまま利用できます。
+            このサービスの退会が完了しました。
+            {isOracle
+              ? '他のサービスは引き続き利用できます。'
+              : 'ワタシワークスのアカウントと他のサービスはそのまま利用できます。'}
           </p>
         )}
 
@@ -238,7 +243,7 @@ export default async function ServiceEntryPage({
         </section>
 
         <footer className="service-entry__details">
-          <span>運営：{configuration.operatorName}</span>
+          {!isOracle && <span>運営：{configuration.operatorName}</span>}
           <Link href={`/s/${configuration.slug}/help` as Route}>使い方・ヘルプ</Link>
           {configuration.contactEmail && (
             <a href={`mailto:${configuration.contactEmail}`}>お問い合わせ</a>

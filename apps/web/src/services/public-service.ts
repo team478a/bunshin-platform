@@ -3,6 +3,7 @@ import { ServiceFoundationService, type ServiceFoundationRecord } from '@bunshin
 import { ApplicationError } from '@bunshin/shared';
 import { isRouteNotFound } from '../navigation/route-not-found';
 import { enforceBusinessFreeRegistrationSettings } from './business-daily-service-settings';
+import { ORACLE_SERVICE_NAME, ORACLE_SERVICE_SLUG } from './service-auth-brand';
 import { readServiceOnboardingSettings } from './service-onboarding-settings';
 
 const SERVICE_SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -52,6 +53,19 @@ export function effectiveServiceConfiguration(
   };
 }
 
+function customerFacingConfiguration(stored: ServiceFoundationRecord): ServiceFoundationRecord {
+  const configuration = effectiveServiceConfiguration(stored);
+  if (configuration.slug !== ORACLE_SERVICE_SLUG) return configuration;
+  return {
+    ...configuration,
+    displayName:
+      configuration.displayName === 'ワタシワークス占い'
+        ? ORACLE_SERVICE_NAME
+        : configuration.displayName,
+    poweredByEnabled: false,
+  };
+}
+
 export async function resolvePublicServiceContext(slug: string): Promise<PublicServiceContext> {
   if (slug.length > 80 || !SERVICE_SLUG.test(slug))
     throw new ApplicationError('NOT_FOUND', 'service not found');
@@ -59,7 +73,7 @@ export async function resolvePublicServiceContext(slug: string): Promise<PublicS
   const storedConfiguration = await new ServiceFoundationService(
     new db.PrismaServiceFoundationRepository(),
   ).findPublicBySlug({ slug });
-  const configuration = effectiveServiceConfiguration(storedConfiguration);
+  const configuration = customerFacingConfiguration(storedConfiguration);
   return {
     workspaceId: configuration.workspaceId,
     serviceId: configuration.groupId,
@@ -78,7 +92,7 @@ export async function resolveMemberServiceContext(
   const storedConfiguration = await new ServiceFoundationService(
     new db.PrismaServiceFoundationRepository(),
   ).findMemberBySlug({ slug, actorUserId });
-  const configuration = effectiveServiceConfiguration(storedConfiguration);
+  const configuration = customerFacingConfiguration(storedConfiguration);
   return {
     workspaceId: configuration.workspaceId,
     serviceId: configuration.groupId,
