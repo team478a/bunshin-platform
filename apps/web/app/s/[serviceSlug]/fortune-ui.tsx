@@ -15,6 +15,7 @@ export function FortuneNav({ serviceSlug }: { serviceSlug: string }) {
     <nav className="fortune-nav" aria-label="占いメニュー">
       <Link href={`/s/${serviceSlug}/today` as Route}>今日の占い</Link>
       <Link href={`/s/${serviceSlug}/history` as Route}>過去の結果</Link>
+      <Link href={`/s/${serviceSlug}/credits` as Route}>クレジット</Link>
       <Link href={`/s/${serviceSlug}/settings` as Route}>設定</Link>
       <Link href={`/s/${serviceSlug}/manual` as Route}>使い方</Link>
     </nav>
@@ -25,12 +26,14 @@ export function ReadingCard({
   reading,
   linked = false,
   showFollowUps = false,
+  showCreditFollowUps = false,
   serviceSlug,
   characters,
 }: {
   reading: FortuneReadingView;
   linked?: boolean;
   showFollowUps?: boolean;
+  showCreditFollowUps?: boolean;
   characters?: FortuneGuidanceSettings['characters'];
   serviceSlug: string;
 }) {
@@ -148,9 +151,10 @@ export function ReadingCard({
   ) : (
     <>
       {card}
-      {showFollowUps && (reading.status === 'READY_AI' || reading.status === 'READY_BASIC') && (
-        <FortuneFollowUps key={reading.id} serviceSlug={serviceSlug} readingId={reading.id} />
-      )}
+      {(showFollowUps || showCreditFollowUps) &&
+        (reading.status === 'READY_AI' || reading.status === 'READY_BASIC') && (
+          <FortuneFollowUps key={reading.id} serviceSlug={serviceSlug} readingId={reading.id} />
+        )}
     </>
   );
 }

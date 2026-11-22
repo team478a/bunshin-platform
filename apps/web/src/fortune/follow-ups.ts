@@ -13,12 +13,19 @@ export async function askFortuneFollowUp(input: {
   readingId: string;
   requestId: string;
   question: string;
+  expectedCreditCost?: number;
 }) {
   const repository = await fortuneFollowUpRepository();
   const reservation = await repository.reserve(input);
   if (reservation.kind === 'REPLAY') return reservation.view;
   if (reservation.kind === 'LIMIT')
     throw new ApplicationError('CONFLICT', 'この鑑定の追加質問の上限に達しました。');
+  if (reservation.kind === 'OFFER_CHANGED')
+    throw new ApplicationError('CONFLICT', '交換条件が変わりました。現在の条件をご確認ください。');
+  if (reservation.kind === 'INSUFFICIENT_CREDIT')
+    throw new ApplicationError('CONFLICT', '利用できるクレジットが足りません。');
+  if (reservation.kind === 'REQUEST_CONFLICT')
+    throw new ApplicationError('CONFLICT', '送信済みの質問と内容が一致しません。');
   if (reservation.kind === 'UNAVAILABLE')
     throw new ApplicationError('NOT_FOUND', '追加質問を利用できません。');
   const context = { ...input, revision: reservation.claim.personalProfileRevision };

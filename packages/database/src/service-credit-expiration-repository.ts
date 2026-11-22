@@ -24,7 +24,14 @@ export class PrismaServiceCreditExpirationRepository implements ServiceCreditExp
               groupId: account.groupId,
             },
             orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-            select: { id: true, type: true, amount: true, expiresAt: true, sourceId: true },
+            select: {
+              id: true,
+              type: true,
+              amount: true,
+              expiresAt: true,
+              sourceId: true,
+              lotAllocations: true,
+            },
           });
           const lots = remainingServiceCreditLots(entries);
           const expiredLots = [...lots.entries()].filter(

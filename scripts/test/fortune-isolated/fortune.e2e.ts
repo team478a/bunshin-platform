@@ -6,6 +6,8 @@ const deepStage = stage === 'deep';
 const referral = stage === 'referral';
 const referralAdmin = stage === 'referral-admin';
 const appearanceEditor = stage === 'appearance-editor';
+const creditEditor = stage === 'credit-editor';
+const creditExchange = stage === 'credit-exchange';
 const appearanceViewer = stage === 'appearance-viewer';
 const invitationPath = process.env['BUNSHIN_FORTUNE_TEST_INVITATION'];
 test(
@@ -21,7 +23,11 @@ test(
             ? 'a Fortune member can share and view their referral history on mobile'
             : referralAdmin
               ? 'a Fortune operator sees qualified referrals and settings on mobile'
-              : 'a verified participant can join, skip intake and draw a standard reading on mobile',
+              : creditEditor
+                ? 'an operator can save exchange settings on mobile'
+                : creditExchange
+                  ? 'a referred member exchanges credit for a follow-up and sees their ledger on mobile'
+                  : 'a verified participant can join, skip intake and draw a standard reading on mobile',
   async ({ app, browser, screen }) => {
     const slug = process.env['BUNSHIN_FORTUNE_TEST_SLUG'];
     if (!slug?.startsWith('isolated-fortune-'))
@@ -38,7 +44,7 @@ test(
     });
     const entry =
       invitationPath ||
-      `/s/${slug}/${appearanceEditor ? 'manage/fortune' : referralAdmin ? 'manage/referrals' : referral ? 'home' : 'today'}`;
+      `/s/${slug}/${appearanceEditor || creditEditor ? 'manage/fortune' : referralAdmin ? 'manage/referrals' : referral ? 'home' : 'today'}`;
     if (invitationPath && !invitationPath.startsWith(`/s/${slug}/join/`)) {
       throw new Error('An invitation scoped to the disposable service is required');
     }
@@ -48,6 +54,30 @@ test(
       cookies.map(({ name, value }) => ({ name, value, url, httpOnly: true })),
     );
     await app.open(entry);
+    if (creditEditor) {
+      await screen.getByLabel('利用者に表示する名称').fill('星の特典');
+      await screen.getByLabel('追加質問1回に必要なクレジット数').fill('2');
+      await screen.getByLabel('クレジット交換を受け付ける').tap();
+      await screen.getByRole('button', '交換設定を保存する').tap();
+      await expect(screen.getByText('交換設定を保存しました。')).toBeVisible({ timeout: 45_000 });
+      return;
+    }
+    if (creditExchange) {
+      await expect(
+        screen.getByText('追加質問1回に星の特典を2使います。', { exact: false }),
+      ).toBeVisible({ timeout: 45_000 });
+      await screen.getByLabel('AIへの質問').fill('追加質問の交換を確認したい');
+      await screen.getByRole('button', '2クレジットで質問する').tap();
+      await expect(
+        screen.getByText('考えを一つに絞ると、次の一歩を決めやすくなります。'),
+      ).toBeVisible({ timeout: 45_000 });
+      await screen.getByRole('link', '残高・履歴と利用条件を見る').tap();
+      await browser.waitForURL(`${url}/s/${slug}/credits`, { timeout: 45_000 });
+      await expect(screen.getByRole('heading', '星の特典')).toBeVisible();
+      await expect(screen.getByRole('heading', '追加質問に使いました')).toBeVisible();
+      await expect(screen.getByRole('heading', '紹介特典')).toBeVisible();
+      return;
+    }
     if (referralAdmin) {
       await expect(screen.getByRole('heading', '紹介の審査・確定')).toBeVisible();
       await expect(screen.getByRole('heading', '紹介実績')).toBeVisible();

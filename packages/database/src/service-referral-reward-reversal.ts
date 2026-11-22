@@ -31,6 +31,7 @@ export async function reverseConfirmedReferralRewards(
         amount: true,
         expiresAt: true,
         sourceId: true,
+        lotAllocations: true,
       },
     });
     const key = `referral:${referralId}:rule:${reward.ruleId}:membership:${reward.beneficiaryMembershipId}`;

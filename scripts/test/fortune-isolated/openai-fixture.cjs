@@ -14,6 +14,11 @@ globalThis.fetch = function (input, options) {
   let result;
   if (schema === 'fortune_intake_question') {
     result = { key: context.answers.length ? 'DONE' : 'SITUATION' };
+  } else if (schema === 'fortune_follow_up' && context.question === '追加質問の交換を確認したい') {
+    result = {
+      body: '考えを一つに絞ると、次の一歩を決めやすくなります。',
+      actionStep: '今できることを一つ書き出してみましょう。',
+    };
   } else if (schema === 'fortune_deep_reading') {
     const fresh = context.reviewedUnderstanding.some(
       ({ text }) => text === '今は働き方を整理したい',

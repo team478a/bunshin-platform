@@ -12,3 +12,21 @@ it('removes a specific grant without consuming another grant with earlier expiry
   expect(lots.get('other')?.remaining).toBe(2);
   expect(lots.get('referral')?.remaining).toBe(0);
 });
+
+it('allocates one exchange to its unexpired grant lots and leaves earlier expired credits intact', () => {
+  const common = { expiresAt: null, sourceId: null };
+  const lots = remainingServiceCreditLots([
+    { ...common, id: 'expired', type: 'GRANT', amount: 2, expiresAt: new Date('2026-11-01') },
+    { ...common, id: 'first', type: 'GRANT', amount: 3 },
+    { ...common, id: 'second', type: 'GRANT', amount: 4 },
+    {
+      ...common,
+      id: 'question',
+      type: 'CONSUME',
+      amount: -5,
+      lotAllocations: { first: 3, second: 2 },
+    },
+    { ...common, id: 'expiry', type: 'EXPIRE', amount: -2, sourceId: 'grant:expired' },
+  ]);
+  expect(Array.from(lots.values()).map((item) => item.remaining)).toEqual([0, 0, 2]);
+});
