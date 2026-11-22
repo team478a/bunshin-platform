@@ -1,5 +1,10 @@
 import 'server-only';
-import { FORTUNE_KNOWLEDGE_MEANING_COUNT, readFortuneDeck } from '@bunshin/capability-fortune';
+import {
+  FORTUNE_KNOWLEDGE_MEANING_COUNT,
+  readFortuneDeck,
+  type FortuneDeckCard,
+  type FortuneKnowledgeMeaningInput,
+} from '@bunshin/capability-fortune';
 import { ApplicationError } from '@bunshin/shared';
 import { currentLineEnvironment } from '../line/secure-configuration';
 import {
@@ -26,6 +31,8 @@ export interface FortuneOperatorStatus {
   timeZone: string;
   bunshinId: string | null;
   approvedVersion: number | null;
+  deck: FortuneDeckCard[];
+  customMeanings: FortuneKnowledgeMeaningInput[];
   approvedMeaningCount: number;
   requiredMeaningCount: number;
   termsReady: boolean;
