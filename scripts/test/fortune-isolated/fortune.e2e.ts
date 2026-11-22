@@ -3,6 +3,7 @@ import { expect } from 'e2e';
 
 const stage = process.env['BUNSHIN_FORTUNE_TEST_STAGE'];
 const deepStage = stage === 'deep';
+const referral = stage === 'referral';
 const appearanceEditor = stage === 'appearance-editor';
 const appearanceViewer = stage === 'appearance-viewer';
 const invitationPath = process.env['BUNSHIN_FORTUNE_TEST_INVITATION'];
@@ -15,7 +16,9 @@ test(
         ? 'a returning participant can check saved context and receive a deep reading on mobile'
         : invitationPath
           ? 'an invited visitor can accept the invitation and reach the mobile age gate'
-          : 'a verified participant can join, skip intake and draw a standard reading on mobile',
+          : referral
+            ? 'a Fortune member can share and view their referral history on mobile'
+            : 'a verified participant can join, skip intake and draw a standard reading on mobile',
   async ({ app, browser, screen }) => {
     const slug = process.env['BUNSHIN_FORTUNE_TEST_SLUG'];
     if (!slug?.startsWith('isolated-fortune-'))
@@ -30,7 +33,9 @@ test(
       if (new URL(route.request.url).origin === url) await route.continue();
       else await route.abort();
     });
-    const entry = invitationPath || `/s/${slug}/${appearanceEditor ? 'manage/fortune' : 'today'}`;
+    const entry =
+      invitationPath ||
+      `/s/${slug}/${appearanceEditor ? 'manage/fortune' : referral ? 'home' : 'today'}`;
     if (invitationPath && !invitationPath.startsWith(`/s/${slug}/join/`)) {
       throw new Error('An invitation scoped to the disposable service is required');
     }
@@ -40,6 +45,30 @@ test(
       cookies.map(({ name, value }) => ({ name, value, url, httpOnly: true })),
     );
     await app.open(entry);
+    if (referral) {
+      await screen.getByRole('link', '友だちに紹介する').tap();
+      await expect(screen.getByRole('heading', '友だちに紹介する')).toBeVisible();
+      await expect(screen.getByText('紹介経由で登録しました')).toBeVisible();
+      const stats = browser.locator('[aria-label="紹介の状況"]');
+      await expect(stats.getByText('1回', { exact: true })).toBeVisible();
+      await expect(stats.getByText('1人', { exact: true })).toBeVisible();
+      await expect(stats.getByText('0人', { exact: true })).toBeVisible();
+      await expect(screen.getByRole('link', 'LINEで送る')).toBeVisible();
+      await expect(browser.locator('a[href^="https://line.me/R/share?text="]')).toBeVisible();
+      await screen.getByText('QRコードを表示').tap();
+      await expect(screen.getByRole('img', '紹介URLのQRコード')).toBeVisible();
+      await screen.getByRole('button', '紹介用の投稿文を作る').tap();
+      await expect(screen.getByRole('button', '投稿文をコピー')).toBeVisible();
+      await expect(screen.getByText('最初の投稿まで進んだ人数')).toHaveCount(0);
+      await expect(screen.getByRole('heading', '画像作成回数')).toHaveCount(0);
+      await expect(screen.getByRole('heading', 'ポイント・バッジ')).toHaveCount(0);
+      const width = await browser.evaluate(() => ({
+        viewport: innerWidth,
+        page: document.documentElement.scrollWidth,
+      }));
+      expect(width).toEqual({ viewport: 390, page: 390 });
+      return;
+    }
     if (appearanceEditor) {
       await screen.getByText('利用者画面のデザイン', { exact: true }).tap();
       await screen.getByLabel('基本の配色').selectOption({ value: 'night' });
