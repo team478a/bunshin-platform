@@ -6,6 +6,7 @@ import {
   defaultFortuneAppearance,
   fortuneAppearanceSchema,
   resolveFortuneAppearanceColors,
+  resolveFortuneSummoningMode,
   type FortuneAppearanceBrand,
   type FortuneAppearanceSettings,
 } from '../../../../../src/fortune/appearance';
@@ -106,6 +107,20 @@ export function FortuneAppearanceEditor({
               onChange={(event) => change('enabled', event.target.checked)}
             />
             <span>保存後に占い画面へ適用する</span>
+          </label>
+          <label className="form-field">
+            <span>占いの演出</span>
+            <select
+              value={resolveFortuneSummoningMode(value)}
+              onChange={(event) => {
+                const mode = event.target.value;
+                change('summoning', mode === 'standard' ? 'standard' : mode === 'cinematic');
+              }}
+            >
+              <option value="off">演出なし</option>
+              <option value="standard">カード反転のみ</option>
+              <option value="cinematic">シネマティック</option>
+            </select>
           </label>
           <label className="form-field">
             <span>基本の配色</span>

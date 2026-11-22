@@ -12,6 +12,7 @@ import {
   toJapanLocalDate,
 } from '@bunshin/capability-fortune';
 import { FortuneAppearance } from '../fortune-appearance';
+import { resolveFortuneSummoningMode } from '../../../../src/fortune/appearance';
 import { PublicShell } from '../../../ui/public-shell';
 import { fortuneDailyReadingService } from '../../../../src/fortune/runtime';
 import { resolveFortuneGuidanceSettings } from '../../../../src/fortune/guidance-settings';
@@ -124,6 +125,7 @@ export default async function FortuneTodayPage({
           ? '占い方を選ぶ'
           : '今日のカードを引く';
   const { guide, characters } = guidance;
+  const summoning = resolveFortuneSummoningMode(guidance.appearance);
   const welcome = showIntake || !today.participant ? characters?.intake : characters?.daily;
   const content = (
     <PublicShell showPlatformBrand={false}>
@@ -196,6 +198,7 @@ export default async function FortuneTodayPage({
                 serviceSlug={serviceSlug}
                 showFollowUps={showGuide && (!commerce || Boolean(today.reading.deepReading))}
                 showCreditFollowUps={showGuide && setting.followUpCreditEnabled}
+                oracleBook={summoning === 'cinematic'}
                 {...(characters ? { characters } : {})}
               />
               {showUpgrade && (
@@ -204,6 +207,7 @@ export default async function FortuneTodayPage({
                   <p>引いたカードとテーマを使います。今回の相談を確認してから鑑定します。</p>
                   <FortuneDynamicIntake
                     serviceSlug={serviceSlug}
+                    summoning={summoning}
                     selectedTheme={today.reading.theme}
                     paidReading
                     deepReadingEnabled
@@ -228,6 +232,8 @@ export default async function FortuneTodayPage({
               {!showDynamicIntake && <p>今日いちばん気になるものを選んでください。</p>}
               <DrawButtons
                 serviceSlug={serviceSlug}
+                summoning={summoning}
+                {...(characters?.daily ? { dailyCharacter: characters.daily } : {})}
                 {...(deepEnabled ? { deepReadingEnabled: true } : {})}
                 {...(paidView ? { paidReading: true } : {})}
                 {...(characters ? { characters } : {})}

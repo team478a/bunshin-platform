@@ -172,6 +172,8 @@ async function browser(fixture, participant, stage = 'basic', invitationPath) {
       '0',
       '--config',
       join(import.meta.dirname, 'e2e.config.ts'),
+      '--output',
+      join(import.meta.dirname, '.e2e', stage),
     ],
     {
       cwd: root,
@@ -304,6 +306,46 @@ try {
     status: 400,
   });
   await request(participant, today, { method: 'POST', body: { theme: 'WORK' }, status: 403 });
+  const summoningAppearance = {
+    enabled: false,
+    palette: 'night',
+    useBrandColors: false,
+    backdrop: 'glow',
+    cards: 'outline',
+    corners: 'rounded',
+    ornament: 'both',
+    heading: 'serif',
+    showLogo: true,
+    summoning: true,
+  };
+  const cinematicCharacters = Object.fromEntries(
+    [
+      ['daily', 'noah', 'ノア'],
+      ['intake', 'stella', 'ステラ'],
+      ['deep', 'selene', 'セレーネ'],
+    ].map(([role, id, name]) => [
+      role,
+      { id, name, enabled: true, imageUrl: '', iconUrl: '', expressions: {} },
+    ]),
+  );
+  const operationsPath = `/api/services/${primary.slug}/fortune-operations`;
+  const { data: initialFortuneOperations } = await (await request(owner, operationsPath)).json();
+  const configuredGuidance = {
+    ...initialFortuneOperations.guidanceSettings,
+    characters: cinematicCharacters,
+  };
+  delete configuredGuidance.appearance;
+  await request(owner, operationsPath, {
+    method: 'POST',
+    body: { action: 'SAVE_GUIDANCE_SETTINGS', settings: configuredGuidance },
+  });
+  await request(owner, operationsPath, {
+    method: 'POST',
+    body: {
+      action: 'SAVE_APPEARANCE_SETTINGS',
+      settings: { ...summoningAppearance, summoning: 'standard' },
+    },
+  });
   await browser(primary, participant);
   const first = await db.fortuneReading.findFirstOrThrow({
     where: { serviceSettingId: setting.id },
@@ -418,9 +460,20 @@ try {
   await request(participant, entry, { status: 307 });
   assert.equal(await returns(), 0);
   console.log('PASS real return route, opt-in and opt-out persisted without sending LINE messages');
-  await db.fortuneServiceSetting.update({
-    where: { id: setting.id },
-    data: { guidanceSettings: { intake: { enabled: true }, deepReadingEnabled: true } },
+  await request(owner, operationsPath, {
+    method: 'POST',
+    body: {
+      action: 'SAVE_GUIDANCE_SETTINGS',
+      settings: {
+        ...configuredGuidance,
+        intake: { enabled: true, questions: 3, calls: 3 },
+        deepReadingEnabled: true,
+      },
+    },
+  });
+  await request(owner, operationsPath, {
+    method: 'POST',
+    body: { action: 'SAVE_APPEARANCE_SETTINGS', settings: summoningAppearance },
   });
   await put(`${base}/profile`, {
     consented: true,
@@ -558,7 +611,7 @@ try {
   console.log(
     'PASS scoped invitation acceptance and policy consent open the mobile Fortune age gate',
   );
-  const priorGuidance = (
+  const { appearance: priorAppearance, ...priorGuidance } = (
     await db.fortuneServiceSetting.findUniqueOrThrow({ where: { id: setting.id } })
   ).guidanceSettings;
   await browser(primary, owner, 'appearance-editor');
@@ -567,6 +620,8 @@ try {
     await db.fortuneServiceSetting.findUniqueOrThrow({ where: { id: setting.id } })
   ).guidanceSettings;
   assert.equal(appearance.palette, 'night');
+  assert.equal(priorAppearance.summoning, true);
+  assert.equal(appearance.summoning, 'standard');
   assert.deepEqual(
     remainingGuidance,
     priorGuidance,

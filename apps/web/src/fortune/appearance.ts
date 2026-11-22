@@ -18,6 +18,7 @@ export const fortuneAppearanceSchema = z
     ornament: z.enum(['none', 'moon', 'stars', 'both']),
     heading: z.enum(['sans', 'serif']),
     showLogo: z.boolean(),
+    summoning: z.union([z.boolean(), z.literal('standard')]).optional(),
   })
   .strict();
 
@@ -27,6 +28,14 @@ export const readFortuneAppearance = (guidance: unknown) =>
   appearanceFromGuidance.safeParse(guidance).data?.appearance;
 
 export type FortuneAppearanceSettings = z.infer<typeof fortuneAppearanceSchema>;
+export type FortuneSummoningMode = 'off' | 'standard' | 'cinematic';
+
+export function resolveFortuneSummoningMode(
+  appearance: FortuneAppearanceSettings | undefined,
+): FortuneSummoningMode {
+  if (appearance?.summoning === 'standard') return 'standard';
+  return appearance?.summoning === true ? 'cinematic' : 'off';
+}
 export type FortuneAppearanceBrand = {
   logoUrl: string | null;
   primaryColor: string;

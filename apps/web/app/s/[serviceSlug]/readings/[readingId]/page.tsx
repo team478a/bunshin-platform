@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { FortuneAppearance } from '../../fortune-appearance';
 import { PublicShell } from '../../../../ui/public-shell';
 import { fortuneDailyReadingService } from '../../../../../src/fortune/runtime';
+import { resolveFortuneSummoningMode } from '../../../../../src/fortune/appearance';
 import { resolveFortuneGuidanceSettings } from '../../../../../src/fortune/guidance-settings';
 import { resolveFortunePage } from '../../../../../src/fortune/page-context';
 import { FortuneDeleteButton } from '../../fortune-actions';
@@ -40,6 +41,7 @@ export default async function FortuneReadingPage({
           {...(characters ? { characters } : {})}
           serviceSlug={serviceSlug}
           showFollowUps={setting.aiEnabled && setting.personalProfileEnabled}
+          oracleBook={resolveFortuneSummoningMode(appearance) === 'cinematic'}
         />
         <FortuneDeleteButton serviceSlug={serviceSlug} readingId={readingId} />
         <FortuneNav serviceSlug={serviceSlug} />
