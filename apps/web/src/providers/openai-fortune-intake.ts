@@ -23,6 +23,7 @@ const INTAKE_INSTRUCTIONS = [
 
 export async function selectFortuneIntakeQuestion(input: {
   id: string;
+  purchaseId?: string;
   workspaceId: string;
   groupId: string;
   bunshinId: string;
@@ -35,7 +36,9 @@ export async function selectFortuneIntakeQuestion(input: {
   allowed: () => Promise<boolean>;
 }) {
   const started = Date.now();
-  const operationKey = `fortune-intake:${input.id}`;
+  const operationKey = input.purchaseId
+    ? `fortune-purchase:${input.purchaseId}:fortune-intake:${input.id}`
+    : `fortune-intake:${input.id}`;
   const runtime = await reserveOpenAiRuntimeConfiguration(operationKey);
   let attempted = false;
   let inputTokens: number | null = null;

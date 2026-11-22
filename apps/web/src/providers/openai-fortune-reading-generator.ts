@@ -202,9 +202,12 @@ export class OpenAiFortuneReadingGenerator implements FortuneAiReadingGenerator 
       }
     };
     const attempt = input.claim.jobAttempt;
-    const operationKey = followUp
+    const readingOperationKey = followUp
       ? `fortune-follow-up:${input.claim.reading.id}:${followUp.requestId}`
       : `fortune-reading:${input.claim.reading.id}${attempt ? `:${attempt.jobId}:attempt:${attempt.attemptCount}` : input.claim.generationRevision ? `:revision:${input.claim.generationRevision.getTime()}` : ''}`;
+    const operationKey = input.claim.purchaseId
+      ? `fortune-purchase:${input.claim.purchaseId}:${readingOperationKey}`
+      : readingOperationKey;
     const runtime = await reserveOpenAiRuntimeConfiguration(operationKey);
     let usagePending = true;
     let providerAttempted = false;

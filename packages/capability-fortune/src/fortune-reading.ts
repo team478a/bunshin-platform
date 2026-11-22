@@ -65,6 +65,7 @@ export type CreateFortuneReadingResult =
   | { kind: 'KNOWLEDGE_NOT_READY' };
 
 export interface FortuneAiGenerationClaim {
+  purchaseId?: string;
   generationRevision?: Date;
   jobAttempt?: { jobId: string; attemptCount: number };
   workspaceId: string;

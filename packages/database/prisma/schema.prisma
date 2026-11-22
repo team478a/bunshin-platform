@@ -233,6 +233,7 @@ enum ServiceMembershipEventType {
   NOTIFICATION_OPTED_OUT
   SERVICE_WITHDRAWN
   FORTUNE_WEEKLY_LINE_RETURN
+  FORTUNE_FUNNEL
 }
 
 enum GroupInvitationStatus {
@@ -3442,6 +3443,8 @@ model FortuneServiceSetting {
   bunshin                   Bunshin                   @relation(fields: [workspaceId, bunshinId], references: [workspaceId, id], onDelete: Restrict)
   participants              FortuneParticipant[]
   commerceProduct           FortuneCommerceProduct?
+  acquisitionVisits         FortuneAcquisitionVisit[]
+  advertisingSpend          FortuneAdvertisingSpend[]
   knowledgeVersions         FortuneKnowledgeVersion[]
   readings                  FortuneReading[]
   feedback                  FortuneFeedback[]
@@ -3494,6 +3497,11 @@ model FortuneCommercePurchase {
   providerCheckoutSessionId String? @unique @map("provider_checkout_session_id") @db.VarChar(200)
   providerPaymentIntentId String? @unique @map("provider_payment_intent_id") @db.VarChar(200)
   refundedAmountYen Int @default(0) @map("refunded_amount_yen")
+  acquisitionChannel String? @map("acquisition_channel") @db.VarChar(64)
+  acquisitionMedium String? @map("acquisition_medium") @db.VarChar(64)
+  acquisitionCampaign String? @map("acquisition_campaign") @db.VarChar(64)
+  stripeFeeYen Int? @map("stripe_fee_yen")
+  refunds FortuneCommerceRefund[]
   readingId String? @unique @map("reading_id") @db.Uuid
   deliveredAt DateTime? @map("delivered_at") @db.Timestamptz(6)
   paidAt DateTime? @map("paid_at") @db.Timestamptz(6)
@@ -3515,6 +3523,46 @@ enum FortuneCommercePurchaseStatus {
   PAID
   EXPIRED
   REFUNDED
+}
+
+model FortuneAcquisitionVisit {
+  id String @id @default(uuid()) @db.Uuid
+  workspaceId String @map("workspace_id") @db.Uuid
+  groupId String @map("group_id") @db.Uuid
+  serviceSettingId String @map("service_setting_id") @db.Uuid
+  channel String @db.VarChar(64)
+  medium String? @db.VarChar(64)
+  campaign String? @db.VarChar(64)
+  occurredAt DateTime @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  serviceSetting FortuneServiceSetting @relation(fields: [workspaceId, groupId, serviceSettingId], references: [workspaceId, groupId, id], onDelete: Cascade)
+
+  @@index([workspaceId, groupId, occurredAt])
+  @@map("fortune_acquisition_visits")
+}
+
+model FortuneAdvertisingSpend {
+  id String @id @default(uuid()) @db.Uuid
+  workspaceId String @map("workspace_id") @db.Uuid
+  groupId String @map("group_id") @db.Uuid
+  serviceSettingId String @map("service_setting_id") @db.Uuid
+  month String @db.VarChar(7)
+  channel String @db.VarChar(64)
+  amountYen Int @map("amount_yen")
+  serviceSetting FortuneServiceSetting @relation(fields: [workspaceId, groupId, serviceSettingId], references: [workspaceId, groupId, id], onDelete: Cascade)
+
+  @@unique([workspaceId, groupId, month, channel])
+  @@map("fortune_advertising_spend")
+}
+
+model FortuneCommerceRefund {
+  id String @id @default(uuid()) @db.Uuid
+  purchaseId String @map("purchase_id") @db.Uuid
+  observedAmountYen Int @map("observed_amount_yen")
+  occurredAt DateTime @map("occurred_at") @db.Timestamptz(6)
+  purchase FortuneCommercePurchase @relation(fields: [purchaseId], references: [id], onDelete: Restrict)
+
+  @@unique([purchaseId, observedAmountYen])
+  @@map("fortune_commerce_refunds")
 }
 
 model FortuneParticipant {

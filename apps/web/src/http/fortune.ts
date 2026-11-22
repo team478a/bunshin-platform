@@ -29,6 +29,8 @@ import { recordServiceUse } from '../services/service-membership';
 import { askFortuneFollowUp, fortuneFollowUpRepository } from '../fortune/follow-ups';
 import { selectFortuneIntakeQuestion } from '../providers/openai-fortune-intake';
 
+import { recordFortuneFunnel } from '../fortune/funnel';
+
 const logger = createLogger();
 
 const slug = z
@@ -311,6 +313,7 @@ export const drawFortuneResponse = (request: Request, serviceSlug: string) =>
         : body.consultation;
       if (body.intakeOutcome && (body.intakeOutcome === 'REVIEWED') !== Boolean(reviewed))
         throw new ApplicationError('VALIDATION_ERROR', '今回の相談内容を確認してください。');
+      if (!body.paidReading) await recordFortuneFunnel(parsedSlug, actorUserId, 'FREE_START');
       const result = await (
         await fortuneDailyReadingService()
       ).draw({
@@ -321,6 +324,8 @@ export const drawFortuneResponse = (request: Request, serviceSlug: string) =>
         ...(reviewed ? { reviewedUnderstanding: reviewed } : {}),
         ...(body.paidReading ? { paidReading: true } : {}),
       });
+      if (!body.paidReading && result.status === 'READY_BASIC')
+        await recordFortuneFunnel(parsedSlug, actorUserId, 'FREE_COMPLETE');
       if (body.intakeOutcome)
         await recordFortuneIntakeProgress({
           serviceSlug: parsedSlug,

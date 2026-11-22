@@ -14,6 +14,7 @@ export type StripeProgramEvent = {
   id?: unknown;
   type?: unknown;
   livemode?: unknown;
+  created?: unknown;
   data?: {
     object?: {
       id?: unknown;

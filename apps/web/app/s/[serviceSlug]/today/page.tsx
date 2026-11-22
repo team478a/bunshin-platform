@@ -1,5 +1,6 @@
 import type { Metadata, Route } from 'next';
 import Link from 'next/link';
+import { recordFortuneFunnel } from '../../../../src/fortune/funnel';
 import { prisma } from '@bunshin/database';
 import {
   availableFortuneProduct,
@@ -70,6 +71,7 @@ export default async function FortuneTodayPage({
             : null,
         ])
       : [false, null];
+  if (product && !hasPurchase) await recordFortuneFunnel(serviceSlug, actor.userId, 'PAID_OFFER');
   const paidView =
     hasPurchase &&
     (await searchParams)?.paid === '1' &&

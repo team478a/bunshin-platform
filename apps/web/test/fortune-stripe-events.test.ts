@@ -66,6 +66,7 @@ function fixture() {
         Promise.resolve(Object.assign(current, data)),
       ),
     },
+    fortuneCommerceRefund: { createMany: vi.fn() },
     paymentWebhookEvent: {
       findUnique: vi.fn(
         ({

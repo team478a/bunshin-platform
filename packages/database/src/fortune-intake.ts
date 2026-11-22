@@ -45,6 +45,7 @@ export class PrismaFortuneIntakeRepository {
     });
     if (!participant) return null;
     const commerce = usesFortuneCommerce(input.serviceSlug, scope);
+    let purchaseId: string | undefined;
     if (commerce) {
       const purchase = await this.db.fortuneCommercePurchase.findFirst({
         where: {
@@ -61,6 +62,7 @@ export class PrismaFortuneIntakeRepository {
         !fortuneDeepReadingEnabled(scope.guidanceSettings)
       )
         return null;
+      purchaseId = purchase.id;
     }
     const now = this.now();
     const localDate = dateOnly(toJapanLocalDate(now));
@@ -79,7 +81,15 @@ export class PrismaFortuneIntakeRepository {
       (!commerce || reading.deepReading || !['READY_BASIC', 'READY_AI'].includes(reading.status))
     )
       return null;
-    return { scope, participant, options, localDate, now, selectedTheme: reading?.theme };
+    return {
+      scope,
+      participant,
+      options,
+      localDate,
+      now,
+      selectedTheme: reading?.theme,
+      purchaseId,
+    };
   }
 
   async recordProgress(
@@ -173,6 +183,7 @@ export class PrismaFortuneIntakeRepository {
     return {
       kind: 'RESERVED',
       id,
+      ...(target.purchaseId ? { purchaseId: target.purchaseId } : {}),
       workspaceId: scope.workspaceId,
       groupId: scope.groupId,
       bunshinId: scope.bunshinId,
