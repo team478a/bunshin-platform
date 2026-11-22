@@ -15,6 +15,7 @@
   color: var(--ivory);
   perspective: 800px;
   scroll-margin-block: 1rem;
+  scroll-margin-block-end: calc(4rem + env(safe-area-inset-bottom));
   text-align: center;
 }
 

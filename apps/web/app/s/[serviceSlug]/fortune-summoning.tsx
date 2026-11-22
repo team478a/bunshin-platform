@@ -84,7 +84,7 @@ function FortuneSummoning({
   useEffect(() => {
     const transition = stage.current;
     const previous = document.activeElement;
-    transition?.scrollIntoView({ block: 'nearest', behavior: 'instant' });
+    transition?.scrollIntoView({ block: 'center', behavior: 'instant' });
     skipButton.current?.focus({ preventScroll: true });
     return () => {
       if (previous instanceof HTMLElement && document.activeElement === document.body)

@@ -38,9 +38,21 @@ test(
       value: string;
     }>;
     if (!cookies.length) throw new Error('Real local Auth session required');
+    let allowDeepDraw = () => {};
+    const deepDrawGate = new Promise<void>((resolve) => {
+      allowDeepDraw = resolve;
+    });
     await browser.route('**/*', async (route) => {
-      if (new URL(route.request.url).origin === url) await route.continue();
-      else await route.abort();
+      const target = new URL(route.request.url);
+      if (target.origin !== url) return route.abort();
+      if (
+        deepStage &&
+        route.request.method === 'POST' &&
+        target.pathname === `/api/services/${slug}/fortune/today`
+      ) {
+        await deepDrawGate;
+      }
+      await route.continue();
     });
     const entry =
       invitationPath ||
@@ -176,8 +188,25 @@ test(
       await screen.getByRole('button', '質問をスキップする').tap();
       await expect(screen.getByText('ここまでの内容で占えます。')).toBeVisible();
       await screen.getByRole('button', 'ここまでで占う').tap();
-      await screen.getByRole('button', 'この内容で占う').tap();
-      await screen.getByRole('button', '演出をスキップ').tap();
+      try {
+        await screen.getByRole('button', 'この内容で占う').tap();
+        const skip = screen.getByRole('button', '演出をスキップ');
+        await expect(skip).toBeVisible();
+        const clearOfNav = await browser.evaluate(() => {
+          const button = document.querySelector('.fortune-summoning button');
+          const nav = document.querySelector('.fortune-nav');
+          return Boolean(
+            button &&
+            nav &&
+            button.getBoundingClientRect().bottom <= nav.getBoundingClientRect().top,
+          );
+        });
+        expect(clearOfNav).toBe(true);
+        await app.screenshot('fortune-deep-summoning-390px');
+        await skip.tap();
+      } finally {
+        allowDeepDraw();
+      }
       await expect(screen.getByRole('heading', '考えられる選択肢')).toBeVisible({
         timeout: 75_000,
       });
