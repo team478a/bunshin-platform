@@ -52,6 +52,27 @@ beforeEach(() => {
   m.execute.mockResolvedValue({ state: 'UNASSESSED', review: 'CLEAR' });
 });
 describe('referral management HTTP authorization and input boundary', () => {
+  it('accepts a Fortune policy with an optional registration window', async () => {
+    const value = {
+      kind: 'POLICY',
+      expectedPolicyVersionId: null,
+      authority: 'HEADQUARTERS',
+      status: 'ACTIVE',
+      timezone: 'Asia/Tokyo',
+      conditions: {
+        requireFirstFreeReading: true,
+        minimumActiveDays: 0,
+        minimumPaidPurchases: 1,
+        registeredFrom: 1_800_000_000_000,
+      },
+      reason: 'Synthetic Fortune configuration',
+    };
+    expect((await POST(request(value), context)).status).toBe(200);
+    expect(m.save).toHaveBeenCalledWith(
+      { workspaceId: id(4), serviceId: id(5), actorUserId: id(3) },
+      value,
+    );
+  });
   it('requires session and does not read service before authentication', async () => {
     m.actor.mockResolvedValue(null);
     expect((await POST(request(review()), context)).status).toBe(401);

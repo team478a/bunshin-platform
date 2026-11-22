@@ -580,6 +580,24 @@ try {
     ).guidanceSettings?.appearance,
     undefined,
   );
+  const referralEndpoint = `/api/services/${primary.slug}/referral-code`;
+  await request(participant, referralEndpoint, { method: 'POST', status: 403 });
+  const scope = { workspaceId: primary.member.workspaceId, groupId: primary.member.groupId };
+  await db.serviceRegistrationPolicy.update({
+    where: { groupId: scope.groupId },
+    data: { referralEnabled: true },
+  });
+  const issueCode = async () =>
+    (await (await request(participant, referralEndpoint, { method: 'POST' })).json()).data;
+  const referral = await issueCode();
+  assert.equal((await issueCode()).code, referral.code);
+  const referralPath = new URL(referral.referralUrl).pathname;
+  await request(null, referralPath, { status: 404 });
+  assert.doesNotMatch(
+    await (await request(participant, `/s/${primary.slug}/activity`)).text(),
+    /あなた専用の紹介URL/,
+  );
+
   await db.serviceConfiguration.update({
     where: { id: primary.configurationId },
     data: { visibility: 'PUBLIC' },
@@ -605,6 +623,187 @@ try {
   );
   console.log(
     'PASS scoped appearance, public branding, original logo, and 390px participant layout',
+  );
+
+  await db.serviceRegistrationPolicy.update({
+    where: { groupId: scope.groupId },
+    data: { mode: 'PUBLIC' },
+  });
+  const landing = await request(null, referralPath, { status: 303 });
+  const landingUrl = new URL(landing.headers.get('location'), origin);
+  assert.equal(landingUrl.pathname, `/s/${primary.slug}`);
+  assert.equal(landingUrl.searchParams.get('ref'), referral.code);
+  const referralClickId = landingUrl.searchParams.get('rc');
+  assert.ok(referralClickId);
+  const legalDocumentIds = (
+    await db.serviceLegalDocument.findMany({
+      where: scope,
+      select: { id: true },
+    })
+  ).map(({ id }) => id);
+  const referred = await actor('referred');
+  const register = (actor, clickId) =>
+    request(actor, `/api/services/${primary.slug}/participation`, {
+      method: 'POST',
+      body: { legalDocumentIds, referralCode: referral.code, referralClickId: clickId },
+      status: 201,
+    });
+  await register(referred, referralClickId);
+  await register(referred, referralClickId);
+  await register(participant, null);
+  const referrals = await db.serviceReferral.findMany({ where: scope });
+  assert.equal(referrals.length, 1);
+  assert.equal(referrals[0].referralClickId, referralClickId);
+  assert.equal(referrals[0].referredUserId, referred.userId);
+  assert.equal(referrals[0].qualificationState, 'UNASSESSED');
+  assert.equal(await db.serviceReferralClick.count({ where: scope }), 1);
+  assert.equal(await db.serviceReferralReward.count({ where: scope }), 0);
+  await request(referred, `${base}/participation`, {
+    method: 'POST',
+    body: { ageConfirmed: true },
+    status: 201,
+  });
+  const referredReading = await request(referred, today, {
+    method: 'POST',
+    body: { theme: 'LOVE' },
+    status: 201,
+  });
+  const { data: freeReading } = await referredReading.json();
+  assert.ok(['READY_BASIC', 'READY_AI'].includes(freeReading.status));
+  const otherMember = await request(referred, `/s/${primary.slug}/activity`);
+  assert.ok(
+    !(await otherMember.text()).includes(referral.referralUrl),
+    'Referral URL is private to its owner',
+  );
+  await browser(primary, participant, 'referral');
+  console.log(
+    'PASS private referral denial, public attribution, no self or duplicate attribution, and mobile referral sharing',
+  );
+
+  const adminPath = `/api/services/${primary.slug}/referral-management`;
+  await request(referred, adminPath, { status: 403 });
+  await db.platformAdmin.create({
+    data: { userId: owner.userId, role: 'SUPER_ADMIN', status: 'ACTIVE' },
+  });
+  const operatorCommand = async (body) =>
+    (await (await request(owner, adminPath, { method: 'POST', body })).json()).data;
+  const policy = await operatorCommand({
+    kind: 'POLICY',
+    authority: 'HEADQUARTERS',
+    status: 'ACTIVE',
+    timezone: 'Asia/Tokyo',
+    expectedPolicyVersionId: null,
+    reason: '隔離環境の合成設定',
+    conditions: { requireFirstFreeReading: true, minimumActiveDays: 0, minimumPaidPurchases: 0 },
+  });
+  await request(owner, `/api/services/${primary.slug}/referral-reward-rules`, {
+    method: 'POST',
+    status: 201,
+    body: {
+      ruleKey: 'qualified-referrer',
+      milestone: 'QUALIFICATION_CONFIRMED',
+      recipient: 'REFERRER',
+      creditAmount: 2,
+      expiresAfterDays: 30,
+      monthlyGrantLimit: 2,
+      enabled: true,
+    },
+  });
+  await request(owner, `/api/services/${primary.slug}/referral-reward-rules`, {
+    method: 'POST',
+    status: 201,
+    body: {
+      ruleKey: 'qualified-referred',
+      milestone: 'QUALIFICATION_CONFIRMED',
+      recipient: 'REFERRED',
+      creditAmount: 2,
+      expiresAfterDays: 30,
+      monthlyGrantLimit: 2,
+      enabled: true,
+    },
+  });
+  await request(referred, today);
+  const target = { referralId: referrals[0].id, reason: '隔離環境の合成審査' };
+  await operatorCommand({
+    ...target,
+    kind: 'REVIEW',
+    expectedRevision: 0,
+    review: 'CLEAR',
+    commandId: randomUUID(),
+  });
+  const confirm = {
+    ...target,
+    kind: 'CONFIRM',
+    expectedRevision: 1,
+    expectedPolicyVersionId: policy.id,
+    commandId: randomUUID(),
+  };
+  assert.equal((await operatorCommand(confirm)).state, 'CONFIRMED');
+  assert.equal((await operatorCommand(confirm)).state, 'CONFIRMED');
+  assert.equal(await db.serviceReferralReward.count({ where: { ...scope, status: 'GRANTED' } }), 2);
+  await browser(primary, owner, 'referral-admin');
+
+  await db.fortuneCommerceProduct.create({
+    data: {
+      ...scope,
+      serviceSettingId: setting.id,
+      name: '合成商品',
+      description: '合成条件',
+      deliveryTerms: '合成条件',
+      refundTerms: '合成条件',
+      amountYen: 1980,
+      enabled: false,
+    },
+  });
+  await request(referred, `${base}/profile`, {
+    method: 'PUT',
+    body: { consented: true, interest: '仕事', question: '働き方を整理したい', style: 'DIRECT' },
+  });
+  await browser(primary, owner, 'credit-editor');
+  assert.equal(
+    await db.serviceConfigurationAudit.count({
+      where: {
+        ...scope,
+        action: 'FORTUNE_CREDIT_EXCHANGE_UPDATED',
+        performedByUserId: owner.userId,
+      },
+    }),
+    1,
+  );
+
+  const exchangePath = `${base}/readings/${freeReading.id}/follow-ups`;
+  const attempt = {
+    requestId: randomUUID(),
+    question: '失敗時の残高を確認したい',
+    expectedCreditCost: 2,
+  };
+  const failed = await request(referred, exchangePath, { method: 'POST', body: attempt });
+  assert.equal((await failed.json()).data.turns.at(-1).status, 'FAILED');
+  const creditAccount = () =>
+    db.serviceCreditAccount.findFirstOrThrow({ where: { ...scope, userId: referred.userId } });
+  assert.equal((await creditAccount()).availableCredits, 2);
+  await browser(primary, referred, 'credit-exchange');
+  assert.equal((await creditAccount()).availableCredits, 0);
+  const consume = await db.serviceCreditLedger.findMany({
+    where: { ...scope, userId: referred.userId, type: 'CONSUME' },
+  });
+  assert.equal(consume.length, 1);
+  assert.equal(consume[0].amount, -2);
+  console.log(
+    'PASS credit quote, failure release, one completed exchange, and private ledger on mobile',
+  );
+  await operatorCommand({
+    ...target,
+    kind: 'REVOKE',
+    expectedRevision: 2,
+    commandId: randomUUID(),
+  });
+  const balance = await db.serviceCreditAccount.findFirstOrThrow({
+    where: { ...scope, userId: participant.userId },
+  });
+  assert.equal(balance.availableCredits, 0);
+  console.log(
+    'PASS free reading evidence, scoped operator settings, exact-once credit and revocation',
   );
 } catch (error) {
   console.error(error instanceof Error ? error.message : 'Isolated Fortune test failed');

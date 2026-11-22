@@ -374,6 +374,7 @@ export type {
 export { PrismaSocialServiceReferralEvidenceRepository } from './social-service-referral-evidence';
 
 export { PrismaServiceReferralManagementRepository } from './service-referral-management';
+export { revokeFortuneReferralAfterRefund } from './fortune-referral-refund';
 
 export { PrismaSocialRecommendationPolicyRepository } from './social-recommendation-policy';
 
@@ -384,3 +385,8 @@ export {
   PrismaExternalReadGrantRepository,
   type ExternalGrantServerPolicy,
 } from './external-read-grants';
+export {
+  FORTUNE_FOLLOW_UP_CREDIT_KEY,
+  FORTUNE_FOLLOW_UP_CREDIT_NAME,
+  readFortuneFollowUpCreditBalance,
+} from './fortune-follow-up-credits';

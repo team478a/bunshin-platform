@@ -1,6 +1,6 @@
 import 'server-only';
 
-import type { PrismaClient } from '@bunshin/database';
+import { revokeFortuneReferralAfterRefund, type PrismaClient } from '@bunshin/database';
 import { ApplicationError } from '@bunshin/shared';
 import { z } from 'zod';
 import type { StripeProgramEvent } from '../payments/stripe-program-event';
@@ -52,6 +52,11 @@ export async function processFortuneStripeEvent(
     )
       throw new ApplicationError('FORBIDDEN', 'fortune Stripe event scope mismatch');
 
+    const serviceScope = { workspaceId: purchase.workspaceId, groupId: purchase.groupId };
+    if (purchase.liveMode && (refund || completed)) {
+      await tx.$queryRaw`SELECT id FROM groups WHERE workspace_id=${serviceScope.workspaceId}::uuid
+        AND id=${serviceScope.groupId}::uuid FOR UPDATE`;
+    }
     await tx.$queryRaw`SELECT id FROM fortune_commerce_purchases
       WHERE id = ${purchase.id}::uuid AND workspace_id = ${scope.workspaceId}::uuid
         AND payment_configuration_id = ${scope.paymentConfigurationId}::uuid FOR UPDATE`;
@@ -136,9 +141,24 @@ export async function processFortuneStripeEvent(
               : {}),
           },
         });
+        if (current.liveMode)
+          await revokeFortuneReferralAfterRefund(
+            tx,
+            serviceScope,
+            current,
+            providerEventId,
+            new Date(),
+          );
       }
     }
 
+    // Advance the row version on which confirmation transactions serialize.
+    if (current.liveMode && (completed || refund)) {
+      await tx.group.update({
+        where: { id: serviceScope.groupId },
+        data: { updatedAt: new Date() },
+      });
+    }
     await tx.paymentWebhookEvent.create({
       data: {
         ...key,

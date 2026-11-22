@@ -13,6 +13,7 @@ import { fortuneFailureLabel, fortuneRate } from '../../../../../src/fortune/qua
 import { PublicShell } from '../../../../ui/public-shell';
 import { FortuneAppearanceEditor } from './fortune-appearance-editor';
 import { FortuneGuidanceEditor } from './fortune-guidance-editor';
+import { FortuneCreditExchangeSettings } from './credit-exchange-settings';
 import { FortuneCommerceProduct } from './commerce-product';
 import { FortuneOperatorEditor } from './fortune-operator-editor';
 
@@ -25,10 +26,10 @@ export default async function FortuneManagementPage({
   searchParams,
 }: {
   params: Promise<{ serviceSlug: string }>;
-  searchParams: Promise<{ commerce?: string }>;
+  searchParams: Promise<{ commerce?: string; creditExchange?: string }>;
 }) {
   const { serviceSlug } = await params;
-  const { commerce } = await searchParams;
+  const { commerce, creditExchange } = await searchParams;
   const actor = await (await currentUserProvider()).getCurrentUser();
   if (!actor) redirect(`/login?returnTo=${encodeURIComponent(`/s/${serviceSlug}/manage/fortune`)}`);
   const status = await fortuneOperatorStatus(serviceSlug, actor.userId).catch(() => null);
@@ -58,7 +59,10 @@ export default async function FortuneManagementPage({
             <Link href={`/s/${serviceSlug}/manage/fortune/revenue` as Route}>占い収益分析</Link>{' '}
             <Link href={`/s/${serviceSlug}/manage/fortune/experiments` as Route}>
               商品仮説と販売実証
-            </Link>
+            </Link>{' '}
+            <Link href={`/s/${serviceSlug}/manage/settings` as Route}>友だち紹介の設定</Link>{' '}
+            <Link href={`/s/${serviceSlug}/manage/referrals` as Route}>紹介の条件・審査</Link>{' '}
+            <Link href={`/s/${serviceSlug}/manage/referral-rewards` as Route}>紹介特典</Link>
           </p>
         )}
         {status.configured && (
@@ -66,6 +70,13 @@ export default async function FortuneManagementPage({
             serviceSlug={serviceSlug}
             actorUserId={actor.userId}
             {...(commerce ? { result: commerce } : {})}
+          />
+        )}
+        {status.configured && (
+          <FortuneCreditExchangeSettings
+            serviceSlug={serviceSlug}
+            actorUserId={actor.userId}
+            {...(creditExchange ? { result: creditExchange } : {})}
           />
         )}
         <section className="settings-card">

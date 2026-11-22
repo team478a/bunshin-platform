@@ -15,6 +15,7 @@ import { FortuneAppearance } from '../fortune-appearance';
 import { PublicShell } from '../../../ui/public-shell';
 import { fortuneDailyReadingService } from '../../../../src/fortune/runtime';
 import { resolveFortuneGuidanceSettings } from '../../../../src/fortune/guidance-settings';
+import { fortuneReferralAvailable } from '../../../../src/fortune/referral-access';
 import { resolveFortunePage } from '../../../../src/fortune/page-context';
 import { FortuneDrawButtons, FortuneJoinButton } from '../fortune-actions';
 import { FortuneNav, ReadingCard } from '../fortune-ui';
@@ -129,6 +130,9 @@ export default async function FortuneTodayPage({
       <div className="app-page fortune-page fortune-today">
         <header className="app-page__heading">
           <h1>今日の占い</h1>
+          {fortuneReferralAvailable(service.configuration) && (
+            <Link href={`/s/${serviceSlug}/activity` as Route}>友だちに紹介する</Link>
+          )}
         </header>
         {(showGuide || welcome?.enabled) && (
           <section className="fortune-today__guide" aria-label="AI案内役">
@@ -191,6 +195,7 @@ export default async function FortuneTodayPage({
                 reading={today.reading}
                 serviceSlug={serviceSlug}
                 showFollowUps={showGuide && (!commerce || Boolean(today.reading.deepReading))}
+                showCreditFollowUps={showGuide && setting.followUpCreditEnabled}
                 {...(characters ? { characters } : {})}
               />
               {showUpgrade && (
