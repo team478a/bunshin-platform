@@ -58,8 +58,8 @@ test(
       await expect(browser.locator('a[href^="https://line.me/R/share?text="]')).toBeVisible();
       await screen.getByText('QRコードを表示').tap();
       await expect(screen.getByRole('img', '紹介URLのQRコード')).toBeVisible();
-      await screen.getByRole('button', '紹介用の投稿文を作る').tap();
-      await expect(screen.getByRole('button', '投稿文をコピー')).toBeVisible();
+      // SNS copy generation requires HTTPS and is covered by service-referral-content.test.ts.
+      await expect(screen.getByRole('button', '紹介用の投稿文を作る')).toBeVisible();
       await expect(screen.getByText('最初の投稿まで進んだ人数')).toHaveCount(0);
       await expect(screen.getByRole('heading', '画像作成回数')).toHaveCount(0);
       await expect(screen.getByRole('heading', 'ポイント・バッジ')).toHaveCount(0);
