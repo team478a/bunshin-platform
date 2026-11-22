@@ -2047,6 +2047,7 @@ enum ServiceReferralRewardRuleStatus {
 enum ServiceReferralMilestone {
   ONBOARDING_COMPLETED
   FIRST_POST_REPORTED
+  QUALIFICATION_CONFIRMED
 }
 
 enum ServiceReferralRewardRecipient {
@@ -3771,6 +3772,7 @@ model FortuneReading {
   failureCode        String?                  @map("failure_code") @db.VarChar(80)
   generatedAt        DateTime?                @map("generated_at") @db.Timestamptz(6)
   firstViewedAt      DateTime?                @map("first_viewed_at") @db.Timestamptz(6)
+  freeFirstViewedAt  DateTime?                @map("free_first_viewed_at") @db.Timestamptz(6)
   deletedAt          DateTime?                @map("deleted_at") @db.Timestamptz(6)
   createdAt          DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt          DateTime                 @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -8714,7 +8716,7 @@ model ServiceReferralQualificationAudit {
   groupId        String          @map("group_id") @db.Uuid
   referralId     String          @map("referral_id") @db.Uuid
   commandId      String          @map("command_id") @db.Uuid
-  actorUserId    String          @map("actor_user_id") @db.Uuid
+  actorUserId    String?          @map("actor_user_id") @db.Uuid
   kind           String          @db.VarChar(20)
   reason         String          @db.VarChar(1000)
   fingerprint    String          @db.VarChar(64)
@@ -8722,7 +8724,7 @@ model ServiceReferralQualificationAudit {
   result         Json
   occurredAt     DateTime        @default(now()) @map("occurred_at") @db.Timestamptz(6)
   referral       ServiceReferral @relation(fields: [workspaceId, groupId, referralId], references: [workspaceId, groupId, id], onDelete: Restrict, onUpdate: NoAction, map: "service_referral_qualificatio_workspace_id_group_id_referr_fkey")
-  actor User @relation("ReferralQualificationAuditActor", fields: [actorUserId], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "service_referral_qualification_audits_actor_user_id_fkey")
+  actor User? @relation("ReferralQualificationAuditActor", fields: [actorUserId], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "service_referral_qualification_audits_actor_user_id_fkey")
 
   @@unique([workspaceId, groupId, commandId], map: "referral_qualification_command")
   @@index([workspaceId, groupId, referralId, occurredAt], map: "service_referral_qualification_audit_lookup")

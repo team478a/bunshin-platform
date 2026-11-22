@@ -23,6 +23,7 @@ export async function grantReferralMilestonesInTransaction(
   tx: Prisma.TransactionClient,
   input: Omit<Parameters<ServiceReferralRewardRepository['completeMilestone']>[0], 'milestone'> & {
     milestone?: Parameters<ServiceReferralRewardRepository['completeMilestone']>[0]['milestone'];
+    qualificationConfirmation?: boolean;
   },
 ): Promise<ServiceReferralRewardGrant[]> {
   const referredMembership = await tx.groupMembership.findFirst({
@@ -85,25 +86,29 @@ export async function grantReferralMilestonesInTransaction(
       !hq ||
       hq.status !== 'ACTIVE' ||
       qualificationPolicy.status !== 'ACTIVE' ||
-      referral.qualificationState !== 'CONFIRMED'
+      referral.qualificationState !== 'CONFIRMED' ||
+      (qualificationPolicy.profileKey !== 'SOCIAL_REFERRAL' && !input.qualificationConfirmation)
     )
       return [];
   }
 
+  if (input.qualificationConfirmation && !qualificationPolicy) return [];
   const rules = await tx.serviceReferralRewardRule.findMany({
     where: {
       workspaceId: input.workspaceId,
       groupId: input.groupId,
       status: 'ACTIVE',
       milestone: {
-        in: [
-          ...(referral.onboardingCompletedAt || input.milestone === 'ONBOARDING_COMPLETED'
-            ? ['ONBOARDING_COMPLETED' as const]
-            : []),
-          ...(referral.firstPostReportedAt || input.milestone === 'FIRST_POST_REPORTED'
-            ? ['FIRST_POST_REPORTED' as const]
-            : []),
-        ],
+        in: input.qualificationConfirmation
+          ? ['QUALIFICATION_CONFIRMED']
+          : [
+              ...(referral.onboardingCompletedAt || input.milestone === 'ONBOARDING_COMPLETED'
+                ? ['ONBOARDING_COMPLETED' as const]
+                : []),
+              ...(referral.firstPostReportedAt || input.milestone === 'FIRST_POST_REPORTED'
+                ? ['FIRST_POST_REPORTED' as const]
+                : []),
+            ],
       },
     },
     orderBy: { createdAt: 'asc' },
@@ -145,7 +150,7 @@ export async function grantReferralMilestonesInTransaction(
           groupId: input.groupId,
           rule: { ruleKey: rule.ruleKey },
           beneficiaryMembershipId: beneficiary.id,
-          status: 'GRANTED',
+          ...(input.qualificationConfirmation ? {} : { status: 'GRANTED' as const }),
           grantedAt: { gte: monthStart },
         },
       });

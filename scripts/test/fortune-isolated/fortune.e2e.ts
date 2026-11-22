@@ -4,6 +4,7 @@ import { expect } from 'e2e';
 const stage = process.env['BUNSHIN_FORTUNE_TEST_STAGE'];
 const deepStage = stage === 'deep';
 const referral = stage === 'referral';
+const referralAdmin = stage === 'referral-admin';
 const appearanceEditor = stage === 'appearance-editor';
 const appearanceViewer = stage === 'appearance-viewer';
 const invitationPath = process.env['BUNSHIN_FORTUNE_TEST_INVITATION'];
@@ -18,7 +19,9 @@ test(
           ? 'an invited visitor can accept the invitation and reach the mobile age gate'
           : referral
             ? 'a Fortune member can share and view their referral history on mobile'
-            : 'a verified participant can join, skip intake and draw a standard reading on mobile',
+            : referralAdmin
+              ? 'a Fortune operator sees qualified referrals and settings on mobile'
+              : 'a verified participant can join, skip intake and draw a standard reading on mobile',
   async ({ app, browser, screen }) => {
     const slug = process.env['BUNSHIN_FORTUNE_TEST_SLUG'];
     if (!slug?.startsWith('isolated-fortune-'))
@@ -35,7 +38,7 @@ test(
     });
     const entry =
       invitationPath ||
-      `/s/${slug}/${appearanceEditor ? 'manage/fortune' : referral ? 'home' : 'today'}`;
+      `/s/${slug}/${appearanceEditor ? 'manage/fortune' : referralAdmin ? 'manage/referrals' : referral ? 'home' : 'today'}`;
     if (invitationPath && !invitationPath.startsWith(`/s/${slug}/join/`)) {
       throw new Error('An invitation scoped to the disposable service is required');
     }
@@ -45,6 +48,14 @@ test(
       cookies.map(({ name, value }) => ({ name, value, url, httpOnly: true })),
     );
     await app.open(entry);
+    if (referralAdmin) {
+      await expect(screen.getByRole('heading', '紹介の審査・確定')).toBeVisible();
+      await expect(screen.getByRole('heading', '紹介実績')).toBeVisible();
+      await expect(screen.getByText('初回の無料鑑定を読む')).toBeVisible();
+      await expect(screen.getByText('確定済み', { exact: false })).toBeVisible();
+      await expect(screen.getByText('本人による初回投稿案作成')).toHaveCount(0);
+      return;
+    }
     if (referral) {
       await screen.getByRole('link', '友だちに紹介する').tap();
       await browser.waitForURL(`${url}/s/${slug}/activity`, { timeout: 45_000 });

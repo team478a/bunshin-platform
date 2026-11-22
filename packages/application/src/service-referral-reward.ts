@@ -15,7 +15,7 @@ export interface ServiceReferralRewardRepository {
     workspaceId: string;
     groupId: string;
     referredUserId: string;
-    milestone: ServiceReferralMilestone;
+    milestone: Exclude<ServiceReferralMilestone, 'QUALIFICATION_CONFIRMED'>;
     now: Date;
   }): Promise<ServiceReferralRewardGrant[]>;
 }
