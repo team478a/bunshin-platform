@@ -36,7 +36,15 @@ const approvedMonetizationNames = [
   '20261122100000_fortune_revenue',
   '20261122110000_fortune_experiments',
 ];
+const approvedReferralRewardNames = [
+  '20261122120000_referral_confirmation_reward',
+  '20261122130000_fortune_follow_up_credits',
+];
 const releaseSettings = new Map([
+  [
+    'referral-rewards',
+    { approval: 'APPLY_FORTUNE_REFERRAL_SCHEMA_TO', approvedNames: approvedReferralRewardNames },
+  ],
   [
     'monetization',
     { approval: 'APPLY_FORTUNE_MONETIZATION_SCHEMA_TO', approvedNames: approvedMonetizationNames },
