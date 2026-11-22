@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import QRCode from 'qrcode';
 import { resolveAuthenticatedMemberServicePage } from '../../../../src/services/member-service-page';
+import { fortuneReferralAvailable } from '../../../../src/fortune/referral-access';
+import { isFortuneServicePackage } from '../../../../src/services/service-creation-templates';
 import { memberServiceMetadata } from '../../../../src/services/member-service-metadata';
 import { readServiceOnboardingSettings } from '../../../../src/services/service-onboarding-settings';
 import { isPromptOnlyImageService } from '../../../../src/services/service-image-policy';
@@ -60,17 +62,31 @@ export default async function ServiceMemberActivityPage({
   if (onboarding.businessProfileEnabled) {
     redirect(`/s/${serviceSlug}/weekly-report` as Route);
   }
+  const isFortune =
+    isFortuneServicePackage(service.configuration.registration.onboardingConfig) ||
+    Boolean(
+      await db.prisma.fortuneServiceSetting.findFirst({
+        where: { workspaceId: service.workspaceId, groupId: service.serviceId },
+        select: { id: true },
+      }),
+    );
   const promptOnlyImages = isPromptOnlyImageService(service.configuration.slug);
 
-  const rewardsPilotAccess = await db.getActiveRewardsPilotAccess(db.prisma, {
-    workspaceId: service.workspaceId,
-    groupId: service.serviceId,
-    userId: actor.userId,
-  });
+  const referralAvailable = isFortune
+    ? fortuneReferralAvailable(service.configuration)
+    : service.configuration.registration.referralEnabled;
+  const showImageCredits = !isFortune && !promptOnlyImages;
+  const rewardsPilotAccess = !isFortune
+    ? await db.getActiveRewardsPilotAccess(db.prisma, {
+        workspaceId: service.workspaceId,
+        groupId: service.serviceId,
+        userId: actor.userId,
+      })
+    : null;
 
   const [referralCode, creditAccount, pointAccount, badgeAwards, badgeProgress, badgeAwardCount] =
     await Promise.all([
-      service.configuration.registration.referralEnabled
+      referralAvailable
         ? db.prisma.serviceReferralCode.findFirst({
             where: {
               workspaceId: service.workspaceId,
@@ -86,12 +102,12 @@ export default async function ServiceMemberActivityPage({
               referrals: {
                 orderBy: { createdAt: 'desc' },
                 take: 10,
-                select: { id: true, status: true, updatedAt: true },
+                select: { id: true, status: true, qualificationState: true, updatedAt: true },
               },
             },
           })
         : null,
-      promptOnlyImages
+      !showImageCredits
         ? null
         : db.prisma.serviceCreditAccount.findFirst({
             where: {
@@ -162,6 +178,7 @@ export default async function ServiceMemberActivityPage({
           workspaceId: service.workspaceId,
           groupId: service.serviceId,
           referralCodeId: referralCode.id,
+          ...(isFortune ? { registeredAt: { not: null } } : {}),
         },
         _count: true,
       })
@@ -217,20 +234,24 @@ export default async function ServiceMemberActivityPage({
     <PublicShell showPlatformBrand={false}>
       <article className="service-entry service-member-home" style={style}>
         <header className="service-entry__header">
-          <p className="eyebrow">あなたの記録</p>
-          <h1>活動・紹介</h1>
+          {!isFortune && <p className="eyebrow">あなたの記録</p>}
+          <h1>{isFortune ? '友だちに紹介する' : '活動・紹介'}</h1>
           <p>
-            {promptOnlyImages
-              ? rewardsPilotAccess
-                ? 'ポイント、バッジ、紹介をここで確認できます。'
-                : '紹介の記録をここで確認できます。'
-              : rewardsPilotAccess
-                ? 'ポイント、バッジ、紹介、画像作成回数をここで確認できます。'
-                : '紹介と画像作成回数をここで確認できます。'}
+            {isFortune
+              ? referralAvailable
+                ? '友だちに紹介URLを送り、紹介の状況を確認できます。'
+                : '現在、友だち紹介は受け付けていません。'
+              : promptOnlyImages
+                ? rewardsPilotAccess
+                  ? 'ポイント、バッジ、紹介をここで確認できます。'
+                  : '紹介の記録をここで確認できます。'
+                : rewardsPilotAccess
+                  ? 'ポイント、バッジ、紹介、画像作成回数をここで確認できます。'
+                  : '紹介と画像作成回数をここで確認できます。'}
           </p>
         </header>
 
-        {service.configuration.registration.referralEnabled && (
+        {referralAvailable && (
           <section className="service-entry__card service-activity-dashboard__section">
             <div>
               <p className="eyebrow">紹介する</p>
@@ -247,7 +268,9 @@ export default async function ServiceMemberActivityPage({
               <div>
                 <small>有効紹介（審査・確定済み）</small>
                 <strong>
-                  {confirmedReferrals === null ? '集計準備中' : `${confirmedReferrals}人`}
+                  {confirmedReferrals === null && !isFortune
+                    ? '集計準備中'
+                    : `${confirmedReferrals ?? 0}人`}
                 </strong>
               </div>
               <div>
@@ -255,20 +278,33 @@ export default async function ServiceMemberActivityPage({
                 <strong>{referralCode?._count.clicks ?? 0}回</strong>
               </div>
               <div>
-                <small>参加につながった人数</small>
+                <small>{isFortune ? '紹介経由の登録人数' : '参加につながった人数'}</small>
                 <strong>{successfulReferrals}人</strong>
               </div>
-              <div>
-                <small>最初の投稿まで進んだ人数</small>
-                <strong>{firstPosts}人</strong>
-              </div>
+              {!isFortune && (
+                <div>
+                  <small>最初の投稿まで進んだ人数</small>
+                  <strong>{firstPosts}人</strong>
+                </div>
+              )}
             </div>
             {referralCode && referralCode.referrals.length > 0 && (
               <div className="service-activity-dashboard__history">
                 <h3>最近の紹介</h3>
                 {referralCode.referrals.map((referral) => (
                   <p key={referral.id}>
-                    <span>{referralStatusLabel[referral.status]}</span>
+                    <span>
+                      {!isFortune
+                        ? referralStatusLabel[referral.status]
+                        : referral.qualificationState === 'CONFIRMED'
+                          ? '有効な紹介として確定しました'
+                          : referral.status === 'REJECTED' ||
+                              referral.qualificationState === 'REVOKED'
+                            ? '対象外になりました'
+                            : referral.status === 'CLICKED'
+                              ? '紹介URLを開きました'
+                              : '紹介経由で登録しました'}
+                    </span>
                     <time dateTime={referral.updatedAt.toISOString()}>
                       {referral.updatedAt.toLocaleDateString('ja-JP')}
                     </time>
@@ -366,7 +402,7 @@ export default async function ServiceMemberActivityPage({
           </section>
         )}
 
-        {!promptOnlyImages && (
+        {showImageCredits && (
           <section className="service-entry__card service-activity-dashboard__section">
             <div>
               <p className="eyebrow">画像を作れる回数</p>
@@ -384,7 +420,9 @@ export default async function ServiceMemberActivityPage({
           </section>
         )}
 
-        <Link href={`/s/${serviceSlug}/home` as Route}>← サービスホームへ戻る</Link>
+        <Link href={`/s/${serviceSlug}/home` as Route}>
+          ← {isFortune ? '占いホームへ戻る' : 'サービスホームへ戻る'}
+        </Link>
       </article>
     </PublicShell>
   );

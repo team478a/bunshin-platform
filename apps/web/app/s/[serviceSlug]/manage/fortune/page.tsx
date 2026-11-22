@@ -58,7 +58,8 @@ export default async function FortuneManagementPage({
             <Link href={`/s/${serviceSlug}/manage/fortune/revenue` as Route}>占い収益分析</Link>{' '}
             <Link href={`/s/${serviceSlug}/manage/fortune/experiments` as Route}>
               商品仮説と販売実証
-            </Link>
+            </Link>{' '}
+            <Link href={`/s/${serviceSlug}/manage/settings` as Route}>友だち紹介の設定</Link>
           </p>
         )}
         {status.configured && (

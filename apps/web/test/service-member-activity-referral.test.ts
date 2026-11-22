@@ -46,6 +46,6 @@ describe('service member activity and referral', () => {
   it('links the shared activity view from every service home', () => {
     expect(home).toContain('/activity');
     expect(home).toContain('活動・紹介を見る');
-    expect(page).toContain('registration.referralEnabled &&');
+    expect(page).toContain('referralAvailable &&');
   });
 });
