@@ -198,6 +198,24 @@ test(
       await expect(screen.getByText('ここまでの内容で占えます。')).toBeVisible();
       await screen.getByRole('button', 'ここまでで占う').tap();
       await expect(screen.getByText('ステラ', { exact: true })).toBeVisible();
+      await browser.evaluate(() => {
+        const metrics = document.documentElement.dataset;
+        let summonedAt: number | undefined;
+        const observer = new MutationObserver(() => {
+          const phase = document.querySelector('.fortune-summoning')?.getAttribute('data-phase');
+          if (phase === 'pending') summonedAt ??= performance.now();
+          if (phase === 'reveal' && summonedAt !== undefined) {
+            metrics.summoningBackMs = String(performance.now() - summonedAt);
+            observer.disconnect();
+          }
+        });
+        observer.observe(document.body, { subtree: true, childList: true, attributes: true });
+        document.addEventListener('animationend', (event) => {
+          if (event.animationName === 'fortune-summoning-cinematic-flip') {
+            metrics.summoningFlipMs = String(event.elapsedTime * 1000);
+          }
+        });
+      });
       try {
         await screen.getByRole('button', 'この内容で占う').tap();
         const skip = screen.getByRole('button', '演出をスキップ');
@@ -215,11 +233,21 @@ test(
           );
         });
         expect(clearOfNav).toBe(true);
+        await expect(browser.locator('.fortune-summoning__seal')).toBeVisible();
+        await app.screenshot('fortune-cinematic-card-back-390px');
       } finally {
         allowDraw();
       }
+      const reveal = browser.locator('.fortune-summoning[data-phase="reveal"]');
+      await expect(reveal.getByText('一枚のカードがひらきます')).toBeVisible({ timeout: 75_000 });
       const moonGate = browser.locator('.fortune-moon-stage[data-scene="gate"]');
       await expect(moonGate).toBeVisible({ timeout: 75_000 });
+      const pacing = await browser.evaluate(() => ({
+        backMs: Number(document.documentElement.dataset.summoningBackMs),
+        flipMs: Number(document.documentElement.dataset.summoningFlipMs),
+      }));
+      expect(pacing.backMs).toBeGreaterThanOrEqual(900);
+      expect(pacing.flipMs).toBe(2200);
       await app.screenshot('fortune-moon-gate-390px');
       const entrance = browser.locator('.fortune-moon-stage[data-scene="entrance"]');
       await expect(entrance).toBeVisible();

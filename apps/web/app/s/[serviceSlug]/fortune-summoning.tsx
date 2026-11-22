@@ -67,15 +67,19 @@ export function useFortuneSummoning(
         active.finish = finish;
         setScene(nextScene);
       });
+    let summoning: Promise<void> | undefined;
     if (!active.skipped) {
       motion.addEventListener?.('change', onMotionChange);
-      setScene({ phase: 'pending' });
+      if (mode === 'cinematic') summoning = play({ phase: 'pending' }, 1100);
+      else setScene({ phase: 'pending' });
     }
     try {
       const { deepReading, cardCode, cardNameJa, orientation, status, title } = await request();
       const card = { cardCode, cardNameJa, orientation };
       if (!active.skipped && status !== 'DELETED' && status !== 'FAILED') {
-        await play({ phase: 'reveal', card }, 1250);
+        if (summoning) await summoning;
+        if (!active.skipped)
+          await play({ phase: 'reveal', card }, mode === 'cinematic' ? 2500 : 1250);
         if (mode === 'cinematic' && options?.deep && status === 'READY_AI' && deepReading) {
           if (!active.skipped) await play({ phase: 'gate' }, 2200);
           if (!active.skipped) await play({ phase: 'entrance' }, 2150);
@@ -84,6 +88,7 @@ export function useFortuneSummoning(
       }
       if (operation.current === active) complete();
     } finally {
+      active.finish?.();
       active.dispose();
       if (operation.current === active) {
         operation.current = null;
@@ -134,7 +139,12 @@ function FortuneSummoning({
   const card = scene.phase === 'reveal' ? scene.card : null;
   const moonPhase = scene.phase === 'gate' || scene.phase === 'entrance' ? scene.phase : null;
   return (
-    <div className="fortune-summoning" data-phase={scene.phase} ref={stage}>
+    <div
+      className="fortune-summoning"
+      data-phase={scene.phase}
+      data-cinematic={cinematic || undefined}
+      ref={stage}
+    >
       {moonPhase ? (
         <FortuneMoonGate phase={moonPhase} finish={finish} {...(character ? { character } : {})} />
       ) : scene.phase === 'book' ? (
@@ -161,12 +171,15 @@ function FortuneSummoning({
             onAnimationEnd={(event) => {
               if (
                 event.target === event.currentTarget &&
-                event.animationName === 'fortune-summoning-flip'
+                event.animationName ===
+                  (cinematic ? 'fortune-summoning-cinematic-flip' : 'fortune-summoning-flip')
               )
                 finish();
             }}
           >
-            <span className="fortune-summoning__back">✦</span>
+            <span className="fortune-summoning__back">
+              {cinematic ? <span className="fortune-summoning__seal">☽</span> : '✦'}
+            </span>
             {card && (
               <span className="fortune-summoning__face">
                 <FortuneCardArtwork card={card} />
@@ -180,7 +193,9 @@ function FortuneSummoning({
       )}
       <p role="status">
         {card
-          ? `${card.cardNameJa}・${card.orientation === 'UPRIGHT' ? '正位置' : '逆位置'}`
+          ? cinematic
+            ? '一枚のカードがひらきます'
+            : `${card.cardNameJa}・${card.orientation === 'UPRIGHT' ? '正位置' : '逆位置'}`
           : moonPhase === 'gate'
             ? '月の門が開きます'
             : moonPhase === 'entrance'
