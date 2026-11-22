@@ -171,6 +171,8 @@ async function browser(fixture, participant, stage = 'basic', invitationPath) {
       '0',
       '--config',
       join(import.meta.dirname, 'e2e.config.ts'),
+      '--output',
+      join(import.meta.dirname, '.e2e', stage),
     ],
     {
       cwd: root,
@@ -303,6 +305,25 @@ try {
     status: 400,
   });
   await request(participant, today, { method: 'POST', body: { theme: 'WORK' }, status: 403 });
+  const summoningAppearance = {
+    enabled: false,
+    palette: 'night',
+    useBrandColors: false,
+    backdrop: 'glow',
+    cards: 'outline',
+    corners: 'rounded',
+    ornament: 'both',
+    heading: 'serif',
+    showLogo: true,
+    summoning: true,
+  };
+  await request(owner, `/api/services/${primary.slug}/fortune-operations`, {
+    method: 'POST',
+    body: {
+      action: 'SAVE_APPEARANCE_SETTINGS',
+      settings: summoningAppearance,
+    },
+  });
   await browser(primary, participant);
   const first = await db.fortuneReading.findFirstOrThrow({
     where: { serviceSettingId: setting.id },
@@ -419,7 +440,13 @@ try {
   console.log('PASS real return route, opt-in and opt-out persisted without sending LINE messages');
   await db.fortuneServiceSetting.update({
     where: { id: setting.id },
-    data: { guidanceSettings: { intake: { enabled: true }, deepReadingEnabled: true } },
+    data: {
+      guidanceSettings: {
+        intake: { enabled: true },
+        deepReadingEnabled: true,
+        appearance: summoningAppearance,
+      },
+    },
   });
   await put(`${base}/profile`, {
     consented: true,

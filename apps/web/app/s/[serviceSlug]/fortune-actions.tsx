@@ -3,15 +3,21 @@
 import type { Route } from 'next';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import type { FortuneFeedbackIssue, FortuneFeedbackRating } from '@bunshin/capability-fortune';
+import type {
+  FortuneFeedbackIssue,
+  FortuneFeedbackRating,
+  FortuneReadingView,
+} from '@bunshin/capability-fortune';
+import { useFortuneSummoning } from './fortune-summoning';
 
-async function request(url: string, init: RequestInit) {
+async function request<T = unknown>(url: string, init: RequestInit) {
   const response = await fetch(url, {
     ...init,
     headers: { 'content-type': 'application/json', ...init.headers },
   });
-  const body = (await response.json()) as { error?: { message?: string } };
+  const body = (await response.json()) as { data: T; error?: { message?: string } };
   if (!response.ok) throw new Error(body.error?.message ?? '操作を完了できませんでした。');
+  return body.data;
 }
 
 export function FortuneJoinButton({
@@ -137,11 +143,13 @@ const choices = [
 export function FortuneDrawButtons({
   serviceSlug,
   askConsultation = false,
+  summoning = false,
   themeLabels,
   onSelectTheme,
 }: {
   serviceSlug: string;
   askConsultation?: boolean;
+  summoning?: boolean;
   themeLabels?: Record<(typeof choices)[number]['value'], string>;
   onSelectTheme?: (theme: (typeof choices)[number]['value']) => void;
 }) {
@@ -149,8 +157,10 @@ export function FortuneDrawButtons({
   const [busy, setBusy] = useState<string | null>(null);
   const [consultation, setConsultation] = useState('');
   const [error, setError] = useState('');
+  const summoningScene = useFortuneSummoning(summoning);
   return (
     <div className="fortune-theme-list">
+      {summoningScene.panel}
       {askConsultation && (
         <label className="form-field">
           <span>今日、特に知りたいこと（任意）</span>
@@ -178,16 +188,19 @@ export function FortuneDrawButtons({
               setBusy(choice.value);
               setError('');
               try {
-                await request(`/api/services/${serviceSlug}/fortune/today`, {
-                  method: 'POST',
-                  body: JSON.stringify({
-                    theme: choice.value,
-                    ...(askConsultation && consultation.trim()
-                      ? { consultation: consultation.trim() }
-                      : {}),
-                  }),
-                });
-                router.refresh();
+                await summoningScene.run(
+                  () =>
+                    request<FortuneReadingView>(`/api/services/${serviceSlug}/fortune/today`, {
+                      method: 'POST',
+                      body: JSON.stringify({
+                        theme: choice.value,
+                        ...(askConsultation && consultation.trim()
+                          ? { consultation: consultation.trim() }
+                          : {}),
+                      }),
+                    }),
+                  () => router.refresh(),
+                );
               } catch (cause) {
                 setError(cause instanceof Error ? cause.message : '占いを完了できませんでした。');
               } finally {

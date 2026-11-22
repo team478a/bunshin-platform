@@ -204,6 +204,7 @@ export default async function FortuneTodayPage({
                   <p>引いたカードとテーマを使います。今回の相談を確認してから鑑定します。</p>
                   <FortuneDynamicIntake
                     serviceSlug={serviceSlug}
+                    summoning={guidance.appearance?.summoning === true}
                     selectedTheme={today.reading.theme}
                     paidReading
                     deepReadingEnabled
@@ -228,6 +229,7 @@ export default async function FortuneTodayPage({
               {!showDynamicIntake && <p>今日いちばん気になるものを選んでください。</p>}
               <DrawButtons
                 serviceSlug={serviceSlug}
+                summoning={guidance.appearance?.summoning === true}
                 {...(deepEnabled ? { deepReadingEnabled: true } : {})}
                 {...(paidView ? { paidReading: true } : {})}
                 {...(characters ? { characters } : {})}

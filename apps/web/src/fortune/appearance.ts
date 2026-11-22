@@ -18,6 +18,7 @@ export const fortuneAppearanceSchema = z
     ornament: z.enum(['none', 'moon', 'stars', 'both']),
     heading: z.enum(['sans', 'serif']),
     showLogo: z.boolean(),
+    summoning: z.boolean().optional(),
   })
   .strict();
 
