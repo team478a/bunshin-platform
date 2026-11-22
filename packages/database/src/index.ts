@@ -374,6 +374,7 @@ export type {
 export { PrismaSocialServiceReferralEvidenceRepository } from './social-service-referral-evidence';
 
 export { PrismaServiceReferralManagementRepository } from './service-referral-management';
+export { revokeFortuneReferralAfterRefund } from './fortune-referral-refund';
 
 export { PrismaSocialRecommendationPolicyRepository } from './social-recommendation-policy';
 

@@ -37,6 +37,15 @@ export interface ReferralManagementOverview {
     referrerMembershipId: string;
   })[];
   hasMore: boolean;
+  profile?: 'FORTUNE_REFERRAL';
+  progress?: {
+    clicks: number;
+    registrations: number;
+    freeReadingMembers: number;
+    paidMembers: number;
+    grantedCredits: number;
+    consumedCredits: number;
+  };
 }
 /** Explicit privileged port; implementations must authorize each transaction. */
 export interface ServiceReferralManagementRepository {

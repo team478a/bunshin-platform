@@ -11,6 +11,12 @@ type SocialConditions = Pick<
   | 'minimumActiveDays'
 >;
 
+function japanDate(value: unknown) {
+  if (typeof value !== 'number') return '';
+  const date = new Date(value + 9 * 60 * 60 * 1000);
+  return Number.isNaN(date.getTime()) ? '' : date.toISOString().slice(0, 10);
+}
+
 export function ReferralManagementEditor({
   serviceSlug,
   initial,
@@ -25,6 +31,22 @@ export function ReferralManagementEditor({
   const [authority, setAuthority] = useState<'HEADQUARTERS' | 'SERVICE'>(
     initial.canSetHeadquartersPolicy ? 'HEADQUARTERS' : 'SERVICE',
   );
+  const fortune = initial.profile === 'FORTUNE_REFERRAL';
+  const firstConditions =
+    initial.profile === 'FORTUNE_REFERRAL' ? initial.policy?.conditions : undefined;
+  const [fortuneConditions, setFortuneConditions] = useState({
+    requireFirstFreeReading: firstConditions?.['requireFirstFreeReading'] !== false,
+    minimumActiveDays: Number(firstConditions?.['minimumActiveDays'] ?? 0),
+    minimumPaidPurchases: Number(firstConditions?.['minimumPaidPurchases'] ?? 0),
+    startsOn: japanDate(firstConditions?.['registeredFrom']),
+    endsBefore: japanDate(firstConditions?.['registeredBefore']),
+  });
+  const { startsOn, endsBefore, ...fortuneThresholds } = fortuneConditions;
+  const savedFortuneConditions = {
+    ...fortuneThresholds,
+    ...(startsOn ? { registeredFrom: Date.parse(`${startsOn}T00:00:00+09:00`) } : {}),
+    ...(endsBefore ? { registeredBefore: Date.parse(`${endsBefore}T00:00:00+09:00`) } : {}),
+  };
   const [conditions, setConditions] = useState<SocialConditions>(
     (initial.policy?.conditions as SocialConditions | undefined) ?? {
       requireNewRegistration: true,
@@ -84,11 +106,45 @@ export function ReferralManagementEditor({
   }
   return (
     <div className="referral-management">
+      {value.progress && (
+        <section className="settings-card">
+          <h2>紹介実績</h2>
+          <dl>
+            <div>
+              <dt>紹介リンクのクリック</dt>
+              <dd>{value.progress.clicks}回</dd>
+            </div>
+            <div>
+              <dt>紹介経由の登録</dt>
+              <dd>{value.progress.registrations}人</dd>
+            </div>
+            <div>
+              <dt>無料鑑定を閲覧</dt>
+              <dd>{value.progress.freeReadingMembers}人</dd>
+            </div>
+            <div>
+              <dt>有料鑑定を購入（返金済みを除く）</dt>
+              <dd>{value.progress.paidMembers}人</dd>
+            </div>
+            <div>
+              <dt>紹介特典の累計付与</dt>
+              <dd>{value.progress.grantedCredits}</dd>
+            </div>
+            <div>
+              <dt>サービス内の累計クレジット消費</dt>
+              <dd>{value.progress.consumedCredits}</dd>
+            </div>
+          </dl>
+          <a href={`/s/${serviceSlug}/manage/fortune/revenue`}>占いの原価を見る</a>
+        </section>
+      )}
       <section className="settings-card">
         <h2>有効紹介の条件</h2>
         <p>本部の承認があるサービスだけで確定できます。OEMは本部の条件を緩和できません。</p>
         <p>
-          条件を保存すると、既存の画像特典も今後の付与には審査・確定が必要になります。停止中は新しい付与を行いません。
+          {fortune
+            ? '初回の会員登録を確認したうえで、無料鑑定の閲覧と決済確定から判定します。'
+            : '条件を保存すると、既存の画像特典も今後の付与には審査・確定が必要になります。停止中は新しい付与を行いません。'}
         </p>
         <p>
           現在：
@@ -112,35 +168,105 @@ export function ReferralManagementEditor({
         )}
         <fieldset disabled={busy || (!value.headquartersPolicy && !value.canSetHeadquartersPolicy)}>
           <legend>達成条件</legend>
-          {(
-            [
-              ['requireNewRegistration', '新規登録'],
-              ['requireOnboarding', '初期設定完了'],
-              ['requireFirstUserGeneration', '本人による初回投稿案作成'],
-            ] as const
-          ).map(([key, label]) => (
-            <label key={key} style={{ display: 'block', padding: 8 }}>
-              <input
-                type="checkbox"
-                checked={conditions[key]}
-                onChange={(e) => setConditions({ ...conditions, [key]: e.target.checked })}
-              />
-              {label}
-            </label>
-          ))}
-          <label>
-            必要な活動日数
-            <input
-              aria-label="必要な活動日数"
-              type="number"
-              min={0}
-              max={3660}
-              value={conditions.minimumActiveDays}
-              onChange={(e) =>
-                setConditions({ ...conditions, minimumActiveDays: Number(e.target.value) })
-              }
-            />
-          </label>
+          {fortune ? (
+            <>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={fortuneConditions.requireFirstFreeReading}
+                  onChange={(e) =>
+                    setFortuneConditions({
+                      ...fortuneConditions,
+                      requireFirstFreeReading: e.target.checked,
+                    })
+                  }
+                />
+                初回の無料鑑定を読む
+              </label>
+              <label>
+                無料鑑定を読んだ日数
+                <input
+                  type="number"
+                  min={0}
+                  max={3660}
+                  value={fortuneConditions.minimumActiveDays}
+                  onChange={(e) =>
+                    setFortuneConditions({
+                      ...fortuneConditions,
+                      minimumActiveDays: Number(e.target.value),
+                    })
+                  }
+                />
+              </label>
+              <label>
+                決済済みの有料鑑定の購入回数（0は条件なし）
+                <input
+                  type="number"
+                  min={0}
+                  max={1000}
+                  value={fortuneConditions.minimumPaidPurchases}
+                  onChange={(e) =>
+                    setFortuneConditions({
+                      ...fortuneConditions,
+                      minimumPaidPurchases: Number(e.target.value),
+                    })
+                  }
+                />
+              </label>
+              <label>
+                紹介登録の対象開始日（日本時間）
+                <input
+                  type="date"
+                  value={startsOn}
+                  onChange={(e) =>
+                    setFortuneConditions({ ...fortuneConditions, startsOn: e.target.value })
+                  }
+                />
+              </label>
+              <label>
+                紹介登録の対象終了日（この日を含めない・日本時間）
+                <input
+                  type="date"
+                  value={endsBefore}
+                  onChange={(e) =>
+                    setFortuneConditions({ ...fortuneConditions, endsBefore: e.target.value })
+                  }
+                />
+              </label>
+            </>
+          ) : (
+            <>
+              {(
+                [
+                  ['requireNewRegistration', '新規登録'],
+                  ['requireOnboarding', '初期設定完了'],
+                  ['requireFirstUserGeneration', '本人による初回投稿案作成'],
+                ] as const
+              ).map(([key, label]) => (
+                <label key={key} style={{ display: 'block', padding: 8 }}>
+                  <input
+                    type="checkbox"
+                    checked={conditions[key]}
+                    onChange={(e) => setConditions({ ...conditions, [key]: e.target.checked })}
+                  />
+                  {label}
+                </label>
+              ))}
+              <label>
+                必要な活動日数
+                <input
+                  aria-label="必要な活動日数"
+                  type="number"
+                  min={0}
+                  max={3660}
+                  value={conditions.minimumActiveDays}
+                  onChange={(e) =>
+                    setConditions({ ...conditions, minimumActiveDays: Number(e.target.value) })
+                  }
+                />
+              </label>
+            </>
+          )}
           <label>
             日付のタイムゾーン
             <input
@@ -183,7 +309,7 @@ export function ReferralManagementEditor({
               expectedPolicyVersionId: value.policy?.id ?? null,
               status: enabled ? 'ACTIVE' : 'SUSPENDED',
               timezone,
-              conditions,
+              conditions: fortune ? savedFortuneConditions : conditions,
               reason,
             })
           }
@@ -197,7 +323,10 @@ export function ReferralManagementEditor({
       <section className="settings-card">
         <h2>紹介の確認</h2>
         <p>
-          「問題なし」の審査後、保存済みの利用履歴で条件を満たした紹介だけを確定します。確定の取消では付与済みクレジットを回収しません。
+          「問題なし」の審査後、保存済みの利用履歴で条件を満たした紹介だけを確定します。
+          {fortune
+            ? '取消時は、対象の紹介で付与された未使用分を取り消します。'
+            : '確定の取消では付与済みクレジットを回収しません。'}
         </p>
         <p>取消済みの紹介は再確定できません。</p>
         {!value.referrals.length && <p>紹介記録はありません。</p>}

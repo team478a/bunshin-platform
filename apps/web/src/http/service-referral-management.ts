@@ -23,7 +23,23 @@ export const referralManagementInput = z.discriminatedUnion('kind', [
       authority: z.enum(['HEADQUARTERS', 'SERVICE']),
       status: z.enum(['ACTIVE', 'SUSPENDED']),
       timezone: z.string().min(1).max(64),
-      conditions,
+      conditions: z.union([
+        conditions,
+        z
+          .object({
+            requireFirstFreeReading: z.boolean(),
+            minimumActiveDays: z.number().int().min(0).max(3660),
+            minimumPaidPurchases: z.number().int().min(0).max(1000),
+            registeredFrom: z.number().int().positive().max(8_640_000_000_000_000).optional(),
+            registeredBefore: z.number().int().positive().max(8_640_000_000_000_000).optional(),
+          })
+          .strict()
+          .transform(({ registeredFrom, registeredBefore, ...thresholds }) => ({
+            ...thresholds,
+            ...(registeredFrom === undefined ? {} : { registeredFrom }),
+            ...(registeredBefore === undefined ? {} : { registeredBefore }),
+          })),
+      ]),
       reason,
     })
     .strict(),

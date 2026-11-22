@@ -172,9 +172,15 @@ importers:
 
   packages/capability-fortune:
     dependencies:
+      '@bunshin/application':
+        specifier: workspace:*
+        version: link:../application
       '@bunshin/capability-contract':
         specifier: workspace:*
         version: link:../capability-contract
+      '@bunshin/shared':
+        specifier: workspace:*
+        version: link:../shared
     devDependencies:
       vitest:
         specifier: 4.1.11

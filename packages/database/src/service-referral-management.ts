@@ -15,6 +15,17 @@ import {
   SOCIAL_SERVICE_REFERRAL_QUALIFICATION_VERSION,
   type SocialServiceReferralQualificationRule,
 } from '@bunshin/capability-social';
+import {
+  FORTUNE_REFERRAL_PROFILE,
+  FORTUNE_REFERRAL_PROFILE_REVISION,
+  normalizeFortuneReferralConditions,
+} from '@bunshin/capability-fortune';
+import {
+  decideFortuneReferral,
+  fortuneReferralConditions,
+  hasFortuneReferralProfile,
+  summarizeFortuneReferralProgress,
+} from './fortune-referral-evidence';
 import { ApplicationError } from '@bunshin/shared';
 import {
   Prisma,
@@ -23,6 +34,7 @@ import {
 } from '@prisma/client';
 import { prisma, type PrismaClient } from './client';
 import { readSocialReferralEvidenceInTransaction } from './social-service-referral-evidence';
+import { reverseConfirmedReferralRewards } from './service-referral-reward-reversal';
 import { grantReferralMilestonesInTransaction } from './service-referral-reward-repository';
 
 const fail = () =>
@@ -134,14 +146,18 @@ function rule(row: ServiceReferralQualificationPolicyVersion) {
   });
 }
 function policyView(row: ServiceReferralQualificationPolicyVersion): ReferralPolicyView {
-  const normalized = rule(row);
+  if (row.profileKey !== FORTUNE_REFERRAL_PROFILE) rule(row);
+  const selected =
+    row.profileKey === FORTUNE_REFERRAL_PROFILE
+      ? fortuneReferralConditions(row)
+      : conditions(row.conditions);
   return {
     id: row.id,
     version: row.version,
     authority: row.authority as ReferralPolicyView['authority'],
-    status: normalized.status,
+    status: row.status as ReferralPolicyView['status'],
     timezone: row.timezone,
-    conditions: { ...conditions(row.conditions) },
+    conditions: selected,
   };
 }
 function confirmation(row: ServiceReferral): ServiceReferralConfirmation {
@@ -193,6 +209,7 @@ export class PrismaServiceReferralManagementRepository implements ServiceReferra
         await tx.$executeRaw`SET TRANSACTION READ ONLY`;
         const canSetHeadquartersPolicy = await authorize(tx, s, this.now());
         const { latest, headquarters } = await policies(tx, s);
+        const fortune = await hasFortuneReferralProfile(tx, whereScope(s));
         if (
           after &&
           !(await tx.serviceReferral.findFirst({
@@ -218,6 +235,12 @@ export class PrismaServiceReferralManagementRepository implements ServiceReferra
             referrerMembershipId: row.referralCode.groupMembershipId,
           })),
           hasMore: rows.length > 100,
+          ...(fortune
+            ? {
+                profile: FORTUNE_REFERRAL_PROFILE,
+                progress: await summarizeFortuneReferralProgress(tx, whereScope(s)),
+              }
+            : {}),
         };
       },
       { ...transactionOptions, isolationLevel: 'RepeatableRead' },
@@ -240,15 +263,6 @@ export class PrismaServiceReferralManagementRepository implements ServiceReferra
       (v.expectedPolicyVersionId !== null && !uuid.test(v.expectedPolicyVersionId))
     )
       throw fail();
-    const selectedConditions = conditions(v.conditions);
-    normalizeSocialServiceReferralQualificationRule({
-      scope: s,
-      ruleKey: 'social-referral',
-      version: 1,
-      status: v.status,
-      timezone: v.timezone,
-      ...selectedConditions,
-    });
     return this.writeTransaction(async (tx) => {
       await lockService(tx, s);
       const isHq = await authorize(tx, s, this.now());
@@ -257,16 +271,54 @@ export class PrismaServiceReferralManagementRepository implements ServiceReferra
       if (v.authority === 'HEADQUARTERS' && !isHq)
         throw new ApplicationError('FORBIDDEN', 'headquarters required');
       if (v.authority === 'SERVICE') {
-        if (!headquarters || headquarters.status !== 'ACTIVE') throw fail();
-        const floor = rule(headquarters);
         if (
-          v.timezone !== floor.timezone ||
-          selectedConditions.minimumActiveDays < floor.minimumActiveDays ||
-          (floor.requireNewRegistration && !selectedConditions.requireNewRegistration) ||
-          (floor.requireOnboarding && !selectedConditions.requireOnboarding) ||
-          (floor.requireFirstUserGeneration && !selectedConditions.requireFirstUserGeneration)
+          !headquarters ||
+          headquarters.status !== 'ACTIVE' ||
+          v.timezone !== headquarters.timezone
         )
           throw fail();
+      }
+      const fortune = await hasFortuneReferralProfile(tx, whereScope(s));
+      if (fortune) {
+        try {
+          new Intl.DateTimeFormat('ja-JP', { timeZone: v.timezone }).format(0);
+        } catch {
+          throw new ApplicationError('VALIDATION_ERROR', 'invalid referral timezone');
+        }
+        const selected = normalizeFortuneReferralConditions(v.conditions);
+        if (v.authority === 'SERVICE' && headquarters) {
+          const floor = fortuneReferralConditions(headquarters);
+          if (
+            selected.minimumActiveDays < floor.minimumActiveDays ||
+            selected.minimumPaidPurchases < floor.minimumPaidPurchases ||
+            (floor.registeredFrom !== undefined &&
+              (selected.registeredFrom ?? 0) < floor.registeredFrom) ||
+            (floor.registeredBefore !== undefined &&
+              (selected.registeredBefore ?? Infinity) > floor.registeredBefore) ||
+            (floor.requireFirstFreeReading && !selected.requireFirstFreeReading)
+          )
+            throw fail();
+        }
+      } else {
+        const selected = conditions(v.conditions);
+        normalizeSocialServiceReferralQualificationRule({
+          scope: s,
+          ruleKey: 'social-referral',
+          version: 1,
+          status: v.status,
+          timezone: v.timezone,
+          ...selected,
+        });
+        if (v.authority === 'SERVICE' && headquarters) {
+          const floor = rule(headquarters);
+          if (
+            selected.minimumActiveDays < floor.minimumActiveDays ||
+            (floor.requireNewRegistration && !selected.requireNewRegistration) ||
+            (floor.requireOnboarding && !selected.requireOnboarding) ||
+            (floor.requireFirstUserGeneration && !selected.requireFirstUserGeneration)
+          )
+            throw fail();
+        }
       }
       const created = await tx.serviceReferralQualificationPolicyVersion.create({
         data: {
@@ -274,8 +326,10 @@ export class PrismaServiceReferralManagementRepository implements ServiceReferra
           version: (latest?.version ?? 0) + 1,
           authority: v.authority,
           status: v.status,
-          profileKey: 'SOCIAL_REFERRAL',
-          profileRevision: SOCIAL_SERVICE_REFERRAL_QUALIFICATION_VERSION,
+          profileKey: fortune ? FORTUNE_REFERRAL_PROFILE : 'SOCIAL_REFERRAL',
+          profileRevision: fortune
+            ? FORTUNE_REFERRAL_PROFILE_REVISION
+            : SOCIAL_SERVICE_REFERRAL_QUALIFICATION_VERSION,
           conditions: { ...v.conditions },
           timezone: v.timezone,
           reason: v.reason.trim(),
@@ -339,6 +393,9 @@ export class PrismaServiceReferralManagementRepository implements ServiceReferra
       await tx.$queryRaw`SELECT id FROM service_referrals WHERE workspace_id=${s.workspaceId}::uuid AND group_id=${s.serviceId}::uuid AND id=${v.referralId}::uuid FOR UPDATE`;
       const row = await tx.serviceReferral.findFirst({
         where: { ...whereScope(s), id: v.referralId },
+        include: {
+          referralCode: { select: { groupMembershipId: true, userId: true, status: true } },
+        },
       });
       if (!row) throw new ApplicationError('NOT_FOUND', 'referral not found');
       const current = confirmation(row);
@@ -350,6 +407,7 @@ export class PrismaServiceReferralManagementRepository implements ServiceReferra
         reason: v.reason.trim(),
       };
       let command: ServiceReferralConfirmationCommand;
+      let fortuneConfirmation = false;
       if (v.kind === 'CONFIRM') {
         const { latest, headquarters } = await policies(tx, s);
         if (
@@ -359,26 +417,32 @@ export class PrismaServiceReferralManagementRepository implements ServiceReferra
           latest.id !== v.expectedPolicyVersionId
         )
           throw fail();
-        const evidence = await readSocialReferralEvidenceInTransaction(
-          tx,
-          {
-            scope: {
-              ...current.scope,
-              groupMembershipId: row.referredMembershipId,
-              userId: row.referredUserId,
+        fortuneConfirmation = latest.profileKey === FORTUNE_REFERRAL_PROFILE;
+        let decision;
+        if (fortuneConfirmation) {
+          decision = await decideFortuneReferral(tx, row, latest, now);
+        } else {
+          const evidence = await readSocialReferralEvidenceInTransaction(
+            tx,
+            {
+              scope: {
+                ...current.scope,
+                groupMembershipId: row.referredMembershipId,
+                userId: row.referredUserId,
+              },
+              timezone: latest.timezone,
+              asOf: now,
             },
-            timezone: latest.timezone,
-            asOf: now,
-          },
-          now,
-          true,
-        );
-        if (!evidence || evidence.referralId !== row.id) throw fail();
-        const decision = evaluateSocialServiceReferralQualification(
-          rule(latest),
-          { ...evidence, review: current.review },
-          now,
-        );
+            now,
+            true,
+          );
+          if (!evidence || evidence.referralId !== row.id) throw fail();
+          decision = evaluateSocialServiceReferralQualification(
+            rule(latest),
+            { ...evidence, review: current.review },
+            now,
+          ).decision;
+        }
         command = {
           ...base,
           kind: 'CONFIRM',
@@ -389,7 +453,7 @@ export class PrismaServiceReferralManagementRepository implements ServiceReferra
             policyVersionId: latest.id,
             observedRevision: current.revision,
             asOf: now.toISOString(),
-            decision: decision.decision,
+            decision,
           },
         };
       } else
@@ -435,9 +499,12 @@ export class PrismaServiceReferralManagementRepository implements ServiceReferra
           workspaceId: s.workspaceId,
           groupId: s.serviceId,
           referredUserId: row.referredUserId,
+          ...(fortuneConfirmation ? { qualificationConfirmation: true } : {}),
           now,
         });
       }
+      if (result.changed && v.kind === 'REVOKE')
+        await reverseConfirmedReferralRewards(tx, whereScope(s), row.id, v.reason.trim(), now);
       return result.value;
     });
   }
