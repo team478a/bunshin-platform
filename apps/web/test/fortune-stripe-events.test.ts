@@ -60,15 +60,24 @@ function fixture() {
   const tx = {
     $queryRaw: vi.fn(),
     fortuneCommercePurchase: {
-      findFirst: vi.fn(async () => current),
-      findUniqueOrThrow: vi.fn(async () => current),
-      update: vi.fn(async ({ data }) => Object.assign(current, data)),
+      findFirst: vi.fn().mockResolvedValue(current),
+      findUniqueOrThrow: vi.fn().mockResolvedValue(current),
+      update: vi.fn(({ data }: { data: Record<string, unknown> }) =>
+        Promise.resolve(Object.assign(current, data)),
+      ),
     },
     paymentWebhookEvent: {
-      findUnique: vi.fn(async ({ where }) =>
-        events.get(where.paymentConfigurationId_providerEventId.providerEventId),
+      findUnique: vi.fn(
+        ({
+          where,
+        }: {
+          where: { paymentConfigurationId_providerEventId: { providerEventId: string } };
+        }) =>
+          Promise.resolve(events.get(where.paymentConfigurationId_providerEventId.providerEventId)),
       ),
-      create: vi.fn(async ({ data }) => events.set(data.providerEventId, data)),
+      create: vi.fn(({ data }: { data: { providerEventId: string; payloadDigest: string } }) =>
+        Promise.resolve(events.set(data.providerEventId, data)),
+      ),
     },
   };
   const db = {

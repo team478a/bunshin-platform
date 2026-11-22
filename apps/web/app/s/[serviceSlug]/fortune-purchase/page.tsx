@@ -157,7 +157,7 @@ export default async function FortunePurchasePage({
             </ul>
           )}
         </section>
-        <Link href={today as Route}>今日の占いに戻る</Link>
+        <Link href={today}>今日の占いに戻る</Link>
       </main>
     </PublicShell>
   );
