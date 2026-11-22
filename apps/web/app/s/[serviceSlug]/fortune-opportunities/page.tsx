@@ -19,7 +19,7 @@ export default async function FortuneOpportunitiesPage({
 }) {
   const { serviceSlug } = await params;
   const query = await searchParams;
-  const path = `/s/${serviceSlug}/fortune-opportunities`;
+  const path = `/s/${serviceSlug}/fortune-opportunities` as const;
   const { actor, service } = await resolveFortunePage(serviceSlug, path);
   const scope = { workspaceId: service.workspaceId, groupId: service.serviceId };
   const hypotheses = await prisma.fortuneProductHypothesis.findMany({
