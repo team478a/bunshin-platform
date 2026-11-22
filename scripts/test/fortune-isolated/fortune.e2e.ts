@@ -202,15 +202,25 @@ test(
           );
         });
         expect(clearOfNav).toBe(true);
-        await app.screenshot('fortune-deep-summoning-390px');
-        await skip.tap();
       } finally {
         allowDeepDraw();
       }
+      const moonGate = browser.locator('.fortune-moon-stage[data-scene="gate"]');
+      await expect(moonGate).toBeVisible({ timeout: 75_000 });
+      await app.screenshot('fortune-moon-gate-390px');
+      const entrance = browser.locator('.fortune-moon-stage[data-scene="entrance"]');
+      await expect(entrance).toBeVisible();
+      await expect(screen.getByText('月の案内役', { exact: true })).toBeVisible();
+      await app.screenshot('fortune-selene-fallback-390px');
       await expect(screen.getByRole('heading', '考えられる選択肢')).toBeVisible({
         timeout: 75_000,
       });
       await expect(screen.getByText('今は働き方を整理したい', { exact: true })).toBeVisible();
+      await app.open(`/s/${slug}/today`);
+      await expect(screen.getByRole('heading', '考えられる選択肢')).toBeVisible({
+        timeout: 30_000,
+      });
+      await expect(browser.locator('.fortune-moon-stage')).toHaveCount(0);
       return;
     }
     const join = screen.getByRole('button', '確認して始める');
@@ -243,6 +253,7 @@ test(
       width: document.documentElement.scrollWidth,
     }));
     expect(summoned.card).toMatch(/^\/fortune\/tarot\/.+\.webp$/);
+    await expect(browser.locator('.fortune-moon-stage')).toHaveCount(0);
     expect(summoned.name).toBe(summoned.result?.replace(' （', '・').replace('）', ''));
     expect(summoned.width).toBeLessThanOrEqual(390);
     await expect(screen.getByText(/最初の10分で行うこと/)).toBeVisible();
