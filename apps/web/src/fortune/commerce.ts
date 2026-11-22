@@ -6,6 +6,7 @@ import type { Prisma, PrismaClient } from '@bunshin/database';
 import { getServerEnvironment } from '@bunshin/config';
 import { ApplicationError } from '@bunshin/shared';
 import { z } from 'zod';
+import { fortuneAcquisitionCookie, purchaseAcquisition } from './funnel';
 import {
   AesGcmPaymentSecretCrypto,
   currentPaymentEnvironment,
@@ -155,6 +156,7 @@ export async function startFortuneCheckout(
   const { product, payment, groupMembershipId } = target;
   const secretKey = new AesGcmPaymentSecretCrypto().decrypt(payment.encryptedSecretKey);
   const liveMode = /^(?:sk|rk)_live_/.test(secretKey);
+  const visitId = await fortuneAcquisitionCookie(serviceSlug);
   const purchase = await db.$transaction(async (tx) => {
     // Serialize checkout creation for a member, including concurrent tabs with different keys.
     await tx.$queryRaw`SELECT id FROM group_memberships
@@ -205,8 +207,14 @@ export async function startFortuneCheckout(
         throw new ApplicationError('CONFLICT', '購入履歴でお支払い・鑑定の状況をご確認ください。');
       return existing;
     }
+    const acquisition = await purchaseAcquisition(
+      tx,
+      { workspaceId, groupId, buyerUserId, groupMembershipId },
+      visitId,
+    );
     return tx.fortuneCommercePurchase.create({
       data: {
+        ...acquisition,
         id: input.purchaseId,
         workspaceId,
         groupId,

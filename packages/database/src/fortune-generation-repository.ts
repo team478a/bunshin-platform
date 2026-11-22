@@ -282,7 +282,8 @@ export class PrismaFortuneGenerationRepository {
         },
       });
       if (!reading) return null;
-      if (usesFortuneCommerce(input.serviceSlug, scope)) {
+      let purchaseId: string | undefined;
+      if (commerce) {
         const entitlement =
           reading.pendingUnderstanding &&
           (await tx.fortuneCommercePurchase.findFirst({
@@ -298,6 +299,7 @@ export class PrismaFortuneGenerationRepository {
           await this.saveFallback({ ...input, failureCode: 'FORTUNE_PURCHASE_REQUIRED' }, tx);
           return null;
         }
+        purchaseId = entitlement.id;
       }
       const personal = await new PrismaFortunePersonalProfileRepository(tx).read(input);
       const reviewed =
@@ -478,6 +480,7 @@ export class PrismaFortuneGenerationRepository {
         groupId: scope.groupId,
         bunshinId: scope.bunshinId,
         reading: await fortuneReadingView(tx, reading),
+        ...(purchaseId ? { purchaseId } : {}),
         ...(personal?.enabled ? { personalGuidance: true } : {}),
         ...(personal?.enabled && scope.reflectionEnabled ? { reflectionEnabled: true } : {}),
         ...(personal?.enabled && reading.pendingConsultation
