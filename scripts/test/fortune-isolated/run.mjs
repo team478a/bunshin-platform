@@ -210,6 +210,110 @@ function stopApp(app) {
   }
 }
 
+async function verifyBasicProfiles(owner, member, skipper, secondary) {
+  const fixture = await service('profiles', owner, member);
+  const scope = { workspaceId: fixture.member.workspaceId, groupId: fixture.member.groupId };
+  await db.workspaceMembership.create({
+    data: { workspaceId: scope.workspaceId, userId: skipper.userId, role: 'MEMBER' },
+  });
+  await db.groupMembership.create({
+    data: { ...scope, userId: skipper.userId, status: 'ACTIVE', consentedAt: new Date() },
+  });
+  const api = `/api/services/${fixture.slug}/fortune`;
+  const operation = `/api/services/${fixture.slug}/fortune-operations`;
+  await request(owner, operation, {
+    method: 'POST',
+    status: 201,
+    body: { action: 'IMPORT_STANDARD_KNOWLEDGE', bunshinId: fixture.bunshinId },
+  });
+  const setting = await db.fortuneServiceSetting.update({
+    where: { groupId: scope.groupId },
+    data: { enabled: true },
+  });
+  const guidance = (await (await request(owner, operation)).json()).data.guidanceSettings;
+  delete guidance.appearance;
+  await request(owner, operation, {
+    method: 'POST',
+    body: {
+      action: 'SAVE_GUIDANCE_SETTINGS',
+      settings: {
+        ...guidance,
+        characters: {
+          intake: {
+            id: 'stella',
+            name: 'ステラ',
+            enabled: true,
+            imageUrl: '',
+            iconUrl: '',
+            expressions: {},
+          },
+        },
+      },
+    },
+  });
+  await browser(fixture, owner, 'profile-admin');
+  await request(member, `${api}/basic-profile`, { status: 403 });
+  await browser(fixture, member, 'profile-save');
+  await browser(fixture, skipper, 'profile-skip');
+
+  const profilePath = `${api}/basic-profile`;
+  const basicProfile = async (actor, path = profilePath) =>
+    (await (await request(actor, path)).json()).data;
+  assert.deepEqual(await basicProfile(member), { completed: true, profile: null });
+  assert.deepEqual(await basicProfile(skipper), { completed: true, profile: null });
+  const first = (await (await request(member, `${api}/today`)).json()).data.reading;
+  const replay = (
+    await (
+      await request(member, `${api}/today`, {
+        method: 'POST',
+        status: 201,
+        body: { theme: 'LOVE' },
+      })
+    ).json()
+  ).data;
+  assert.equal(replay.id, first.id);
+
+  await request(member, profilePath, {
+    method: 'PUT',
+    body: { action: 'save', consented: true, birthDate: '1992-02-29' },
+  });
+  assert.equal((await basicProfile(member)).profile.birthDate, '1992-02-29');
+  assert.equal((await basicProfile(skipper)).profile, null);
+  await db.groupMembership.create({
+    data: {
+      workspaceId: secondary.member.workspaceId,
+      groupId: secondary.member.groupId,
+      userId: member.userId,
+      status: 'ACTIVE',
+      consentedAt: new Date(),
+    },
+  });
+  const foreignApi = `/api/services/${secondary.slug}/fortune`;
+  await request(member, `${foreignApi}/participation`, {
+    method: 'POST',
+    status: 201,
+    body: { ageConfirmed: true },
+  });
+  assert.deepEqual(await basicProfile(member, `${foreignApi}/basic-profile`), {
+    completed: false,
+    profile: null,
+  });
+  const participant = await db.fortuneParticipant.findUniqueOrThrow({
+    where: { serviceSettingId_userId: { serviceSettingId: setting.id, userId: member.userId } },
+  });
+  assert.equal(await db.fortuneBasicProfile.count({ where: { participantId: participant.id } }), 1);
+  await request(member, `/api/services/${fixture.slug}/participation`, { method: 'DELETE' });
+  await request(member, profilePath, { status: 403 });
+  assert.equal(await db.fortuneBasicProfile.count({ where: { participantId: participant.id } }), 0);
+  assert.equal(
+    (await (await request(skipper, `${api}/today`)).json()).data.reading.status,
+    'READY_BASIC',
+  );
+  console.log(
+    'PASS basic profile admin, save/skip at 390px, age/date checks, edit, withdrawal, daily card reuse and service isolation',
+  );
+}
+
 let app;
 try {
   const [identity] = await db.$queryRawUnsafe(
@@ -296,6 +400,7 @@ try {
       consentedAt: new Date(),
     })),
   });
+  await verifyBasicProfiles(owner, await actor('profile'), await actor('profile-skip'), secondary);
   const base = `/api/services/${primary.slug}/fortune`;
   const today = `${base}/today`;
   await request(null, today, { status: 401 });
