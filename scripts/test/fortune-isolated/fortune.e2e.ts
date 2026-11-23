@@ -169,7 +169,9 @@ test(
       expect((await saved).status).toBe(200);
       await expect(screen.getByText('占いのデザインを保存しました。')).toBeVisible();
       await screen.getByRole('button', 'カード', { exact: true }).tap();
-      await screen.getByText('カードのデザイン見本', { exact: true }).tap();
+      await expect(screen.getByRole('heading', 'カードの管理')).toBeVisible();
+      await app.open(`/s/${slug}/manage/fortune?section=cards`);
+      await browser.locator('.fortune-deck-editor__examples > summary').tap();
       await expect(browser.locator('.fortune-deck-preview .fortune-tarot-art')).toHaveCount(3);
       await expect(browser.locator('.fortune-deck-preview .fortune-tarot-back')).toBeVisible();
       expect(await browser.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
@@ -184,7 +186,6 @@ test(
       await screen.getByRole('button', 'カード画像を保存').tap();
       expect((await savedCard).status).toBe(200);
       await expect(screen.getByText('カードを保存しました。')).toBeVisible();
-      await screen.getByText('カードのデザイン見本', { exact: true }).tap();
       await screen.getByRole('button', '独自カードを追加').tap();
       await expect(screen.getByLabel('カード名')).toBeVisible();
       await expect(screen.getByLabel('抽選対象にする')).toBeVisible();
