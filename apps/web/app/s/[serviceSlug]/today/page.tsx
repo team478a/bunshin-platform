@@ -21,10 +21,12 @@ import { resolveFortunePage } from '../../../../src/fortune/page-context';
 import { FortuneDrawButtons, FortuneJoinButton } from '../fortune-actions';
 import { FortuneNav, ReadingCard } from '../fortune-ui';
 import { FortuneReflection } from '../fortune-reflection';
+import { FortuneBasicProfileForm } from '../fortune-basic-profile-form';
 import { FortuneProfileForm } from '../fortune-profile-form';
 import { FortuneCharacterBadge } from '../fortune-character';
 import { FortuneDynamicIntake } from '../fortune-dynamic-intake';
 import {
+  fortuneBasicProfileRepository,
   fortunePersonalProfileRepository,
   fortuneUnderstandingRepository,
 } from '../../../../src/fortune/personal-profile';
@@ -39,7 +41,7 @@ export default async function FortuneTodayPage({
   searchParams,
 }: {
   params: Promise<{ serviceSlug: string }>;
-  searchParams?: Promise<{ paid?: string }>;
+  searchParams?: Promise<{ paid?: string; deep?: string }>;
 }) {
   const { serviceSlug } = await params;
   const { actor, service, setting } = await resolveFortunePage(
@@ -81,9 +83,10 @@ export default async function FortuneTodayPage({
         ])
       : [false, null, null];
   if (product && !hasPurchase) await recordFortuneFunnel(serviceSlug, actor.userId, 'PAID_OFFER');
+  const requested = await searchParams;
   const paidView =
     hasPurchase &&
-    (await searchParams)?.paid === '1' &&
+    requested?.paid === '1' &&
     setting.aiEnabled &&
     setting.personalProfileEnabled &&
     fortuneDeepReadingEnabled(setting.guidanceSettings);
@@ -93,16 +96,40 @@ export default async function FortuneTodayPage({
     !today.reading.deepReading,
   );
   const showUpgrade = paidView && canUpgrade && profile?.profile.consented;
-  const showIntake = Boolean(profile?.enabled && !profile.completed && !today.reading);
+  const basicProfile = guidance.basicProfile;
+  const basicProfileFlow = Boolean(
+    basicProfile?.enabled &&
+    (basicProfile.showNickname || basicProfile.showBirthDate || basicProfile.showSex),
+  );
   const showGuide = setting.personalProfileEnabled && setting.aiEnabled;
+  const optionalDeep =
+    basicProfileFlow &&
+    !commerce &&
+    showGuide &&
+    fortuneDeepReadingEnabled(setting.guidanceSettings);
+  const deepView = paidView || (optionalDeep && requested?.deep === '1');
+  const showBasicProfile =
+    basicProfileFlow &&
+    today.participant &&
+    !today.reading &&
+    !deepView &&
+    (await (await fortuneBasicProfileRepository()).read({ serviceSlug, actorUserId: actor.userId }))
+      ?.completed === false;
+  const showIntake = Boolean(
+    (!basicProfileFlow || deepView) && profile?.enabled && !profile.completed && !today.reading,
+  );
   const showDynamicIntake =
     showGuide &&
+    (!basicProfileFlow || deepView) &&
     !showIntake &&
     (!commerce || (paidView && profile?.profile.consented)) &&
     fortuneIntakeOptions(setting.guidanceSettings).enabled;
   const DrawButtons = showDynamicIntake ? FortuneDynamicIntake : FortuneDrawButtons;
   const deepEnabled =
-    showGuide && (!commerce || paidView) && fortuneDeepReadingEnabled(setting.guidanceSettings);
+    showGuide &&
+    (!basicProfileFlow || deepView) &&
+    (!commerce || paidView) &&
+    fortuneDeepReadingEnabled(setting.guidanceSettings);
   const saved =
     deepEnabled && profile?.profile.consented && (!today.reading || canUpgrade)
       ? await (
@@ -117,7 +144,7 @@ export default async function FortuneTodayPage({
       : undefined;
   const nextAction = !today.participant
     ? '年齢確認へ'
-    : showIntake
+    : showBasicProfile || showIntake
       ? 'はじめる'
       : today.reading
         ? '今日の鑑定を見る'
@@ -136,7 +163,7 @@ export default async function FortuneTodayPage({
             <Link href={`/s/${serviceSlug}/activity` as Route}>友だちに紹介する</Link>
           )}
         </header>
-        {(showGuide || welcome?.enabled) && (
+        {!showBasicProfile && (showGuide || welcome?.enabled) && (
           <section className="fortune-today__guide" aria-label="AI案内役">
             {welcome?.enabled ? (
               <FortuneCharacterBadge
@@ -180,7 +207,13 @@ export default async function FortuneTodayPage({
               guidance={guidance}
             />
           )}
-          {!today.participant ? (
+          {showBasicProfile && basicProfile ? (
+            <FortuneBasicProfileForm
+              serviceSlug={serviceSlug}
+              settings={basicProfile}
+              {...(characters?.intake ? { character: characters.intake } : {})}
+            />
+          ) : !today.participant ? (
             <section className="settings-card">
               <h2>最初に年齢を確認します</h2>
               <p>占いは、未来を断定するものではなく、今日を考えるためのヒントです。</p>
@@ -240,6 +273,7 @@ export default async function FortuneTodayPage({
                 {...(priorUnderstanding ? { priorUnderstanding } : {})}
                 {...(profile?.enabled ? { themeLabels: guidance.themeLabels } : {})}
                 askConsultation={Boolean(
+                  !basicProfileFlow &&
                   !commerce &&
                   setting.aiEnabled &&
                   profile?.enabled &&
@@ -247,6 +281,9 @@ export default async function FortuneTodayPage({
                   !profile.profile.question,
                 )}
               />
+              {optionalDeep && !deepView && (
+                <Link href={`/s/${serviceSlug}/today?deep=1` as Route}>深層鑑定を希望する</Link>
+              )}
             </section>
           )}
         </div>
