@@ -33,7 +33,11 @@ export async function saveFortuneGuidanceSettings(input: {
   const db = await import('@bunshin/database');
   const updated = await db.prisma.$executeRaw`
     UPDATE fortune_service_settings
-    SET guidance_settings = ${JSON.stringify(input.settings)}::jsonb ||
+    SET guidance_settings =
+      CASE WHEN jsonb_typeof(guidance_settings->'basicProfile') = 'object'
+        THEN jsonb_build_object('basicProfile', guidance_settings->'basicProfile')
+        ELSE '{}'::jsonb
+      END || ${JSON.stringify(input.settings)}::jsonb ||
       CASE WHEN jsonb_typeof(guidance_settings->'appearance') = 'object'
         THEN jsonb_build_object('appearance', guidance_settings->'appearance')
         ELSE '{}'::jsonb

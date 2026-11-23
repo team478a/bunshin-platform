@@ -87,19 +87,19 @@ export class PrismaFortuneBasicProfileRepository {
           settings && typeof settings === 'object' && !Array.isArray(settings)
             ? settings.basicProfile
             : null;
-        if (
-          !policy ||
-          typeof policy !== 'object' ||
-          Array.isArray(policy) ||
-          policy.enabled !== true
-        )
-          return false;
-
         const fields = input.change.fields;
+        const values = Object.values(fields);
+        const clearing =
+          participant.basicProfile && values.length > 0 && values.every((value) => value === null);
+        const enabled =
+          policy && typeof policy === 'object' && !Array.isArray(policy) && policy.enabled === true
+            ? policy
+            : null;
+        if (!enabled && !clearing) return false;
         if (
-          (fields.nickname && policy.showNickname === false) ||
-          (fields.birthDate && policy.showBirthDate === false) ||
-          ((fields.sex || fields.sexDescription) && policy.showSex === false)
+          (fields.nickname && enabled?.showNickname === false) ||
+          (fields.birthDate && enabled?.showBirthDate === false) ||
+          ((fields.sex || fields.sexDescription) && enabled?.showSex === false)
         )
           return false;
         const existing = participant.basicProfile;
