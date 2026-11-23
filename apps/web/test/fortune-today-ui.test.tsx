@@ -17,6 +17,7 @@ const state = vi.hoisted(() => ({
   today: vi.fn(),
   history: vi.fn(),
   profile: vi.fn(),
+  basicProfile: vi.fn(),
 }));
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
@@ -26,6 +27,7 @@ vi.mock('../src/fortune/runtime', () => ({
 }));
 vi.mock('../src/fortune/personal-profile', () => ({
   fortunePersonalProfileRepository: () => ({ read: state.profile }),
+  fortuneBasicProfileRepository: () => ({ read: state.basicProfile }),
 }));
 
 const renderToday = async () =>
@@ -144,6 +146,38 @@ describe('fortune member home', () => {
     expect(markup).toContain('スキップ');
     expect(markup).toContain('何について占いますか？');
     expect(state.history).not.toHaveBeenCalled();
+  });
+
+  it('shows optional basic onboarding after the age gate, then goes directly to free themes', async () => {
+    state.page.mockResolvedValue({
+      actor: { userId: 'reader' },
+      service,
+      setting: {
+        ...setting,
+        guidanceSettings: {
+          ...setting.guidanceSettings,
+          basicProfile: { enabled: true, showSex: false },
+        },
+      },
+    });
+    state.basicProfile.mockResolvedValue({ completed: false, profile: null });
+    expect(await renderToday()).not.toContain('スキップして占う');
+    expect(state.basicProfile).not.toHaveBeenCalled();
+
+    state.today.mockResolvedValue({ participant: { id: 'participant' }, reading: null });
+    const onboarding = await renderToday();
+    expect(onboarding).toContain('あなたのことを少し教えてください');
+    expect(onboarding).toContain('スキップして占う');
+    expect(onboarding).toContain('name="nickname"');
+    expect(onboarding).toContain('type="date"');
+    expect(onboarding).not.toContain('name="sex"');
+    expect(onboarding).not.toContain('name="question"');
+
+    state.basicProfile.mockResolvedValue({ completed: true, profile: null });
+    const free = await renderToday();
+    expect(free).toContain('何について占いますか？');
+    expect(free).not.toContain('スキップして占う');
+    expect(free).not.toContain('name="question"');
   });
 
   it('offers AI consultation before the card choices when intake is enabled', async () => {
