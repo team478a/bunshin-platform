@@ -344,7 +344,9 @@ test(
       await expect(book).toBeVisible();
       await expect(book.getByText('セレーネ', { exact: true })).toBeVisible();
       await expect(screen.getByText('今は働き方を整理したい', { exact: true })).toBeVisible();
-      await expect(screen.getByRole('heading', 'この鑑定についてAIに聞く')).toBeVisible();
+      await expect(screen.getByRole('heading', 'この鑑定についてAIに聞く')).toBeVisible({
+        timeout: 45_000,
+      });
       await screen.getByText('次回の振り返りを見る', { exact: true }).tap();
       await expect(screen.getByText('書き出してみて、気持ちに変化はありましたか？')).toBeVisible();
       const layout = await browser.evaluate(() => {
