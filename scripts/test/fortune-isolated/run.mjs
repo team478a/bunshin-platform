@@ -210,6 +210,44 @@ function stopApp(app) {
   }
 }
 
+async function inviteFortuneParticipant(fixture, owner, invitee, stage) {
+  const effectiveAt = new Date(Date.now() - 60_000);
+  await db.serviceLegalDocument.createMany({
+    data: [
+      ['TERMS', '合成利用規約'],
+      ['PRIVACY', '合成プライバシーポリシー'],
+    ].map(([type, title]) => ({
+      workspaceId: fixture.member.workspaceId,
+      groupId: fixture.member.groupId,
+      configurationId: fixture.configurationId,
+      type,
+      version: 1,
+      title,
+      content: '隔離テスト用の合成文書です。',
+      status: 'PUBLISHED',
+      effectiveAt,
+      publishedAt: effectiveAt,
+      createdByUserId: owner.userId,
+    })),
+  });
+  const invitation = await request(
+    owner,
+    `/api/workspaces/${fixture.member.workspaceId}/groups/${fixture.member.groupId}/invitations`,
+    { method: 'POST', body: { role: 'PARTICIPANT', serviceSlug: fixture.slug }, status: 201 },
+  );
+  const invitationUrl = new URL((await invitation.json()).data.invitationUrl);
+  assert.equal(invitationUrl.origin, origin);
+  assert.ok(invitationUrl.pathname.startsWith(`/s/${fixture.slug}/join/`));
+  await browser(fixture, invitee, stage, invitationUrl.pathname);
+  assert.ok(
+    await db.groupMembership.findFirst({
+      where: { groupId: fixture.member.groupId, userId: invitee.userId, status: 'ACTIVE' },
+      select: { id: true },
+    }),
+    'Invite acceptance creates a service membership',
+  );
+}
+
 async function verifyBasicProfiles(owner, member, skipper, secondary) {
   const fixture = await service('profiles', owner, member);
   const scope = { workspaceId: fixture.member.workspaceId, groupId: fixture.member.groupId };
@@ -312,8 +350,11 @@ async function verifyBasicProfiles(owner, member, skipper, secondary) {
     (await (await request(skipper, `${api}/today`)).json()).data.reading.status,
     'READY_BASIC',
   );
+  const invited = await actor('profile-invite');
+  await inviteFortuneParticipant(fixture, owner, invited, 'profile-invite');
+  assert.deepEqual(await basicProfile(invited), { completed: true, profile: null });
   console.log(
-    'PASS basic profile admin, save/skip at 390px, age/date checks, edit, withdrawal, daily card reuse and service isolation',
+    'PASS invite and legal consent to first free reading, basic profile admin and 390px onboarding, edit, withdrawal, daily card reuse and service isolation',
   );
 }
 
@@ -575,6 +616,7 @@ try {
         ...configuredGuidance,
         intake: { enabled: true, questions: 3, calls: 3 },
         deepReadingEnabled: true,
+        basicProfile: { enabled: true },
       },
     },
   });
@@ -587,6 +629,14 @@ try {
     interest: '仕事',
     question: null,
     style: 'DIRECT',
+  });
+  await put(`${base}/basic-profile`, {
+    action: 'save',
+    consented: true,
+    nickname: 'プロフィール検証用ニックネーム',
+    birthDate: '1992-02-29',
+    sex: 'OTHER',
+    sexDescription: 'プロフィール検証用の自由記述',
   });
   const saved = (await (await request(participant, `${base}/understanding`)).json()).data;
   const priorText = '以前は家族との時間を重視していた';
@@ -669,45 +719,25 @@ try {
   assert.match(dashboard, /深層鑑定の利用状況/);
   assert.match(dashboard, /0\.0001/);
   assert.ok(!dashboard.includes(priorText) && !dashboard.includes(currentText));
+  assert.ok(
+    !dashboard.includes('プロフィール検証用ニックネーム') && !dashboard.includes('1992-02-29'),
+  );
+  await request(participant, `${base}/basic-profile`, { method: 'DELETE' });
+  const currentGuidance = (await (await request(owner, operationsPath)).json()).data
+    .guidanceSettings;
+  delete currentGuidance.appearance;
+  await request(owner, operationsPath, {
+    method: 'POST',
+    body: {
+      action: 'SAVE_GUIDANCE_SETTINGS',
+      settings: { ...currentGuidance, basicProfile: { enabled: false } },
+    },
+  });
   console.log(
     'PASS confirmed context, next-day reuse and withdrawal, deep results, isolated metrics and recorded cost',
   );
-  const effectiveAt = new Date(Date.now() - 60_000);
-  await db.serviceLegalDocument.createMany({
-    data: [
-      ['TERMS', '合成利用規約'],
-      ['PRIVACY', '合成プライバシーポリシー'],
-    ].map(([type, title]) => ({
-      workspaceId: primary.member.workspaceId,
-      groupId: primary.member.groupId,
-      configurationId: primary.configurationId,
-      type,
-      version: 1,
-      title,
-      content: '隔離テスト用の合成文書です。',
-      status: 'PUBLISHED',
-      effectiveAt,
-      publishedAt: effectiveAt,
-      createdByUserId: owner.userId,
-    })),
-  });
   const invited = await actor('invited');
-  const invitation = await request(
-    owner,
-    `/api/workspaces/${primary.member.workspaceId}/groups/${primary.member.groupId}/invitations`,
-    { method: 'POST', body: { role: 'PARTICIPANT', serviceSlug: primary.slug }, status: 201 },
-  );
-  const invitationUrl = new URL((await invitation.json()).data.invitationUrl);
-  assert.equal(invitationUrl.origin, origin);
-  assert.ok(invitationUrl.pathname.startsWith(`/s/${primary.slug}/join/`));
-  await browser(primary, invited, 'invite', invitationUrl.pathname);
-  assert.ok(
-    await db.groupMembership.findFirst({
-      where: { groupId: primary.member.groupId, userId: invited.userId, status: 'ACTIVE' },
-      select: { id: true },
-    }),
-    'Invite acceptance creates a service membership',
-  );
+  await inviteFortuneParticipant(primary, owner, invited, 'invite');
   assert.equal(
     await db.serviceLegalConsent.count({
       where: { groupId: primary.member.groupId, userId: invited.userId },

@@ -3,7 +3,8 @@ import { expect } from 'e2e';
 
 const stage = process.env['BUNSHIN_FORTUNE_TEST_STAGE'];
 const admin = stage === 'profile-admin';
-const skip = stage === 'profile-skip';
+const invitationPath = process.env['BUNSHIN_FORTUNE_TEST_INVITATION'];
+const skip = stage === 'profile-skip' || stage === 'profile-invite';
 
 test(
   admin
@@ -27,7 +28,24 @@ test(
     await browser.setCookies(
       cookies.map(({ name, value }) => ({ name, value, url, httpOnly: true })),
     );
-    await app.open(`${base}/${admin ? 'manage/fortune' : 'today'}`);
+    if (invitationPath && !invitationPath.startsWith(`${base}/join/`)) {
+      throw new Error('An invitation scoped to the disposable service is required');
+    }
+    await app.open(invitationPath || `${base}/${admin ? 'manage/fortune' : 'today'}`);
+    if (invitationPath) {
+      await screen.getByLabel(/サービスへの参加に同意します/).tap();
+      await screen.getByRole('button', '同意して参加する').tap();
+      await expect(screen.getByRole('heading', '利用規約などの確認')).toBeVisible({
+        timeout: 30_000,
+      });
+      await screen.getByLabel('合成利用規約に同意します').tap();
+      await screen.getByLabel('合成プライバシーポリシーに同意します').tap();
+      await screen.getByRole('button', '現在の文書へ同意する').tap();
+      await expect(screen.getByText('現在有効な文書への同意は完了しています。')).toBeVisible({
+        timeout: 30_000,
+      });
+      await screen.getByRole('link', 'サービスのホームに戻る').tap();
+    }
     if (admin) {
       await screen.getByRole('button', '表示・案内役').tap();
       await screen.getByText('ヒアリングとAI案内役の設定', { exact: true }).tap();
@@ -43,6 +61,7 @@ test(
     }
 
     const join = screen.getByRole('button', '確認して始める');
+    await expect(join).toBeVisible({ timeout: 30_000 });
     await expect(join).toBeDisabled();
     await expect(screen.getByText('あなたのことを少し教えてください', { exact: true })).toHaveCount(
       0,

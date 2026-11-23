@@ -8,6 +8,15 @@ globalThis.fetch = function (input, options) {
   ) {
     return guardedFetch(input, options);
   }
+  if (
+    ['1992-02-29', 'プロフィール検証用ニックネーム', 'プロフィール検証用の自由記述'].some((value) =>
+      options.body.includes(value),
+    )
+  ) {
+    return Promise.resolve(
+      Response.json({ error: 'Basic profile reached the AI fixture' }, { status: 422 }),
+    );
+  }
   const request = JSON.parse(options.body);
   const schema = request.text.format.name;
   const context = JSON.parse(request.input.find(({ role }) => role === 'user').content);
