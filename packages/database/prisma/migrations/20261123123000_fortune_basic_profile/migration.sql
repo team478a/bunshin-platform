@@ -17,6 +17,8 @@ CREATE TABLE "fortune_basic_profiles" (
       AND ("sex_description" IS NULL OR "sex" IS NOT DISTINCT FROM 'OTHER'))
 );
 
+ALTER TABLE "fortune_basic_profiles" ENABLE ROW LEVEL SECURITY;
+
 CREATE FUNCTION "erase_revoked_fortune_basic_profile"() RETURNS trigger
 LANGUAGE plpgsql AS $$
 BEGIN
