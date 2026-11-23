@@ -141,9 +141,13 @@ test(
         nav: document.querySelector('.fortune-admin__nav')?.getBoundingClientRect().x ?? 0,
         editor: document.querySelector('.fortune-deck-editor')?.getBoundingClientRect().x ?? 0,
         width: document.querySelector('.fortune-deck-editor')?.getBoundingClientRect().width ?? 0,
+        saveBottom:
+          document.querySelector('.fortune-deck-editor__footer button')?.getBoundingClientRect()
+            .bottom ?? Infinity,
       }));
       expect(layout.editor).toBeGreaterThan(layout.nav);
       expect(layout.width).toBeGreaterThan(800);
+      expect(layout.saveBottom).toBeLessThanOrEqual(900);
       await app.screenshot('fortune-admin-desktop');
       return;
     }

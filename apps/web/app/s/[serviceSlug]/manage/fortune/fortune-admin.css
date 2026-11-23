@@ -298,6 +298,18 @@
   background: #463266;
 }
 
+@media (min-width: 1000px) {
+  .fortune-deck-editor__metadata:has(> label:nth-child(2)),
+  .fortune-deck-editor__meaning {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .fortune-deck-editor__metadata p,
+  .fortune-deck-editor__meaning > label:first-of-type {
+    grid-column: 1 / -1;
+  }
+}
+
 @media (max-width: 760px) {
   .fortune-admin__layout {
     grid-template-columns: minmax(0, 1fr);
