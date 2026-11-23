@@ -88,6 +88,24 @@ describe('fortune member home', () => {
     state.history.mockResolvedValue([]);
   });
 
+  it('shows a built-in card’s symbolism and theme prompt with an existing free reading', async () => {
+    state.today.mockResolvedValue({
+      participant: { id: 'participant' },
+      reading: { ...reading, cardCode: 'MAJOR_00', status: 'READY_BASIC' },
+    });
+    const markup = await renderToday();
+    expect(markup).toContain('カードの象徴');
+    expect(markup).toContain('旅人が小さな荷物を手に');
+    expect(markup).toContain('今日の作業や打ち合わせ');
+    expect(markup).toContain(reading.body);
+
+    state.today.mockResolvedValue({
+      participant: { id: 'participant' },
+      reading: { ...reading, cardCode: 'CUSTOM_STAR', status: 'READY_BASIC' },
+    });
+    expect(await renderToday()).not.toContain('カードの象徴');
+  });
+
   it('identifies the configurable AI guide and directs a first-time visitor to age confirmation', async () => {
     const markup = await renderToday();
     expect(markup).toContain('AI案内役');
