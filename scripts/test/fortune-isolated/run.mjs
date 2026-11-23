@@ -252,6 +252,9 @@ async function verifyBasicProfiles(owner, member, skipper, secondary) {
     },
   });
   await browser(fixture, owner, 'profile-admin');
+  const configured = (await (await request(owner, operation)).json()).data.guidanceSettings
+    .basicProfile;
+  assert.equal(configured?.enabled, true);
   await request(member, `${api}/basic-profile`, { status: 403 });
   await browser(fixture, member, 'profile-save');
   await browser(fixture, skipper, 'profile-skip');
