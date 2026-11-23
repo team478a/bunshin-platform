@@ -5,11 +5,19 @@ import { useState, type FormEvent } from 'react';
 import { FORTUNE_INTAKE_MAX_QUESTIONS, fortuneIntakeOptions } from '@bunshin/capability-fortune';
 import {
   defaultFortuneGuide,
+  defaultFortuneBasicProfileSettings,
   defaultFortuneGuidanceSettings,
   fortuneCharacterExpressions,
   fortuneCharacterRoles,
   type FortuneGuidanceSettings,
 } from '../../../../../src/fortune/guidance-settings';
+
+const basicProfileToggles = [
+  ['enabled', '基本プロフィールの入力を受け付ける'],
+  ['showNickname', 'ニックネーム欄を表示する'],
+  ['showBirthDate', '生年月日欄を表示する'],
+  ['showSex', '性別欄を表示する'],
+] as const;
 
 const guideFields = [
   ['introduction', '利用者向けの紹介文'],
@@ -33,6 +41,7 @@ export function FortuneGuidanceEditor({
   const [error, setError] = useState('');
   const guide = settings.guide ?? defaultFortuneGuide;
   const intake = fortuneIntakeOptions(settings);
+  const basicProfile = settings.basicProfile ?? defaultFortuneBasicProfileSettings;
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -82,6 +91,16 @@ export function FortuneGuidanceEditor({
             guideName: text('guideName'),
             followUpLimit: Number(text('followUpLimit')),
             deepReadingEnabled: fields.get('deepReadingEnabled') === 'on',
+            basicProfile: {
+              ...Object.fromEntries(
+                basicProfileToggles.map(([key]) => [
+                  key,
+                  fields.get(`basicProfile.${key}`) === 'on',
+                ]),
+              ),
+              introduction: text('basicProfile.introduction'),
+              consentDescription: text('basicProfile.consentDescription'),
+            },
             intake: {
               enabled: fields.get('intakeEnabled') === 'on',
               questions: Number(text('intakeQuestions')),
@@ -133,6 +152,44 @@ export function FortuneGuidanceEditor({
               <input name={key} defaultValue={settings[key]} maxLength={100} required />
             </label>
           ))}
+          <details className="settings-card">
+            <summary>基本プロフィール</summary>
+            <div className="form-stack">
+              <p>
+                表示した項目はすべて任意です。利用者は設定から保存済みの情報を確認・削除できます。
+              </p>
+              {basicProfileToggles.map(([key, label]) => (
+                <label key={key} className="fortune-check">
+                  <input
+                    type="checkbox"
+                    name={`basicProfile.${key}`}
+                    defaultChecked={basicProfile[key]}
+                  />
+                  <span>{label}</span>
+                </label>
+              ))}
+              <label className="form-field">
+                <span>初回画面の案内文</span>
+                <textarea
+                  name="basicProfile.introduction"
+                  defaultValue={basicProfile.introduction}
+                  maxLength={300}
+                  rows={3}
+                  required
+                />
+              </label>
+              <label className="form-field">
+                <span>個別化同意の説明文</span>
+                <textarea
+                  name="basicProfile.consentDescription"
+                  defaultValue={basicProfile.consentDescription}
+                  maxLength={300}
+                  rows={3}
+                  required
+                />
+              </label>
+            </div>
+          </details>
           <p>
             案内役はAIとして表示します。紹介や表現ルールには、ご本人の選択を尊重する案内を入力してください。
           </p>

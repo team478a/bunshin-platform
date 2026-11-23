@@ -2,7 +2,11 @@ import type { E2EConfig } from 'e2e';
 import { web } from '@e2e-dev/web';
 
 export default {
-  tests: ['fortune.e2e.ts'],
+  tests: [
+    process.env['BUNSHIN_FORTUNE_TEST_STAGE']?.startsWith('profile-')
+      ? 'basic-profile.e2e.ts'
+      : 'fortune.e2e.ts',
+  ],
   workers: 1,
   actionTimeout: 45_000,
   timeout: 180_000,

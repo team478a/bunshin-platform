@@ -1,12 +1,17 @@
 import { FortuneAppearance } from '../fortune-appearance';
 import { PublicShell } from '../../../ui/public-shell';
 import { fortuneDailyReadingService } from '../../../../src/fortune/runtime';
-import { resolveFortuneGuidanceSettings } from '../../../../src/fortune/guidance-settings';
+import {
+  defaultFortuneBasicProfileSettings,
+  resolveFortuneGuidanceSettings,
+} from '../../../../src/fortune/guidance-settings';
 import { resolveFortunePage } from '../../../../src/fortune/page-context';
 import { FortuneCharacterBadge } from '../fortune-character';
 import { FortuneNav } from '../fortune-ui';
+import { FortuneBasicProfileForm } from '../fortune-basic-profile-form';
 import { FortuneProfileForm } from '../fortune-profile-form';
 import {
+  fortuneBasicProfileRepository,
   fortunePersonalProfileRepository,
   fortuneUnderstandingRepository,
 } from '../../../../src/fortune/personal-profile';
@@ -53,6 +58,13 @@ export default async function FortuneSettingsPage({
       })
     : [];
   const guidance = resolveFortuneGuidanceSettings(setting.guidanceSettings);
+  const basicSettings = guidance.basicProfile ?? defaultFortuneBasicProfileSettings;
+  const basic = today.participant
+    ? await (await fortuneBasicProfileRepository()).read({ serviceSlug, actorUserId: actor.userId })
+    : null;
+  const hasBasicFields =
+    basicSettings.enabled &&
+    (basicSettings.showNickname || basicSettings.showBirthDate || basicSettings.showSex);
   const content = (
     <PublicShell showPlatformBrand={false}>
       <main className="app-page fortune-page">
@@ -71,6 +83,14 @@ export default async function FortuneSettingsPage({
               : 'まだ年齢確認が終わっていません。'}
           </p>
         </section>
+        {basic && (hasBasicFields || basic.profile) && (
+          <FortuneBasicProfileForm
+            serviceSlug={serviceSlug}
+            settings={basicSettings}
+            profile={basic.profile}
+            initial={false}
+          />
+        )}
         {profile && (profile.enabled || profile.profile.consented) && (
           <FortuneProfileForm
             key={String(profile.profile.consented)}

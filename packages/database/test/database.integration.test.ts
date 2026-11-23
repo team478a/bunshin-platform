@@ -134,6 +134,7 @@ import {
   recoverStaleFortuneReadings,
   PrismaFortuneGenerationQueue,
   PrismaFortuneRepository,
+  PrismaFortuneBasicProfileRepository,
   PrismaFortunePersonalProfileRepository,
   PrismaFortuneFollowUpRepository,
   PrismaFortuneIntakeRepository,
@@ -1853,6 +1854,81 @@ describe('database ownership boundaries', () => {
         }),
       ).toEqual({ personalFitRating: null, personalFitRatedAt: null });
       await expect(repository.savePersonalFit({ ...input, rating: 'VERY' })).resolves.toBe(false);
+
+      const basicProfiles = new PrismaFortuneBasicProfileRepository(client);
+      const scope = { serviceSlug: configuration.slug, actorUserId: owner.user.id };
+      const now = new Date();
+      const fields = {
+        nickname: '月',
+        birthDate: '1992-02-29',
+        sex: 'OTHER' as const,
+        sexDescription: '回答例',
+      };
+      const save = { ...scope, now, change: { action: 'save' as const, fields } };
+      await expect(basicProfiles.change(save)).resolves.toBe(false);
+      await expect(
+        basicProfiles.change({ ...scope, now, change: { action: 'skip' } }),
+      ).resolves.toBe(true);
+      await expect(basicProfiles.read(scope)).resolves.toEqual({ completed: true, profile: null });
+
+      await client.fortuneServiceSetting.update({
+        where: { id: setting.id },
+        data: { guidanceSettings: { basicProfile: { enabled: true } } },
+      });
+      await expect(basicProfiles.change(save)).resolves.toBe(true);
+      await expect(basicProfiles.read(scope)).resolves.toMatchObject({
+        completed: true,
+        profile: fields,
+      });
+      await expect(
+        basicProfiles.read({ ...scope, actorUserId: other.user.id }),
+      ).resolves.toBeNull();
+      await expect(
+        basicProfiles.read({ ...scope, serviceSlug: 'foreign-fortune' }),
+      ).resolves.toBeNull();
+      await expect(
+        basicProfiles.change({
+          ...scope,
+          now,
+          change: { action: 'save', fields: { nickname: null, sex: null } },
+        }),
+      ).resolves.toBe(true);
+      await expect(basicProfiles.read(scope)).resolves.toMatchObject({
+        profile: { nickname: null, birthDate: '1992-02-29', sex: null, sexDescription: null },
+      });
+      await expect(
+        basicProfiles.change({ ...scope, now, change: { action: 'delete' } }),
+      ).resolves.toBe(true);
+      await expect(basicProfiles.read(scope)).resolves.toEqual({ completed: true, profile: null });
+
+      await expect(basicProfiles.change(save)).resolves.toBe(true);
+      await client.fortuneServiceSetting.update({
+        where: { id: setting.id },
+        data: { guidanceSettings: { basicProfile: { enabled: false } } },
+      });
+      await expect(basicProfiles.change(save)).resolves.toBe(false);
+      await expect(
+        basicProfiles.change({
+          ...scope,
+          now,
+          change: { action: 'save', fields: { birthDate: null } },
+        }),
+      ).resolves.toBe(true);
+      await expect(basicProfiles.read(scope)).resolves.toMatchObject({
+        profile: { nickname: '月', birthDate: null },
+      });
+      await expect(
+        new PrismaServiceParticipationRepository(client).withdraw({
+          slug: scope.serviceSlug,
+          actorUserId: scope.actorUserId,
+          now,
+        }),
+      ).resolves.toMatchObject({ status: 'REVOKED' });
+      await expect(basicProfiles.read(scope)).resolves.toBeNull();
+      await expect(
+        client.fortuneBasicProfile.count({ where: { participantId: participant.id } }),
+      ).resolves.toBe(0);
+      await expect(basicProfiles.change(save)).resolves.toBe(false);
     } finally {
       await client.job.deleteMany({
         where: { workspaceId: base.workspaceId, jobType: 'FORTUNE_READING_GENERATE' },
