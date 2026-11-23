@@ -107,6 +107,17 @@ describe('fortune operator HTTP boundary', () => {
       defaultFortuneGuidanceSettings,
       { ...defaultFortuneGuidanceSettings, guide },
       { ...defaultFortuneGuidanceSettings, guide, characters },
+      {
+        ...defaultFortuneGuidanceSettings,
+        basicProfile: {
+          enabled: true,
+          showNickname: true,
+          showBirthDate: false,
+          showSex: false,
+          introduction: 'プロフィールを入力できます。',
+          consentDescription: 'このサービス内での個別化に使います。',
+        },
+      },
     ]) {
       const result = await updateFortuneOperationsResponse(
         request({ action: 'SAVE_GUIDANCE_SETTINGS', settings }),
