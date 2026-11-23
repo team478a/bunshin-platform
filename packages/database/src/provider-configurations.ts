@@ -546,6 +546,7 @@ export class PrismaAiProviderConfigurationRepository
             ? {}
             : { reservedCostUsdMicros: input.reservedCostUsdMicros }),
           ...(input.requestCount === undefined ? {} : { requestCount: input.requestCount }),
+          ...(input.estimateUnknownCosts ? { estimateUnknownCosts: true } : {}),
         },
         {
           configuration: aiProviderConfiguration(row),

@@ -129,13 +129,13 @@ describe('PrismaAiProviderConfigurationRepository', () => {
     },
   );
 
-  it('reserves the next provider cost under the shared database lock', async () => {
+  it('reserves under the shared lock with a monthly estimate for older unknown costs', async () => {
     const now = new Date('2026-10-11T12:00:00.000Z');
-    const operationHash = createHash('sha256').update('trend:week:1').digest('hex');
+    const operationHash = createHash('sha256').update('fortune:reading:1').digest('hex');
     const row = {
       id: '11111111-1111-4111-8111-111111111111',
       environment: 'PRODUCTION',
-      provider: 'EXA',
+      provider: 'OPENAI',
       version: 1,
       status: 'ACTIVE',
       encryptedApiKey: 'sealed',
@@ -160,7 +160,7 @@ describe('PrismaAiProviderConfigurationRepository', () => {
           .fn()
           .mockResolvedValueOnce({ _sum: { estimatedCostUsdMicros: 100n } })
           .mockResolvedValueOnce({ _sum: { estimatedCostUsdMicros: 500n } }),
-        count: vi.fn().mockResolvedValue(0),
+        count: vi.fn().mockResolvedValueOnce(2).mockResolvedValueOnce(0),
       },
       aiProviderCallAdmission: {
         findUnique: vi.fn().mockResolvedValue(null),
@@ -171,7 +171,7 @@ describe('PrismaAiProviderConfigurationRepository', () => {
         create: vi.fn().mockResolvedValue({
           id: '33333333-3333-4333-8333-333333333333',
           environment: 'PRODUCTION',
-          provider: 'EXA',
+          provider: 'OPENAI',
           operationHash,
         }),
       },
@@ -186,17 +186,20 @@ describe('PrismaAiProviderConfigurationRepository', () => {
       client as never,
     ).reserveActiveForRuntime({
       environment: 'PRODUCTION',
-      provider: 'EXA',
-      operationKey: 'trend:week:1',
+      provider: 'OPENAI',
+      operationKey: 'fortune:reading:1',
       requestCount: 2,
+      estimateUnknownCosts: true,
     });
 
     expect(result).toMatchObject({
       dailySpentUsdMicros: 300,
       monthlySpentUsdMicros: 800,
+      monthlyUnknownCostEvents: 2,
+      dailyUnknownCostEvents: 0,
       admission: {
         environment: 'PRODUCTION',
-        provider: 'EXA',
+        provider: 'OPENAI',
         operationHash: expect.stringMatching(/^[a-f0-9]{64}$/),
       },
     });
