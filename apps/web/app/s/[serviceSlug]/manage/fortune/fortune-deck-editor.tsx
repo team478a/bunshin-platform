@@ -21,6 +21,18 @@ const previewCards = TAROT_DECK.filter((card) =>
 const positions = FORTUNE_ORIENTATIONS.flatMap((orientation) =>
   FORTUNE_THEMES.map((theme) => ({ orientation, theme, key: `${orientation}-${theme}` })),
 );
+const orientationLabel = (orientation: (typeof FORTUNE_ORIENTATIONS)[number]) =>
+  orientation === 'UPRIGHT' ? '正位置' : '逆位置';
+const meaningFields = ['title', 'body', 'action'] as const;
+
+function missingMeaningField(form: FormData, key: string) {
+  return meaningFields
+    .map((field) => `${key}-${field}`)
+    .find((field) => {
+      const value = form.get(field);
+      return typeof value !== 'string' || !value.trim();
+    });
+}
 
 export function FortuneDeckEditor({
   serviceSlug,
@@ -42,6 +54,12 @@ export function FortuneDeckEditor({
   const pending = busy || savedVersion > version;
   const standard = TAROT_DECK.find((card) => card.code === selected);
   const savedCard = deck.find((card) => card.code === selected);
+
+  function selectCard(code: string) {
+    setSelected(code);
+    setMessage('');
+    setError('');
+  }
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -96,32 +114,41 @@ export function FortuneDeckEditor({
   }
 
   return (
-    <details className="settings-card fortune-appearance-editor">
-      <summary>カードの管理</summary>
-      <div className="fortune-deck-preview" aria-label="カードのデザイン見本">
-        <figure>
-          <FortuneCardBack />
-          <figcaption>裏面</figcaption>
-        </figure>
-        {previewCards.map((card) => (
-          <figure key={card.code}>
-            <FortuneCardArtwork
-              card={{ cardCode: card.code, cardNameJa: card.nameJa, orientation: 'UPRIGHT' }}
-            />
-            <figcaption>{card.nameJa}</figcaption>
+    <section className="settings-card fortune-deck-editor">
+      <header className="fortune-deck-editor__header">
+        <h2>カードの管理</h2>
+        <button
+          type="button"
+          className="button button--secondary"
+          disabled={pending || selected === newCard}
+          onClick={() => selectCard(newCard)}
+        >
+          独自カードを追加
+        </button>
+      </header>
+      <details className="fortune-deck-editor__examples">
+        <summary>カードのデザイン見本</summary>
+        <div className="fortune-deck-preview" aria-label="カードのデザイン見本">
+          <figure>
+            <FortuneCardBack />
+            <figcaption>裏面</figcaption>
           </figure>
-        ))}
-      </div>
-      <label className="form-field">
+          {previewCards.map((card) => (
+            <figure key={card.code}>
+              <FortuneCardArtwork
+                card={{ cardCode: card.code, cardNameJa: card.nameJa, orientation: 'UPRIGHT' }}
+              />
+              <figcaption>{card.nameJa}</figcaption>
+            </figure>
+          ))}
+        </div>
+      </details>
+      <label className="form-field fortune-deck-editor__picker">
         <span>編集するカード</span>
         <select
           value={selected}
           disabled={pending}
-          onChange={(event) => {
-            setSelected(event.target.value);
-            setMessage('');
-            setError('');
-          }}
+          onChange={(event) => selectCard(event.target.value)}
         >
           <option value={newCard}>独自カードを追加</option>
           <optgroup label="標準カード">
@@ -154,7 +181,7 @@ export function FortuneDeckEditor({
       />
       {message && <p role="status">{message}</p>}
       {error && <p role="alert">{error}</p>}
-    </details>
+    </section>
   );
 }
 
@@ -174,63 +201,142 @@ function CardForm({
   save: (event: FormEvent<HTMLFormElement>) => Promise<void>;
 }) {
   const [imageUrl, setImageUrl] = useState(card?.imageUrl ?? '');
+  const [orientation, setOrientation] = useState<(typeof FORTUNE_ORIENTATIONS)[number]>('UPRIGHT');
+  const [theme, setTheme] = useState<(typeof FORTUNE_THEMES)[number]>('LOVE');
+  const [complete, setComplete] = useState<string[]>(() =>
+    meanings
+      .filter(({ title, body, actionStep }) => title.trim() && body.trim() && actionStep.trim())
+      .map((meaning) => `${meaning.orientation}-${meaning.theme}`),
+  );
+  const [missingField, setMissingField] = useState('');
   const custom = !standardName;
+  const activeKey = `${orientation}-${theme}`;
   const validImage = isFortuneCardImageUrl(imageUrl.trim()) ? imageUrl.trim() : undefined;
+
+  function submit(event: FormEvent<HTMLFormElement>) {
+    if (custom) {
+      const element = event.currentTarget;
+      const data = new FormData(element);
+      for (const position of positions) {
+        const field = missingMeaningField(data, position.key);
+        if (!field) continue;
+        event.preventDefault();
+        setOrientation(position.orientation);
+        setTheme(position.theme);
+        setMissingField(field);
+        requestAnimationFrame(() => {
+          const control = element.elements.namedItem(field);
+          if (control instanceof HTMLElement) control.focus();
+        });
+        return;
+      }
+    }
+    void save(event);
+  }
+
   return (
-    <form onSubmit={(event) => void save(event)}>
-      <fieldset className="form-stack" disabled={busy}>
-        {custom && (
-          <label className="form-field">
-            <span>カード名</span>
-            <input name="nameJa" defaultValue={card?.nameJa} required maxLength={50} />
-          </label>
-        )}
-        <label className="form-field">
-          <span>絵柄の公開HTTPS画像URL</span>
-          <input
-            name="imageUrl"
-            type="url"
-            required={custom}
-            maxLength={1000}
-            value={imageUrl}
-            onChange={(event) => setImageUrl(event.target.value)}
-          />
-        </label>
-        <p>
-          {custom
-            ? '正位置・逆位置と3テーマの解釈を入力してください。'
-            : '空欄で保存すると、標準の絵柄に戻ります。'}
-        </p>
-        <p>過去の鑑定に元の絵柄を残す場合は、新しい画像を別のURLで登録してください。</p>
-        {(validImage || standardName) && (
-          <div className="fortune-deck-current" aria-label="選択したカードのプレビュー">
-            <FortuneCardArtwork
-              card={{
-                cardCode: code,
-                cardNameJa: standardName ?? card?.nameJa ?? '新しいカード',
-                orientation: 'UPRIGHT',
-                ...(validImage ? { cardImageUrl: validImage } : {}),
-              }}
-            />
+    <form
+      onSubmit={submit}
+      onInput={(event) => {
+        if (!custom) return;
+        const data = new FormData(event.currentTarget);
+        setComplete(
+          positions.filter(({ key }) => !missingMeaningField(data, key)).map(({ key }) => key),
+        );
+        if (missingField) {
+          const value = data.get(missingField);
+          if (typeof value === 'string' && value.trim()) setMissingField('');
+        }
+      }}
+    >
+      <fieldset className="fortune-deck-editor__fields" disabled={busy}>
+        <div className="fortune-deck-editor__identity">
+          <div className="fortune-deck-editor__metadata">
+            {custom && (
+              <label className="form-field">
+                <span>カード名</span>
+                <input name="nameJa" defaultValue={card?.nameJa} required maxLength={50} />
+              </label>
+            )}
+            <label className="form-field">
+              <span>絵柄の公開HTTPS画像URL</span>
+              <input
+                name="imageUrl"
+                type="url"
+                required={custom}
+                maxLength={1000}
+                value={imageUrl}
+                onChange={(event) => setImageUrl(event.target.value)}
+              />
+            </label>
+            {!custom && <p>空欄で保存すると、標準の絵柄に戻ります。</p>}
+            <p>過去の鑑定に元の絵柄を残す場合は、新しい画像を別のURLで登録してください。</p>
           </div>
-        )}
+          {(validImage || standardName) && (
+            <div className="fortune-deck-current" aria-label="選択したカードのプレビュー">
+              <FortuneCardArtwork
+                card={{
+                  cardCode: code,
+                  cardNameJa: standardName ?? card?.nameJa ?? '新しいカード',
+                  orientation: 'UPRIGHT',
+                  ...(validImage ? { cardImageUrl: validImage } : {}),
+                }}
+              />
+            </div>
+          )}
+        </div>
         {custom && (
-          <>
+          <div className="fortune-deck-editor__meanings">
+            <div className="fortune-deck-editor__meaning-heading">
+              <h3>カードの解釈</h3>
+              <span aria-live="polite">{complete.length} / 6 入力済み</span>
+            </div>
+            <div className="fortune-deck-editor__filters">
+              <div className="fortune-deck-editor__toggle" role="group" aria-label="カードの向き">
+                {FORTUNE_ORIENTATIONS.map((value) => (
+                  <button
+                    key={value}
+                    type="button"
+                    aria-pressed={orientation === value}
+                    onClick={() => setOrientation(value)}
+                  >
+                    {orientationLabel(value)}
+                  </button>
+                ))}
+              </div>
+              <div className="fortune-deck-editor__toggle" role="group" aria-label="占いのテーマ">
+                {FORTUNE_THEMES.map((value) => (
+                  <button
+                    key={value}
+                    type="button"
+                    aria-pressed={theme === value}
+                    onClick={() => setTheme(value)}
+                  >
+                    {themeLabel(value)}
+                  </button>
+                ))}
+              </div>
+            </div>
             {positions.map(({ orientation, theme, key }) => {
               const meaning = meanings.find(
                 (item) => item.orientation === orientation && item.theme === theme,
               );
               return (
-                <fieldset key={key} className="form-stack">
+                <fieldset
+                  key={key}
+                  className="fortune-deck-editor__meaning"
+                  hidden={key !== activeKey}
+                >
                   <legend>
-                    {orientation === 'UPRIGHT' ? '正位置' : '逆位置'}・{themeLabel(theme)}
+                    {orientationLabel(orientation)}・{themeLabel(theme)}
                   </legend>
                   <label className="form-field">
                     <span>タイトル</span>
                     <input
                       name={`${key}-title`}
                       defaultValue={meaning?.title}
-                      required
+                      aria-required="true"
+                      aria-invalid={missingField === `${key}-title`}
                       maxLength={160}
                     />
                   </label>
@@ -239,7 +345,8 @@ function CardForm({
                     <textarea
                       name={`${key}-body`}
                       defaultValue={meaning?.body}
-                      required
+                      aria-required="true"
+                      aria-invalid={missingField === `${key}-body`}
                       maxLength={700}
                       rows={2}
                     />
@@ -249,7 +356,8 @@ function CardForm({
                     <textarea
                       name={`${key}-action`}
                       defaultValue={meaning?.actionStep}
-                      required
+                      aria-required="true"
+                      aria-invalid={missingField === `${key}-action`}
                       maxLength={200}
                       rows={2}
                     />
@@ -257,17 +365,24 @@ function CardForm({
                 </fieldset>
               );
             })}
-            <label className="form-field">
-              <span>
-                <input type="checkbox" name="enabled" defaultChecked={card?.enabled ?? false} />{' '}
-                抽選対象にする
-              </span>
-            </label>
-          </>
+            {missingField && (
+              <p className="form-error" role="alert">
+                保存するには、6通りすべての解釈を入力してください。
+              </p>
+            )}
+          </div>
         )}
-        <button className="button button--primary" type="submit">
-          {custom ? '解釈を確認して保存' : 'カード画像を保存'}
-        </button>
+        <div className="fortune-deck-editor__footer">
+          {custom && (
+            <label>
+              <input type="checkbox" name="enabled" defaultChecked={card?.enabled ?? false} />{' '}
+              抽選対象にする
+            </label>
+          )}
+          <button className="button button--primary" type="submit">
+            {custom ? '解釈を確認して保存' : 'カード画像を保存'}
+          </button>
+        </div>
       </fieldset>
     </form>
   );

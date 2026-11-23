@@ -47,3 +47,39 @@
     width: 100%;
   }
 }
+
+.fortune-today__theme-entry {
+  padding: clamp(1rem, 4vw, 1.5rem);
+}
+
+.fortune-today__theme-entry > h2 {
+  padding-bottom: 0;
+  font-size: clamp(1.2rem, 4.2vw, 1.65rem);
+}
+
+.fortune-today__theme-entry > p {
+  margin: 0.5rem 0 1rem;
+  color: var(--color-text-muted);
+}
+
+.fortune-today__theme-entry .fortune-theme-list {
+  gap: 0.65rem;
+}
+
+.fortune-today__theme-entry .fortune-theme-button {
+  padding: 0.85rem 1rem;
+  border-inline-start: 3px solid var(--fortune-accent, #b79262);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .fortune-today__theme-entry {
+    animation: fortune-theme-enter 360ms ease-out both;
+  }
+
+  @keyframes fortune-theme-enter {
+    from {
+      opacity: 0.55;
+      transform: translateY(0.25rem);
+    }
+  }
+}

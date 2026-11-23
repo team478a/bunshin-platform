@@ -1,5 +1,7 @@
 'use client';
 
+import './fortune-profile-admin.css';
+
 import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
 import { FORTUNE_INTAKE_MAX_QUESTIONS, fortuneIntakeOptions } from '@bunshin/capability-fortune';
@@ -152,42 +154,46 @@ export function FortuneGuidanceEditor({
               <input name={key} defaultValue={settings[key]} maxLength={100} required />
             </label>
           ))}
-          <details className="settings-card">
+          <details className="settings-card fortune-profile-admin">
             <summary>基本プロフィール</summary>
-            <div className="form-stack">
+            <div className="fortune-profile-admin__body">
               <p>
                 表示した項目はすべて任意です。利用者は設定から保存済みの情報を確認・削除できます。
               </p>
-              {basicProfileToggles.map(([key, label]) => (
-                <label key={key} className="fortune-check">
-                  <input
-                    type="checkbox"
-                    name={`basicProfile.${key}`}
-                    defaultChecked={basicProfile[key]}
+              <div className="fortune-profile-admin__toggles">
+                {basicProfileToggles.map(([key, label]) => (
+                  <label key={key} className="fortune-check">
+                    <input
+                      type="checkbox"
+                      name={`basicProfile.${key}`}
+                      defaultChecked={basicProfile[key]}
+                    />
+                    <span>{label}</span>
+                  </label>
+                ))}
+              </div>
+              <div className="fortune-profile-admin__copy">
+                <label className="form-field">
+                  <span>初回画面の案内文</span>
+                  <textarea
+                    name="basicProfile.introduction"
+                    defaultValue={basicProfile.introduction}
+                    maxLength={300}
+                    rows={3}
+                    required
                   />
-                  <span>{label}</span>
                 </label>
-              ))}
-              <label className="form-field">
-                <span>初回画面の案内文</span>
-                <textarea
-                  name="basicProfile.introduction"
-                  defaultValue={basicProfile.introduction}
-                  maxLength={300}
-                  rows={3}
-                  required
-                />
-              </label>
-              <label className="form-field">
-                <span>個別化同意の説明文</span>
-                <textarea
-                  name="basicProfile.consentDescription"
-                  defaultValue={basicProfile.consentDescription}
-                  maxLength={300}
-                  rows={3}
-                  required
-                />
-              </label>
+                <label className="form-field">
+                  <span>個別化同意の説明文</span>
+                  <textarea
+                    name="basicProfile.consentDescription"
+                    defaultValue={basicProfile.consentDescription}
+                    maxLength={300}
+                    rows={3}
+                    required
+                  />
+                </label>
+              </div>
             </div>
           </details>
           <p>

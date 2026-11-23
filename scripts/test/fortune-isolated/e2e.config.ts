@@ -12,7 +12,12 @@ export default {
   timeout: 180_000,
   targets: [
     {
-      engine: web({ viewport: { width: 390, height: 844 } }),
+      engine: web({
+        viewport:
+          process.env['BUNSHIN_FORTUNE_TEST_STAGE'] === 'appearance-desktop'
+            ? { width: 1440, height: 900 }
+            : { width: 390, height: 844 },
+      }),
       app: { url: 'http://127.0.0.1:19000' },
     },
   ],
