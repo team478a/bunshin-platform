@@ -1,6 +1,8 @@
 import 'server-only';
 import {
   FortunePolicyError,
+  FORTUNE_BASIC_PROFILE_SEXES,
+  fortuneBirthDateIssue,
   FORTUNE_FEEDBACK_ISSUES,
   FORTUNE_FEEDBACK_RATINGS,
   FORTUNE_INTAKE_KEYS,
@@ -22,6 +24,7 @@ import { currentUserProvider } from '../auth/current-user';
 import { requireSameOrigin } from '../auth/request-security';
 import { fortuneDailyReadingService } from '../fortune/runtime';
 import {
+  fortuneBasicProfileRepository,
   fortunePersonalProfileRepository,
   fortuneUnderstandingRepository,
 } from '../fortune/personal-profile';
@@ -58,6 +61,29 @@ const personalProfileBody = z.discriminatedUnion('consented', [
     })
     .strict(),
 ]);
+const basicProfileBody = z.discriminatedUnion('action', [
+  z.object({ action: z.literal('skip') }).strict(),
+  z
+    .object({
+      action: z.literal('save'),
+      consented: z.literal(true),
+      nickname: optionalProfileText(30).optional(),
+      birthDate: z.string().max(10).nullable().optional(),
+      sex: z.enum(FORTUNE_BASIC_PROFILE_SEXES).nullable().optional(),
+      sexDescription: optionalProfileText(60).optional(),
+    })
+    .strict(),
+]);
+const birthDateError = {
+  INVALID_DATE: '実在する生年月日を入力してください。',
+  FUTURE_DATE: '未来の日付は入力できません。生年月日を確認してください。',
+  UNDERAGE: '入力された生年月日では18歳未満です。年齢の申告と生年月日を確認してください。',
+};
+class FortuneBirthDateValidationError extends ApplicationError {
+  constructor(issue: keyof typeof birthDateError) {
+    super('VALIDATION_ERROR', birthDateError[issue]);
+  }
+}
 const reviewedItemBody = z
   .object({
     field: z.enum(FORTUNE_UNDERSTANDING_FIELDS),
@@ -171,6 +197,7 @@ async function json<T>(
     );
   } catch (error) {
     const mapped = toApiError(mapError(error), requestId);
+    if (error instanceof FortuneBirthDateValidationError) mapped.body.error.message = error.message;
     return Response.json(mapped.body, {
       status: mapped.status,
       headers: { 'cache-control': 'private, no-store' },
@@ -211,6 +238,57 @@ export const updateFortunePersonalizationResponse = (request: Request, serviceSl
       actorUserId,
       bunshinId: body.bunshinId,
     });
+  });
+
+export const getFortuneBasicProfileResponse = (request: Request, serviceSlug: string) =>
+  json(request, serviceSlug, async (actorUserId, parsedSlug) => {
+    const data = await (
+      await fortuneBasicProfileRepository()
+    ).read({ serviceSlug: parsedSlug, actorUserId });
+    if (!data) throw new ApplicationError('FORBIDDEN', '基本プロフィールを確認できません。');
+    return data;
+  });
+
+export const updateFortuneBasicProfileResponse = (request: Request, serviceSlug: string) =>
+  json(request, serviceSlug, async (actorUserId, parsedSlug) => {
+    const body = await requireJson(request, basicProfileBody);
+    const now = new Date();
+    if (body.action === 'save' && typeof body.birthDate === 'string') {
+      const issue = fortuneBirthDateIssue(body.birthDate, now);
+      if (issue) throw new FortuneBirthDateValidationError(issue);
+    }
+    const change =
+      body.action === 'skip'
+        ? body
+        : {
+            action: 'save' as const,
+            fields: {
+              ...(body.nickname !== undefined ? { nickname: body.nickname } : {}),
+              ...(body.birthDate !== undefined ? { birthDate: body.birthDate } : {}),
+              ...(body.sex !== undefined ? { sex: body.sex } : {}),
+              ...(body.sexDescription !== undefined ? { sexDescription: body.sexDescription } : {}),
+            },
+          };
+    const saved = await (
+      await fortuneBasicProfileRepository()
+    ).change({ serviceSlug: parsedSlug, actorUserId, change, now });
+    if (!saved) throw new ApplicationError('FORBIDDEN', '基本プロフィールを更新できません。');
+    return { saved };
+  });
+
+export const deleteFortuneBasicProfileResponse = (request: Request, serviceSlug: string) =>
+  json(request, serviceSlug, async (actorUserId, parsedSlug) => {
+    requireSameOrigin(request);
+    const deleted = await (
+      await fortuneBasicProfileRepository()
+    ).change({
+      serviceSlug: parsedSlug,
+      actorUserId,
+      change: { action: 'delete' },
+      now: new Date(),
+    });
+    if (!deleted) throw new ApplicationError('FORBIDDEN', '基本プロフィールを削除できません。');
+    return { deleted };
   });
 
 export const updateFortunePersonalProfileResponse = (request: Request, serviceSlug: string) =>

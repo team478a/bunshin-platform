@@ -7,6 +7,8 @@ const state = vi.hoisted(() => ({
   join: vi.fn(),
   updatePersonalization: vi.fn(),
   updateProfile: vi.fn(),
+  readBasicProfile: vi.fn(),
+  changeBasicProfile: vi.fn(),
   today: vi.fn(),
   draw: vi.fn(),
   history: vi.fn(),
@@ -31,6 +33,8 @@ vi.mock('../src/fortune/runtime', () => ({
   fortuneDailyReadingService: () => Promise.resolve(state),
 }));
 vi.mock('../src/fortune/personal-profile', () => ({
+  fortuneBasicProfileRepository: () =>
+    Promise.resolve({ read: state.readBasicProfile, change: state.changeBasicProfile }),
   fortunePersonalProfileRepository: () => Promise.resolve({ update: state.updateProfile }),
   fortuneUnderstandingRepository: () =>
     Promise.resolve({
@@ -59,6 +63,9 @@ vi.mock('@bunshin/database', () => ({
 
 import {
   askFortuneFollowUpResponse,
+  getFortuneBasicProfileResponse,
+  updateFortuneBasicProfileResponse,
+  deleteFortuneBasicProfileResponse,
   drawFortuneResponse,
   getFortuneTodayResponse,
   joinFortuneResponse,
@@ -101,6 +108,64 @@ describe('fortune HTTP contract', () => {
     state.draw.mockResolvedValue({ id: 'reading-1' });
     state.feedback.mockResolvedValue({ id: 'reading-1', feedbackRating: 'HELPFUL' });
     state.recordUse.mockResolvedValue({ id: 'membership-1' });
+  });
+
+  it('makes basic profile data private and scopes every action to the signed-in actor and service', async () => {
+    state.readBasicProfile.mockResolvedValue({ profile: null, completed: false });
+    state.changeBasicProfile.mockResolvedValue(true);
+    const path = '/api/services/fortune/fortune/basic-profile';
+    const get = () => getFortuneBasicProfileResponse(request(path), 'fortune');
+    const put = (body: unknown) =>
+      updateFortuneBasicProfileResponse(
+        request(path, {
+          method: 'PUT',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(body),
+        }),
+        'fortune',
+      );
+
+    const first = await get();
+    expect(first.headers.get('cache-control')).toBe('private, no-store');
+    expect((await first.json()).data).toEqual({ profile: null, completed: false });
+    expect(state.readBasicProfile).toHaveBeenCalledWith({
+      actorUserId: 'user-1',
+      serviceSlug: 'fortune',
+    });
+
+    expect((await put({ action: 'save', nickname: '例', consented: false })).status).toBe(400);
+    expect((await put({ action: 'skip', nickname: '例' })).status).toBe(400);
+    const invalid = await put({ action: 'save', consented: true, birthDate: '2018-07-10' });
+    expect(invalid.status).toBe(400);
+    expect((await invalid.json()).error.message).toContain('18歳');
+    expect(state.changeBasicProfile).not.toHaveBeenCalled();
+
+    expect((await put({ action: 'save', consented: true, birthDate: '2000-02-29' })).status).toBe(
+      200,
+    );
+    expect(state.changeBasicProfile).toHaveBeenLastCalledWith({
+      serviceSlug: 'fortune',
+      actorUserId: 'user-1',
+      change: { action: 'save', fields: { birthDate: '2000-02-29' } },
+      now: expect.any(Date),
+    });
+    expect((await put({ action: 'skip' })).status).toBe(200);
+    expect(
+      (await deleteFortuneBasicProfileResponse(request(path, { method: 'DELETE' }), 'fortune'))
+        .status,
+    ).toBe(200);
+    expect(state.changeBasicProfile).toHaveBeenLastCalledWith({
+      serviceSlug: 'fortune',
+      actorUserId: 'user-1',
+      change: { action: 'delete' },
+      now: expect.any(Date),
+    });
+
+    state.user = null;
+    expect((await get()).status).toBe(401);
+    state.user = { userId: 'user-2' };
+    state.readBasicProfile.mockResolvedValue(null);
+    expect((await get()).status).toBe(403);
   });
 
   it('passes verified reviewed items to the same daily draw and rejects unverified or mixed input', async () => {

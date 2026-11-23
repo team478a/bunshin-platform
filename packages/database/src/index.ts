@@ -77,6 +77,7 @@ export {
   fortuneReadingRetentionCutoff,
   purgeExpiredFortuneReadings,
 } from './fortune';
+export { PrismaFortuneBasicProfileRepository } from './fortune-basic-profile';
 export { PrismaFortunePersonalProfileRepository } from './fortune-personal-profile';
 export { PrismaFortuneFollowUpRepository } from './fortune-follow-ups';
 export { PrismaFortuneIntakeRepository } from './fortune-intake';
