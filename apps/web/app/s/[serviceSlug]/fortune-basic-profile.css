@@ -241,6 +241,8 @@
 .fortune-basic-profile--welcome .fortune-basic-profile__actions .button {
   flex-basis: 7.75rem;
   min-width: 0;
+  padding-inline: 0.4rem;
+  white-space: nowrap;
 }
 
 .fortune-basic-profile--welcome .button--primary:not(:disabled) {
