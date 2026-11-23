@@ -80,6 +80,12 @@ test(
     if (skip) {
       await screen.getByRole('button', 'スキップして占う').tap();
     } else {
+      expect(await browser.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+      await browser.evaluate(() => {
+        window.scrollTo({ top: 0, behavior: 'instant' });
+        return null;
+      });
+      await app.screenshot('basic-profile-390px');
       await nickname.fill('月の旅人');
       await birthDate.fill('2020-01-01');
       await sex.selectOption({ value: 'OTHER' });
@@ -91,8 +97,6 @@ test(
         timeout: 30_000,
       });
       await birthDate.fill('1992-02-29');
-      expect(await browser.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
-      await app.screenshot('basic-profile-390px');
       await save.tap();
     }
 
