@@ -753,6 +753,7 @@ try {
     await db.fortuneServiceSetting.findUniqueOrThrow({ where: { id: setting.id } })
   ).guidanceSettings;
   await browser(primary, owner, 'appearance-editor');
+  await browser(primary, owner, 'appearance-desktop');
   await browser(primary, participant, 'appearance-viewer');
   const { appearance, ...remainingGuidance } = (
     await db.fortuneServiceSetting.findUniqueOrThrow({ where: { id: setting.id } })
@@ -1047,7 +1048,7 @@ try {
   const added = (await (await changeDeck(owner, replaced.version, customChange)).json()).data;
   const published = await getDeck();
   assert.equal(published.approvedMeaningCount, 468);
-  assert.equal(published.customMeanings.length, 6);
+  assert.equal(published.customMeanings.length, beforeDeck.customMeanings.length + 6);
   assert.equal(published.deck.find((card) => card.code === added.code).nameJa, customChange.nameJa);
   const historicalVersion = await db.fortuneKnowledgeVersion.findUniqueOrThrow({
     where: { serviceSettingId_version: { serviceSettingId: setting.id, version: added.version } },
@@ -1061,7 +1062,7 @@ try {
       })
     ).json()
   ).data;
-  assert.equal((await getDeck()).deck.length, 2);
+  assert.equal((await getDeck()).deck.length, published.deck.length);
   await changeDeck(owner, reimported.version, {
     ...customChange,
     code: added.code,
