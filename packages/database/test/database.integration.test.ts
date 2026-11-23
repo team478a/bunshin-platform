@@ -1912,10 +1912,13 @@ describe('database ownership boundaries', () => {
       await expect(basicProfiles.read(scope)).resolves.toEqual({ completed: true, profile: null });
 
       await expect(basicProfiles.change(save)).resolves.toBe(true);
-      await client.groupMembership.update({
-        where: { id: membership.id },
-        data: { status: 'REVOKED' },
-      });
+      await expect(
+        new PrismaServiceParticipationRepository(client).withdraw({
+          slug: scope.serviceSlug,
+          actorUserId: scope.actorUserId,
+          now,
+        }),
+      ).resolves.toMatchObject({ status: 'REVOKED' });
       await expect(basicProfiles.read(scope)).resolves.toBeNull();
       await expect(
         client.fortuneBasicProfile.count({ where: { participantId: participant.id } }),
