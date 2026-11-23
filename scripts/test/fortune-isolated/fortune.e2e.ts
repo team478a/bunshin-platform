@@ -7,28 +7,31 @@ const deepStage = stage === 'deep';
 const referral = stage === 'referral';
 const referralAdmin = stage === 'referral-admin';
 const appearanceEditor = stage === 'appearance-editor';
+const appearanceDesktop = stage === 'appearance-desktop';
 const creditEditor = stage === 'credit-editor';
 const creditExchange = stage === 'credit-exchange';
 const appearanceViewer = stage === 'appearance-viewer';
 const invitationPath = process.env['BUNSHIN_FORTUNE_TEST_INVITATION'];
 test(
-  appearanceEditor
-    ? 'an owner previews and saves the service theme on mobile'
-    : appearanceViewer
-      ? 'a saved theme reaches mobile participants across the Fortune pages'
-      : deepStage
-        ? 'a returning participant can check saved context and receive a deep reading on mobile'
-        : invitationPath
-          ? 'an invited visitor can accept the invitation and reach the mobile age gate'
-          : referral
-            ? 'a Fortune member can share and view their referral history on mobile'
-            : referralAdmin
-              ? 'a Fortune operator sees qualified referrals and settings on mobile'
-              : creditEditor
-                ? 'an operator can save exchange settings on mobile'
-                : creditExchange
-                  ? 'a referred member exchanges credit for a follow-up and sees their ledger on mobile'
-                  : 'a verified participant can join, skip intake and draw a standard reading on mobile',
+  appearanceDesktop
+    ? 'the desktop card editor uses the available space and shows one interpretation'
+    : appearanceEditor
+      ? 'an owner previews and saves the service theme on mobile'
+      : appearanceViewer
+        ? 'a saved theme reaches mobile participants across the Fortune pages'
+        : deepStage
+          ? 'a returning participant can check saved context and receive a deep reading on mobile'
+          : invitationPath
+            ? 'an invited visitor can accept the invitation and reach the mobile age gate'
+            : referral
+              ? 'a Fortune member can share and view their referral history on mobile'
+              : referralAdmin
+                ? 'a Fortune operator sees qualified referrals and settings on mobile'
+                : creditEditor
+                  ? 'an operator can save exchange settings on mobile'
+                  : creditExchange
+                    ? 'a referred member exchanges credit for a follow-up and sees their ledger on mobile'
+                    : 'a verified participant can join, skip intake and draw a standard reading on mobile',
   async ({ app, browser, screen }) => {
     const slug = process.env['BUNSHIN_FORTUNE_TEST_SLUG'];
     if (!slug?.startsWith('isolated-fortune-'))
@@ -62,7 +65,7 @@ test(
     });
     const entry =
       invitationPath ||
-      `/s/${slug}/${appearanceEditor || creditEditor ? 'manage/fortune' : referralAdmin ? 'manage/referrals' : referral ? 'home' : 'today'}`;
+      `/s/${slug}/${appearanceDesktop ? 'manage/fortune?section=cards' : appearanceEditor || creditEditor ? 'manage/fortune' : referralAdmin ? 'manage/referrals' : referral ? 'home' : 'today'}`;
     if (invitationPath && !invitationPath.startsWith(`/s/${slug}/join/`)) {
       throw new Error('An invitation scoped to the disposable service is required');
     }
@@ -73,6 +76,7 @@ test(
     );
     await app.open(entry);
     if (creditEditor) {
+      await screen.getByRole('button', '販売・紹介').tap();
       await screen.getByLabel('利用者に表示する名称').fill('星の特典');
       await screen.getByLabel('追加質問1回に必要なクレジット数').fill('2');
       await screen.getByLabel('クレジット交換を受け付ける').tap();
@@ -129,7 +133,26 @@ test(
       expect(width).toEqual({ viewport: 390, page: 390 });
       return;
     }
+    if (appearanceDesktop) {
+      await expect(screen.getByRole('heading', 'カードの管理')).toBeVisible();
+      await screen.getByRole('button', '独自カードを追加').tap();
+      await expect(browser.locator('.fortune-deck-editor__meaning:not([hidden])')).toHaveCount(1);
+      const layout = await browser.evaluate(() => ({
+        nav: document.querySelector('.fortune-admin__nav')?.getBoundingClientRect().x ?? 0,
+        editor: document.querySelector('.fortune-deck-editor')?.getBoundingClientRect().x ?? 0,
+        width: document.querySelector('.fortune-deck-editor')?.getBoundingClientRect().width ?? 0,
+        saveBottom:
+          document.querySelector('.fortune-deck-editor__footer button')?.getBoundingClientRect()
+            .bottom ?? Infinity,
+      }));
+      expect(layout.editor).toBeGreaterThan(layout.nav);
+      expect(layout.width).toBeGreaterThan(800);
+      expect(layout.saveBottom).toBeLessThanOrEqual(900);
+      await app.screenshot('fortune-admin-desktop');
+      return;
+    }
     if (appearanceEditor) {
+      await screen.getByRole('button', '表示・案内役').tap();
       await screen.getByText('利用者画面のデザイン', { exact: true }).tap();
       await screen.getByLabel('基本の配色').selectOption({ value: 'night' });
       await screen.getByLabel('カードの角丸').selectOption({ value: 'square' });
@@ -144,7 +167,8 @@ test(
       await screen.getByRole('button', 'デザインを保存').tap();
       expect((await saved).status).toBe(200);
       await expect(screen.getByText('占いのデザインを保存しました。')).toBeVisible();
-      await screen.getByText('カードの管理', { exact: true }).tap();
+      await screen.getByRole('button', 'カード', { exact: true }).tap();
+      await screen.getByText('カードのデザイン見本', { exact: true }).tap();
       await expect(browser.locator('.fortune-deck-preview .fortune-tarot-art')).toHaveCount(3);
       await expect(browser.locator('.fortune-deck-preview .fortune-tarot-back')).toBeVisible();
       expect(await browser.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
@@ -158,9 +182,48 @@ test(
       await screen.getByRole('button', 'カード画像を保存').tap();
       expect((await savedCard).status).toBe(200);
       await expect(screen.getByText('カードを保存しました。')).toBeVisible();
-      await screen.getByLabel('編集するカード').selectOption({ value: 'new' });
+      await screen.getByText('カードのデザイン見本', { exact: true }).tap();
+      await screen.getByRole('button', '独自カードを追加').tap();
       await expect(screen.getByLabel('カード名')).toBeVisible();
       await expect(screen.getByLabel('抽選対象にする')).toBeVisible();
+      await screen.getByLabel('カード名').fill('星明かり');
+      await imageUrl.fill('https://example.invalid/cards/starlight.webp');
+      const interpretation = browser.locator('.fortune-deck-editor__meaning:not([hidden])');
+      await expect(interpretation).toHaveCount(1);
+      for (const orientation of ['正位置', '逆位置']) {
+        await screen.getByRole('button', orientation, { exact: true }).tap();
+        for (const theme of ['恋愛', '仕事', '人間関係']) {
+          await screen.getByRole('button', theme, { exact: true }).tap();
+          if (orientation === '逆位置' && theme === '人間関係') continue;
+          await interpretation.getByLabel('タイトル').fill(`${orientation}・${theme}のヒント`);
+          await interpretation
+            .getByLabel('カードの解釈')
+            .fill('今の状況を落ち着いて見直してみましょう。');
+          await interpretation
+            .getByLabel('行動の提案')
+            .fill('気づいたことを一つ書き留めましょう。');
+        }
+      }
+      await screen.getByRole('button', '正位置', { exact: true }).tap();
+      await screen.getByRole('button', '概要').tap();
+      await screen.getByRole('button', 'カード', { exact: true }).tap();
+      await expect(screen.getByText('5 / 6 入力済み')).toBeVisible();
+      await screen.getByRole('button', '解釈を確認して保存').tap();
+      await expect(browser.locator('.fortune-deck-editor__meanings').getByRole('alert')).toHaveText(
+        '保存するには、6通りすべての解釈を入力してください。',
+      );
+      await expect(interpretation.getByText('逆位置・人間関係')).toBeVisible();
+      await interpretation.getByLabel('タイトル').fill('逆位置・人間関係のヒント');
+      await interpretation
+        .getByLabel('カードの解釈')
+        .fill('今の状況を落ち着いて見直してみましょう。');
+      await interpretation.getByLabel('行動の提案').fill('気づいたことを一つ書き留めましょう。');
+      await expect(screen.getByText('6 / 6 入力済み')).toBeVisible();
+      await app.screenshot('fortune-admin-mobile');
+      const customSaved = browser.waitForResponse(`**/api/services/${slug}/fortune-operations`);
+      await screen.getByRole('button', '解釈を確認して保存').tap();
+      expect((await customSaved).status).toBe(200);
+      await expect(screen.getByText('カードを保存しました。')).toBeVisible();
       return;
     }
     if (appearanceViewer) {
