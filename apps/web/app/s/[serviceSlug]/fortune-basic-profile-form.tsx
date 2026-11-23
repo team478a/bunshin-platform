@@ -178,7 +178,7 @@ export function FortuneBasicProfileForm({
               {hidden.map(({ field, label, value }) => (
                 <div key={field}>
                   <p>
-                    {label}　{value}
+                    {label} {value}
                   </p>
                   <button
                     type="button"
