@@ -1,0 +1,301 @@
+.public-shell__content:has(> .fortune-admin) {
+  width: min(100%, 1220px);
+}
+
+.fortune-admin {
+  --admin-ink: #251d38;
+  --admin-muted: #62596f;
+  --admin-line: #e4dee9;
+  --admin-soft: #f6f2f8;
+  --admin-accent: #59427d;
+  display: grid;
+  gap: 1rem;
+  color: var(--admin-ink);
+}
+
+.fortune-admin__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem 1rem;
+  padding: 1rem clamp(1rem, 3vw, 1.65rem);
+  border: 1px solid #5c4769;
+  border-radius: 1rem;
+  background: linear-gradient(125deg, #241c38, #423253);
+  color: #fff5e6;
+}
+
+.fortune-admin__header h1 {
+  margin: 0;
+  font-size: clamp(1.35rem, 2.5vw, 1.95rem);
+  letter-spacing: 0.02em;
+}
+
+.fortune-admin__header-links,
+.fortune-admin__related {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.65rem;
+}
+
+.fortune-admin__header a {
+  color: #f7e5c8;
+  text-underline-offset: 0.2em;
+}
+
+.fortune-admin__layout {
+  display: grid;
+  grid-template-columns: 11rem minmax(0, 1fr);
+  align-items: start;
+  gap: 1rem;
+  scroll-margin-top: 0.6rem;
+}
+
+.fortune-admin__nav {
+  position: sticky;
+  top: 0.75rem;
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.4rem;
+  border: 1px solid var(--admin-line);
+  border-radius: 0.9rem;
+  background: #fff;
+}
+
+.fortune-admin__nav button,
+.fortune-deck-editor__toggle button {
+  min-width: 0;
+  min-height: 44px;
+  padding: 0.45rem 0.75rem;
+  border: 1px solid transparent;
+  border-radius: 0.58rem;
+  background: transparent;
+  color: var(--admin-ink);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.fortune-admin__nav button {
+  text-align: start;
+}
+
+.fortune-admin__nav button:hover,
+.fortune-deck-editor__toggle button:hover {
+  background: var(--admin-soft);
+}
+
+.fortune-admin__nav button[aria-pressed='true'],
+.fortune-deck-editor__toggle button[aria-pressed='true'] {
+  border-color: var(--admin-accent);
+  background: var(--admin-accent);
+  color: #fff;
+}
+
+.fortune-admin :is(button, a, summary, input, select, textarea):focus-visible {
+  outline: 2px solid var(--admin-accent);
+  outline-offset: 2px;
+}
+
+.fortune-admin__header a:focus-visible {
+  outline-color: #ffe9c2;
+}
+
+.fortune-admin__panel,
+.fortune-deck-editor__fields,
+.fortune-deck-editor__metadata,
+.fortune-deck-editor__meanings {
+  display: grid;
+  min-width: 0;
+  gap: 0.9rem;
+}
+
+.fortune-admin__panel[hidden],
+.fortune-deck-editor__meaning[hidden] {
+  display: none;
+}
+
+.fortune-admin__related {
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--admin-line);
+  border-radius: 0.8rem;
+  background: #fff;
+}
+
+.fortune-admin__related a {
+  color: var(--admin-accent);
+  text-underline-offset: 0.2em;
+}
+
+.fortune-admin .settings-card {
+  min-width: 0;
+  margin-bottom: 0;
+  border-color: var(--admin-line);
+  border-radius: 0.95rem;
+  box-shadow: 0 4px 15px #28203908;
+}
+
+.fortune-deck-editor__header,
+.fortune-deck-editor__meaning-heading,
+.fortune-deck-editor__footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.45rem 0.85rem;
+}
+
+.fortune-deck-editor :is(h2, h3) {
+  margin: 0;
+}
+
+.fortune-deck-editor__picker {
+  max-width: 28rem;
+}
+
+.fortune-deck-editor__examples {
+  padding: 0.6rem 0.75rem;
+  border-radius: 0.65rem;
+  background: var(--admin-soft);
+}
+
+.fortune-deck-editor__examples summary {
+  width: fit-content;
+  min-height: 2rem;
+  padding-block: 0.25rem;
+  cursor: pointer;
+}
+
+.fortune-deck-editor .fortune-deck-preview {
+  grid-template-columns: repeat(4, minmax(0, 6rem));
+  padding-block: 0.4rem;
+}
+
+.fortune-deck-editor__fields,
+.fortune-deck-editor__meaning {
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.fortune-deck-editor__identity {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 0.75rem;
+}
+
+.fortune-deck-editor__identity .fortune-deck-current {
+  width: clamp(3.2rem, 14vw, 5.4rem);
+}
+
+.fortune-deck-editor__metadata p {
+  margin: 0;
+  color: var(--admin-muted);
+  font-size: 0.875rem;
+}
+
+.fortune-deck-editor .form-field {
+  display: grid;
+  min-width: 0;
+  gap: 0.3rem;
+  color: var(--admin-ink);
+  font-weight: 600;
+}
+
+.fortune-deck-editor :is(select, textarea, input:not([type='checkbox'])) {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid #bdb2c9;
+  border-radius: 0.6rem;
+  background: #fff;
+  color: var(--admin-ink);
+  font: inherit;
+  font-weight: 400;
+}
+
+.fortune-deck-editor textarea {
+  min-height: 4rem;
+  resize: vertical;
+}
+
+.fortune-deck-editor [aria-invalid='true'] {
+  border-color: #a12b42;
+}
+
+.fortune-deck-editor__meanings {
+  padding: clamp(0.6rem, 2vw, 1rem);
+  border: 1px solid var(--admin-line);
+  border-radius: 0.75rem;
+  background: var(--admin-soft);
+}
+
+.fortune-deck-editor__meaning-heading span,
+.fortune-deck-editor__meaning legend {
+  color: var(--admin-muted);
+  font-size: 0.875rem;
+}
+
+.fortune-deck-editor__filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.fortune-deck-editor__toggle {
+  display: inline-flex;
+  gap: 0.2rem;
+  padding: 0.18rem;
+  border: 1px solid var(--admin-line);
+  border-radius: 0.72rem;
+  background: #fff;
+}
+
+.fortune-deck-editor__meaning {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.fortune-deck-editor__meaning legend {
+  margin-bottom: 0.45rem;
+  padding: 0;
+}
+
+.fortune-deck-editor__footer {
+  margin-top: 0.15rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--admin-line);
+}
+
+.fortune-deck-editor__footer label {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.fortune-deck-editor__footer button {
+  margin-inline-start: auto;
+}
+
+@media (max-width: 760px) {
+  .fortune-admin__layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .fortune-admin__nav {
+    position: static;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .fortune-admin__nav button {
+    padding-inline: 0.15rem;
+    text-align: center;
+    font-size: 0.875rem;
+  }
+}
