@@ -65,6 +65,7 @@ test(
     });
     const entry =
       invitationPath ||
+      (deepStage && `/s/${slug}/today?deep=1`) ||
       `/s/${slug}/${appearanceDesktop ? 'manage/fortune?section=cards' : appearanceEditor || creditEditor ? 'manage/fortune' : referralAdmin ? 'manage/referrals' : referral ? 'home' : 'today'}`;
     if (invitationPath && !invitationPath.startsWith(`/s/${slug}/join/`)) {
       throw new Error('An invitation scoped to the disposable service is required');
@@ -174,6 +175,7 @@ test(
       expect(await browser.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
       await browser.evaluate(() => {
         document.querySelector('.fortune-deck-preview')?.scrollIntoView({ block: 'center' });
+        return null;
       });
       await app.screenshot('fortune-deck-preview-390px');
       const imageUrl = screen.getByLabel('絵柄の公開HTTPS画像URL');
@@ -295,6 +297,7 @@ test(
             metrics.summoningFlipMs = String(event.elapsedTime * 1000);
           }
         });
+        return null;
       });
       try {
         await screen.getByRole('button', 'この内容で占う').tap();
@@ -341,7 +344,9 @@ test(
       await expect(book).toBeVisible();
       await expect(book.getByText('セレーネ', { exact: true })).toBeVisible();
       await expect(screen.getByText('今は働き方を整理したい', { exact: true })).toBeVisible();
-      await expect(screen.getByRole('heading', 'この鑑定についてAIに聞く')).toBeVisible();
+      await expect(screen.getByRole('heading', 'この鑑定についてAIに聞く')).toBeVisible({
+        timeout: 45_000,
+      });
       await screen.getByText('次回の振り返りを見る', { exact: true }).tap();
       await expect(screen.getByText('書き出してみて、気持ちに変化はありましたか？')).toBeVisible();
       const layout = await browser.evaluate(() => {
@@ -349,7 +354,7 @@ test(
         const reading = book?.querySelector('.fortune-reading-body');
         const select = window.getSelection();
         if (reading) select?.selectAllChildren(reading);
-        const selected = select?.toString();
+        const selected = select?.toString() ?? '';
         select?.removeAllRanges();
         book?.scrollIntoView({ block: 'start', behavior: 'instant' });
         return { selected, width: document.documentElement.scrollWidth };
@@ -365,11 +370,12 @@ test(
       await expect(browser.locator('.fortune-oracle-opening')).toHaveCount(0);
       await app.open(`/s/${slug}/history`);
       await expect(book).toHaveCount(0);
-      const readingPath = await browser.evaluate(() =>
-        document.querySelector('.fortune-reading-link')?.getAttribute('href'),
+      const readingPath = await browser.evaluate(
+        () => document.querySelector('.fortune-reading-link')?.getAttribute('href') ?? null,
       );
       expect(readingPath).toMatch(/\/readings\//);
-      await app.open(readingPath!);
+      if (!readingPath) throw new Error('Expected a link to the saved reading');
+      await app.open(readingPath);
       await expect(book).toBeVisible({ timeout: 45_000 });
       await expect(browser.locator('.fortune-oracle-opening')).toHaveCount(0);
       return;
@@ -393,6 +399,7 @@ test(
         document.documentElement.dataset.summonedName =
           scene?.querySelector('p')?.textContent ?? '';
       });
+      return null;
     });
     const drawButton = screen.getByRole('button', /仕事や今後の動き/);
     await drawButton.tap();
@@ -414,15 +421,15 @@ test(
     }
     await expect(screen.getByRole('heading', '今日の提案')).toBeVisible({ timeout: 75_000 });
     const summoned = await browser.evaluate(() => ({
-      card: document.documentElement.dataset.summonedCard,
-      name: document.documentElement.dataset.summonedName,
-      result: document.querySelector('.fortune-reading-card h2')?.textContent,
+      card: document.documentElement.dataset.summonedCard ?? null,
+      name: document.documentElement.dataset.summonedName ?? null,
+      result: document.querySelector('.fortune-reading-card h2')?.textContent ?? null,
       width: document.documentElement.scrollWidth,
     }));
     expect(summoned.card).toMatch(/^\/fortune\/tarot\/.+\.webp$/);
     await expect(browser.locator('.fortune-moon-stage')).toHaveCount(0);
     await expect(browser.locator('.fortune-oracle-book')).toHaveCount(0);
-    expect(summoned.name).toBe(summoned.result?.replace(' （', '・').replace('）', ''));
+    expect(summoned.name).toBe(summoned.result?.replace(' （', '・').replace('）', '') ?? null);
     expect(summoned.width).toBeLessThanOrEqual(390);
     await expect(screen.getByText(/最初の10分で行うこと/)).toBeVisible();
     await app.open(`/s/${slug}/today`);
