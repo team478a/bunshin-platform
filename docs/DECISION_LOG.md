@@ -4660,3 +4660,9 @@
 - 既存30日研修のSocial Planner・Assessmentと動的学習のLesson・Conversation・Practice Support・Persona・Nudge・Evidence Reviewについて、Responses、非保存、strict JSON Schema、失敗時のfail-closedを合成テストする。Daily MissionのContent/Qualityは既存の低推論ポリシーを同modelへ引き継ぐ。
 - 原価予約テストは承認候補の最大予約額`57,344 USD micros`が既存Admissionへ明示入力され、そのまま保持されることだけを確認する。単価・予約額をruntimeへ固定せず、本番のPricing、Provider設定、予算、Admission値は同一レビュー単位で別承認する。
 - Prompt、DB、migration、Feature Flag、Program、Provider設定、環境変数、本番AI/LINE呼出しは変更しない。合成互換性は実モデル品質・利用権・実費・本番開始を承認しない。
+
+## 2026-11-24: 占いのOpenAI原価は概算で運用する
+
+- 占いのAI個別化・鑑定・追加質問・ヒアリングでは、共通OpenAI台帳の原価未取得行だけを理由に利用を止めない。日次・月次の予算判定では、原価未取得1件につき運営設定の呼び出し1回分の概算を仮計上する。
+- 稼働中のモデルの[OpenAI公式単価](https://developers.openai.com/api/docs/models/gpt-5.6-terra)を運営上の見積もりの根拠に使う。トークンが未取得の過去の行に確定原価を記入しない。既存の精算や原価レポートは運用上の見積もりと区別する。
+- 予算超過、Providerの停止、接続確認、原子的な費用予約は既存の判定を維持する。他機能の受付判定は従来のままとする。

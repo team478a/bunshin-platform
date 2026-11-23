@@ -58,69 +58,84 @@ describe('PrismaAiProviderConfigurationRepository', () => {
     expect(transactionClient.aiProviderConfigurationAudit.create).not.toHaveBeenCalled();
   });
 
-  it('counts all unknown-cost events in the current UTC month for runtime gating', async () => {
-    const now = new Date('2026-10-10T12:00:00.000Z');
-    const dailyFrom = new Date('2026-10-10T00:00:00.000Z');
-    const monthlyFrom = new Date('2026-10-01T00:00:00.000Z');
-    const aggregate = vi
-      .fn()
-      .mockResolvedValueOnce({ _sum: { estimatedCostUsdMicros: 100n } })
-      .mockResolvedValueOnce({ _sum: { estimatedCostUsdMicros: 200n } });
-    const count = vi.fn().mockResolvedValue(3);
-    const client = {
-      aiProviderConfiguration: {
-        findFirst: vi.fn().mockResolvedValue({
-          id: '11111111-1111-4111-8111-111111111111',
+  it.each([false, true])(
+    'counts today separately for an estimated budget (%s)',
+    async (estimateUnknownCosts) => {
+      const now = new Date('2026-10-10T12:00:00.000Z');
+      const dailyFrom = new Date('2026-10-10T00:00:00.000Z');
+      const monthlyFrom = new Date('2026-10-01T00:00:00.000Z');
+      const aggregate = vi
+        .fn()
+        .mockResolvedValueOnce({ _sum: { estimatedCostUsdMicros: 100n } })
+        .mockResolvedValueOnce({ _sum: { estimatedCostUsdMicros: 200n } });
+      const count = vi.fn().mockResolvedValueOnce(3).mockResolvedValueOnce(1);
+      const client = {
+        aiProviderConfiguration: {
+          findFirst: vi.fn().mockResolvedValue({
+            id: '11111111-1111-4111-8111-111111111111',
+            environment: 'PRODUCTION',
+            provider: 'OPENAI',
+            version: 1,
+            status: 'ACTIVE',
+            encryptedApiKey: 'sealed',
+            apiKeyMask: '•••1234',
+            model: 'gpt-5-mini',
+            dailyBudgetUsdMicros: 1_000_000,
+            monthlyBudgetUsdMicros: 10_000_000,
+            requestCostUsdMicros: 0,
+            globallyPaused: false,
+            keyVersion: 1,
+            lastVerifiedAt: now,
+            lastErrorCategory: null,
+            createdAt: now,
+            updatedAt: now,
+          }),
+        },
+        aiUsageEvent: { aggregate, count },
+      };
+
+      await expect(
+        new PrismaAiProviderConfigurationRepository(client as never).getActiveForRuntime({
           environment: 'PRODUCTION',
           provider: 'OPENAI',
-          version: 1,
-          status: 'ACTIVE',
-          encryptedApiKey: 'sealed',
-          apiKeyMask: '•••1234',
-          model: 'gpt-5-mini',
-          dailyBudgetUsdMicros: 1_000_000,
-          monthlyBudgetUsdMicros: 10_000_000,
-          requestCostUsdMicros: 0,
-          globallyPaused: false,
-          keyVersion: 1,
-          lastVerifiedAt: now,
-          lastErrorCategory: null,
-          createdAt: now,
-          updatedAt: now,
+          dailyFrom,
+          monthlyFrom,
+          now,
+          estimateUnknownCosts,
         }),
-      },
-      aiUsageEvent: { aggregate, count },
-    };
+      ).resolves.toMatchObject({
+        dailySpentUsdMicros: 100,
+        monthlySpentUsdMicros: 200,
+        monthlyUnknownCostEvents: 3,
+        ...(estimateUnknownCosts ? { dailyUnknownCostEvents: 1 } : {}),
+      });
+      expect(count).toHaveBeenCalledWith({
+        where: {
+          provider: 'openai',
+          estimatedCostUsdMicros: null,
+          occurredAt: { gte: monthlyFrom, lt: now },
+        },
+      });
+      expect(count).toHaveBeenCalledTimes(estimateUnknownCosts ? 2 : 1);
+      if (estimateUnknownCosts) {
+        expect(count).toHaveBeenCalledWith({
+          where: {
+            provider: 'openai',
+            estimatedCostUsdMicros: null,
+            occurredAt: { gte: dailyFrom, lt: now },
+          },
+        });
+      }
+    },
+  );
 
-    await expect(
-      new PrismaAiProviderConfigurationRepository(client as never).getActiveForRuntime({
-        environment: 'PRODUCTION',
-        provider: 'OPENAI',
-        dailyFrom,
-        monthlyFrom,
-        now,
-      }),
-    ).resolves.toMatchObject({
-      dailySpentUsdMicros: 100,
-      monthlySpentUsdMicros: 200,
-      monthlyUnknownCostEvents: 3,
-    });
-    expect(count).toHaveBeenCalledWith({
-      where: {
-        provider: 'openai',
-        estimatedCostUsdMicros: null,
-        occurredAt: { gte: monthlyFrom, lt: now },
-      },
-    });
-  });
-
-  it('reserves the next provider cost under the shared database lock', async () => {
+  it('reserves under the shared lock with a monthly estimate for older unknown costs', async () => {
     const now = new Date('2026-10-11T12:00:00.000Z');
-    const operationHash = createHash('sha256').update('trend:week:1').digest('hex');
+    const operationHash = createHash('sha256').update('fortune:reading:1').digest('hex');
     const row = {
       id: '11111111-1111-4111-8111-111111111111',
       environment: 'PRODUCTION',
-      provider: 'EXA',
+      provider: 'OPENAI',
       version: 1,
       status: 'ACTIVE',
       encryptedApiKey: 'sealed',
@@ -145,7 +160,7 @@ describe('PrismaAiProviderConfigurationRepository', () => {
           .fn()
           .mockResolvedValueOnce({ _sum: { estimatedCostUsdMicros: 100n } })
           .mockResolvedValueOnce({ _sum: { estimatedCostUsdMicros: 500n } }),
-        count: vi.fn().mockResolvedValue(0),
+        count: vi.fn().mockResolvedValueOnce(2).mockResolvedValueOnce(0),
       },
       aiProviderCallAdmission: {
         findUnique: vi.fn().mockResolvedValue(null),
@@ -156,7 +171,7 @@ describe('PrismaAiProviderConfigurationRepository', () => {
         create: vi.fn().mockResolvedValue({
           id: '33333333-3333-4333-8333-333333333333',
           environment: 'PRODUCTION',
-          provider: 'EXA',
+          provider: 'OPENAI',
           operationHash,
         }),
       },
@@ -171,17 +186,20 @@ describe('PrismaAiProviderConfigurationRepository', () => {
       client as never,
     ).reserveActiveForRuntime({
       environment: 'PRODUCTION',
-      provider: 'EXA',
-      operationKey: 'trend:week:1',
+      provider: 'OPENAI',
+      operationKey: 'fortune:reading:1',
       requestCount: 2,
+      estimateUnknownCosts: true,
     });
 
     expect(result).toMatchObject({
       dailySpentUsdMicros: 300,
       monthlySpentUsdMicros: 800,
+      monthlyUnknownCostEvents: 2,
+      dailyUnknownCostEvents: 0,
       admission: {
         environment: 'PRODUCTION',
-        provider: 'EXA',
+        provider: 'OPENAI',
         operationHash: expect.stringMatching(/^[a-f0-9]{64}$/),
       },
     });
