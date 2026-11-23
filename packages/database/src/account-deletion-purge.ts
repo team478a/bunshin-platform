@@ -283,6 +283,7 @@ export class PrismaAccountDeletionPurgeRepository implements AccountDeletionPurg
         where: { id: input.userId },
         data: { status: 'DELETED', email: null, displayName: '退会済みユーザー' },
       });
+      await tx.fortuneBasicProfile.deleteMany({ where: { participant: { userId: input.userId } } });
       await tx.accountDeletionRequest.update({
         where: { id: request.id },
         data: {
