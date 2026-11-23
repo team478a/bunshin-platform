@@ -12,6 +12,7 @@ import {
   parseFortuneReviewedItems,
   FORTUNE_PROFILE_STYLES,
   FORTUNE_REFLECTION_ANSWERS,
+  fortuneDrawPool,
 } from '@bunshin/capability-fortune';
 import type {
   CreateFortuneReadingResult,
@@ -29,6 +30,17 @@ import { fortuneReadingRetentionCutoff } from './fortune-retention';
 
 export class PrismaFortuneGenerationRepository {
   constructor(private readonly db: PrismaClient) {}
+
+  async findDrawDeck(input: Parameters<NonNullable<FortuneRepository['findDrawDeck']>>[0]) {
+    const scope = await fortuneTarget(this.db, input.serviceSlug, input.actorUserId);
+    if (!scope) return null;
+    const version = await this.db.fortuneKnowledgeVersion.findFirst({
+      where: { serviceSettingId: scope.id, status: 'APPROVED' },
+      orderBy: { version: 'desc' },
+      select: { id: true, deck: true },
+    });
+    return version ? { knowledgeVersionId: version.id, pool: fortuneDrawPool(version.deck) } : null;
+  }
 
   async findReadingForDate(input: {
     serviceSlug: string;
@@ -88,7 +100,9 @@ export class PrismaFortuneGenerationRepository {
       const knowledge = await tx.fortuneKnowledgeVersion.findFirst({
         where: {
           serviceSettingId: scope.id,
-          status: 'APPROVED',
+          ...(input.knowledgeVersionId
+            ? { id: input.knowledgeVersionId, status: { in: ['APPROVED', 'RETIRED'] } }
+            : { status: 'APPROVED' }),
           cardMeanings: {
             some: {
               cardCode: input.cardCode,

@@ -144,6 +144,23 @@ test(
       await screen.getByRole('button', 'デザインを保存').tap();
       expect((await saved).status).toBe(200);
       await expect(screen.getByText('占いのデザインを保存しました。')).toBeVisible();
+      await screen.getByText('カードの管理', { exact: true }).tap();
+      await expect(browser.locator('.fortune-deck-preview .fortune-tarot-art')).toHaveCount(3);
+      await expect(browser.locator('.fortune-deck-preview .fortune-tarot-back')).toBeVisible();
+      expect(await browser.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+      await browser.evaluate(() => {
+        document.querySelector('.fortune-deck-preview')?.scrollIntoView({ block: 'center' });
+      });
+      await app.screenshot('fortune-deck-preview-390px');
+      const imageUrl = screen.getByLabel('絵柄の公開HTTPS画像URL');
+      await imageUrl.fill('https://example.invalid/cards/moon-preview.webp');
+      const savedCard = browser.waitForResponse(`**/api/services/${slug}/fortune-operations`);
+      await screen.getByRole('button', 'カード画像を保存').tap();
+      expect((await savedCard).status).toBe(200);
+      await expect(screen.getByText('カードを保存しました。')).toBeVisible();
+      await screen.getByLabel('編集するカード').selectOption({ value: 'new' });
+      await expect(screen.getByLabel('カード名')).toBeVisible();
+      await expect(screen.getByLabel('抽選対象にする')).toBeVisible();
       return;
     }
     if (appearanceViewer) {
@@ -198,6 +215,24 @@ test(
       await expect(screen.getByText('ここまでの内容で占えます。')).toBeVisible();
       await screen.getByRole('button', 'ここまでで占う').tap();
       await expect(screen.getByText('ステラ', { exact: true })).toBeVisible();
+      await browser.evaluate(() => {
+        const metrics = document.documentElement.dataset;
+        let summonedAt: number | undefined;
+        const observer = new MutationObserver(() => {
+          const phase = document.querySelector('.fortune-summoning')?.getAttribute('data-phase');
+          if (phase === 'pending') summonedAt ??= performance.now();
+          if (phase === 'reveal' && summonedAt !== undefined) {
+            metrics.summoningBackMs = String(performance.now() - summonedAt);
+            observer.disconnect();
+          }
+        });
+        observer.observe(document.body, { subtree: true, childList: true, attributes: true });
+        document.addEventListener('animationend', (event) => {
+          if (event.animationName === 'fortune-summoning-cinematic-flip') {
+            metrics.summoningFlipMs = String(event.elapsedTime * 1000);
+          }
+        });
+      });
       try {
         await screen.getByRole('button', 'この内容で占う').tap();
         const skip = screen.getByRole('button', '演出をスキップ');
@@ -215,11 +250,21 @@ test(
           );
         });
         expect(clearOfNav).toBe(true);
+        await expect(browser.locator('.fortune-tarot-back__crest')).toBeVisible();
+        await app.screenshot('fortune-cinematic-card-back-390px');
       } finally {
         allowDraw();
       }
+      const reveal = browser.locator('.fortune-summoning[data-phase="reveal"]');
+      await expect(reveal.getByText('一枚のカードがひらきます')).toBeVisible({ timeout: 75_000 });
       const moonGate = browser.locator('.fortune-moon-stage[data-scene="gate"]');
       await expect(moonGate).toBeVisible({ timeout: 75_000 });
+      const pacing = await browser.evaluate(() => ({
+        backMs: Number(document.documentElement.dataset.summoningBackMs),
+        flipMs: Number(document.documentElement.dataset.summoningFlipMs),
+      }));
+      expect(pacing.backMs).toBeGreaterThanOrEqual(900);
+      expect(pacing.flipMs).toBe(2200);
       await app.screenshot('fortune-moon-gate-390px');
       const entrance = browser.locator('.fortune-moon-stage[data-scene="entrance"]');
       await expect(entrance).toBeVisible();

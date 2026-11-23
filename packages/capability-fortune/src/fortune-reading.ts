@@ -38,6 +38,7 @@ export interface FortuneReadingView {
   theme: FortuneTheme;
   cardCode: string;
   cardNameJa: string;
+  cardImageUrl?: string;
   orientation: FortuneOrientation;
   status: FortuneReadingState;
   title: string | null;
@@ -147,6 +148,10 @@ export interface FortuneRepository {
     actorUserId: string;
     localDate: string;
   }): Promise<FortuneReadingView | null>;
+  findDrawDeck?(input: {
+    serviceSlug: string;
+    actorUserId: string;
+  }): Promise<{ knowledgeVersionId: string; pool: readonly { code: string }[] } | null>;
   createBasicReading(input: {
     serviceSlug: string;
     actorUserId: string;
@@ -155,6 +160,7 @@ export interface FortuneRepository {
     consultation?: string;
     reviewedUnderstanding?: ConfirmedFortuneUnderstanding[];
     paidReading?: boolean;
+    knowledgeVersionId?: string;
     cardCode: string;
     orientation: FortuneOrientation;
   }): Promise<CreateFortuneReadingResult>;
@@ -296,7 +302,12 @@ export class FortuneDailyReadingService {
       return existing;
     }
     const theme = existing?.theme ?? parseFortuneTheme(input.theme);
-    const draw = existing ? null : drawTarotCard(this.random);
+    const deck = existing ? null : await this.repository.findDrawDeck?.(input);
+    const draw = existing
+      ? null
+      : deck
+        ? drawTarotCard(this.random, deck.pool)
+        : drawTarotCard(this.random);
     const result = await this.repository.createBasicReading({
       serviceSlug: input.serviceSlug,
       actorUserId: input.actorUserId,
@@ -307,6 +318,7 @@ export class FortuneDailyReadingService {
         ? { reviewedUnderstanding: input.reviewedUnderstanding }
         : {}),
       ...(input.paidReading ? { paidReading: true } : {}),
+      ...(deck ? { knowledgeVersionId: deck.knowledgeVersionId } : {}),
       cardCode: existing?.cardCode ?? draw!.card.code,
       orientation: existing?.orientation ?? draw!.orientation,
     });

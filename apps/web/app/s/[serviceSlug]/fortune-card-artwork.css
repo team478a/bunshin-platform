@@ -1,0 +1,119 @@
+.fortune-tarot-art {
+  display: grid;
+  width: 100%;
+  aspect-ratio: 300 / 527;
+  box-sizing: border-box;
+  grid-template-rows: minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.fortune-tarot-art[data-framed] {
+  padding: 4%;
+  border: 1px solid #c49c5c;
+  border-radius: 0.45rem;
+  background: linear-gradient(133deg, #33254d 12%, #18152e 45%, #35294d 98%);
+  box-shadow:
+    inset 0 0 0 2px #1a162f,
+    inset 0 0 0 3px #b9986380;
+  color: #f4ede3;
+}
+
+.fortune-tarot-art img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  object-fit: contain;
+  border-radius: 0.2rem;
+}
+
+.fortune-tarot-art[data-reversed] img {
+  rotate: 180deg;
+}
+
+.fortune-tarot-art__fallback {
+  display: grid;
+  place-items: center;
+  padding: 0.35rem;
+  overflow-wrap: anywhere;
+  text-align: center;
+}
+
+.fortune-reading-card > .fortune-tarot-art {
+  width: min(100%, 132px);
+  margin: 0.8rem auto;
+}
+
+.fortune-tarot-back {
+  position: relative;
+  display: grid;
+  width: 100%;
+  aspect-ratio: 300 / 527;
+  place-items: center;
+  box-sizing: border-box;
+  overflow: hidden;
+  border-radius: 0.45rem;
+  background:
+    radial-gradient(ellipse, #362b52 1%, transparent 63%),
+    repeating-conic-gradient(from 9deg, #d8b57322 0deg 1deg, transparent 1deg 15deg), #131329;
+  box-shadow:
+    inset 0 0 0 1px #d3aa6c,
+    inset 0 0 0 5px #141326,
+    inset 0 0 0 6px #977347;
+}
+
+.fortune-tarot-back::before {
+  position: absolute;
+  inset: 9% 11%;
+  border: 1px solid #c4a16a9c;
+  border-radius: 49%;
+  content: '';
+}
+
+.fortune-tarot-back::after {
+  position: absolute;
+  inset: 7% 0;
+  background:
+    radial-gradient(circle at 50% 0%, #ffdd9b 1px, transparent 3px),
+    radial-gradient(circle at 50% 100%, #ffdd9b 1px, transparent 3px),
+    radial-gradient(circle at 20% 24%, #f4d394 1px, transparent 2px),
+    radial-gradient(circle at 80% 76%, #f4d394 1px, transparent 2px);
+  content: '';
+}
+
+.fortune-tarot-back__crest {
+  display: grid;
+  width: 58%;
+  aspect-ratio: 1;
+  place-items: center;
+  border: 3px double #e2bf83;
+  border-radius: 50%;
+  background: radial-gradient(circle, #2e244b, #17162c 72%);
+  box-shadow:
+    0 0 0 4px #c4a16a4d,
+    0 0 18px #e3b97739;
+}
+
+.fortune-tarot-back__moon {
+  width: 43%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  box-shadow: 0.22rem 0.06rem 0 0.01rem #f3d695;
+  rotate: -18deg;
+}
+
+.fortune-deck-preview {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(64px, 112px));
+  gap: 0.6rem;
+  justify-content: start;
+}
+
+.fortune-deck-preview figure {
+  margin: 0;
+  text-align: center;
+}
+
+.fortune-deck-current {
+  width: min(33vw, 112px);
+}

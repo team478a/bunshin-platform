@@ -16,6 +16,7 @@ import { FortuneGuidanceEditor } from './fortune-guidance-editor';
 import { FortuneCreditExchangeSettings } from './credit-exchange-settings';
 import { FortuneCommerceProduct } from './commerce-product';
 import { FortuneOperatorEditor } from './fortune-operator-editor';
+import { FortuneDeckEditor } from './fortune-deck-editor';
 
 export const dynamic = 'force-dynamic';
 const percent = (value: number | null) =>
@@ -219,6 +220,14 @@ export default async function FortuneManagementPage({
               characters={status.guidanceSettings.characters}
             />
             <FortuneGuidanceEditor serviceSlug={serviceSlug} settings={status.guidanceSettings} />
+            {status.approvedVersion !== null && (
+              <FortuneDeckEditor
+                serviceSlug={serviceSlug}
+                version={status.approvedVersion}
+                deck={status.deck}
+                meanings={status.customMeanings}
+              />
+            )}
           </>
         )}
         {status.configured && (

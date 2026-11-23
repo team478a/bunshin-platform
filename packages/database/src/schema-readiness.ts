@@ -1,1 +1,1 @@
-export const LATEST_DATABASE_MIGRATION = '20261122130000_fortune_follow_up_credits';
+export const LATEST_DATABASE_MIGRATION = '20261123120000_fortune_knowledge_deck';
