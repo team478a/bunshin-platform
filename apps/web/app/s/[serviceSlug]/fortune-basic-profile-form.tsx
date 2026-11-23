@@ -36,7 +36,9 @@ export function FortuneBasicProfileForm({
         body: JSON.stringify(body),
       });
       if (!response.ok) {
-        const result = await response.json().catch(() => null);
+        const result = (await response.json().catch(() => null)) as {
+          error?: { message?: string };
+        } | null;
         setError(result?.error?.message ?? '保存できませんでした。もう一度お試しください。');
         return;
       }
