@@ -238,6 +238,11 @@
   text-align: center;
 }
 
+.fortune-basic-profile--welcome .fortune-basic-profile__actions .button {
+  flex-basis: 7.75rem;
+  min-width: 0;
+}
+
 .fortune-basic-profile--welcome .button--primary:not(:disabled) {
   border-color: var(--fortune-action, #543873);
   background: var(--fortune-action, #543873);
