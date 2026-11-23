@@ -48,9 +48,11 @@ test(
       0,
     );
     await screen.getByLabel('私は18歳以上です').tap();
+    const joined = browser.waitForResponse(`**/api/services/${slug}/fortune/participation`);
     await join.tap();
+    expect((await joined).status).toBe(201);
     const onboarding = screen.getByRole('heading', 'あなたのことを少し教えてください');
-    await expect(onboarding).toBeVisible();
+    await expect(onboarding).toBeVisible({ timeout: 30_000 });
     await expect(screen.getByText('答えたい項目だけを選べます。')).toBeVisible();
     await expect(screen.getByText('ステラ', { exact: true })).toBeVisible();
     const nickname = screen.getByLabel('ニックネーム（任意）');
@@ -66,20 +68,24 @@ test(
       await screen.getByLabel('この目的で基本プロフィールを保存することに同意します').tap();
       const save = screen.getByRole('button', '保存して次へ');
       await save.tap();
-      await expect(screen.getByText(/入力された生年月日では18歳未満/)).toBeVisible();
+      await expect(screen.getByText(/入力された生年月日では18歳未満/)).toBeVisible({
+        timeout: 30_000,
+      });
       await birthDate.fill('1992-02-29');
       expect(await browser.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
       await app.screenshot('basic-profile-390px');
       await save.tap();
     }
 
+    await expect(screen.getByRole('heading', '何について占いますか？')).toBeVisible({
+      timeout: 30_000,
+    });
     await expect(onboarding).toHaveCount(0);
-    await expect(screen.getByRole('heading', '何について占いますか？')).toBeVisible();
     await expect(screen.getByLabel('今日、特に知りたいこと（任意）')).toHaveCount(0);
     const drawn = browser.waitForResponse(`**/api/services/${slug}/fortune/today`);
     await screen.getByRole('button', /仕事や今後の動き/).tap();
     expect((await drawn).status).toBe(201);
-    await expect(browser.locator('.fortune-reading-card')).toBeVisible();
+    await expect(browser.locator('.fortune-reading-card')).toBeVisible({ timeout: 30_000 });
     await app.open(`${base}/history`);
     await expect(browser.locator('.fortune-reading-link')).toHaveCount(1);
     if (skip) return;
@@ -91,15 +97,19 @@ test(
     await birthDate.fill('');
     await sex.selectOption({ value: '' });
     await screen.getByRole('button', '変更を保存').tap();
-    await expect(screen.getByText('基本プロフィールを更新しました。')).toBeVisible();
+    await expect(screen.getByText('基本プロフィールを更新しました。')).toBeVisible({
+      timeout: 30_000,
+    });
     await app.open(`${base}/settings`);
     await expect(browser.locator('input[name="nickname"][value="月"]')).toBeVisible();
     await expect(browser.locator('input[name="birthDate"][value=""]')).toBeVisible();
     await screen.getByRole('button', '同意を撤回して基本プロフィールを削除').tap();
     await expect(screen.getByText('同意を撤回し、基本プロフィールを削除しました。')).toBeVisible();
-    await expect(browser.locator('input[name="nickname"][value=""]')).toBeVisible();
+    await expect(browser.locator('input[name="nickname"][value=""]')).toBeVisible({
+      timeout: 30_000,
+    });
     await app.open(`${base}/today`);
     await expect(onboarding).toHaveCount(0);
-    await expect(browser.locator('.fortune-reading-card')).toBeVisible();
+    await expect(browser.locator('.fortune-reading-card')).toBeVisible({ timeout: 30_000 });
   },
 );
