@@ -3649,6 +3649,8 @@ model FortuneParticipant {
   groupMembershipId          String                @unique @map("group_membership_id") @db.Uuid
   userId                     String                @map("user_id") @db.Uuid
   personalizationBunshinId   String?               @map("personalization_bunshin_id") @db.Uuid
+  basicProfileHandledAt      DateTime?             @map("basic_profile_handled_at") @db.Timestamptz(6)
+  basicProfile               FortuneBasicProfile?
   profileInterest            String?               @map("profile_interest") @db.VarChar(120)
   profileQuestion            String?               @map("profile_question") @db.VarChar(500)
   profileStyle               String?               @map("profile_style") @db.VarChar(20)
@@ -3678,6 +3680,20 @@ model FortuneParticipant {
   @@unique([workspaceId, groupId, id, userId])
   @@index([workspaceId, personalizationBunshinId])
   @@map("fortune_participants")
+}
+
+model FortuneBasicProfile {
+  participantId  String             @id @map("participant_id") @db.Uuid
+  nickname       String?            @db.VarChar(30)
+  birthDate      DateTime?          @map("birth_date") @db.Date
+  sex            String?            @db.VarChar(8)
+  sexDescription String?            @map("sex_description") @db.VarChar(60)
+  consentedAt    DateTime           @map("consented_at") @db.Timestamptz(6)
+  createdAt      DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
+  participant    FortuneParticipant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+
+  @@map("fortune_basic_profiles")
 }
 
 model FortuneKnowledgeVersion {

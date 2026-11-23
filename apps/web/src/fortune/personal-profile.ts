@@ -5,6 +5,11 @@ export async function fortunePersonalProfileRepository() {
   return new db.PrismaFortunePersonalProfileRepository(db.prisma);
 }
 
+export async function fortuneBasicProfileRepository() {
+  const db = await import('@bunshin/database');
+  return new db.PrismaFortuneBasicProfileRepository(db.prisma);
+}
+
 export async function fortuneUnderstandingRepository() {
   const db = await import('@bunshin/database');
   return new db.PrismaFortuneUnderstandingRepository(db.prisma);
