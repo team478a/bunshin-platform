@@ -80,7 +80,16 @@ test(
     if (skip) {
       await screen.getByRole('button', 'スキップして占う').tap();
     } else {
-      expect(await browser.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+      const layout = await browser.evaluate(() => {
+        const actions = document.querySelector('.fortune-basic-profile__actions');
+        const save = actions?.querySelector('button[type="submit"]')?.getBoundingClientRect();
+        const skip = actions?.querySelector('button[type="button"]')?.getBoundingClientRect();
+        return {
+          width: document.documentElement.scrollWidth,
+          actionsShareRow: Boolean(save && skip && Math.abs(save.top - skip.top) < 1),
+        };
+      });
+      expect(layout).toEqual({ width: 390, actionsShareRow: true });
       await browser.evaluate(() => {
         window.scrollTo({ top: 0, behavior: 'instant' });
         return null;

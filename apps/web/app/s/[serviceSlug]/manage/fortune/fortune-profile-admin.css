@@ -1,0 +1,76 @@
+.fortune-profile-admin.settings-card {
+  margin: 0;
+  padding: 0;
+  border-color: var(--admin-line, #e4dee9);
+  background: var(--admin-soft, #f6f2f8);
+  color: var(--admin-ink, #251d38);
+  box-shadow: none;
+}
+
+.fortune-profile-admin > summary {
+  padding: 0.8rem 1rem;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.fortune-profile-admin__body {
+  display: grid;
+  gap: 0.9rem;
+  padding: 0 1rem 1rem;
+}
+
+.fortune-profile-admin__body > p {
+  margin: 0;
+  color: var(--admin-muted, #62596f);
+  font-size: 0.86rem;
+}
+
+.fortune-profile-admin__toggles,
+.fortune-profile-admin__copy {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
+  gap: 0.65rem;
+}
+
+.fortune-profile-admin__toggles .fortune-check {
+  min-height: 44px;
+  padding: 0.65rem 0.8rem;
+  border: 1px solid var(--admin-line, #e4dee9);
+  border-radius: 0.6rem;
+  background: #fff;
+  font-size: 0.85rem;
+}
+
+.fortune-profile-admin__toggles .fortune-check:first-child {
+  grid-column: 1 / -1;
+  border-color: #c3acd9;
+}
+
+.fortune-profile-admin__toggles .fortune-check input {
+  flex: 0 0 1.15rem;
+  width: 1.15rem;
+  height: 1.15rem;
+  margin: 0;
+  accent-color: var(--admin-accent, #59427d);
+}
+
+.fortune-profile-admin__copy .form-field {
+  display: grid;
+  min-width: 0;
+  gap: 0.35rem;
+  font-weight: 650;
+}
+
+.fortune-profile-admin__copy textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  padding: 0.65rem;
+  border: 1px solid var(--admin-line, #e4dee9);
+  border-radius: 0.6rem;
+  background: #fff;
+  color: inherit;
+  font: inherit;
+  font-weight: 400;
+  resize: vertical;
+}

@@ -254,7 +254,13 @@ export default async function FortuneTodayPage({
               )}
             </>
           ) : paidView && !profile?.profile.consented ? null : (
-            <section className="settings-card">
+            <section
+              className={
+                basicProfileFlow && !deepView
+                  ? 'settings-card fortune-today__theme-entry'
+                  : 'settings-card'
+              }
+            >
               <h2>
                 {paidView
                   ? '深層鑑定を始める'

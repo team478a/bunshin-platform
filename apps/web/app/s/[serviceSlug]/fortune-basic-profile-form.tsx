@@ -8,6 +8,7 @@ import type {
   FortuneCharacter,
 } from '../../../src/fortune/guidance-settings';
 import { FortuneCharacterBadge } from './fortune-character';
+import './fortune-basic-profile.css';
 
 const sexLabels: Record<FortuneBasicProfileSex, string> = {
   MALE: '男性',
@@ -100,65 +101,91 @@ export function FortuneBasicProfileForm({
   }
 
   return (
-    <section className="settings-card fortune-basic-profile" aria-labelledby={headingId}>
-      {character?.enabled && (
-        <FortuneCharacterBadge character={character} expression="welcome" compact />
+    <section
+      className={
+        initial
+          ? 'fortune-basic-profile fortune-basic-profile--welcome'
+          : 'settings-card fortune-basic-profile'
+      }
+      aria-labelledby={headingId}
+    >
+      {initial ? (
+        <header className="fortune-basic-profile__welcome">
+          <span className="fortune-basic-profile__moon" aria-hidden="true" />
+          <div className="fortune-basic-profile__welcome-copy">
+            {character?.enabled && (
+              <FortuneCharacterBadge character={character} expression="welcome" compact />
+            )}
+            <h2 id={headingId}>あなたのことを少し教えてください</h2>
+            <p>{settings.introduction}</p>
+          </div>
+        </header>
+      ) : (
+        <>
+          <h2 id={headingId}>基本プロフィール</h2>
+          <p>入力は任意です。項目を空欄にして保存すると、その項目を削除できます。</p>
+        </>
       )}
-      <h2 id={headingId}>{initial ? 'あなたのことを少し教えてください' : '基本プロフィール'}</h2>
-      {initial && <p>{settings.introduction}</p>}
-      {!initial && <p>入力は任意です。項目を空欄にして保存すると、その項目を削除できます。</p>}
-      <form className="fortune-action" onSubmit={submit} key={profile?.updatedAt ?? 'empty'}>
-        <fieldset className="fortune-action" disabled={submitting || refreshing}>
-          {showNickname && (
-            <label className="form-field">
-              <span>ニックネーム（任意）</span>
-              <input
-                name="nickname"
-                type="text"
-                maxLength={30}
-                defaultValue={profile?.nickname ?? ''}
-              />
-            </label>
-          )}
-          {showBirthDate && (
-            <label className="form-field">
-              <span>生年月日（任意）</span>
-              <input
-                name="birthDate"
-                type="date"
-                min="0001-01-01"
-                defaultValue={profile?.birthDate ?? ''}
-              />
-            </label>
-          )}
-          {showSex && (
-            <label className="form-field">
-              <span>性別（任意）</span>
-              <select
-                name="sex"
-                value={sex}
-                onChange={(event) => setSex(event.target.value as FortuneBasicProfileSex | '')}
-              >
-                <option value="">回答しない</option>
-                <option value="MALE">男性</option>
-                <option value="FEMALE">女性</option>
-                <option value="OTHER">その他・自由記述を希望</option>
-              </select>
-            </label>
-          )}
-          {showSex && sex === 'OTHER' && (
-            <label className="form-field">
-              <span>性別の自由記述（任意）</span>
-              <input
-                name="sexDescription"
-                type="text"
-                maxLength={60}
-                defaultValue={profile?.sexDescription ?? ''}
-              />
-            </label>
+      <form
+        className="fortune-basic-profile__form"
+        onSubmit={submit}
+        key={profile?.updatedAt ?? 'empty'}
+      >
+        <fieldset className="fortune-basic-profile__fieldset" disabled={submitting || refreshing}>
+          {editable && (
+            <div className="fortune-basic-profile__fields">
+              {showNickname && (
+                <label className="form-field fortune-basic-profile__wide">
+                  <span>ニックネーム（任意）</span>
+                  <input
+                    name="nickname"
+                    type="text"
+                    maxLength={30}
+                    defaultValue={profile?.nickname ?? ''}
+                  />
+                </label>
+              )}
+              {showBirthDate && (
+                <label className="form-field">
+                  <span>生年月日（任意）</span>
+                  <input
+                    name="birthDate"
+                    type="date"
+                    min="0001-01-01"
+                    defaultValue={profile?.birthDate ?? ''}
+                  />
+                </label>
+              )}
+              {showSex && (
+                <label className="form-field">
+                  <span>性別（任意）</span>
+                  <select
+                    name="sex"
+                    value={sex}
+                    onChange={(event) => setSex(event.target.value as FortuneBasicProfileSex | '')}
+                  >
+                    <option value="">回答しない</option>
+                    <option value="MALE">男性</option>
+                    <option value="FEMALE">女性</option>
+                    <option value="OTHER">その他・自由記述を希望</option>
+                  </select>
+                </label>
+              )}
+              {showSex && sex === 'OTHER' && (
+                <label className="form-field fortune-basic-profile__wide">
+                  <span>性別の自由記述（任意）</span>
+                  <input
+                    name="sexDescription"
+                    type="text"
+                    maxLength={60}
+                    defaultValue={profile?.sexDescription ?? ''}
+                  />
+                </label>
+              )}
+            </div>
           )}
           {editable && (
-            <>
+            <div className="fortune-basic-profile__consent">
               <p id={consentId}>{settings.consentDescription}</p>
               <label className="fortune-check">
                 <input
@@ -170,7 +197,7 @@ export function FortuneBasicProfileForm({
                 />
                 <span>この目的で基本プロフィールを保存することに同意します</span>
               </label>
-            </>
+            </div>
           )}
           {hidden.length > 0 && (
             <div className="fortune-action">
@@ -197,7 +224,12 @@ export function FortuneBasicProfileForm({
               ))}
             </div>
           )}
-          <div className="button-row">
+          {error && (
+            <p role="alert" className="fortune-basic-profile__error">
+              {error}
+            </p>
+          )}
+          <div className="fortune-basic-profile__actions">
             {editable && (
               <button type="submit" className="button button--primary">
                 {initial ? '保存して次へ' : '変更を保存'}
@@ -224,12 +256,12 @@ export function FortuneBasicProfileForm({
           </div>
         </fieldset>
       </form>
-      {!initial && message && <p role="status">{message}</p>}
-      {error && (
-        <p role="alert" className="form-error">
-          {error}
+      {initial && (submitting || refreshing) && (
+        <p className="fortune-basic-profile__pending" role="status">
+          今日の占いを準備しています…
         </p>
       )}
+      {!initial && message && <p role="status">{message}</p>}
     </section>
   );
 }
