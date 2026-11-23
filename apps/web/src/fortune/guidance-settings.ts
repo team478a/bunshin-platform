@@ -80,6 +80,38 @@ export const defaultFortuneGuide: z.infer<typeof guideSchema> = {
   imageUrl: '',
 };
 
+export const defaultFortuneBasicProfileSettings = {
+  enabled: false,
+  showNickname: true,
+  showBirthDate: true,
+  showSex: true,
+  introduction:
+    'これからの占いをあなたに合わせるため、基本的なプロフィールを登録できます。答えたくない項目はスキップできます。',
+  consentDescription:
+    '入力した情報は、このサービスの個別化に備えて保存します。生年月日と性別は今日のタロットには使いません。設定からいつでも同意を撤回し、情報を削除できます。',
+};
+const basicProfileSettingsSchema = z
+  .object({
+    enabled: z.boolean(),
+    showNickname: z.boolean().default(true),
+    showBirthDate: z.boolean().default(true),
+    showSex: z.boolean().default(true),
+    introduction: z
+      .string()
+      .trim()
+      .min(1)
+      .max(300)
+      .default(defaultFortuneBasicProfileSettings.introduction),
+    consentDescription: z
+      .string()
+      .trim()
+      .min(1)
+      .max(300)
+      .default(defaultFortuneBasicProfileSettings.consentDescription),
+  })
+  .strict();
+export type FortuneBasicProfileSettings = z.infer<typeof basicProfileSettingsSchema>;
+
 export const fortuneGuidanceSettingsSchema = z
   .object({
     interestQuestion: label,
@@ -87,6 +119,7 @@ export const fortuneGuidanceSettingsSchema = z
     styleQuestion: label,
     guideName: label,
     guide: guideSchema.optional(),
+    basicProfile: basicProfileSettingsSchema.optional(),
     characters: charactersSchema.optional(),
     followUpLimit: z.number().int().min(0).max(2).optional(),
     deepReadingEnabled: z.boolean().optional(),

@@ -1902,6 +1902,21 @@ describe('database ownership boundaries', () => {
       await expect(basicProfiles.read(scope)).resolves.toEqual({ completed: true, profile: null });
 
       await expect(basicProfiles.change(save)).resolves.toBe(true);
+      await client.fortuneServiceSetting.update({
+        where: { id: setting.id },
+        data: { guidanceSettings: { basicProfile: { enabled: false } } },
+      });
+      await expect(basicProfiles.change(save)).resolves.toBe(false);
+      await expect(
+        basicProfiles.change({
+          ...scope,
+          now,
+          change: { action: 'save', fields: { birthDate: null } },
+        }),
+      ).resolves.toBe(true);
+      await expect(basicProfiles.read(scope)).resolves.toMatchObject({
+        profile: { nickname: '月', birthDate: null },
+      });
       await expect(
         new PrismaServiceParticipationRepository(client).withdraw({
           slug: scope.serviceSlug,
