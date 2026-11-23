@@ -42,6 +42,13 @@ const approvedReferralRewardNames = [
 ];
 const releaseSettings = new Map([
   [
+    'card-catalog',
+    {
+      approval: 'APPLY_FORTUNE_CARD_CATALOG_SCHEMA_TO',
+      approvedNames: ['20261123120000_fortune_knowledge_deck'],
+    },
+  ],
+  [
     'referral-rewards',
     { approval: 'APPLY_FORTUNE_REFERRAL_SCHEMA_TO', approvedNames: approvedReferralRewardNames },
   ],
