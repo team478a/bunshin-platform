@@ -228,6 +228,10 @@
   border-color: #a12b42;
 }
 
+.fortune-deck-editor [role='alert'] {
+  color: #95253b;
+}
+
 .fortune-deck-editor__meanings {
   padding: clamp(0.6rem, 2vw, 1rem);
   border: 1px solid var(--admin-line);
@@ -281,6 +285,17 @@
 
 .fortune-deck-editor__footer button {
   margin-inline-start: auto;
+}
+
+.fortune-deck-editor .button--primary {
+  border-color: var(--admin-accent);
+  background: var(--admin-accent);
+  color: #fff;
+}
+
+.fortune-deck-editor .button--primary:hover:not(:disabled) {
+  border-color: #463266;
+  background: #463266;
 }
 
 @media (max-width: 760px) {

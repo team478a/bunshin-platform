@@ -205,7 +205,7 @@ test(
       await screen.getByRole('button', 'カード', { exact: true }).tap();
       await expect(screen.getByText('5 / 6 入力済み')).toBeVisible();
       await screen.getByRole('button', '解釈を確認して保存').tap();
-      await expect(screen.getByRole('alert')).toHaveText(
+      await expect(browser.locator('.fortune-deck-editor__meanings').getByRole('alert')).toHaveText(
         '保存するには、6通りすべての解釈を入力してください。',
       );
       await expect(interpretation.getByText('逆位置・人間関係')).toBeVisible();
