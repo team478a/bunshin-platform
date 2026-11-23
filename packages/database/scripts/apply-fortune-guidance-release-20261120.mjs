@@ -42,6 +42,13 @@ const approvedReferralRewardNames = [
 ];
 const releaseSettings = new Map([
   [
+    'basic-profile',
+    {
+      approval: 'APPLY_FORTUNE_BASIC_PROFILE_SCHEMA_TO',
+      approvedNames: ['20261123123000_fortune_basic_profile'],
+    },
+  ],
+  [
     'card-catalog',
     {
       approval: 'APPLY_FORTUNE_CARD_CATALOG_SCHEMA_TO',

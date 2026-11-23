@@ -1,0 +1,92 @@
+name: Apply Fortune basic profile migration
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type APPLY_FORTUNE_BASIC_PROFILE_SCHEMA_TO_vtkzinaudznwbsjoyszk
+        required: true
+        type: string
+      mode:
+        description: Preview the exact migration set before applying
+        required: true
+        default: preview
+        type: choice
+        options: [preview, apply]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-migration-apply
+  cancel-in-progress: false
+
+jobs:
+  migration:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: production
+    steps:
+      - name: Verify explicit production scope
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = refs/heads/main
+          test "$CONFIRMATION" = APPLY_FORTUNE_BASIC_PROFILE_SCHEMA_TO_vtkzinaudznwbsjoyszk
+
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Check out the exact Fortune application release for its schema and migration history
+        uses: actions/checkout@v5
+        with:
+          ref: 479e7823bbb4013524c726f05487db7616aea143
+          path: release
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.10.0
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: release/pnpm-lock.yaml
+
+      - name: Install release dependencies and PostgreSQL client
+        working-directory: release
+        run: |
+          set -euo pipefail
+          pnpm install --frozen-lockfile
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-16
+          cp ../packages/database/scripts/apply-fortune-guidance-release-20261120.mjs packages/database/scripts/
+
+      - name: Verify or apply only the Fortune basic profile migration
+        working-directory: release
+        env:
+          VERCEL_ENV: production
+          MIGRATION_APPLY_EXPECTED_PROJECT_REF: vtkzinaudznwbsjoyszk
+          MIGRATION_APPLY_CONFIRMATION: ${{ inputs.confirmation }}
+          MIGRATION_APPLY_RELEASE: basic-profile
+          MIGRATION_APPLY_MODE: ${{ inputs.mode }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+          SUPABASE_SESSION_POOLER_HOST: ${{ vars.SUPABASE_SESSION_POOLER_HOST || secrets.SUPABASE_SESSION_POOLER_HOST }}
+        run: |
+          set -euo pipefail
+          node packages/database/scripts/apply-fortune-guidance-release-20261120.mjs | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Verify the release schema after apply
+        if: inputs.mode == 'apply'
+        working-directory: release
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+        run: |
+          set -euo pipefail
+          pnpm db:assert-ready | tee -a "$GITHUB_STEP_SUMMARY"
