@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { FortuneReadingView } from '@bunshin/capability-fortune';
 import type { FortuneSummoningMode } from '../../../src/fortune/appearance';
 import type { FortuneCharacter } from '../../../src/fortune/guidance-settings';
-import { FortuneCardArtwork, type FortuneCardFace } from './fortune-card-artwork';
+import { FortuneCardArtwork, FortuneCardBack, type FortuneCardFace } from './fortune-card-artwork';
 import { FortuneCharacterBadge } from './fortune-character';
 import { FortuneMoonGate } from './fortune-moon-gate';
 import { FortuneOracleBookOpening } from './fortune-oracle-book';
@@ -74,8 +74,9 @@ export function useFortuneSummoning(
       else setScene({ phase: 'pending' });
     }
     try {
-      const { deepReading, cardCode, cardNameJa, orientation, status, title } = await request();
-      const card = { cardCode, cardNameJa, orientation };
+      const { deepReading, cardCode, cardNameJa, cardImageUrl, orientation, status, title } =
+        await request();
+      const card = { cardCode, cardNameJa, orientation, ...(cardImageUrl ? { cardImageUrl } : {}) };
       if (!active.skipped && status !== 'DELETED' && status !== 'FAILED') {
         if (summoning) await summoning;
         if (!active.skipped)
@@ -177,12 +178,10 @@ function FortuneSummoning({
                 finish();
             }}
           >
-            <span className="fortune-summoning__back">
-              {cinematic ? <span className="fortune-summoning__seal">☽</span> : '✦'}
-            </span>
+            <span className="fortune-summoning__back">{cinematic ? <FortuneCardBack /> : '✦'}</span>
             {card && (
               <span className="fortune-summoning__face">
-                <FortuneCardArtwork card={card} />
+                <FortuneCardArtwork card={card} framed={cinematic} />
               </span>
             )}
           </div>

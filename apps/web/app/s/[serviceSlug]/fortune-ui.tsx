@@ -3,6 +3,7 @@ import Link from 'next/link';
 import type { FortuneReadingView } from '@bunshin/capability-fortune';
 import type { FortuneGuidanceSettings } from '../../../src/fortune/guidance-settings';
 import { FortuneCharacterBadge } from './fortune-character';
+import { FortuneCardArtwork } from './fortune-card-artwork';
 import { FortuneFeedbackButtons } from './fortune-actions';
 import { FortuneFollowUps } from './fortune-follow-ups';
 import { FortuneOracleBook } from './fortune-oracle-book';
@@ -152,6 +153,9 @@ export function ReadingCard({
         {reading.cardNameJa}{' '}
         <small>（{reading.orientation === 'UPRIGHT' ? '正位置' : '逆位置'}）</small>
       </h2>
+      {!linked && reading.body && (oracleBook || reading.cardImageUrl) && (
+        <FortuneCardArtwork card={reading} />
+      )}
       {content}
     </article>
   );

@@ -144,6 +144,23 @@ test(
       await screen.getByRole('button', 'デザインを保存').tap();
       expect((await saved).status).toBe(200);
       await expect(screen.getByText('占いのデザインを保存しました。')).toBeVisible();
+      await screen.getByText('カードの管理', { exact: true }).tap();
+      await expect(browser.locator('.fortune-deck-preview .fortune-tarot-art')).toHaveCount(3);
+      await expect(browser.locator('.fortune-deck-preview .fortune-tarot-back')).toBeVisible();
+      expect(await browser.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+      await browser.evaluate(() => {
+        document.querySelector('.fortune-deck-preview')?.scrollIntoView({ block: 'center' });
+      });
+      await app.screenshot('fortune-deck-preview-390px');
+      const imageUrl = screen.getByLabel('絵柄の公開HTTPS画像URL');
+      await imageUrl.fill('https://example.invalid/cards/moon-preview.webp');
+      const savedCard = browser.waitForResponse(`**/api/services/${slug}/fortune-operations`);
+      await screen.getByRole('button', 'カード画像を保存').tap();
+      expect((await savedCard).status).toBe(200);
+      await expect(screen.getByText('カードを保存しました。')).toBeVisible();
+      await screen.getByLabel('編集するカード').selectOption({ value: 'new' });
+      await expect(screen.getByLabel('カード名')).toBeVisible();
+      await expect(screen.getByLabel('抽選対象にする')).toBeVisible();
       return;
     }
     if (appearanceViewer) {
@@ -233,7 +250,7 @@ test(
           );
         });
         expect(clearOfNav).toBe(true);
-        await expect(browser.locator('.fortune-summoning__seal')).toBeVisible();
+        await expect(browser.locator('.fortune-tarot-back__crest')).toBeVisible();
         await app.screenshot('fortune-cinematic-card-back-390px');
       } finally {
         allowDraw();

@@ -3,6 +3,8 @@ import { buildFortuneLaunchSteps, isFortuneLineReady } from '../src/fortune/laun
 import type { FortuneOperatorStatus } from '../src/fortune/operator';
 
 const status = (override: Partial<FortuneOperatorStatus> = {}): FortuneOperatorStatus => ({
+  deck: [],
+  customMeanings: [],
   packageRelease: {
     key: 'FORTUNE_DAILY_GUIDANCE',
     installedVersion: 1,

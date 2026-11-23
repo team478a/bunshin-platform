@@ -21,6 +21,8 @@ import {
 
 import { fortuneAppearanceSchema } from '../fortune/appearance';
 import { fortuneGuidanceSettingsSchema } from '../fortune/guidance-settings';
+import { fortuneDeckChangeSchema } from '../fortune/deck-settings';
+import { saveFortuneDeckCard } from '../fortune/deck-operations';
 
 const slug = z
   .string()
@@ -28,6 +30,13 @@ const slug = z
   .max(80);
 const body = z.discriminatedUnion('action', [
   z.object({ action: z.literal('INSTALL_STANDARD_PACKAGE') }).strict(),
+  z
+    .object({
+      action: z.literal('SAVE_DECK_CARD'),
+      expectedVersion: z.number().int().positive(),
+      change: fortuneDeckChangeSchema,
+    })
+    .strict(),
   z.object({ action: z.literal('UPDATE_STANDARD_PACKAGE') }).strict(),
   z
     .object({
@@ -125,6 +134,16 @@ export async function updateFortuneOperationsResponse(request: Request, serviceS
     const requestBody: unknown = await request.json();
     const value = await body.parseAsync(requestBody);
     const parsedSlug = slug.parse(serviceSlug);
+    if (value.action === 'SAVE_DECK_CARD')
+      return result(
+        await saveFortuneDeckCard({
+          serviceSlug: parsedSlug,
+          actorUserId,
+          expectedVersion: value.expectedVersion,
+          change: value.change,
+        }),
+        requestId,
+      );
     if (value.action === 'INSTALL_STANDARD_PACKAGE')
       return result(
         await installStandardFortunePackage({
