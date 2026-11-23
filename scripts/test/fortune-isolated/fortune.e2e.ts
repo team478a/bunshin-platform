@@ -65,6 +65,7 @@ test(
     });
     const entry =
       invitationPath ||
+      (deepStage && `/s/${slug}/today?deep=1`) ||
       `/s/${slug}/${appearanceDesktop ? 'manage/fortune?section=cards' : appearanceEditor || creditEditor ? 'manage/fortune' : referralAdmin ? 'manage/referrals' : referral ? 'home' : 'today'}`;
     if (invitationPath && !invitationPath.startsWith(`/s/${slug}/join/`)) {
       throw new Error('An invitation scoped to the disposable service is required');
