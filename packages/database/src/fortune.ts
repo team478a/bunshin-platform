@@ -35,6 +35,10 @@ export class PrismaFortuneRepository implements FortuneRepository {
     return this.generation.findReadingForDate(input);
   }
 
+  findDrawDeck(input: Parameters<NonNullable<FortuneRepository['findDrawDeck']>>[0]) {
+    return this.generation.findDrawDeck(input);
+  }
+
   createBasicReading(input: Parameters<FortuneRepository['createBasicReading']>[0]) {
     return this.generation.createBasicReading(input);
   }

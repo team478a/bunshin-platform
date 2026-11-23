@@ -2,10 +2,49 @@ import 'server-only';
 import {
   buildStandardFortuneKnowledgePack,
   parseFortuneKnowledgePack,
+  isCustomFortuneCardCode,
+  readFortuneDeck,
+  type FortuneDeckCard,
   type FortuneKnowledgePack,
 } from '@bunshin/capability-fortune';
+import type { Prisma } from '@prisma/client';
 import { ApplicationError } from '@bunshin/shared';
 import { fortuneOperatorScope } from './operator-scope';
+
+export async function publishFortuneKnowledge(
+  tx: Prisma.TransactionClient,
+  settingId: string,
+  actorUserId: string,
+  pack: FortuneKnowledgePack,
+  deck: FortuneDeckCard[],
+) {
+  const latest = await tx.fortuneKnowledgeVersion.aggregate({
+    where: { serviceSettingId: settingId },
+    _max: { version: true },
+  });
+  const version = (latest._max.version ?? 0) + 1;
+  await tx.fortuneKnowledgeVersion.updateMany({
+    where: { serviceSettingId: settingId, status: 'APPROVED' },
+    data: { status: 'RETIRED' },
+  });
+  await tx.fortuneKnowledgeVersion.create({
+    data: {
+      serviceSettingId: settingId,
+      version,
+      status: 'APPROVED',
+      promptVersion: pack.promptVersion,
+      deck,
+      approvedByUserId: actorUserId,
+      approvedAt: new Date(),
+      cardMeanings: {
+        createMany: {
+          data: pack.meanings.map((meaning) => ({ ...meaning, safetyReviewed: true })),
+        },
+      },
+    },
+  });
+  return version;
+}
 
 export async function importFortuneKnowledge(input: {
   serviceSlug: string;
@@ -107,39 +146,37 @@ export async function importFortuneKnowledge(input: {
       update: { bunshinId: bunshin.id },
       select: { id: true },
     });
-    const latest = await tx.fortuneKnowledgeVersion.aggregate({
-      where: { serviceSettingId: setting.id },
-      _max: { version: true },
-    });
-    const version = (latest._max.version ?? 0) + 1;
-    const knowledge = await tx.fortuneKnowledgeVersion.create({
-      data: {
-        serviceSettingId: setting.id,
-        version,
-        status: 'DRAFT',
-        promptVersion: pack.promptVersion,
-      },
-      select: { id: true },
-    });
-    await tx.fortuneCardMeaning.createMany({
-      data: pack.meanings.map((meaning) => ({
-        knowledgeVersionId: knowledge.id,
-        ...meaning,
-        safetyReviewed: true,
-      })),
-    });
-    await tx.fortuneKnowledgeVersion.updateMany({
+    const previous = await tx.fortuneKnowledgeVersion.findFirst({
       where: { serviceSettingId: setting.id, status: 'APPROVED' },
-      data: { status: 'RETIRED' },
-    });
-    await tx.fortuneKnowledgeVersion.update({
-      where: { id: knowledge.id },
-      data: {
-        status: 'APPROVED',
-        approvedByUserId: input.actorUserId,
-        approvedAt: new Date(),
+      orderBy: { version: 'desc' },
+      select: {
+        deck: true,
+        cardMeanings: {
+          where: { cardCode: { startsWith: 'CUSTOM_' }, safetyReviewed: true },
+          select: {
+            cardCode: true,
+            orientation: true,
+            theme: true,
+            title: true,
+            body: true,
+            actionStep: true,
+          },
+        },
       },
     });
+    const version = await publishFortuneKnowledge(
+      tx,
+      setting.id,
+      input.actorUserId,
+      {
+        ...pack,
+        meanings: [
+          ...pack.meanings,
+          ...(previous?.cardMeanings.filter((row) => isCustomFortuneCardCode(row.cardCode)) ?? []),
+        ],
+      },
+      readFortuneDeck(previous?.deck),
+    );
     return { version, meaningCount: pack.meanings.length };
   });
 }

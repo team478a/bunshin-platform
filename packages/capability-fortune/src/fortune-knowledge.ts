@@ -25,16 +25,23 @@ export interface FortuneKnowledgePack {
   meanings: FortuneKnowledgeMeaningInput[];
 }
 
-const expectedMeaningKeys = new Set(
-  TAROT_DECK.flatMap((card) =>
-    FORTUNE_ORIENTATIONS.flatMap((orientation) =>
-      FORTUNE_THEMES.map((theme) => `${card.code}:${orientation}:${theme}`),
+const meaningKeysFor = (codes: readonly string[]) =>
+  new Set(
+    codes.flatMap((code) =>
+      FORTUNE_ORIENTATIONS.flatMap((orientation) =>
+        FORTUNE_THEMES.map((theme) => `${code}:${orientation}:${theme}`),
+      ),
     ),
-  ),
-);
+  );
 
-/** 78枚×正逆×3テーマの完全な運営者承認用パックだけを受け入れる。 */
-export function parseFortuneKnowledgePack(value: unknown): FortuneKnowledgePack {
+const standardCodes = TAROT_DECK.map((card) => card.code);
+
+/** 指定されたカードの正逆×3テーマを含む完全な承認用パックを検査する。 */
+export function parseFortuneKnowledgePack(
+  value: unknown,
+  cardCodes: readonly string[] = standardCodes,
+): FortuneKnowledgePack {
+  const expectedMeaningKeys = meaningKeysFor(cardCodes);
   if (!value || typeof value !== 'object' || Array.isArray(value))
     throw new FortunePolicyError('INVALID_KNOWLEDGE_PACK', '解釈ファイルの形式が不正です');
   const record = value as Record<string, unknown>;
@@ -106,7 +113,7 @@ export function parseFortuneKnowledgePack(value: unknown): FortuneKnowledgePack 
   return { promptVersion: record['promptVersion'].trim(), meanings };
 }
 
-export const FORTUNE_KNOWLEDGE_MEANING_COUNT = expectedMeaningKeys.size;
+export const FORTUNE_KNOWLEDGE_MEANING_COUNT = meaningKeysFor(standardCodes).size;
 
 /** 初期運用向けの全468通りの標準解釈。返却前に公開時と同じ安全検査を行う。 */
 export function buildStandardFortuneKnowledgePack(): FortuneKnowledgePack {

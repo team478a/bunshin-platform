@@ -8,6 +8,7 @@ import {
   FORTUNE_PERSONAL_FIT_RATINGS,
   FORTUNE_REFLECTION_ANSWERS,
   parseFortuneDeepReadingDetails,
+  readFortuneDeck,
   TAROT_DECK,
 } from '@bunshin/capability-fortune';
 import type { Prisma, PrismaClient } from '@prisma/client';
@@ -66,6 +67,7 @@ async function meaningForReading(
       theme: reading.theme,
       safetyReviewed: true,
     },
+    include: { knowledgeVersion: { select: { deck: true } } },
   });
 }
 
@@ -89,6 +91,9 @@ export async function fortuneReadingView(
   },
 ): Promise<FortuneReadingView> {
   const meaning = await meaningForReading(db, row);
+  const card = readFortuneDeck(meaning?.knowledgeVersion?.deck).find(
+    (item) => item.code === row.cardCode,
+  );
   const feedback = await db.fortuneFeedback.findUnique({
     where: { readingId: row.id },
     select: { rating: true, issueCode: true },
@@ -105,7 +110,8 @@ export async function fortuneReadingView(
     localDate: row.localDate.toISOString().slice(0, 10),
     theme: row.theme,
     cardCode: row.cardCode,
-    cardNameJa: cardName(row.cardCode),
+    cardNameJa: card?.nameJa ?? cardName(row.cardCode),
+    ...(card ? { cardImageUrl: card.imageUrl } : {}),
     orientation: row.orientation,
     status: row.status,
     title: row.status === 'FAILED' ? null : (meaning?.title ?? null),

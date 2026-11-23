@@ -860,6 +860,92 @@ try {
   console.log(
     'PASS free reading evidence, scoped operator settings, exact-once credit and revocation',
   );
+
+  const getDeck = async () => (await (await request(owner, operationsPath)).json()).data;
+  const changeDeck = (actor, expectedVersion, change, status = 200) =>
+    request(actor, operationsPath, {
+      method: 'POST',
+      status,
+      body: { action: 'SAVE_DECK_CARD', expectedVersion, change },
+    });
+  const beforeDeck = await getDeck();
+  const standardChange = {
+    kind: 'standard',
+    code: 'MAJOR_18',
+    imageUrl: 'https://example.invalid/cards/moon-v2.webp',
+  };
+  await changeDeck(participant, beforeDeck.approvedVersion, standardChange, 404);
+  await changeDeck(
+    owner,
+    beforeDeck.approvedVersion,
+    { ...standardChange, imageUrl: 'http://example.invalid/card' },
+    400,
+  );
+  const replaced = (
+    await (await changeDeck(owner, beforeDeck.approvedVersion, standardChange)).json()
+  ).data;
+  await changeDeck(owner, beforeDeck.approvedVersion, standardChange, 409);
+  const customChange = {
+    kind: 'custom',
+    nameJa: '夜明けの灯',
+    imageUrl: 'https://example.invalid/cards/dawn-v1.webp',
+    enabled: true,
+    meanings: ['UPRIGHT', 'REVERSED'].flatMap((orientation) =>
+      ['LOVE', 'WORK', 'RELATIONSHIPS'].map((theme) => ({
+        orientation,
+        theme,
+        title: '今日の小さな気づき',
+        body: '今の状況を一つの視点から見直してみましょう。',
+        actionStep: '感じたことを一つ書き留めましょう。',
+      })),
+    ),
+  };
+  await changeDeck(
+    owner,
+    replaced.version,
+    { ...customChange, meanings: Array(6).fill(customChange.meanings[0]) },
+    400,
+  );
+  const added = (await (await changeDeck(owner, replaced.version, customChange)).json()).data;
+  const published = await getDeck();
+  assert.equal(published.approvedMeaningCount, 468);
+  assert.equal(published.customMeanings.length, 6);
+  assert.equal(published.deck.find((card) => card.code === added.code).nameJa, customChange.nameJa);
+  const historicalVersion = await db.fortuneKnowledgeVersion.findUniqueOrThrow({
+    where: { serviceSettingId_version: { serviceSettingId: setting.id, version: added.version } },
+  });
+  const reimported = (
+    await (
+      await request(owner, operationsPath, {
+        method: 'POST',
+        status: 201,
+        body: { action: 'IMPORT_STANDARD_KNOWLEDGE', bunshinId: primary.bunshinId },
+      })
+    ).json()
+  ).data;
+  assert.equal((await getDeck()).deck.length, 2);
+  await changeDeck(owner, reimported.version, {
+    ...customChange,
+    code: added.code,
+    enabled: false,
+    nameJa: '明け方の灯',
+    imageUrl: 'https://example.invalid/cards/dawn-v2.webp',
+  });
+  assert.equal((await getDeck()).deck.find((card) => card.code === added.code).enabled, false);
+
+  // A fixture reading pinned to the earlier approved version remains readable after retirement.
+  await db.fortuneReading.update({
+    where: { id: freeReading.id },
+    data: { cardCode: added.code, knowledgeVersionId: historicalVersion.id },
+  });
+  const historical = (await (await request(referred, `${base}/readings/${freeReading.id}`)).json())
+    .data;
+  assert.equal(historical.cardNameJa, customChange.nameJa);
+  assert.equal(historical.cardImageUrl, customChange.imageUrl);
+  await request(participant, `${base}/readings/${freeReading.id}`, { status: 404 });
+  console.log(
+    'PASS card deck operator access, complete approval, version conflicts, import and history',
+  );
 } catch (error) {
   console.error(error instanceof Error ? error.message : 'Isolated Fortune test failed');
   process.exitCode = 1;

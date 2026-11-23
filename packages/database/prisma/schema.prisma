@@ -3678,6 +3678,7 @@ model FortuneKnowledgeVersion {
   version            Int
   status             FortuneKnowledgeStatus @default(DRAFT)
   promptVersion      String                  @map("prompt_version") @db.VarChar(80)
+  deck               Json?
   approvedByUserId   String?                 @map("approved_by_user_id") @db.Uuid
   approvedAt         DateTime?               @map("approved_at") @db.Timestamptz(6)
   createdAt          DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)

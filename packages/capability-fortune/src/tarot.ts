@@ -97,9 +97,17 @@ const takeRandomIndex = (source: SecureRandomSource, maxExclusive: number) => {
   return value;
 };
 
-export function drawTarotCard(source: SecureRandomSource): TarotDraw {
+export function drawTarotCard(source: SecureRandomSource): TarotDraw;
+export function drawTarotCard<T extends Pick<TarotCard, 'code'>>(
+  source: SecureRandomSource,
+  pool: readonly T[],
+): { card: T; orientation: FortuneOrientation };
+export function drawTarotCard(
+  source: SecureRandomSource,
+  pool: readonly Pick<TarotCard, 'code'>[] = TAROT_DECK,
+) {
   return {
-    card: TAROT_DECK[takeRandomIndex(source, TAROT_DECK.length)]!,
+    card: pool[takeRandomIndex(source, pool.length)]!,
     orientation: FORTUNE_ORIENTATIONS[takeRandomIndex(source, 2)]!,
   };
 }
