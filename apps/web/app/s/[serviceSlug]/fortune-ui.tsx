@@ -1,6 +1,7 @@
 import type { Route } from 'next';
 import Link from 'next/link';
 import type { FortuneReadingView } from '@bunshin/capability-fortune';
+import { dailyCardDetails } from '../../../src/fortune/daily-card-details';
 import type { FortuneGuidanceSettings } from '../../../src/fortune/guidance-settings';
 import { FortuneCharacterBadge } from './fortune-character';
 import { FortuneCardArtwork } from './fortune-card-artwork';
@@ -42,6 +43,13 @@ export function ReadingCard({
   serviceSlug: string;
 }) {
   const deep = linked ? undefined : reading.deepReading;
+  const insight =
+    !linked &&
+    !deep &&
+    reading.body &&
+    (reading.status === 'READY_BASIC' || reading.status === 'READY_AI')
+      ? dailyCardDetails(reading.cardCode, reading.theme)
+      : undefined;
   const character = linked ? undefined : deep ? characters?.deep : characters?.daily;
   const showBook = oracleBook && Boolean(deep) && reading.status === 'READY_AI';
   const context = `${reading.localDate.replaceAll('-', '/')}・${themeLabel(reading.theme)}`;
@@ -98,6 +106,16 @@ export function ReadingCard({
         ) : (
           <p className="fortune-reading-body">{reading.body}</p>
         ))}
+      {insight && (
+        <section>
+          <h3>{reading.cardImageUrl ? '標準デッキの象徴' : 'カードの象徴'}</h3>
+          <p>{insight.imageDetail}</p>
+          <p>{insight.situation}</p>
+          <p>
+            <strong>{insight.question}</strong>
+          </p>
+        </section>
+      )}
       {deep && (
         <section>
           <h3>考えられる選択肢</h3>
