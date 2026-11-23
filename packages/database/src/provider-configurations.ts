@@ -394,7 +394,7 @@ export class PrismaAiProviderConfigurationRepository
     });
     if (row?.encryptedApiKey == null) return null;
     const provider = input.provider.toLowerCase();
-    const [daily, monthly, monthlyUnknownCostEvents] = await Promise.all([
+    const [daily, monthly, monthlyUnknownCostEvents, dailyUnknownCostEvents] = await Promise.all([
       this.client.aiUsageEvent.aggregate({
         where: { provider, occurredAt: { gte: input.dailyFrom, lt: input.now } },
         _sum: { estimatedCostUsdMicros: true },
@@ -410,6 +410,15 @@ export class PrismaAiProviderConfigurationRepository
           occurredAt: { gte: input.monthlyFrom, lt: input.now },
         },
       }),
+      input.estimateUnknownCosts
+        ? this.client.aiUsageEvent.count({
+            where: {
+              provider,
+              estimatedCostUsdMicros: null,
+              occurredAt: { gte: input.dailyFrom, lt: input.now },
+            },
+          })
+        : undefined,
     ]);
     const safeNumber = (value: bigint | null) =>
       value === null
@@ -421,6 +430,7 @@ export class PrismaAiProviderConfigurationRepository
       dailySpentUsdMicros: safeNumber(daily._sum.estimatedCostUsdMicros),
       monthlySpentUsdMicros: safeNumber(monthly._sum.estimatedCostUsdMicros),
       monthlyUnknownCostEvents,
+      ...(dailyUnknownCostEvents === undefined ? {} : { dailyUnknownCostEvents }),
     };
   }
 
@@ -436,6 +446,7 @@ export class PrismaAiProviderConfigurationRepository
     operationKey: string;
     reservedCostUsdMicros?: number;
     requestCount?: number;
+    estimateUnknownCosts?: boolean;
   }) {
     const operationHash = createHash('sha256').update(input.operationKey).digest('hex');
     return this.client.$transaction(async (tx) => {
@@ -470,7 +481,14 @@ export class PrismaAiProviderConfigurationRepository
         Date.UTC(clock.now.getUTCFullYear(), clock.now.getUTCMonth(), 1),
       );
       const provider = input.provider.toLowerCase();
-      const [daily, monthly, monthlyUnknownCostEvents, dailyOpen, monthlyOpen] = await Promise.all([
+      const [
+        daily,
+        monthly,
+        monthlyUnknownCostEvents,
+        dailyUnknownCostEvents,
+        dailyOpen,
+        monthlyOpen,
+      ] = await Promise.all([
         tx.aiUsageEvent.aggregate({
           where: { provider, occurredAt: { gte: dailyFrom, lt: clock.now } },
           _sum: { estimatedCostUsdMicros: true },
@@ -486,6 +504,15 @@ export class PrismaAiProviderConfigurationRepository
             occurredAt: { gte: monthlyFrom, lt: clock.now },
           },
         }),
+        input.estimateUnknownCosts
+          ? tx.aiUsageEvent.count({
+              where: {
+                provider,
+                estimatedCostUsdMicros: null,
+                occurredAt: { gte: dailyFrom, lt: clock.now },
+              },
+            })
+          : undefined,
         tx.aiProviderCallAdmission.aggregate({
           where: {
             environment: input.environment,
@@ -532,6 +559,7 @@ export class PrismaAiProviderConfigurationRepository
               (monthlyOpen._sum.reservedCostUsdMicros ?? 0n),
           ),
           monthlyUnknownCostEvents,
+          ...(dailyUnknownCostEvents === undefined ? {} : { dailyUnknownCostEvents }),
         },
       );
       const admission = await tx.aiProviderCallAdmission.create({

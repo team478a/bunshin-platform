@@ -108,7 +108,7 @@ function resolveLegacyOpenAiRuntimeConfiguration(
 
 export async function resolveOpenAiRuntimeConfiguration(
   dependencies?: Dependencies,
-  task?: OpenAiCompatibilityTask,
+  task?: OpenAiCompatibilityTask | 'FORTUNE',
 ): Promise<OpenAiRuntimeConfiguration> {
   const environment = dependencies?.environment ?? currentAiProviderEnvironment();
   let repository: AiProviderConfigurationRepository;
@@ -122,10 +122,11 @@ export async function resolveOpenAiRuntimeConfiguration(
     const resolved = await new ResolveAiProviderRuntimeConfiguration(repository).execute({
       environment,
       provider: 'OPENAI',
+      ...(task === 'FORTUNE' ? { estimateUnknownCosts: true } : {}),
     });
     if (!resolved.configuration.model)
       throw new ApplicationError('CONFIGURATION_ERROR', 'active OpenAI model is required');
-    if (task) assertOpenAiTaskModel(task, resolved.configuration.model);
+    if (task && task !== 'FORTUNE') assertOpenAiTaskModel(task, resolved.configuration.model);
     return {
       apiKey: crypto.decrypt(resolved.encryptedApiKey),
       model: resolved.configuration.model,
@@ -141,7 +142,7 @@ export async function resolveOpenAiRuntimeConfiguration(
         legacyModel: dependencies?.legacyModel,
         legacyRequestCostUsdMicros: dependencies?.legacyRequestCostUsdMicros,
       },
-      task,
+      task === 'FORTUNE' ? undefined : task,
     );
   }
 }
@@ -151,7 +152,7 @@ export async function reserveOpenAiRuntimeConfiguration(
   dependencies?: Omit<Dependencies, 'repository'> & {
     repository: AiProviderConfigurationRepository & AiProviderRuntimeAdmissionRepository;
   },
-  task?: OpenAiCompatibilityTask,
+  task?: OpenAiCompatibilityTask | 'FORTUNE',
   reservedCostUsdMicros?: number,
   requestCount?: number,
 ): Promise<AdmittedOpenAiRuntimeConfiguration> {
@@ -166,6 +167,7 @@ export async function reserveOpenAiRuntimeConfiguration(
     const reserved = await new ReserveAiProviderRuntimeCall(repository).execute({
       environment,
       provider: 'OPENAI',
+      ...(task === 'FORTUNE' ? { estimateUnknownCosts: true } : {}),
       operationKey,
       ...(reservedCostUsdMicros === undefined ? {} : { reservedCostUsdMicros }),
       ...(requestCount === undefined ? {} : { requestCount }),
@@ -173,7 +175,7 @@ export async function reserveOpenAiRuntimeConfiguration(
     try {
       if (!reserved.configuration.model)
         throw new ApplicationError('CONFIGURATION_ERROR', 'active OpenAI model is required');
-      if (task) assertOpenAiTaskModel(task, reserved.configuration.model);
+      if (task && task !== 'FORTUNE') assertOpenAiTaskModel(task, reserved.configuration.model);
       return {
         apiKey: crypto.decrypt(reserved.encryptedApiKey),
         model: reserved.configuration.model,
@@ -194,7 +196,7 @@ export async function reserveOpenAiRuntimeConfiguration(
         legacyModel: dependencies?.legacyModel,
         legacyRequestCostUsdMicros: dependencies?.legacyRequestCostUsdMicros,
       },
-      task,
+      task === 'FORTUNE' ? undefined : task,
     );
     return { ...legacy, admission: null };
   }

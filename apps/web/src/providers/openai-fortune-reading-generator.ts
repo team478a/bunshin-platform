@@ -15,6 +15,8 @@ import {
 } from '../fortune/personal-profile';
 import { resolveFortuneGuidanceSettings } from '../fortune/guidance-settings';
 
+import { fortuneOpenAiUsageCost } from './openai-fortune-cost';
+
 export const FORTUNE_AI_PROMPT_VERSION = 'fortune-daily-reading-v6-tarot';
 
 export const FORTUNE_PERSONAL_AI_PROMPT_VERSION = 'fortune-daily-reading-v8-suggestions';
@@ -208,7 +210,7 @@ export class OpenAiFortuneReadingGenerator implements FortuneAiReadingGenerator 
     const operationKey = input.claim.purchaseId
       ? `fortune-purchase:${input.claim.purchaseId}:${readingOperationKey}`
       : readingOperationKey;
-    const runtime = await reserveOpenAiRuntimeConfiguration(operationKey);
+    const runtime = await reserveOpenAiRuntimeConfiguration(operationKey, undefined, 'FORTUNE');
     let usagePending = true;
     let providerAttempted = false;
     let observedInputTokens: number | null = null;
@@ -379,8 +381,13 @@ export class OpenAiFortuneReadingGenerator implements FortuneAiReadingGenerator 
         inputTokens: result.inputTokens,
         outputTokens: result.outputTokens,
         latencyMs: result.latencyMs,
-        estimatedCostUsdMicros: runtime.requestCostUsdMicros,
-        pricingVersion: 'admin-request-cost-v1',
+        ...fortuneOpenAiUsageCost(
+          result.model,
+          result.inputTokens,
+          result.outputTokens,
+          runtime.requestCostUsdMicros,
+          true,
+        ),
         idempotencyKey: operationKey,
       });
       return result;
@@ -399,9 +406,13 @@ export class OpenAiFortuneReadingGenerator implements FortuneAiReadingGenerator 
           inputTokens: observedInputTokens,
           outputTokens: observedOutputTokens,
           latencyMs: Date.now() - started,
-          estimatedCostUsdMicros: providerAttempted ? runtime.requestCostUsdMicros : 0,
-          pricingVersion:
-            providerAttempted && runtime.requestCostUsdMicros ? 'admin-request-cost-v1' : null,
+          ...fortuneOpenAiUsageCost(
+            runtime.model,
+            observedInputTokens,
+            observedOutputTokens,
+            runtime.requestCostUsdMicros,
+            providerAttempted,
+          ),
           errorCode: error instanceof ApplicationError ? error.code : 'INTERNAL_ERROR',
           idempotencyKey: operationKey,
         });

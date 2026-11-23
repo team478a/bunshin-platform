@@ -11,6 +11,8 @@ import { recordOpenAiUsageAndSettle } from '../ai/openai-cost-admission';
 import { reserveOpenAiRuntimeConfiguration } from '../ai/runtime-provider-configuration';
 import { withOrganizationAiGenerationQuota } from '../organization-ai-generation-quota';
 
+import { fortuneOpenAiUsageCost } from './openai-fortune-cost';
+
 export const FORTUNE_INTAKE_PROMPT_VERSION = 'fortune-dynamic-intake-v2';
 
 const INTAKE_INSTRUCTIONS = [
@@ -39,7 +41,7 @@ export async function selectFortuneIntakeQuestion(input: {
   const operationKey = input.purchaseId
     ? `fortune-purchase:${input.purchaseId}:fortune-intake:${input.id}`
     : `fortune-intake:${input.id}`;
-  const runtime = await reserveOpenAiRuntimeConfiguration(operationKey);
+  const runtime = await reserveOpenAiRuntimeConfiguration(operationKey, undefined, 'FORTUNE');
   let attempted = false;
   let inputTokens: number | null = null;
   let outputTokens: number | null = null;
@@ -148,8 +150,13 @@ export async function selectFortuneIntakeQuestion(input: {
     inputTokens,
     outputTokens,
     latencyMs: Date.now() - started,
-    estimatedCostUsdMicros: attempted ? runtime.requestCostUsdMicros : 0,
-    pricingVersion: attempted && runtime.requestCostUsdMicros ? 'admin-request-cost-v1' : null,
+    ...fortuneOpenAiUsageCost(
+      runtime.model,
+      inputTokens,
+      outputTokens,
+      runtime.requestCostUsdMicros,
+      attempted,
+    ),
     ...(errorCode ? { errorCode } : {}),
     idempotencyKey: operationKey,
   });
