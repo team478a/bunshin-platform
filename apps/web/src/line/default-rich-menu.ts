@@ -52,6 +52,7 @@ const partnerItems: readonly RichMenuItem[] = [
 ];
 
 export type LineRichMenuLayout = 'DEFAULT' | 'PARTNER' | 'FORTUNE';
+export type GroupLineRichMenuLayout = LineRichMenuLayout | 'ORACLE';
 
 export async function renderDefaultLineRichMenu(
   layout: LineRichMenuLayout = 'DEFAULT',

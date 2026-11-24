@@ -35,6 +35,86 @@ describe('dedicated group LINE rich menu', () => {
     ]);
   });
 
+  it('publishes the six Oracle tiles in artwork order with matching bounds and destinations', async () => {
+    const request = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(Response.json({ richmenus: [] }))
+      .mockResolvedValueOnce(Response.json({ richMenuId: 'richmenu-oracle' }))
+      .mockResolvedValueOnce(new Response(null, { status: 200 }))
+      .mockResolvedValueOnce(new Response(null, { status: 200 }));
+    await publishDefaultGroupRichMenu({
+      request,
+      accessToken: 'synthetic',
+      groupId: 'group-1',
+      groupName: '月と星のオラクル',
+      appUrl: 'https://app.example.com',
+      serviceSlug: 'watashi-fortune',
+      image: Buffer.from([1]),
+      layout: 'ORACLE',
+    });
+    const definition = JSON.parse(request.mock.calls[1]?.[1]?.body as string) as {
+      size: { width: number; height: number };
+      chatBarText: string;
+      areas: Array<{
+        bounds: { x: number; y: number; width: number; height: number };
+        action: { type: string; label: string; uri: string };
+      }>;
+    };
+    expect(definition.size).toEqual({ width: 2500, height: 1686 });
+    expect(definition.chatBarText).toBe('占いメニュー');
+    expect(
+      definition.areas.map(({ bounds, action }) => [
+        bounds.x,
+        bounds.y,
+        bounds.width,
+        bounds.height,
+        action.type,
+        action.label,
+        action.uri,
+      ]),
+    ).toEqual([
+      [0, 0, 833, 843, 'uri', '今日の占い', 'https://app.example.com/s/watashi-fortune/today'],
+      [833, 0, 834, 843, 'uri', '鑑定履歴', 'https://app.example.com/s/watashi-fortune/history'],
+      [
+        1667,
+        0,
+        833,
+        843,
+        'uri',
+        '友だち紹介',
+        'https://app.example.com/s/watashi-fortune/activity',
+      ],
+      [0, 843, 833, 843, 'uri', '特典', 'https://app.example.com/s/watashi-fortune/credits'],
+      [
+        833,
+        843,
+        834,
+        843,
+        'uri',
+        '通知設定',
+        'https://app.example.com/s/watashi-fortune/settings#fortune-notifications',
+      ],
+      [1667, 843, 833, 843, 'uri', '使い方', 'https://app.example.com/s/watashi-fortune/manual'],
+    ]);
+  });
+
+  it('rejects the Oracle menu on another service before contacting LINE', async () => {
+    const request = vi.fn<typeof fetch>();
+    await expect(
+      publishDefaultGroupRichMenu({
+        request,
+        accessToken: 'synthetic',
+        groupId: 'group-1',
+        groupName: '別の占い',
+        appUrl: 'https://app.example.com',
+        serviceSlug: 'other-fortune',
+        image: Buffer.from([1]),
+        layout: 'ORACLE',
+      }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+    expect(request).not.toHaveBeenCalled();
+  });
+
   it('creates and activates the default menu with service-scoped links', async () => {
     const request = vi
       .fn<typeof fetch>()
