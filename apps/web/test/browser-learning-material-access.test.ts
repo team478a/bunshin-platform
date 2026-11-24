@@ -86,8 +86,10 @@ describe('illustrated lessons in the personal learning page', () => {
     mocks.readImage.mockResolvedValue(new Uint8Array([1, 2]));
     mocks.readMaterial.mockResolvedValue({
       device: 'mobile',
+      reviewStatus: 'DEAD',
       material: {
         id: material,
+        revision: 2,
         title: '練習用メモ',
         goal: '表示を確かめる',
         preparation: '操作練習を開く',
@@ -100,6 +102,8 @@ describe('illustrated lessons in the personal learning page', () => {
     const html = renderToStaticMarkup(await page());
     expect(html).toContain('プレビューを押す');
     expect(html).toContain('タップして');
+    expect(html).toContain('教材と画面が違う');
+    expect(html).toContain('前の教材を表示しています');
     expect(html).toContain('variant=after');
     expect(html).toContain(topicId);
   });

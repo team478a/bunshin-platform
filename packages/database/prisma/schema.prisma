@@ -9244,6 +9244,9 @@ model BrowserFixtureMaterial {
   practice       String                       @db.VarChar(600)
   checkpoint     String                       @db.VarChar(400)
   verifiedAt     DateTime                     @map("verified_at") @db.Timestamptz(6)
+  semanticDigest String?                      @map("semantic_digest") @db.Char(64)
+  reviewedAt     DateTime?                    @map("reviewed_at") @db.Timestamptz(6)
+  reviewRequestedAt DateTime?                 @map("review_requested_at") @db.Timestamptz(6)
   sourceJobId    String                       @map("source_job_id") @db.Uuid
   sourceAttempt  Int                          @map("source_attempt")
   recipe         BrowserFixtureRecipe?        @relation(fields: [recipeId], references: [id], onDelete: Cascade, map: "browser_fixture_materials_recipe_fkey")

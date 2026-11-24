@@ -59,6 +59,21 @@ export default async function BrowserLearningMaterialPage({
       redirect(learningMaterialPath(serviceSlug, programEnrollmentId, current.topicId));
     }
 
+    const materialId = material?.id;
+    async function reportDifference() {
+      'use server';
+      if (!materialId) return;
+      const current = await browserLearningMaterialActor(
+        serviceSlug,
+        programEnrollmentId,
+        query.topicId,
+        true,
+      );
+      const db = await import('@bunshin/database');
+      await new db.PrismaBrowserLearningMaterials(db.prisma).enqueueReview(current, materialId);
+      redirect(learningMaterialPath(serviceSlug, programEnrollmentId, current.topicId));
+    }
+
     return (
       <main className={styles.page}>
         <Link href={home}>個別学習に戻る</Link>
@@ -66,7 +81,7 @@ export default async function BrowserLearningMaterialPage({
         {material ? (
           <>
             <BrowserMaterialView
-              material={material}
+              material={{ ...material, verifiedAt: material.reviewedAt ?? material.verifiedAt }}
               device={state.device}
               ordinal={ordinal}
               showDetail={showDetail}
@@ -87,7 +102,21 @@ export default async function BrowserLearningMaterialPage({
                   : 'パソコンのブラウザで、ボタンをクリックして進めましょう。'
               }
             />
-            <Link href={home}>分からない操作を個別学習で相談する</Link>
+            <section aria-label="画面の違い">
+              <small>教材 第{material.revision}版</small>
+              <form action={reportDifference}>
+                <button type="submit">教材と画面が違う</button>
+              </form>
+              {state.reviewStatus === 'DEAD' ? (
+                <p role="status">再検証で操作を確認できなかったため、前の教材を表示しています。</p>
+              ) : state.reviewStatus &&
+                ['PENDING', 'LEASED', 'RETRY_SCHEDULED'].includes(state.reviewStatus) ? (
+                <p role="status">教材の画面を再検証しています。</p>
+              ) : null}
+              <Link href={{ ...home, hash: 'practice-record' }}>
+                分からない操作を個別学習で相談する
+              </Link>
+            </section>
           </>
         ) : (
           <section aria-label="教材の準備">

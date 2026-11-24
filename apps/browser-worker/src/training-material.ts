@@ -1,10 +1,11 @@
 import { join } from 'node:path';
 import type { UserJob } from '@bunshin/application';
 import { PrismaBrowserLearningMaterials, prisma } from '@bunshin/database';
-import { BrowserRunError, runBrowserPlan } from './browser';
+import { BrowserRunError, verifyBrowserPlan } from './browser';
 import { saveEvidence } from './evidence';
-import { fixture, fixturePlan } from './fixture';
+import { compactPreviewStep, fixture, fixturePlan } from './fixture';
 import { composeFixtureMaterial } from './material-content';
+import { materialSignature } from './material-signature';
 
 export async function runTrainingMaterial(input: {
   job: UserJob;
@@ -19,8 +20,16 @@ export async function runTrainingMaterial(input: {
     const target = await materials.jobMaterial(job);
     if (target.existing) return await materials.finish(job, workerId);
 
-    const plan = fixturePlan(target.device);
-    const run = await runBrowserPlan(plan, fixture, limits, signal);
+    const { plan, run } = await verifyBrowserPlan(
+      fixturePlan(target.device),
+      fixture,
+      limits,
+      signal,
+      {
+        stepId: 'preview',
+        target: compactPreviewStep.target,
+      },
+    );
     await saveEvidence(
       join(output, job.workspaceId, job.id),
       String(job.attemptCount),
@@ -31,6 +40,7 @@ export async function runTrainingMaterial(input: {
     signal.throwIfAborted();
     return await materials.finish(job, workerId, {
       ...content,
+      semanticDigest: materialSignature(plan, run),
       verifiedAt: new Date(run.verifiedAt),
     });
   } catch (error) {
@@ -38,4 +48,17 @@ export async function runTrainingMaterial(input: {
       throw new BrowserRunError('INVALID_PLAN');
     throw error;
   }
+}
+
+export function scheduleTrainingReviews() {
+  return new PrismaBrowserLearningMaterials(prisma).scheduleReviews();
+}
+
+export function rollbackTrainingMaterial(input: {
+  workspaceId: string;
+  actorId: string;
+  materialId: string;
+  expectedCurrentId: string;
+}) {
+  return new PrismaBrowserLearningMaterials(prisma).rollback(input);
 }

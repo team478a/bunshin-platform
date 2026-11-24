@@ -82,12 +82,25 @@ export function discoverBrowserPlan(
   return executePlan(input, fixture, limits, cancellation, select);
 }
 
+type ClickTargetFallback = Readonly<{ stepId: string; target: BrowserLocator }>;
+
+export function verifyBrowserPlan(
+  plan: BrowserPlan,
+  fixture: Fixture,
+  limits: { timeoutMs: number; maxSteps: number },
+  cancellation: AbortSignal,
+  fallback: ClickTargetFallback,
+) {
+  return executePlan(plan, fixture, limits, cancellation, undefined, fallback);
+}
+
 async function executePlan(
   input: unknown,
   fixture: Fixture,
   limits: { timeoutMs: number; maxSteps: number },
   cancellation: AbortSignal,
   select?: BrowserStepSelector,
+  fallback?: ClickTargetFallback,
 ): Promise<{ plan: BrowserPlan; run: BrowserRun }> {
   const parsed = browserPlanSchema.safeParse(input);
   if (!parsed.success || parsed.data.steps.length > limits.maxSteps) {
@@ -217,9 +230,18 @@ async function executePlan(
             )
           : undefined;
       signal.throwIfAborted();
-      const step = select ? candidates.find(({ id }) => id === selectedId) : remainingSteps[0];
+      let step = select ? candidates.find(({ id }) => id === selectedId) : remainingSteps[0];
       if (!step) throw new BrowserRunError('STEP_FAILED');
       remainingSteps.splice(remainingSteps.indexOf(step), 1);
+      if (
+        step.action === 'click' &&
+        fallback?.stepId === step.id &&
+        (await locate(page, step.target).count()) === 0
+      ) {
+        if ((await locate(page, fallback.target).count()) !== 1)
+          throw new BrowserRunError('STEP_FAILED', step.id);
+        step = { ...step, target: fallback.target };
+      }
       executed.push(step);
       stepId = step.id;
       signal.throwIfAborted();
