@@ -1,3 +1,4 @@
+import type { UrlObject } from 'node:url';
 import Image from 'next/image';
 import Link from 'next/link';
 import styles from './browser-material.module.css';
@@ -28,9 +29,7 @@ export function BrowserMaterialView({
   device: string;
   ordinal: number;
   showDetail: boolean;
-  stepHref: (
-    value: number,
-  ) => string | { pathname: string; query: Record<string, string | number> };
+  stepHref: (value: number) => UrlObject;
   imageHref: (variant: 'before' | 'after' | 'detail') => string;
   guidance?: string;
 }) {

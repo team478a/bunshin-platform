@@ -32,8 +32,12 @@ export default async function BrowserLearningMaterialPage({
     const state = await materials.readMaterial(actor);
     if (!state) notFound();
     const path = learningMaterialPath(serviceSlug, programEnrollmentId, actor.topicId);
-    const topic = new URLSearchParams(actor.topicId ? { topicId: actor.topicId } : {});
-    const home = path.replace('/learning-request/browser-material', '/learning-request');
+    const pathname = learningMaterialPath(serviceSlug, programEnrollmentId);
+    const topic = actor.topicId ? { topicId: actor.topicId } : {};
+    const home = {
+      pathname: pathname.replace('/learning-request/browser-material', '/learning-request'),
+      query: topic,
+    };
     const material = state.material;
     const ordinal = query.step === undefined ? 1 : Number(query.step);
     const step = material?.steps[ordinal - 1];
@@ -66,12 +70,12 @@ export default async function BrowserLearningMaterialPage({
               device={state.device}
               ordinal={ordinal}
               showDetail={showDetail}
-              stepHref={(value) => path + (actor.topicId ? '&' : '?') + 'step=' + value}
+              stepHref={(value) => ({ pathname, query: { ...topic, step: value } })}
               imageHref={(variant) =>
-                path.split('?')[0] +
+                pathname +
                 '/image?' +
                 new URLSearchParams({
-                  ...Object.fromEntries(topic),
+                  ...topic,
                   material: material.id,
                   step: String(ordinal),
                   variant,
