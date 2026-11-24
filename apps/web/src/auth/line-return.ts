@@ -17,6 +17,10 @@ const learningProgramAdminPagePattern = new RegExp(
 const learningRequestPagePattern = new RegExp(
   `^/s/${serviceSlugPattern}/programs/${uuidPattern}/learning-request$`,
 );
+const learningMaterialPagePattern = new RegExp(
+  `^/s/${serviceSlugPattern}/programs/${uuidPattern}/learning-request/browser-material$`,
+);
+const topicIdentifierPattern = new RegExp(`^${uuidPattern}$`);
 const fortuneWeeklyLinePagePattern = new RegExp(`^/s/${serviceSlugPattern}/today/from-line$`);
 const serviceOverviewAdminPagePattern = new RegExp(
   `^/s/${serviceSlugPattern}/manage/improvement-overview$`,
@@ -113,6 +117,19 @@ export function safeLineAuthReturnPath(value: string | null | undefined): string
       url.search === ''
     ) {
       return url.pathname;
+    }
+    if (learningMaterialPagePattern.test(url.pathname)) {
+      if (!url.search) return url.pathname;
+      const params = [...url.searchParams.entries()];
+      const [name, topic] = params[0] ?? [];
+      if (
+        params.length !== 1 ||
+        name !== 'topicId' ||
+        !topic ||
+        !topicIdentifierPattern.test(topic)
+      )
+        return null;
+      return `${url.pathname}?topicId=${topic}`;
     }
     if (videoAuthReturnProjectId(value)) return value;
     if (imageAuthReturnSampleId(value)) return value;
