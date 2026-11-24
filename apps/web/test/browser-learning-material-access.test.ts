@@ -15,6 +15,9 @@ vi.mock('../src/services/browser-learning-material', async (original) => ({
 }));
 vi.mock('@bunshin/database', () => ({
   prisma: {},
+  PrismaBrowserMaterialVideos: class {
+    state = () => null;
+  },
   PrismaBrowserLearningMaterials: class {
     readMaterial = mocks.readMaterial;
     readImage = mocks.readImage;

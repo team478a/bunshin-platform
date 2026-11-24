@@ -9258,6 +9258,8 @@ model BrowserFixtureMaterial {
   importer       WorkspaceMembership?         @relation(fields: [workspaceId, importedBy], references: [workspaceId, userId], onDelete: Cascade, map: "browser_fixture_materials_import_membership_fkey")
   steps          BrowserFixtureMaterialStep[]
 
+  videos         BrowserFixtureMaterialVideo[]
+
   @@unique([recipeId, revision], map: "browser_fixture_materials_recipe_revision_key")
   @@unique([workspaceId, groupId, programId, fixtureDevice, revision], map: "browser_fixture_materials_program_revision_key")
   @@unique([workspaceId, importedBy, fixtureDevice, importDigest], map: "browser_fixture_materials_import_key")
@@ -9277,4 +9279,17 @@ model BrowserFixtureMaterialStep {
   @@id([materialId, ordinal], map: "browser_fixture_material_steps_pkey")
   @@unique([materialId, stepId], map: "browser_fixture_material_steps_material_step_key")
   @@map("browser_fixture_material_steps")
+}
+
+model BrowserFixtureMaterialVideo {
+  materialId String                 @map("material_id") @db.Uuid
+  version    Int
+  mp4        Bytes                  @db.ByteA
+  captions   String                 @db.Text
+  chapters   String                 @db.Text
+  durationMs Int                    @map("duration_ms")
+  material   BrowserFixtureMaterial @relation(fields: [materialId], references: [id], onDelete: Cascade, map: "browser_fixture_material_videos_material_fkey")
+
+  @@id([materialId, version], map: "browser_fixture_material_videos_pkey")
+  @@map("browser_fixture_material_videos")
 }

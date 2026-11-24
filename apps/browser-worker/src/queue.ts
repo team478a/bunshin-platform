@@ -19,6 +19,8 @@ import { modelPreviewSelector } from './model-selector';
 import { completeMaterialJob } from './materials';
 import { runTrainingMaterial } from './training-material';
 
+import { runMaterialVideo } from './material-video-job';
+
 const environment = 'DEVELOPMENT';
 const jobs = new PrismaJobRepository(prisma, 'browser-fixture');
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
@@ -112,6 +114,12 @@ export async function runQueue(input: {
             errorCategory: 'BROWSER_ATTEMPTS_EXHAUSTED',
             retryable: false,
           });
+          continue;
+        }
+        if (job.payloadReference.startsWith('browser-video:')) {
+          assertUserJob(job);
+          await runMaterialVideo(job, workerId, input.limits.timeoutMs, input.signal);
+          console.log(JSON.stringify({ jobId: job.id, status: 'SUCCEEDED' }));
           continue;
         }
         if (job.payloadReference.startsWith('training-material:')) {
