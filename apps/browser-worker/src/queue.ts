@@ -13,8 +13,9 @@ import {
 import { PrismaJobRepository, prisma } from '@bunshin/database';
 import { BrowserRunError, discoverBrowserPlan, runBrowserPlan } from './browser';
 import { saveEvidence } from './evidence';
-import { fixture, fixturePlan, fixtureVersion } from './fixture';
+import { compactPreviewStep, fixture, fixturePlan, fixtureVersion } from './fixture';
 import { completeRecipeReplay, completeWithRecipe, findRecipeId, loadRecipe } from './recipes';
+import { modelPreviewSelector } from './model-selector';
 
 const environment = 'DEVELOPMENT';
 const jobs = new PrismaJobRepository(prisma, 'browser-fixture');
@@ -30,7 +31,7 @@ export async function enqueueFixture(
   actorId: string,
   deviceName: string,
   requestId: string,
-  mode: 'fixture' | 'discover' | 'replay' = 'fixture',
+  mode: 'fixture' | 'discover' | 'discover-model' | 'replay' = 'fixture',
 ) {
   if (![workspaceId, actorId, requestId].every((value) => uuid.test(value))) {
     throw new Error('Workspace, actor and request must be UUIDs');
@@ -42,7 +43,7 @@ export async function enqueueFixture(
     payloadReference = `replay:${deviceName.toLowerCase()}`;
   } else {
     const device = deviceFrom(deviceName);
-    payloadReference = `${mode === 'discover' ? 'discover:' : ''}${fixtureVersion}:${device}`;
+    payloadReference = `${mode === 'fixture' ? '' : mode + ':'}${fixtureVersion}:${device}`;
   }
   return new EnqueueJob(jobs).enqueue({
     environment,
@@ -134,7 +135,11 @@ export async function runQueue(input: {
         const [kind, value, device, extra] = job.payloadReference.split(':');
         let discovery;
         let run;
-        if (kind === 'discover' && value === fixtureVersion && extra === undefined) {
+        if (
+          (kind === 'discover' || kind === 'discover-model') &&
+          value === fixtureVersion &&
+          extra === undefined
+        ) {
           const template = fixturePlan(deviceFrom(device));
           recipeId = await findRecipeId(job.workspaceId, job.requestedBy, template.device);
           if (recipeId) {
@@ -142,11 +147,13 @@ export async function runQueue(input: {
             run = await runBrowserPlan(saved, fixture, input.limits, input.signal);
           } else {
             const candidates = template.steps.filter(({ action }) => action !== 'scroll').reverse();
+            if (kind === 'discover-model') candidates.push(compactPreviewStep);
             discovery = await discoverBrowserPlan(
               { ...template, steps: candidates },
               fixture,
               input.limits,
               input.signal,
+              kind === 'discover-model' ? modelPreviewSelector(job.id, workerId) : undefined,
             );
             run = discovery.run;
           }
@@ -186,7 +193,10 @@ export async function runQueue(input: {
               : 'INFRASTRUCTURE';
         await fail.execute(job, workerId, {
           errorCategory: `BROWSER_${category}`,
-          retryable: category !== 'INVALID_PLAN' && category !== 'STEP_FAILED',
+          retryable:
+            category !== 'INVALID_PLAN' &&
+            category !== 'STEP_FAILED' &&
+            category !== 'MODEL_SELECTION_FAILED',
         });
         console.error(
           JSON.stringify({

@@ -3,7 +3,7 @@ import { browserPlanSchema, type BrowserPlan } from '@bunshin/capability-browser
 import { CompleteJob, type UserJob } from '@bunshin/application';
 import { PrismaJobRepository, prisma } from '@bunshin/database';
 import { BrowserRunError } from './browser';
-import { fixturePlan, fixtureVersion } from './fixture';
+import { compactPreviewStep, fixturePlan, fixtureVersion } from './fixture';
 
 const recipeScope = (workspaceId: string, actorId: string) => ({
   workspaceId,
@@ -41,9 +41,10 @@ export async function loadRecipe(recipeId: string, workspaceId: string, actorId:
   // Rebuild steps from the deployed fixture, so even a changed or stale record
   // cannot broaden the set of approved actions or weaken the goal.
   const official = fixturePlan(parsed.data.device);
+  const allowed = [...official.steps, compactPreviewStep];
   const normalized = browserPlanSchema.safeParse({
     ...official,
-    steps: parsed.data.steps.map(({ id }) => official.steps.find((step) => step.id === id)),
+    steps: parsed.data.steps.map(({ id }) => allowed.find((step) => step.id === id)),
   });
   if (
     !normalized.success ||

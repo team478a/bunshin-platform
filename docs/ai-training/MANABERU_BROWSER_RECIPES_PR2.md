@@ -28,8 +28,16 @@ cp apps/browser-worker/probes/stagehand-local.mjs "$PROBE_DIR/"
 node "$PROBE_DIR/stagehand-local.mjs"
 ```
 
-既定のワーカーで稼働するのは、実画面を検査する決定的な候補選択。LLM での目的解釈・候補選択、既存原価枠との接続、変化した画面の部分修復、外部サービス、教材生成は未実装。VPS での計測と有料モデルによる探索成功率は未実施。
+通常の探索は実画面を検査する決定的な候補選択。下記の開発モードでは既存の Gemini Provider で複数候補を選択できる。自然言語による目的解釈、画面が変わったときの部分修復、外部サービス、教材生成は後続。VPS と実モデルでの検証は未実施。
 
 ## 開発検証
 
 実 Chromium の 9 テストで、候補の並びを逆にしても画面に沿って発見できること、候補外 ID の拒否、リプレイ、成功条件変更時の失敗を確認。使い捨て PostgreSQL でレシピ 1 件・3 ステップの保存、明示リプレイ、新しい依頼による既存レシピの再利用、同じ Workspace 内の別利用者による取得拒否を確認した。生成物は 3 ステップの前後 PNG 6 枚と証拠 JSON。AI 原価 0 円。本番の migration と設定変更は未実施。
+
+## 開発用モデル選択
+
+`discover-model WORKSPACE_ID ACTOR_ID DEVICE REQUEST_ID` を使う。保存済みレシピが見つからず、通常と簡易の両方のプレビューが操作可能な場合に、1 ジョブにつき最大 1 回だけモデルへ問い合わせる。候補が一つの場合と保存済みレシピの再実行はモデル呼び出し 0 回。
+
+Web は開発環境で `BROWSER_FIXTURE_MODEL_WORKSPACE_ID` と `BROWSER_FIXTURE_MODEL_SECRET` を設定した場合だけ受け付ける。ワーカーには同じ専用シークレットと、Web の Origin を `BROWSER_FIXTURE_MODEL_ORIGIN` に設定する。HTTPS または開発機のループバック HTTP を使う。Gemini の有効な開発用 Provider 設定と既存単価表を使う。ジョブ ID で予約を一意にし、既存の AI 利用記録にトークン・推定原価・結果を残す。料金不明時は予約を保持する。 [Gemini のトークン内訳](https://aistudio.google.com/api-reference/generate-content)
+
+外部通信を置換したテストで利用枠の拒否、候補外応答の拒否、推論トークン込みの原価記録、原価不明時の予約保持を確認した。実 API 呼び出しと実課金は発生していない。

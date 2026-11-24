@@ -18,7 +18,12 @@ export interface Fixture {
 export class BrowserRunError extends Error {
   constructor(
     readonly category:
-      'INVALID_PLAN' | 'CANCELLED' | 'TIMEOUT' | 'STEP_FAILED' | 'BROWSER_UNAVAILABLE',
+      | 'INVALID_PLAN'
+      | 'CANCELLED'
+      | 'TIMEOUT'
+      | 'STEP_FAILED'
+      | 'BROWSER_UNAVAILABLE'
+      | 'MODEL_SELECTION_FAILED',
     readonly stepId?: string,
   ) {
     super(stepId ? `${category}: ${stepId}` : category);

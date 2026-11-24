@@ -14,6 +14,14 @@ function asToken(value: unknown): number | null {
   return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : null;
 }
 
+function browserSelectionOutputTokens(usage: Record<string, unknown>) {
+  const input = asToken(usage['promptTokenCount']);
+  const total = asToken(usage['totalTokenCount']);
+  if (input === null || total === null || total < input) return null;
+  // The fixture sends no tools, so total minus prompt also includes thinking tokens.
+  return total - input <= 2_147_483_647 ? total - input : null;
+}
+
 function toGoogleRequest(request: LearningAiRequest) {
   let body: unknown;
   try {
@@ -138,12 +146,21 @@ export class GoogleLearningGenerationAdapter implements LearningAiGenerationPort
     } catch {
       value = null;
     }
+    const forBrowser = request.task === 'BROWSER_FIXTURE_SELECTION';
+    const inputTokens = asToken(usage['promptTokenCount']);
+    const cachedInputTokens = asToken(usage['cachedContentTokenCount']) ?? 0;
     const measurement = {
       provider: 'google',
       model: typeof raw['modelVersion'] === 'string' ? raw['modelVersion'] : request.model,
-      inputTokens: asToken(usage['promptTokenCount']),
-      outputTokens: asToken(usage['candidatesTokenCount']),
-      cachedInputTokens: asToken(usage['cachedContentTokenCount']) ?? 0,
+      inputTokens: forBrowser && (inputTokens ?? 0) > 2_147_483_647 ? null : inputTokens,
+      outputTokens: forBrowser
+        ? browserSelectionOutputTokens(usage)
+        : asToken(usage['candidatesTokenCount']),
+      cachedInputTokens:
+        forBrowser &&
+        (inputTokens === null || inputTokens > 2_147_483_647 || cachedInputTokens > inputTokens)
+          ? null
+          : cachedInputTokens,
       latencyMs: Math.min(2_147_483_647, Date.now() - start),
       success: value !== null,
       errorCategory: value

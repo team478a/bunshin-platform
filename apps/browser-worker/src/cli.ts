@@ -47,13 +47,14 @@ async function main() {
   if (
     command !== 'enqueue' &&
     command !== 'discover' &&
+    command !== 'discover-model' &&
     command !== 'replay' &&
     command !== 'cancel' &&
     command !== 'serve' &&
     command !== 'once'
   ) {
     throw new Error(
-      'Usage: smoke [mobile|desktop] | enqueue WORKSPACE_ID ACTOR_ID DEVICE REQUEST_ID | discover WORKSPACE_ID ACTOR_ID DEVICE REQUEST_ID | replay WORKSPACE_ID ACTOR_ID RECIPE_ID REQUEST_ID | cancel WORKSPACE_ID ACTOR_ID JOB_ID | serve | once',
+      'Usage: smoke [mobile|desktop] | enqueue WORKSPACE_ID ACTOR_ID DEVICE REQUEST_ID | discover|discover-model WORKSPACE_ID ACTOR_ID DEVICE REQUEST_ID | replay WORKSPACE_ID ACTOR_ID RECIPE_ID REQUEST_ID | cancel WORKSPACE_ID ACTOR_ID JOB_ID | serve | once',
     );
   }
   const databaseUrl = process.env['BROWSER_FIXTURE_DATABASE_URL'];
@@ -61,7 +62,12 @@ async function main() {
   process.env['DATABASE_URL'] = databaseUrl;
   const queue = await import('./queue');
   try {
-    if (command === 'enqueue' || command === 'discover' || command === 'replay') {
+    if (
+      command === 'enqueue' ||
+      command === 'discover' ||
+      command === 'discover-model' ||
+      command === 'replay'
+    ) {
       const [workspace = '', actor = '', device = '', request = ''] = args;
       console.log(
         JSON.stringify(
