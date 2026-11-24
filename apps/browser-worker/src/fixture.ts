@@ -30,10 +30,13 @@ export const fixture: Fixture = {
       html(
         'メモを作成',
         `<label for="note">メモのタイトル</label><input id="note">
-        <button type="button" id="preview">プレビュー</button>
+        <button type="button" id="preview" disabled>プレビュー</button>
         <p role="status"></p>
         <footer><h2>練習の注意点</h2></footer>
         <script>
+          document.getElementById('note').addEventListener('input', (event) => {
+            document.getElementById('preview').disabled = !event.target.value;
+          });
           document.getElementById('preview').addEventListener('click', () => {
             const note = document.getElementById('note').value;
             document.querySelector('[role=status]').textContent =

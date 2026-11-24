@@ -2925,6 +2925,7 @@ model Workspace {
 }
 
 model WorkspaceMembership {
+  browserFixtureRecipes BrowserFixtureRecipe[]
   id          String           @id @default(uuid()) @db.Uuid
   workspaceId String           @map("workspace_id") @db.Uuid
   userId      String           @map("user_id") @db.Uuid
@@ -9207,4 +9208,21 @@ model SocialPublicationIntent {
   @@index([workspaceId, groupId, ownerUserId, bunshinId, status, scheduledAt], map: "social_publication_intents_owner_status_idx")
   @@index([connectionId, status], map: "social_publication_intents_connection_idx")
   @@map("social_publication_intents")
+}
+
+model BrowserFixtureRecipe {
+  id             String              @id @default(uuid()) @db.Uuid
+  workspaceId    String              @map("workspace_id") @db.Uuid
+  actorId        String              @map("actor_id") @db.Uuid
+  fixtureVersion String              @map("fixture_version") @db.VarChar(64)
+  device         String              @db.VarChar(12)
+  planHash       String              @map("plan_hash") @db.Char(64)
+  plan           Json
+  sourceJobId    String              @map("source_job_id") @db.Uuid
+  sourceAttempt  Int                 @map("source_attempt")
+  verifiedAt     DateTime            @map("verified_at") @db.Timestamptz(6)
+  membership     WorkspaceMembership @relation(fields: [workspaceId, actorId], references: [workspaceId, userId], onDelete: Cascade, map: "browser_fixture_recipes_membership_fkey")
+
+  @@unique([workspaceId, actorId, fixtureVersion, device, planHash], map: "browser_fixture_recipes_content_key")
+  @@map("browser_fixture_recipes")
 }

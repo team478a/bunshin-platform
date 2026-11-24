@@ -3,6 +3,7 @@ import { chromium, devices, type Page } from 'playwright';
 import {
   browserPlanSchema,
   type BrowserLocator,
+  type BrowserPlan,
   type BrowserRun,
   type BrowserStepEvidence,
 } from '@bunshin/capability-browser';
@@ -32,12 +33,57 @@ function locate(page: Page, target: BrowserLocator) {
   return page.getByText(target.text, { exact: true });
 }
 
+type PlanStep = BrowserPlan['steps'][number];
+
+export type BrowserStepSelector = (
+  candidates: readonly Readonly<{ id: string; action: PlanStep['action'] }>[],
+  signal: AbortSignal,
+) => Promise<string>;
+
+async function selectBeforeAbort(
+  choose: BrowserStepSelector,
+  candidates: Parameters<BrowserStepSelector>[0],
+  signal: AbortSignal,
+) {
+  signal.throwIfAborted();
+  let stop: () => void = () => {};
+  const aborted = new Promise<never>((_, reject) => {
+    stop = () => reject(new BrowserRunError('CANCELLED'));
+    signal.addEventListener('abort', stop, { once: true });
+  });
+  try {
+    return await Promise.race([aborted, choose(candidates, signal)]);
+  } finally {
+    signal.removeEventListener('abort', stop);
+  }
+}
+
 export async function runBrowserPlan(
   input: unknown,
   fixture: Fixture,
   limits: { timeoutMs: number; maxSteps: number },
   cancellation: AbortSignal,
-): Promise<BrowserRun> {
+) {
+  return (await executePlan(input, fixture, limits, cancellation)).run;
+}
+
+export function discoverBrowserPlan(
+  input: unknown,
+  fixture: Fixture,
+  limits: { timeoutMs: number; maxSteps: number },
+  cancellation: AbortSignal,
+  select: BrowserStepSelector = (candidates) => Promise.resolve(candidates[0]?.id ?? ''),
+) {
+  return executePlan(input, fixture, limits, cancellation, select);
+}
+
+async function executePlan(
+  input: unknown,
+  fixture: Fixture,
+  limits: { timeoutMs: number; maxSteps: number },
+  cancellation: AbortSignal,
+  select?: BrowserStepSelector,
+): Promise<{ plan: BrowserPlan; run: BrowserRun }> {
   const parsed = browserPlanSchema.safeParse(input);
   if (!parsed.success || parsed.data.steps.length > limits.maxSteps) {
     throw new BrowserRunError('INVALID_PLAN');
@@ -138,7 +184,38 @@ export async function runBrowserPlan(
 
     await page.goto(pageUrl(plan.startPage), { timeout: remaining() });
     const steps: BrowserStepEvidence[] = [];
-    for (const step of plan.steps) {
+    const executed: PlanStep[] = [];
+    const remainingSteps = [...plan.steps];
+    const goalReached = async () =>
+      currentPage() === plan.success.page && (await locate(page, plan.success.visible).isVisible());
+    while (remainingSteps.length > 0) {
+      if (select && executed.length > 0 && (await goalReached())) break;
+      const candidates: PlanStep[] = [];
+      if (select) {
+        for (const step of remainingSteps) {
+          if (step.action === 'navigate') continue;
+          const target = locate(page, step.target);
+          if ((await target.count()) !== 1 || !(await target.isVisible())) continue;
+          if (step.action === 'click' && !(await target.isEnabled({ timeout: remaining() })))
+            continue;
+          if (step.action === 'fill' && !(await target.isEditable({ timeout: remaining() })))
+            continue;
+          candidates.push(step);
+        }
+      }
+      const selectedId =
+        select && candidates.length
+          ? await selectBeforeAbort(
+              select,
+              candidates.map(({ id, action }) => ({ id, action })),
+              signal,
+            )
+          : undefined;
+      signal.throwIfAborted();
+      const step = select ? candidates.find(({ id }) => id === selectedId) : remainingSteps[0];
+      if (!step) throw new BrowserRunError('STEP_FAILED');
+      remainingSteps.splice(remainingSteps.indexOf(step), 1);
+      executed.push(step);
       stepId = step.id;
       signal.throwIfAborted();
       const before = await capture();
@@ -169,19 +246,19 @@ export async function runBrowserPlan(
       });
     }
     stepId = undefined;
-    if (
-      currentPage() !== plan.success.page ||
-      !(await locate(page, plan.success.visible).isVisible())
-    ) {
+    if (!(await goalReached())) {
       throw new BrowserRunError('STEP_FAILED');
     }
     signal.throwIfAborted();
     return {
-      steps,
-      browserVersion: browser.version(),
-      device: plan.device,
-      durationMs: Math.round(performance.now() - startedAt),
-      verifiedAt: new Date().toISOString(),
+      plan: { ...plan, steps: executed },
+      run: {
+        steps,
+        browserVersion: browser.version(),
+        device: plan.device,
+        durationMs: Math.round(performance.now() - startedAt),
+        verifiedAt: new Date().toISOString(),
+      },
     };
   } catch (error) {
     if (cancellation.aborted) throw new BrowserRunError('CANCELLED', stepId);
