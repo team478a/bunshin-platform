@@ -75,7 +75,9 @@ test(
     await expect(screen.getByText('答えたい項目だけを選べます。')).toBeVisible();
     await expect(screen.getByText('ステラ', { exact: true })).toBeVisible();
     const nickname = screen.getByLabel('ニックネーム（任意）');
-    const birthDate = screen.getByLabel('生年月日（任意）');
+    const birthYear = screen.getByRole('combobox', { name: '年', exact: true });
+    const birthMonth = screen.getByRole('combobox', { name: '月', exact: true });
+    const birthDay = screen.getByRole('combobox', { name: '日', exact: true });
     const sex = screen.getByLabel('性別（任意）');
     if (skip) {
       await screen.getByRole('button', 'スキップして占う').tap();
@@ -96,16 +98,27 @@ test(
       });
       await app.screenshot('basic-profile-390px');
       await nickname.fill('月の旅人');
-      await birthDate.fill('2020-01-01');
+      await birthYear.selectOption({ value: '2020' });
       await sex.selectOption({ value: 'OTHER' });
       await screen.getByLabel('性別の自由記述（任意）').fill('自由記述の確認');
       await screen.getByLabel('この目的で基本プロフィールを保存することに同意します').tap();
       const save = screen.getByRole('button', '保存して次へ');
       await save.tap();
+      await expect(screen.getByText(/生年月日は年・月・日をすべて選ぶ/)).toBeVisible();
+      await birthMonth.selectOption({ value: '01' });
+      await birthDay.selectOption({ value: '01' });
+      await save.tap();
       await expect(screen.getByText(/入力された生年月日では18歳未満/)).toBeVisible({
         timeout: 30_000,
       });
-      await birthDate.fill('1992-02-29');
+      await birthYear.selectOption({ value: '1992' });
+      await birthMonth.selectOption({ value: '02' });
+      await birthDay.selectOption({ value: '29' });
+      await birthYear.selectOption({ value: '1993' });
+      await expect(birthDay).toHaveValue('');
+      await expect(browser.locator('select[name="birthDay"] option[value="29"]')).toHaveCount(0);
+      await birthYear.selectOption({ value: '1992' });
+      await birthDay.selectOption({ value: '29' });
       await save.tap();
     }
 
@@ -124,9 +137,11 @@ test(
 
     await app.open(`${base}/settings`);
     await expect(browser.locator('input[name="nickname"][value="月の旅人"]')).toBeVisible();
-    await expect(browser.locator('input[name="birthDate"][value="1992-02-29"]')).toBeVisible();
+    await expect(birthYear).toHaveValue('1992');
+    await expect(birthMonth).toHaveValue('02');
+    await expect(birthDay).toHaveValue('29');
     await nickname.fill('月');
-    await birthDate.fill('');
+    await screen.getByRole('button', '生年月日をクリア').tap();
     await sex.selectOption({ value: '' });
     await screen.getByRole('button', '変更を保存').tap();
     await expect(screen.getByText('基本プロフィールを更新しました。')).toBeVisible({
@@ -134,7 +149,9 @@ test(
     });
     await app.open(`${base}/settings`);
     await expect(browser.locator('input[name="nickname"][value="月"]')).toBeVisible();
-    await expect(browser.locator('input[name="birthDate"][value=""]')).toBeVisible();
+    await expect(birthYear).toHaveValue('');
+    await expect(birthMonth).toHaveValue('');
+    await expect(birthDay).toHaveValue('');
     await screen.getByRole('button', '同意を撤回して基本プロフィールを削除').tap();
     await expect(screen.getByText('同意を撤回し、基本プロフィールを削除しました。')).toBeVisible();
     await expect(browser.locator('input[name="nickname"][value=""]')).toBeVisible({

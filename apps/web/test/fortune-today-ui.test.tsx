@@ -169,7 +169,10 @@ describe('fortune member home', () => {
     expect(onboarding).toContain('あなたのことを少し教えてください');
     expect(onboarding).toContain('スキップして占う');
     expect(onboarding).toContain('name="nickname"');
-    expect(onboarding).toContain('type="date"');
+    expect(onboarding).toContain('生年月日（任意）');
+    expect(onboarding).toContain('<select name="birthYear"');
+    expect(onboarding).toContain('<select name="birthMonth"');
+    expect(onboarding).toContain('<select name="birthDay"');
     expect(onboarding).not.toContain('name="sex"');
     expect(onboarding).not.toContain('name="question"');
 
