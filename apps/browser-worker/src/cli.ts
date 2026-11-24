@@ -49,12 +49,13 @@ async function main() {
     command !== 'discover' &&
     command !== 'discover-model' &&
     command !== 'replay' &&
+    command !== 'material' &&
     command !== 'cancel' &&
     command !== 'serve' &&
     command !== 'once'
   ) {
     throw new Error(
-      'Usage: smoke [mobile|desktop] | enqueue WORKSPACE_ID ACTOR_ID DEVICE REQUEST_ID | discover|discover-model WORKSPACE_ID ACTOR_ID DEVICE REQUEST_ID | replay WORKSPACE_ID ACTOR_ID RECIPE_ID REQUEST_ID | cancel WORKSPACE_ID ACTOR_ID JOB_ID | serve | once',
+      'Usage: smoke [mobile|desktop] | enqueue WORKSPACE_ID ACTOR_ID DEVICE REQUEST_ID | discover|discover-model WORKSPACE_ID ACTOR_ID DEVICE REQUEST_ID | replay|material WORKSPACE_ID ACTOR_ID RECIPE_ID REQUEST_ID | cancel WORKSPACE_ID ACTOR_ID JOB_ID | serve | once',
     );
   }
   const databaseUrl = process.env['BROWSER_FIXTURE_DATABASE_URL'];
@@ -66,7 +67,8 @@ async function main() {
       command === 'enqueue' ||
       command === 'discover' ||
       command === 'discover-model' ||
-      command === 'replay'
+      command === 'replay' ||
+      command === 'material'
     ) {
       const [workspace = '', actor = '', device = '', request = ''] = args;
       console.log(

@@ -223,6 +223,11 @@ async function executePlan(
       executed.push(step);
       stepId = step.id;
       signal.throwIfAborted();
+      const viewport = page.viewportSize();
+      const box =
+        step.action === 'click' || step.action === 'fill'
+          ? await locate(page, step.target).boundingBox({ timeout: remaining() })
+          : null;
       const before = await capture();
       switch (step.action) {
         case 'navigate':
@@ -244,6 +249,11 @@ async function executePlan(
       steps.push({
         stepId,
         action: step.action,
+        ...(box && viewport
+          ? {
+              target: { ...box, viewportWidth: viewport.width, viewportHeight: viewport.height },
+            }
+          : {}),
         before: before.state,
         after: after.state,
         beforePng: before.png,

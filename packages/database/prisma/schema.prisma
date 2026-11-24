@@ -9211,6 +9211,7 @@ model SocialPublicationIntent {
 }
 
 model BrowserFixtureRecipe {
+  materials      BrowserFixtureMaterial[]
   id             String              @id @default(uuid()) @db.Uuid
   workspaceId    String              @map("workspace_id") @db.Uuid
   actorId        String              @map("actor_id") @db.Uuid
@@ -9225,4 +9226,38 @@ model BrowserFixtureRecipe {
 
   @@unique([workspaceId, actorId, fixtureVersion, device, planHash], map: "browser_fixture_recipes_content_key")
   @@map("browser_fixture_recipes")
+}
+
+model BrowserFixtureMaterial {
+  id             String                       @id @default(uuid()) @db.Uuid
+  recipeId       String                       @map("recipe_id") @db.Uuid
+  revision       Int
+  title          String                       @db.VarChar(160)
+  goal           String                       @db.VarChar(400)
+  preparation    String                       @db.VarChar(400)
+  practice       String                       @db.VarChar(600)
+  checkpoint     String                       @db.VarChar(400)
+  verifiedAt     DateTime                     @map("verified_at") @db.Timestamptz(6)
+  sourceJobId    String                       @map("source_job_id") @db.Uuid
+  sourceAttempt  Int                          @map("source_attempt")
+  recipe         BrowserFixtureRecipe         @relation(fields: [recipeId], references: [id], onDelete: Cascade, map: "browser_fixture_materials_recipe_fkey")
+  steps          BrowserFixtureMaterialStep[]
+
+  @@unique([recipeId, revision], map: "browser_fixture_materials_recipe_revision_key")
+  @@map("browser_fixture_materials")
+}
+
+model BrowserFixtureMaterialStep {
+  materialId  String                 @map("material_id") @db.Uuid
+  ordinal     Int
+  stepId      String                 @map("step_id") @db.VarChar(64)
+  instruction String                 @db.VarChar(400)
+  beforeImage Bytes                  @map("before_image") @db.ByteA
+  afterImage  Bytes                  @map("after_image") @db.ByteA
+  detailImage Bytes?                 @map("detail_image") @db.ByteA
+  material    BrowserFixtureMaterial @relation(fields: [materialId], references: [id], onDelete: Cascade, map: "browser_fixture_material_steps_material_fkey")
+
+  @@id([materialId, ordinal], map: "browser_fixture_material_steps_pkey")
+  @@unique([materialId, stepId], map: "browser_fixture_material_steps_material_step_key")
+  @@map("browser_fixture_material_steps")
 }

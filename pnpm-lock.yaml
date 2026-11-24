@@ -68,6 +68,9 @@ importers:
       playwright:
         specifier: 1.65.1
         version: 1.65.1
+      sharp:
+        specifier: 0.35.4
+        version: 0.35.4(@types/node@24.13.3)
       tsx:
         specifier: 4.23.15
         version: 4.23.15
