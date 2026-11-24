@@ -2,7 +2,7 @@
 
 import type { Route } from 'next';
 import Link from 'next/link';
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useId, useState, type FormEvent } from 'react';
 
 const suggestions = ['もう少し詳しく知りたい', '別の見方はある？', '具体的にどうすればいい？'];
 
@@ -35,6 +35,8 @@ export function FortuneFollowUps({
   const url = `/api/services/${serviceSlug}/fortune/readings/${readingId}/follow-ups`;
   const [conversation, setConversation] = useState<Conversation | null>(null);
   const [question, setQuestion] = useState('');
+  const questionHintId = useId();
+  const hasQuestion = Boolean(question.trim());
   const [draft, setDraft] = useState<{
     requestId: string;
     question: string;
@@ -151,7 +153,7 @@ export function FortuneFollowUps({
                 key={suggestion}
                 type="button"
                 className="button button--secondary"
-                disabled={busy}
+                disabled={busy || hasQuestion}
                 onClick={() => setQuestion(suggestion)}
               >
                 {suggestion}
@@ -164,16 +166,16 @@ export function FortuneFollowUps({
               value={question}
               onChange={(event) => setQuestion(event.target.value)}
               maxLength={300}
-              rows={2}
+              rows={3}
+              aria-describedby={questionHintId}
               required
               disabled={busy}
             />
+            <small id={questionHintId} className="fortune-input-hint" aria-hidden="true">
+              例文は質問欄が空のときに使えます。{question.length} / 300文字
+            </small>
           </label>
-          <button
-            type="submit"
-            className="button button--primary"
-            disabled={busy || !question.trim()}
-          >
+          <button type="submit" className="button button--primary" disabled={busy || !hasQuestion}>
             {busy
               ? 'AIが回答中です…'
               : creditOffer

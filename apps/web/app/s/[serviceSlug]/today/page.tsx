@@ -341,7 +341,7 @@ export default async function FortuneTodayPage({
         <p className="fortune-note">
           占い結果は判断の参考です。医療・法律・投資などの重要な判断は専門家にご相談ください。
         </p>
-        <FortuneNav serviceSlug={serviceSlug} />
+        <FortuneNav serviceSlug={serviceSlug} inFlow={Boolean(showBasicProfile)} />
       </div>
     </PublicShell>
   );
