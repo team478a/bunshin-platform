@@ -13,9 +13,18 @@ import { FortunePersonalFit } from './fortune-personal-fit';
 export const themeLabel = (theme: FortuneReadingView['theme']) =>
   ({ LOVE: '恋愛', WORK: '仕事', RELATIONSHIPS: '人間関係' })[theme];
 
-export function FortuneNav({ serviceSlug }: { serviceSlug: string }) {
+export function FortuneNav({
+  serviceSlug,
+  inFlow = false,
+}: {
+  serviceSlug: string;
+  inFlow?: boolean;
+}) {
   return (
-    <nav className="fortune-nav" aria-label="占いメニュー">
+    <nav
+      className={inFlow ? 'fortune-nav fortune-nav--in-flow' : 'fortune-nav'}
+      aria-label="占いメニュー"
+    >
       <Link href={`/s/${serviceSlug}/today` as Route}>今日の占い</Link>
       <Link href={`/s/${serviceSlug}/history` as Route}>過去の結果</Link>
       <Link href={`/s/${serviceSlug}/credits` as Route}>クレジット</Link>

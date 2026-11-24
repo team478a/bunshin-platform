@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useRef, useState, type ComponentProps } from 'react';
+import { useEffect, useId, useRef, useState, type ComponentProps } from 'react';
 import {
   FORTUNE_INTAKE_QUESTIONS,
   buildFortuneUnderstanding,
@@ -125,6 +125,8 @@ function IntakeConversation({
   const [consultation, setConsultation] = useState('');
   const [answers, setAnswers] = useState<FortuneIntakeAnswer[]>([]);
   const [draft, setDraft] = useState('');
+  const consultationHintId = useId();
+  const answerHintId = useId();
   const [asking, setAsking] = useState(false);
   const [drawing, setDrawing] = useState(false);
   const drawCharacter = deepReadingEnabled ? characters?.deep : characters?.daily;
@@ -209,7 +211,12 @@ function IntakeConversation({
   }
 
   function reviewBeforeDrawing() {
-    const items = buildFortuneUnderstanding(theme, consultation, answers);
+    const pendingAnswer = draft.trim();
+    const reviewAnswers =
+      step.kind === 'QUESTION' && pendingAnswer
+        ? [...answers, { key: step.key, answer: pendingAnswer }]
+        : answers;
+    const items = buildFortuneUnderstanding(theme, consultation, reviewAnswers);
     if (!confirmedFortuneUnderstanding(items).length) {
       void draw(items);
       return;
@@ -314,10 +321,15 @@ function IntakeConversation({
           <textarea
             rows={3}
             maxLength={200}
+            placeholder="例：今の仕事を続けるか迷っています"
+            aria-describedby={consultationHintId}
             value={consultation}
             disabled={asking || drawing}
             onChange={(event) => setConsultation(event.target.value)}
           />
+          <small id={consultationHintId} className="fortune-input-hint" aria-hidden="true">
+            {consultation.length} / 200文字
+          </small>
         </label>
       )}
       {question && (
@@ -341,10 +353,14 @@ function IntakeConversation({
             <textarea
               rows={2}
               maxLength={50}
+              aria-describedby={answerHintId}
               value={draft}
               disabled={asking || drawing}
               onChange={(event) => setDraft(event.target.value)}
             />
+            <small id={answerHintId} className="fortune-input-hint" aria-hidden="true">
+              {draft.length} / 50文字
+            </small>
           </label>
           <div className="button-row">
             <button

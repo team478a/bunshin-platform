@@ -13,7 +13,9 @@ import { FortuneProfileForm } from '../../../apps/web/app/s/[serviceSlug]/fortun
 import { FortuneDynamicIntake } from '../../../apps/web/app/s/[serviceSlug]/fortune-dynamic-intake';
 import { FortuneSavedUnderstanding } from '../../../apps/web/app/s/[serviceSlug]/fortune-understanding';
 import { FortuneReflection } from '../../../apps/web/app/s/[serviceSlug]/fortune-reflection';
-import { ReadingCard } from '../../../apps/web/app/s/[serviceSlug]/fortune-ui';
+import { FortuneNav, ReadingCard } from '../../../apps/web/app/s/[serviceSlug]/fortune-ui';
+import { FortuneBasicProfileForm } from '../../../apps/web/app/s/[serviceSlug]/fortune-basic-profile-form';
+import { defaultFortuneBasicProfileSettings } from '../../../apps/web/src/fortune/guidance-settings';
 import '../../../apps/web/app/styles.css';
 
 type SerializedReading = Omit<FortuneReadingView, 'createdAt'> & { createdAt: string };
@@ -41,15 +43,27 @@ function FortuneHarness() {
   }, []);
   if (!state) return null;
   const serviceSlug = 'fixture-fortune';
+  const params = new URLSearchParams(window.location.search);
+  if (params.has('basic-profile'))
+    return (
+      <main className="app-page fortune-page fortune-today">
+        <header className="app-page__heading">
+          <h1>今日の占い</h1>
+        </header>
+        <FortuneBasicProfileForm
+          serviceSlug={serviceSlug}
+          settings={{ ...defaultFortuneBasicProfileSettings, enabled: true }}
+        />
+        <FortuneNav serviceSlug={serviceSlug} inFlow />
+      </main>
+    );
   if (state.understanding)
     return (
       <main className="app-page fortune-page">
         <FortuneSavedUnderstanding serviceSlug={serviceSlug} initial={state.understanding} />
       </main>
     );
-  const DrawButtons = new URLSearchParams(window.location.search).has('dynamic-intake')
-    ? FortuneDynamicIntake
-    : FortuneDrawButtons;
+  const DrawButtons = params.has('dynamic-intake') ? FortuneDynamicIntake : FortuneDrawButtons;
   return (
     <main className="app-page fortune-page">
       <h1>今日の占い</h1>
