@@ -385,6 +385,7 @@ export default async function FortuneTodayPage({
   );
   return (
     <FortuneAppearance
+      serviceSlug={serviceSlug}
       settings={resolveFortunePageAppearance(guidance.appearance)}
       brand={service.configuration.brand}
       showMastheadOrnament={!illustrated}

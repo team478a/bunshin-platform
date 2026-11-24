@@ -8,13 +8,36 @@
   --fortune-radius: 1.25rem;
   --service-primary: var(--fortune-action);
   --service-secondary: var(--fortune-accent);
-  --service-font: 'Noto Sans JP Variable', 'Noto Sans JP', sans-serif;
+  --fortune-body-font: 'Noto Sans JP Variable', 'Noto Sans JP', sans-serif;
+  --fortune-serif-fallback: 'Yu Mincho', 'Hiragino Mincho ProN', 'Noto Serif CJK JP', serif;
+  --fortune-serif-font: var(--fortune-serif-fallback);
+  --service-font: var(--fortune-body-font);
   --fortune-tint: color-mix(in srgb, var(--fortune-accent) 10%, var(--fortune-surface));
   min-height: 100svh;
   min-width: 0;
   background: var(--fortune-canvas);
   color: var(--fortune-canvas-text);
-  font-family: 'Noto Sans JP Variable', 'Noto Sans JP', sans-serif;
+  font-family: var(--fortune-body-font);
+}
+
+.fortune-appearance[data-oracle-typography] {
+  --fortune-serif-font: 'Shippori Mincho', var(--fortune-serif-fallback);
+  --fortune-heading-font: var(--fortune-serif-font);
+}
+
+.fortune-appearance[data-oracle-typography][data-heading='sans'] {
+  --fortune-heading-font: var(--fortune-body-font);
+}
+
+.fortune-appearance[data-oracle-typography]
+  :is(.fortune-reading-body, .fortune-nav, button, input, select, textarea) {
+  font-family: var(--fortune-body-font);
+}
+
+.fortune-appearance[data-oracle-typography][data-heading='serif']
+  :is(.fortune-page, .service-entry, .auth-panel, .easy-manual)
+  :is(h1, h2, h3) {
+  font-weight: 700;
 }
 
 .fortune-appearance[data-corners='square'] {
@@ -116,7 +139,7 @@
 }
 
 .fortune-appearance[data-heading='serif'] .fortune-page :is(h1, h2, h3) {
-  font-family: 'Yu Mincho', 'Hiragino Mincho ProN', 'Noto Serif CJK JP', serif;
+  font-family: var(--fortune-serif-font);
 }
 
 .fortune-appearance
@@ -369,7 +392,7 @@
 .fortune-appearance[data-heading='serif']
   :is(.service-entry, .auth-panel, .easy-manual)
   :is(h1, h2, h3) {
-  font-family: 'Yu Mincho', 'Hiragino Mincho ProN', 'Noto Serif CJK JP', serif;
+  font-family: var(--fortune-serif-font);
 }
 
 .fortune-appearance .auth-panel .echo-motif {

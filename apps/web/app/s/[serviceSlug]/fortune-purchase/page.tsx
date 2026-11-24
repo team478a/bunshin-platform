@@ -173,6 +173,7 @@ export default async function FortunePurchasePage({
   );
   return (
     <FortuneAppearance
+      serviceSlug={serviceSlug}
       settings={resolveFortunePageAppearance(readFortuneAppearance(setting.guidanceSettings))}
       brand={service.configuration.brand}
     >

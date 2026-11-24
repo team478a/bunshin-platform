@@ -50,6 +50,7 @@ export default async function FortuneHistoryPage({
   );
   return (
     <FortuneAppearance
+      serviceSlug={serviceSlug}
       settings={resolveFortunePageAppearance(appearance)}
       brand={service.configuration.brand}
     >

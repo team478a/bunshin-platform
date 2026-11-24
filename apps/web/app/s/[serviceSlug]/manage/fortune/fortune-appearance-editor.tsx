@@ -211,7 +211,11 @@ export function FortuneAppearanceEditor({
             </select>
           </label>
           <div className="fortune-appearance-preview" aria-label="スマートフォンプレビュー">
-            <FortuneAppearance settings={{ ...value, enabled: true }} brand={brand}>
+            <FortuneAppearance
+              serviceSlug={serviceSlug}
+              settings={{ ...value, enabled: true }}
+              brand={brand}
+            >
               <div className="app-page fortune-page">
                 <header className="app-page__heading">
                   <h3>{selected.heading}</h3>

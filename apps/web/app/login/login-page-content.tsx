@@ -192,6 +192,7 @@ export default async function LoginPageContent({
   );
   return (
     <FortuneAppearance
+      serviceSlug={serviceSlug ?? undefined}
       settings={appearance}
       brand={serviceConfiguration?.brand}
       showMastheadLogo={false}

@@ -209,6 +209,7 @@ export default async function ServiceMemberHome({
     const appearance = await fortuneEntryAppearance(service.configuration);
     return (
       <FortuneAppearance
+        serviceSlug={serviceSlug}
         settings={appearance}
         brand={service.configuration.brand}
         showMastheadLogo={false}

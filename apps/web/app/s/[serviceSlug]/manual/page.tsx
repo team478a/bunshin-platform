@@ -84,6 +84,7 @@ export default async function ServiceManualPage({
   );
   return (
     <FortuneAppearance
+      serviceSlug={serviceSlug}
       settings={resolveFortunePageAppearance(result.appearance)}
       brand={result.service.configuration.brand}
     >

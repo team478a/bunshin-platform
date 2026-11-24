@@ -53,6 +53,7 @@ function FortuneHarness() {
       <FortuneAppearance
         settings={resolveFortunePageAppearance(undefined)}
         brand={undefined}
+        serviceSlug={illustrated ? 'watashi-fortune' : undefined}
         showMastheadOrnament={!illustrated}
       >
         <main className="public-shell">

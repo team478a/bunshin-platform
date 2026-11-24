@@ -79,6 +79,7 @@ export async function ServiceLegalPage({
     );
     return (
       <FortuneAppearance
+        serviceSlug={serviceSlug}
         settings={appearance}
         brand={service.configuration.brand}
         showMastheadLogo={false}

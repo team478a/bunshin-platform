@@ -1,5 +1,7 @@
 import type { CSSProperties, ReactNode } from 'react';
 import '@fontsource-variable/noto-sans-jp';
+import '@fontsource/shippori-mincho/700.css';
+import { ORACLE_SERVICE_SLUG } from '../../../src/services/service-auth-brand';
 import {
   fortuneReadableText,
   resolveFortuneAppearanceColors,
@@ -12,12 +14,14 @@ const ornaments = { none: '', moon: '☾', stars: '✧', both: '✧　☾　✧'
 
 export function FortuneAppearance({
   settings,
+  serviceSlug,
   brand,
   children,
   showMastheadLogo = true,
   showMastheadOrnament = true,
 }: {
   settings: FortuneAppearanceSettings | undefined;
+  serviceSlug?: string | undefined;
   brand: FortuneAppearanceBrand | undefined;
   children: ReactNode;
   showMastheadLogo?: boolean;
@@ -47,6 +51,7 @@ export function FortuneAppearance({
       data-cards={settings.cards}
       data-corners={settings.corners}
       data-heading={settings.heading}
+      data-oracle-typography={serviceSlug === ORACLE_SERVICE_SLUG ? '' : undefined}
       style={style}
     >
       {(logoUrl || ornament) && (

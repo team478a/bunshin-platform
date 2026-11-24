@@ -226,6 +226,7 @@ export default async function ServiceLineSettingsPage({
   );
   return (
     <FortuneAppearance
+      serviceSlug={serviceSlug}
       settings={appearance}
       brand={service.configuration.brand}
       showMastheadLogo={false}

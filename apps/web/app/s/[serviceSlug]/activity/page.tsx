@@ -449,6 +449,7 @@ export default async function ServiceMemberActivityPage({
   if (!isFortune) return content;
   return (
     <FortuneAppearance
+      serviceSlug={serviceSlug}
       settings={resolveFortunePageAppearance(
         readFortuneAppearance(fortuneSetting?.guidanceSettings),
       )}

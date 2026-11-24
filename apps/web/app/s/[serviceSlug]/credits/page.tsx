@@ -184,6 +184,7 @@ export default async function ServiceCreditsPage({
   if (!fortune) return content;
   return (
     <FortuneAppearance
+      serviceSlug={serviceSlug}
       settings={resolveFortunePageAppearance(readFortuneAppearance(fortune.guidanceSettings))}
       brand={service.configuration.brand}
     >

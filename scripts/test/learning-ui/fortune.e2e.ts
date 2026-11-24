@@ -79,7 +79,19 @@ test('mobile Oracle displays the approved artwork and draws with the existing th
     const nav = document.querySelector('.fortune-nav')!;
     const referral = document.querySelector('.fortune-today__share')!;
     const border = getComputedStyle(theme);
+    const heading = getComputedStyle(document.querySelector('.fortune-observatory h1')!);
+    const themeLabel = getComputedStyle(theme.querySelector('strong')!);
+    const navLabel = getComputedStyle(nav.querySelector('a')!);
+    const faces = await document.fonts.load(
+      '700 24px "Shippori Mincho"',
+      '今日の占い恋愛仕事人間関係',
+    );
     return {
+      minchoLoaded: faces.length > 0 && faces.every((face) => face.status === 'loaded'),
+      minchoHeadings:
+        heading.fontFamily.startsWith('"Shippori Mincho"') &&
+        themeLabel.fontFamily.startsWith('"Shippori Mincho"'),
+      sansNavigation: navLabel.fontFamily.startsWith('"Noto Sans JP Variable"'),
       fitsWidth: document.documentElement.scrollWidth <= innerWidth,
       loadedImages: art.length,
       hasSideBorder: border.borderLeftWidth !== '0px' || border.borderRightWidth !== '0px',
@@ -90,6 +102,9 @@ test('mobile Oracle displays the approved artwork and draws with the existing th
   expect(layout).toEqual({
     fitsWidth: true,
     loadedImages: 9,
+    minchoLoaded: true,
+    minchoHeadings: true,
+    sansNavigation: true,
     hasSideBorder: false,
     referralAboveNav: true,
     activeLabel: 'rgb(33, 29, 65)',

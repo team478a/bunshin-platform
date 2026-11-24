@@ -61,6 +61,7 @@ export default async function ServiceLegalConsentPage({
   );
   return (
     <FortuneAppearance
+      serviceSlug={serviceSlug}
       settings={appearance}
       brand={service.configuration.brand}
       showMastheadLogo={false}

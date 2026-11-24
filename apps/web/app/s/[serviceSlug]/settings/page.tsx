@@ -160,6 +160,7 @@ export default async function FortuneSettingsPage({
   );
   return (
     <FortuneAppearance
+      serviceSlug={serviceSlug}
       settings={resolveFortunePageAppearance(guidance.appearance)}
       brand={service.configuration.brand}
     >

@@ -275,6 +275,7 @@ export async function InvitationContent({
   });
   return (
     <FortuneAppearance
+      serviceSlug={serviceSlug}
       settings={resolveFortunePageAppearance(readFortuneAppearance(setting?.guidanceSettings))}
       brand={invitation.group.serviceConfiguration?.brand ?? undefined}
     >

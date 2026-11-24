@@ -105,9 +105,11 @@ describe('fortune member home', () => {
     });
     const oracle = await renderToday('watashi-fortune');
     expect(oracle).toContain('fortune-today--observatory');
+    expect(oracle).toContain('data-oracle-typography');
     expect(oracle).toContain('今日のテーマを選ぶ');
     expect(oracle).toContain('/fortune/observatory/compass.webp');
     expect(await renderToday()).not.toContain('fortune-today--observatory');
+    expect(await renderToday()).not.toContain('data-oracle-typography');
 
     state.today.mockResolvedValue({ participant: { id: 'participant' }, reading });
     expect(await renderToday('watashi-fortune')).not.toContain('fortune-today--observatory');

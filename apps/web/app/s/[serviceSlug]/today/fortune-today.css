@@ -139,7 +139,8 @@
 }
 
 .fortune-today--observatory :is(.fortune-observatory__title, .fortune-today__contents) {
-  font-family: 'Yu Mincho', 'Hiragino Mincho ProN', 'Noto Serif CJK JP', serif;
+  font-family: var(--fortune-heading-font, var(--fortune-serif-font));
+  font-weight: 700;
 }
 
 .fortune-observatory__title p,
@@ -237,6 +238,8 @@
 }
 
 .fortune-theme-list--illustrated strong {
+  font-family: var(--fortune-heading-font, var(--fortune-serif-font));
+  font-weight: 700;
   font-size: clamp(1.2rem, 5.25vw, 1.7rem);
   letter-spacing: 0.06em;
 }
