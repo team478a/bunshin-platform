@@ -22,7 +22,7 @@ const reportCooldown = 60 * 60 * 1000;
 const prefix = 'training-material';
 const identity = (id: string) => `${prefix}:${id}`;
 const jobPattern =
-  /^training-material:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?::([0-9a-f-]{36}))?$/i;
+  /^training-material:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?::([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}))?$/i;
 const denied = () => new ApplicationError('NOT_FOUND', 'training browser material unavailable');
 type MaterialKey = {
   workspaceId: string;

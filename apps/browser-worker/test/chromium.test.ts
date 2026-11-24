@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { discoverBrowserPlan, runBrowserPlan } from '../src/browser';
+import { discoverBrowserPlan, runBrowserPlan, verifyBrowserPlan } from '../src/browser';
 import { compactPreviewStep, fixture, fixturePlan } from '../src/fixture';
 import { modelPreviewSelector } from '../src/model-selector';
+import { materialSignature } from '../src/material-signature';
 
 describe.skipIf(process.env['BROWSER_WORKER_LIVE_TESTS'] !== '1')('local Chromium', () => {
   const limits = { timeoutMs: 30_000, maxSteps: 20 };
@@ -75,6 +76,40 @@ describe.skipIf(process.env['BROWSER_WORKER_LIVE_TESTS'] !== '1')('local Chromiu
       vi.unstubAllGlobals();
     }
   }, 70_000);
+
+  it('rechecks an unchanged fixture, substitutes an approved target, and rejects a missing action', async () => {
+    const plan = fixturePlan('mobile');
+    const fallback = { stepId: 'preview', target: compactPreviewStep.target };
+    const verify = (pages: ReadonlyMap<string, string>) =>
+      verifyBrowserPlan(plan, { ...fixture, pages }, limits, signal, fallback);
+    const original = await verify(fixture.pages);
+    const repeat = await verify(fixture.pages);
+    expect(materialSignature(repeat.plan, repeat.run)).toBe(
+      materialSignature(original.plan, original.run),
+    );
+    const changed = new Map(fixture.pages);
+    const editor = changed
+      .get('editor')!
+      .replace('disabled>プレビュー</button>', 'disabled>旧表示</button>');
+    changed.set('editor', editor);
+    const repaired = await verify(changed);
+    expect(repaired.plan.steps[2]).toMatchObject({
+      id: 'preview',
+      target: compactPreviewStep.target,
+    });
+    expect(repaired.run.steps[2]?.after.accessibility).toContain('プレビューを表示しました');
+    expect(materialSignature(repaired.plan, repaired.run)).not.toBe(
+      materialSignature(original.plan, original.run),
+    );
+    changed.set(
+      'editor',
+      editor.replace('disabled>簡易プレビュー</button>', 'disabled>旧簡易表示</button>'),
+    );
+    await expect(verify(changed)).rejects.toMatchObject({
+      category: 'STEP_FAILED',
+      stepId: 'preview',
+    });
+  }, 40_000);
 
   it('rejects a selection outside the observed candidates', async () => {
     const plan = fixturePlan('desktop');
