@@ -8,6 +8,7 @@ import {
 import { getServerEnvironment } from '@bunshin/config';
 import { ApplicationError } from '@bunshin/shared';
 import { currentUserProvider } from '../auth/current-user';
+import { resolveAuthenticatedMemberServicePage } from './member-service-page';
 import { resolvePersonalLearningRequestActor } from './personal-learning-request-access';
 
 export function browserLearningDevelopment() {
@@ -38,10 +39,18 @@ export async function browserLearningMaterialActor(
   slug: string,
   enrollment: string,
   topic?: string,
+  redirectToLogin = false,
 ) {
   if (!browserLearningDevelopment())
     throw new ApplicationError('NOT_FOUND', 'material unavailable');
-  const current = await (await currentUserProvider()).getCurrentUser();
+  const current = redirectToLogin
+    ? (
+        await resolveAuthenticatedMemberServicePage(
+          slug,
+          learningMaterialPath(slug, enrollment, topic),
+        )
+      ).actor
+    : await (await currentUserProvider()).getCurrentUser();
   if (!current) throw new ApplicationError('NOT_FOUND', 'material unavailable');
   return resolvePersonalLearningRequestActor(
     slug,

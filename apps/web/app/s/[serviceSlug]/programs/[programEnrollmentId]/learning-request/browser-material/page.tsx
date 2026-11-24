@@ -25,6 +25,7 @@ export default async function BrowserLearningMaterialPage({
       serviceSlug,
       programEnrollmentId,
       query.topicId,
+      true,
     );
     const db = await import('@bunshin/database');
     const materials = new db.PrismaBrowserLearningMaterials(db.prisma);
@@ -48,6 +49,7 @@ export default async function BrowserLearningMaterialPage({
         serviceSlug,
         programEnrollmentId,
         query.topicId,
+        true,
       );
       await enqueueBrowserLearningMaterial(current);
       redirect(learningMaterialPath(serviceSlug, programEnrollmentId, current.topicId));
