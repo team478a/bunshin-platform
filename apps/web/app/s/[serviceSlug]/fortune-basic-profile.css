@@ -113,7 +113,13 @@
 
 .fortune-basic-profile__welcome h2 {
   margin: 0;
-  font-family: 'Yu Mincho', 'Hiragino Mincho ProN', 'Noto Serif CJK JP', serif;
+  font-family: var(
+    --fortune-heading-font,
+    'Yu Mincho',
+    'Hiragino Mincho ProN',
+    'Noto Serif CJK JP',
+    serif
+  );
   font-size: clamp(1.33rem, 4.8vw, 1.95rem);
   line-height: 1.42;
   letter-spacing: 0.02em;

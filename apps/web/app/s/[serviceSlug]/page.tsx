@@ -265,7 +265,12 @@ export default async function ServiceEntryPage({
     </PublicShell>
   );
   return (
-    <FortuneAppearance settings={appearance} brand={configuration.brand} showMastheadLogo={false}>
+    <FortuneAppearance
+      serviceSlug={serviceSlug}
+      settings={appearance}
+      brand={configuration.brand}
+      showMastheadLogo={false}
+    >
       {content}
     </FortuneAppearance>
   );

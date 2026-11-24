@@ -5,6 +5,8 @@ import { notFound, redirect } from 'next/navigation';
 import { currentUserProvider } from '../../../../src/auth/current-user';
 import { isRouteNotFound } from '../../../../src/navigation/route-not-found';
 import { resolveMemberServiceContext } from '../../../../src/services/public-service';
+import { fortuneEntryAppearance } from '../../../../src/fortune/public-appearance';
+import { FortuneAppearance } from '../fortune-appearance';
 import { PublicShell } from '../../../ui/public-shell';
 import { ServiceLegalConsentForm } from './service-legal-consent-form';
 
@@ -31,9 +33,10 @@ export default async function ServiceLegalConsentPage({
     new db.PrismaServiceParticipationRepository(),
   ).findLegalConsentView({ slug: serviceSlug, actorUserId: actor.userId });
   const pending = view.legalDocuments.filter(({ id }) => !view.acceptedDocumentIds.includes(id));
-  return (
+  const appearance = await fortuneEntryAppearance(service.configuration);
+  const content = (
     <PublicShell showPlatformBrand={false}>
-      <main className="app-page">
+      <div className={appearance ? 'app-page fortune-page fortune-page--standalone' : 'app-page'}>
         <header className="app-page__heading">
           <p className="eyebrow">{service.configuration.displayName}</p>
           <h1>利用規約などの確認</h1>
@@ -53,7 +56,17 @@ export default async function ServiceLegalConsentPage({
           )}
         </section>
         <Link href={`/s/${service.configuration.slug}/home` as Route}>サービスのホームに戻る</Link>
-      </main>
+      </div>
     </PublicShell>
+  );
+  return (
+    <FortuneAppearance
+      serviceSlug={serviceSlug}
+      settings={appearance}
+      brand={service.configuration.brand}
+      showMastheadLogo={false}
+    >
+      {content}
+    </FortuneAppearance>
   );
 }

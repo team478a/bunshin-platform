@@ -29,6 +29,8 @@ import {
   readServiceOnboardingAnswers,
 } from '../../../../src/services/service-onboarding-response';
 import { PublicShell } from '../../../ui/public-shell';
+import { fortuneEntryAppearance } from '../../../../src/fortune/public-appearance';
+import { FortuneAppearance } from '../fortune-appearance';
 import { isFortuneServicePackage } from '../../../../src/services/service-creation-templates';
 import {
   BusinessRoadmapSummary,
@@ -204,32 +206,42 @@ export default async function ServiceMemberHome({
   ) {
     if (needsLegalConsent) redirect(`/s/${service.configuration.slug}/legal-consent`);
     if (fortune) redirect(`/s/${service.configuration.slug}/today`);
+    const appearance = await fortuneEntryAppearance(service.configuration);
     return (
-      <PublicShell narrow showPlatformBrand={false}>
-        <header className="service-entry__header">
-          {service.configuration.brand.logoUrl && (
-            <div
-              className="service-entry__logo"
-              role="img"
-              aria-label={`${service.configuration.displayName}のロゴ`}
-              style={{
-                backgroundImage: `url(${JSON.stringify(service.configuration.brand.logoUrl)})`,
-              }}
-            />
-          )}
-          <h1>{service.configuration.displayName}</h1>
-        </header>
-        <section className="service-entry__card" aria-labelledby="fortune-unavailable-title">
-          <h2 id="fortune-unavailable-title">占いは現在ご利用いただけません</h2>
-          <p>使い方は今すぐ確認できます。</p>
-          <Link
-            className="button button--primary button--full"
-            href={`/s/${service.configuration.slug}/manual`}
-          >
-            占いの使い方を見る
-          </Link>
-        </section>
-      </PublicShell>
+      <FortuneAppearance
+        serviceSlug={serviceSlug}
+        settings={appearance}
+        brand={service.configuration.brand}
+        showMastheadLogo={false}
+      >
+        <PublicShell narrow showPlatformBrand={false}>
+          <div className="service-entry">
+            <header className="service-entry__header">
+              {service.configuration.brand.logoUrl && (
+                <div
+                  className="service-entry__logo"
+                  role="img"
+                  aria-label={`${service.configuration.displayName}のロゴ`}
+                  style={{
+                    backgroundImage: `url(${JSON.stringify(service.configuration.brand.logoUrl)})`,
+                  }}
+                />
+              )}
+              <h1>{service.configuration.displayName}</h1>
+            </header>
+            <section className="service-entry__card" aria-labelledby="fortune-unavailable-title">
+              <h2 id="fortune-unavailable-title">占いは現在ご利用いただけません</h2>
+              <p>使い方は今すぐ確認できます。</p>
+              <Link
+                className="button button--primary button--full"
+                href={`/s/${service.configuration.slug}/manual`}
+              >
+                占いの使い方を見る
+              </Link>
+            </section>
+          </div>
+        </PublicShell>
+      </FortuneAppearance>
     );
   }
   const onboarding = readServiceOnboardingSettings(

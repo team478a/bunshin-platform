@@ -1,3 +1,4 @@
+import { resolveFortunePageAppearance } from '../../../../src/fortune/appearance';
 import type { Metadata } from 'next';
 import { FortuneAppearance } from '../fortune-appearance';
 import { PublicShell } from '../../../ui/public-shell';
@@ -43,12 +44,16 @@ export default async function FortuneHistoryPage({
             ))}
           </div>
         )}
-        <FortuneNav serviceSlug={serviceSlug} />
+        <FortuneNav serviceSlug={serviceSlug} current="history" />
       </main>
     </PublicShell>
   );
   return (
-    <FortuneAppearance settings={appearance} brand={service.configuration.brand}>
+    <FortuneAppearance
+      serviceSlug={serviceSlug}
+      settings={resolveFortunePageAppearance(appearance)}
+      brand={service.configuration.brand}
+    >
       {content}
     </FortuneAppearance>
   );

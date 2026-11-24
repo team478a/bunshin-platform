@@ -30,10 +30,16 @@ vi.mock('../src/fortune/personal-profile', () => ({
   fortuneBasicProfileRepository: () => ({ read: state.basicProfile }),
 }));
 
-const renderToday = async () =>
-  renderToStaticMarkup(
-    await FortuneTodayPage({ params: Promise.resolve({ serviceSlug: 'tarot' }) }),
-  );
+vi.mock('@bunshin/database', () => ({
+  prisma: { fortuneProductHypothesis: { findFirst: () => null } },
+}));
+vi.mock('../src/fortune/commerce', () => ({
+  hasAvailableFortunePurchase: () => false,
+  availableFortuneProduct: () => null,
+}));
+
+const renderToday = async (serviceSlug = 'tarot') =>
+  renderToStaticMarkup(await FortuneTodayPage({ params: Promise.resolve({ serviceSlug }) }));
 
 const setting = {
   minimumAge: 18,
@@ -90,6 +96,25 @@ describe('fortune member home', () => {
     state.history.mockResolvedValue([]);
   });
 
+  it('uses the observatory for Oracle participants before their draw', async () => {
+    state.today.mockResolvedValue({ participant: { id: 'participant' }, reading: null });
+    state.profile.mockResolvedValue({
+      enabled: true,
+      completed: true,
+      profile: emptyFortunePersonalProfile,
+    });
+    const oracle = await renderToday('watashi-fortune');
+    expect(oracle).toContain('fortune-today--observatory');
+    expect(oracle).toContain('data-oracle-typography');
+    expect(oracle).toContain('今日のテーマを選ぶ');
+    expect(oracle).toContain('/fortune/observatory/compass.webp');
+    expect(await renderToday()).not.toContain('fortune-today--observatory');
+    expect(await renderToday()).not.toContain('data-oracle-typography');
+
+    state.today.mockResolvedValue({ participant: { id: 'participant' }, reading });
+    expect(await renderToday('watashi-fortune')).not.toContain('fortune-today--observatory');
+  });
+
   it('shows a built-in card’s symbolism and theme prompt with an existing free reading', async () => {
     state.today.mockResolvedValue({
       participant: { id: 'participant' },
@@ -111,7 +136,8 @@ describe('fortune member home', () => {
   it('identifies the configurable AI guide and directs a first-time visitor to age confirmation', async () => {
     const markup = await renderToday();
     expect(markup).toContain('AI案内役');
-    expect(markup).not.toContain('class="fortune-appearance"');
+    expect(markup).toContain('class="fortune-appearance"');
+    expect(markup).toContain('--fortune-canvas:#f9f5ec');
     expect(markup).toContain('月の案内役');
     expect(markup).toContain('今日の気持ちを整理しましょう。');
     expect(markup).toContain('images.example/guide.webp');
@@ -180,6 +206,9 @@ describe('fortune member home', () => {
     state.basicProfile.mockResolvedValue({ completed: true, profile: null });
     const free = await renderToday();
     expect(free).toContain('何について占いますか？');
+    expect(free).toContain('fortune-appearance');
+    expect(free).not.toContain('href="#fortune-today-action"');
+    expect(free).toContain('aria-current="page"');
     expect(free).not.toContain('スキップして占う');
     expect(free).not.toContain('fortune-nav--in-flow');
     expect(free).not.toContain('name="question"');

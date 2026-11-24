@@ -83,3 +83,208 @@
     }
   }
 }
+
+.fortune-appearance:has(.fortune-today--observatory) > .public-shell {
+  padding-inline: 0;
+  padding-block-start: 0;
+  background-image: url('/fortune/observatory/paper.webp');
+}
+
+.fortune-appearance .fortune-page.fortune-today--observatory {
+  gap: 0.875rem;
+  padding-bottom: calc(6rem + env(safe-area-inset-bottom));
+}
+
+.fortune-today--observatory > :not(.fortune-observatory, .fortune-nav) {
+  margin-inline: clamp(1.125rem, 5.5vw, 2.75rem);
+}
+
+.fortune-observatory {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  min-height: clamp(15rem, 77vw, 25rem);
+  isolation: isolate;
+  color: #fff1db;
+  text-align: center;
+}
+
+.fortune-observatory::before,
+.fortune-observatory__art {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  mask-image: linear-gradient(#000 72%, transparent 100%);
+}
+
+.fortune-observatory::before {
+  content: '';
+  background: #17152e;
+}
+
+.fortune-observatory__art {
+  object-fit: cover;
+  object-position: center 47%;
+}
+
+.fortune-observatory__title {
+  display: grid;
+  justify-items: center;
+  align-content: start;
+  gap: 0.25rem;
+  padding: clamp(3.4rem, 15vw, 5rem) 1rem 1rem;
+  text-shadow: 0 2px 12px #17152e;
+}
+
+.fortune-today--observatory :is(.fortune-observatory__title, .fortune-today__contents) {
+  font-family: var(--fortune-heading-font, var(--fortune-serif-font));
+  font-weight: 700;
+}
+
+.fortune-observatory__title p,
+.fortune-observatory__title h1 {
+  margin: 0;
+  color: inherit;
+  letter-spacing: 0.08em;
+}
+
+.fortune-observatory__title p {
+  font-size: clamp(0.95rem, 4vw, 1.25rem);
+}
+
+.fortune-observatory__title h1 {
+  font-size: clamp(1.95rem, 9vw, 3.35rem);
+}
+
+.fortune-observatory__rule {
+  display: flex;
+  width: min(45%, 7.5rem);
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  color: #e2be83;
+}
+
+.fortune-observatory__rule::before,
+.fortune-observatory__rule::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: currentColor;
+}
+
+.fortune-today__contents {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.fortune-today__contents > h2 {
+  margin: 0;
+  padding: 0;
+  color: inherit;
+  font-size: clamp(1.3rem, 5vw, 1.8rem);
+  text-align: center;
+}
+
+.fortune-today__contents > h2::after {
+  content: '';
+  display: block;
+  width: 3rem;
+  height: 1px;
+  margin: 0.55rem auto 0;
+  background: var(--fortune-accent);
+}
+
+.fortune-theme-list--illustrated {
+  gap: 0;
+}
+
+.fortune-theme-list--illustrated > .form-field {
+  margin-block: 0.65rem;
+}
+
+.fortune-appearance .fortune-page .fortune-theme-list--illustrated .fortune-theme-button {
+  grid-template-columns: clamp(2.7rem, 15vw, 3.85rem) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: clamp(0.85rem, 5vw, 1.6rem);
+  min-height: 4.25rem;
+  padding: 0.45rem clamp(0.3rem, 2vw, 0.65rem);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--fortune-canvas-text);
+}
+
+.fortune-appearance
+  .fortune-page
+  .fortune-theme-list--illustrated
+  .fortune-theme-button
+  + .fortune-theme-button {
+  border-block-start: 1px solid color-mix(in srgb, var(--fortune-accent) 42%, transparent);
+}
+
+.fortune-appearance
+  .fortune-page
+  .fortune-theme-list--illustrated
+  .fortune-theme-button:not(:disabled):is(:hover, :focus-visible) {
+  background: color-mix(in srgb, var(--fortune-accent) 10%, transparent);
+}
+
+.fortune-theme-list--illustrated img {
+  width: 100%;
+  height: auto;
+}
+
+.fortune-theme-list--illustrated strong {
+  font-family: var(--fortune-heading-font, var(--fortune-serif-font));
+  font-weight: 700;
+  font-size: clamp(1.2rem, 5.25vw, 1.7rem);
+  letter-spacing: 0.06em;
+}
+
+.fortune-theme-list--illustrated .fortune-theme-button__arrow {
+  color: inherit;
+  font-family: sans-serif;
+  font-size: 1.65rem;
+}
+
+.fortune-today__share {
+  justify-self: center;
+  display: grid;
+  place-items: center;
+  min-height: 44px;
+  padding-inline: 0.6rem;
+  text-underline-offset: 0.25em;
+}
+
+.fortune-appearance .fortune-nav.fortune-nav--illustrated {
+  border-color: color-mix(in srgb, var(--fortune-accent) 48%, transparent);
+  background: var(--fortune-canvas) url('/fortune/observatory/paper.webp');
+}
+
+.fortune-appearance .fortune-nav.fortune-nav--illustrated a {
+  gap: 0.15rem;
+  min-height: 52px;
+  color: var(--fortune-canvas-text);
+}
+
+.fortune-nav--illustrated img {
+  width: 1.65rem;
+  height: 1.65rem;
+  object-fit: contain;
+}
+
+.fortune-appearance .fortune-nav.fortune-nav--illustrated a[aria-current='page'] {
+  background: transparent;
+  color: var(--fortune-canvas-text);
+}
+
+.fortune-nav--illustrated a[aria-current='page']::after {
+  content: '';
+  width: 0.28rem;
+  height: 0.28rem;
+  border-radius: 50%;
+  background: var(--fortune-accent);
+}

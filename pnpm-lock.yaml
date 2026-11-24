@@ -92,6 +92,9 @@ importers:
       '@fontsource-variable/noto-sans-jp':
         specifier: 5.3.1
         version: 5.3.1
+      '@fontsource/shippori-mincho':
+        specifier: 5.3.0
+        version: 5.3.0
       '@modelcontextprotocol/server':
         specifier: 2.3.0
         version: 2.3.0
@@ -360,6 +363,9 @@ packages:
 
   '@fontsource-variable/noto-sans-jp@5.3.1':
     resolution: {integrity: sha512-/anGvJFc5y36f8DJ+3TSh2+KAvaRLA9PaLUMvneeY5s4j8m+8X4F3lE/sjTuG9YI5BX4sykvCk4TuJMG7ecMRQ==}
+
+  '@fontsource/shippori-mincho@5.3.0':
+    resolution: {integrity: sha512-S41kRxQuubAaYss+LeXu0IOc02RQwsPaJbR1cWZx4VV15hXaYZViH3WAve9HpDVFqKYd/BVk86Bg7lp9ytV3KQ==}
 
   '@humanfs/core@0.19.2':
     resolution: {integrity: sha512-UhXNm+CFMWcbChXywFwkmhqjs3PRCmcSa/hfBgLIb7oQ5HNb1wS0icWsGtSAUNgefHeI+eBrA8I1fxmbHsGdvA==}
@@ -2323,6 +2329,8 @@ snapshots:
       levn: 0.4.1
 
   '@fontsource-variable/noto-sans-jp@5.3.1': {}
+
+  '@fontsource/shippori-mincho@5.3.0': {}
 
   '@humanfs/core@0.19.2':
     dependencies:
