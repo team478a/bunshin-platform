@@ -41,7 +41,7 @@ export async function enqueueFixture(
     correlationId: requestId,
     jobType: BROWSER_FIXTURE_JOB_TYPE,
     payloadReference,
-    idempotencyKey: `browser-fixture:${workspaceId}:${actorId}:${payloadReference}:${requestId}`,
+    idempotencyKey: `browser-fixture:${workspaceId.toLowerCase()}:${actorId.toLowerCase()}:${payloadReference}:${requestId.toLowerCase()}`,
     maxAttempts: 3,
   });
 }
@@ -76,12 +76,12 @@ export async function runQueue(input: {
   limits: { timeoutMs: number; maxSteps: number };
   signal: AbortSignal;
 }) {
-  const workerId = randomUUID();
   // Retain a lease beyond the browser budget for cleanup and local evidence writes.
   const claim = new ClaimJob(jobs, input.limits.timeoutMs + 30_000);
   const fail = new FailJob(jobs);
   const complete = new CompleteJob(jobs);
   const consume = async () => {
+    const workerId = randomUUID();
     while (!input.signal.aborted) {
       const job = await claim.execute(environment, workerId);
       if (!job) {
