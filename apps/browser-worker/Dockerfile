@@ -3,7 +3,10 @@ FROM mcr.microsoft.com/playwright:v1.65.1-noble
 
 COPY --from=node /usr/local/bin/node /usr/local/bin/node
 WORKDIR /workspace
-RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg && rm -rf /var/lib/apt/lists/*
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ffmpeg open-jtalk=1.11-5 \
+       open-jtalk-mecab-naist-jdic=1.11-5 hts-voice-nitech-jp-atr503-m001=1.05-8 \
+    && rm -rf /var/lib/apt/lists/*
 RUN npm install --global pnpm@10.10.0
 COPY . .
 RUN pnpm install --frozen-lockfile --filter @bunshin/browser-worker... \

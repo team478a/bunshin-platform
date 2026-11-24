@@ -131,10 +131,15 @@ export default async function BrowserLearningMaterialPage({
               state={video}
               requestVideo={requestVideo}
               reloadHref={path}
-              fileHref={(variant) =>
+              fileHref={(variant, version) =>
                 pathname +
                 '/video?' +
-                new URLSearchParams({ ...topic, material: material.id, variant }).toString()
+                new URLSearchParams({
+                  ...topic,
+                  material: material.id,
+                  variant,
+                  version: String(version),
+                }).toString()
               }
             />
             <section aria-label="画面の違い">

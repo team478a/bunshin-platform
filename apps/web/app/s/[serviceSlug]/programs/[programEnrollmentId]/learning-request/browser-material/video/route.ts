@@ -15,7 +15,7 @@ export async function GET(
   const query = videoFileQuery.safeParse(Object.fromEntries(new URL(request.url).searchParams));
   if (!query.success) return missingVideo();
   const { serviceSlug, programEnrollmentId } = await context.params;
-  const { topicId, material, variant } = query.data;
+  const { topicId, material, variant, version } = query.data;
   try {
     const learner = await browserLearningMaterialActor(serviceSlug, programEnrollmentId, topicId);
     const db = await import('@bunshin/database');
@@ -23,6 +23,7 @@ export async function GET(
       { kind: 'learner', learner },
       material,
       variant,
+      version,
     );
     return videoResponse(request, asset);
   } catch (error) {

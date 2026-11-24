@@ -1,6 +1,6 @@
 import { expect, it, vi } from 'vitest';
 vi.mock('server-only', () => ({}));
-import { videoResponse } from '../src/services/browser-material-video';
+import { videoFileQuery, videoResponse } from '../src/services/browser-material-video';
 
 it('returns private byte ranges for in-browser MP4 playback', async () => {
   const data = new Uint8Array([11, 12, 13, 14]);
@@ -16,5 +16,14 @@ it('returns private byte ranges for in-browser MP4 playback', async () => {
   expect(videoResponse(request('bytes=1-2'), null).status).toBe(404);
   expect(videoResponse(request(''), 'WEBVTT').headers.get('content-type')).toBe(
     'text/vtt; charset=utf-8',
+  );
+});
+
+it('keeps old file URLs on version 1 and accepts explicit version 2', () => {
+  const material = '50000000-1111-4111-8111-111111111111';
+  expect(videoFileQuery.parse({ material, variant: 'mp4' }).version).toBe(1);
+  expect(videoFileQuery.parse({ material, variant: 'captions', version: '2' }).version).toBe(2);
+  expect(videoFileQuery.safeParse({ material, variant: 'chapters', version: '3' }).success).toBe(
+    false,
   );
 });
