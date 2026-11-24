@@ -106,7 +106,7 @@ export function FortuneAppearanceEditor({
               checked={value.enabled}
               onChange={(event) => change('enabled', event.target.checked)}
             />
-            <span>保存後に占い画面へ適用する</span>
+            <span>カスタムデザインを使う（オフの場合は占いの標準デザイン）</span>
           </label>
           <label className="form-field">
             <span>占いの演出</span>
@@ -211,7 +211,11 @@ export function FortuneAppearanceEditor({
             </select>
           </label>
           <div className="fortune-appearance-preview" aria-label="スマートフォンプレビュー">
-            <FortuneAppearance settings={{ ...value, enabled: true }} brand={brand}>
+            <FortuneAppearance
+              serviceSlug={serviceSlug}
+              settings={{ ...value, enabled: true }}
+              brand={brand}
+            >
               <div className="app-page fortune-page">
                 <header className="app-page__heading">
                   <h3>{selected.heading}</h3>

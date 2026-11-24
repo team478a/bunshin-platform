@@ -5,6 +5,7 @@ import { defineConfig } from 'vite';
 const root = path.dirname(fileURLToPath(import.meta.url));
 export default defineConfig({
   root,
+  publicDir: path.resolve(root, '../../../apps/web/public'),
   oxc: { jsx: { runtime: 'automatic' } },
   resolve: {
     alias: {

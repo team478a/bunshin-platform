@@ -1,3 +1,4 @@
+import { resolveFortunePageAppearance } from '../../src/fortune/appearance';
 import { publicFortuneAppearance } from '../../src/fortune/public-appearance';
 import { FortuneAppearance } from '../s/[serviceSlug]/fortune-appearance';
 import { PublicShell } from '../ui/public-shell';
@@ -6,7 +7,10 @@ import { PendingSubmitButton } from '../ui/pending-submit-button';
 import { ServiceAuthBranding } from '../ui/service-auth-branding';
 import { serviceAuthReturnSlug } from '../../src/auth/line-return';
 import { resolvePublicServiceContext } from '../../src/services/public-service';
-import { serviceAuthBrandForSlug } from '../../src/services/service-auth-brand';
+import {
+  ORACLE_SERVICE_SLUG,
+  serviceAuthBrandForSlug,
+} from '../../src/services/service-auth-brand';
 import { isRouteNotFound } from '../../src/navigation/route-not-found';
 import { serviceAuthMetadata } from '../../src/services/service-auth-metadata';
 
@@ -42,7 +46,9 @@ export default async function LoginPage({
   const serviceName = serviceBrand?.serviceName;
   const appearance = serviceConfiguration
     ? await publicFortuneAppearance(serviceConfiguration)
-    : undefined;
+    : serviceSlug === ORACLE_SERVICE_SLUG
+      ? resolveFortunePageAppearance(undefined, true)
+      : undefined;
   const content = (
     <PublicShell narrow showPlatformBrand={!serviceBrand}>
       {serviceBrand && (
@@ -174,6 +180,7 @@ export default async function LoginPage({
   );
   return (
     <FortuneAppearance
+      serviceSlug={serviceSlug ?? undefined}
       settings={appearance}
       brand={serviceConfiguration?.brand}
       showMastheadLogo={false}

@@ -14,6 +14,7 @@ import {
   saveVerifiedStripeFee,
 } from '../../../../../../src/fortune/revenue';
 import { PublicShell } from '../../../../../ui/public-shell';
+import '../fortune-admin.css';
 
 export const dynamic = 'force-dynamic';
 const yen = (amount: number | null) =>
@@ -92,8 +93,8 @@ export default async function FortuneRevenuePage({
 
   return (
     <PublicShell showPlatformBrand={false}>
-      <main className="app-page">
-        <header className="app-page__heading">
+      <div className="app-page fortune-admin fortune-admin--report">
+        <header className="fortune-admin__header">
           <h1>占い収益分析</h1>
           <Link href={`/s/${serviceSlug}/manage/fortune` as Route}>占い管理へ戻る</Link>
         </header>
@@ -284,7 +285,7 @@ export default async function FortuneRevenuePage({
             </button>
           </form>
         </section>
-      </main>
+      </div>
     </PublicShell>
   );
 }

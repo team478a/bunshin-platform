@@ -54,6 +54,15 @@ export const defaultFortuneAppearance: FortuneAppearanceSettings = {
   showLogo: true,
 };
 
+export function resolveFortunePageAppearance(
+  settings: FortuneAppearanceSettings | undefined,
+  showDefaultLogo = false,
+) {
+  return settings?.enabled
+    ? settings
+    : { ...defaultFortuneAppearance, enabled: true, showLogo: showDefaultLogo };
+}
+
 const palettes = {
   light: {
     background: '#f9f5ec',

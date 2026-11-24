@@ -54,7 +54,7 @@
 
 .fortune-oracle-book__title h2 {
   margin-block: 0.3rem;
-  font-family: 'Yu Mincho', 'Hiragino Mincho ProN', serif;
+  font-family: var(--fortune-heading-font, 'Yu Mincho', 'Hiragino Mincho ProN', serif);
   font-size: clamp(1.18rem, 5vw, 1.7rem);
   line-height: 1.45;
 }

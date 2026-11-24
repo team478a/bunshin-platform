@@ -163,7 +163,7 @@ test(
       await expect(
         browser.locator('.fortune-appearance-preview [data-corners="square"]'),
       ).toBeVisible();
-      await screen.getByLabel('保存後に占い画面へ適用する').tap();
+      await screen.getByLabel(/カスタムデザインを使う/).tap();
       const saved = browser.waitForResponse(`**/api/services/${slug}/fortune-operations`);
       await screen.getByRole('button', 'デザインを保存').tap();
       expect((await saved).status).toBe(200);
@@ -245,10 +245,35 @@ test(
       expect(layout.content).toBeLessThanOrEqual(layout.viewport);
       expect(layout.background).toBe('rgb(23, 22, 43)');
       await app.screenshot('fortune-night-390px');
+      for (const path of [
+        'history',
+        'settings',
+        'credits',
+        'activity',
+        'manual',
+        'fortune-purchase',
+        'fortune-opportunities',
+        'terms',
+        'privacy',
+        'commerce',
+        'legal-consent',
+      ]) {
+        await app.open(`/s/${slug}/${path}`);
+        await expect(appearance).toBeVisible();
+        expect(
+          await browser.evaluate(() => document.documentElement.scrollWidth),
+        ).toBeLessThanOrEqual(390);
+        if (['history', 'settings', 'credits', 'activity', 'manual'].includes(path)) {
+          const nav = screen.getByRole('navigation', '占いメニュー');
+          await expect(nav.getByRole('link')).toHaveCount(5);
+          await app.screenshot(`fortune-${path}-390px`);
+        }
+      }
       await app.open(`/s/${slug}/history`);
+      const readingLink = browser.locator('.fortune-reading-link').first();
+      await readingLink.tap();
       await expect(appearance).toBeVisible();
-      await app.open(`/s/${slug}/settings`);
-      await expect(appearance).toBeVisible();
+      await app.screenshot('fortune-reading-390px');
       return;
     }
     if (invitationPath) {

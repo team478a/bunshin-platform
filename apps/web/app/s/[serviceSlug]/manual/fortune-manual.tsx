@@ -1,10 +1,10 @@
-import type { CSSProperties } from 'react';
 import type { Route } from 'next';
 import Link from 'next/link';
 import { PublicShell } from '../../../ui/public-shell';
 
 import type { FortuneCharacter } from '../../../../src/fortune/guidance-settings';
 import { FortuneCharacterBadge } from '../fortune-character';
+import { FortuneNav } from '../fortune-ui';
 
 function ActionLabel({ children }: { children: React.ReactNode }) {
   return <strong className="easy-manual__action">{children}</strong>;
@@ -31,15 +31,10 @@ export function FortuneManual({
   character?: FortuneCharacter;
 }) {
   const serviceBase = `/s/${serviceSlug}`;
-  const style = {
-    '--service-primary': '#5d50e6',
-    '--service-secondary': '#ef5b55',
-    '--service-font': "'Noto Sans JP'",
-  } as CSSProperties;
 
   return (
     <PublicShell showPlatformBrand={false}>
-      <article className="easy-manual" style={style}>
+      <article className="easy-manual">
         <header className="easy-manual__hero">
           <p className="eyebrow">はじめての方へ</p>
           <h1>
@@ -230,6 +225,7 @@ export function FortuneManual({
           <Link href={`/s/${serviceSlug}` as Route}>{serviceName}へ戻る</Link>
           <small>2026年9月版</small>
         </footer>
+        <FortuneNav serviceSlug={serviceSlug} current="manual" inFlow />
       </article>
     </PublicShell>
   );

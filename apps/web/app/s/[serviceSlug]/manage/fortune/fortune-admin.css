@@ -13,6 +13,21 @@
   color: var(--admin-ink);
 }
 
+.fortune-admin--report {
+  padding: 0;
+}
+
+.fortune-admin--report > .settings-card {
+  min-width: 0;
+  margin: 0;
+  border-color: var(--admin-line);
+}
+
+.fortune-admin--report .table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
 .fortune-admin__header {
   display: flex;
   flex-wrap: wrap;

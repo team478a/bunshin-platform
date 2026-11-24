@@ -6,10 +6,38 @@
   --color-surface: var(--fortune-surface);
   --color-border: color-mix(in srgb, var(--fortune-surface-text) 25%, var(--fortune-surface));
   --fortune-radius: 1.25rem;
+  --service-primary: var(--fortune-action);
+  --service-secondary: var(--fortune-accent);
+  --fortune-body-font: 'Noto Sans JP Variable', 'Noto Sans JP', sans-serif;
+  --fortune-serif-fallback: 'Yu Mincho', 'Hiragino Mincho ProN', 'Noto Serif CJK JP', serif;
+  --fortune-serif-font: var(--fortune-serif-fallback);
+  --service-font: var(--fortune-body-font);
+  --fortune-tint: color-mix(in srgb, var(--fortune-accent) 10%, var(--fortune-surface));
+  min-height: 100svh;
   min-width: 0;
   background: var(--fortune-canvas);
   color: var(--fortune-canvas-text);
-  font-family: 'Noto Sans JP Variable', 'Noto Sans JP', sans-serif;
+  font-family: var(--fortune-body-font);
+}
+
+.fortune-appearance[data-oracle-typography] {
+  --fortune-serif-font: 'Shippori Mincho', var(--fortune-serif-fallback);
+  --fortune-heading-font: var(--fortune-serif-font);
+}
+
+.fortune-appearance[data-oracle-typography][data-heading='sans'] {
+  --fortune-heading-font: var(--fortune-body-font);
+}
+
+.fortune-appearance[data-oracle-typography]
+  :is(.fortune-reading-body, .fortune-nav, button, input, select, textarea) {
+  font-family: var(--fortune-body-font);
+}
+
+.fortune-appearance[data-oracle-typography][data-heading='serif']
+  :is(.fortune-page, .service-entry, .auth-panel, .easy-manual)
+  :is(h1, h2, h3) {
+  font-weight: 700;
 }
 
 .fortune-appearance[data-corners='square'] {
@@ -21,7 +49,59 @@
 }
 
 .fortune-appearance > .public-shell {
+  padding-inline: clamp(0.875rem, 4vw, 2rem);
+  padding-block-start: clamp(0.75rem, 3vw, 1.75rem);
   background: transparent;
+}
+
+.fortune-appearance .fortune-page {
+  display: grid;
+  gap: clamp(0.875rem, 3vw, 1.5rem);
+  padding: 0 0 calc(5rem + env(safe-area-inset-bottom));
+  overflow-wrap: anywhere;
+}
+
+.fortune-appearance .fortune-page--standalone {
+  padding-bottom: 0;
+}
+
+.fortune-appearance .fortune-page .settings-card,
+.fortune-appearance .fortune-page .app-page__heading {
+  margin: 0;
+}
+
+.fortune-appearance .fortune-page .settings-card {
+  min-width: 0;
+  padding: clamp(1rem, 4.2vw, 1.75rem);
+}
+
+.fortune-appearance .fortune-page .app-page__heading h1 {
+  margin: 0;
+  color: inherit;
+}
+
+.fortune-appearance .fortune-page .app-page__heading > :not(h1) {
+  margin-block-start: 0.55rem;
+}
+
+.fortune-appearance .fortune-page .app-page__heading::after {
+  content: '';
+  display: block;
+  width: 2rem;
+  height: 1px;
+  margin: 0.7rem auto 0;
+  background: var(--fortune-accent);
+}
+
+.fortune-appearance .fortune-page .settings-card > h2 {
+  padding-block-end: 0;
+}
+
+.fortune-appearance .fortune-page .fortune-balance {
+  margin-block: 0.1rem 0.75rem;
+  font-size: clamp(2rem, 10vw, 3rem);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 
 .fortune-appearance__masthead {
@@ -54,19 +134,17 @@
   line-height: 1.2;
 }
 
-.fortune-appearance .fortune-today__guide {
-  margin-bottom: 1rem;
-}
 .fortune-appearance .fortune-page .app-page__heading {
   text-align: center;
 }
 
 .fortune-appearance[data-heading='serif'] .fortune-page :is(h1, h2, h3) {
-  font-family: 'Yu Mincho', 'Hiragino Mincho ProN', 'Noto Serif CJK JP', serif;
+  font-family: var(--fortune-serif-font);
 }
 
-.fortune-appearance .fortune-page :is(.settings-card, .fortune-today__guide, .fortune-theme-button),
-.fortune-appearance .fortune-page .fortune-nav {
+.fortune-appearance
+  .fortune-page
+  :is(.settings-card, .fortune-today__guide, .fortune-theme-button) {
   --color-text: var(--fortune-surface-text);
   --color-text-muted: var(--fortune-surface-text);
   background: var(--fortune-surface);
@@ -103,7 +181,6 @@
     .fortune-note,
     .fortune-theme-button span,
     .fortune-reading-card h2 small,
-    .fortune-nav a,
     .fortune-notification-setting p:not([class])
   ) {
   color: var(--color-text-muted);
@@ -139,8 +216,113 @@
   outline-offset: 3px;
 }
 
-.fortune-appearance .fortune-page .fortune-nav {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+.fortune-appearance .fortune-page .fortune-today__guide {
+  --color-text: var(--fortune-guide-text);
+  --color-text-muted: var(--fortune-guide-text);
+  color: var(--fortune-guide-text);
+  border: 1px solid var(--fortune-accent);
+  background:
+    radial-gradient(
+      ellipse at 100% 0%,
+      color-mix(in srgb, var(--fortune-accent) 14%, transparent),
+      transparent 60%
+    ),
+    var(--fortune-guide);
+}
+
+.fortune-appearance .fortune-today__guide .button--primary:not(:disabled) {
+  color: var(--fortune-surface-text);
+  border-color: var(--fortune-surface);
+  background: var(--fortune-surface);
+}
+
+.fortune-appearance .fortune-page .fortune-theme-button {
+  border-inline-start: 3px solid var(--fortune-accent);
+  background: var(--fortune-tint);
+}
+
+.fortune-appearance .fortune-page .fortune-theme-button:not(:disabled):is(:hover, :focus-visible) {
+  background: color-mix(in srgb, var(--fortune-accent) 18%, var(--fortune-surface));
+}
+
+.fortune-appearance .fortune-referral-link {
+  min-height: 44px;
+  padding: 0.4rem 0.9rem;
+  font-size: 0.85rem;
+}
+
+.fortune-appearance .fortune-nav {
+  --color-text: var(--fortune-surface-text);
+  --color-text-muted: var(--fortune-surface-text);
+  background: var(--fortune-surface);
+  border-color: var(--color-border);
+}
+
+.fortune-appearance .fortune-nav a {
+  color: var(--fortune-surface-text);
+}
+
+.fortune-appearance .fortune-nav a[aria-current='page'] {
+  color: var(--fortune-action-text);
+  background: var(--fortune-action);
+}
+
+.fortune-appearance .fortune-nav--in-flow {
+  border: 1px solid var(--color-border);
+  border-radius: var(--fortune-radius);
+}
+
+.fortune-appearance .fortune-page:has(.fortune-nav--in-flow) {
+  padding-bottom: 0;
+}
+
+.fortune-appearance
+  :is(
+    .activity-progress,
+    .service-referral-share input,
+    .service-referral-share details,
+    .service-activity-dashboard__stats > div,
+    .easy-manual__tip,
+    .easy-manual__trouble,
+    .easy-manual__contact
+  ) {
+  border-color: var(--color-border);
+  background: var(--fortune-tint);
+  color: var(--fortune-surface-text);
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+.fortune-appearance
+  :is(
+    .activity-progress__summary > strong,
+    .service-activity-dashboard__stats strong,
+    .service-activity-dashboard__stats small,
+    .service-referral-share summary,
+    .service-activity-dashboard__history time,
+    .easy-manual__nav a,
+    .easy-manual__next,
+    .easy-manual__contact a,
+    .easy-manual__contact small,
+    .easy-manual__trouble summary,
+    .easy-manual__footer > a:not(.button)
+  ) {
+  color: inherit;
+}
+
+.fortune-appearance :is(.service-referral-share__qr img, .service-referral-share__qr canvas) {
+  max-width: 100%;
+  height: auto;
+}
+
+.fortune-appearance
+  :is(.easy-manual__step-header > span, .easy-manual__before li span, .easy-manual__action) {
+  color: var(--fortune-action-text);
+  background: var(--fortune-action);
+}
+
+.fortune-appearance :is(.easy-manual__before > p, .easy-manual__nav a) {
+  background: var(--fortune-tint);
 }
 
 .fortune-appearance-preview {
@@ -149,6 +331,10 @@
   overflow: hidden;
   border: 1px solid var(--color-border);
   border-radius: 1rem;
+}
+
+.fortune-appearance-preview .fortune-appearance {
+  min-height: 0;
 }
 
 .fortune-appearance-preview .fortune-page {
@@ -199,14 +385,14 @@
 
 .fortune-appearance
   :is(.service-entry__card, .auth-panel, .easy-manual)
-  :is(h2, .field__label, a:not(.button), .auth-panel__help, .easy-manual__action) {
+  :is(h2, .field__label, a:not(.button), .auth-panel__help) {
   color: inherit;
 }
 
 .fortune-appearance[data-heading='serif']
   :is(.service-entry, .auth-panel, .easy-manual)
   :is(h1, h2, h3) {
-  font-family: 'Yu Mincho', 'Hiragino Mincho ProN', 'Noto Serif CJK JP', serif;
+  font-family: var(--fortune-serif-font);
 }
 
 .fortune-appearance .auth-panel .echo-motif {
@@ -219,7 +405,7 @@
   border-color: var(--color-border);
 }
 
-.fortune-appearance :is(.service-entry, .easy-manual) .button--primary:not(:disabled) {
+.fortune-appearance :is(.service-entry, .easy-manual, .auth-panel) .button--primary:not(:disabled) {
   background: var(--fortune-action);
   color: var(--fortune-action-text);
   border-color: var(--fortune-action);
