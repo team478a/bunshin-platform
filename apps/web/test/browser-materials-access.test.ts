@@ -109,7 +109,7 @@ describe('browser material access', () => {
   });
 
   it('labels an imported recording and displays a single captured screenshot', async () => {
-    mocks.video.mockResolvedValue({ ready: true, status: null });
+    mocks.video.mockResolvedValue({ version: 2, status: null });
     mocks.material.mockResolvedValue({
       id: materialId,
       title: '操作記録',

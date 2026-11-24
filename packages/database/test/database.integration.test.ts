@@ -337,9 +337,21 @@ describe('database ownership boundaries', () => {
       const owner = { kind: 'owner' as const, owner: actor };
       const stranger = { kind: 'owner' as const, owner: { ...actor, actorId: other.id } };
       expect(await videos.enqueueVideo(stranger, saved.id)).toBeNull();
+      const legacyMp4 = new Uint8Array([4, 5]);
+      await client.browserFixtureMaterialVideo.create({
+        data: {
+          materialId: saved.id,
+          version: 1,
+          mp4: legacyMp4,
+          captions: 'WEBVTT',
+          chapters: 'WEBVTT',
+          durationMs: 8000,
+        },
+      });
+      expect(await videos.state(owner, saved.id)).toEqual({ version: 1, status: null });
       await videos.enqueueVideo(owner, saved.id);
       await videos.enqueueVideo(owner, saved.id);
-      expect(await videos.state(owner, saved.id)).toEqual({ ready: false, status: 'PENDING' });
+      expect(await videos.state(owner, saved.id)).toEqual({ version: 1, status: 'PENDING' });
       const worker = randomUUID();
       const job = await new ClaimJob(new PrismaJobRepository(client, 'browser-fixture')).execute(
         'DEVELOPMENT',
@@ -355,8 +367,9 @@ describe('database ownership boundaries', () => {
         chapters: 'WEBVTT',
         durationMs: 8000,
       });
-      expect(await videos.state(owner, saved.id)).toEqual({ ready: true, status: null });
+      expect(await videos.state(owner, saved.id)).toEqual({ version: 2, status: null });
       expect(await videos.readFile(owner, saved.id, 'mp4')).toEqual(mp4);
+      expect(await videos.readFile(owner, saved.id, 'mp4', 1)).toEqual(legacyMp4);
       expect(await videos.readFile(stranger, saved.id, 'mp4')).toBeNull();
       await videos.enqueueVideo(owner, saved.id);
       expect(await client.job.count({ where: { workspaceId: workspace.id } })).toBe(1);
