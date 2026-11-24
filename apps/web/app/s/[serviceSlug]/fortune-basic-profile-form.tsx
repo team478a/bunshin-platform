@@ -16,6 +16,97 @@ const sexLabels: Record<FortuneBasicProfileSex, string> = {
   OTHER: 'その他',
 };
 
+function daysInBirthMonth(year: string, month: string) {
+  if (!month) return 31;
+  const endOfMonth = new Date(0);
+  endOfMonth.setUTCFullYear(Number(year) || 2000, Number(month), 0);
+  return endOfMonth.getUTCDate();
+}
+
+function BirthDateFields({ birthDate }: { birthDate: string | null }) {
+  const [savedYear = '', savedMonth = '', savedDay = ''] = birthDate?.split('-') ?? [];
+  const [year, setYear] = useState(savedYear);
+  const [month, setMonth] = useState(savedMonth);
+  const [day, setDay] = useState(savedDay);
+  const currentYear = new Date().getUTCFullYear();
+  const oldestYear = Math.min(1900, Number(savedYear) || 1900);
+  const years = Array.from({ length: currentYear - oldestYear + 1 }, (_, index) =>
+    String(currentYear - index).padStart(4, '0'),
+  );
+  const numberOptions = (count: number) =>
+    Array.from({ length: count }, (_, index) => {
+      const number = index + 1;
+      const value = String(number).padStart(2, '0');
+      return (
+        <option key={value} value={value}>
+          {number}
+        </option>
+      );
+    });
+
+  return (
+    <fieldset className="fortune-basic-profile__birth-date fortune-basic-profile__wide">
+      <legend>生年月日（任意）</legend>
+      <div className="fortune-basic-profile__date-parts">
+        <label className="form-field">
+          <span>年</span>
+          <select
+            name="birthYear"
+            value={year}
+            onChange={(event) => {
+              const next = event.target.value;
+              setYear(next);
+              if (Number(day) > daysInBirthMonth(next, month)) setDay('');
+            }}
+          >
+            <option value="">選択</option>
+            {years.map((value) => (
+              <option key={value} value={value}>
+                {Number(value)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="form-field">
+          <span>月</span>
+          <select
+            name="birthMonth"
+            value={month}
+            onChange={(event) => {
+              const next = event.target.value;
+              setMonth(next);
+              if (Number(day) > daysInBirthMonth(year, next)) setDay('');
+            }}
+          >
+            <option value="">選択</option>
+            {numberOptions(12)}
+          </select>
+        </label>
+        <label className="form-field">
+          <span>日</span>
+          <select name="birthDay" value={day} onChange={(event) => setDay(event.target.value)}>
+            <option value="">選択</option>
+            {numberOptions(daysInBirthMonth(year, month))}
+          </select>
+        </label>
+      </div>
+      {(year || month || day) && (
+        <button
+          type="button"
+          className="fortune-basic-profile__clear-date"
+          onClick={() => {
+            setYear('');
+            setMonth('');
+            setDay('');
+          }}
+        >
+          生年月日をクリア
+        </button>
+      )}
+    </fieldset>
+  );
+}
+
 export function FortuneBasicProfileForm({
   serviceSlug,
   settings,
@@ -89,11 +180,22 @@ export function FortuneBasicProfileForm({
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const fields = new FormData(event.currentTarget);
+    const birthParts = ['birthYear', 'birthMonth', 'birthDay'].map((name) => {
+      const value = fields.get(name);
+      return typeof value === 'string' ? value : '';
+    });
+    if (showBirthDate && birthParts.some(Boolean) && !birthParts.every(Boolean)) {
+      setError('生年月日は年・月・日をすべて選ぶか、空欄にしてください。');
+      setMessage('');
+      return;
+    }
     void send({
       action: 'save',
       consented: fields.get('consent') === 'on',
       ...(showNickname ? { nickname: fields.get('nickname') || null } : {}),
-      ...(showBirthDate ? { birthDate: fields.get('birthDate') || null } : {}),
+      ...(showBirthDate
+        ? { birthDate: birthParts.every(Boolean) ? birthParts.join('-') : null }
+        : {}),
       ...(showSex
         ? { sex: sex || null, sexDescription: fields.get('sexDescription') || null }
         : {}),
@@ -145,17 +247,7 @@ export function FortuneBasicProfileForm({
                   />
                 </label>
               )}
-              {showBirthDate && (
-                <label className="form-field">
-                  <span>生年月日（任意）</span>
-                  <input
-                    name="birthDate"
-                    type="date"
-                    min="0001-01-01"
-                    defaultValue={profile?.birthDate ?? ''}
-                  />
-                </label>
-              )}
+              {showBirthDate && <BirthDateFields birthDate={profile?.birthDate ?? null} />}
               {showSex && (
                 <label className="form-field">
                   <span>性別（任意）</span>
