@@ -9,7 +9,7 @@ import type {
 } from '@bunshin/application';
 import { ApplicationError } from '@bunshin/shared';
 import { type Prisma, type PrismaClient, prisma } from './client';
-import { FEEDBACK_PURGE_JOB_TYPE } from '@bunshin/application';
+import { BROWSER_FIXTURE_JOB_TYPE, FEEDBACK_PURGE_JOB_TYPE } from '@bunshin/application';
 import { platformJob } from './job-mapping';
 
 function lineNotificationPreference(
@@ -18,11 +18,16 @@ function lineNotificationPreference(
   return row;
 }
 export class PrismaJobRepository implements JobRepository {
-  constructor(private readonly client: PrismaClient | Prisma.TransactionClient = prisma) {}
+  constructor(
+    private readonly client: PrismaClient | Prisma.TransactionClient = prisma,
+    private readonly claimQueue: 'platform' | 'browser-fixture' = 'platform',
+  ) {}
 
   async enqueue(input: EnqueueJobInput): Promise<Job> {
     if (input.jobType === FEEDBACK_PURGE_JOB_TYPE || !input.requestedBy?.trim())
       throw new ApplicationError('FORBIDDEN', 'maintenance job cannot use user enqueue');
+    if (input.jobType === BROWSER_FIXTURE_JOB_TYPE && input.environment !== 'DEVELOPMENT')
+      throw new ApplicationError('FORBIDDEN', 'browser fixtures are limited to development jobs');
     const scope = await this.client.workspace.findFirst({
       where: {
         id: input.workspaceId,
@@ -69,11 +74,14 @@ export class PrismaJobRepository implements JobRepository {
   }
 
   async claim(input: Parameters<JobRepository['claim']>[0]): Promise<Job | null> {
+    if (this.claimQueue === 'browser-fixture' && input.environment !== 'DEVELOPMENT') return null;
+    const browserQueue = this.claimQueue === 'browser-fixture';
     const rows = await this.client.$queryRaw<Array<{ id: string }>>`
       WITH candidate AS (
         SELECT "id"
         FROM "jobs"
         WHERE "environment" = ${input.environment}::"LineConfigurationEnvironment"
+          AND ("job_type" = ${BROWSER_FIXTURE_JOB_TYPE}) = ${browserQueue}
           AND (
             ("status" = 'PENDING' AND "scheduled_at" <= ${input.now})
             OR ("status" = 'RETRY_SCHEDULED' AND "next_retry_at" <= ${input.now})
