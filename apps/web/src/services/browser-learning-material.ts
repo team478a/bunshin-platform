@@ -1,5 +1,4 @@
 import 'server-only';
-import type { Route } from 'next';
 import type { PersonalLearningActor } from '@bunshin/application';
 import {
   personalLearningDynamicProgramAllows,
@@ -25,13 +24,9 @@ export function browserLearningProgram(settings: unknown, enrollmentId: string) 
   );
 }
 
-export function learningMaterialPath(slug: string, enrollment: string, topic?: string): Route {
-  return ('/s/' +
-    encodeURIComponent(slug) +
-    '/programs/' +
-    encodeURIComponent(enrollment) +
-    '/learning-request/browser-material' +
-    (topic ? '?topicId=' + encodeURIComponent(topic) : '')) as Route;
+export function learningMaterialPath(slug: string, enrollment: string, topic?: string) {
+  const query = topic ? `?topicId=${encodeURIComponent(topic)}` : '';
+  return `/s/${encodeURIComponent(slug)}/programs/${encodeURIComponent(enrollment)}/learning-request/browser-material${query}` as const;
 }
 
 export async function browserLearningMaterialActor(
