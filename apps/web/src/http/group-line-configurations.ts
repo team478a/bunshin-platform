@@ -317,7 +317,7 @@ export function publishDefaultGroupRichMenuResponse(request: Request, groupIdVal
       appUrl: getServerEnvironment().APP_URL,
       serviceSlug,
       image,
-      layout,
+      layout: oracle ? 'ORACLE' : layout,
     });
     await db.prisma.groupLineConfigurationAudit.create({
       data: {
@@ -330,7 +330,7 @@ export function publishDefaultGroupRichMenuResponse(request: Request, groupIdVal
         reason,
         afterData: {
           lineRichMenuId: published.lineRichMenuId,
-          template: oracle ? 'ORACLE_V1' : `${layout}_V1`,
+          template: oracle ? 'ORACLE_V2' : `${layout}_V1`,
           cleanupFailedIds: published.cleanupFailedIds,
         },
       },

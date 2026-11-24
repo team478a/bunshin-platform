@@ -2,7 +2,11 @@ import 'server-only';
 import { join } from 'node:path';
 import { Resvg } from '@resvg/resvg-js';
 import sharp from 'sharp';
-import { FORTUNE_LINE_MENU_ITEMS } from './fortune-rich-menu-content';
+import {
+  FORTUNE_LINE_MENU_ITEMS,
+  ORACLE_LINE_MENU_ITEMS,
+  ORACLE_LINE_MENU_SIZE,
+} from './fortune-rich-menu-content';
 
 const icons = [
   '<path d="M124 18a67 67 0 1 0 61 102A64 64 0 0 1 124 18Z"/><path d="M154 25v35m-17-17h35"/>',
@@ -26,7 +30,6 @@ const star = (x: number, y: number, scale: number) =>
   `<path transform="translate(${x} ${y}) scale(${scale})" d="M0-33C4-11 11-4 33 0 11 4 4 11 0 33-4 11-11 4-33 0-11-4-4-11 0-33Z" fill="none" stroke="currentColor" stroke-width="3"/>`;
 
 export async function renderFortuneLineRichMenu(brandLogo?: Buffer): Promise<Buffer> {
-  const fonts = join(process.cwd(), 'assets/fonts/noto-sans-jp');
   // The first cell is the primary action. Each illustrated cell stays entirely within its tap area.
   const cells = FORTUNE_LINE_MENU_ITEMS.map(({ title, subtitle }, index) => {
     const x = (index % 2) * 1250;
@@ -62,15 +65,7 @@ export async function renderFortuneLineRichMenu(brandLogo?: Buffer): Promise<Buf
     <rect width="2500" height="1686" fill="#211b38" />
     ${cells}
   </svg>`;
-  const png = new Resvg(svg, {
-    font: {
-      loadSystemFonts: false,
-      fontFiles: [join(fonts, 'NotoSansCJKjp-Regular.otf'), join(fonts, 'NotoSansCJKjp-Bold.otf')],
-      defaultFontFamily: 'Noto Sans CJK JP',
-    },
-  })
-    .render()
-    .asPng();
+  const png = renderFortuneMenuSvg(svg);
   const image = sharp(png);
   if (brandLogo) {
     const logo = await sharp(brandLogo)
@@ -80,4 +75,57 @@ export async function renderFortuneLineRichMenu(brandLogo?: Buffer): Promise<Buf
     image.composite([{ input: logo, left: 275, top: 124 }]);
   }
   return image.png({ compressionLevel: 9, palette: true }).toBuffer();
+}
+
+function renderFortuneMenuSvg(svg: string) {
+  const fonts = join(process.cwd(), 'assets/fonts/noto-sans-jp');
+  return new Resvg(svg, {
+    font: {
+      loadSystemFonts: false,
+      fontFiles: [join(fonts, 'NotoSansCJKjp-Regular.otf'), join(fonts, 'NotoSansCJKjp-Bold.otf')],
+      defaultFontFamily: 'Noto Sans CJK JP',
+    },
+  })
+    .render()
+    .asPng();
+}
+
+const oracleIcons = {
+  moon: icons[0],
+  cards: icons[1],
+  people:
+    '<circle cx="75" cy="59" r="22"/><path d="M31 133v-11c0-18 16-31 36-31h16c20 0 36 13 36 31v11M128 44a19 19 0 1 1 0 38m5 11c21 1 37 13 37 30v10"/>',
+  gift: '<rect x="38" y="68" width="130" height="31" rx="5"/><path d="M47 99v43h112V99M103 142V68m0 0H72a17 17 0 1 1 14-27zm0 0h31a17 17 0 1 0-14-27z"/>',
+  bell: icons[2],
+  book: icons[3],
+};
+
+export async function renderOracleLineRichMenu(): Promise<Buffer> {
+  const { width, height } = ORACLE_LINE_MENU_SIZE;
+  const cells = ORACLE_LINE_MENU_ITEMS.map(({ title, icon, bounds }, index) => {
+    const center = bounds.width / 2;
+    const primary = index === 0;
+    const accent = primary ? '#845b26' : '#dec18a';
+    const text = primary ? '#211a3a' : '#fff3df';
+    return `<g transform="translate(${bounds.x} ${bounds.y})" color="${accent}">
+      <rect x="14" y="14" width="${bounds.width - 28}" height="${bounds.height - 28}" rx="37" fill="url(#${primary ? 'ivory' : 'night'})"/>
+      <rect x="40" y="40" width="${bounds.width - 80}" height="${bounds.height - 80}" rx="19" fill="none" stroke="currentColor" stroke-opacity="0.42" stroke-width="3"/>
+      <circle cx="${center}" cy="330" r="146" fill="none" stroke="currentColor" stroke-opacity="0.38" stroke-width="3"/>
+      <circle cx="${center}" cy="330" r="127" fill="none" stroke="currentColor" stroke-opacity="0.2" stroke-width="2"/>
+      ${star(center - 222, 254, 0.5)}
+      ${star(center + 210, 374, 0.3)}
+      ${star(center + 204, 225, 0.63)}
+      <g transform="translate(${center - 103} 244)" fill="none" stroke="currentColor" stroke-width="7" stroke-linecap="round" stroke-linejoin="round">${oracleIcons[icon]}</g>
+      <text x="${center}" y="635" text-anchor="middle" fill="${text}" font-size="${primary ? 116 : 99}" font-weight="700" letter-spacing="5">${title}</text>
+    </g>`;
+  }).join('');
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+    <defs>
+      <linearGradient id="ivory" x2="1" y2="1"><stop stop-color="#fff6e3"/><stop offset="1" stop-color="#e7d0a4"/></linearGradient>
+      <radialGradient id="night" cx=".5" cy=".33" r=".77"><stop stop-color="#33264f"/><stop offset="1" stop-color="#17152e"/></radialGradient>
+    </defs>
+    <rect width="${width}" height="${height}" fill="#151229"/>
+    ${cells}
+  </svg>`;
+  return sharp(renderFortuneMenuSvg(svg)).png({ compressionLevel: 9, palette: true }).toBuffer();
 }
