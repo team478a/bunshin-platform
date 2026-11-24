@@ -21,6 +21,28 @@ const reading = {
 const emptyProfile = { consented: false, interest: null, question: null, style: null } as const;
 const endpoints = '**/api/services/fixture-fortune/fortune';
 
+test('mobile Fortune keeps profile actions clear of the navigation', async ({
+  app,
+  screen,
+  browser,
+}) => {
+  await browser.route('**/__fortune_fixture', (route) =>
+    route.fulfill({ json: { joined: true, completed: false, profile: emptyProfile } }),
+  );
+  await app.open('/fortune.html?basic-profile');
+  await expect(screen.getByRole('button', '保存して次へ')).toBeVisible();
+  await expect(screen.getByRole('button', 'スキップして占う')).toBeVisible();
+  const layout = await browser.evaluate(() => {
+    const actions = document.querySelector('.fortune-basic-profile__actions')!;
+    const nav = document.querySelector('.fortune-nav')!;
+    return {
+      navAfterActions: nav.getBoundingClientRect().top >= actions.getBoundingClientRect().bottom,
+      fitsWidth: document.documentElement.scrollWidth <= innerWidth,
+    };
+  });
+  expect(layout).toEqual({ navAfterActions: true, fitsWidth: true });
+});
+
 test('mobile Fortune completes guided reading, two follow-ups, rating and next-day reflection', async ({
   app,
   screen,
@@ -77,7 +99,12 @@ test('mobile Fortune completes guided reading, two follow-ups, rating and next-d
   await expect(join).toBeDisabled();
   await screen.getByLabel('私は18歳以上です').tap();
   await join.tap();
-  await screen.getByLabel('今、どんなことが気になっていますか？').fill('新しい役割');
+  const interest = screen.getByLabel('今、どんなことが気になっていますか？');
+  const workInterest = screen.getByRole('group', '関心テーマの候補').getByRole('button', '仕事');
+  await workInterest.tap();
+  await expect(workInterest).toHaveAttribute('aria-pressed', 'true');
+  await interest.fill('新しい役割');
+  await expect(workInterest).toHaveAttribute('aria-pressed', 'false');
   await screen.getByLabel(/入力した希望と過去の鑑定・評価を使うことに同意する/).tap();
   await screen.getByRole('button', '同意して希望を保存').tap();
   await screen.getByLabel('今日、特に知りたいこと（任意）').fill('得意なことを生かしたい');
@@ -93,6 +120,7 @@ test('mobile Fortune completes guided reading, two follow-ups, rating and next-d
   await screen.getByRole('button', '質問する').tap();
   await expect(screen.getByText(/あと1回質問できます/)).toBeVisible();
   await screen.getByLabel('AIへの質問').fill('ほかにできることは？');
+  await expect(screen.getByRole('button', '別の見方はある？')).toBeDisabled();
   await screen.getByRole('button', '質問する').tap();
   await expect(screen.getByText(/あと0回質問できます/)).toBeVisible();
   await expect(screen.getByRole('button', '質問する')).toHaveCount(0);
@@ -224,6 +252,12 @@ test('mobile Fortune asks one adaptive question at a time and only draws on conf
   await screen.getByRole('button', 'ここまでで占う').tap();
   await expect(screen.getByRole('heading', '今回の相談内容を確認')).toBeVisible();
   await expect(screen.getByText('未確認の候補', { exact: true })).toBeVisible();
+  await screen.getByRole('button', '入力に戻る').tap();
+  await screen.getByLabel('自分の言葉で答える（任意）').fill('次の一歩を整理したい');
+  await expect(screen.getByText('10 / 50文字')).toBeVisible();
+  await screen.getByRole('button', 'ここまでで占う').tap();
+  await expect(screen.getByText('次の一歩を整理したい', { exact: true })).toBeVisible();
+  expect(draws).toEqual([]);
   await screen.getByRole('button', '大切にしたいことを訂正する').tap();
   await screen.getByLabel('大切にしたいことを訂正').fill('生活とのバランスを大切にする');
   await screen.getByRole('button', '訂正を反映する').tap();
@@ -274,6 +308,12 @@ test('mobile Fortune asks one adaptive question at a time and only draws on conf
           state: 'CONFIRMED',
           source: 'CORRECTION',
           text: '生活とのバランスを大切にする',
+        },
+        {
+          field: 'GOAL',
+          state: 'CONFIRMED',
+          source: 'ANSWER',
+          text: '次の一歩を整理したい',
         },
       ],
     },

@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useState, type FormEvent } from 'react';
+import { useId, useState, type FormEvent } from 'react';
 import {
   defaultFortuneGuidanceSettings,
   type FortuneGuidanceSettings,
@@ -22,6 +22,8 @@ export function FortuneProfileForm({
   guidance?: FortuneGuidanceSettings;
 }) {
   const router = useRouter();
+  const [interest, setInterest] = useState(profile.interest ?? '');
+  const questionHintId = useId();
   const [consented, setConsented] = useState(profile.consented);
   const [completed, setCompleted] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -52,6 +54,7 @@ export function FortuneProfileForm({
         setError('保存できませんでした。時間をおいてもう一度お試しください。');
         return;
       }
+      if (!allow) setInterest('');
       setConsented(allow);
       setCompleted(true);
       setMessage(allow ? '希望を保存しました。' : '個別化に使う希望を削除しました。');
@@ -82,11 +85,24 @@ export function FortuneProfileForm({
                 <span>{guidance.interestQuestion}</span>
                 <input
                   name="interest"
-                  defaultValue={profile.interest ?? ''}
+                  value={interest}
                   maxLength={120}
-                  placeholder={Object.values(guidance.themeLabels).join('、')}
+                  onChange={(event) => setInterest(event.target.value)}
                 />
               </label>
+              <div className="button-row" role="group" aria-label="関心テーマの候補">
+                {Object.entries(guidance.themeLabels).map(([theme, label]) => (
+                  <button
+                    key={theme}
+                    className="button button--secondary"
+                    type="button"
+                    aria-pressed={interest === label}
+                    onClick={() => setInterest(label)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
               <label className="form-field">
                 <span>{guidance.consultationQuestion}</span>
                 <textarea
@@ -94,7 +110,11 @@ export function FortuneProfileForm({
                   defaultValue={profile.question ?? ''}
                   maxLength={500}
                   rows={3}
+                  aria-describedby={questionHintId}
                 />
+                <small id={questionHintId} className="fortune-input-hint" aria-hidden="true">
+                  例：新しい仕事に慣れるためにできることを知りたい（500文字まで）
+                </small>
               </label>
               <label className="form-field">
                 <span>{guidance.styleQuestion}</span>

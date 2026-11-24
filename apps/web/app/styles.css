@@ -6870,6 +6870,17 @@ body:has(.app-shell) > .site-footer {
   backdrop-filter: blur(12px);
 }
 
+.fortune-nav--in-flow {
+  position: static;
+  margin-block-start: 1rem;
+}
+
+.fortune-input-hint {
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+  font-weight: 400;
+}
+
 .fortune-nav a {
   color: #344054;
   font-size: 0.85rem;
