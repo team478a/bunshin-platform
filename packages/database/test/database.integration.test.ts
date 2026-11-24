@@ -3493,6 +3493,45 @@ describe('database ownership boundaries', () => {
     ).resolves.toMatchObject({ status: 'SUCCEEDED' });
   });
 
+  it('reserves fixture jobs for the dedicated development worker', async () => {
+    const owner = await new CreateUserWithPersonalWorkspace(
+      new PrismaAccountUnitOfWork(client),
+    ).execute({ displayName: 'Browser Fixture Owner' });
+    const platform = new PrismaJobRepository(client);
+    const browser = new PrismaJobRepository(client, 'browser-fixture');
+    const input = {
+      workspaceId: owner.workspace.id,
+      requestedBy: owner.user.id,
+      correlationId: randomUUID(),
+      jobType: 'BROWSER_FIXTURE_RUN',
+      payloadReference: 'practice-note-v1:mobile',
+      idempotencyKey: randomUUID(),
+      priority: 0,
+      scheduledAt: new Date('2000-01-01T00:00:00Z'),
+    };
+    await expect(browser.enqueue({ ...input, environment: 'PRODUCTION' })).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    });
+    const job = await browser.enqueue({ ...input, environment: 'DEVELOPMENT' });
+    const normal = await platform.enqueue({
+      ...input,
+      environment: 'DEVELOPMENT',
+      idempotencyKey: randomUUID(),
+      jobType: 'FIXTURE_CONTROL',
+    });
+    const timing = { now: new Date(), leaseExpiresAt: new Date(Date.now() + 60_000) };
+    await expect(
+      platform.claim({ ...timing, environment: 'DEVELOPMENT', workerId: 'platform-test' }),
+    ).resolves.toMatchObject({ id: normal.id });
+    const claims = await Promise.all(
+      ['browser-a', 'browser-b'].map((workerId) =>
+        browser.claim({ ...timing, environment: 'DEVELOPMENT', workerId }),
+      ),
+    );
+    expect(claims.map((claim) => claim?.id).filter(Boolean)).toEqual([job.id]);
+    await client.job.deleteMany({ where: { id: { in: [job.id, normal.id] } } });
+  });
+
   it('revalidates SOCIAL strategy and confirmed plan without crossing user scope', async () => {
     const accounts = new CreateUserWithPersonalWorkspace(new PrismaAccountUnitOfWork(client));
     const owner = await accounts.execute({ displayName: 'Automation Owner' });

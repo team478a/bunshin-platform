@@ -1,0 +1,21 @@
+{
+  "name": "@bunshin/browser-worker",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "lint": "eslint src test",
+    "test": "vitest run --dir test",
+    "typecheck": "tsc --noEmit",
+    "start": "tsx src/cli.ts",
+    "test:browser": "tsx src/cli.ts smoke"
+  },
+  "dependencies": {
+    "@bunshin/application": "workspace:*",
+    "@bunshin/capability-browser": "workspace:*",
+    "@bunshin/database": "workspace:*",
+    "playwright": "1.65.1",
+    "tsx": "4.23.15"
+  }
+}

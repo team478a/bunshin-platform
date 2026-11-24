@@ -30,6 +30,8 @@ export interface JobDispatcher {
   enqueue(input: EnqueueJobInput): Promise<JobReference>;
 }
 
+export const BROWSER_FIXTURE_JOB_TYPE = 'BROWSER_FIXTURE_RUN';
+
 export const FEEDBACK_PURGE_JOB_TYPE = 'IMPROVEMENT_FEEDBACK_PURGE';
 
 interface StoredJob extends Required<
