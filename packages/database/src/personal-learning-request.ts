@@ -9,6 +9,8 @@ import {
 } from '@bunshin/application';
 import {
   isPersonalLearningPilotProgram,
+  personalLearningFeatureEnabled,
+  personalLearningOfferPolicy,
   TRAINING_EXPORT_MAX_ROWS,
 } from '@bunshin/capability-training';
 import type { Prisma } from '@prisma/client';
@@ -47,18 +49,24 @@ export class PrismaPersonalLearningRequestRepository
       throw new ApplicationError('NOT_FOUND', 'learning request unavailable');
     if (isPersonalLearningPilotProgram(program.settings)) {
       await requirePersonalLearningPilotSeat(tx, s, true);
-      const externalSeat = await tx.personalLearningPilotSeat.findFirst({
+      const fixturePilot =
+        process.env['APP_ENV'] === 'development' &&
+        personalLearningFeatureEnabled(program.settings, 'browserMaterials') &&
+        personalLearningOfferPolicy(program.settings) === 'AI_SKILL_V1';
+      const learnerSeat = await tx.personalLearningPilotSeat.findFirst({
         where: {
           workspaceId: s.workspaceId,
           groupId: s.groupId,
           serviceProgramId: program.id,
           programEnrollmentId: s.programEnrollmentId,
-          kind: 'EXTERNAL',
+          ...(fixturePilot
+            ? { OR: [{ kind: 'EXTERNAL' }, { kind: 'INTERNAL', cohort: 'INTERNAL' }] }
+            : { kind: 'EXTERNAL' as const }),
           revokedAt: null,
         },
         select: { id: true },
       });
-      if (!externalSeat) throw new ApplicationError('NOT_FOUND', 'learning request unavailable');
+      if (!learnerSeat) throw new ApplicationError('NOT_FOUND', 'learning request unavailable');
     }
   }
   readRequest(input: PersonalLearningActor) {

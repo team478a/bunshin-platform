@@ -1,4 +1,3 @@
-import Image from 'next/image';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import {
@@ -8,17 +7,14 @@ import {
   readBrowserMaterial,
   searchBrowserMaterials,
 } from '../../../../../src/services/browser-materials';
-import styles from './materials.module.css';
+import styles from '../../../../../src/components/browser-material.module.css';
+import {
+  BrowserMaterialView,
+  dateLabel,
+  deviceLabel,
+} from '../../../../../src/components/browser-material-view';
 
 export const dynamic = 'force-dynamic';
-
-const deviceLabel = (device: string) =>
-  device === 'mobile' ? 'スマートフォンのブラウザ' : 'パソコンのブラウザ';
-const dateLabel = (date: Date) =>
-  new Intl.DateTimeFormat('ja-JP', {
-    dateStyle: 'long',
-    timeZone: 'Asia/Tokyo',
-  }).format(date);
 
 export default async function BrowserMaterialsPage(props: {
   params: Promise<{ workspaceId: string }>;
@@ -52,7 +48,8 @@ export default async function BrowserMaterialsPage(props: {
               </Link>
               <p>{material.goal}</p>
               <small>
-                {deviceLabel(material.recipe.device)} · 検証 {dateLabel(material.verifiedAt)}
+                {deviceLabel(material.recipe?.device ?? 'desktop')} · 検証{' '}
+                {dateLabel(material.verifiedAt)}
               </small>
             </li>
           ))}
@@ -80,67 +77,14 @@ export default async function BrowserMaterialsPage(props: {
   return (
     <main className={styles.page}>
       <Link href={{ pathname: base, query: { q: query } }}>教材一覧</Link>
-      <header>
-        <h1>{material.title}</h1>
-        <p>{material.goal}</p>
-        <small>
-          {deviceLabel(material.recipe.device)} · 検証 {dateLabel(material.verifiedAt)}
-        </small>
-      </header>
-      <details>
-        <summary>準備</summary>
-        <p>{material.preparation}</p>
-      </details>
-      <section className={styles.step} aria-labelledby="material-step">
-        <h2 id="material-step">
-          手順 {step.ordinal} / {material.steps.length}
-        </h2>
-        <p>{step.instruction}</p>
-        <div className={styles.images}>
-          {(['before', 'after'] as const).map((variant) => (
-            <figure key={variant}>
-              <a href={`${imageBase}/${variant}`} target="_blank" rel="noopener noreferrer">
-                <Image
-                  src={`${imageBase}/${variant}`}
-                  alt={variant === 'before' ? '操作前の画面' : '操作後の画面'}
-                  width={640}
-                  height={480}
-                  unoptimized
-                />
-              </a>
-              <figcaption>
-                {variant === 'before' ? '操作前' : '操作後'} · 画像を開いて拡大
-              </figcaption>
-            </figure>
-          ))}
-        </div>
-        {showDetail ? (
-          <details className={styles.detail}>
-            <summary>操作箇所を拡大</summary>
-            <a href={`${imageBase}/detail`} target="_blank" rel="noopener noreferrer">
-              <Image
-                src={`${imageBase}/detail`}
-                alt="操作箇所の拡大画像"
-                width={480}
-                height={260}
-                unoptimized
-              />
-            </a>
-          </details>
-        ) : null}
-        <nav className={styles.navigation} aria-label="教材の手順">
-          {ordinal > 1 ? <Link href={stepHref(ordinal - 1)}>前へ</Link> : <span />}
-          {ordinal < material.steps.length ? <Link href={stepHref(ordinal + 1)}>次へ</Link> : null}
-        </nav>
-      </section>
-      {ordinal === material.steps.length ? (
-        <section className={styles.step}>
-          <h2>実践課題</h2>
-          <p>{material.practice}</p>
-          <h3>理解度確認</h3>
-          <p>{material.checkpoint}</p>
-        </section>
-      ) : null}
+      <BrowserMaterialView
+        material={material}
+        device={material.recipe?.device ?? 'desktop'}
+        ordinal={ordinal}
+        showDetail={showDetail}
+        stepHref={stepHref}
+        imageHref={(variant) => imageBase + '/' + variant}
+      />
     </main>
   );
 }

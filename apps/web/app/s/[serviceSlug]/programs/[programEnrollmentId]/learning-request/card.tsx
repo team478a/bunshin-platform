@@ -1,5 +1,6 @@
 'use client';
 import { useState } from 'react';
+import { browserLearningDevice } from '@bunshin/capability-training';
 import { LearningCandidateCard } from './candidate-card';
 import { LearningPracticeCard } from './practice-card';
 import { LearningConversationCard } from './conversation-card';
@@ -18,6 +19,7 @@ const appendPath = (url: string, suffix: string) => {
 
 export function PersonalLearningRequestCard({
   dynamicMode = false,
+  browserMaterialHref,
   endpoint,
   initial,
   candidateEndpoint,
@@ -28,6 +30,7 @@ export function PersonalLearningRequestCard({
   initialConversation = null,
 }: {
   dynamicMode?: boolean;
+  browserMaterialHref?: string | undefined;
   endpoint: string;
   initial: SavedPersonalLearningRequest | null;
   candidateEndpoint?: string;
@@ -206,6 +209,11 @@ export function PersonalLearningRequestCard({
         </form>
         <p role="status">{message}</p>
       </div>
+      {browserMaterialHref && saved && matchesSaved && browserLearningDevice(saved) && (
+        <section className="service-entry__card" aria-label="操作教材">
+          <a href={browserMaterialHref}>画像付き操作教材を確認する</a>
+        </section>
+      )}
       {conversationEndpoint && saved && matchesSaved && (
         <div id="conversation-record">
           <LearningConversationCard

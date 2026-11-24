@@ -408,3 +408,5 @@ export {
   FORTUNE_FOLLOW_UP_CREDIT_NAME,
   readFortuneFollowUpCreditBalance,
 } from './fortune-follow-up-credits';
+
+export { PrismaBrowserLearningMaterials } from './browser-learning-material';

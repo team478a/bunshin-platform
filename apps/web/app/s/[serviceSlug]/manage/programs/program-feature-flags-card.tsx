@@ -9,6 +9,7 @@ type Features = {
   extendedScope: boolean;
   learningNudges: boolean;
   toolUpdates: boolean;
+  browserMaterials?: boolean;
 };
 type LearningMode = 'DYNAMIC_V1' | 'FIXED_DEFINITIONS_V1';
 type OfferPolicy = 'AI_SKILL_V1' | 'SIDE_HUSTLE_V1' | null;
@@ -58,6 +59,11 @@ const featureRows: { key: keyof Features; label: string; description: string }[]
     key: 'learningNudges',
     label: '学習の声かけ',
     description: '受講状況に応じた学習の声かけを有効にします。',
+  },
+  {
+    key: 'browserMaterials',
+    label: '操作教材（開発環境）',
+    description: '操作練習ページから取得した画像を使った教材を受講者に案内します。',
   },
   {
     key: 'toolUpdates',
@@ -308,7 +314,7 @@ export function ProgramFeatureFlagsCard({
                       className="program-feature-flags__switch"
                       type="checkbox"
                       role="switch"
-                      checked={features[key]}
+                      checked={features[key] ?? false}
                       disabled={
                         !canEdit ||
                         busy ||

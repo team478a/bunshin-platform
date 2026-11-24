@@ -14,9 +14,14 @@ export const PERSONAL_LEARNING_FEATURE_KEYS = [
   'extendedScope',
   'learningNudges',
   'toolUpdates',
+  'browserMaterials',
 ] as const;
 export type PersonalLearningFeature = (typeof PERSONAL_LEARNING_FEATURE_KEYS)[number];
-export type PersonalLearningFeatures = Readonly<Record<PersonalLearningFeature, boolean>>;
+export type PersonalLearningFeatures = Readonly<
+  Record<Exclude<PersonalLearningFeature, 'browserMaterials'>, boolean> & {
+    browserMaterials?: boolean;
+  }
+>;
 const defaultFeatures: PersonalLearningFeatures = Object.freeze({
   conversation: false,
   multiTopic: false,
@@ -26,9 +31,8 @@ const defaultFeatures: PersonalLearningFeatures = Object.freeze({
   toolUpdates: false,
 });
 const legacyFeatureKeys = PERSONAL_LEARNING_FEATURE_KEYS.filter(
-  (key) => key !== 'learningNudges' && key !== 'toolUpdates',
+  (key) => key !== 'learningNudges' && key !== 'toolUpdates' && key !== 'browserMaterials',
 );
-const nudgesFeatureKeys = PERSONAL_LEARNING_FEATURE_KEYS.filter((key) => key !== 'toolUpdates');
 
 /** Missing mode is the legacy contract; malformed explicit values fail closed. */
 export function personalLearningMode(settings: unknown): PersonalLearningMode | null {
@@ -46,15 +50,12 @@ export function personalLearningFeatures(settings: unknown): PersonalLearningFea
   const features = object(raw);
   if (
     !features ||
-    !(
-      Object.keys(features).length === PERSONAL_LEARNING_FEATURE_KEYS.length ||
-      Object.keys(features).length === nudgesFeatureKeys.length ||
-      Object.keys(features).length === legacyFeatureKeys.length
-    ) ||
     legacyFeatureKeys.some((key) => typeof features[key] !== 'boolean') ||
     (Object.hasOwn(features, 'learningNudges') &&
       typeof features['learningNudges'] !== 'boolean') ||
     (Object.hasOwn(features, 'toolUpdates') && typeof features['toolUpdates'] !== 'boolean') ||
+    (Object.hasOwn(features, 'browserMaterials') &&
+      typeof features['browserMaterials'] !== 'boolean') ||
     Object.keys(features).some(
       (key) => !PERSONAL_LEARNING_FEATURE_KEYS.includes(key as PersonalLearningFeature),
     )
@@ -67,6 +68,9 @@ export function personalLearningFeatures(settings: unknown): PersonalLearningFea
     extendedScope: features['extendedScope'] as boolean,
     learningNudges: features['learningNudges'] === true,
     toolUpdates: features['toolUpdates'] === true,
+    ...(typeof features['browserMaterials'] === 'boolean'
+      ? { browserMaterials: features['browserMaterials'] }
+      : {}),
   });
 }
 

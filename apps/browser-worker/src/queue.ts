@@ -17,6 +17,7 @@ import { compactPreviewStep, fixture, fixturePlan, fixtureVersion } from './fixt
 import { completeRecipeReplay, completeWithRecipe, findRecipeId, loadRecipe } from './recipes';
 import { modelPreviewSelector } from './model-selector';
 import { completeMaterialJob } from './materials';
+import { runTrainingMaterial } from './training-material';
 
 const environment = 'DEVELOPMENT';
 const jobs = new PrismaJobRepository(prisma, 'browser-fixture');
@@ -111,6 +112,15 @@ export async function runQueue(input: {
             errorCategory: 'BROWSER_ATTEMPTS_EXHAUSTED',
             retryable: false,
           });
+          continue;
+        }
+        if (job.payloadReference.startsWith('training-material:')) {
+          if (!job.requestedBy) throw new BrowserRunError('INVALID_PLAN');
+          assertUserJob(job);
+          const material = await runTrainingMaterial({ ...input, job, workerId });
+          console.log(
+            JSON.stringify({ jobId: job.id, status: 'SUCCEEDED', materialId: material.id }),
+          );
           continue;
         }
         const membership = job.requestedBy
