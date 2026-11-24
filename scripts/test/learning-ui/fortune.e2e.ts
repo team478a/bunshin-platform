@@ -26,8 +26,9 @@ test('mobile Fortune keeps profile actions clear of the navigation', async ({
   screen,
   browser,
 }) => {
-  const state: FortuneBrowserFixture = { joined: true, completed: false, profile: emptyProfile };
-  await browser.route('**/__fortune_fixture', (route) => route.fulfill({ json: state }));
+  await browser.route('**/__fortune_fixture', (route) =>
+    route.fulfill({ json: { joined: true, completed: false, profile: emptyProfile } }),
+  );
   await app.open('/fortune.html?basic-profile');
   await expect(screen.getByRole('button', '保存して次へ')).toBeVisible();
   await expect(screen.getByRole('button', 'スキップして占う')).toBeVisible();
