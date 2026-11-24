@@ -18,3 +18,5 @@ CREATE TABLE "browser_fixture_recipes" (
 
 CREATE UNIQUE INDEX "browser_fixture_recipes_content_key"
   ON "browser_fixture_recipes"("workspace_id", "actor_id", "fixture_version", "device", "plan_hash");
+
+ALTER TABLE "browser_fixture_recipes" ENABLE ROW LEVEL SECURITY;
