@@ -375,10 +375,12 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
         expect(await materials.finish(same, worker, { ...proof, verifiedAt: new Date() })).toEqual({
           id: result.id,
         });
-        expect(await materials.readMaterial(f.actor)).toMatchObject({
+        const checked = await materials.readMaterial(f.actor);
+        expect(checked).toMatchObject({
           reviewStatus: 'SUCCEEDED',
-          material: { id: result.id, revision: 1, reviewedAt: expect.any(Date) },
+          material: { id: result.id, revision: 1 },
         });
+        expect(checked?.material?.reviewedAt).toBeInstanceOf(Date);
 
         await client.browserFixtureMaterial.update({
           where: { id: result.id },
