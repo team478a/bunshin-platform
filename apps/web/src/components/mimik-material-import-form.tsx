@@ -57,7 +57,12 @@ export function MimikMaterialImportForm({ workspaceId }: { workspaceId: string }
   return (
     <details>
       <summary>Mimik の操作記録を取り込む</summary>
-      <form className={styles.importForm} onSubmit={submit}>
+      <form
+        className={styles.importForm}
+        onSubmit={(event) => {
+          void submit(event);
+        }}
+      >
         <label>
           操作記録 <input name="recording" type="file" accept=".mimik" required />
         </label>

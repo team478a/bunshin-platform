@@ -12,3 +12,7 @@
 形式を確認した Mimik Desktop v1.2.0 は MIT、Copyright 2026 Westpoint。ZIP 読み取りには yauzl 3.4.0（MIT）を追加し、画像加工は既存の Sharp 0.35.4（Apache-2.0）を使用する。テスト用アーカイブには既存の fflate 0.7.5（MIT）を使用する。取り込みの AI 呼び出しは0回。 [Mimik の形式](https://raw.githubusercontent.com/westpoint-io/mimik/desktop-v1.2.0/packages/core/src/transfer/schema.ts) · [Mimik のライセンス](https://raw.githubusercontent.com/westpoint-io/mimik/desktop-v1.2.0/LICENSE) · [yauzl](https://github.com/thejoshwolfe/yauzl)
 
 現在の対象は本人用教材ライブラリ。研修参加者への共有公開、記録の再生、教材の編集・動画化は対象外。
+
+## 開発検証
+
+実 Chromium の検証用キャプチャをバンドル v1 形式にまとめたサンプルから、2手順と1枚の WebP を取り込んだ。Mimik アプリ本体での書き出しは未検証。互換形式の読み取り、入力値除去設定、画像欠落時の拒否、所有者限定の手順表示をテストした。
