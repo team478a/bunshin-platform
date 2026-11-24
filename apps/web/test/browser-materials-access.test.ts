@@ -48,19 +48,19 @@ describe('browser material access', () => {
     const image = await imageRequest();
     expect(image.status).toBe(200);
     expect(image.headers.get('cache-control')).toBe('private, no-store');
+    const scope: unknown = expect.arrayContaining([
+      { recipe: expect.objectContaining({ workspaceId, actorId }) },
+      expect.objectContaining({ workspaceId, importedBy: actorId }),
+    ]);
     expect(mocks.image).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: expect.objectContaining({
-          material: { recipe: expect.objectContaining({ workspaceId, actorId }) },
-        }),
-      }),
+      expect.objectContaining({ where: expect.objectContaining({ material: { OR: scope } }) }),
     );
     const actor = await browserMaterialActor(workspaceId);
     await searchBrowserMaterials(actor!, 'メモ');
     expect(mocks.search).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
-          recipe: expect.objectContaining({ workspaceId, actorId }),
+          OR: scope,
           title: { contains: 'メモ', mode: 'insensitive' },
         }),
       }),
@@ -93,6 +93,31 @@ describe('browser material access', () => {
     expect(html).toContain('操作箇所を拡大');
     expect(html).toContain('/2/after');
     expect(html).not.toContain('最初の操作を行う');
+  });
+
+  it('labels an imported recording and displays a single captured screenshot', async () => {
+    mocks.material.mockResolvedValue({
+      id: materialId,
+      title: '操作記録',
+      goal: '',
+      preparation: '準備',
+      practice: '練習',
+      checkpoint: '確認',
+      verifiedAt: null,
+      importedAt: new Date('2026-11-25T10:00:00Z'),
+      fixtureDevice: 'mobile',
+      steps: [{ ordinal: 1, stepId: 'one', instruction: 'ボタンを選ぶ' }],
+    });
+    mocks.image.mockResolvedValue({ ordinal: 1 });
+    const view = await BrowserMaterialsPage({
+      params: Promise.resolve({ workspaceId }),
+      searchParams: Promise.resolve({ material: materialId }),
+    });
+    const html = renderToStaticMarkup(view);
+    expect(html).toContain('人の操作記録・未検証');
+    expect(html).toContain('記録画面');
+    expect(html).toContain('/1/after');
+    expect(html).not.toContain('/1/before');
   });
 
   it('returns no image for an unavailable material or an untrusted session', async () => {

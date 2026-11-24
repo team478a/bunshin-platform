@@ -410,3 +410,4 @@ export {
 } from './fortune-follow-up-credits';
 
 export { PrismaBrowserLearningMaterials } from './browser-learning-material';
+export { saveImportedBrowserMaterial } from './imported-browser-material';
