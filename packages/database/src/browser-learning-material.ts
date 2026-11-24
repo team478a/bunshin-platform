@@ -52,49 +52,57 @@ export class PrismaBrowserLearningMaterials extends PrismaPersonalLearningPersis
   private async authorizedMaterial<T>(
     actor: PersonalLearningActor,
     work: (tx: Prisma.TransactionClient, key: MaterialKey, requestId: string) => Promise<T>,
+    lockEnrollment = true,
   ) {
     if (process.env['APP_ENV'] !== 'development') return null;
-    return this.authorized(actor, true, async (tx) => {
-      const scope = actor.scope;
-      const enrollment = await tx.programEnrollment.findUniqueOrThrow({
-        where: { id: scope.programEnrollmentId },
-        select: { serviceProgramId: true },
-      });
-      const program = await tx.serviceProgram.findUniqueOrThrow({
-        where: { id: enrollment.serviceProgramId },
-        select: { id: true, settings: true },
-      });
-      if (
-        !personalLearningDynamicProgramAllows(program.settings, scope.programEnrollmentId) ||
-        !personalLearningFeatureEnabled(program.settings, 'browserMaterials') ||
-        personalLearningOfferPolicy(program.settings) !== 'AI_SKILL_V1'
-      )
-        return null;
-      const request = await tx.personalLearningRequest.findFirst({
-        where: { ...scope, topicId: actor.topicId ?? null },
-        orderBy: { revision: 'desc' },
-        select: { id: true, originalText: true, deviceType: true },
-      });
-      const fixtureDevice = request && browserLearningDevice(request);
-      if (!request || !fixtureDevice) return null;
-      const key = {
-        workspaceId: scope.workspaceId,
-        groupId: scope.groupId,
-        programId: program.id,
-        fixtureDevice,
-        revision,
-      };
-      return work(tx, key, request.id);
-    });
+    return this.authorized(
+      actor,
+      true,
+      async (tx) => {
+        const scope = actor.scope;
+        const enrollment = await tx.programEnrollment.findUniqueOrThrow({
+          where: { id: scope.programEnrollmentId },
+          select: { serviceProgramId: true },
+        });
+        const program = await tx.serviceProgram.findUniqueOrThrow({
+          where: { id: enrollment.serviceProgramId },
+          select: { id: true, settings: true },
+        });
+        if (
+          !personalLearningDynamicProgramAllows(program.settings, scope.programEnrollmentId) ||
+          !personalLearningFeatureEnabled(program.settings, 'browserMaterials') ||
+          personalLearningOfferPolicy(program.settings) !== 'AI_SKILL_V1'
+        )
+          return null;
+        const request = await tx.personalLearningRequest.findFirst({
+          where: { ...scope, topicId: actor.topicId ?? null },
+          orderBy: { revision: 'desc' },
+          select: { id: true, originalText: true, deviceType: true },
+        });
+        const fixtureDevice = request && browserLearningDevice(request);
+        if (!request || !fixtureDevice) return null;
+        const key = {
+          workspaceId: scope.workspaceId,
+          groupId: scope.groupId,
+          programId: program.id,
+          fixtureDevice,
+          revision,
+        };
+        return work(tx, key, request.id);
+      },
+      false,
+      lockEnrollment,
+    );
   }
 
   private async use<T>(
     actor: PersonalLearningActor,
     work: (tx: Prisma.TransactionClient, key: MaterialKey, requestId: string) => Promise<T>,
+    lockEnrollment = true,
   ) {
     for (let attempt = 1; ; attempt += 1) {
       try {
-        return await this.authorizedMaterial(actor, work);
+        return await this.authorizedMaterial(actor, work, lockEnrollment);
       } catch (error) {
         if (attempt === 3 || !(error instanceof ApplicationError) || error.code !== 'CONFLICT')
           throw error;
@@ -102,22 +110,29 @@ export class PrismaBrowserLearningMaterials extends PrismaPersonalLearningPersis
     }
   }
   readMaterial(actor: PersonalLearningActor) {
-    return this.use(actor, async (tx, key, requestId) => {
-      const material = await tx.browserFixtureMaterial.findFirst({ where: key, select: selection });
-      const job = material
-        ? null
-        : await tx.job.findFirst({
-            where: {
-              environment,
-              jobType,
-              workspaceId: key.workspaceId,
-              requestedBy: actor.actorUserId,
-              idempotencyKey: identity(requestId),
-            },
-            select: { status: true },
-          });
-      return { device: key.fixtureDevice, material, status: job?.status ?? null };
-    });
+    return this.use(
+      actor,
+      async (tx, key, requestId) => {
+        const material = await tx.browserFixtureMaterial.findFirst({
+          where: key,
+          select: selection,
+        });
+        const job = material
+          ? null
+          : await tx.job.findFirst({
+              where: {
+                environment,
+                jobType,
+                workspaceId: key.workspaceId,
+                requestedBy: actor.actorUserId,
+                idempotencyKey: identity(requestId),
+              },
+              select: { status: true },
+            });
+        return { device: key.fixtureDevice, material, status: job?.status ?? null };
+      },
+      false,
+    );
   }
 
   enqueue(actor: PersonalLearningActor) {
@@ -151,13 +166,17 @@ export class PrismaBrowserLearningMaterials extends PrismaPersonalLearningPersis
     const column = ({ before: 'beforeImage', after: 'afterImage', detail: 'detailImage' } as const)[
       variant
     ];
-    return this.use(actor, async (tx, key) => {
-      const step = await tx.browserFixtureMaterialStep.findFirst({
-        where: { materialId, ordinal, material: key },
-        select: { [column]: true },
-      });
-      return step?.[column] ?? null;
-    });
+    return this.use(
+      actor,
+      async (tx, key) => {
+        const step = await tx.browserFixtureMaterialStep.findFirst({
+          where: { materialId, ordinal, material: key },
+          select: { [column]: true },
+        });
+        return step?.[column] ?? null;
+      },
+      false,
+    );
   }
 
   private async jobActor(job: UserJob) {

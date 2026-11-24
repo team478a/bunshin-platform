@@ -338,7 +338,13 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
         expect(await materials.readMaterial(f.actor)).toMatchObject({
           material: { id: result.id },
         });
-        expect(await materials.readImage(f.actor, result.id, 1, 'before')).toEqual(image);
+        expect(
+          await Promise.all([
+            materials.readImage(f.actor, result.id, 1, 'before'),
+            materials.readImage(f.actor, result.id, 1, 'after'),
+            materials.readImage(f.actor, result.id, 1, 'detail'),
+          ]),
+        ).toEqual([image, image, null]);
         await expect(
           materials.readImage(
             { ...f.actor, actorUserId: other.scope.userId },
