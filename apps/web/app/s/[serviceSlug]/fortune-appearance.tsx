@@ -1,5 +1,7 @@
 import type { CSSProperties, ReactNode } from 'react';
 import '@fontsource-variable/noto-sans-jp';
+import '@fontsource/shippori-mincho/700.css';
+import { ORACLE_SERVICE_SLUG } from '../../../src/services/service-auth-brand';
 import {
   fortuneReadableText,
   resolveFortuneAppearanceColors,
@@ -12,19 +14,26 @@ const ornaments = { none: '', moon: '☾', stars: '✧', both: '✧　☾　✧'
 
 export function FortuneAppearance({
   settings,
+  serviceSlug,
   brand,
   children,
   showMastheadLogo = true,
+  showMastheadOrnament = true,
 }: {
   settings: FortuneAppearanceSettings | undefined;
+  serviceSlug?: string | undefined;
   brand: FortuneAppearanceBrand | undefined;
   children: ReactNode;
   showMastheadLogo?: boolean;
+  showMastheadOrnament?: boolean;
 }) {
   if (!settings?.enabled) return children;
 
   const colors = resolveFortuneAppearanceColors(settings, brand);
+  const guideColor = settings.palette === 'night' ? colors.surface : colors.action;
   const style = {
+    '--fortune-guide': guideColor,
+    '--fortune-guide-text': fortuneReadableText(colors.text, guideColor),
     '--fortune-canvas': colors.background,
     '--fortune-surface': colors.surface,
     '--fortune-canvas-text': fortuneReadableText(colors.text, colors.background),
@@ -33,7 +42,7 @@ export function FortuneAppearance({
     '--fortune-action-text': fortuneReadableText(colors.text, colors.action),
     '--fortune-accent': colors.accent,
   } as CSSProperties;
-  const ornament = ornaments[settings.ornament];
+  const ornament = showMastheadOrnament ? ornaments[settings.ornament] : null;
   const logoUrl = settings.showLogo && showMastheadLogo ? brand?.logoUrl : null;
   return (
     <div
@@ -42,6 +51,7 @@ export function FortuneAppearance({
       data-cards={settings.cards}
       data-corners={settings.corners}
       data-heading={settings.heading}
+      data-oracle-typography={serviceSlug === ORACLE_SERVICE_SLUG ? '' : undefined}
       style={style}
     >
       {(logoUrl || ornament) && (
