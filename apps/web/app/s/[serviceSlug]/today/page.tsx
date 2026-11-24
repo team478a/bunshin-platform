@@ -1,6 +1,8 @@
 import { resolveFortunePageAppearance } from '../../../../src/fortune/appearance';
 import type { Metadata, Route } from 'next';
 import Link from 'next/link';
+import { ORACLE_SERVICE_SLUG } from '../../../../src/services/service-auth-brand';
+import { FortuneObservatoryHero } from './fortune-observatory-hero';
 import { recordFortuneFunnel } from '../../../../src/fortune/funnel';
 import { prisma } from '@bunshin/database';
 import {
@@ -65,7 +67,7 @@ export default async function FortuneTodayPage({
             ['READY_AI', 'READY_BASIC'].includes(reading.status),
         )
       : null;
-  const commerce = serviceSlug === 'watashi-fortune' || Boolean(setting.commerceProduct);
+  const commerce = serviceSlug === ORACLE_SERVICE_SLUG || Boolean(setting.commerceProduct);
   const scope = { workspaceId: service.workspaceId, groupId: service.serviceId };
   const [hasPurchase, product, opportunity] =
     commerce && today.participant
@@ -157,56 +159,64 @@ export default async function FortuneTodayPage({
   const themesAlreadyShown =
     Boolean(today.participant) && !today.reading && !showIntake && !showDynamicIntake && !paidView;
   const welcome = showIntake || !today.participant ? characters?.intake : characters?.daily;
+  const illustrated =
+    serviceSlug === ORACLE_SERVICE_SLUG &&
+    Boolean(today.participant) &&
+    !today.reading &&
+    !showBasicProfile &&
+    !showIntake &&
+    !deepView;
+  const referralPath = fortuneReferralAvailable(service.configuration)
+    ? (`/s/${serviceSlug}/activity` as Route)
+    : null;
+  const guidePanel = !showBasicProfile && (showGuide || welcome?.enabled) && (
+    <section className="fortune-today__guide" aria-label="AI案内役">
+      {welcome?.enabled ? (
+        <FortuneCharacterBadge
+          character={welcome}
+          expression="welcome"
+          {...(guide?.imageUrl ? { fallbackImage: guide.imageUrl } : {})}
+        />
+      ) : (
+        <div className="fortune-today__guide-profile">
+          {guide?.imageUrl && (
+            <img src={guide.imageUrl} alt="" width={56} height={56} referrerPolicy="no-referrer" />
+          )}
+          <div>
+            <p className="eyebrow">AI案内役</p>
+            <h2>{guidance.guideName}</h2>
+          </div>
+        </div>
+      )}
+      <p>
+        {guide?.introduction ||
+          '今日のカードから、今のあなたが考えを整理するヒントをお届けします。'}
+      </p>
+      {!illustrated && !themesAlreadyShown && (
+        <a href="#fortune-today-action" className="button button--primary">
+          {nextAction}
+        </a>
+      )}
+    </section>
+  );
   const content = (
     <PublicShell showPlatformBrand={false}>
-      <div className="app-page fortune-page fortune-today">
-        <header className="app-page__heading">
-          <h1>今日の占い</h1>
-          {fortuneReferralAvailable(service.configuration) && (
-            <Link
-              className="button button--secondary fortune-referral-link"
-              href={`/s/${serviceSlug}/activity` as Route}
-            >
-              友だちに紹介する
-            </Link>
-          )}
-        </header>
-        {!showBasicProfile && (showGuide || welcome?.enabled) && (
-          <section className="fortune-today__guide" aria-label="AI案内役">
-            {welcome?.enabled ? (
-              <FortuneCharacterBadge
-                character={welcome}
-                expression="welcome"
-                {...(guide?.imageUrl ? { fallbackImage: guide.imageUrl } : {})}
-              />
-            ) : (
-              <div className="fortune-today__guide-profile">
-                {guide?.imageUrl && (
-                  <img
-                    src={guide.imageUrl}
-                    alt=""
-                    width={56}
-                    height={56}
-                    referrerPolicy="no-referrer"
-                  />
-                )}
-                <div>
-                  <p className="eyebrow">AI案内役</p>
-                  <h2>{guidance.guideName}</h2>
-                </div>
-              </div>
+      <div
+        className={`app-page fortune-page fortune-today${illustrated ? ' fortune-today--observatory' : ''}`}
+      >
+        {illustrated ? (
+          <FortuneObservatoryHero />
+        ) : (
+          <header className="app-page__heading">
+            <h1>今日の占い</h1>
+            {referralPath && (
+              <Link className="button button--secondary fortune-referral-link" href={referralPath}>
+                友だちに紹介する
+              </Link>
             )}
-            <p>
-              {guide?.introduction ||
-                '今日のカードから、今のあなたが考えを整理するヒントをお届けします。'}
-            </p>
-            {!themesAlreadyShown && (
-              <a href="#fortune-today-action" className="button button--primary">
-                {nextAction}
-              </a>
-            )}
-          </section>
+          </header>
         )}
+        {!illustrated && guidePanel}
         <div id="fortune-today-action" className="fortune-today__action" tabIndex={-1}>
           {profile && showIntake && (
             <FortuneProfileForm
@@ -266,9 +276,11 @@ export default async function FortuneTodayPage({
           ) : paidView && !profile?.profile.consented ? null : (
             <section
               className={
-                basicProfileFlow && !deepView
-                  ? 'settings-card fortune-today__theme-entry'
-                  : 'settings-card'
+                illustrated
+                  ? 'fortune-today__contents'
+                  : basicProfileFlow && !deepView
+                    ? 'settings-card fortune-today__theme-entry'
+                    : 'settings-card'
               }
             >
               <h2>
@@ -276,12 +288,17 @@ export default async function FortuneTodayPage({
                   ? '深層鑑定を始める'
                   : showDynamicIntake
                     ? '今日の占い方を選ぶ'
-                    : '何について占いますか？'}
+                    : illustrated
+                      ? '今日のテーマを選ぶ'
+                      : '何について占いますか？'}
               </h2>
-              {!showDynamicIntake && <p>今日いちばん気になるものを選んでください。</p>}
+              {!showDynamicIntake && !illustrated && (
+                <p>今日いちばん気になるものを選んでください。</p>
+              )}
               <DrawButtons
                 serviceSlug={serviceSlug}
                 summoning={summoning}
+                illustrated={illustrated}
                 {...(characters?.daily ? { dailyCharacter: characters.daily } : {})}
                 {...(deepEnabled ? { deepReadingEnabled: true } : {})}
                 {...(paidView ? { paidReading: true } : {})}
@@ -303,6 +320,12 @@ export default async function FortuneTodayPage({
             </section>
           )}
         </div>
+        {illustrated && referralPath && (
+          <Link className="fortune-today__share" href={referralPath}>
+            友だちに紹介する
+          </Link>
+        )}
+        {illustrated && guidePanel}
         {paidView && !profile?.profile.consented && (
           <p>
             深層鑑定に使う情報の取り扱いを
@@ -351,7 +374,12 @@ export default async function FortuneTodayPage({
         <p className="fortune-note">
           占い結果は判断の参考です。医療・法律・投資などの重要な判断は専門家にご相談ください。
         </p>
-        <FortuneNav serviceSlug={serviceSlug} current="today" inFlow={Boolean(showBasicProfile)} />
+        <FortuneNav
+          serviceSlug={serviceSlug}
+          current="today"
+          illustrated={illustrated}
+          inFlow={Boolean(showBasicProfile)}
+        />
       </div>
     </PublicShell>
   );
@@ -359,6 +387,7 @@ export default async function FortuneTodayPage({
     <FortuneAppearance
       settings={resolveFortunePageAppearance(guidance.appearance)}
       brand={service.configuration.brand}
+      showMastheadOrnament={!illustrated}
     >
       {content}
     </FortuneAppearance>

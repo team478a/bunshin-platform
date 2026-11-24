@@ -30,10 +30,16 @@ vi.mock('../src/fortune/personal-profile', () => ({
   fortuneBasicProfileRepository: () => ({ read: state.basicProfile }),
 }));
 
-const renderToday = async () =>
-  renderToStaticMarkup(
-    await FortuneTodayPage({ params: Promise.resolve({ serviceSlug: 'tarot' }) }),
-  );
+vi.mock('@bunshin/database', () => ({
+  prisma: { fortuneProductHypothesis: { findFirst: () => null } },
+}));
+vi.mock('../src/fortune/commerce', () => ({
+  hasAvailableFortunePurchase: () => false,
+  availableFortuneProduct: () => null,
+}));
+
+const renderToday = async (serviceSlug = 'tarot') =>
+  renderToStaticMarkup(await FortuneTodayPage({ params: Promise.resolve({ serviceSlug }) }));
 
 const setting = {
   minimumAge: 18,
@@ -88,6 +94,23 @@ describe('fortune member home', () => {
       profile: emptyFortunePersonalProfile,
     });
     state.history.mockResolvedValue([]);
+  });
+
+  it('uses the observatory for Oracle participants before their draw', async () => {
+    state.today.mockResolvedValue({ participant: { id: 'participant' }, reading: null });
+    state.profile.mockResolvedValue({
+      enabled: true,
+      completed: true,
+      profile: emptyFortunePersonalProfile,
+    });
+    const oracle = await renderToday('watashi-fortune');
+    expect(oracle).toContain('fortune-today--observatory');
+    expect(oracle).toContain('今日のテーマを選ぶ');
+    expect(oracle).toContain('/fortune/observatory/compass.webp');
+    expect(await renderToday()).not.toContain('fortune-today--observatory');
+
+    state.today.mockResolvedValue({ participant: { id: 'participant' }, reading });
+    expect(await renderToday('watashi-fortune')).not.toContain('fortune-today--observatory');
   });
 
   it('shows a built-in card’s symbolism and theme prompt with an existing free reading', async () => {

@@ -1,4 +1,5 @@
 import type { Route } from 'next';
+import { fortuneObservatoryArt } from './fortune-observatory-art';
 import Link from 'next/link';
 import type { FortuneReadingView } from '@bunshin/capability-fortune';
 import { dailyCardDetails } from '../../../src/fortune/daily-card-details';
@@ -24,15 +25,17 @@ const fortuneNavItems = [
 export function FortuneNav({
   serviceSlug,
   inFlow = false,
+  illustrated = false,
   current,
 }: {
   serviceSlug: string;
   inFlow?: boolean;
+  illustrated?: boolean;
   current?: (typeof fortuneNavItems)[number]['path'];
 }) {
   return (
     <nav
-      className={inFlow ? 'fortune-nav fortune-nav--in-flow' : 'fortune-nav'}
+      className={`fortune-nav${inFlow ? ' fortune-nav--in-flow' : ''}${illustrated ? ' fortune-nav--illustrated' : ''}`}
       aria-label="占いメニュー"
     >
       {fortuneNavItems.map(({ path, label, symbol }) => (
@@ -41,9 +44,19 @@ export function FortuneNav({
           href={`/s/${serviceSlug}/${path}` as Route}
           aria-current={path === current ? 'page' : undefined}
         >
-          <span className="fortune-nav__symbol" aria-hidden="true">
-            {symbol}
-          </span>
+          {illustrated ? (
+            <img
+              src={`${fortuneObservatoryArt}/${path === 'today' ? 'moon' : path}.webp`}
+              alt=""
+              width={26}
+              height={26}
+              decoding="async"
+            />
+          ) : (
+            <span className="fortune-nav__symbol" aria-hidden="true">
+              {symbol}
+            </span>
+          )}
           <span>{label}</span>
         </Link>
       ))}

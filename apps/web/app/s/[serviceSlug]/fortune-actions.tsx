@@ -2,6 +2,7 @@
 
 import type { Route } from 'next';
 import { useRouter } from 'next/navigation';
+import { fortuneObservatoryArt } from './fortune-observatory-art';
 import { useState } from 'react';
 import type {
   FortuneFeedbackIssue,
@@ -137,14 +138,20 @@ export function FortunePersonalizationSetting({
 }
 
 const choices = [
-  { value: 'LOVE', label: '恋愛', note: '恋愛や気持ちについて' },
-  { value: 'WORK', label: '仕事', note: '仕事や今後の動きについて' },
-  { value: 'RELATIONSHIPS', label: '人間関係', note: '家族・友人・周囲との関係について' },
+  { value: 'LOVE', art: 'rose', label: '恋愛', note: '恋愛や気持ちについて' },
+  { value: 'WORK', art: 'compass', label: '仕事', note: '仕事や今後の動きについて' },
+  {
+    value: 'RELATIONSHIPS',
+    art: 'stars',
+    label: '人間関係',
+    note: '家族・友人・周囲との関係について',
+  },
 ] as const;
 
 export function FortuneDrawButtons({
   serviceSlug,
   askConsultation = false,
+  illustrated = false,
   summoning = 'off',
   dailyCharacter,
   themeLabels,
@@ -152,6 +159,7 @@ export function FortuneDrawButtons({
 }: {
   serviceSlug: string;
   askConsultation?: boolean;
+  illustrated?: boolean;
   summoning?: FortuneSummoningMode;
   dailyCharacter?: FortuneCharacter;
   themeLabels?: Record<(typeof choices)[number]['value'], string>;
@@ -166,7 +174,11 @@ export function FortuneDrawButtons({
     dailyCharacter ? { character: dailyCharacter } : undefined,
   );
   return (
-    <div className="fortune-theme-list">
+    <div
+      className={
+        illustrated ? 'fortune-theme-list fortune-theme-list--illustrated' : 'fortune-theme-list'
+      }
+    >
       {summoningScene.panel}
       {askConsultation && (
         <label className="form-field">
@@ -222,12 +234,27 @@ export function FortuneDrawButtons({
             })();
           }}
         >
+          {illustrated && (
+            <img
+              src={`${fortuneObservatoryArt}/${choice.art}.webp`}
+              alt=""
+              width={60}
+              height={60}
+              decoding="async"
+            />
+          )}
           <strong>
             {busy === choice.value
               ? 'カードを引いています…'
               : (themeLabels?.[choice.value] ?? choice.label)}
           </strong>
-          <span>{choice.note}</span>
+          {illustrated ? (
+            <span className="fortune-theme-button__arrow" aria-hidden="true">
+              ›
+            </span>
+          ) : (
+            <span>{choice.note}</span>
+          )}
         </button>
       ))}
       {error && (

@@ -56,6 +56,50 @@ test('mobile Fortune uses the standard theme and fits all five navigation items'
   await app.screenshot('fortune-standard-390px');
 });
 
+test('mobile Oracle displays the approved artwork and draws with the existing theme action', async ({
+  app,
+  browser,
+  screen,
+}) => {
+  await browser.route('**/__fortune_fixture', (route) =>
+    route.fulfill({ json: { joined: true, completed: true, profile: emptyProfile } }),
+  );
+  await browser.route(`${endpoints}/today`, (route) => {
+    expect(JSON.parse(route.request.postData ?? '{}')).toEqual({ theme: 'WORK' });
+    return route.fulfill({ json: { data: reading } });
+  });
+  await app.open('/fortune.html?observatory');
+  await expect(screen.getByRole('heading', '今日のテーマを選ぶ')).toBeVisible();
+  const work = screen.getByRole('button', '仕事', { exact: true });
+  await expect(work).toBeVisible();
+  const layout = await browser.evaluate(async () => {
+    const art = [...document.querySelectorAll<HTMLImageElement>('.fortune-today img')];
+    await Promise.all(art.map((asset) => asset.decode()));
+    const theme = document.querySelector('.fortune-theme-button')!;
+    const nav = document.querySelector('.fortune-nav')!;
+    const referral = document.querySelector('.fortune-today__share')!;
+    const border = getComputedStyle(theme);
+    return {
+      fitsWidth: document.documentElement.scrollWidth <= innerWidth,
+      loadedImages: art.length,
+      hasSideBorder: border.borderLeftWidth !== '0px' || border.borderRightWidth !== '0px',
+      referralAboveNav: referral.getBoundingClientRect().bottom <= nav.getBoundingClientRect().top,
+      activeLabel: getComputedStyle(nav.querySelector('[aria-current=page]')!).color,
+    };
+  });
+  expect(layout).toEqual({
+    fitsWidth: true,
+    loadedImages: 9,
+    hasSideBorder: false,
+    referralAboveNav: true,
+    activeLabel: 'rgb(33, 29, 65)',
+  });
+  await app.screenshot('oracle-observatory-390px');
+  const draw = browser.waitForResponse(`${endpoints}/today`);
+  await work.tap();
+  expect((await draw).status).toBe(200);
+});
+
 test('mobile Fortune keeps profile actions clear of the navigation', async ({
   app,
   screen,

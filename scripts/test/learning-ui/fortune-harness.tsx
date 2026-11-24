@@ -13,6 +13,7 @@ import { FortuneProfileForm } from '../../../apps/web/app/s/[serviceSlug]/fortun
 import { FortuneDynamicIntake } from '../../../apps/web/app/s/[serviceSlug]/fortune-dynamic-intake';
 import { FortuneSavedUnderstanding } from '../../../apps/web/app/s/[serviceSlug]/fortune-understanding';
 import { FortuneReflection } from '../../../apps/web/app/s/[serviceSlug]/fortune-reflection';
+import { FortuneObservatoryHero } from '../../../apps/web/app/s/[serviceSlug]/today/fortune-observatory-hero';
 import { FortuneAppearance } from '../../../apps/web/app/s/[serviceSlug]/fortune-appearance';
 import { resolveFortunePageAppearance } from '../../../apps/web/src/fortune/appearance';
 import { FortuneNav, ReadingCard } from '../../../apps/web/app/s/[serviceSlug]/fortune-ui';
@@ -46,20 +47,42 @@ function FortuneHarness() {
   if (!state) return null;
   const serviceSlug = 'fixture-fortune';
   const params = new URLSearchParams(window.location.search);
-  if (params.has('design'))
+  const illustrated = params.has('observatory');
+  if (illustrated || params.has('design'))
     return (
-      <FortuneAppearance settings={resolveFortunePageAppearance(undefined)} brand={undefined}>
+      <FortuneAppearance
+        settings={resolveFortunePageAppearance(undefined)}
+        brand={undefined}
+        showMastheadOrnament={!illustrated}
+      >
         <main className="public-shell">
           <div className="public-shell__content">
-            <div className="app-page fortune-page fortune-today">
-              <header className="app-page__heading">
-                <h1>今日の占い</h1>
-              </header>
-              <section className="settings-card fortune-today__theme-entry">
-                <h2>何について占いますか？</h2>
-                <FortuneDrawButtons serviceSlug={serviceSlug} />
+            <div
+              className={`app-page fortune-page fortune-today${illustrated ? ' fortune-today--observatory' : ''}`}
+            >
+              {illustrated ? (
+                <FortuneObservatoryHero />
+              ) : (
+                <header className="app-page__heading">
+                  <h1>今日の占い</h1>
+                </header>
+              )}
+              <section
+                className={
+                  illustrated
+                    ? 'fortune-today__contents'
+                    : 'settings-card fortune-today__theme-entry'
+                }
+              >
+                <h2>{illustrated ? '今日のテーマを選ぶ' : '何について占いますか？'}</h2>
+                <FortuneDrawButtons serviceSlug={serviceSlug} illustrated={illustrated} />
               </section>
-              <FortuneNav serviceSlug={serviceSlug} current="today" />
+              {illustrated && (
+                <a href={`/s/${serviceSlug}/activity`} className="fortune-today__share">
+                  友だちに紹介する
+                </a>
+              )}
+              <FortuneNav serviceSlug={serviceSlug} current="today" illustrated={illustrated} />
             </div>
           </div>
         </main>

@@ -15,11 +15,13 @@ export function FortuneAppearance({
   brand,
   children,
   showMastheadLogo = true,
+  showMastheadOrnament = true,
 }: {
   settings: FortuneAppearanceSettings | undefined;
   brand: FortuneAppearanceBrand | undefined;
   children: ReactNode;
   showMastheadLogo?: boolean;
+  showMastheadOrnament?: boolean;
 }) {
   if (!settings?.enabled) return children;
 
@@ -36,7 +38,7 @@ export function FortuneAppearance({
     '--fortune-action-text': fortuneReadableText(colors.text, colors.action),
     '--fortune-accent': colors.accent,
   } as CSSProperties;
-  const ornament = ornaments[settings.ornament];
+  const ornament = showMastheadOrnament ? ornaments[settings.ornament] : null;
   const logoUrl = settings.showLogo && showMastheadLogo ? brand?.logoUrl : null;
   return (
     <div
