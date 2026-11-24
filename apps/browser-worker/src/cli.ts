@@ -52,10 +52,12 @@ async function main() {
     command !== 'material' &&
     command !== 'cancel' &&
     command !== 'serve' &&
-    command !== 'once'
+    command !== 'once' &&
+    command !== 'schedule-training-rechecks' &&
+    command !== 'rollback-training-material'
   ) {
     throw new Error(
-      'Usage: smoke [mobile|desktop] | enqueue WORKSPACE_ID ACTOR_ID DEVICE REQUEST_ID | discover|discover-model WORKSPACE_ID ACTOR_ID DEVICE REQUEST_ID | replay|material WORKSPACE_ID ACTOR_ID RECIPE_ID REQUEST_ID | cancel WORKSPACE_ID ACTOR_ID JOB_ID | serve | once',
+      'Usage: smoke [mobile|desktop] | enqueue WORKSPACE_ID ACTOR_ID DEVICE REQUEST_ID | discover|discover-model WORKSPACE_ID ACTOR_ID DEVICE REQUEST_ID | replay|material WORKSPACE_ID ACTOR_ID RECIPE_ID REQUEST_ID | cancel WORKSPACE_ID ACTOR_ID JOB_ID | serve | once | schedule-training-rechecks | rollback-training-material WORKSPACE_ID ACTOR_ID OLD_MATERIAL_ID CURRENT_MATERIAL_ID',
     );
   }
   const databaseUrl = process.env['BROWSER_FIXTURE_DATABASE_URL'];
@@ -85,6 +87,26 @@ async function main() {
     } else if (command === 'cancel') {
       const [workspace = '', actor = '', jobId = ''] = args;
       console.log(JSON.stringify(await queue.cancelFixture(workspace, actor, jobId)));
+    } else if (command === 'schedule-training-rechecks') {
+      const { scheduleTrainingReviews } = await import('./training-material');
+      console.log(JSON.stringify({ queued: await scheduleTrainingReviews() }));
+    } else if (command === 'rollback-training-material') {
+      const [workspaceId, actorId, materialId, expectedCurrentId] = args;
+      const uuid = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
+      if (
+        !workspaceId ||
+        !actorId ||
+        !materialId ||
+        !expectedCurrentId ||
+        ![workspaceId, actorId, materialId, expectedCurrentId].every((value) => uuid.test(value))
+      )
+        throw new BrowserRunError('INVALID_PLAN');
+      const { rollbackTrainingMaterial } = await import('./training-material');
+      console.log(
+        JSON.stringify(
+          await rollbackTrainingMaterial({ workspaceId, actorId, materialId, expectedCurrentId }),
+        ),
+      );
     } else {
       await queue.runQueue({
         output,

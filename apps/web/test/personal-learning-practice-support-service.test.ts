@@ -14,6 +14,8 @@ const f = vi.hoisted(() => ({
   body: vi.fn(),
   generate: vi.fn(),
   extendedScope: vi.fn(),
+  readMaterial: vi.fn(),
+  enqueueReview: vi.fn(),
 }));
 vi.mock('@bunshin/database', () => ({
   prisma: { personalLearningCallAdmission: { findUnique: f.admission } },
@@ -21,6 +23,10 @@ vi.mock('@bunshin/database', () => ({
     prepareSupport = f.prepare;
     completeSupport = f.complete;
     failSupport = f.fail;
+  },
+  PrismaBrowserLearningMaterials: class {
+    readMaterial = f.readMaterial;
+    enqueueReview = f.enqueueReview;
   },
   PrismaPersonalLearningTextOperationRepository: class {},
 }));
@@ -174,6 +180,26 @@ describe('practice support orchestration', () => {
     );
     expect(f.settle).toHaveBeenCalledOnce();
     expect(f.fail).not.toHaveBeenCalled();
+  });
+  it('uses an existing screen mismatch diagnosis to recheck the scoped lesson without sending the image to the worker', async () => {
+    vi.stubEnv('APP_ENV', 'development');
+    f.readMaterial.mockResolvedValue({ material: { id } });
+    f.enqueueReview.mockResolvedValue(true);
+    f.generate.mockResolvedValue({ value: { ...advice, cause: 'ENVIRONMENT_MISMATCH' } });
+    const screen = {
+      ...command,
+      reason: 'ENVIRONMENT_MISMATCH' as const,
+      image: {
+        mimeType: 'image/jpeg' as const,
+        sizeBytes: 1,
+        base64: 'AA==',
+        sha256: 'a'.repeat(64),
+      },
+    };
+    expect(await requestPracticeSupport(screen)).toEqual(practice);
+    expect(f.readMaterial).toHaveBeenCalledWith(command.actor);
+    expect(f.enqueueReview).toHaveBeenCalledWith(command.actor, id);
+    expect(f.generate).toHaveBeenCalledOnce();
   });
   it('returns a stored READY response without new runtime, call or cost', async () => {
     f.prepare.mockResolvedValue({

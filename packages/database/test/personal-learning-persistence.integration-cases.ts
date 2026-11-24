@@ -1,4 +1,4 @@
-import { BROWSER_FIXTURE_JOB_TYPE, ClaimJob, assertUserJob } from '@bunshin/application';
+import { BROWSER_FIXTURE_JOB_TYPE, ClaimJob, FailJob, assertUserJob } from '@bunshin/application';
 import { PrismaBrowserLearningMaterials } from '../src/browser-learning-material';
 import { PrismaJobRepository } from '../src/automation-jobs';
 import { createHash, randomUUID } from 'node:crypto';
@@ -318,13 +318,14 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
         ).rejects.toMatchObject({ code: 'NOT_FOUND' });
         expect(await materials.jobMaterial(job)).toEqual({ device: 'mobile', existing: false });
         const image = new Uint8Array([1, 2, 3]);
-        const result = await materials.finish(job, worker, {
+        const proof = {
           title: '練習用メモ',
           goal: '表示を確かめる',
           preparation: '開始',
           practice: '復習',
           checkpoint: '確認',
-          verifiedAt: new Date(),
+          verifiedAt: new Date(Date.now() - 8 * 86_400_000),
+          semanticDigest: 'a'.repeat(64),
           steps: [
             {
               ordinal: 1,
@@ -334,7 +335,8 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
               afterImage: image,
             },
           ],
-        });
+        };
+        const result = await materials.finish(job, worker, proof);
         expect(await materials.readMaterial(f.actor)).toMatchObject({
           material: { id: result.id },
         });
@@ -359,6 +361,73 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
             where: { workspaceId: f.scope.workspaceId, jobType: BROWSER_FIXTURE_JOB_TYPE },
           }),
         ).toBe(1);
+        expect(await materials.scheduleReviews()).toBe(1);
+        expect(await materials.scheduleReviews()).toBe(0);
+        const queue = new PrismaJobRepository(client, 'browser-fixture');
+        const claimReview = async () => {
+          const review = await new ClaimJob(queue).execute('DEVELOPMENT', worker);
+          if (!review) throw new Error('review job missing');
+          assertUserJob(review);
+          return review;
+        };
+        const same = await claimReview();
+        expect(await materials.jobMaterial(same)).toEqual({ device: 'mobile', existing: false });
+        expect(await materials.finish(same, worker, { ...proof, verifiedAt: new Date() })).toEqual({
+          id: result.id,
+        });
+        expect(await materials.readMaterial(f.actor)).toMatchObject({
+          reviewStatus: 'SUCCEEDED',
+          material: { id: result.id, revision: 1, reviewedAt: expect.any(Date) },
+        });
+
+        await client.browserFixtureMaterial.update({
+          where: { id: result.id },
+          data: { reviewRequestedAt: null },
+        });
+        expect(await materials.enqueueReview(f.actor, result.id)).toBe(true);
+        expect(await materials.enqueueReview(f.actor, result.id)).toBe(false);
+        const failed = await claimReview();
+        await new FailJob(queue).execute(failed, worker, {
+          errorCategory: 'BROWSER_STEP_FAILED',
+          retryable: false,
+        });
+        expect(await materials.readMaterial(f.actor)).toMatchObject({
+          reviewStatus: 'DEAD',
+          material: { id: result.id, revision: 1 },
+        });
+
+        await client.browserFixtureMaterial.update({
+          where: { id: result.id },
+          data: { reviewRequestedAt: null },
+        });
+        expect(await materials.enqueueReview(f.actor, result.id)).toBe(true);
+        const changed = await claimReview();
+        const revised = await materials.finish(changed, worker, {
+          ...proof,
+          verifiedAt: new Date(),
+          semanticDigest: 'b'.repeat(64),
+        });
+        expect(await materials.readMaterial(f.actor)).toMatchObject({
+          material: { id: revised.id, revision: 2 },
+        });
+        expect(await materials.enqueueReview(f.actor, result.id)).toBe(false);
+        expect(await materials.readImage(f.actor, result.id, 1, 'after')).toEqual(image);
+        const rollback = {
+          workspaceId: f.scope.workspaceId,
+          materialId: result.id,
+          expectedCurrentId: revised.id,
+        };
+        await expect(
+          materials.rollback({ ...rollback, actorId: f.scope.userId }),
+        ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+        const restored = await materials.rollback({ ...rollback, actorId: f.owner.id });
+        expect(restored.revision).toBe(3);
+        expect(await materials.readMaterial(f.actor)).toMatchObject({
+          material: { id: restored.id, revision: 3 },
+        });
+        await expect(
+          materials.rollback({ ...rollback, actorId: f.owner.id }),
+        ).rejects.toMatchObject({ code: 'CONFLICT' });
       } finally {
         await client.job.deleteMany({
           where: { workspaceId: f.scope.workspaceId, jobType: BROWSER_FIXTURE_JOB_TYPE },

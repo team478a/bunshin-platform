@@ -133,6 +133,22 @@ export async function requestPracticeSupport(command: PracticeSupportCommand) {
       usageKey,
       promptVersion,
     });
+    if (
+      process.env['APP_ENV'] === 'development' &&
+      command.image &&
+      command.reason === 'ENVIRONMENT_MISMATCH' &&
+      value.cause === 'ENVIRONMENT_MISMATCH'
+    ) {
+      try {
+        const materials = new db.PrismaBrowserLearningMaterials(db.prisma);
+        const lesson = await materials.readMaterial(command.actor);
+        if (lesson?.material) await materials.enqueueReview(command.actor, lesson.material.id);
+      } catch (error) {
+        console.warn('practice support browser review unavailable', {
+          category: error instanceof ApplicationError ? error.code : 'INTERNAL',
+        });
+      }
+    }
     await (
       await import('./personal-learning-persona-inference')
     ).inferPersonalLearningPersonaAfterSuccess({
