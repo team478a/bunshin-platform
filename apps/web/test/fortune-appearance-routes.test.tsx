@@ -17,7 +17,7 @@ vi.mock('../src/auth/current-user', () => ({
   currentUserProvider: () => ({ getCurrentUser: () => ({ userId: 'member' }) }),
 }));
 vi.mock('../src/services/public-service', () => ({
-  resolveVisitorServiceContext: async () => (await fixture.page()).service,
+  resolveVisitorServiceContext: () => service,
 }));
 vi.mock('../src/services/member-service-page', () => ({
   resolveAuthenticatedMemberServicePage: fixture.page,
@@ -42,8 +42,23 @@ vi.mock('@bunshin/database', () => ({
   },
 }));
 
+const serviceSlug = 'tarot';
+const service = {
+  workspaceId: 'workspace',
+  serviceId: 'group',
+  configuration: {
+    id: 'configuration',
+    workspaceId: 'workspace',
+    groupId: 'group',
+    slug: serviceSlug,
+    displayName: '月と星のオラクル',
+    visibility: 'PRIVATE',
+    registration: { referralEnabled: false },
+    brand: { logoUrl: null, primaryColor: '#28234f', secondaryColor: '#a47935' },
+  },
+};
+
 describe('Oracle design on member and entry routes', () => {
-  const serviceSlug = 'tarot';
   const params = Promise.resolve({ serviceSlug });
   const searchParams = Promise.resolve({});
   const appearance = { ...defaultFortuneAppearance, enabled: true, palette: 'night' };
@@ -53,20 +68,7 @@ describe('Oracle design on member and entry routes', () => {
     fixture.page.mockResolvedValue({
       actor: { userId: 'member' },
       setting,
-      service: {
-        workspaceId: 'workspace',
-        serviceId: 'group',
-        configuration: {
-          id: 'configuration',
-          workspaceId: 'workspace',
-          groupId: 'group',
-          slug: serviceSlug,
-          displayName: '月と星のオラクル',
-          visibility: 'PRIVATE',
-          registration: { referralEnabled: false },
-          brand: { logoUrl: null, primaryColor: '#28234f', secondaryColor: '#a47935' },
-        },
-      },
+      service,
     });
   });
 
