@@ -8,11 +8,21 @@ export const deviceLabel = (device: string) =>
 export const dateLabel = (date: Date) =>
   new Intl.DateTimeFormat('ja-JP', { dateStyle: 'long', timeZone: 'Asia/Tokyo' }).format(date);
 
+export function materialSourceLabel(material: {
+  verifiedAt: Date | null;
+  importedAt?: Date | null;
+}) {
+  if (material.importedAt)
+    return '人の操作記録・未検証 · 取り込み ' + dateLabel(material.importedAt);
+  return material.verifiedAt ? '検証 ' + dateLabel(material.verifiedAt) : '検証日時なし';
+}
+
 export function BrowserMaterialView({
   material,
   device,
   ordinal,
   showDetail,
+  hasRecordedImage = false,
   stepHref,
   imageHref,
   guidance,
@@ -23,26 +33,33 @@ export function BrowserMaterialView({
     preparation: string;
     practice: string;
     checkpoint: string;
-    verifiedAt: Date;
+    verifiedAt: Date | null;
+    importedAt?: Date | null;
     steps: { ordinal: number; instruction: string }[];
   };
   device: string;
   ordinal: number;
   showDetail: boolean;
+  hasRecordedImage?: boolean;
   stepHref: (value: number) => UrlObject;
   imageHref: (variant: 'before' | 'after' | 'detail') => string;
   guidance?: string;
 }) {
   const step = material.steps[ordinal - 1];
   if (!step) return null;
+  const images: ('before' | 'after')[] = material.importedAt
+    ? hasRecordedImage
+      ? ['after']
+      : []
+    : ['before', 'after'];
 
   return (
     <>
       <header>
         <h2>{material.title}</h2>
-        <p>{material.goal}</p>
+        {material.goal && <p>{material.goal}</p>}
         <small>
-          {deviceLabel(device)} · 検証 {dateLabel(material.verifiedAt)}
+          {deviceLabel(device)} · {materialSourceLabel(material)}
         </small>
       </header>
       <details>
@@ -55,8 +72,12 @@ export function BrowserMaterialView({
         </h3>
         <p>{step.instruction}</p>
         <div className={styles.images}>
-          {(['before', 'after'] as const).map((variant) => {
-            const label = variant === 'before' ? '操作前' : '操作後';
+          {images.map((variant) => {
+            const label = material.importedAt
+              ? '記録画面'
+              : variant === 'before'
+                ? '操作前'
+                : '操作後';
             const href = imageHref(variant);
             return (
               <figure key={variant}>

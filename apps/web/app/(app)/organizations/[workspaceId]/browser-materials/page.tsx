@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import {
   browserMaterialActor,
   hasBrowserMaterialDetail,
+  hasBrowserMaterialImage,
   materialIdSchema,
   readBrowserMaterial,
   searchBrowserMaterials,
@@ -10,9 +11,11 @@ import {
 import styles from '../../../../../src/components/browser-material.module.css';
 import {
   BrowserMaterialView,
-  dateLabel,
+  materialSourceLabel,
   deviceLabel,
 } from '../../../../../src/components/browser-material-view';
+
+import { MimikMaterialImportForm } from '../../../../../src/components/mimik-material-import-form';
 
 export const dynamic = 'force-dynamic';
 
@@ -35,6 +38,7 @@ export default async function BrowserMaterialsPage(props: {
     return (
       <main className={styles.page}>
         <h1>操作教材</h1>
+        <MimikMaterialImportForm workspaceId={workspaceId} />
         <form className={styles.search}>
           <label htmlFor="material-search">教材名</label>
           <input id="material-search" name="q" defaultValue={query} maxLength={100} type="search" />
@@ -49,7 +53,7 @@ export default async function BrowserMaterialsPage(props: {
               <p>{material.goal}</p>
               <small>
                 {deviceLabel(material.recipe?.device ?? 'desktop')} · 検証{' '}
-                {dateLabel(material.verifiedAt)}
+                {materialSourceLabel(material)}
               </small>
             </li>
           ))}
@@ -67,7 +71,11 @@ export default async function BrowserMaterialsPage(props: {
     typeof search.step === 'string' && /^[1-9]\d{0,8}$/.test(search.step) ? Number(search.step) : 1;
   const step = material.steps[ordinal - 1];
   if (!step) notFound();
-  const showDetail = await hasBrowserMaterialDetail(actor, material.id, step.ordinal);
+  const showDetail =
+    !material.importedAt && (await hasBrowserMaterialDetail(actor, material.id, step.ordinal));
+  const hasRecordedImage =
+    !!material.importedAt &&
+    (await hasBrowserMaterialImage(actor, material.id, step.ordinal, 'after'));
   const stepHref = (value: number) => ({
     pathname: base,
     query: { material: material.id, step: value, q: query },
@@ -79,7 +87,8 @@ export default async function BrowserMaterialsPage(props: {
       <Link href={{ pathname: base, query: { q: query } }}>教材一覧</Link>
       <BrowserMaterialView
         material={material}
-        device={material.recipe?.device ?? 'desktop'}
+        device={material.fixtureDevice ?? material.recipe?.device ?? 'desktop'}
+        hasRecordedImage={hasRecordedImage}
         ordinal={ordinal}
         showDetail={showDetail}
         stepHref={stepHref}

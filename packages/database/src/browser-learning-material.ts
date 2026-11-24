@@ -209,7 +209,11 @@ export class PrismaBrowserLearningMaterials extends PrismaPersonalLearningPersis
       if (!material || material.id !== materialId) return false;
       const now = new Date();
       const cutoff = new Date(now.getTime() - (periodic ? reviewInterval : reportCooldown));
-      if (periodic && (material.reviewedAt ?? material.verifiedAt) >= cutoff) return false;
+      if (
+        !material.verifiedAt ||
+        (periodic && (material.reviewedAt ?? material.verifiedAt) >= cutoff)
+      )
+        return false;
       const inProgress = await tx.job.findFirst({
         where: {
           environment,

@@ -2927,6 +2927,7 @@ model Workspace {
 }
 
 model WorkspaceMembership {
+  importedBrowserMaterials BrowserFixtureMaterial[]
   browserFixtureRecipes BrowserFixtureRecipe[]
   id          String           @id @default(uuid()) @db.Uuid
   workspaceId String           @map("workspace_id") @db.Uuid
@@ -9243,18 +9244,23 @@ model BrowserFixtureMaterial {
   preparation    String                       @db.VarChar(400)
   practice       String                       @db.VarChar(600)
   checkpoint     String                       @db.VarChar(400)
-  verifiedAt     DateTime                     @map("verified_at") @db.Timestamptz(6)
+  verifiedAt     DateTime?                    @map("verified_at") @db.Timestamptz(6)
   semanticDigest String?                      @map("semantic_digest") @db.Char(64)
   reviewedAt     DateTime?                    @map("reviewed_at") @db.Timestamptz(6)
   reviewRequestedAt DateTime?                 @map("review_requested_at") @db.Timestamptz(6)
-  sourceJobId    String                       @map("source_job_id") @db.Uuid
-  sourceAttempt  Int                          @map("source_attempt")
+  sourceJobId    String?                      @map("source_job_id") @db.Uuid
+  sourceAttempt  Int?                         @map("source_attempt")
   recipe         BrowserFixtureRecipe?        @relation(fields: [recipeId], references: [id], onDelete: Cascade, map: "browser_fixture_materials_recipe_fkey")
   program        ServiceProgram?              @relation(fields: [workspaceId, groupId, programId], references: [workspaceId, groupId, id], onDelete: Cascade, map: "browser_fixture_materials_program_fkey")
+  importedBy     String?                      @map("imported_by") @db.Uuid
+  importedAt     DateTime?                    @map("imported_at") @db.Timestamptz(6)
+  importDigest   String?                      @map("import_digest") @db.Char(64)
+  importer       WorkspaceMembership?         @relation(fields: [workspaceId, importedBy], references: [workspaceId, userId], onDelete: Cascade, map: "browser_fixture_materials_import_membership_fkey")
   steps          BrowserFixtureMaterialStep[]
 
   @@unique([recipeId, revision], map: "browser_fixture_materials_recipe_revision_key")
   @@unique([workspaceId, groupId, programId, fixtureDevice, revision], map: "browser_fixture_materials_program_revision_key")
+  @@unique([workspaceId, importedBy, fixtureDevice, importDigest], map: "browser_fixture_materials_import_key")
   @@map("browser_fixture_materials")
 }
 
@@ -9263,8 +9269,8 @@ model BrowserFixtureMaterialStep {
   ordinal     Int
   stepId      String                 @map("step_id") @db.VarChar(64)
   instruction String                 @db.VarChar(400)
-  beforeImage Bytes                  @map("before_image") @db.ByteA
-  afterImage  Bytes                  @map("after_image") @db.ByteA
+  beforeImage Bytes?                 @map("before_image") @db.ByteA
+  afterImage  Bytes?                 @map("after_image") @db.ByteA
   detailImage Bytes?                 @map("detail_image") @db.ByteA
   material    BrowserFixtureMaterial @relation(fields: [materialId], references: [id], onDelete: Cascade, map: "browser_fixture_material_steps_material_fkey")
 

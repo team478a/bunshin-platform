@@ -1,1 +1,1 @@
-export const LATEST_DATABASE_MIGRATION = '20261125090000_training_browser_material_review';
+export const LATEST_DATABASE_MIGRATION = '20261125100000_imported_browser_materials';

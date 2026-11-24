@@ -155,6 +155,7 @@ import {
   PrismaServiceParticipationRepository,
   PrismaServiceNotificationPreferenceRepository,
   lockTrainingEnrollmentData,
+  saveImportedBrowserMaterial,
 } from '../src';
 
 const integrationTarget = integrationDatabaseTarget(process.env);
@@ -284,6 +285,63 @@ describe('database ownership boundaries', () => {
         client.trainingParticipantProfile.count(),
       ]),
     ).toEqual([0, 0, 0, 0, 0, 0]);
+  });
+
+  it('stores Mimik records without verification evidence and deduplicates within the active workspace member', async () => {
+    const workspace = await client.workspace.create({
+      data: { type: 'ORGANIZATION', name: 'Mimik recorder' },
+    });
+    const member = await client.user.create({ data: { displayName: 'Synthetic importer' } });
+    const other = await client.user.create({ data: { displayName: 'Synthetic stranger' } });
+    const membership = await client.workspaceMembership.create({
+      data: { workspaceId: workspace.id, userId: member.id, role: 'OWNER' },
+    });
+    const actor = { workspaceId: workspace.id, actorId: member.id };
+    const material = {
+      title: '合成の操作記録',
+      goal: '',
+      importDigest: 'a'.repeat(64),
+      steps: [
+        { stepId: 'heading', instruction: '準備', ordinal: 1, afterImage: null },
+        { stepId: 'preview', instruction: '押す', ordinal: 2, afterImage: new Uint8Array([1]) },
+      ],
+    };
+    try {
+      const saved = await saveImportedBrowserMaterial(client, actor, 'mobile', material);
+      expect(await saveImportedBrowserMaterial(client, actor, 'mobile', material)).toEqual(saved);
+      await expect(
+        saveImportedBrowserMaterial(client, { ...actor, actorId: other.id }, 'mobile', material),
+      ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+      const stored = await client.browserFixtureMaterial.findUniqueOrThrow({
+        where: { id: saved.id },
+        include: { steps: { orderBy: { ordinal: 'asc' } } },
+      });
+      expect(stored).toMatchObject({
+        importedBy: member.id,
+        fixtureDevice: 'mobile',
+        workspaceId: workspace.id,
+        recipeId: null,
+        programId: null,
+        verifiedAt: null,
+        sourceJobId: null,
+        sourceAttempt: null,
+      });
+      expect(stored.importedAt).toBeInstanceOf(Date);
+      expect(stored.steps.map(({ beforeImage, afterImage }) => [beforeImage, afterImage])).toEqual([
+        [null, null],
+        [null, new Uint8Array([1])],
+      ]);
+      await client.workspaceMembership.update({
+        where: { id: membership.id },
+        data: { status: 'REVOKED' },
+      });
+      await expect(
+        saveImportedBrowserMaterial(client, actor, 'mobile', material),
+      ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    } finally {
+      await client.workspace.delete({ where: { id: workspace.id } });
+      await client.user.deleteMany({ where: { id: { in: [member.id, other.id] } } });
+    }
   });
 
   it('persists owner trouble feedback, serializes concurrent replays and separates service, user, Bunshin and package', async () => {
