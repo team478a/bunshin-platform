@@ -144,6 +144,40 @@ describe('ResolveAiProviderRuntimeConfiguration', () => {
     ).rejects.toMatchObject({ code: 'CONFLICT', message: 'provider cost is unknown' });
   });
 
+  it('uses the daily and monthly estimates only when the caller opts in', async () => {
+    const atBoundary = {
+      ...snapshot,
+      dailySpentUsdMicros: 999_500,
+      monthlySpentUsdMicros: 4_999_000,
+      dailyUnknownCostEvents: 1,
+      monthlyUnknownCostEvents: 3,
+    };
+    const input = {
+      environment: 'PRODUCTION',
+      provider: 'OPENAI',
+      estimateUnknownCosts: true,
+    } as const;
+    const resolve = (override: Partial<typeof atBoundary>) =>
+      new ResolveAiProviderRuntimeConfiguration(repository({ ...atBoundary, ...override })).execute(
+        input,
+      );
+
+    await expect(resolve({})).resolves.toEqual(atBoundary);
+    await expect(resolve({ dailyUnknownCostEvents: 2 })).rejects.toMatchObject({
+      code: 'CONFLICT',
+      message: 'daily provider budget reached',
+    });
+    await expect(resolve({ monthlyUnknownCostEvents: 4 })).rejects.toMatchObject({
+      code: 'CONFLICT',
+      message: 'monthly provider budget reached',
+    });
+    await expect(
+      new ResolveAiProviderRuntimeConfiguration(
+        repository({ ...atBoundary, configuration: { ...configuration, globallyPaused: true } }),
+      ).execute(input),
+    ).rejects.toMatchObject({ code: 'CONFIGURATION_ERROR', message: 'provider is paused' });
+  });
+
   it.each(['absent', 'zero'] as const)(
     'fails before runtime handoff when the configured request cost is %s',
     async (requestCost) => {

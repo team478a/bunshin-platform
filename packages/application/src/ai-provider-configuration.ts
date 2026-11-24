@@ -106,16 +106,11 @@ export interface AiProviderConfigurationRepository {
   getActiveForRuntime(input: {
     environment: LineConfigurationEnvironment;
     provider: AiProviderKey;
+    estimateUnknownCosts?: boolean;
     dailyFrom: Date;
     monthlyFrom: Date;
     now: Date;
-  }): Promise<{
-    configuration: AiProviderConfiguration;
-    encryptedApiKey: string;
-    dailySpentUsdMicros: number;
-    monthlySpentUsdMicros: number;
-    monthlyUnknownCostEvents: number;
-  } | null>;
+  }): Promise<AiProviderRuntimeConfigurationSnapshot | null>;
 }
 
 export interface AiProviderRuntimeConfigurationSnapshot {
@@ -124,6 +119,7 @@ export interface AiProviderRuntimeConfigurationSnapshot {
   dailySpentUsdMicros: number;
   monthlySpentUsdMicros: number;
   monthlyUnknownCostEvents: number;
+  dailyUnknownCostEvents?: number;
 }
 
 export function assertAiProviderRuntimeConfiguration(
@@ -132,6 +128,7 @@ export function assertAiProviderRuntimeConfiguration(
     provider: AiProviderKey;
     reservedCostUsdMicros?: number;
     requestCount?: number;
+    estimateUnknownCosts?: boolean;
   },
   value: AiProviderRuntimeConfigurationSnapshot,
 ) {
@@ -142,16 +139,26 @@ export function assertAiProviderRuntimeConfiguration(
     throw new ApplicationError('CONFIGURATION_ERROR', 'provider is paused');
   if (configuration.lastVerifiedAt === null || configuration.lastErrorCategory !== null)
     throw new ApplicationError('CONFIGURATION_ERROR', 'verified provider configuration required');
-  if (value.monthlyUnknownCostEvents > 0)
+  if (value.monthlyUnknownCostEvents > 0 && !input.estimateUnknownCosts)
     throw new ApplicationError('CONFLICT', 'provider cost is unknown');
   const requestCostUsdMicros =
     input.reservedCostUsdMicros ??
     (configuration.requestCostUsdMicros ?? 0) * (input.requestCount ?? 1);
   if (!Number.isSafeInteger(requestCostUsdMicros) || requestCostUsdMicros <= 0)
     throw new ApplicationError('CONFIGURATION_ERROR', 'provider request cost is required');
-  if (value.dailySpentUsdMicros > configuration.dailyBudgetUsdMicros - requestCostUsdMicros)
+  const estimatedCostPerEvent = input.estimateUnknownCosts ? configuration.requestCostUsdMicros : 0;
+  const dailyEstimate =
+    (value.dailyUnknownCostEvents ?? value.monthlyUnknownCostEvents) * (estimatedCostPerEvent ?? 0);
+  const monthlyEstimate = value.monthlyUnknownCostEvents * (estimatedCostPerEvent ?? 0);
+  if (
+    value.dailySpentUsdMicros + dailyEstimate >
+    configuration.dailyBudgetUsdMicros - requestCostUsdMicros
+  )
     throw new ApplicationError('CONFLICT', 'daily provider budget reached');
-  if (value.monthlySpentUsdMicros > configuration.monthlyBudgetUsdMicros - requestCostUsdMicros)
+  if (
+    value.monthlySpentUsdMicros + monthlyEstimate >
+    configuration.monthlyBudgetUsdMicros - requestCostUsdMicros
+  )
     throw new ApplicationError('CONFLICT', 'monthly provider budget reached');
   return value;
 }
@@ -170,14 +177,10 @@ export interface AiProviderRuntimeAdmissionRepository {
     operationKey: string;
     reservedCostUsdMicros?: number;
     requestCount?: number;
-  }): Promise<{
-    configuration: AiProviderConfiguration;
-    encryptedApiKey: string;
-    dailySpentUsdMicros: number;
-    monthlySpentUsdMicros: number;
-    monthlyUnknownCostEvents: number;
-    admission: AiProviderRuntimeAdmission;
-  } | null>;
+    estimateUnknownCosts?: boolean;
+  }): Promise<
+    (AiProviderRuntimeConfigurationSnapshot & { admission: AiProviderRuntimeAdmission }) | null
+  >;
   settleRuntimeAdmission(input: AiProviderRuntimeAdmission): Promise<boolean>;
 }
 
@@ -351,6 +354,7 @@ export class ResolveAiProviderRuntimeConfiguration {
   async execute(input: {
     environment: LineConfigurationEnvironment;
     provider: AiProviderKey;
+    estimateUnknownCosts?: boolean;
     now?: Date;
   }) {
     const now = input.now ?? new Date();
@@ -377,6 +381,7 @@ export class ReserveAiProviderRuntimeCall {
     operationKey: string;
     reservedCostUsdMicros?: number;
     requestCount?: number;
+    estimateUnknownCosts?: boolean;
   }) {
     if (!input.operationKey.trim() || input.operationKey.length > 200)
       throw new ApplicationError('VALIDATION_ERROR', 'invalid provider operation key');
