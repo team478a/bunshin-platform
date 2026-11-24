@@ -179,8 +179,41 @@
   font-weight: 400;
 }
 
-.fortune-basic-profile input[type='date'] {
-  text-align: start;
+.fortune-basic-profile__birth-date {
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.fortune-basic-profile__birth-date legend {
+  margin-bottom: 0.4rem;
+  padding: 0;
+  color: var(--profile-ink);
+  font-size: 0.88rem;
+  font-weight: 650;
+}
+
+.fortune-basic-profile__date-parts {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) repeat(2, minmax(0, 1fr));
+  gap: clamp(0.35rem, 2vw, 0.8rem);
+}
+
+.fortune-basic-profile__date-parts .form-field select {
+  padding-inline: clamp(0.35rem, 2vw, 0.7rem);
+}
+
+.fortune-basic-profile__clear-date {
+  min-block-size: 2.75rem;
+  padding-inline: 0.15rem;
+  border: 0;
+  background: transparent;
+  color: var(--profile-ink);
+  font: inherit;
+  font-size: 0.85rem;
+  text-decoration: underline;
+  cursor: pointer;
 }
 
 .fortune-basic-profile :is(input, select, button):focus-visible {
