@@ -1,3 +1,4 @@
+import { resolveFortunePageAppearance } from '../../../../../src/fortune/appearance';
 import { FortunePolicyError } from '@bunshin/capability-fortune';
 import { notFound } from 'next/navigation';
 import { FortuneAppearance } from '../../fortune-appearance';
@@ -49,7 +50,10 @@ export default async function FortuneReadingPage({
     </PublicShell>
   );
   return (
-    <FortuneAppearance settings={appearance} brand={service.configuration.brand}>
+    <FortuneAppearance
+      settings={resolveFortunePageAppearance(appearance)}
+      brand={service.configuration.brand}
+    >
       {content}
     </FortuneAppearance>
   );

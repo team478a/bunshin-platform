@@ -111,7 +111,8 @@ describe('fortune member home', () => {
   it('identifies the configurable AI guide and directs a first-time visitor to age confirmation', async () => {
     const markup = await renderToday();
     expect(markup).toContain('AI案内役');
-    expect(markup).not.toContain('class="fortune-appearance"');
+    expect(markup).toContain('class="fortune-appearance"');
+    expect(markup).toContain('--fortune-canvas:#f9f5ec');
     expect(markup).toContain('月の案内役');
     expect(markup).toContain('今日の気持ちを整理しましょう。');
     expect(markup).toContain('images.example/guide.webp');
@@ -180,6 +181,9 @@ describe('fortune member home', () => {
     state.basicProfile.mockResolvedValue({ completed: true, profile: null });
     const free = await renderToday();
     expect(free).toContain('何について占いますか？');
+    expect(free).toContain('fortune-appearance');
+    expect(free).not.toContain('href="#fortune-today-action"');
+    expect(free).toContain('aria-current="page"');
     expect(free).not.toContain('スキップして占う');
     expect(free).not.toContain('fortune-nav--in-flow');
     expect(free).not.toContain('name="question"');

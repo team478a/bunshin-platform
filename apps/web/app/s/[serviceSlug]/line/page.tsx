@@ -4,6 +4,8 @@ import { notFound, redirect } from 'next/navigation';
 import { currentUserProvider } from '../../../../src/auth/current-user';
 import { isRouteNotFound } from '../../../../src/navigation/route-not-found';
 import { loadServiceLineSettings } from '../../../../src/services/service-line-settings';
+import { fortuneEntryAppearance } from '../../../../src/fortune/public-appearance';
+import { FortuneAppearance } from '../fortune-appearance';
 import { PublicShell } from '../../../ui/public-shell';
 import { LineConnectionForm } from '../bunshins/[bunshinId]/line/line-connection-form';
 
@@ -84,9 +86,16 @@ export default async function ServiceLineSettingsPage({
       </PublicShell>
     );
   }
-  return (
+  const appearance = await fortuneEntryAppearance(service.configuration);
+  const content = (
     <PublicShell showPlatformBrand={false}>
-      <main className="app-page line-link-page">
+      <div
+        className={
+          appearance
+            ? 'app-page line-link-page fortune-page fortune-page--standalone'
+            : 'app-page line-link-page'
+        }
+      >
         <header className="app-page__heading">
           <p className="eyebrow">{service.configuration.displayName}</p>
           <h1>LINEの接続・お知らせ設定</h1>
@@ -206,7 +215,16 @@ export default async function ServiceLineSettingsPage({
           ) : null}
         </section>
         <Link href={`/account?service=${slug}` as Route}>アカウントへ戻る</Link>
-      </main>
+      </div>
     </PublicShell>
+  );
+  return (
+    <FortuneAppearance
+      settings={appearance}
+      brand={service.configuration.brand}
+      showMastheadLogo={false}
+    >
+      {content}
+    </FortuneAppearance>
   );
 }

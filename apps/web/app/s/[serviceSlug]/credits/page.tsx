@@ -7,7 +7,13 @@ import {
 } from '../../../../src/services/service-credit-balance';
 import { resolveAuthenticatedMemberServicePage } from '../../../../src/services/member-service-page';
 import { isPromptOnlyImageService } from '../../../../src/services/service-image-policy';
+import {
+  readFortuneAppearance,
+  resolveFortunePageAppearance,
+} from '../../../../src/fortune/appearance';
+import { FortuneNav } from '../fortune-ui';
 import { PublicShell } from '../../../ui/public-shell';
+import { FortuneAppearance } from '../fortune-appearance';
 
 export const dynamic = 'force-dynamic';
 
@@ -70,6 +76,7 @@ export default async function ServiceCreditsPage({
   const fortune = await db.prisma.fortuneServiceSetting.findFirst({
     where: { workspaceId: service.workspaceId, groupId: service.serviceId },
     select: {
+      guidanceSettings: true,
       creditDisplayName: true,
       followUpCreditEnabled: true,
       followUpCreditCost: true,
@@ -81,9 +88,9 @@ export default async function ServiceCreditsPage({
     ? (await db.readFortuneFollowUpCreditBalance(db.prisma, accountScope, new Date())).available
     : (account?.availableCredits ?? 0);
   const ledger = account?.ledgerEntries ?? [];
-  return (
+  const content = (
     <PublicShell showPlatformBrand={false}>
-      <main className="app-page">
+      <div className={fortune ? 'app-page fortune-page' : 'app-page'}>
         <header className="app-page__heading">
           {!fortune && <p className="eyebrow">画像作成回数</p>}
           <h1>{fortune ? name : '使える画像作成回数'}</h1>
@@ -95,7 +102,11 @@ export default async function ServiceCreditsPage({
         </header>
         <section className="settings-card">
           <p>{fortune ? '利用可能残高' : '今使える回数'}</p>
-          <p style={{ fontSize: '2rem', fontWeight: 700 }}>{fortune ? credits : `${credits}回`}</p>
+          {fortune ? (
+            <p className="fortune-balance">{credits}</p>
+          ) : (
+            <p style={{ fontSize: '2rem', fontWeight: 700 }}>{credits}回</p>
+          )}
           {fortune ? (
             <>
               <p>
@@ -162,8 +173,21 @@ export default async function ServiceCreditsPage({
             </div>
           )}
         </section>
-        <Link href={`/s/${serviceSlug}/home` as Route}>サービスホームへ戻る</Link>
-      </main>
+        {fortune ? (
+          <FortuneNav serviceSlug={serviceSlug} current="credits" />
+        ) : (
+          <Link href={`/s/${serviceSlug}/home` as Route}>サービスホームへ戻る</Link>
+        )}
+      </div>
     </PublicShell>
+  );
+  if (!fortune) return content;
+  return (
+    <FortuneAppearance
+      settings={resolveFortunePageAppearance(readFortuneAppearance(fortune.guidanceSettings))}
+      brand={service.configuration.brand}
+    >
+      {content}
+    </FortuneAppearance>
   );
 }

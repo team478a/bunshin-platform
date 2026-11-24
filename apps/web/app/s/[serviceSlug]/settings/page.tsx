@@ -1,3 +1,4 @@
+import { resolveFortunePageAppearance } from '../../../../src/fortune/appearance';
 import { FortuneAppearance } from '../fortune-appearance';
 import { PublicShell } from '../../../ui/public-shell';
 import { fortuneDailyReadingService } from '../../../../src/fortune/runtime';
@@ -153,12 +154,15 @@ export default async function FortuneSettingsPage({
           <p>退会はこの占いサービスのみに適用されます。他のサービスは引き続き利用できます。</p>
           <FortuneWithdrawButton serviceSlug={serviceSlug} />
         </section>
-        <FortuneNav serviceSlug={serviceSlug} />
+        <FortuneNav serviceSlug={serviceSlug} current="settings" />
       </main>
     </PublicShell>
   );
   return (
-    <FortuneAppearance settings={guidance.appearance} brand={service.configuration.brand}>
+    <FortuneAppearance
+      settings={resolveFortunePageAppearance(guidance.appearance)}
+      brand={service.configuration.brand}
+    >
       {content}
     </FortuneAppearance>
   );

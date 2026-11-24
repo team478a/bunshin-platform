@@ -13,23 +13,40 @@ import { FortunePersonalFit } from './fortune-personal-fit';
 export const themeLabel = (theme: FortuneReadingView['theme']) =>
   ({ LOVE: '恋愛', WORK: '仕事', RELATIONSHIPS: '人間関係' })[theme];
 
+const fortuneNavItems = [
+  { path: 'today', label: '今日の占い', symbol: '☾' },
+  { path: 'history', label: '過去の結果', symbol: '◇' },
+  { path: 'credits', label: 'クレジット', symbol: '✧' },
+  { path: 'settings', label: '設定', symbol: '⚙' },
+  { path: 'manual', label: '使い方', symbol: '○' },
+] as const;
+
 export function FortuneNav({
   serviceSlug,
   inFlow = false,
+  current,
 }: {
   serviceSlug: string;
   inFlow?: boolean;
+  current?: (typeof fortuneNavItems)[number]['path'];
 }) {
   return (
     <nav
       className={inFlow ? 'fortune-nav fortune-nav--in-flow' : 'fortune-nav'}
       aria-label="占いメニュー"
     >
-      <Link href={`/s/${serviceSlug}/today` as Route}>今日の占い</Link>
-      <Link href={`/s/${serviceSlug}/history` as Route}>過去の結果</Link>
-      <Link href={`/s/${serviceSlug}/credits` as Route}>クレジット</Link>
-      <Link href={`/s/${serviceSlug}/settings` as Route}>設定</Link>
-      <Link href={`/s/${serviceSlug}/manual` as Route}>使い方</Link>
+      {fortuneNavItems.map(({ path, label, symbol }) => (
+        <Link
+          key={path}
+          href={`/s/${serviceSlug}/${path}` as Route}
+          aria-current={path === current ? 'page' : undefined}
+        >
+          <span className="fortune-nav__symbol" aria-hidden="true">
+            {symbol}
+          </span>
+          <span>{label}</span>
+        </Link>
+      ))}
     </nav>
   );
 }

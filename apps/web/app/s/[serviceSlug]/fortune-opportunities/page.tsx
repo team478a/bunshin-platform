@@ -6,7 +6,13 @@ import { ApplicationError } from '@bunshin/shared';
 import { ZodError } from 'zod';
 import { changeFortuneInterest, interestLabels } from '../../../../src/fortune/experiments';
 import { resolveFortunePage } from '../../../../src/fortune/page-context';
+import {
+  readFortuneAppearance,
+  resolveFortunePageAppearance,
+} from '../../../../src/fortune/appearance';
+import { FortuneNav } from '../fortune-ui';
 import { PublicShell } from '../../../ui/public-shell';
+import { FortuneAppearance } from '../fortune-appearance';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,7 +26,7 @@ export default async function FortuneOpportunitiesPage({
   const { serviceSlug } = await params;
   const query = await searchParams;
   const path = `/s/${serviceSlug}/fortune-opportunities` as const;
-  const { actor, service } = await resolveFortunePage(serviceSlug, path);
+  const { actor, service, setting } = await resolveFortunePage(serviceSlug, path);
   const scope = { workspaceId: service.workspaceId, groupId: service.serviceId };
   const hypotheses = await prisma.fortuneProductHypothesis.findMany({
     where: {
@@ -51,7 +57,7 @@ export default async function FortuneOpportunitiesPage({
     redirect(path);
   }
 
-  return (
+  const content = (
     <PublicShell showPlatformBrand={false}>
       <main className="app-page fortune-page">
         <header className="app-page__heading">
@@ -96,7 +102,16 @@ export default async function FortuneOpportunitiesPage({
           );
         })}
         <Link href={`/s/${serviceSlug}/today` as Route}>今日の占いに戻る</Link>
+        <FortuneNav serviceSlug={serviceSlug} />
       </main>
     </PublicShell>
+  );
+  return (
+    <FortuneAppearance
+      settings={resolveFortunePageAppearance(readFortuneAppearance(setting.guidanceSettings))}
+      brand={service.configuration.brand}
+    >
+      {content}
+    </FortuneAppearance>
   );
 }

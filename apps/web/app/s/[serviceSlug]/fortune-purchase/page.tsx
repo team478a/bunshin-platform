@@ -12,7 +12,13 @@ import {
 } from '../../../../src/fortune/commerce';
 import { recordFortuneFunnel } from '../../../../src/fortune/funnel';
 import { resolveFortunePage } from '../../../../src/fortune/page-context';
+import {
+  readFortuneAppearance,
+  resolveFortunePageAppearance,
+} from '../../../../src/fortune/appearance';
+import { FortuneNav } from '../fortune-ui';
 import { PublicShell } from '../../../ui/public-shell';
+import { FortuneAppearance } from '../fortune-appearance';
 
 export const dynamic = 'force-dynamic';
 
@@ -33,7 +39,7 @@ export default async function FortunePurchasePage({
   const { serviceSlug } = await params;
   const path = `/s/${serviceSlug}/fortune-purchase` as const;
   const today = `/s/${serviceSlug}/today` as const;
-  const { actor, service } = await resolveFortunePage(serviceSlug, path);
+  const { actor, service, setting } = await resolveFortunePage(serviceSlug, path);
   const scope = { workspaceId: service.workspaceId, groupId: service.serviceId };
   const [target, history, result] = await Promise.all([
     availableFortuneProduct(prisma, scope, actor.userId),
@@ -70,7 +76,7 @@ export default async function FortunePurchasePage({
     redirect(url);
   }
 
-  return (
+  const content = (
     <PublicShell showPlatformBrand={false}>
       <main className="app-page fortune-page">
         <header className="app-page__heading">
@@ -161,7 +167,16 @@ export default async function FortunePurchasePage({
           )}
         </section>
         <Link href={today}>今日の占いに戻る</Link>
+        <FortuneNav serviceSlug={serviceSlug} />
       </main>
     </PublicShell>
+  );
+  return (
+    <FortuneAppearance
+      settings={resolveFortunePageAppearance(readFortuneAppearance(setting.guidanceSettings))}
+      brand={service.configuration.brand}
+    >
+      {content}
+    </FortuneAppearance>
   );
 }

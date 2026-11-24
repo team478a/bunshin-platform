@@ -1,3 +1,4 @@
+import { resolveFortunePageAppearance } from '../../../../src/fortune/appearance';
 import { cache } from 'react';
 import type { Metadata } from 'next';
 import { notFound, redirect } from 'next/navigation';
@@ -82,7 +83,10 @@ export default async function ServiceManualPage({
     />
   );
   return (
-    <FortuneAppearance settings={result.appearance} brand={result.service.configuration.brand}>
+    <FortuneAppearance
+      settings={resolveFortunePageAppearance(result.appearance)}
+      brand={result.service.configuration.brand}
+    >
       {content}
     </FortuneAppearance>
   );

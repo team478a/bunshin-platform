@@ -1,3 +1,4 @@
+import { resolveFortunePageAppearance } from '../../../../src/fortune/appearance';
 import type { Metadata, Route } from 'next';
 import Link from 'next/link';
 import { recordFortuneFunnel } from '../../../../src/fortune/funnel';
@@ -153,6 +154,8 @@ export default async function FortuneTodayPage({
           : '今日のカードを引く';
   const { guide, characters } = guidance;
   const summoning = resolveFortuneSummoningMode(guidance.appearance);
+  const themesAlreadyShown =
+    Boolean(today.participant) && !today.reading && !showIntake && !showDynamicIntake && !paidView;
   const welcome = showIntake || !today.participant ? characters?.intake : characters?.daily;
   const content = (
     <PublicShell showPlatformBrand={false}>
@@ -160,7 +163,12 @@ export default async function FortuneTodayPage({
         <header className="app-page__heading">
           <h1>今日の占い</h1>
           {fortuneReferralAvailable(service.configuration) && (
-            <Link href={`/s/${serviceSlug}/activity` as Route}>友だちに紹介する</Link>
+            <Link
+              className="button button--secondary fortune-referral-link"
+              href={`/s/${serviceSlug}/activity` as Route}
+            >
+              友だちに紹介する
+            </Link>
           )}
         </header>
         {!showBasicProfile && (showGuide || welcome?.enabled) && (
@@ -192,9 +200,11 @@ export default async function FortuneTodayPage({
               {guide?.introduction ||
                 '今日のカードから、今のあなたが考えを整理するヒントをお届けします。'}
             </p>
-            <a href="#fortune-today-action" className="button button--primary">
-              {nextAction}
-            </a>
+            {!themesAlreadyShown && (
+              <a href="#fortune-today-action" className="button button--primary">
+                {nextAction}
+              </a>
+            )}
           </section>
         )}
         <div id="fortune-today-action" className="fortune-today__action" tabIndex={-1}>
@@ -341,12 +351,15 @@ export default async function FortuneTodayPage({
         <p className="fortune-note">
           占い結果は判断の参考です。医療・法律・投資などの重要な判断は専門家にご相談ください。
         </p>
-        <FortuneNav serviceSlug={serviceSlug} inFlow={Boolean(showBasicProfile)} />
+        <FortuneNav serviceSlug={serviceSlug} current="today" inFlow={Boolean(showBasicProfile)} />
       </div>
     </PublicShell>
   );
   return (
-    <FortuneAppearance settings={guidance.appearance} brand={service.configuration.brand}>
+    <FortuneAppearance
+      settings={resolveFortunePageAppearance(guidance.appearance)}
+      brand={service.configuration.brand}
+    >
       {content}
     </FortuneAppearance>
   );

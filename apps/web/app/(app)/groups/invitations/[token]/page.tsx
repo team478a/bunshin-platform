@@ -12,6 +12,14 @@ import { safeLineAuthReturnPath } from '../../../../../src/auth/line-return';
 import { invitationAcceptedPath } from '../../../../../src/services/ai-training-consent-policy';
 import { hasAiTrainingServiceProgram } from '../../../../../src/services/service-ai-training-mode';
 
+import { PublicShell } from '../../../../ui/public-shell';
+import { FortuneAppearance } from '../../../../s/[serviceSlug]/fortune-appearance';
+import {
+  readFortuneAppearance,
+  resolveFortunePageAppearance,
+} from '../../../../../src/fortune/appearance';
+import { isFortuneServicePackage } from '../../../../../src/services/service-creation-templates';
+
 export const dynamic = 'force-dynamic';
 
 const tokenSchema = z.string().regex(/^[A-Za-z0-9_-]{43}$/);
@@ -179,6 +187,7 @@ export async function InvitationContent({
       usedCount: true,
       group: {
         select: {
+          id: true,
           name: true,
           workspace: { select: { name: true } },
           // Service-participation approval is separate from accepting an invitation and any Program Enrollment.
@@ -187,7 +196,8 @@ export async function InvitationContent({
               slug: true,
               displayName: true,
               operatorName: true,
-              registration: { select: { mode: true } },
+              brand: { select: { logoUrl: true, primaryColor: true, secondaryColor: true } },
+              registration: { select: { mode: true, onboardingConfig: true } },
             },
           },
         },
@@ -196,8 +206,12 @@ export async function InvitationContent({
   });
   if (!invitation || invitation.usedCount >= invitation.maxUses) notFound();
 
-  return (
-    <main className="app-page">
+  const fortune =
+    serviceSlug &&
+    isFortuneServicePackage(invitation.group.serviceConfiguration?.registration?.onboardingConfig);
+  const Container = fortune ? 'div' : 'main';
+  const content = (
+    <Container className={fortune ? 'app-page fortune-page fortune-page--standalone' : 'app-page'}>
       <header className="app-page__heading">
         <p className="eyebrow">{serviceSlug ? 'サービスへの招待' : 'グループへの招待'}</p>
         <h1>{invitation.group.serviceConfiguration?.displayName ?? invitation.group.name}</h1>
@@ -252,6 +266,21 @@ export async function InvitationContent({
           <Link href="/groups">あとで確認する</Link>
         )}
       </section>
-    </main>
+    </Container>
+  );
+  if (!fortune) return content;
+  const setting = await db.prisma.fortuneServiceSetting.findFirst({
+    where: { workspaceId: invitation.workspaceId, groupId: invitation.group.id },
+    select: { guidanceSettings: true },
+  });
+  return (
+    <FortuneAppearance
+      settings={resolveFortunePageAppearance(readFortuneAppearance(setting?.guidanceSettings))}
+      brand={invitation.group.serviceConfiguration?.brand ?? undefined}
+    >
+      <PublicShell narrow showPlatformBrand={false}>
+        {content}
+      </PublicShell>
+    </FortuneAppearance>
   );
 }

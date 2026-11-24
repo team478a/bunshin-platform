@@ -1,9 +1,10 @@
-import type { CSSProperties } from 'react';
 import type { Metadata, Route } from 'next';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { currentUserProvider } from '../../../../../../src/auth/current-user';
 import { fortuneOperatorStatus } from '../../../../../../src/fortune/operator';
+import { resolveFortunePageAppearance } from '../../../../../../src/fortune/appearance';
+import { FortuneAppearance } from '../../../fortune-appearance';
 import { PublicShell } from '../../../../../ui/public-shell';
 
 export const dynamic = 'force-dynamic';
@@ -30,15 +31,10 @@ export default async function FortuneOperatorManualPage({
   const status = await fortuneOperatorStatus(serviceSlug, actor.userId).catch(() => null);
   if (!status) notFound();
   const base = `/s/${serviceSlug}`;
-  const style = {
-    '--service-primary': '#5d50e6',
-    '--service-secondary': '#ef5b55',
-    '--service-font': "'Noto Sans JP'",
-  } as CSSProperties;
 
-  return (
+  const content = (
     <PublicShell showPlatformBrand={false}>
-      <article className="easy-manual" style={style}>
+      <article className="easy-manual">
         <header className="easy-manual__hero">
           <p className="eyebrow">サービス管理者向け</p>
           <h1>占い運営マニュアル</h1>
@@ -186,5 +182,10 @@ export default async function FortuneOperatorManualPage({
         </footer>
       </article>
     </PublicShell>
+  );
+  return (
+    <FortuneAppearance settings={resolveFortunePageAppearance(undefined)} brand={undefined}>
+      {content}
+    </FortuneAppearance>
   );
 }

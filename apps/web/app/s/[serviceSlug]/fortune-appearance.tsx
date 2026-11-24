@@ -24,7 +24,10 @@ export function FortuneAppearance({
   if (!settings?.enabled) return children;
 
   const colors = resolveFortuneAppearanceColors(settings, brand);
+  const guideColor = settings.palette === 'night' ? colors.surface : colors.action;
   const style = {
+    '--fortune-guide': guideColor,
+    '--fortune-guide-text': fortuneReadableText(colors.text, guideColor),
     '--fortune-canvas': colors.background,
     '--fortune-surface': colors.surface,
     '--fortune-canvas-text': fortuneReadableText(colors.text, colors.background),

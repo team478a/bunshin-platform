@@ -21,6 +21,41 @@ const reading = {
 const emptyProfile = { consented: false, interest: null, question: null, style: null } as const;
 const endpoints = '**/api/services/fixture-fortune/fortune';
 
+test('mobile Fortune uses the standard theme and fits all five navigation items', async ({
+  app,
+  screen,
+  browser,
+}) => {
+  await browser.route('**/__fortune_fixture', (route) =>
+    route.fulfill({ json: { joined: true, completed: true, profile: emptyProfile } }),
+  );
+  await app.open('/fortune.html?design');
+  const menu = screen.getByRole('navigation', '占いメニュー');
+  await expect(menu.getByRole('link')).toHaveCount(5);
+  await expect(menu.getByRole('link', '今日の占い')).toHaveAttribute('aria-current', 'page');
+  await expect(screen.getByRole('heading', '何について占いますか？')).toBeVisible();
+  const layout = await browser.evaluate(() => ({
+    fitsViewport: document.documentElement.scrollWidth === innerWidth,
+    oneRow:
+      new Set(
+        Array.from(
+          document.querySelectorAll('.fortune-nav a'),
+          (link) => link.getBoundingClientRect().top,
+        ),
+      ).size === 1,
+    background: getComputedStyle(document.querySelector('.fortune-appearance')!).backgroundColor,
+    activeText: getComputedStyle(document.querySelector('.fortune-nav [aria-current="page"]')!)
+      .color,
+  }));
+  expect(layout).toEqual({
+    fitsViewport: true,
+    oneRow: true,
+    background: 'rgb(249, 245, 236)',
+    activeText: 'rgb(255, 255, 255)',
+  });
+  await app.screenshot('fortune-standard-390px');
+});
+
 test('mobile Fortune keeps profile actions clear of the navigation', async ({
   app,
   screen,

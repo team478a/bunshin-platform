@@ -6,6 +6,8 @@ import { notFound } from 'next/navigation';
 import { currentUserProvider } from '../../../src/auth/current-user';
 import { isRouteNotFound } from '../../../src/navigation/route-not-found';
 import { resolveVisitorServiceContext } from '../../../src/services/public-service';
+import { fortuneEntryAppearance } from '../../../src/fortune/public-appearance';
+import { FortuneAppearance } from './fortune-appearance';
 import { PublicShell } from '../../ui/public-shell';
 import { ServiceLegalDocumentContent } from './service-legal-document';
 
@@ -50,7 +52,8 @@ export async function ServiceLegalPage({
       '--service-font': service.configuration.brand.fontFamily,
     } as CSSProperties;
 
-    return (
+    const appearance = await fortuneEntryAppearance(service.configuration);
+    const content = (
       <PublicShell showPlatformBrand={false}>
         <article className="service-entry service-legal-document" style={style}>
           <header className="service-entry__header">
@@ -73,6 +76,15 @@ export async function ServiceLegalPage({
           </Link>
         </article>
       </PublicShell>
+    );
+    return (
+      <FortuneAppearance
+        settings={appearance}
+        brand={service.configuration.brand}
+        showMastheadLogo={false}
+      >
+        {content}
+      </FortuneAppearance>
     );
   } catch (error) {
     if (isRouteNotFound(error)) notFound();

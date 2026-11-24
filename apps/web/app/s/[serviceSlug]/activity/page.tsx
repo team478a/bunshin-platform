@@ -10,7 +10,13 @@ import { isFortuneServicePackage } from '../../../../src/services/service-creati
 import { memberServiceMetadata } from '../../../../src/services/member-service-metadata';
 import { readServiceOnboardingSettings } from '../../../../src/services/service-onboarding-settings';
 import { isPromptOnlyImageService } from '../../../../src/services/service-image-policy';
+import {
+  readFortuneAppearance,
+  resolveFortunePageAppearance,
+} from '../../../../src/fortune/appearance';
+import { FortuneNav } from '../fortune-ui';
 import { PublicShell } from '../../../ui/public-shell';
+import { FortuneAppearance } from '../fortune-appearance';
 import { ServiceReferralShare } from './service-referral-share';
 
 export const dynamic = 'force-dynamic';
@@ -62,14 +68,13 @@ export default async function ServiceMemberActivityPage({
   if (onboarding.businessProfileEnabled) {
     redirect(`/s/${serviceSlug}/weekly-report` as Route);
   }
+  const fortuneSetting = await db.prisma.fortuneServiceSetting.findFirst({
+    where: { workspaceId: service.workspaceId, groupId: service.serviceId },
+    select: { guidanceSettings: true },
+  });
   const isFortune =
     isFortuneServicePackage(service.configuration.registration.onboardingConfig) ||
-    Boolean(
-      await db.prisma.fortuneServiceSetting.findFirst({
-        where: { workspaceId: service.workspaceId, groupId: service.serviceId },
-        select: { id: true },
-      }),
-    );
+    Boolean(fortuneSetting);
   const promptOnlyImages = isPromptOnlyImageService(service.configuration.slug);
 
   const referralAvailable = isFortune
@@ -230,10 +235,17 @@ export default async function ServiceMemberActivityPage({
     '--service-font': service.configuration.brand.fontFamily,
   } as CSSProperties;
 
-  return (
+  const content = (
     <PublicShell showPlatformBrand={false}>
-      <article className="service-entry service-member-home" style={style}>
-        <header className="service-entry__header">
+      <article
+        className={
+          isFortune
+            ? 'app-page fortune-page fortune-referrals'
+            : 'service-entry service-member-home'
+        }
+        style={isFortune ? undefined : style}
+      >
+        <header className={isFortune ? 'app-page__heading' : 'service-entry__header'}>
           {!isFortune && <p className="eyebrow">あなたの記録</p>}
           <h1>{isFortune ? '友だちに紹介する' : '活動・紹介'}</h1>
           <p>
@@ -252,9 +264,15 @@ export default async function ServiceMemberActivityPage({
         </header>
 
         {referralAvailable && (
-          <section className="service-entry__card service-activity-dashboard__section">
+          <section
+            className={
+              isFortune
+                ? 'settings-card service-activity-dashboard__section'
+                : 'service-entry__card service-activity-dashboard__section'
+            }
+          >
             <div>
-              <p className="eyebrow">紹介する</p>
+              {!isFortune && <p className="eyebrow">紹介する</p>}
               <h2>あなたの紹介URL</h2>
               <p>このURLから参加した人は、あなたからの紹介として記録されます。</p>
             </div>
@@ -420,10 +438,23 @@ export default async function ServiceMemberActivityPage({
           </section>
         )}
 
-        <Link href={`/s/${serviceSlug}/home` as Route}>
-          ← {isFortune ? '占いホームへ戻る' : 'サービスホームへ戻る'}
-        </Link>
+        {isFortune ? (
+          <FortuneNav serviceSlug={serviceSlug} />
+        ) : (
+          <Link href={`/s/${serviceSlug}/home` as Route}>← サービスホームへ戻る</Link>
+        )}
       </article>
     </PublicShell>
+  );
+  if (!isFortune) return content;
+  return (
+    <FortuneAppearance
+      settings={resolveFortunePageAppearance(
+        readFortuneAppearance(fortuneSetting?.guidanceSettings),
+      )}
+      brand={service.configuration.brand}
+    >
+      {content}
+    </FortuneAppearance>
   );
 }

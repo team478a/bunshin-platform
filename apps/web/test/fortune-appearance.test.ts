@@ -5,10 +5,22 @@ import {
   fortuneContrast,
   fortuneReadableText,
   resolveFortuneAppearanceColors,
+  resolveFortunePageAppearance,
   resolveFortuneSummoningMode,
 } from '../src/fortune/appearance';
 
 describe('Fortune appearance', () => {
+  it('uses the standard Oracle theme when custom styling is disabled', () => {
+    const customized = { ...defaultFortuneAppearance, palette: 'night' as const, enabled: true };
+    expect(resolveFortunePageAppearance(customized)).toBe(customized);
+    expect(resolveFortunePageAppearance({ ...customized, enabled: false })).toMatchObject({
+      enabled: true,
+      palette: 'light',
+      showLogo: false,
+    });
+    expect(resolveFortunePageAppearance(undefined, true).showLogo).toBe(true);
+  });
+
   it('maps missing and legacy settings and accepts the lightweight mode', () => {
     expect(resolveFortuneSummoningMode(undefined)).toBe('off');
     expect(resolveFortuneSummoningMode({ ...defaultFortuneAppearance, summoning: false })).toBe(
