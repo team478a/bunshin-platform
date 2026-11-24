@@ -7,20 +7,21 @@ import { readFortuneAppearance, resolveFortunePageAppearance } from './appearanc
 
 const logger = createLogger();
 
+export function hasFortuneEntryTheme(configuration: ServiceFoundationRecord) {
+  return (
+    configuration.slug === ORACLE_SERVICE_SLUG ||
+    isFortuneServicePackage(configuration.registration?.onboardingConfig)
+  );
+}
+
 export async function publicFortuneAppearance(configuration: ServiceFoundationRecord) {
-  if (
-    configuration.visibility !== 'PUBLIC' ||
-    (configuration.slug !== ORACLE_SERVICE_SLUG &&
-      !isFortuneServicePackage(configuration.registration.onboardingConfig))
-  )
+  if (configuration.visibility !== 'PUBLIC' || !hasFortuneEntryTheme(configuration)) {
     return undefined;
+  }
   return fortuneEntryAppearance(configuration);
 }
 
 export async function fortuneEntryAppearance(configuration: ServiceFoundationRecord) {
-  const packageService =
-    configuration.slug === ORACLE_SERVICE_SLUG ||
-    isFortuneServicePackage(configuration.registration.onboardingConfig);
   const db = await import('@bunshin/database');
   const setting = await db.prisma.fortuneServiceSetting
     .findFirst({
@@ -35,7 +36,7 @@ export async function fortuneEntryAppearance(configuration: ServiceFoundationRec
       logger.warn('fortune public appearance unavailable');
       return null;
     });
-  return packageService || setting
+  return setting || hasFortuneEntryTheme(configuration)
     ? resolveFortunePageAppearance(readFortuneAppearance(setting?.guidanceSettings), true)
     : undefined;
 }
