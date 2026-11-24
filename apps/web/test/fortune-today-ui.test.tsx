@@ -168,6 +168,7 @@ describe('fortune member home', () => {
     const onboarding = await renderToday();
     expect(onboarding).toContain('あなたのことを少し教えてください');
     expect(onboarding).toContain('スキップして占う');
+    expect(onboarding).toContain('fortune-nav--in-flow');
     expect(onboarding).toContain('name="nickname"');
     expect(onboarding).toContain('生年月日（任意）');
     expect(onboarding).toContain('<select name="birthYear"');
@@ -180,6 +181,7 @@ describe('fortune member home', () => {
     const free = await renderToday();
     expect(free).toContain('何について占いますか？');
     expect(free).not.toContain('スキップして占う');
+    expect(free).not.toContain('fortune-nav--in-flow');
     expect(free).not.toContain('name="question"');
   });
 
