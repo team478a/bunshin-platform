@@ -59,3 +59,12 @@ export interface BrowserRun {
   device: BrowserPlan['device'];
   steps: BrowserStepEvidence[];
 }
+
+export const BROWSER_FIXTURE_VERSION = 'practice-note-v1';
+export const browserPreviewChoices = ['preview', 'compact-preview'] as const;
+export const browserPreviewChoiceSchema = z.enum(browserPreviewChoices);
+export const browserPreviewResponseSchema = z.strictObject({ id: browserPreviewChoiceSchema });
+export const browserFixtureSelectionRequestSchema = z.strictObject({
+  jobId: z.uuid(),
+  workerId: z.uuid(),
+});

@@ -3,6 +3,7 @@ import type { AiModelCapability } from './ai-provider-configuration';
 
 export type LearningAiTask =
   | 'LESSON'
+  | 'BROWSER_FIXTURE_SELECTION'
   | 'CONVERSATION'
   | 'PRACTICE_SUPPORT'
   | 'EVIDENCE_REVIEW'

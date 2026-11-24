@@ -80,6 +80,9 @@ importers:
       '@bunshin/auth':
         specifier: workspace:*
         version: link:../../packages/auth
+      '@bunshin/capability-browser':
+        specifier: workspace:*
+        version: link:../../packages/capability-browser
       '@bunshin/capability-fortune':
         specifier: workspace:*
         version: link:../../packages/capability-fortune

@@ -8,11 +8,14 @@ import {
   CompleteJob,
   EnqueueJob,
   FailJob,
+  assertUserJob,
 } from '@bunshin/application';
 import { PrismaJobRepository, prisma } from '@bunshin/database';
-import { BrowserRunError, runBrowserPlan } from './browser';
+import { BrowserRunError, discoverBrowserPlan, runBrowserPlan } from './browser';
 import { saveEvidence } from './evidence';
-import { fixture, fixturePlan, fixtureVersion } from './fixture';
+import { compactPreviewStep, fixture, fixturePlan, fixtureVersion } from './fixture';
+import { completeRecipeReplay, completeWithRecipe, findRecipeId, loadRecipe } from './recipes';
+import { modelPreviewSelector } from './model-selector';
 
 const environment = 'DEVELOPMENT';
 const jobs = new PrismaJobRepository(prisma, 'browser-fixture');
@@ -28,12 +31,20 @@ export async function enqueueFixture(
   actorId: string,
   deviceName: string,
   requestId: string,
+  mode: 'fixture' | 'discover' | 'discover-model' | 'replay' = 'fixture',
 ) {
   if (![workspaceId, actorId, requestId].every((value) => uuid.test(value))) {
     throw new Error('Workspace, actor and request must be UUIDs');
   }
-  const device = deviceFrom(deviceName);
-  const payloadReference = `${fixtureVersion}:${device}`;
+  let payloadReference;
+  if (mode === 'replay') {
+    if (!uuid.test(deviceName)) throw new BrowserRunError('INVALID_PLAN');
+    await loadRecipe(deviceName, workspaceId, actorId);
+    payloadReference = `replay:${deviceName.toLowerCase()}`;
+  } else {
+    const device = deviceFrom(deviceName);
+    payloadReference = `${mode === 'fixture' ? '' : mode + ':'}${fixtureVersion}:${device}`;
+  }
   return new EnqueueJob(jobs).enqueue({
     environment,
     workspaceId,
@@ -91,6 +102,8 @@ export async function runQueue(input: {
         });
         continue;
       }
+      let recipeId: string | undefined;
+      let completedWithRecipe = false;
       try {
         if (job.attemptCount > job.maxAttempts) {
           await fail.execute(job, workerId, {
@@ -118,21 +131,59 @@ export async function runQueue(input: {
           });
           continue;
         }
-        const [version, deviceName, extra] = job.payloadReference.split(':');
-        if (version !== fixtureVersion || extra !== undefined)
-          throw new BrowserRunError('INVALID_PLAN');
-        const run = await runBrowserPlan(
-          fixturePlan(deviceFrom(deviceName)),
-          fixture,
-          input.limits,
-          input.signal,
-        );
+        assertUserJob(job);
+        const [kind, value, device, extra] = job.payloadReference.split(':');
+        let discovery;
+        let run;
+        if (
+          (kind === 'discover' || kind === 'discover-model') &&
+          value === fixtureVersion &&
+          extra === undefined
+        ) {
+          const template = fixturePlan(deviceFrom(device));
+          recipeId = await findRecipeId(job.workspaceId, job.requestedBy, template.device);
+          if (recipeId) {
+            const saved = await loadRecipe(recipeId, job.workspaceId, job.requestedBy);
+            run = await runBrowserPlan(saved, fixture, input.limits, input.signal);
+          } else {
+            const candidates = template.steps.filter(({ action }) => action !== 'scroll').reverse();
+            if (kind === 'discover-model') candidates.push(compactPreviewStep);
+            discovery = await discoverBrowserPlan(
+              { ...template, steps: candidates },
+              fixture,
+              input.limits,
+              input.signal,
+              kind === 'discover-model' ? modelPreviewSelector(job.id, workerId) : undefined,
+            );
+            run = discovery.run;
+          }
+        } else {
+          let plan;
+          if (kind === 'replay' && value && uuid.test(value) && device === undefined) {
+            recipeId = value;
+            plan = await loadRecipe(value, job.workspaceId, job.requestedBy);
+          } else if (kind === fixtureVersion && device === undefined) {
+            plan = fixturePlan(deviceFrom(value));
+          } else {
+            throw new BrowserRunError('INVALID_PLAN');
+          }
+          run = await runBrowserPlan(plan, fixture, input.limits, input.signal);
+        }
         await saveEvidence(
           join(input.output, job.workspaceId, job.id),
           String(job.attemptCount),
           run,
           input.signal,
         );
+        if (discovery) {
+          input.signal.throwIfAborted();
+          recipeId = (await completeWithRecipe(job, workerId, discovery.plan, run.verifiedAt)).id;
+          completedWithRecipe = true;
+        } else if (recipeId) {
+          input.signal.throwIfAborted();
+          await completeRecipeReplay(job, workerId, recipeId, run.verifiedAt);
+          completedWithRecipe = true;
+        }
       } catch (error) {
         const category =
           error instanceof BrowserRunError
@@ -142,7 +193,10 @@ export async function runQueue(input: {
               : 'INFRASTRUCTURE';
         await fail.execute(job, workerId, {
           errorCategory: `BROWSER_${category}`,
-          retryable: category !== 'INVALID_PLAN' && category !== 'STEP_FAILED',
+          retryable:
+            category !== 'INVALID_PLAN' &&
+            category !== 'STEP_FAILED' &&
+            category !== 'MODEL_SELECTION_FAILED',
         });
         console.error(
           JSON.stringify({
@@ -153,9 +207,9 @@ export async function runQueue(input: {
         );
         continue;
       }
-      await complete.execute(job.id, workerId);
+      if (!completedWithRecipe) await complete.execute(job.id, workerId);
       console.log(
-        JSON.stringify({ jobId: job.id, status: 'SUCCEEDED', attempt: job.attemptCount }),
+        JSON.stringify({ jobId: job.id, status: 'SUCCEEDED', attempt: job.attemptCount, recipeId }),
       );
     }
   };
