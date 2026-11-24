@@ -33,14 +33,13 @@ function BirthDateFields({ birthDate }: { birthDate: string | null }) {
   const years = Array.from({ length: currentYear - oldestYear + 1 }, (_, index) =>
     String(currentYear - index).padStart(4, '0'),
   );
-  const numberOptions = (count: number, unit: string) =>
+  const numberOptions = (count: number) =>
     Array.from({ length: count }, (_, index) => {
       const number = index + 1;
       const value = String(number).padStart(2, '0');
       return (
         <option key={value} value={value}>
           {number}
-          {unit}
         </option>
       );
     });
@@ -60,10 +59,10 @@ function BirthDateFields({ birthDate }: { birthDate: string | null }) {
               if (Number(day) > daysInBirthMonth(next, month)) setDay('');
             }}
           >
-            <option value="">年を選択</option>
+            <option value="">選択</option>
             {years.map((value) => (
               <option key={value} value={value}>
-                {Number(value)}年
+                {Number(value)}
               </option>
             ))}
           </select>
@@ -79,15 +78,15 @@ function BirthDateFields({ birthDate }: { birthDate: string | null }) {
               if (Number(day) > daysInBirthMonth(year, next)) setDay('');
             }}
           >
-            <option value="">月を選択</option>
-            {numberOptions(12, '月')}
+            <option value="">選択</option>
+            {numberOptions(12)}
           </select>
         </label>
         <label className="form-field">
           <span>日</span>
           <select name="birthDay" value={day} onChange={(event) => setDay(event.target.value)}>
-            <option value="">日を選択</option>
-            {numberOptions(daysInBirthMonth(year, month), '日')}
+            <option value="">選択</option>
+            {numberOptions(daysInBirthMonth(year, month))}
           </select>
         </label>
       </div>
