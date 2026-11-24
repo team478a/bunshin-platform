@@ -12,6 +12,23 @@ export const FORTUNE_LINE_MENU = {
 } as const satisfies Record<LineRichMenuAction, { title: string; subtitle: string; path: string }>;
 
 export const FORTUNE_LINE_MENU_ITEMS = Object.values(FORTUNE_LINE_MENU);
+const oracleLineItems = [
+  { ...FORTUNE_LINE_MENU.OPEN_TODAY, icon: 'moon' },
+  { ...FORTUNE_LINE_MENU.OPEN_BUNSHINS, icon: 'cards' },
+  { title: '友だち紹介', path: 'activity', icon: 'people' },
+  { title: '特典', path: 'credits', icon: 'gift' },
+  { ...FORTUNE_LINE_MENU.OPEN_NOTIFICATION_SETTINGS, icon: 'bell' },
+  { ...FORTUNE_LINE_MENU.OPEN_ACCOUNT, icon: 'book' },
+] as const;
+
+export const ORACLE_LINE_MENU_SIZE = { width: 2500, height: 1686 } as const;
+export const ORACLE_LINE_MENU_ITEMS = oracleLineItems.map((item, index) => {
+  const column = index % 3;
+  const x = Math.round((column * ORACLE_LINE_MENU_SIZE.width) / 3);
+  const right = Math.round(((column + 1) * ORACLE_LINE_MENU_SIZE.width) / 3);
+  const height = ORACLE_LINE_MENU_SIZE.height / 2;
+  return { ...item, bounds: { x, y: Math.floor(index / 3) * height, width: right - x, height } };
+});
 export const ORACLE_LINE_MENU_IMAGE_PATH = '/tsuki-to-hoshi-oracle-line-menu.png';
 
 export function isOracleLineService(serviceSlug: string | null | undefined) {

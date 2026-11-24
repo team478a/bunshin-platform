@@ -3,6 +3,7 @@ import { useRef, useState } from 'react';
 import {
   FORTUNE_LINE_MENU_ITEMS,
   ORACLE_LINE_MENU_IMAGE_PATH,
+  ORACLE_LINE_MENU_ITEMS,
 } from '../../../../../../src/line/fortune-rich-menu-content';
 
 type Item = {
@@ -403,14 +404,17 @@ export function GroupLineEditor(props: {
           <>
             <h2>占いリッチメニュー</h2>
             <p>
-              {FORTUNE_LINE_MENU_ITEMS.map(({ title }) => title).join('・')}
-              の4ボタンを、このサービスの専用LINEに設定します。
+              {(props.fortuneMenu === 'ORACLE' ? ORACLE_LINE_MENU_ITEMS : FORTUNE_LINE_MENU_ITEMS)
+                .map(({ title }) => title)
+                .join('・')}
+              の{props.fortuneMenu === 'ORACLE' ? 6 : 4}
+              ボタンを、このサービスの専用LINEに設定します。
             </p>
             {props.fortuneMenu === 'ORACLE' && (
               <figure>
                 <img
                   src={ORACLE_LINE_MENU_IMAGE_PATH}
-                  alt="月と星のオラクルのLINEリッチメニュー。左上から今日の占い、鑑定履歴、通知設定、使い方。"
+                  alt={`月と星のオラクルのLINEリッチメニュー。左上から${ORACLE_LINE_MENU_ITEMS.map(({ title }) => title).join('、')}。`}
                   width={2500}
                   height={1686}
                   loading="lazy"
