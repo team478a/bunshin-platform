@@ -4799,3 +4799,9 @@
 - Grok WebのCustom MCP実機画面はOAuth Client ID入力を持たず、Supabase OAuth ServerのDynamic Client Registrationから接続試行ごとに新しいpublic clientを登録する。固定client IDだけをcatalogで許可する方式では、初回失敗後の再接続を完了できない。
 - 明示フラグがあるstagingに限り、認可画面で受け取ったclient IDをSupabase Admin OAuth APIで毎回取得する。登録名、public/dynamic区分、secretなし、grant/response type、完全一致redirect URIがreviewed templateと一致する場合だけ許可する。取得失敗・複数template・追加redirect・メタデータ変更は拒否する。
 - Productionは従来どおり固定client ID完全一致のみとし、dynamic clientフラグを設定できない。OAuth scopeは業務権限にせず、MCPの読取対象は引き続き本人の一意な操作別`ExternalReadGrant`で毎回解決する。DB、Grant、ツール入力は変更しない。
+
+## 2026-11-24: 占いのOpenAI原価は概算で運用する
+
+- 占いのAI個別化・鑑定・追加質問・ヒアリングでは、共通OpenAI台帳の原価未取得行だけを理由に利用を止めない。日次・月次の予算判定では、原価未取得1件につき運営設定の呼び出し1回分の概算を仮計上する。
+- 稼働中のモデルの[OpenAI公式単価](https://developers.openai.com/api/docs/models/gpt-5.6-terra)を運営上の見積もりの根拠に使う。トークンが未取得の過去の行に確定原価を記入しない。既存の精算や原価レポートは運用上の見積もりと区別する。
+- 予算超過、Providerの停止、接続確認、原子的な費用予約は既存の判定を維持する。他機能の受付判定は従来のままとする。

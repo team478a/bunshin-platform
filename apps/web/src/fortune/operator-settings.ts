@@ -104,7 +104,7 @@ export async function setFortuneAiEnabled(input: {
       throw new ApplicationError('CONFLICT', 'publish fortune before enabling AI');
     const { resolveOpenAiRuntimeConfiguration } =
       await import('../ai/runtime-provider-configuration');
-    await resolveOpenAiRuntimeConfiguration();
+    await resolveOpenAiRuntimeConfiguration(undefined, 'FORTUNE');
   }
   const service = await fortuneOperatorScope(input.serviceSlug, input.actorUserId);
   const db = await import('@bunshin/database');
