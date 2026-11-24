@@ -181,7 +181,10 @@ export function FortuneBasicProfileForm({
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const fields = new FormData(event.currentTarget);
-    const birthParts = ['birthYear', 'birthMonth', 'birthDay'].map((name) => fields.get(name));
+    const birthParts = ['birthYear', 'birthMonth', 'birthDay'].map((name) => {
+      const value = fields.get(name);
+      return typeof value === 'string' ? value : '';
+    });
     if (showBirthDate && birthParts.some(Boolean) && !birthParts.every(Boolean)) {
       setError('生年月日は年・月・日をすべて選ぶか、空欄にしてください。');
       setMessage('');
