@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { ApplicationError } from '@bunshin/shared';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type * as BrowserLearningMaterialService from '../src/services/browser-learning-material';
 
 const mocks = vi.hoisted(() => ({
   resolveActor: vi.fn(),
@@ -9,7 +10,7 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock('server-only', () => ({}));
 vi.mock('../src/services/browser-learning-material', async (original) => ({
-  ...(await original<typeof import('../src/services/browser-learning-material')>()),
+  ...(await original<typeof BrowserLearningMaterialService>()),
   browserLearningMaterialActor: mocks.resolveActor,
 }));
 vi.mock('@bunshin/database', () => ({
@@ -20,6 +21,7 @@ vi.mock('@bunshin/database', () => ({
   },
 }));
 
+import { safeLineAuthReturnPath } from '../src/auth/line-return';
 import { GET } from '../app/s/[serviceSlug]/programs/[programEnrollmentId]/learning-request/browser-material/image/route';
 import MaterialPage from '../app/s/[serviceSlug]/programs/[programEnrollmentId]/learning-request/browser-material/page';
 
@@ -50,6 +52,15 @@ describe('illustrated lessons in the personal learning page', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     mocks.resolveActor.mockResolvedValue(actor);
+  });
+
+  it('preserves an approved topic return path for sign-in', () => {
+    const path =
+      '/s/manaberu/programs/' + params.programEnrollmentId + '/learning-request/browser-material';
+    expect(safeLineAuthReturnPath(path + '?topicId=' + topicId)).toBe(path + '?topicId=' + topicId);
+    expect(safeLineAuthReturnPath(path + '?topicId=invalid')).toBeNull();
+    expect(safeLineAuthReturnPath(path + '?topicId=' + topicId + '&topicId=' + topicId)).toBeNull();
+    expect(safeLineAuthReturnPath(path + '/image')).toBeNull();
   });
 
   it('reads private image evidence through the currently authorized enrollment and topic', async () => {
