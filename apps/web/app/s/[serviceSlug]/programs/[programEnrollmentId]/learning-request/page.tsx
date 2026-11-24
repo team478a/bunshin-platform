@@ -1,3 +1,7 @@
+import {
+  browserLearningProgram,
+  learningMaterialPath,
+} from '../../../../../../src/services/browser-learning-material';
 import { notFound } from 'next/navigation';
 import { ApplicationError } from '@bunshin/shared';
 import { resolveAuthenticatedMemberServicePage } from '../../../../../../src/services/member-service-page';
@@ -294,6 +298,11 @@ export default async function Page({
           </p>
         )}
         <PersonalLearningRequestCard
+          browserMaterialHref={
+            browserLearningProgram(program?.settings, programEnrollmentId)
+              ? learningMaterialPath(serviceSlug, programEnrollmentId, input.topicId)
+              : undefined
+          }
           dynamicMode={dynamicProgram}
           endpoint={`/api/services/${serviceSlug}/ai-training/enrollments/${programEnrollmentId}/learning-request${topicQuery}`}
           initial={initial}

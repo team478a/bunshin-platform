@@ -1,3 +1,8 @@
+import { browserLearningDevice } from '@bunshin/capability-training';
+import {
+  browserLearningDevelopment,
+  enqueueBrowserLearningMaterial,
+} from '../services/browser-learning-material';
 import 'server-only';
 import { z } from 'zod';
 import { ApplicationError, toApiError } from '@bunshin/shared';
@@ -94,6 +99,22 @@ export async function personalLearningRequestResponse(
             ...input,
             ...body.parse(await boundedLearningJson(request)),
           });
+    if (
+      request.method === 'POST' &&
+      saved &&
+      browserLearningDevice(saved) &&
+      browserLearningDevelopment()
+    ) {
+      try {
+        await enqueueBrowserLearningMaterial(input);
+      } catch (error) {
+        const failure = toApiError(error, requestId);
+        logger.error('browser learning material enqueue failed', {
+          requestId,
+          code: failure.body.error.code,
+        });
+      }
+    }
     return Response.json({ data: saved, requestId }, { headers });
   } catch (error) {
     const mapped = toApiError(

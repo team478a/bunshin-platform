@@ -1,3 +1,8 @@
+import { ApplicationError } from '@bunshin/shared';
+import {
+  browserLearningProgram,
+  learningMaterialPath,
+} from '../services/browser-learning-material';
 import 'server-only';
 import type { Job } from '@bunshin/application';
 import {
@@ -241,7 +246,27 @@ export async function executePersonalLearningLineJob(job: Job) {
           const response = result.conversation.messages.find(
             (message) => message.role === 'ASSISTANT' && message.operationId === inbox.operationId,
           );
-          if (response) text = `${response.text.slice(0, 3500)}\n\n${homeUrl}`;
+          if (response) {
+            text = `${response.text.slice(0, 3500)}\n\n${homeUrl}`;
+            if (slug && browserLearningProgram(settings, enrollment.id)) {
+              try {
+                const lesson = await new db.PrismaBrowserLearningMaterials(db.prisma).readMaterial(
+                  actor,
+                );
+                if (lesson?.material) {
+                  const url = new URL(
+                    learningMaterialPath(slug, enrollment.id, actor.topicId),
+                    homeUrl,
+                  );
+                  text += `\n\n画像付き操作教材\n${url.toString()}`;
+                }
+              } catch (error) {
+                console.warn('LINE learning material unavailable', {
+                  category: error instanceof ApplicationError ? error.code : 'INTERNAL',
+                });
+              }
+            }
+          }
         }
       } else if (inbox.messageType === 'IMAGE' && inbox.lineMessageId) {
         let image =

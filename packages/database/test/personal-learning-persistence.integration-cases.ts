@@ -1,3 +1,6 @@
+import { BROWSER_FIXTURE_JOB_TYPE, ClaimJob, assertUserJob } from '@bunshin/application';
+import { PrismaBrowserLearningMaterials } from '../src/browser-learning-material';
+import { PrismaJobRepository } from '../src/automation-jobs';
 import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import type { PrismaClient, Prisma } from '@prisma/client';
@@ -229,6 +232,139 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
       experienceDescription: null,
       currentPosition: null,
     } as const;
+    it('reuses illustrated practice evidence and rejects another learner’s job', async () => {
+      const f = await fixture(false);
+      const other = await fixture(false);
+      const programId = f.enrollment.serviceProgramId;
+      await client.programEnrollment.update({
+        where: { id: f.enrollment.id },
+        data: { startsAt: new Date(0), endsAt: null },
+      });
+      await client.serviceProgram.update({
+        where: { id: programId },
+        data: {
+          settings: {
+            trainingOperations: { notificationsEnabled: false, postponedReminderEnabled: false },
+            moduleKey: 'AI_TRAINING_V1',
+            personalLearningPilot: {
+              enabled: true,
+              enrollmentIds: [f.enrollment.id],
+              participantControl: {
+                version: 'PILOT_PARTICIPANT_CAP_V1',
+                revision: 1,
+                externalParticipantCap: 5,
+                internalParticipantCap: 1,
+                currentWave: 1,
+                currentWaveCap: 5,
+              },
+              learningMode: 'DYNAMIC_V1',
+              learningFeatures: {
+                conversation: true,
+                multiTopic: false,
+                lineLearning: false,
+                extendedScope: false,
+                browserMaterials: true,
+              },
+            },
+          },
+        },
+      });
+      await client.personalLearningPilotSeat.create({
+        data: {
+          workspaceId: f.scope.workspaceId,
+          groupId: f.scope.groupId,
+          serviceProgramId: programId,
+          programEnrollmentId: f.enrollment.id,
+          participantHash: pilotParticipantHash(programId, f.scope.userId),
+          kind: 'INTERNAL',
+          cohort: 'INTERNAL',
+          seatNumber: 1,
+        },
+      });
+      const requests = new PrismaPersonalLearningRequestRepository(client);
+      await requests.saveRequest({
+        ...f.actor,
+        content: {
+          ...requestContent,
+          originalText: '練習用メモをプレビューしたい',
+          deviceType: 'SMARTPHONE',
+        },
+        expectedRevision: 0,
+        idempotencyKey: randomUUID(),
+      });
+      const materials = new PrismaBrowserLearningMaterials(client);
+      try {
+        await materials.enqueue(f.actor);
+        await materials.enqueue(f.actor);
+        expect(
+          await client.job.count({
+            where: { workspaceId: f.scope.workspaceId, jobType: BROWSER_FIXTURE_JOB_TYPE },
+          }),
+        ).toBe(1);
+        expect(await materials.readMaterial(f.actor)).toMatchObject({
+          device: 'mobile',
+          status: 'PENDING',
+          material: null,
+        });
+        const worker = randomUUID();
+        const job = await new ClaimJob(new PrismaJobRepository(client, 'browser-fixture')).execute(
+          'DEVELOPMENT',
+          worker,
+        );
+        if (!job) throw new Error('fixture job missing');
+        assertUserJob(job);
+        await expect(
+          materials.jobMaterial({ ...job, requestedBy: other.scope.userId }),
+        ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+        expect(await materials.jobMaterial(job)).toEqual({ device: 'mobile', existing: false });
+        const image = new Uint8Array([1, 2, 3]);
+        const result = await materials.finish(job, worker, {
+          title: '練習用メモ',
+          goal: '表示を確かめる',
+          preparation: '開始',
+          practice: '復習',
+          checkpoint: '確認',
+          verifiedAt: new Date(),
+          steps: [
+            {
+              ordinal: 1,
+              stepId: 'open-editor',
+              instruction: '開く',
+              beforeImage: image,
+              afterImage: image,
+            },
+          ],
+        });
+        expect(await materials.readMaterial(f.actor)).toMatchObject({
+          material: { id: result.id },
+        });
+        expect(
+          await Promise.all([
+            materials.readImage(f.actor, result.id, 1, 'before'),
+            materials.readImage(f.actor, result.id, 1, 'after'),
+            materials.readImage(f.actor, result.id, 1, 'detail'),
+          ]),
+        ).toEqual([image, image, null]);
+        await expect(
+          materials.readImage(
+            { ...f.actor, actorUserId: other.scope.userId },
+            result.id,
+            1,
+            'before',
+          ),
+        ).rejects.toBeDefined();
+        await materials.enqueue(f.actor);
+        expect(
+          await client.job.count({
+            where: { workspaceId: f.scope.workspaceId, jobType: BROWSER_FIXTURE_JOB_TYPE },
+          }),
+        ).toBe(1);
+      } finally {
+        await client.job.deleteMany({
+          where: { workspaceId: f.scope.workspaceId, jobType: BROWSER_FIXTURE_JOB_TYPE },
+        });
+      }
+    });
     async function textOperationFixture() {
       const f = await fixture(false);
       const requests = new PrismaPersonalLearningRequestRepository(client, () => now);

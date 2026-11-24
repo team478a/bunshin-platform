@@ -20,6 +20,7 @@ const featureSchema = z
     extendedScope: z.boolean(),
     learningNudges: z.boolean(),
     toolUpdates: z.boolean(),
+    browserMaterials: z.boolean().optional(),
   })
   .strict();
 const inputSchema = z
@@ -207,13 +208,21 @@ export async function programFeatureFlagsResponse(request: Request, serviceSlug:
               'cannot change offer policy while enrollments exist',
             );
         }
+        const learningFeatures = {
+          ...(before.learningFeatures.browserMaterials === undefined
+            ? {}
+            : {
+                browserMaterials: before.learningFeatures.browserMaterials,
+              }),
+          ...input.learningFeatures,
+        };
         const nextSettings = {
           ...currentSettings,
           ...(nextOfferPolicy === 'SIDE_HUSTLE_V1' ? { learningOfferPolicy: nextOfferPolicy } : {}),
           personalLearningPilot: {
             ...pilot,
             learningMode: input.learningMode,
-            learningFeatures: input.learningFeatures,
+            learningFeatures,
           },
         };
         if (nextOfferPolicy === 'AI_SKILL_V1')
@@ -232,7 +241,7 @@ export async function programFeatureFlagsResponse(request: Request, serviceSlug:
             beforeData: { ...before, learningOfferPolicy: currentOfferPolicy },
             afterData: {
               learningMode: input.learningMode,
-              learningFeatures: input.learningFeatures,
+              learningFeatures,
               reviewEvidenceKey: input.reviewEvidenceKey,
               learningOfferPolicy: nextOfferPolicy,
             },

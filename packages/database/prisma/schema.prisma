@@ -374,6 +374,8 @@ model ServiceProgram {
   createdAt                DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt                DateTime             @updatedAt @map("updated_at") @db.Timestamptz(3)
 
+  browserFixtureMaterials BrowserFixtureMaterial[]
+
   @@unique([workspaceId, groupId, id])
   @@index([workspaceId, groupId, status])
   @@map("service_programs")
@@ -9230,7 +9232,11 @@ model BrowserFixtureRecipe {
 
 model BrowserFixtureMaterial {
   id             String                       @id @default(uuid()) @db.Uuid
-  recipeId       String                       @map("recipe_id") @db.Uuid
+  recipeId       String?                      @map("recipe_id") @db.Uuid
+  workspaceId    String?                      @map("workspace_id") @db.Uuid
+  groupId        String?                      @map("group_id") @db.Uuid
+  programId      String?                      @map("program_id") @db.Uuid
+  fixtureDevice  String?                      @map("fixture_device") @db.VarChar(16)
   revision       Int
   title          String                       @db.VarChar(160)
   goal           String                       @db.VarChar(400)
@@ -9240,10 +9246,12 @@ model BrowserFixtureMaterial {
   verifiedAt     DateTime                     @map("verified_at") @db.Timestamptz(6)
   sourceJobId    String                       @map("source_job_id") @db.Uuid
   sourceAttempt  Int                          @map("source_attempt")
-  recipe         BrowserFixtureRecipe         @relation(fields: [recipeId], references: [id], onDelete: Cascade, map: "browser_fixture_materials_recipe_fkey")
+  recipe         BrowserFixtureRecipe?        @relation(fields: [recipeId], references: [id], onDelete: Cascade, map: "browser_fixture_materials_recipe_fkey")
+  program        ServiceProgram?              @relation(fields: [workspaceId, groupId, programId], references: [workspaceId, groupId, id], onDelete: Cascade, map: "browser_fixture_materials_program_fkey")
   steps          BrowserFixtureMaterialStep[]
 
   @@unique([recipeId, revision], map: "browser_fixture_materials_recipe_revision_key")
+  @@unique([workspaceId, groupId, programId, fixtureDevice, revision], map: "browser_fixture_materials_program_revision_key")
   @@map("browser_fixture_materials")
 }
 

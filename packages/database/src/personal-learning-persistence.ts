@@ -72,16 +72,19 @@ export class PrismaPersonalLearningPersistenceRepository implements PersonalLear
   ) {}
   protected async authorized<T>(
     input: PersonalLearningActor,
-    write: boolean,
+    requireActiveEnrollment: boolean,
     work: (tx: Tx, now: Date) => Promise<T>,
     allowUnscopedMultiTopic = false,
+    lockEnrollment = true,
   ): Promise<T> {
     validatePersonalLearningActor(input);
     const s = input.scope;
     try {
       return await this.client.$transaction(
         async (tx) => {
-          await lockTrainingEnrollmentData(tx, { ...s, actorUserId: input.actorUserId });
+          // Keep the mutation lock for writers. Concurrent evidence reads only need the authorization snapshot.
+          if (lockEnrollment)
+            await lockTrainingEnrollmentData(tx, { ...s, actorUserId: input.actorUserId });
           const members = await tx.$queryRaw<{ id: string; serviceRole: string }[]>`
           SELECT m.id, m.service_role::text AS "serviceRole" FROM group_memberships m JOIN users u ON u.id=m.user_id
           JOIN groups g ON g.id=m.group_id JOIN workspaces w ON w.id=g.workspace_id
@@ -100,7 +103,9 @@ export class PrismaPersonalLearningPersistenceRepository implements PersonalLear
               workspaceId: s.workspaceId,
               groupId: s.groupId,
               groupMembershipId: s.groupMembershipId,
-              ...(write ? { status: 'ACTIVE', AND: [trainingEnrollmentPeriodWhere(now)] } : {}),
+              ...(requireActiveEnrollment
+                ? { status: 'ACTIVE', AND: [trainingEnrollmentPeriodWhere(now)] }
+                : {}),
             },
           });
           if (!enrollment) denied();
