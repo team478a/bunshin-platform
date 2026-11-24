@@ -16,6 +16,7 @@ import { saveEvidence } from './evidence';
 import { compactPreviewStep, fixture, fixturePlan, fixtureVersion } from './fixture';
 import { completeRecipeReplay, completeWithRecipe, findRecipeId, loadRecipe } from './recipes';
 import { modelPreviewSelector } from './model-selector';
+import { completeMaterialJob } from './materials';
 
 const environment = 'DEVELOPMENT';
 const jobs = new PrismaJobRepository(prisma, 'browser-fixture');
@@ -31,16 +32,16 @@ export async function enqueueFixture(
   actorId: string,
   deviceName: string,
   requestId: string,
-  mode: 'fixture' | 'discover' | 'discover-model' | 'replay' = 'fixture',
+  mode: 'fixture' | 'discover' | 'discover-model' | 'replay' | 'material' = 'fixture',
 ) {
   if (![workspaceId, actorId, requestId].every((value) => uuid.test(value))) {
     throw new Error('Workspace, actor and request must be UUIDs');
   }
   let payloadReference;
-  if (mode === 'replay') {
+  if (mode === 'replay' || mode === 'material') {
     if (!uuid.test(deviceName)) throw new BrowserRunError('INVALID_PLAN');
     await loadRecipe(deviceName, workspaceId, actorId);
-    payloadReference = `replay:${deviceName.toLowerCase()}`;
+    payloadReference = `${mode}:${deviceName.toLowerCase()}`;
   } else {
     const device = deviceFrom(deviceName);
     payloadReference = `${mode === 'fixture' ? '' : mode + ':'}${fixtureVersion}:${device}`;
@@ -133,6 +134,26 @@ export async function runQueue(input: {
         }
         assertUserJob(job);
         const [kind, value, device, extra] = job.payloadReference.split(':');
+        if (kind === 'material' && value && uuid.test(value) && device === undefined) {
+          const material = await completeMaterialJob({
+            recipeId: value,
+            job,
+            workerId,
+            output: input.output,
+            limits: input.limits,
+            signal: input.signal,
+          });
+          console.log(
+            JSON.stringify({
+              jobId: job.id,
+              status: 'SUCCEEDED',
+              attempt: job.attemptCount,
+              recipeId: value,
+              materialId: material.id,
+            }),
+          );
+          continue;
+        }
         let discovery;
         let run;
         if (

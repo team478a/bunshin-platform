@@ -43,7 +43,17 @@ export interface BrowserStepState {
   accessibility: string;
 }
 
+export const browserEvidenceTargetSchema = z.strictObject({
+  x: z.number(),
+  y: z.number(),
+  width: z.number().positive(),
+  height: z.number().positive(),
+  viewportWidth: z.number().positive(),
+  viewportHeight: z.number().positive(),
+});
+
 export interface BrowserStepEvidence {
+  target?: z.infer<typeof browserEvidenceTargetSchema>;
   stepId: string;
   action: BrowserPlan['steps'][number]['action'];
   before: BrowserStepState;

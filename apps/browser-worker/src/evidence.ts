@@ -13,12 +13,12 @@ export async function saveEvidence(
   const output = join(parent, directory);
   try {
     const steps = [];
-    for (const { stepId, action, before, after, beforePng, afterPng } of run.steps) {
+    for (const { stepId, action, target, before, after, beforePng, afterPng } of run.steps) {
       const beforeImage = `${stepId}-before.png`;
       const afterImage = `${stepId}-after.png`;
       await writeFile(join(staging, beforeImage), beforePng, { signal, mode: 0o600 });
       await writeFile(join(staging, afterImage), afterPng, { signal, mode: 0o600 });
-      steps.push({ stepId, action, before, after, beforeImage, afterImage });
+      steps.push({ stepId, action, target, before, after, beforeImage, afterImage });
     }
     await writeFile(join(staging, 'evidence.json'), JSON.stringify({ ...run, steps }, null, 2), {
       signal,

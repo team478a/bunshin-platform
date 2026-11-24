@@ -5,7 +5,7 @@ import { PrismaJobRepository, prisma } from '@bunshin/database';
 import { BrowserRunError } from './browser';
 import { compactPreviewStep, fixturePlan, fixtureVersion } from './fixture';
 
-const recipeScope = (workspaceId: string, actorId: string) => ({
+export const recipeScope = (workspaceId: string, actorId: string) => ({
   workspaceId,
   actorId,
   membership: {
@@ -29,9 +29,20 @@ export async function findRecipeId(
 }
 
 export async function loadRecipe(recipeId: string, workspaceId: string, actorId: string) {
+  return (await loadVerifiedRecipe(recipeId, workspaceId, actorId)).plan;
+}
+
+export async function loadVerifiedRecipe(recipeId: string, workspaceId: string, actorId: string) {
   const recipe = await prisma.browserFixtureRecipe.findFirst({
     where: { id: recipeId, fixtureVersion, ...recipeScope(workspaceId, actorId) },
-    select: { plan: true, device: true, planHash: true },
+    select: {
+      plan: true,
+      device: true,
+      planHash: true,
+      verifiedAt: true,
+      sourceJobId: true,
+      sourceAttempt: true,
+    },
   });
   const parsed = browserPlanSchema.safeParse(recipe?.plan);
   if (!recipe || !parsed.success || parsed.data.device !== recipe.device) {
@@ -53,7 +64,12 @@ export async function loadRecipe(recipeId: string, workspaceId: string, actorId:
   ) {
     throw new BrowserRunError('INVALID_PLAN');
   }
-  return normalized.data;
+  return {
+    plan: normalized.data,
+    verifiedAt: recipe.verifiedAt,
+    sourceJobId: recipe.sourceJobId,
+    sourceAttempt: recipe.sourceAttempt,
+  };
 }
 
 function hashPlan(plan: BrowserPlan) {
