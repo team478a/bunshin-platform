@@ -39,6 +39,7 @@ const items = [
 ] as const;
 
 export type LineRichMenuLayout = 'DEFAULT' | 'FORTUNE';
+export type GroupLineRichMenuLayout = LineRichMenuLayout | 'ORACLE';
 
 export async function renderDefaultLineRichMenu(
   layout: LineRichMenuLayout = 'DEFAULT',

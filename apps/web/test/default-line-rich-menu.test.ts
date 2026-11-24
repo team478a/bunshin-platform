@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 vi.mock('server-only', () => ({}));
 import sharp from 'sharp';
 import { readFile } from 'node:fs/promises';
+import { renderOracleLineRichMenu } from '../src/line/fortune-rich-menu-art';
 import {
   DEFAULT_LINE_RICH_MENU,
   renderDefaultLineRichMenu,
@@ -29,6 +30,7 @@ describe('default LINE rich menu', () => {
   it('占い用の汎用画像とオラクルの正式画像をLINE仕様内で用意する', async () => {
     for (const image of [
       await renderDefaultLineRichMenu('FORTUNE'),
+      await renderOracleLineRichMenu(),
       await readFile('public/tsuki-to-hoshi-oracle-line-menu.png'),
     ]) {
       expect(await sharp(image).metadata()).toMatchObject({
