@@ -4,9 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsc -p tsconfig.json --outDir dist",
+    "build": "tsc -p tsconfig.build.json",
     "lint": "eslint src test",
-    "test": "vitest run",
+    "test": "vitest run --dir test",
     "typecheck": "tsc --noEmit",
     "start": "tsx src/cli.ts",
     "test:browser": "tsx src/cli.ts smoke"
