@@ -1,0 +1,52 @@
+name: Narration Docker verification
+
+on:
+  push:
+    branches: [codex/manaberu-narration-docker-check]
+
+permissions:
+  contents: read
+
+jobs:
+  docker-audio:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v5
+      - name: Build browser worker
+        run: docker build -f apps/browser-worker/Dockerfile -t manaberu-narration-check .
+      - name: Generate and validate narrated MP4 without network access
+        run: |
+          docker run --rm --network none -i --entrypoint node manaberu-narration-check --import tsx --input-type=module - <<'JS'
+          import assert from 'node:assert/strict';
+          import { execFileSync } from 'node:child_process';
+          import { writeFile } from 'node:fs/promises';
+          import { openJTalkNarration } from './src/material-narration.ts';
+          import { renderMaterialVideo } from './src/material-video.ts';
+
+          const imageFields = { beforeImage: null, afterImage: null, detailImage: null };
+          const output = await renderMaterialVideo([
+            { ...imageFields, instruction: '練習メモを開き、入力欄を確認してください。' },
+            { ...imageFields, instruction: '入力したメモがプレビュー画面に表示されていることを確認します。' },
+          ], AbortSignal.timeout(90_000), openJTalkNarration);
+          const mp4 = '/tmp/practice-note-narrated.mp4';
+          await writeFile(mp4, output.mp4);
+          const media = JSON.parse(execFileSync('ffprobe', [
+            '-v', 'error', '-show_streams', '-show_chapters', '-of', 'json', mp4,
+          ], { encoding: 'utf8' }));
+          const video = media.streams.find((s) => s.codec_type === 'video');
+          const audio = media.streams.find((s) => s.codec_type === 'audio');
+          const subtitle = media.streams.find((s) => s.codec_type === 'subtitle');
+          assert.deepEqual([video.codec_name, video.width, video.height], ['h264', 720, 1280]);
+          assert.deepEqual([audio.codec_name, audio.tags.language], ['aac', 'jpn']);
+          assert.deepEqual([subtitle.codec_name, subtitle.tags.language], ['mov_text', 'jpn']);
+          assert.equal(media.chapters.length, 2);
+          assert.equal(media.chapters[0].end_time, media.chapters[1].start_time);
+          assert.equal(Math.round(Number(media.chapters[1].end_time) * 1000), output.durationMs);
+          const measured = execFileSync('sh', [
+            '-c', 'ffmpeg -hide_banner -i "$1" -map 0:a:0 -af volumedetect -f null - 2>&1',
+            'narration-volume', mp4,
+          ], { encoding: 'utf8' });
+          assert.ok(Number(measured.match(/mean_volume: ([-\d.]+) dB/)?.[1]) > -50);
+          console.log(JSON.stringify({ durationMs: output.durationMs, bytes: output.mp4.length, audio: audio.codec_name, chapters: media.chapters.length }));
+          JS
