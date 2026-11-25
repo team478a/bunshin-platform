@@ -27,7 +27,7 @@ export type NarrateMaterialStep = (input: {
 }) => Promise<void>;
 
 const openJTalkVoice =
-  (voicePath: string, speed?: string): NarrateMaterialStep =>
+  (voicePath: string, tuning: string[] = []): NarrateMaterialStep =>
   async ({ text, directory, file, signal }) => {
     const input = file + '.txt';
     await writeFile(join(directory, input), text + '\n', { signal });
@@ -38,7 +38,7 @@ const openJTalkVoice =
         process.env['BROWSER_OPEN_JTALK_DICTIONARY'] || '/var/lib/mecab/dic/open-jtalk/naist-jdic',
         '-m',
         voicePath,
-        ...(speed ? ['-r', speed] : []),
+        ...tuning,
         '-ow',
         file,
         input,
@@ -56,7 +56,7 @@ export const openJTalkNarration: NarrateMaterialStep = (input) =>
 export const meiNarration: NarrateMaterialStep = (input) =>
   openJTalkVoice(
     process.env['BROWSER_OPEN_JTALK_MEI_VOICE'] || '/usr/share/hts-voice/mei/mei_normal.htsvoice',
-    '0.90',
+    ['-r', '0.90', '-fm', '-1.5'],
   )(input);
 
 export async function narrationDurationMs(path: string, signal: AbortSignal) {

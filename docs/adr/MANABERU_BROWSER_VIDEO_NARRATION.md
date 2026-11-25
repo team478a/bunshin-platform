@@ -4,6 +4,6 @@
 
 音声付き出力は動画形式 v2 とし、元の教材版と認可を共有する。すでに保存された v1 と移行前の待機ジョブを保持し、v2 の準備ができるまで v1 を再生できるようにする。DB の既存の版キー、非公開配信、作業キューを再利用する。
 
-2026-11-26 追記。動画形式 v3 は MMDAgent Project Team の HTS Voice「Mei (Normal)」を使い、話速を標準の 0.90 倍に設定する。音声モデルとライセンスを固定し、出典を教材ページと MP4 に表示する。v1 と v2 はそのまま再生でき、女性ナレーション付き動画の依頼時に v3 を生成する。VPS へ配置する場合は v3 対応のワーカーを先に更新する。 [音声モデルのライセンス](https://github.com/r9y9/pyopenjtalk/blob/v0.4.1/pyopenjtalk/htsvoice/LICENSE_mei_normal.htsvoice)
+2026-11-26 追記。動画形式 v3 は MMDAgent Project Team の HTS Voice「Mei (Normal)」を使い、話速を標準の 0.90 倍にし、声の高さを標準より半音 1.5 個分下げる。音声モデルとライセンスを固定し、出典を教材ページと MP4 に表示する。v1 と v2 はそのまま再生でき、女性ナレーション付き動画の依頼時に v3 を生成する。VPS へ配置する場合は v3 対応のワーカーを先に更新する。 [音声モデルのライセンス](https://github.com/r9y9/pyopenjtalk/blob/v0.4.1/pyopenjtalk/htsvoice/LICENSE_mei_normal.htsvoice)
 
 録画の取り込みと本番公開の検証は別の作業とする。
