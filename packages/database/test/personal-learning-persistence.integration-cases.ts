@@ -234,7 +234,7 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
       experienceDescription: null,
       currentPosition: null,
     } as const;
-    it('reuses illustrated practice evidence and rejects another learner’s job', async () => {
+    it('reuses illustrated practice evidence in staging and rejects jobs from another scope', async () => {
       const f = await fixture(false);
       const other = await fixture(false);
       const programId = f.enrollment.serviceProgramId;
@@ -284,23 +284,29 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
         },
       });
       const requests = new PrismaPersonalLearningRequestRepository(client);
-      await requests.saveRequest({
-        ...f.actor,
-        content: {
-          ...requestContent,
-          originalText: '練習用メモをプレビューしたい',
-          deviceType: 'SMARTPHONE',
-        },
-        expectedRevision: 0,
-        idempotencyKey: randomUUID(),
-      });
       const materials = new PrismaBrowserLearningMaterials(client);
+      const originalAppEnvironment = process.env['APP_ENV'];
+      process.env['APP_ENV'] = 'staging';
       try {
+        await requests.saveRequest({
+          ...f.actor,
+          content: {
+            ...requestContent,
+            originalText: '練習用メモをプレビューしたい',
+            deviceType: 'SMARTPHONE',
+          },
+          expectedRevision: 0,
+          idempotencyKey: randomUUID(),
+        });
         await materials.enqueue(f.actor);
         await materials.enqueue(f.actor);
         expect(
           await client.job.count({
-            where: { workspaceId: f.scope.workspaceId, jobType: BROWSER_FIXTURE_JOB_TYPE },
+            where: {
+              environment: 'STAGING',
+              workspaceId: f.scope.workspaceId,
+              jobType: BROWSER_FIXTURE_JOB_TYPE,
+            },
           }),
         ).toBe(1);
         expect(await materials.readMaterial(f.actor)).toMatchObject({
@@ -310,11 +316,14 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
         });
         const worker = randomUUID();
         const job = await new ClaimJob(new PrismaJobRepository(client, 'browser-fixture')).execute(
-          'DEVELOPMENT',
+          'STAGING',
           worker,
         );
         if (!job) throw new Error('fixture job missing');
         assertUserJob(job);
+        await expect(
+          materials.jobMaterial({ ...job, environment: 'DEVELOPMENT' }),
+        ).rejects.toMatchObject({ code: 'NOT_FOUND' });
         await expect(
           materials.jobMaterial({ ...job, requestedBy: other.scope.userId }),
         ).rejects.toMatchObject({ code: 'NOT_FOUND' });
@@ -367,7 +376,7 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
         expect(await materials.scheduleReviews()).toBe(0);
         const queue = new PrismaJobRepository(client, 'browser-fixture');
         const claimReview = async () => {
-          const review = await new ClaimJob(queue).execute('DEVELOPMENT', worker);
+          const review = await new ClaimJob(queue).execute('STAGING', worker);
           if (!review) throw new Error('review job missing');
           assertUserJob(review);
           return review;
@@ -570,7 +579,12 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
         });
         expect(await videos.state(learner, otherMaterial.id)).toBeNull();
         expect(await materials.enqueueReview(f.actor, ownMaterial.id)).toBe(false);
+        process.env['APP_ENV'] = 'production';
+        expect(await materials.readMaterial(f.actor)).toBeNull();
+        expect(await materials.enqueue(f.actor)).toBeNull();
       } finally {
+        if (originalAppEnvironment === undefined) delete process.env['APP_ENV'];
+        else process.env['APP_ENV'] = originalAppEnvironment;
         await client.job.deleteMany({
           where: { workspaceId: f.scope.workspaceId, jobType: BROWSER_FIXTURE_JOB_TYPE },
         });

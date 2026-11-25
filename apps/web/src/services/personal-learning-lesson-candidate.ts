@@ -1,5 +1,6 @@
 import 'server-only';
 import { ApplicationError } from '@bunshin/shared';
+import { browserPilotEnvironment } from '@bunshin/capability-browser';
 import {
   executePersonalLearningTextOperation,
   parsePersonalLearningCallAdmissionPolicy,
@@ -62,7 +63,7 @@ export async function prepareLearningLesson(
     await resolvePersonalLearningOfferContext(actor);
   const includeIntentAnalysis =
     provider === 'google' &&
-    process.env['APP_ENV'] === 'development' &&
+    browserPilotEnvironment(process.env['APP_ENV']) !== null &&
     offerPolicy === 'AI_SKILL_V1' &&
     browserMaterials;
 

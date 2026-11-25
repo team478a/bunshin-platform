@@ -107,4 +107,25 @@ describe('observed model run reporting', () => {
     expect(tx.aiUsageEvent.findMany).not.toHaveBeenCalled();
     expect(tx.aiProviderCallAdmission.findMany).not.toHaveBeenCalled();
   });
+
+  it('uses the staging job and reservation namespace and rejects production', async () => {
+    vi.stubEnv('APP_ENV', 'staging');
+    try {
+      await reportObservedModelJob(workspace, actor, id);
+      for (const query of [tx.job.findFirst, tx.aiProviderCallAdmission.findMany]) {
+        expect(query).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: expect.objectContaining({ environment: 'STAGING' }),
+          }),
+        );
+      }
+      vi.stubEnv('APP_ENV', 'production');
+      await expect(reportObservedModelJob(workspace, actor, id)).rejects.toMatchObject({
+        category: 'INVALID_PLAN',
+      });
+      expect(tx.job.findFirst).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
 });

@@ -12,6 +12,7 @@ import {
 } from '@bunshin/capability-training';
 import {
   browserObservedFixtureVersion,
+  browserPilotEnvironment,
   trainingCatalogueDiscoveryPrefix,
 } from '@bunshin/capability-browser';
 import { ApplicationError } from '@bunshin/shared';
@@ -19,7 +20,6 @@ import type { Prisma, PrismaClient } from '@prisma/client';
 import { PrismaJobRepository } from './automation-jobs';
 import { PrismaPersonalLearningPersistenceRepository } from './personal-learning-persistence';
 
-const environment = 'DEVELOPMENT';
 const jobType = BROWSER_FIXTURE_JOB_TYPE;
 const reviewInterval = 7 * 24 * 60 * 60 * 1000;
 const reportCooldown = 60 * 60 * 1000;
@@ -41,10 +41,11 @@ function discoveryConfigured(workspaceId: string) {
 
 export async function enqueueCatalogueMaterial(
   tx: Prisma.TransactionClient,
-  job: Pick<UserJob, 'workspaceId' | 'requestedBy' | 'correlationId'>,
+  job: Pick<UserJob, 'workspaceId' | 'requestedBy' | 'correlationId' | 'environment'>,
   recipeId: string,
 ) {
   const reference = catalogueIdentity(recipeId);
+  const { environment } = job;
   await tx.job.upsert({
     where: { environment_idempotencyKey: { environment, idempotencyKey: reference } },
     create: {
@@ -55,6 +56,7 @@ export async function enqueueCatalogueMaterial(
       jobType,
       idempotencyKey: reference,
       payloadReference: `material:${recipeId}`,
+      scheduledAt: new Date(),
       maxAttempts: 3,
     },
     update: {},
@@ -72,6 +74,7 @@ type MaterialWork<T> = (
   key: MaterialKey,
   requestId: string,
   target: MaterialTarget,
+  environment: NonNullable<ReturnType<typeof browserPilotEnvironment>>,
 ) => Promise<T>;
 const selection = {
   id: true,
@@ -100,7 +103,8 @@ export class PrismaBrowserLearningMaterials extends PrismaPersonalLearningPersis
     work: MaterialWork<T>,
     lockEnrollment = true,
   ) {
-    if (process.env['APP_ENV'] !== 'development') return null;
+    const environment = browserPilotEnvironment(process.env['APP_ENV']);
+    if (!environment) return null;
     return this.authorized(
       actor,
       true,
@@ -133,7 +137,7 @@ export class PrismaBrowserLearningMaterials extends PrismaPersonalLearningPersis
           programId: program.id,
           fixtureDevice: target.device,
         };
-        if (target.kind === 'practice-note') return work(tx, key, request.id, target);
+        if (target.kind === 'practice-note') return work(tx, key, request.id, target, environment);
         const recipeQuery = {
           where: {
             workspaceId: scope.workspaceId,
@@ -154,7 +158,13 @@ export class PrismaBrowserLearningMaterials extends PrismaPersonalLearningPersis
             ...recipeQuery,
             where: { ...recipeQuery.where, materials: { some: { verifiedAt: { not: null } } } },
           })) ?? (await tx.browserFixtureRecipe.findFirst(recipeQuery));
-        return work(tx, key, request.id, { kind: 'catalogue', recipeId: recipe?.id ?? null });
+        return work(
+          tx,
+          key,
+          request.id,
+          { kind: 'catalogue', recipeId: recipe?.id ?? null },
+          environment,
+        );
       },
       false,
       lockEnrollment,
@@ -184,7 +194,7 @@ export class PrismaBrowserLearningMaterials extends PrismaPersonalLearningPersis
   readMaterial(actor: PersonalLearningActor) {
     return this.use(
       actor,
-      async (tx, key, requestId, target) => {
+      async (tx, key, requestId, target, environment) => {
         const where = this.materialWhere(key, target);
         const material = where
           ? await tx.browserFixtureMaterial.findFirst({
@@ -238,7 +248,7 @@ export class PrismaBrowserLearningMaterials extends PrismaPersonalLearningPersis
   }
 
   enqueue(actor: PersonalLearningActor) {
-    return this.use(actor, async (tx, key, requestId, target) => {
+    return this.use(actor, async (tx, key, requestId, target, environment) => {
       const where = this.materialWhere(key, target);
       if (where && (await tx.browserFixtureMaterial.findFirst({ where, select: { id: true } })))
         return;
@@ -250,6 +260,7 @@ export class PrismaBrowserLearningMaterials extends PrismaPersonalLearningPersis
             workspaceId: key.workspaceId,
             requestedBy: actor.actorUserId,
             correlationId: requestId,
+            environment,
           },
           recipeId,
         );
@@ -268,6 +279,7 @@ export class PrismaBrowserLearningMaterials extends PrismaPersonalLearningPersis
           idempotencyKey: reference,
           payloadReference: reference,
           correlationId: requestId,
+          scheduledAt: new Date(),
           maxAttempts: discovery ? 1 : 3,
         },
         update: {},
@@ -301,7 +313,7 @@ export class PrismaBrowserLearningMaterials extends PrismaPersonalLearningPersis
   }
 
   enqueueReview(actor: PersonalLearningActor, materialId: string, periodic = false) {
-    return this.use(actor, async (tx, key, requestId, target) => {
+    return this.use(actor, async (tx, key, requestId, target, environment) => {
       if (target.kind !== 'practice-note') return false;
       const material = await tx.browserFixtureMaterial.findFirst({
         where: key,
@@ -344,6 +356,7 @@ export class PrismaBrowserLearningMaterials extends PrismaPersonalLearningPersis
           idempotencyKey: `training-material-review:${material.id}:${now.toISOString()}`,
           payloadReference: `${identity(requestId)}:${material.id}`,
           correlationId: material.id,
+          scheduledAt: now,
           maxAttempts: 3,
         },
       });
@@ -352,7 +365,8 @@ export class PrismaBrowserLearningMaterials extends PrismaPersonalLearningPersis
   }
 
   async scheduleReviews() {
-    if (process.env['APP_ENV'] !== 'development') return 0;
+    const environment = browserPilotEnvironment(process.env['APP_ENV']);
+    if (!environment) return 0;
     const cutoff = new Date(Date.now() - reviewInterval);
     let cursor = '00000000-0000-0000-0000-000000000000';
     let queued = 0;
@@ -393,7 +407,7 @@ export class PrismaBrowserLearningMaterials extends PrismaPersonalLearningPersis
     materialId: string;
     expectedCurrentId: string;
   }) {
-    if (process.env['APP_ENV'] !== 'development') throw denied();
+    if (!browserPilotEnvironment(process.env['APP_ENV'])) throw denied();
     return this.database.$transaction(async (tx) => {
       const old = await tx.browserFixtureMaterial.findFirst({
         where: { id: input.materialId, workspaceId: input.workspaceId },
@@ -515,8 +529,9 @@ export class PrismaBrowserLearningMaterials extends PrismaPersonalLearningPersis
     >,
   ) {
     const [, kind, id, reviewId] = jobPattern.exec(job.payloadReference) ?? [];
+    const environment = browserPilotEnvironment(process.env['APP_ENV']);
     if (
-      process.env['APP_ENV'] !== 'development' ||
+      !environment ||
       !id ||
       (kind === 'training-catalogue-discovery' && !!reviewId) ||
       job.environment !== environment ||

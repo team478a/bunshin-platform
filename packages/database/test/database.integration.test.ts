@@ -3595,7 +3595,7 @@ describe('database ownership boundaries', () => {
     ).resolves.toMatchObject({ status: 'SUCCEEDED' });
   });
 
-  it('reserves fixture jobs for the dedicated development worker', async () => {
+  it('reserves fixture jobs for the dedicated non-production worker', async () => {
     const owner = await new CreateUserWithPersonalWorkspace(
       new PrismaAccountUnitOfWork(client),
     ).execute({ displayName: 'Browser Fixture Owner' });
@@ -3615,6 +3615,7 @@ describe('database ownership boundaries', () => {
       code: 'FORBIDDEN',
     });
     const job = await browser.enqueue({ ...input, environment: 'DEVELOPMENT' });
+    const staging = await browser.enqueue({ ...input, environment: 'STAGING' });
     const normal = await platform.enqueue({
       ...input,
       environment: 'DEVELOPMENT',
@@ -3631,7 +3632,10 @@ describe('database ownership boundaries', () => {
       ),
     );
     expect(claims.map((claim) => claim?.id).filter(Boolean)).toEqual([job.id]);
-    await client.job.deleteMany({ where: { id: { in: [job.id, normal.id] } } });
+    await expect(
+      browser.claim({ ...timing, environment: 'STAGING', workerId: 'staging-test' }),
+    ).resolves.toMatchObject({ id: staging.id });
+    await client.job.deleteMany({ where: { id: { in: [job.id, staging.id, normal.id] } } });
   });
 
   it('revalidates SOCIAL strategy and confirmed plan without crossing user scope', async () => {

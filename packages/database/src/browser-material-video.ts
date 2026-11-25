@@ -4,12 +4,12 @@ import {
   type PersonalLearningActor,
   type UserJob,
 } from '@bunshin/application';
+import { browserPilotEnvironment } from '@bunshin/capability-browser';
 import { ApplicationError } from '@bunshin/shared';
 import type { Prisma, PrismaClient } from '@prisma/client';
 import { PrismaJobRepository } from './automation-jobs';
 import { PrismaBrowserLearningMaterials } from './browser-learning-material';
 
-const environment = 'DEVELOPMENT';
 const narratedVersion = 2;
 const jobType = BROWSER_FIXTURE_JOB_TYPE;
 const uuid = '[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}';
@@ -21,7 +21,11 @@ const identity = (materialId: string) => 'browser-video:' + narratedVersion + ':
 type Owner = { workspaceId: string; actorId: string };
 type VideoActor =
   { kind: 'owner'; owner: Owner } | { kind: 'learner'; learner: PersonalLearningActor };
-type Work<T> = (tx: Prisma.TransactionClient, requestId?: string) => Promise<T>;
+type Work<T> = (
+  tx: Prisma.TransactionClient,
+  environment: NonNullable<ReturnType<typeof browserPilotEnvironment>>,
+  requestId?: string,
+) => Promise<T>;
 
 export function privateBrowserMaterialScope(owner: Owner) {
   const membership = {
@@ -43,7 +47,8 @@ export class PrismaBrowserMaterialVideos extends PrismaBrowserLearningMaterials 
   }
 
   private inScope<T>(actor: VideoActor, materialId: string, work: Work<T>, write = false) {
-    if (process.env['APP_ENV'] !== 'development') return Promise.resolve(null);
+    const environment = browserPilotEnvironment(process.env['APP_ENV']);
+    if (!environment) return Promise.resolve(null);
     if (actor.kind === 'learner') {
       return this.use(
         actor.learner,
@@ -54,7 +59,7 @@ export class PrismaBrowserMaterialVideos extends PrismaBrowserLearningMaterials 
             where: { ...where, id: materialId },
             select: { id: true },
           });
-          return material ? work(tx, requestId) : null;
+          return material ? work(tx, environment, requestId) : null;
         },
         write,
       );
@@ -74,12 +79,12 @@ export class PrismaBrowserMaterialVideos extends PrismaBrowserLearningMaterials 
         where: { id: materialId, ...privateBrowserMaterialScope(owner) },
         select: { id: true },
       });
-      return material ? work(tx) : null;
+      return material ? work(tx, environment) : null;
     });
   }
 
   state(actor: VideoActor, materialId: string) {
-    return this.inScope(actor, materialId, async (tx) => {
+    return this.inScope(actor, materialId, async (tx, environment) => {
       const asset = await tx.browserFixtureMaterialVideo.findFirst({
         where: { materialId, version: { in: [1, narratedVersion] } },
         orderBy: { version: 'desc' },
@@ -100,7 +105,7 @@ export class PrismaBrowserMaterialVideos extends PrismaBrowserLearningMaterials 
     return this.inScope(
       actor,
       materialId,
-      async (tx, requestId) => {
+      async (tx, environment, requestId) => {
         const asset = await tx.browserFixtureMaterialVideo.findUnique({
           where: { materialId_version: keyFor(materialId) },
           select: { materialId: true },
@@ -113,6 +118,7 @@ export class PrismaBrowserMaterialVideos extends PrismaBrowserLearningMaterials 
         const idempotencyKey = identity(materialId);
         const payloadReference =
           'browser-video:v2:' + materialId + (requestId ? ':' + requestId : '');
+        const now = new Date();
         const job = await tx.job.upsert({
           where: { environment_idempotencyKey: { environment, idempotencyKey } },
           create: {
@@ -123,6 +129,7 @@ export class PrismaBrowserMaterialVideos extends PrismaBrowserLearningMaterials 
             idempotencyKey,
             payloadReference,
             correlationId: materialId,
+            scheduledAt: now,
             maxAttempts: 3,
           },
           update: {},
@@ -135,7 +142,7 @@ export class PrismaBrowserMaterialVideos extends PrismaBrowserLearningMaterials 
             requestedBy,
             payloadReference,
             attemptCount: 0,
-            scheduledAt: new Date(),
+            scheduledAt: now,
             nextRetryAt: null,
             cancelledAt: null,
             lastErrorCategory: null,
@@ -169,8 +176,10 @@ export class PrismaBrowserMaterialVideos extends PrismaBrowserLearningMaterials 
 
   private async videoJob(job: UserJob) {
     const [, v2, materialId, requestId] = refPattern.exec(job.payloadReference) ?? [];
+    const environment = browserPilotEnvironment(process.env['APP_ENV']);
     if (
       !materialId ||
+      !environment ||
       job.environment !== environment ||
       job.jobType !== jobType ||
       job.bunshinId ||

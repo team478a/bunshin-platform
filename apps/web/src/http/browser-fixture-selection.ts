@@ -6,6 +6,7 @@ import {
   browserFixtureSelectionRequestSchema,
   browserObservedFixtureVersion,
   browserObservedSelectionSchema,
+  browserPilotEnvironment,
   trainingCatalogueDiscoveryPrefix,
 } from '@bunshin/capability-browser';
 import { getServerEnvironment } from '@bunshin/config';
@@ -17,8 +18,8 @@ import { selectBrowserFixturePreview } from '../services/browser-fixture-selecti
 export async function browserFixtureSelectionResponse(request: Request) {
   const secret = process.env['BROWSER_FIXTURE_MODEL_SECRET'];
   const workspaceId = process.env['BROWSER_FIXTURE_MODEL_WORKSPACE_ID'];
-  if (!secret || !workspaceId || getServerEnvironment().APP_ENV !== 'development')
-    return new Response(null, { status: 404 });
+  const environment = browserPilotEnvironment(getServerEnvironment().APP_ENV);
+  if (!secret || !workspaceId || !environment) return new Response(null, { status: 404 });
 
   try {
     authorizeCronRequest(request, secret);
@@ -33,7 +34,7 @@ export async function browserFixtureSelectionResponse(request: Request) {
     const job = await prisma.job.findFirst({
       where: {
         id: identity.data.jobId,
-        environment: 'DEVELOPMENT',
+        environment,
         workspaceId,
         workspace: { status: 'ACTIVE' },
         jobType: BROWSER_FIXTURE_JOB_TYPE,
@@ -89,7 +90,7 @@ export async function browserFixtureSelectionResponse(request: Request) {
           workspaceId: job.workspaceId,
           requestedBy: job.requestedBy,
           payloadReference: job.payloadReference,
-          environment: 'DEVELOPMENT',
+          environment,
           jobType: BROWSER_FIXTURE_JOB_TYPE,
           bunshinId: null,
           capabilityType: null,

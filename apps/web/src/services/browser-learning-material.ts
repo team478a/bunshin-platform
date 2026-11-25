@@ -1,5 +1,6 @@
 import 'server-only';
 import type { PersonalLearningActor } from '@bunshin/application';
+import { browserPilotEnvironment } from '@bunshin/capability-browser';
 import {
   personalLearningDynamicProgramAllows,
   personalLearningFeatureEnabled,
@@ -11,13 +12,13 @@ import { currentUserProvider } from '../auth/current-user';
 import { resolveAuthenticatedMemberServicePage } from './member-service-page';
 import { resolvePersonalLearningRequestActor } from './personal-learning-request-access';
 
-export function browserLearningDevelopment() {
-  return getServerEnvironment().APP_ENV === 'development';
+export function browserLearningPilotAvailable() {
+  return browserPilotEnvironment(getServerEnvironment().APP_ENV) !== null;
 }
 
 export function browserLearningProgram(settings: unknown, enrollmentId: string) {
   return (
-    browserLearningDevelopment() &&
+    browserLearningPilotAvailable() &&
     personalLearningDynamicProgramAllows(settings, enrollmentId) &&
     personalLearningFeatureEnabled(settings, 'browserMaterials') &&
     personalLearningOfferPolicy(settings) === 'AI_SKILL_V1'
@@ -35,7 +36,7 @@ export async function browserLearningMaterialActor(
   topic?: string,
   redirectToLogin = false,
 ) {
-  if (!browserLearningDevelopment())
+  if (!browserLearningPilotAvailable())
     throw new ApplicationError('NOT_FOUND', 'material unavailable');
   const current = redirectToLogin
     ? (
