@@ -1,9 +1,18 @@
 import { createHash } from 'node:crypto';
-import { browserPlanSchema, type BrowserPlan } from '@bunshin/capability-browser';
+import {
+  browserObservedChoiceSchema,
+  browserObservedFixtureVersion,
+  browserObservedStepLimit,
+  browserPlanSchema,
+  type BrowserPlan,
+} from '@bunshin/capability-browser';
 import { CompleteJob, type UserJob } from '@bunshin/application';
 import { PrismaJobRepository, prisma } from '@bunshin/database';
 import { BrowserRunError } from './browser';
 import { compactPreviewStep, fixturePlan, fixtureVersion } from './fixture';
+import { observedCatalogueGoal } from './observed-catalogue';
+
+type RecipeVersion = typeof fixtureVersion | typeof browserObservedFixtureVersion;
 
 export const recipeScope = (workspaceId: string, actorId: string) => ({
   workspaceId,
@@ -19,9 +28,10 @@ export async function findRecipeId(
   workspaceId: string,
   actorId: string,
   device: BrowserPlan['device'],
+  version: RecipeVersion = fixtureVersion,
 ) {
   const recipe = await prisma.browserFixtureRecipe.findFirst({
-    where: { fixtureVersion, device, ...recipeScope(workspaceId, actorId) },
+    where: { fixtureVersion: version, device, ...recipeScope(workspaceId, actorId) },
     orderBy: [{ verifiedAt: 'desc' }, { id: 'asc' }],
     select: { id: true },
   });
@@ -32,12 +42,23 @@ export async function loadRecipe(recipeId: string, workspaceId: string, actorId:
   return (await loadVerifiedRecipe(recipeId, workspaceId, actorId)).plan;
 }
 
-export async function loadVerifiedRecipe(recipeId: string, workspaceId: string, actorId: string) {
+export async function loadVerifiedRecipe(
+  recipeId: string,
+  workspaceId: string,
+  actorId: string,
+  version: RecipeVersion | 'any' = fixtureVersion,
+) {
   const recipe = await prisma.browserFixtureRecipe.findFirst({
-    where: { id: recipeId, fixtureVersion, ...recipeScope(workspaceId, actorId) },
+    where: {
+      id: recipeId,
+      fixtureVersion:
+        version === 'any' ? { in: [fixtureVersion, browserObservedFixtureVersion] } : version,
+      ...recipeScope(workspaceId, actorId),
+    },
     select: {
       plan: true,
       device: true,
+      fixtureVersion: true,
       planHash: true,
       verifiedAt: true,
       sourceJobId: true,
@@ -45,31 +66,62 @@ export async function loadVerifiedRecipe(recipeId: string, workspaceId: string, 
     },
   });
   const parsed = browserPlanSchema.safeParse(recipe?.plan);
-  if (!recipe || !parsed.success || parsed.data.device !== recipe.device) {
-    throw new BrowserRunError('INVALID_PLAN');
-  }
-
-  // Rebuild steps from the deployed fixture, so even a changed or stale record
-  // cannot broaden the set of approved actions or weaken the goal.
-  const official = fixturePlan(parsed.data.device);
-  const allowed = [...official.steps, compactPreviewStep];
-  const normalized = browserPlanSchema.safeParse({
-    ...official,
-    steps: parsed.data.steps.map(({ id }) => allowed.find((step) => step.id === id)),
-  });
   if (
-    !normalized.success ||
-    JSON.stringify(normalized.data) !== JSON.stringify(parsed.data) ||
-    hashPlan(normalized.data) !== recipe.planHash
+    !recipe ||
+    !parsed.success ||
+    parsed.data.device !== recipe.device ||
+    (recipe.fixtureVersion !== fixtureVersion &&
+      recipe.fixtureVersion !== browserObservedFixtureVersion)
   ) {
     throw new BrowserRunError('INVALID_PLAN');
   }
+
+  const recipeVersion: RecipeVersion = recipe.fixtureVersion;
+  const plan = canonicalRecipePlan(parsed.data, recipeVersion);
+  if (hashPlan(plan) !== recipe.planHash) throw new BrowserRunError('INVALID_PLAN');
   return {
-    plan: normalized.data,
+    plan,
+    version: recipeVersion,
     verifiedAt: recipe.verifiedAt,
     sourceJobId: recipe.sourceJobId,
     sourceAttempt: recipe.sourceAttempt,
   };
+}
+
+function canonicalRecipePlan(plan: BrowserPlan, version: RecipeVersion) {
+  if (version === browserObservedFixtureVersion) {
+    const { steps, ...goal } = plan;
+    if (
+      JSON.stringify(goal) !== JSON.stringify(observedCatalogueGoal(plan.device)) ||
+      steps.length > browserObservedStepLimit ||
+      !steps.every(
+        (step, index) =>
+          step.action === 'click' &&
+          step.target.by === 'role' &&
+          step.id.startsWith(`observed-${index + 1}-`) &&
+          browserObservedChoiceSchema.safeParse({
+            id: step.id,
+            role: step.target.role,
+            name: step.target.name,
+          }).success,
+      )
+    ) {
+      throw new BrowserRunError('INVALID_PLAN');
+    }
+    return plan;
+  }
+
+  // Legacy steps and success conditions must match the deployed fixture.
+  const official = fixturePlan(plan.device);
+  const allowed = [...official.steps, compactPreviewStep];
+  const normalized = browserPlanSchema.safeParse({
+    ...official,
+    steps: plan.steps.map(({ id }) => allowed.find((step) => step.id === id)),
+  });
+  if (!normalized.success || JSON.stringify(normalized.data) !== JSON.stringify(plan)) {
+    throw new BrowserRunError('INVALID_PLAN');
+  }
+  return normalized.data;
 }
 
 function hashPlan(plan: BrowserPlan) {
@@ -85,12 +137,13 @@ export async function completeRecipeReplay(
   workerId: string,
   recipeId: string,
   verifiedAt: string,
+  version: RecipeVersion = fixtureVersion,
 ) {
   return prisma.$transaction(async (tx) => {
     await new CompleteJob(new PrismaJobRepository(tx)).execute(job.id, workerId);
     const where = {
       id: recipeId,
-      fixtureVersion,
+      fixtureVersion: version,
       ...recipeScope(job.workspaceId, job.requestedBy),
     };
     const recipe = await tx.browserFixtureRecipe.findFirst({ where, select: { id: true } });
@@ -108,8 +161,9 @@ export async function completeWithRecipe(
   workerId: string,
   plan: BrowserPlan,
   verifiedAt: string,
+  version: RecipeVersion = fixtureVersion,
 ) {
-  const canonical = browserPlanSchema.parse(plan);
+  const canonical = canonicalRecipePlan(browserPlanSchema.parse(plan), version);
   const planHash = hashPlan(canonical);
   return prisma.$transaction(async (tx) => {
     await new CompleteJob(new PrismaJobRepository(tx)).execute(job.id, workerId);
@@ -127,7 +181,7 @@ export async function completeWithRecipe(
     const key = {
       workspaceId: job.workspaceId,
       actorId: job.requestedBy,
-      fixtureVersion,
+      fixtureVersion: version,
       device: plan.device,
       planHash,
     };

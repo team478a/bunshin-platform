@@ -29,11 +29,12 @@ export async function completeMaterialJob(input: {
     return existing;
   }
 
-  const { plan, ...originalProof } = await loadVerifiedRecipe(
+  const { plan, sourceJobId, sourceAttempt, verifiedAt } = await loadVerifiedRecipe(
     recipeId,
     job.workspaceId,
     job.requestedBy,
   );
+  const originalProof = { sourceJobId, sourceAttempt, verifiedAt };
   const folder = join(
     output,
     job.workspaceId,
