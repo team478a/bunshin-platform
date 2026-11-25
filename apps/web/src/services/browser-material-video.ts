@@ -1,11 +1,9 @@
 import 'server-only';
-import type { Route } from 'next';
 import { z } from 'zod';
 import {
   browserMaterialAzureVoice,
   browserMaterialAzureVoices,
   browserMaterialVideoVersion,
-  type BrowserMaterialAzureVoice,
 } from '@bunshin/capability-browser';
 
 export function lessonNarrationSelection(
@@ -23,11 +21,6 @@ export function lessonNarrationSelection(
     voice,
     version: voice ? browserMaterialAzureVoices[voice].version : browserMaterialVideoVersion,
   };
-}
-
-export function lessonNarratorHref(path: string, voice: BrowserMaterialAzureVoice | null): Route {
-  const href = voice ? `${path}${path.includes('?') ? '&' : '?'}narrator=${voice}` : path;
-  return href as Route;
 }
 
 export const videoFileQuery = z.object({

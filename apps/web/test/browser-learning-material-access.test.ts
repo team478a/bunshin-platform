@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { ApplicationError } from '@bunshin/shared';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as BrowserLearningMaterialService from '../src/services/browser-learning-material';
+import { learningMaterialPath } from '../src/services/browser-learning-material';
 
 const mocks = vi.hoisted(() => ({
   resolveActor: vi.fn(),
@@ -64,6 +65,9 @@ describe('illustrated lessons in the personal learning page', () => {
     expect(safeLineAuthReturnPath(path + '?topicId=invalid')).toBeNull();
     expect(safeLineAuthReturnPath(path + '?topicId=' + topicId + '&topicId=' + topicId)).toBeNull();
     expect(safeLineAuthReturnPath(path + '/image')).toBeNull();
+    expect(
+      learningMaterialPath(params.serviceSlug, params.programEnrollmentId, topicId, 'daichi'),
+    ).toBe(path + '?topicId=' + topicId + '&narrator=daichi');
   });
 
   it('reads private image evidence through the currently authorized enrollment and topic', async () => {

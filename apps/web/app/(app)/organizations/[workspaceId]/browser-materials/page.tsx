@@ -18,10 +18,8 @@ import {
 import { MimikMaterialImportForm } from '../../../../../src/components/mimik-material-import-form';
 
 import { BrowserMaterialVideo } from '../../../../../src/components/browser-material-video';
-import {
-  lessonNarrationSelection,
-  lessonNarratorHref,
-} from '../../../../../src/services/browser-material-video';
+import { lessonNarrationSelection } from '../../../../../src/services/browser-material-video';
+import type { BrowserMaterialAzureVoice } from '@bunshin/capability-browser';
 
 export const dynamic = 'force-dynamic';
 
@@ -84,9 +82,10 @@ export default async function BrowserMaterialsPage(props: {
     !!material.importedAt &&
     (await hasBrowserMaterialImage(actor, material.id, step.ordinal, 'after'));
   const materialId = material.id;
-  const lessonHref = `${base}?material=${materialId}` as const;
+  const lessonHref = (voice: BrowserMaterialAzureVoice | null) =>
+    `${base}?material=${materialId}${voice ? `&narrator=${voice}` : ''}` as const;
   const narrator = lessonNarrationSelection(workspaceId, material, search.narrator);
-  const narratorPath = lessonNarratorHref(lessonHref, narrator.voice);
+  const narratorPath = lessonHref(narrator.voice);
   const stepHref = (value: number) => ({
     pathname: base,
     query: {
@@ -136,7 +135,7 @@ export default async function BrowserMaterialsPage(props: {
           ? {
               choice: {
                 voice: narrator.voice,
-                href: (voice) => lessonNarratorHref(lessonHref, voice),
+                href: lessonHref,
               },
             }
           : {})}

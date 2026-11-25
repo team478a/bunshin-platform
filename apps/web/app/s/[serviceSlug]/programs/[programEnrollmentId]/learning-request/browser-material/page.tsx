@@ -10,10 +10,7 @@ import {
 } from '../../../../../../../src/services/browser-learning-material';
 
 import { BrowserMaterialVideo } from '../../../../../../../src/components/browser-material-video';
-import {
-  lessonNarrationSelection,
-  lessonNarratorHref,
-} from '../../../../../../../src/services/browser-material-video';
+import { lessonNarrationSelection } from '../../../../../../../src/services/browser-material-video';
 
 export const dynamic = 'force-dynamic';
 
@@ -71,7 +68,12 @@ export default async function BrowserLearningMaterialPage({
       material ?? null,
       query.narrator,
     );
-    const narratorPath = lessonNarratorHref(path, narrator.voice);
+    const narratorPath = learningMaterialPath(
+      serviceSlug,
+      programEnrollmentId,
+      actor.topicId,
+      narrator.voice,
+    );
     const video = materialId
       ? await new db.PrismaBrowserMaterialVideos(db.prisma).state(
           { kind: 'learner', learner: actor },
@@ -96,10 +98,7 @@ export default async function BrowserLearningMaterialPage({
         narrator.version,
       );
       redirect(
-        lessonNarratorHref(
-          learningMaterialPath(serviceSlug, programEnrollmentId, learner.topicId),
-          narrator.voice,
-        ),
+        learningMaterialPath(serviceSlug, programEnrollmentId, learner.topicId, narrator.voice),
       );
     }
     async function reportDifference() {
@@ -159,7 +158,13 @@ export default async function BrowserLearningMaterialPage({
                 ? {
                     choice: {
                       voice: narrator.voice,
-                      href: (voice) => lessonNarratorHref(path, voice),
+                      href: (voice) =>
+                        learningMaterialPath(
+                          serviceSlug,
+                          programEnrollmentId,
+                          actor.topicId,
+                          voice,
+                        ),
                     },
                   }
                 : {})}

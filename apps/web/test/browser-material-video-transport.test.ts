@@ -2,7 +2,6 @@ import { expect, it, vi } from 'vitest';
 vi.mock('server-only', () => ({}));
 import {
   lessonNarrationSelection,
-  lessonNarratorHref,
   videoFileQuery,
   videoResponse,
 } from '../src/services/browser-material-video';
@@ -57,8 +56,6 @@ it('defaults to Shiori and accepts Daichi only on eligible pilot materials', () 
     expect(
       lessonNarrationSelection('pilot', { ...material, importedAt: new Date() }, 'daichi'),
     ).toEqual({ voice: null, version: 3 });
-    const path = '/s/manaberu/programs/program/learning-request/browser-material?step=1';
-    expect(lessonNarratorHref(path, 'daichi')).toBe(path + '&narrator=daichi');
   } finally {
     vi.unstubAllEnvs();
   }
