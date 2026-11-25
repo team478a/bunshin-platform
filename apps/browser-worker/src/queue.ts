@@ -13,6 +13,7 @@ import {
 import {
   browserObservedFixtureVersion,
   browserObservedStepLimit,
+  type BrowserPlan,
 } from '@bunshin/capability-browser';
 import { PrismaJobRepository, prisma } from '@bunshin/database';
 import {
@@ -23,7 +24,13 @@ import {
 } from './browser';
 import { saveEvidence } from './evidence';
 import { compactPreviewStep, fixture, fixturePlan, fixtureVersion } from './fixture';
-import { completeRecipeReplay, completeWithRecipe, findRecipeId, loadRecipe } from './recipes';
+import {
+  completeRecipeReplay,
+  completeWithRecipe,
+  findRecipeId,
+  loadRecipe,
+  loadVerifiedRecipe,
+} from './recipes';
 import { observedCatalogue, observedCatalogueGoal } from './observed-catalogue';
 import { modelObservedSelector, modelPreviewSelector } from './model-selector';
 import { completeMaterialJob } from './materials';
@@ -59,7 +66,12 @@ export async function enqueueFixture(
   let payloadReference;
   if (mode === 'replay' || mode === 'material') {
     if (!uuid.test(deviceName)) throw new BrowserRunError('INVALID_PLAN');
-    await loadRecipe(deviceName, workspaceId, actorId);
+    await loadVerifiedRecipe(
+      deviceName,
+      workspaceId,
+      actorId,
+      mode === 'replay' ? 'any' : undefined,
+    );
     payloadReference = `${mode}:${deviceName.toLowerCase()}`;
   } else {
     const device = deviceFrom(deviceName);
@@ -190,6 +202,10 @@ export async function runQueue(input: {
           );
           continue;
         }
+        let discovery: BrowserPlan | undefined;
+        let evidencePlan: BrowserPlan | undefined;
+        let version: typeof fixtureVersion | typeof browserObservedFixtureVersion = fixtureVersion;
+        let run;
         if (
           kind === 'discover-observed-model' &&
           value === browserObservedFixtureVersion &&
@@ -199,34 +215,28 @@ export async function runQueue(input: {
             ...input.limits,
             maxSteps: Math.min(input.limits.maxSteps, browserObservedStepLimit),
           };
-          const observed = await discoverObservedBrowserPlan(
-            observedCatalogueGoal(deviceFrom(device)),
-            observedCatalogue,
-            limits,
-            input.signal,
-            modelObservedSelector(job.id, workerId),
-          );
-          await runBrowserPlan(observed.plan, observedCatalogue, limits, input.signal);
-          await saveEvidence(
-            join(input.output, job.workspaceId, job.id),
-            String(job.attemptCount),
-            observed.run,
-            input.signal,
-            observed.plan,
-          );
-          await complete.execute(job.id, workerId);
-          console.log(
-            JSON.stringify({
-              jobId: job.id,
-              status: 'SUCCEEDED',
-              steps: observed.run.steps.length,
-            }),
-          );
-          continue;
-        }
-        let discovery;
-        let run;
-        if (
+          const requestedDevice = deviceFrom(device);
+          version = browserObservedFixtureVersion;
+          recipeId = await findRecipeId(job.workspaceId, job.requestedBy, requestedDevice, version);
+          if (recipeId) {
+            ({ plan: evidencePlan } = await loadVerifiedRecipe(
+              recipeId,
+              job.workspaceId,
+              job.requestedBy,
+              version,
+            ));
+          } else {
+            ({ plan: discovery } = await discoverObservedBrowserPlan(
+              observedCatalogueGoal(requestedDevice),
+              observedCatalogue,
+              limits,
+              input.signal,
+              modelObservedSelector(job.id, workerId),
+            ));
+            evidencePlan = discovery;
+          }
+          run = await runBrowserPlan(evidencePlan, observedCatalogue, limits, input.signal);
+        } else if (
           (kind === 'discover' || kind === 'discover-model') &&
           value === fixtureVersion &&
           extra === undefined
@@ -239,40 +249,48 @@ export async function runQueue(input: {
           } else {
             const candidates = template.steps.filter(({ action }) => action !== 'scroll').reverse();
             if (kind === 'discover-model') candidates.push(compactPreviewStep);
-            discovery = await discoverBrowserPlan(
+            ({ plan: discovery, run } = await discoverBrowserPlan(
               { ...template, steps: candidates },
               fixture,
               input.limits,
               input.signal,
               kind === 'discover-model' ? modelPreviewSelector(job.id, workerId) : undefined,
-            );
-            run = discovery.run;
+            ));
           }
         } else {
           let plan;
           if (kind === 'replay' && value && uuid.test(value) && device === undefined) {
             recipeId = value;
-            plan = await loadRecipe(value, job.workspaceId, job.requestedBy);
+            ({ plan, version } = await loadVerifiedRecipe(
+              value,
+              job.workspaceId,
+              job.requestedBy,
+              'any',
+            ));
           } else if (kind === fixtureVersion && device === undefined) {
             plan = fixturePlan(deviceFrom(value));
           } else {
             throw new BrowserRunError('INVALID_PLAN');
           }
-          run = await runBrowserPlan(plan, fixture, input.limits, input.signal);
+          const content = version === browserObservedFixtureVersion ? observedCatalogue : fixture;
+          if (version === browserObservedFixtureVersion) evidencePlan = plan;
+          run = await runBrowserPlan(plan, content, input.limits, input.signal);
         }
         await saveEvidence(
           join(input.output, job.workspaceId, job.id),
           String(job.attemptCount),
           run,
           input.signal,
+          evidencePlan,
         );
         if (discovery) {
           input.signal.throwIfAborted();
-          recipeId = (await completeWithRecipe(job, workerId, discovery.plan, run.verifiedAt)).id;
+          recipeId = (await completeWithRecipe(job, workerId, discovery, run.verifiedAt, version))
+            .id;
           completedWithRecipe = true;
         } else if (recipeId) {
           input.signal.throwIfAborted();
-          await completeRecipeReplay(job, workerId, recipeId, run.verifiedAt);
+          await completeRecipeReplay(job, workerId, recipeId, run.verifiedAt, version);
           completedWithRecipe = true;
         }
       } catch (error) {
