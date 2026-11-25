@@ -443,9 +443,9 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
           durationMs: 4000,
         });
         expect(await videos.readFile(learner, restored.id, 'mp4')).toEqual(image);
-        expect(
-          await videos.readFile({ kind: 'learner', learner: other.actor }, restored.id, 'mp4'),
-        ).toBeNull();
+        await expect(
+          videos.readFile({ kind: 'learner', learner: other.actor }, restored.id, 'mp4'),
+        ).rejects.toMatchObject({ code: 'NOT_FOUND' });
         expect(await videos.state(learner, result.id)).toEqual({ ready: false, status: null });
       } finally {
         await client.job.deleteMany({
