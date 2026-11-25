@@ -551,9 +551,9 @@ export class PrismaBrowserLearningMaterials extends PrismaPersonalLearningPersis
     if (kind !== 'training-catalogue-discovery') throw denied();
     const device = await this.use(
       actor,
-      async (_tx, key, currentId, target) => {
+      (_tx, key, currentId, target) => {
         if (target.kind !== 'catalogue' || currentId !== id) throw denied();
-        return key.fixtureDevice;
+        return Promise.resolve(key.fixtureDevice);
       },
       false,
     );
