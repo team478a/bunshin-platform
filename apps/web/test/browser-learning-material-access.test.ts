@@ -89,6 +89,8 @@ describe('illustrated lessons in the personal learning page', () => {
     mocks.readImage.mockResolvedValue(new Uint8Array([1, 2]));
     mocks.readMaterial.mockResolvedValue({
       device: 'mobile',
+      canGenerate: true,
+      canReview: true,
       reviewStatus: 'DEAD',
       material: {
         id: material,
@@ -112,10 +114,28 @@ describe('illustrated lessons in the personal learning page', () => {
   });
 
   it('shows preparation status while the browser job is queued', async () => {
-    mocks.readMaterial.mockResolvedValue({ device: 'mobile', status: 'PENDING', material: null });
+    mocks.readMaterial.mockResolvedValue({
+      device: 'mobile',
+      status: 'PENDING',
+      material: null,
+      canGenerate: true,
+    });
     const html = renderToStaticMarkup(await page());
     expect(html).toContain('教材を準備中です');
     expect(html).toContain('個別学習に戻る');
     expect(mocks.readImage).not.toHaveBeenCalled();
+  });
+
+  it('lets the learner continue when the selected device has no verified recipe', async () => {
+    mocks.readMaterial.mockResolvedValue({
+      device: 'mobile',
+      status: null,
+      material: null,
+      canGenerate: false,
+    });
+    const html = renderToStaticMarkup(await page());
+    expect(html).toContain('この端末向けの検証済みレシピは準備中です');
+    expect(html).toContain('個別学習に戻る');
+    expect(html).not.toContain('画像付き教材を作る');
   });
 });
