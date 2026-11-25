@@ -16,6 +16,42 @@ const scope = {
 };
 
 describe('LINE messaging persistence isolation', () => {
+  it.each([
+    { status: 'ACTIVE', notificationConsentAt: new Date('2026-11-24T00:00:00Z') },
+    { status: 'DISCONNECTED', notificationConsentAt: null },
+  ])('keeps $status connection and its consent during login', async (existing) => {
+    const where = {
+      environment_workspaceId_userId: {
+        environment: scope.environment,
+        workspaceId: scope.workspaceId,
+        userId: scope.actorUserId,
+      },
+    };
+    const createMany = vi.fn().mockResolvedValue({ count: 0 });
+    const findUnique = vi.fn().mockResolvedValue(existing);
+    const upsert = vi.fn();
+    const client = {
+      authIdentity: { findFirst: vi.fn().mockResolvedValue({ id: 'verified' }) },
+      lineConnection: { createMany, findUnique, upsert },
+    } as unknown as PrismaClient;
+
+    await expect(
+      new PrismaLineConnectionRepository(client).connect({
+        environment: scope.environment,
+        workspaceId: scope.workspaceId,
+        actorUserId: scope.actorUserId,
+        providerUserId: 'U-verified',
+        consentGranted: false,
+      }),
+    ).resolves.toMatchObject(existing);
+    expect(createMany).toHaveBeenCalledWith({
+      data: { ...where.environment_workspaceId_userId, providerUserId: 'U-verified' },
+      skipDuplicates: true,
+    });
+    expect(findUnique).toHaveBeenCalledWith({ where });
+    expect(upsert).not.toHaveBeenCalled();
+  });
+
   it('rejects transfer for a learner connection without changing either member or deliveries', async () => {
     const tx = {
       groupMembership: { findFirst: vi.fn().mockResolvedValue({ id: 'membership' }) },

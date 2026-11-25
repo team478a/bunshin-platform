@@ -2,9 +2,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const state = vi.hoisted(() => ({
   identity: vi.fn(),
-  existing: vi.fn(),
-  source: vi.fn(),
-  update: vi.fn(),
   connect: vi.fn(),
 }));
 
@@ -20,7 +17,6 @@ vi.mock('@bunshin/application', () => ({
 vi.mock('@bunshin/database', () => ({
   prisma: {
     authIdentity: { findFirst: state.identity },
-    lineConnection: { findFirst: state.source, findUnique: state.existing, update: state.update },
   },
   PrismaLineConnectionRepository: class {},
 }));
@@ -30,73 +26,33 @@ import { ensureUserWorkspaceLineConnection } from '../src/line/ensure-user-works
 describe('workspace LINE connection provisioning', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    state.existing.mockResolvedValue(null);
     state.identity.mockResolvedValue({ providerUserId: 'U123' });
-    state.source.mockResolvedValue(null);
     state.connect.mockResolvedValue({ id: 'connection-1' });
-    state.update.mockResolvedValue({ id: 'connection-1' });
   });
 
   it('does nothing when the user has no verified LINE identity', async () => {
     state.identity.mockResolvedValue(null);
-    state.source.mockResolvedValue(null);
 
     await expect(ensureUserWorkspaceLineConnection('user-1', 'workspace-2')).resolves.toBe(false);
     expect(state.connect).not.toHaveBeenCalled();
   });
 
-  it('copies verified identity, consent and friendship state into the joined workspace', async () => {
-    const followedAt = new Date('2026-09-03T00:00:00Z');
-    const consentAt = new Date('2026-09-03T00:01:00Z');
-    state.identity.mockResolvedValue({ providerUserId: 'U123' });
-    state.source.mockResolvedValue({
-      friendshipStatus: 'FOLLOWING',
-      notificationConsentAt: consentAt,
-      followedAt,
-      unfollowedAt: null,
-      lastWebhookAt: followedAt,
-    });
-
+  it('prepares the joined workspace without reading another workspace or granting consent', async () => {
     await expect(ensureUserWorkspaceLineConnection('user-1', 'workspace-2')).resolves.toBe(true);
     expect(state.connect).toHaveBeenCalledWith({
       environment: 'PRODUCTION',
       workspaceId: 'workspace-2',
       actorUserId: 'user-1',
       verifiedProviderUserId: 'U123',
-      consentGranted: true,
+      consentGranted: false,
     });
-    expect(state.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: {
-          environment_workspaceId_userId: {
-            environment: 'PRODUCTION',
-            workspaceId: 'workspace-2',
-            userId: 'user-1',
-          },
-        },
-        data: expect.objectContaining({
-          friendshipStatus: 'FOLLOWING',
-          notificationConsentAt: consentAt,
-        }),
-      }),
-    );
   });
-  it('records the explicit delivery consent even without consent in another workspace', async () => {
+  it('records explicit delivery consent only for the selected workspace', async () => {
     await expect(ensureUserWorkspaceLineConnection('user-1', 'workspace-2', true)).resolves.toBe(
       true,
     );
-    expect(state.connect).toHaveBeenCalledWith(expect.objectContaining({ consentGranted: true }));
-    expect(state.update).not.toHaveBeenCalled();
-  });
-
-  it('preserves existing friendship state instead of copying a different workspace', async () => {
-    state.existing.mockResolvedValue({ id: 'existing' });
-    state.source.mockResolvedValue({
-      friendshipStatus: 'FOLLOWING',
-      notificationConsentAt: new Date(),
-    });
-    await ensureUserWorkspaceLineConnection('user-1', 'workspace-2', true);
-    expect(state.connect).toHaveBeenCalledWith(expect.objectContaining({ consentGranted: true }));
-    expect(state.update).not.toHaveBeenCalled();
+    expect(state.connect).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ workspaceId: 'workspace-2', consentGranted: true }),
+    );
   });
 });
