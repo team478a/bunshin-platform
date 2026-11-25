@@ -6,6 +6,7 @@ import {
   browserFixtureSelectionRequestSchema,
   browserObservedFixtureVersion,
   browserObservedSelectionSchema,
+  trainingCatalogueDiscoveryPrefix,
 } from '@bunshin/capability-browser';
 import { getServerEnvironment } from '@bunshin/config';
 import { ApplicationError, toApiError } from '@bunshin/shared';
@@ -28,7 +29,7 @@ export async function browserFixtureSelectionResponse(request: Request) {
     if (!identity.success)
       throw new ApplicationError('VALIDATION_ERROR', 'invalid browser job identity');
 
-    const { prisma } = await import('@bunshin/database');
+    const { prisma, PrismaBrowserLearningMaterials } = await import('@bunshin/database');
     const job = await prisma.job.findFirst({
       where: {
         id: identity.data.jobId,
@@ -36,15 +37,21 @@ export async function browserFixtureSelectionResponse(request: Request) {
         workspaceId,
         workspace: { status: 'ACTIVE' },
         jobType: BROWSER_FIXTURE_JOB_TYPE,
-        payloadReference: {
-          in: ['mobile', 'desktop']
-            .map((device) => `discover-model:${BROWSER_FIXTURE_VERSION}:${device}`)
-            .concat(
-              ['mobile', 'desktop'].map(
-                (device) => `discover-observed-model:${browserObservedFixtureVersion}:${device}`,
-              ),
-            ),
-        },
+        OR: [
+          {
+            payloadReference: {
+              in: ['mobile', 'desktop']
+                .map((device) => `discover-model:${BROWSER_FIXTURE_VERSION}:${device}`)
+                .concat(
+                  ['mobile', 'desktop'].map(
+                    (device) =>
+                      `discover-observed-model:${browserObservedFixtureVersion}:${device}`,
+                  ),
+                ),
+            },
+          },
+          { payloadReference: { startsWith: trainingCatalogueDiscoveryPrefix + ':' } },
+        ],
         status: 'LEASED',
         leaseOwner: identity.data.workerId,
         leaseExpiresAt: { gt: new Date() },
@@ -74,10 +81,24 @@ export async function browserFixtureSelectionResponse(request: Request) {
     if (!job?.requestedBy || !member)
       throw new ApplicationError('NOT_FOUND', 'browser job unavailable');
 
-    const remainingLeaseMs = (job.leaseExpiresAt?.getTime() ?? 0) - Date.now();
-    if (remainingLeaseMs <= 0) throw new ApplicationError('NOT_FOUND', 'browser job unavailable');
+    const trainingCatalogue = job.payloadReference.startsWith(
+      trainingCatalogueDiscoveryPrefix + ':',
+    );
+    const device = trainingCatalogue
+      ? await new PrismaBrowserLearningMaterials(prisma).catalogueDiscovery({
+          workspaceId: job.workspaceId,
+          requestedBy: job.requestedBy,
+          payloadReference: job.payloadReference,
+          environment: 'DEVELOPMENT',
+          jobType: BROWSER_FIXTURE_JOB_TYPE,
+          bunshinId: null,
+          capabilityType: null,
+        })
+      : job.payloadReference.endsWith(':mobile')
+        ? 'mobile'
+        : 'desktop';
     let observed;
-    if (job.payloadReference.startsWith('discover-observed-model:')) {
+    if (trainingCatalogue || job.payloadReference.startsWith('discover-observed-model:')) {
       const parsed = browserObservedSelectionSchema.safeParse(
         await boundedLearningJson(request, 32_000),
       );
@@ -85,11 +106,13 @@ export async function browserFixtureSelectionResponse(request: Request) {
         throw new ApplicationError('VALIDATION_ERROR', 'invalid observed browser candidates');
       observed = parsed.data;
     }
+    const remainingLeaseMs = (job.leaseExpiresAt?.getTime() ?? 0) - Date.now();
+    if (remainingLeaseMs <= 0) throw new ApplicationError('NOT_FOUND', 'browser job unavailable');
     const selection = await selectBrowserFixturePreview({
       jobId: job.id,
       workspaceId: job.workspaceId,
       actorId: job.requestedBy,
-      device: job.payloadReference.endsWith(':mobile') ? 'mobile' : 'desktop',
+      device,
       ...(observed ? { observed } : {}),
       signal: AbortSignal.any([
         request.signal,

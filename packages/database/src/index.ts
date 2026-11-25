@@ -409,6 +409,9 @@ export {
   readFortuneFollowUpCreditBalance,
 } from './fortune-follow-up-credits';
 
-export { PrismaBrowserLearningMaterials } from './browser-learning-material';
+export {
+  enqueueCatalogueMaterial,
+  PrismaBrowserLearningMaterials,
+} from './browser-learning-material';
 export { saveImportedBrowserMaterial } from './imported-browser-material';
 export { privateBrowserMaterialScope, PrismaBrowserMaterialVideos } from './browser-material-video';

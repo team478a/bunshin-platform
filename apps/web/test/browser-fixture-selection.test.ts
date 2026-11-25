@@ -10,9 +10,13 @@ const mocks = vi.hoisted(() => ({
   provider: vi.fn(),
   environment: vi.fn(),
   fetcher: vi.fn(),
+  trainingDiscovery: vi.fn(),
 }));
 vi.mock('@bunshin/config', () => ({ getServerEnvironment: mocks.environment }));
 vi.mock('@bunshin/database', () => ({
+  PrismaBrowserLearningMaterials: class {
+    catalogueDiscovery = mocks.trainingDiscovery;
+  },
   prisma: {
     job: { findFirst: mocks.job },
     workspaceMembership: { findFirst: mocks.member },
@@ -52,6 +56,22 @@ function output(id: string, usageMetadata: unknown) {
 }
 
 describe('browser fixture model selection', () => {
+  it('rejects a stale learner job before reserving provider usage', async () => {
+    mocks.job.mockResolvedValue({
+      id: jobId,
+      workspaceId,
+      requestedBy: actorId,
+      payloadReference: 'training-catalogue-discovery:55555555-5555-4555-8555-555555555555',
+      leaseExpiresAt: new Date(Date.now() + 30_000),
+    });
+    const { ApplicationError } = await import('@bunshin/shared');
+    mocks.trainingDiscovery.mockRejectedValue(new ApplicationError('NOT_FOUND', 'stale request'));
+    expect((await browserFixtureSelectionResponse(request())).status).toBe(404);
+    expect(mocks.trainingDiscovery).toHaveBeenCalledWith(
+      expect.objectContaining({ requestedBy: actorId }),
+    );
+    expect(mocks.reserve).not.toHaveBeenCalled();
+  });
   beforeEach(() => {
     vi.resetAllMocks();
     vi.stubEnv('BROWSER_FIXTURE_MODEL_SECRET', 'fixture-secret');
@@ -139,14 +159,18 @@ describe('browser fixture model selection', () => {
     expect(mocks.settle).toHaveBeenCalledWith(admission);
   });
 
-  it('uses only the current candidates and records a distinct operation key per step', async () => {
+  it.each([
+    'discover-observed-model:observed-catalogue-v1:mobile',
+    'training-catalogue-discovery:55555555-5555-4555-8555-555555555555',
+  ])('uses only the current candidates and records each step for %s', async (payloadReference) => {
     mocks.job.mockResolvedValue({
       id: jobId,
       workspaceId,
       requestedBy: actorId,
-      payloadReference: 'discover-observed-model:observed-catalogue-v1:mobile',
+      payloadReference,
       leaseExpiresAt: new Date(Date.now() + 30_000),
     });
+    mocks.trainingDiscovery.mockResolvedValue('mobile');
     mocks.fetcher.mockImplementationOnce(() =>
       output('observed-2-0', {
         promptTokenCount: 100,
