@@ -7,7 +7,7 @@ import {
   type BrowserPlan,
 } from '@bunshin/capability-browser';
 import { CompleteJob, type UserJob } from '@bunshin/application';
-import { PrismaJobRepository, prisma } from '@bunshin/database';
+import { enqueueCatalogueMaterial, PrismaJobRepository, prisma } from '@bunshin/database';
 import { BrowserRunError } from './browser';
 import { compactPreviewStep, fixture, fixturePlan, fixtureVersion } from './fixture';
 import { observedCatalogue, observedCatalogueGoal } from './observed-catalogue';
@@ -142,6 +142,7 @@ export async function completeRecipeReplay(
   recipeId: string,
   verifiedAt: string,
   version: RecipeVersion = fixtureVersion,
+  queueMaterial = false,
 ) {
   return prisma.$transaction(async (tx) => {
     await new CompleteJob(new PrismaJobRepository(tx)).execute(job.id, workerId);
@@ -157,6 +158,7 @@ export async function completeRecipeReplay(
       where: { ...where, verifiedAt: { lt: evidence.verifiedAt } },
       data: evidence,
     });
+    if (queueMaterial) await enqueueCatalogueMaterial(tx, job, recipeId);
   });
 }
 
@@ -166,6 +168,7 @@ export async function completeWithRecipe(
   plan: BrowserPlan,
   verifiedAt: string,
   version: RecipeVersion = fixtureVersion,
+  queueMaterial = false,
 ) {
   const canonical = canonicalRecipePlan(browserPlanSchema.parse(plan), version);
   const planHash = hashPlan(canonical);
@@ -189,7 +192,7 @@ export async function completeWithRecipe(
       device: plan.device,
       planHash,
     };
-    return tx.browserFixtureRecipe.upsert({
+    const recipe = await tx.browserFixtureRecipe.upsert({
       where: { workspaceId_actorId_fixtureVersion_device_planHash: key },
       create: {
         ...key,
@@ -201,5 +204,7 @@ export async function completeWithRecipe(
       update: {},
       select: { id: true },
     });
+    if (queueMaterial) await enqueueCatalogueMaterial(tx, job, recipe.id);
+    return recipe;
   });
 }

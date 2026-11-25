@@ -4,6 +4,7 @@ import {
   browserObservedFixtureVersion,
   browserObservedModelOperationKey,
   browserObservedStepLimit,
+  trainingCatalogueDiscoveryPrefix,
 } from '@bunshin/capability-browser';
 import { prisma } from '@bunshin/database';
 import { BrowserRunError } from './browser';
@@ -26,11 +27,16 @@ export async function reportObservedModelJob(workspaceId: string, actorId: strin
           jobType: BROWSER_FIXTURE_JOB_TYPE,
           bunshinId: null,
           capabilityType: null,
-          payloadReference: {
-            in: ['desktop', 'mobile'].map(
-              (device) => `discover-observed-model:${browserObservedFixtureVersion}:${device}`,
-            ),
-          },
+          OR: [
+            {
+              payloadReference: {
+                in: ['desktop', 'mobile'].map(
+                  (device) => `discover-observed-model:${browserObservedFixtureVersion}:${device}`,
+                ),
+              },
+            },
+            { payloadReference: { startsWith: trainingCatalogueDiscoveryPrefix + ':' } },
+          ],
           workspace: {
             status: 'ACTIVE',
             memberships: {

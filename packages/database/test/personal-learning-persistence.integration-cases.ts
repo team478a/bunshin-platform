@@ -510,6 +510,40 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
         expect(await materials.readImage(f.actor, otherMaterial.id, 1, 'before')).toBeNull();
         await materials.enqueue(f.actor);
         expect(await client.job.count({ where: { workspaceId, status: 'PENDING' } })).toBe(0);
+
+        const configuredWorkspace = process.env['BROWSER_FIXTURE_MODEL_WORKSPACE_ID'];
+        const configuredSecret = process.env['BROWSER_FIXTURE_MODEL_SECRET'];
+        try {
+          process.env['BROWSER_FIXTURE_MODEL_WORKSPACE_ID'] = workspaceId;
+          process.env['BROWSER_FIXTURE_MODEL_SECRET'] = 'fixture-test-secret';
+          await Promise.all([materials.enqueue(f.actor), materials.enqueue(f.actor)]);
+          expect(await client.job.count({ where: { workspaceId, status: 'PENDING' } })).toBe(1);
+          expect(await materials.readMaterial(f.actor)).toMatchObject({
+            canGenerate: true,
+            material: null,
+            status: 'PENDING',
+          });
+          const discovery = await claimReview();
+          expect(discovery.maxAttempts).toBe(1);
+          expect(await materials.catalogueDiscovery(discovery)).toBe('mobile');
+          await expect(
+            materials.catalogueDiscovery({
+              ...discovery,
+              payloadReference: `training-catalogue-discovery:${job.correlationId}`,
+            }),
+          ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+          await new FailJob(queue).execute(discovery, worker, {
+            errorCategory: 'BROWSER_STEP_FAILED',
+            retryable: false,
+          });
+          expect(await materials.readMaterial(f.actor)).toMatchObject({ status: 'DEAD' });
+        } finally {
+          if (configuredWorkspace === undefined)
+            delete process.env['BROWSER_FIXTURE_MODEL_WORKSPACE_ID'];
+          else process.env['BROWSER_FIXTURE_MODEL_WORKSPACE_ID'] = configuredWorkspace;
+          if (configuredSecret === undefined) delete process.env['BROWSER_FIXTURE_MODEL_SECRET'];
+          else process.env['BROWSER_FIXTURE_MODEL_SECRET'] = configuredSecret;
+        }
         const ownRecipe = await catalogueRecipe(f.actor.actorUserId);
         await materials.enqueue(f.actor);
         await materials.enqueue(f.actor);

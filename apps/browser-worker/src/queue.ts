@@ -13,9 +13,10 @@ import {
 import {
   browserObservedFixtureVersion,
   browserObservedStepLimit,
+  trainingCatalogueDiscoveryPrefix,
   type BrowserPlan,
 } from '@bunshin/capability-browser';
-import { PrismaJobRepository, prisma } from '@bunshin/database';
+import { PrismaBrowserLearningMaterials, PrismaJobRepository, prisma } from '@bunshin/database';
 import {
   BrowserRunError,
   discoverBrowserPlan,
@@ -178,6 +179,7 @@ export async function runQueue(input: {
         }
         assertUserJob(job);
         const [kind, value, device, extra] = job.payloadReference.split(':');
+        const trainingCatalogue = kind === trainingCatalogueDiscoveryPrefix;
         if (kind === 'material' && value && uuid.test(value) && device === undefined) {
           const material = await completeMaterialJob({
             recipeId: value,
@@ -203,15 +205,22 @@ export async function runQueue(input: {
         let version: typeof fixtureVersion | typeof browserObservedFixtureVersion = fixtureVersion;
         let run;
         if (
-          kind === 'discover-observed-model' &&
-          value === browserObservedFixtureVersion &&
-          extra === undefined
+          trainingCatalogue ||
+          (kind === 'discover-observed-model' &&
+            value === browserObservedFixtureVersion &&
+            extra === undefined)
         ) {
           const limits = {
             ...input.limits,
             maxSteps: Math.min(input.limits.maxSteps, browserObservedStepLimit),
           };
-          const requestedDevice = deviceFrom(device);
+          const catalogueSignal = AbortSignal.any([
+            input.signal,
+            AbortSignal.timeout(limits.timeoutMs),
+          ]);
+          const requestedDevice = trainingCatalogue
+            ? await new PrismaBrowserLearningMaterials(prisma).catalogueDiscovery(job)
+            : deviceFrom(device);
           version = browserObservedFixtureVersion;
           recipeId = await findRecipeId(job.workspaceId, job.requestedBy, requestedDevice, version);
           if (recipeId) {
@@ -226,12 +235,12 @@ export async function runQueue(input: {
               observedCatalogueGoal(requestedDevice),
               observedCatalogue,
               limits,
-              input.signal,
+              catalogueSignal,
               modelObservedSelector(job.id, workerId),
             ));
             evidencePlan = discovery;
           }
-          run = await runBrowserPlan(evidencePlan, observedCatalogue, limits, input.signal);
+          run = await runBrowserPlan(evidencePlan, observedCatalogue, limits, catalogueSignal);
         } else if (
           (kind === 'discover' || kind === 'discover-model') &&
           value === fixtureVersion &&
@@ -280,12 +289,27 @@ export async function runQueue(input: {
         );
         if (discovery) {
           input.signal.throwIfAborted();
-          recipeId = (await completeWithRecipe(job, workerId, discovery, run.verifiedAt, version))
-            .id;
+          recipeId = (
+            await completeWithRecipe(
+              job,
+              workerId,
+              discovery,
+              run.verifiedAt,
+              version,
+              trainingCatalogue,
+            )
+          ).id;
           completedWithRecipe = true;
         } else if (recipeId) {
           input.signal.throwIfAborted();
-          await completeRecipeReplay(job, workerId, recipeId, run.verifiedAt, version);
+          await completeRecipeReplay(
+            job,
+            workerId,
+            recipeId,
+            run.verifiedAt,
+            version,
+            trainingCatalogue,
+          );
           completedWithRecipe = true;
         }
       } catch (error) {
