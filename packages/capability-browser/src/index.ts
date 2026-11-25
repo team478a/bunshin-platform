@@ -71,6 +71,28 @@ export interface BrowserRun {
   verifiedResultText?: string;
 }
 
+export const browserMaterialVideoVersion = 3;
+export const browserMaterialAzureVoices = {
+  shiori: { version: 4, model: 'ja-JP-ShioriNeural', label: '志織（女性）' },
+  daichi: { version: 5, model: 'ja-JP-DaichiNeural', label: '大智（男性）' },
+} as const;
+export type BrowserMaterialAzureVoice = keyof typeof browserMaterialAzureVoices;
+export function browserMaterialAzureVoice(value: unknown): BrowserMaterialAzureVoice {
+  return value === 'daichi' ? 'daichi' : 'shiori';
+}
+export function browserMaterialAzureProfile(version: number) {
+  return Object.values(browserMaterialAzureVoices).find((voice) => voice.version === version);
+}
+export const browserMaterialNarrationPreviewText =
+  '画面の「詳細を開く」を選びます。次に、「比較を開く」を押して、結果を確認しましょう。';
+export const browserMaterialMeiVoice = {
+  name: 'HTS Voice “Mei”',
+  attribution: 'Nagoya Institute of Technology, MMDAgent Project Team',
+  license: 'CC BY 3.0',
+  source:
+    'https://github.com/r9y9/pyopenjtalk/blob/v0.4.1/pyopenjtalk/htsvoice/LICENSE_mei_normal.htsvoice',
+} as const;
+
 export const BROWSER_FIXTURE_VERSION = 'practice-note-v1';
 export const browserPreviewChoices = ['preview', 'compact-preview'] as const;
 export const browserPreviewChoiceSchema = z.enum(browserPreviewChoices);

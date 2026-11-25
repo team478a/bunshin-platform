@@ -349,9 +349,20 @@ describe('database ownership boundaries', () => {
         },
       });
       expect(await videos.state(owner, saved.id)).toEqual({ version: 1, status: null });
+      const previousMp4 = new Uint8Array([6, 7]);
+      await client.browserFixtureMaterialVideo.create({
+        data: {
+          materialId: saved.id,
+          version: 2,
+          mp4: previousMp4,
+          captions: 'WEBVTT',
+          chapters: 'WEBVTT',
+          durationMs: 8000,
+        },
+      });
       await videos.enqueueVideo(owner, saved.id);
       await videos.enqueueVideo(owner, saved.id);
-      expect(await videos.state(owner, saved.id)).toEqual({ version: 1, status: 'PENDING' });
+      expect(await videos.state(owner, saved.id)).toEqual({ version: 2, status: 'PENDING' });
       const worker = randomUUID();
       const job = await new ClaimJob(new PrismaJobRepository(client, 'browser-fixture')).execute(
         'DEVELOPMENT',
@@ -359,7 +370,11 @@ describe('database ownership boundaries', () => {
       );
       if (!job) throw new Error('video job missing');
       assertUserJob(job);
+      expect(job.payloadReference).toBe('browser-video:v3:' + saved.id);
       expect(await videos.renderInput(job)).toHaveLength(2);
+      expect(
+        await videos.renderInput({ ...job, payloadReference: 'browser-video:v2:' + saved.id }),
+      ).toEqual([]);
       const mp4 = new Uint8Array([1, 2]);
       await videos.finishVideo(job, worker, {
         mp4,
@@ -367,9 +382,10 @@ describe('database ownership boundaries', () => {
         chapters: 'WEBVTT',
         durationMs: 8000,
       });
-      expect(await videos.state(owner, saved.id)).toEqual({ version: 2, status: null });
+      expect(await videos.state(owner, saved.id)).toEqual({ version: 3, status: null });
       expect(await videos.readFile(owner, saved.id, 'mp4')).toEqual(mp4);
       expect(await videos.readFile(owner, saved.id, 'mp4', 1)).toEqual(legacyMp4);
+      expect(await videos.readFile(owner, saved.id, 'mp4', 2)).toEqual(previousMp4);
       expect(await videos.readFile(stranger, saved.id, 'mp4')).toBeNull();
       await videos.enqueueVideo(owner, saved.id);
       expect(await client.job.count({ where: { workspaceId: workspace.id } })).toBe(1);

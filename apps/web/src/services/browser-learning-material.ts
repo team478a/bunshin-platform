@@ -1,6 +1,9 @@
 import 'server-only';
 import type { PersonalLearningActor } from '@bunshin/application';
-import { browserPilotEnvironment } from '@bunshin/capability-browser';
+import {
+  browserPilotEnvironment,
+  type BrowserMaterialAzureVoice,
+} from '@bunshin/capability-browser';
 import {
   personalLearningDynamicProgramAllows,
   personalLearningFeatureEnabled,
@@ -25,9 +28,19 @@ export function browserLearningProgram(settings: unknown, enrollmentId: string) 
   );
 }
 
-export function learningMaterialPath(slug: string, enrollment: string, topic?: string) {
-  const query = topic ? `?topicId=${encodeURIComponent(topic)}` : '';
-  return `/s/${encodeURIComponent(slug)}/programs/${encodeURIComponent(enrollment)}/learning-request/browser-material${query}` as const;
+export function learningMaterialPath(
+  slug: string,
+  enrollment: string,
+  topic?: string,
+  narrator?: BrowserMaterialAzureVoice | null,
+) {
+  const query = [
+    topic && `topicId=${encodeURIComponent(topic)}`,
+    narrator && `narrator=${narrator}`,
+  ]
+    .filter(Boolean)
+    .join('&');
+  return `/s/${encodeURIComponent(slug)}/programs/${encodeURIComponent(enrollment)}/learning-request/browser-material${query ? `?${query}` : ''}` as const;
 }
 
 export async function browserLearningMaterialActor(
