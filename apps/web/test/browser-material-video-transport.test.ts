@@ -57,7 +57,8 @@ it('defaults to Shiori and accepts Daichi only on eligible pilot materials', () 
     expect(
       lessonNarrationSelection('pilot', { ...material, importedAt: new Date() }, 'daichi'),
     ).toEqual({ voice: null, version: 3 });
-    expect(lessonNarratorHref('/lesson?step=1', 'daichi')).toBe('/lesson?step=1&narrator=daichi');
+    const path = '/s/manaberu/programs/program/learning-request/browser-material?step=1';
+    expect(lessonNarratorHref(path, 'daichi')).toBe(path + '&narrator=daichi');
   } finally {
     vi.unstubAllEnvs();
   }

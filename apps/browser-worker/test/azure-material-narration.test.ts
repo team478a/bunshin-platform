@@ -10,9 +10,9 @@ it('uses the selected Azure voice and escapes lesson text inside SSML', async ()
   const wav = Buffer.alloc(46);
   wav.write('RIFF');
   wav.write('WAVE', 8);
-  const fetch = vi.fn(
-    async (_url: string, _options: RequestInit) => new Response(new Uint8Array(wav)),
-  );
+  const fetch = vi
+    .fn<(url: string, options: RequestInit) => Promise<Response>>()
+    .mockImplementation(() => Promise.resolve(new Response(new Uint8Array(wav))));
   const record = vi.fn(async () => {});
   vi.stubGlobal('fetch', fetch);
   vi.stubEnv('BROWSER_AZURE_SPEECH_REGION', 'japaneast');

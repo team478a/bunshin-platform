@@ -1,4 +1,5 @@
 import 'server-only';
+import type { Route } from 'next';
 import { z } from 'zod';
 import {
   browserMaterialAzureVoice,
@@ -24,8 +25,8 @@ export function lessonNarrationSelection(
   };
 }
 
-export function lessonNarratorHref(path: string, voice: BrowserMaterialAzureVoice | null) {
-  return voice ? `${path}${path.includes('?') ? '&' : '?'}narrator=${voice}` : path;
+export function lessonNarratorHref(path: Route, voice: BrowserMaterialAzureVoice | null): Route {
+  return voice ? (`${path}${path.includes('?') ? '&' : '?'}narrator=${voice}` as Route) : path;
 }
 
 export const videoFileQuery = z.object({
