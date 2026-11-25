@@ -78,3 +78,26 @@ export const browserFixtureSelectionRequestSchema = z.strictObject({
   jobId: z.uuid(),
   workerId: z.uuid(),
 });
+
+export const browserObservedFixtureVersion = 'observed-catalogue-v1';
+export const browserObservedFixtureObjective = '研修用カタログの詳細から比較結果を開く。';
+export const browserObservedStepLimit = 3;
+export const browserObservedChoiceSchema = z.strictObject({
+  id: z.string().regex(/^observed-[1-3]-\d{1,2}$/),
+  role: z.enum(['button', 'link']),
+  name: z.string().trim().min(1).max(120),
+});
+export const browserObservedSelectionSchema = z
+  .strictObject({
+    ordinal: z.int().min(1).max(browserObservedStepLimit),
+    choices: z.array(browserObservedChoiceSchema).min(1).max(60),
+  })
+  .refine(
+    ({ ordinal, choices }) =>
+      choices.every(({ id }) => id.startsWith('observed-' + ordinal + '-')) &&
+      new Set(choices.map(({ id }) => id)).size === choices.length,
+  );
+export type BrowserObservedSelection = z.infer<typeof browserObservedSelectionSchema>;
+export const browserObservedResponseSchema = z.strictObject({
+  id: browserObservedChoiceSchema.shape.id,
+});

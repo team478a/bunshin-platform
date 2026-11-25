@@ -10,12 +10,22 @@ import {
   FailJob,
   assertUserJob,
 } from '@bunshin/application';
+import {
+  browserObservedFixtureVersion,
+  browserObservedStepLimit,
+} from '@bunshin/capability-browser';
 import { PrismaJobRepository, prisma } from '@bunshin/database';
-import { BrowserRunError, discoverBrowserPlan, runBrowserPlan } from './browser';
+import {
+  BrowserRunError,
+  discoverBrowserPlan,
+  discoverObservedBrowserPlan,
+  runBrowserPlan,
+} from './browser';
 import { saveEvidence } from './evidence';
 import { compactPreviewStep, fixture, fixturePlan, fixtureVersion } from './fixture';
 import { completeRecipeReplay, completeWithRecipe, findRecipeId, loadRecipe } from './recipes';
-import { modelPreviewSelector } from './model-selector';
+import { observedCatalogue, observedCatalogueGoal } from './observed-catalogue';
+import { modelObservedSelector, modelPreviewSelector } from './model-selector';
 import { completeMaterialJob } from './materials';
 import { runTrainingMaterial } from './training-material';
 
@@ -35,7 +45,13 @@ export async function enqueueFixture(
   actorId: string,
   deviceName: string,
   requestId: string,
-  mode: 'fixture' | 'discover' | 'discover-model' | 'replay' | 'material' = 'fixture',
+  mode:
+    | 'fixture'
+    | 'discover'
+    | 'discover-model'
+    | 'discover-observed-model'
+    | 'replay'
+    | 'material' = 'fixture',
 ) {
   if (![workspaceId, actorId, requestId].every((value) => uuid.test(value))) {
     throw new Error('Workspace, actor and request must be UUIDs');
@@ -47,7 +63,9 @@ export async function enqueueFixture(
     payloadReference = `${mode}:${deviceName.toLowerCase()}`;
   } else {
     const device = deviceFrom(deviceName);
-    payloadReference = `${mode === 'fixture' ? '' : mode + ':'}${fixtureVersion}:${device}`;
+    const version =
+      mode === 'discover-observed-model' ? browserObservedFixtureVersion : fixtureVersion;
+    payloadReference = `${mode === 'fixture' ? '' : mode + ':'}${version}:${device}`;
   }
   return new EnqueueJob(jobs).enqueue({
     environment,
@@ -57,7 +75,7 @@ export async function enqueueFixture(
     jobType: BROWSER_FIXTURE_JOB_TYPE,
     payloadReference,
     idempotencyKey: `browser-fixture:${workspaceId.toLowerCase()}:${actorId.toLowerCase()}:${payloadReference}:${requestId.toLowerCase()}`,
-    maxAttempts: 3,
+    maxAttempts: mode === 'discover-observed-model' ? 1 : 3,
   });
 }
 
@@ -168,6 +186,40 @@ export async function runQueue(input: {
               attempt: job.attemptCount,
               recipeId: value,
               materialId: material.id,
+            }),
+          );
+          continue;
+        }
+        if (
+          kind === 'discover-observed-model' &&
+          value === browserObservedFixtureVersion &&
+          extra === undefined
+        ) {
+          const limits = {
+            ...input.limits,
+            maxSteps: Math.min(input.limits.maxSteps, browserObservedStepLimit),
+          };
+          const observed = await discoverObservedBrowserPlan(
+            observedCatalogueGoal(deviceFrom(device)),
+            observedCatalogue,
+            limits,
+            input.signal,
+            modelObservedSelector(job.id, workerId),
+          );
+          await runBrowserPlan(observed.plan, observedCatalogue, limits, input.signal);
+          await saveEvidence(
+            join(input.output, job.workspaceId, job.id),
+            String(job.attemptCount),
+            observed.run,
+            input.signal,
+            observed.plan,
+          );
+          await complete.execute(job.id, workerId);
+          console.log(
+            JSON.stringify({
+              jobId: job.id,
+              status: 'SUCCEEDED',
+              steps: observed.run.steps.length,
             }),
           );
           continue;

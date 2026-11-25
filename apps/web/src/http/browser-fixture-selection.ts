@@ -4,9 +4,12 @@ import { BROWSER_FIXTURE_JOB_TYPE } from '@bunshin/application';
 import {
   BROWSER_FIXTURE_VERSION,
   browserFixtureSelectionRequestSchema,
+  browserObservedFixtureVersion,
+  browserObservedSelectionSchema,
 } from '@bunshin/capability-browser';
 import { getServerEnvironment } from '@bunshin/config';
 import { ApplicationError, toApiError } from '@bunshin/shared';
+import { boundedLearningJson } from './personal-learning-request';
 import { authorizeCronRequest } from './cron-security';
 import { selectBrowserFixturePreview } from '../services/browser-fixture-selection';
 
@@ -34,9 +37,13 @@ export async function browserFixtureSelectionResponse(request: Request) {
         workspace: { status: 'ACTIVE' },
         jobType: BROWSER_FIXTURE_JOB_TYPE,
         payloadReference: {
-          in: ['mobile', 'desktop'].map(
-            (device) => `discover-model:${BROWSER_FIXTURE_VERSION}:${device}`,
-          ),
+          in: ['mobile', 'desktop']
+            .map((device) => `discover-model:${BROWSER_FIXTURE_VERSION}:${device}`)
+            .concat(
+              ['mobile', 'desktop'].map(
+                (device) => `discover-observed-model:${browserObservedFixtureVersion}:${device}`,
+              ),
+            ),
         },
         status: 'LEASED',
         leaseOwner: identity.data.workerId,
@@ -69,11 +76,21 @@ export async function browserFixtureSelectionResponse(request: Request) {
 
     const remainingLeaseMs = (job.leaseExpiresAt?.getTime() ?? 0) - Date.now();
     if (remainingLeaseMs <= 0) throw new ApplicationError('NOT_FOUND', 'browser job unavailable');
+    let observed;
+    if (job.payloadReference.startsWith('discover-observed-model:')) {
+      const parsed = browserObservedSelectionSchema.safeParse(
+        await boundedLearningJson(request, 32_000),
+      );
+      if (!parsed.success)
+        throw new ApplicationError('VALIDATION_ERROR', 'invalid observed browser candidates');
+      observed = parsed.data;
+    }
     const selection = await selectBrowserFixturePreview({
       jobId: job.id,
       workspaceId: job.workspaceId,
       actorId: job.requestedBy,
       device: job.payloadReference.endsWith(':mobile') ? 'mobile' : 'desktop',
+      ...(observed ? { observed } : {}),
       signal: AbortSignal.any([
         request.signal,
         AbortSignal.timeout(Math.min(remainingLeaseMs, 2_147_483_647)),
