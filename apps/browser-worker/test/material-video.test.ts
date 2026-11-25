@@ -20,6 +20,10 @@ it('keeps captions and chapters aligned and limits rendered steps', () => {
   expect(result.chapters).toContain('手順 2');
   expect(result.metadata).toContain('START=4000\nEND=8000');
   expect(() => materialVideoTimeline([])).toThrow(RangeError);
+  const narrated = materialVideoTimeline([blank, blank], [4901, 900]);
+  expect(narrated.stepDurationsMs).toEqual([5250, 4000]);
+  expect(narrated.captions).toContain('00:00:05.250 --> 00:00:09.250');
+  expect(narrated.metadata).toContain('CC BY 3.0');
 });
 
 it.skipIf(process.env['BROWSER_VIDEO_LIVE_TESTS'] !== '1')(
@@ -61,6 +65,59 @@ it.skipIf(process.env['BROWSER_VIDEO_LIVE_TESTS'] !== '1')(
       expect(streams).toContain('tag:title=手順 2');
       expect(streams).toContain('duration=8.000000');
       if (output) await writeFile(output, mp4);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  },
+  65_000,
+);
+
+it.skipIf(process.env['BROWSER_VIDEO_LIVE_TESTS'] !== '1')(
+  'adds Japanese AAC and lets longer narration extend the chapter',
+  async () => {
+    const pcm = Buffer.alloc(44 + (4_800 * 8_000 * 2) / 1_000);
+    pcm.write('RIFF');
+    pcm.writeUInt32LE(pcm.length - 8, 4);
+    pcm.write('WAVEfmt ', 8);
+    pcm.writeUInt32LE(16, 16);
+    pcm.writeUInt16LE(1, 20);
+    pcm.writeUInt16LE(1, 22);
+    pcm.writeUInt32LE(8_000, 24);
+    pcm.writeUInt32LE(16_000, 28);
+    pcm.writeUInt16LE(2, 32);
+    pcm.writeUInt16LE(16, 34);
+    pcm.write('data', 36);
+    pcm.writeUInt32LE(pcm.length - 44, 40);
+    const directory = mkdtempSync(join(tmpdir(), 'bunshin-video-audio-test-'));
+    try {
+      const video = await renderMaterialVideo(
+        [blank, blank],
+        AbortSignal.timeout(60_000),
+        async ({ text, directory, file }) => {
+          expect(text).toBe(blank.instruction);
+          await writeFile(join(directory, file), pcm);
+        },
+      );
+      expect(video.durationMs).toBe(10_500);
+      const sample = join(directory, 'narrated.mp4');
+      await writeFile(sample, video.mp4);
+      const probe = execFileSync(
+        'ffprobe',
+        [
+          '-v',
+          'error',
+          '-select_streams',
+          'a:0',
+          '-show_entries',
+          'stream=codec_name,duration:stream_tags=language:chapter=start_time,end_time',
+          '-of',
+          'compact',
+          sample,
+        ],
+        { encoding: 'utf8' },
+      );
+      expect(probe).toContain('codec_name=aac|duration=10.500000|tag:language=jpn');
+      expect(probe).toContain('start_time=5.250000|end_time=10.500000');
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }

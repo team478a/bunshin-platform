@@ -1,9 +1,13 @@
-import { execFile } from 'node:child_process';
 import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { promisify } from 'node:util';
 import sharp from 'sharp';
+import {
+  narrationDurationMs,
+  videoProcess,
+  videoProcessOptions,
+  type NarrateMaterialStep,
+} from './material-narration';
 
 type Step = {
   instruction: string;
@@ -16,7 +20,12 @@ const width = 720;
 const height = 1280;
 const maximumOutput = 8 * 1024 * 1024;
 const background = '#101828';
-const ffmpeg = promisify(execFile);
+const narrationCredit =
+  'HTS Voice NIT ATR503 M001 v1.05, HTS Working Group, CC BY 3.0 — https://open-jtalk.sourceforge.net/readme_hts_voice_nitech_jp_atr503_m001.php';
+
+function stepText(step: Step, index: number) {
+  return step.instruction.replace(/\s+/g, ' ').trim() || '手順 ' + (index + 1);
+}
 
 function time(ms: number) {
   const seconds = Math.floor(ms / 1_000);
@@ -34,21 +43,25 @@ function cue(text: string, start: number, end: number) {
   return time(start) + ' --> ' + time(end) + '\n' + escaped + '\n\n';
 }
 
-export function materialVideoTimeline(steps: readonly Step[]) {
+export function materialVideoTimeline(steps: readonly Step[], narrationMs: readonly number[] = []) {
   if (!steps.length || steps.length > 30) throw new RangeError('invalid lesson video step count');
   let durationMs = 0;
   let captions = 'WEBVTT\n\n';
   let chapters = 'WEBVTT\n\n';
   let metadata = ';FFMETADATA1\n';
+  if (narrationMs.length) metadata += 'comment=' + narrationCredit + '\n';
+  const stepDurationsMs: number[] = [];
   const frames: { image: Uint8Array | null; durationMs: number }[] = [];
   for (const [index, step] of steps.entries()) {
-    const instruction = step.instruction.replace(/\s+/g, ' ').trim();
+    const instruction = stepText(step, index);
     const title = '手順 ' + (index + 1);
     const start = durationMs;
     const duration = Math.max(
       4_000,
+      Math.ceil(((narrationMs[index] ?? 0) + 250) / 250) * 250,
       Math.min(12_000, Math.ceil(Array.from(instruction).length / 8) * 1000),
     );
+    stepDurationsMs.push(duration);
     const primary = step.afterImage ?? step.beforeImage;
     let remaining = duration;
     if (step.beforeImage && step.afterImage) {
@@ -61,7 +74,7 @@ export function materialVideoTimeline(steps: readonly Step[]) {
     }
     frames.push({ image: primary, durationMs: remaining });
     durationMs += duration;
-    captions += cue(instruction || title, start, durationMs);
+    captions += cue(instruction, start, durationMs);
     chapters += cue(title, start, durationMs);
     metadata += [
       '[CHAPTER]',
@@ -72,13 +85,30 @@ export function materialVideoTimeline(steps: readonly Step[]) {
       '',
     ].join('\n');
   }
-  return { frames, captions, chapters, metadata, durationMs };
+  return { frames, captions, chapters, metadata, durationMs, stepDurationsMs };
 }
 
-export async function renderMaterialVideo(steps: readonly Step[], signal: AbortSignal) {
-  const { frames, captions, chapters, metadata, durationMs } = materialVideoTimeline(steps);
+export async function renderMaterialVideo(
+  steps: readonly Step[],
+  signal: AbortSignal,
+  narrate?: NarrateMaterialStep,
+) {
+  if (!steps.length || steps.length > 30) throw new RangeError('invalid lesson video step count');
   const directory = await mkdtemp(join(tmpdir(), 'bunshin-lesson-video-'));
   try {
+    const audioFiles: string[] = [];
+    const narrationMs: number[] = [];
+    if (narrate) {
+      for (const [index, step] of steps.entries()) {
+        signal.throwIfAborted();
+        const file = 'narration-' + index + '.wav';
+        await narrate({ text: stepText(step, index), directory, file, signal });
+        audioFiles.push(file);
+        narrationMs.push(await narrationDurationMs(join(directory, file), signal));
+      }
+    }
+    const { frames, captions, chapters, metadata, durationMs, stepDurationsMs } =
+      materialVideoTimeline(steps, narrationMs);
     const concat = ['ffconcat version 1.0'];
     for (const [index, frame] of frames.entries()) {
       signal.throwIfAborted();
@@ -97,7 +127,31 @@ export async function renderMaterialVideo(steps: readonly Step[], signal: AbortS
       writeFile(join(directory, 'captions.vtt'), captions),
       writeFile(join(directory, 'chapters.txt'), metadata),
     ]);
-    await ffmpeg(
+    const audioArgs = audioFiles.length
+      ? [
+          ...audioFiles.flatMap((file) => ['-protocol_whitelist', 'file', '-i', file]),
+          '-filter_complex',
+          [
+            ...stepDurationsMs.map(
+              (ms, index) =>
+                '[' + (index + 3) + ':a]apad,atrim=duration=' + ms / 1_000 + '[a' + index + ']',
+            ),
+            stepDurationsMs.map((_, index) => '[a' + index + ']').join('') +
+              'concat=n=' +
+              audioFiles.length +
+              ':v=0:a=1,volume=0.8[narration]',
+          ].join(';'),
+          '-map',
+          '[narration]',
+          '-c:a',
+          'aac',
+          '-b:a',
+          '48k',
+          '-metadata:s:a:0',
+          'language=jpn',
+        ]
+      : [];
+    await videoProcess(
       process.env['BROWSER_FFMPEG_PATH'] || 'ffmpeg',
       [
         '-nostdin',
@@ -121,6 +175,7 @@ export async function renderMaterialVideo(steps: readonly Step[], signal: AbortS
         'ffmetadata',
         '-i',
         'chapters.txt',
+        ...audioArgs,
         '-map',
         '0:v:0',
         '-map',
@@ -155,17 +210,7 @@ export async function renderMaterialVideo(steps: readonly Step[], signal: AbortS
         '+faststart',
         'lesson.mp4',
       ],
-      {
-        cwd: directory,
-        signal,
-        windowsHide: true,
-        maxBuffer: 128 * 1024,
-        env: Object.fromEntries(
-          Object.entries(process.env).filter(([key]) =>
-            /^(PATH|SystemRoot|WINDIR|TEMP|TMP|TMPDIR|HOME|USERPROFILE|LANG|LC_ALL)$/i.test(key),
-          ),
-        ),
-      },
+      videoProcessOptions(directory, signal),
     );
     signal.throwIfAborted();
     const output = join(directory, 'lesson.mp4');
