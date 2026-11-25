@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
-import { discoverBrowserPlan, runBrowserPlan, verifyBrowserPlan } from '../src/browser';
+import {
+  discoverBrowserPlan,
+  discoverObservedBrowserPlan,
+  runBrowserPlan,
+  verifyBrowserPlan,
+} from '../src/browser';
 import { compactPreviewStep, fixture, fixturePlan } from '../src/fixture';
 import { modelPreviewSelector } from '../src/model-selector';
 import { materialSignature } from '../src/material-signature';
@@ -7,6 +12,60 @@ import { materialSignature } from '../src/material-signature';
 describe.skipIf(process.env['BROWSER_WORKER_LIVE_TESTS'] !== '1')('local Chromium', () => {
   const limits = { timeoutMs: 30_000, maxSteps: 20 };
   const signal = new AbortController().signal;
+
+  const observedGoal = {
+    version: 1,
+    device: 'mobile',
+    startPage: 'list',
+    success: { page: 'item', visible: { by: 'role', role: 'status', name: '比較表示中' } },
+  } as const;
+
+  const catalogue = {
+    pages: new Map([
+      [
+        'list',
+        '<a href="/item">詳細へ進む</a><button disabled>準備中</button><button hidden>非表示</button><button>同名</button><button>同名</button>',
+      ],
+      [
+        'item',
+        `<button id="compare">比較を開く</button><div id="result" role="status" aria-label="比較表示中" hidden>比較結果</div>
+        <script>document.querySelector('#compare').onclick = () => { document.querySelector('#result').hidden = false; };</script>`,
+      ],
+    ]),
+    samples: new Map(),
+  };
+
+  it('discovers links and buttons on an unseen screen and verifies a replay of the new recipe', async () => {
+    const offered: string[][] = [];
+    const { plan, run } = await discoverObservedBrowserPlan(
+      observedGoal,
+      catalogue,
+      limits,
+      signal,
+      async (candidates) => {
+        offered.push(candidates.map((item) => (item.target.by === 'role' ? item.target.name : '')));
+        return candidates[0]!.id;
+      },
+    );
+    expect(offered).toEqual([['詳細へ進む'], ['比較を開く']]);
+    expect(run.steps).toHaveLength(2);
+    expect(run.steps[1]?.after.accessibility).toContain('比較表示中');
+    expect(run.steps.every((step) => step.beforePng.length && step.afterPng.length)).toBe(true);
+    const replay = await runBrowserPlan(plan, catalogue, limits, signal);
+    expect(replay.steps.map((step) => step.stepId)).toEqual(plan.steps.map((step) => step.id));
+  }, 70_000);
+
+  it('fails when the selector returns a candidate outside its current screen', async () => {
+    await expect(
+      discoverObservedBrowserPlan(
+        observedGoal,
+        catalogue,
+        limits,
+        signal,
+        async () => 'observed-2-0',
+      ),
+    ).rejects.toMatchObject({ category: 'STEP_FAILED' });
+  }, 40_000);
 
   it.each(['desktop', 'mobile'] as const)(
     'replays %s steps with matching image evidence',

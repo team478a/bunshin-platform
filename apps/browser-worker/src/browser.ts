@@ -8,6 +8,8 @@ import {
   type BrowserStepEvidence,
 } from '@bunshin/capability-browser';
 
+import { observedClickTargets } from './dynamic-targets';
+
 const origin = 'https://browser-fixture.invalid';
 
 export interface Fixture {
@@ -45,9 +47,15 @@ export type BrowserStepSelector = (
   signal: AbortSignal,
 ) => Promise<string>;
 
-async function selectBeforeAbort(
-  choose: BrowserStepSelector,
-  candidates: Parameters<BrowserStepSelector>[0],
+type ObservedChoice = Extract<PlanStep, { action: 'click' }>;
+type ObservedStepSelector = (
+  candidates: readonly Readonly<ObservedChoice>[],
+  signal: AbortSignal,
+) => Promise<string>;
+
+async function selectBeforeAbort<T>(
+  choose: (candidates: readonly T[], signal: AbortSignal) => Promise<string>,
+  candidates: readonly T[],
   signal: AbortSignal,
 ) {
   signal.throwIfAborted();
@@ -82,6 +90,17 @@ export function discoverBrowserPlan(
   return executePlan(input, fixture, limits, cancellation, select);
 }
 
+export function discoverObservedBrowserPlan(
+  goal: Omit<BrowserPlan, 'steps'>,
+  fixture: Fixture,
+  limits: { timeoutMs: number; maxSteps: number },
+  cancellation: AbortSignal,
+  select: ObservedStepSelector,
+) {
+  const input = { ...goal, steps: [{ id: 'start', action: 'navigate', page: goal.startPage }] };
+  return executePlan(input, fixture, limits, cancellation, undefined, undefined, select);
+}
+
 type ClickTargetFallback = Readonly<{ stepId: string; target: BrowserLocator }>;
 
 export function verifyBrowserPlan(
@@ -101,6 +120,7 @@ async function executePlan(
   cancellation: AbortSignal,
   select?: BrowserStepSelector,
   fallback?: ClickTargetFallback,
+  selectObserved?: ObservedStepSelector,
 ): Promise<{ plan: BrowserPlan; run: BrowserRun }> {
   const parsed = browserPlanSchema.safeParse(input);
   if (!parsed.success || parsed.data.steps.length > limits.maxSteps) {
@@ -180,6 +200,7 @@ async function executePlan(
       });
     });
     const page = await context.newPage();
+    const session = selectObserved ? await context.newCDPSession(page) : undefined;
     page.on('popup', (popup) => {
       blockedRequest = true;
       void popup.close().catch(() => {
@@ -206,8 +227,9 @@ async function executePlan(
     const remainingSteps = [...plan.steps];
     const goalReached = async () =>
       currentPage() === plan.success.page && (await locate(page, plan.success.visible).isVisible());
-    while (remainingSteps.length > 0) {
-      if (select && executed.length > 0 && (await goalReached())) break;
+    if (session && (await goalReached())) throw new BrowserRunError('INVALID_PLAN');
+    while (session ? executed.length < limits.maxSteps : remainingSteps.length > 0) {
+      if ((select || session) && executed.length > 0 && (await goalReached())) break;
       const candidates: PlanStep[] = [];
       if (select) {
         for (const step of remainingSteps) {
@@ -221,6 +243,29 @@ async function executePlan(
           candidates.push(step);
         }
       }
+      if (session && selectObserved) {
+        currentPage();
+        const visible: ObservedChoice[] = [];
+        for (const step of await observedClickTargets(session, executed.length + 1)) {
+          signal.throwIfAborted();
+          const target = locate(page, step.target);
+          if (
+            (await target.count()) === 1 &&
+            (await target.isVisible()) &&
+            (await target.isEnabled({ timeout: remaining() }))
+          )
+            visible.push(step);
+        }
+        if (!visible.length) throw new BrowserRunError('STEP_FAILED', stepId);
+        const selectedId = await selectBeforeAbort(
+          selectObserved,
+          structuredClone(visible),
+          signal,
+        );
+        const observed = visible.find(({ id }) => id === selectedId);
+        if (!observed) throw new BrowserRunError('STEP_FAILED', stepId);
+        candidates.push(observed);
+      }
       const selectedId =
         select && candidates.length
           ? await selectBeforeAbort(
@@ -230,9 +275,13 @@ async function executePlan(
             )
           : undefined;
       signal.throwIfAborted();
-      let step = select ? candidates.find(({ id }) => id === selectedId) : remainingSteps[0];
+      let step = session
+        ? candidates[0]
+        : select
+          ? candidates.find(({ id }) => id === selectedId)
+          : remainingSteps.shift();
       if (!step) throw new BrowserRunError('STEP_FAILED');
-      remainingSteps.splice(remainingSteps.indexOf(step), 1);
+      if (select) remainingSteps.splice(remainingSteps.indexOf(step), 1);
       if (
         step.action === 'click' &&
         fallback?.stepId === step.id &&
