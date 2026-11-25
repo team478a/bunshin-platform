@@ -348,11 +348,18 @@ async function executePlan(
     if (!(await goalReached())) {
       throw new BrowserRunError('STEP_FAILED');
     }
+    const resultText = (
+      await locate(page, plan.success.visible).innerText({ timeout: remaining() })
+    )
+      .replace(/\s+/g, ' ')
+      .trim();
     signal.throwIfAborted();
+    if (currentPage() !== plan.success.page) throw new BrowserRunError('STEP_FAILED');
     return {
       plan: { ...plan, steps: executed },
       run: {
         steps,
+        ...(resultText && resultText.length <= 120 ? { verifiedResultText: resultText } : {}),
         browserVersion: browser.version(),
         device: plan.device,
         durationMs: Math.round(performance.now() - startedAt),
