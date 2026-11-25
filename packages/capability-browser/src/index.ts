@@ -82,6 +82,9 @@ export const browserFixtureSelectionRequestSchema = z.strictObject({
 export const browserObservedFixtureVersion = 'observed-catalogue-v1';
 export const browserObservedFixtureObjective = '研修用カタログの詳細から比較結果を開く。';
 export const browserObservedStepLimit = 3;
+export function browserObservedModelOperationKey(jobId: string, ordinal: number) {
+  return `browser-fixture-selection:${jobId}:step-${ordinal}`;
+}
 export const browserObservedChoiceSchema = z.strictObject({
   id: z.string().regex(/^observed-[1-3]-\d{1,2}$/),
   role: z.enum(['button', 'link']),
