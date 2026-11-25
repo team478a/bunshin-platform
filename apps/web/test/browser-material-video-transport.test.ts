@@ -1,6 +1,11 @@
 import { expect, it, vi } from 'vitest';
 vi.mock('server-only', () => ({}));
-import { videoFileQuery, videoResponse } from '../src/services/browser-material-video';
+import {
+  lessonNarrationSelection,
+  lessonNarratorHref,
+  videoFileQuery,
+  videoResponse,
+} from '../src/services/browser-material-video';
 
 it('returns private byte ranges for in-browser MP4 playback', async () => {
   const data = new Uint8Array([11, 12, 13, 14]);
@@ -19,12 +24,41 @@ it('returns private byte ranges for in-browser MP4 playback', async () => {
   );
 });
 
-it('keeps old file URLs on version 1 and accepts explicit versions 2 and 3', () => {
+it('keeps old file URLs on version 1 and accepts explicit narration versions', () => {
   const material = '50000000-1111-4111-8111-111111111111';
   expect(videoFileQuery.parse({ material, variant: 'mp4' }).version).toBe(1);
   expect(videoFileQuery.parse({ material, variant: 'captions', version: '2' }).version).toBe(2);
-  expect(videoFileQuery.parse({ material, variant: 'captions', version: '3' }).version).toBe(3);
-  expect(videoFileQuery.safeParse({ material, variant: 'chapters', version: '4' }).success).toBe(
+  for (const version of ['3', '4', '5']) {
+    expect(videoFileQuery.parse({ material, variant: 'captions', version }).version).toBe(
+      Number(version),
+    );
+  }
+  expect(videoFileQuery.safeParse({ material, variant: 'chapters', version: '6' }).success).toBe(
     false,
   );
+});
+
+it('defaults to Shiori and accepts Daichi only on eligible pilot materials', () => {
+  vi.stubEnv('BROWSER_AZURE_SPEECH_WORKSPACE_ID', 'pilot');
+  try {
+    const material = { verifiedAt: new Date(), importedAt: null };
+    expect(lessonNarrationSelection('pilot', material, undefined)).toEqual({
+      voice: 'shiori',
+      version: 4,
+    });
+    expect(lessonNarrationSelection('pilot', material, 'daichi')).toEqual({
+      voice: 'daichi',
+      version: 5,
+    });
+    expect(lessonNarrationSelection('other', material, 'daichi')).toEqual({
+      voice: null,
+      version: 3,
+    });
+    expect(
+      lessonNarrationSelection('pilot', { ...material, importedAt: new Date() }, 'daichi'),
+    ).toEqual({ voice: null, version: 3 });
+    expect(lessonNarratorHref('/lesson?step=1', 'daichi')).toBe('/lesson?step=1&narrator=daichi');
+  } finally {
+    vi.unstubAllEnvs();
+  }
 });

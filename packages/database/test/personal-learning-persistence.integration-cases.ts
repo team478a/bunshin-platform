@@ -458,6 +458,35 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
         ).rejects.toMatchObject({ code: 'NOT_FOUND' });
         expect(await videos.state(learner, result.id)).toEqual({ version: null, status: null });
 
+        const speechWorkspace = process.env['BROWSER_AZURE_SPEECH_WORKSPACE_ID'];
+        try {
+          process.env['BROWSER_AZURE_SPEECH_WORKSPACE_ID'] = f.scope.workspaceId;
+          for (const version of [4, 5]) {
+            await videos.enqueueVideo(learner, restored.id, version);
+            await videos.enqueueVideo(learner, restored.id, version);
+            const voiceJob = await claimReview();
+            expect(voiceJob.payloadReference).toContain(
+              `browser-video:v${version}:${restored.id}:`,
+            );
+            expect(await videos.renderInput(voiceJob)).toHaveLength(1);
+            await videos.finishVideo(voiceJob, worker, {
+              mp4: image,
+              captions: 'WEBVTT',
+              chapters: 'WEBVTT',
+              durationMs: 4000,
+            });
+            expect(await videos.state(learner, restored.id, version)).toEqual({
+              version,
+              status: null,
+            });
+            expect(await videos.readFile(learner, restored.id, 'mp4', version)).toEqual(image);
+          }
+        } finally {
+          if (speechWorkspace === undefined)
+            delete process.env['BROWSER_AZURE_SPEECH_WORKSPACE_ID'];
+          else process.env['BROWSER_AZURE_SPEECH_WORKSPACE_ID'] = speechWorkspace;
+        }
+
         await requests.saveRequest({
           ...f.actor,
           content: {

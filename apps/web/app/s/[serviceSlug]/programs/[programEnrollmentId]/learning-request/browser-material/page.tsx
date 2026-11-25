@@ -10,6 +10,10 @@ import {
 } from '../../../../../../../src/services/browser-learning-material';
 
 import { BrowserMaterialVideo } from '../../../../../../../src/components/browser-material-video';
+import {
+  lessonNarrationSelection,
+  lessonNarratorHref,
+} from '../../../../../../../src/services/browser-material-video';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,7 +22,7 @@ export default async function BrowserLearningMaterialPage({
   searchParams,
 }: {
   params: Promise<{ serviceSlug: string; programEnrollmentId: string }>;
-  searchParams: Promise<{ topicId?: string; step?: string }>;
+  searchParams: Promise<{ topicId?: string; step?: string; narrator?: string }>;
 }) {
   const { serviceSlug, programEnrollmentId } = await params;
   const query = await searchParams;
@@ -62,10 +66,17 @@ export default async function BrowserLearningMaterialPage({
     }
 
     const materialId = material?.id;
+    const narrator = lessonNarrationSelection(
+      actor.scope.workspaceId,
+      material ?? null,
+      query.narrator,
+    );
+    const narratorPath = lessonNarratorHref(path, narrator.voice);
     const video = materialId
       ? await new db.PrismaBrowserMaterialVideos(db.prisma).state(
           { kind: 'learner', learner: actor },
           materialId,
+          narrator.version,
         )
       : null;
 
@@ -82,8 +93,14 @@ export default async function BrowserLearningMaterialPage({
       await new db.PrismaBrowserMaterialVideos(db.prisma).enqueueVideo(
         { kind: 'learner', learner },
         materialId,
+        narrator.version,
       );
-      redirect(learningMaterialPath(serviceSlug, programEnrollmentId, learner.topicId));
+      redirect(
+        lessonNarratorHref(
+          learningMaterialPath(serviceSlug, programEnrollmentId, learner.topicId),
+          narrator.voice,
+        ),
+      );
     }
     async function reportDifference() {
       'use server';
@@ -110,7 +127,14 @@ export default async function BrowserLearningMaterialPage({
               device={state.device}
               ordinal={ordinal}
               showDetail={showDetail}
-              stepHref={(value) => ({ pathname, query: { ...topic, step: value } })}
+              stepHref={(value) => ({
+                pathname,
+                query: {
+                  ...topic,
+                  step: value,
+                  ...(narrator.voice ? { narrator: narrator.voice } : {}),
+                },
+              })}
               imageHref={(variant) =>
                 pathname +
                 '/image?' +
@@ -130,7 +154,15 @@ export default async function BrowserLearningMaterialPage({
             <BrowserMaterialVideo
               state={video}
               requestVideo={requestVideo}
-              reloadHref={path}
+              reloadHref={narratorPath}
+              {...(narrator.voice
+                ? {
+                    choice: {
+                      voice: narrator.voice,
+                      href: (voice) => lessonNarratorHref(path, voice),
+                    },
+                  }
+                : {})}
               fileHref={(variant, version) =>
                 pathname +
                 '/video?' +

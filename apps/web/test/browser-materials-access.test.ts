@@ -106,6 +106,23 @@ describe('browser material access', () => {
     expect(html).toContain('操作箇所を拡大');
     expect(html).toContain('/2/after');
     expect(html).not.toContain('最初の操作を行う');
+
+    vi.stubEnv('BROWSER_AZURE_SPEECH_WORKSPACE_ID', workspaceId);
+    mocks.video.mockResolvedValue({ version: 4, status: null });
+    try {
+      const comparison = await BrowserMaterialsPage({
+        params: Promise.resolve({ workspaceId }),
+        searchParams: Promise.resolve({ material: materialId, narrator: 'daichi' }),
+      });
+      const markup = renderToStaticMarkup(comparison);
+      expect(markup).toContain('大智（男性）で動画を作る');
+      expect(markup).toContain('志織（女性）（Azure Speech）');
+      expect(markup).toContain('/browser-narration-preview/shiori.wav');
+      expect(markup).toContain('/browser-narration-preview/daichi.wav');
+      expect(mocks.video).toHaveBeenLastCalledWith(expect.anything(), materialId, 5);
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it('labels an imported recording and displays a single captured screenshot', async () => {
