@@ -118,11 +118,15 @@ export default async function BrowserMaterialsPage(props: {
         state={video}
         requestVideo={requestVideo}
         reloadHref={lessonHref}
-        fileHref={(variant) =>
+        fileHref={(variant, version) =>
           '/api/browser-materials/' +
           workspaceId +
           '/video?' +
-          new URLSearchParams({ material: materialId, variant }).toString()
+          new URLSearchParams({
+            material: materialId,
+            variant,
+            version: String(version),
+          }).toString()
         }
       />
     </main>

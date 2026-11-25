@@ -14,11 +14,12 @@ export async function GET(request: Request, context: { params: Promise<{ workspa
   const owner = await browserMaterialActor(workspaceId);
   if (!owner) return missingVideo();
   const db = await import('@bunshin/database');
-  const { material, variant } = query.data;
+  const { material, variant, version } = query.data;
   const asset = await new db.PrismaBrowserMaterialVideos(db.prisma).readFile(
     { kind: 'owner', owner },
     material,
     variant,
+    version,
   );
   return videoResponse(request, asset);
 }
