@@ -22,7 +22,6 @@ jobs:
       DIRECT_URL: postgresql://build:build@localhost:5432/build
       SESSION_SECRET: build-only-secret-build-only-secret
       LOG_LEVEL: info
-      BUNSHIN_REUSE_CI_PRISMA_CLIENT: '1'
     steps:
       - uses: actions/checkout@v5
       - uses: pnpm/action-setup@v4
@@ -45,14 +44,12 @@ jobs:
       - run: pnpm install --frozen-lockfile
       # Turbo may restore a cached database build into a fresh node_modules tree.
       # Regenerate Prisma Client before consumers typecheck against @prisma/client.
-      - run: pnpm db:generate
+      - run: pnpm db:generate --ci-reuse
       - run: pnpm format:check
-      - name: Run architecture checks and harness tests
-        run: pnpm architecture:check && pnpm test:architecture && pnpm test:external-read-poc
-      - name: Typecheck, lint and test workspace packages
-        run: pnpm exec turbo run typecheck lint test
-      - name: Typecheck and lint learning UI tests
-        run: pnpm typecheck:learning-ui && pnpm lint:learning-ui
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm test
+      - run: pnpm test:external-read-poc
       - run: pnpm exec e2e-web install chromium --with-deps
       - name: Run learning UI tests and production build
         env:
@@ -99,7 +96,6 @@ jobs:
           --health-retries 5
     env:
       NODE_ENV: test
-      BUNSHIN_REUSE_CI_PRISMA_CLIENT: '1'
       APP_ENV: development
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/bunshin_platform_test
       DIRECT_URL: postgresql://postgres:postgres@localhost:5432/bunshin_platform_test
@@ -116,6 +112,7 @@ jobs:
       - run: pnpm db:validate
       # Explicit setup of the disposable CI database, never the production build path.
       - run: pnpm db:migrate:deploy
+      - run: pnpm db:generate --ci-reuse
       - run: pnpm db:assert-ready
       - run: pnpm test:integration
       - name: Install native PostgreSQL client for release tests

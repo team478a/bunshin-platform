@@ -15,8 +15,10 @@ const clientPackage = require.resolve('@prisma/client/package.json');
 const generated = resolve(dirname(clientPackage), '../../.prisma/client');
 
 const args = process.argv.slice(2);
-const reuse = process.env.BUNSHIN_REUSE_CI_PRISMA_CLIENT === '1' && args.length === 0;
+const setup = args[0] === '--ci-reuse';
+if (setup) args.shift();
 const stamp = join(generated, '.bunshin-ci-schema');
+const reuse = args.length === 0 && (setup || existsSync(stamp));
 const key = reuse
   ? createHash('sha256')
       .update(readFileSync(schema))
