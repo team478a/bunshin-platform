@@ -4,6 +4,7 @@ import {
   browserObservedFixtureVersion,
   browserObservedModelOperationKey,
   browserObservedStepLimit,
+  browserPilotEnvironment,
   trainingCatalogueDiscoveryPrefix,
 } from '@bunshin/capability-browser';
 import { prisma } from '@bunshin/database';
@@ -13,7 +14,8 @@ const uuid = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
 const terminal = new Set(['SUCCEEDED', 'DEAD', 'CANCELLED']);
 
 export async function reportObservedModelJob(workspaceId: string, actorId: string, jobId: string) {
-  if (![workspaceId, actorId, jobId].every((value) => uuid.test(value))) {
+  const environment = browserPilotEnvironment(process.env['APP_ENV'] ?? 'development');
+  if (!environment || ![workspaceId, actorId, jobId].every((value) => uuid.test(value))) {
     throw new BrowserRunError('INVALID_PLAN');
   }
   return prisma.$transaction(
@@ -23,7 +25,7 @@ export async function reportObservedModelJob(workspaceId: string, actorId: strin
           id: jobId,
           workspaceId,
           requestedBy: actorId,
-          environment: 'DEVELOPMENT',
+          environment,
           jobType: BROWSER_FIXTURE_JOB_TYPE,
           bunshinId: null,
           capabilityType: null,
@@ -81,7 +83,7 @@ export async function reportObservedModelJob(workspaceId: string, actorId: strin
       });
       const admissions = await tx.aiProviderCallAdmission.findMany({
         where: {
-          environment: 'DEVELOPMENT',
+          environment,
           provider: 'GOOGLE',
           operationHash: { in: operations.map(({ hash }) => hash) },
         },

@@ -83,6 +83,12 @@ export const browserObservedFixtureVersion = 'observed-catalogue-v1';
 export const browserObservedFixtureObjective = '研修用カタログの詳細から比較結果を開く。';
 export const browserObservedStepLimit = 3;
 export const trainingCatalogueDiscoveryPrefix = 'training-catalogue-discovery';
+
+export function browserPilotEnvironment(appEnvironment: string | undefined) {
+  if (appEnvironment === 'development') return 'DEVELOPMENT';
+  if (appEnvironment === 'staging') return 'STAGING';
+  return null;
+}
 export function browserObservedModelOperationKey(jobId: string, ordinal: number) {
   return `browser-fixture-selection:${jobId}:step-${ordinal}`;
 }

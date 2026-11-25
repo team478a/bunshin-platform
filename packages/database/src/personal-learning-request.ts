@@ -13,6 +13,7 @@ import {
   personalLearningOfferPolicy,
   TRAINING_EXPORT_MAX_ROWS,
 } from '@bunshin/capability-training';
+import { browserPilotEnvironment } from '@bunshin/capability-browser';
 import type { Prisma } from '@prisma/client';
 import { PrismaPersonalLearningPersistenceRepository } from './personal-learning-persistence';
 import { requirePersonalLearningPilotSeat } from './personal-learning-pilot-seat';
@@ -50,7 +51,7 @@ export class PrismaPersonalLearningRequestRepository
     if (isPersonalLearningPilotProgram(program.settings)) {
       await requirePersonalLearningPilotSeat(tx, s, true);
       const fixturePilot =
-        process.env['APP_ENV'] === 'development' &&
+        browserPilotEnvironment(process.env['APP_ENV']) !== null &&
         personalLearningFeatureEnabled(program.settings, 'browserMaterials') &&
         personalLearningOfferPolicy(program.settings) === 'AI_SKILL_V1';
       const learnerSeat = await tx.personalLearningPilotSeat.findFirst({

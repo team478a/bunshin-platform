@@ -13,6 +13,7 @@ import {
 import {
   browserObservedFixtureVersion,
   browserObservedStepLimit,
+  browserPilotEnvironment,
   trainingCatalogueDiscoveryPrefix,
   type BrowserPlan,
 } from '@bunshin/capability-browser';
@@ -40,9 +41,14 @@ import { runTrainingMaterial } from './training-material';
 
 import { runMaterialVideo } from './material-video-job';
 
-const environment = 'DEVELOPMENT';
 const jobs = new PrismaJobRepository(prisma, 'browser-fixture');
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+
+function queueEnvironment() {
+  const environment = browserPilotEnvironment(process.env['APP_ENV'] ?? 'development');
+  if (!environment) throw new BrowserRunError('INVALID_PLAN');
+  return environment;
+}
 
 function deviceFrom(value: string | undefined) {
   if (value === 'desktop' || value === 'mobile') return value;
@@ -77,7 +83,7 @@ export async function enqueueFixture(
     payloadReference = `${mode === 'fixture' ? '' : mode + ':'}${version}:${device}`;
   }
   return new EnqueueJob(jobs).enqueue({
-    environment,
+    environment: queueEnvironment(),
     workspaceId,
     requestedBy: actorId,
     correlationId: requestId,
@@ -89,6 +95,7 @@ export async function enqueueFixture(
 }
 
 export async function cancelFixture(workspaceId: string, actorId: string, jobId: string) {
+  const environment = queueEnvironment();
   if (![workspaceId, actorId, jobId].every((value) => uuid.test(value))) {
     throw new Error('Workspace, actor and job must be UUIDs');
   }
@@ -118,6 +125,7 @@ export async function runQueue(input: {
   limits: { timeoutMs: number; maxSteps: number };
   signal: AbortSignal;
 }) {
+  const environment = queueEnvironment();
   // Retain a lease beyond the browser budget for cleanup and local evidence writes.
   const claim = new ClaimJob(jobs, input.limits.timeoutMs + 30_000);
   const fail = new FailJob(jobs);

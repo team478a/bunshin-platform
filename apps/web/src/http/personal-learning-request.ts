@@ -1,6 +1,6 @@
 import { browserLearningDevice } from '@bunshin/capability-training';
 import {
-  browserLearningDevelopment,
+  browserLearningPilotAvailable,
   enqueueBrowserLearningMaterial,
 } from '../services/browser-learning-material';
 import 'server-only';
@@ -103,7 +103,7 @@ export async function personalLearningRequestResponse(
       request.method === 'POST' &&
       saved &&
       browserLearningDevice(saved) &&
-      browserLearningDevelopment()
+      browserLearningPilotAvailable()
     ) {
       try {
         await enqueueBrowserLearningMaterial(input);

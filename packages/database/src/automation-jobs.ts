@@ -26,8 +26,8 @@ export class PrismaJobRepository implements JobRepository {
   async enqueue(input: EnqueueJobInput): Promise<Job> {
     if (input.jobType === FEEDBACK_PURGE_JOB_TYPE || !input.requestedBy?.trim())
       throw new ApplicationError('FORBIDDEN', 'maintenance job cannot use user enqueue');
-    if (input.jobType === BROWSER_FIXTURE_JOB_TYPE && input.environment !== 'DEVELOPMENT')
-      throw new ApplicationError('FORBIDDEN', 'browser fixtures are limited to development jobs');
+    if (input.jobType === BROWSER_FIXTURE_JOB_TYPE && input.environment === 'PRODUCTION')
+      throw new ApplicationError('FORBIDDEN', 'browser fixtures are unavailable in production');
     const scope = await this.client.workspace.findFirst({
       where: {
         id: input.workspaceId,
@@ -74,7 +74,7 @@ export class PrismaJobRepository implements JobRepository {
   }
 
   async claim(input: Parameters<JobRepository['claim']>[0]): Promise<Job | null> {
-    if (this.claimQueue === 'browser-fixture' && input.environment !== 'DEVELOPMENT') return null;
+    if (this.claimQueue === 'browser-fixture' && input.environment === 'PRODUCTION') return null;
     const browserQueue = this.claimQueue === 'browser-fixture';
     const rows = await this.client.$queryRaw<Array<{ id: string }>>`
       WITH candidate AS (

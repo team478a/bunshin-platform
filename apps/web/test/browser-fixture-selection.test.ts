@@ -221,6 +221,16 @@ describe('browser fixture model selection', () => {
     expect(mocks.reserve).not.toHaveBeenCalled();
   });
 
+  it('checks the current worker lease in STAGING for staging requests', async () => {
+    mocks.environment.mockReturnValue({ APP_ENV: 'staging' });
+    expect((await browserFixtureSelectionResponse(request())).status).toBe(200);
+    expect(mocks.job).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ environment: 'STAGING', leaseOwner: workerId }),
+      }),
+    );
+  });
+
   it('preserves reservations with unknown cost and rejects an unknown candidate', async () => {
     mocks.fetcher.mockImplementation(() => output('other', {}));
     expect((await browserFixtureSelectionResponse(request())).ok).toBe(false);
