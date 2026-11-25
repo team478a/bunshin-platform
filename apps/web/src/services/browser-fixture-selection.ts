@@ -2,6 +2,7 @@ import 'server-only';
 import { estimateAiCallCost, type AiCallMeasurement } from '@bunshin/application';
 import {
   browserObservedFixtureObjective,
+  browserObservedModelOperationKey,
   browserObservedResponseSchema,
   browserPreviewChoices,
   browserPreviewResponseSchema,
@@ -25,8 +26,9 @@ export async function selectBrowserFixturePreview(input: {
   observed?: BrowserObservedSelection;
 }) {
   const observed = input.observed;
-  const key =
-    `browser-fixture-selection:${input.jobId}` + (observed ? `:step-${observed.ordinal}` : '');
+  const key = observed
+    ? browserObservedModelOperationKey(input.jobId, observed.ordinal)
+    : `browser-fixture-selection:${input.jobId}`;
   const choices: readonly string[] = observed?.choices.map(({ id }) => id) ?? browserPreviewChoices;
   const registry = personalLearningPricingRegistry();
   const runtime = await reserveLearningProviderRuntimeConfiguration(
