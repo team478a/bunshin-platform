@@ -34,6 +34,7 @@ export async function resolvePersonalLearningOfferContext(actor: PersonalLearnin
     throw new ApplicationError('NOT_FOUND', 'learning request unavailable');
   return {
     offerPolicy,
+    browserMaterials: personalLearningFeatureEnabled(program.settings, 'browserMaterials'),
     extendedScope: personalLearningFeatureEnabled(program.settings, 'extendedScope'),
   } as const;
 }

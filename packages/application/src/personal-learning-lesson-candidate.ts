@@ -1,4 +1,8 @@
 import { ApplicationError } from '@bunshin/shared';
+import {
+  validateLearningIntentAnalysis,
+  type LearningIntentAnalysis,
+} from './personal-learning-intent';
 import type { PersonalLearningActor } from './personal-learning-persistence';
 import type { SavedPersonalLearningRequest } from './personal-learning-request';
 
@@ -13,6 +17,7 @@ export interface LearningLessonProposal {
   practice: string[];
   evidence: string[];
   criteria: string[];
+  intentAnalysis?: LearningIntentAnalysis;
 }
 export interface SavedLearningLessonCandidate {
   id: string;
@@ -50,7 +55,11 @@ export function validateLearningLessonProposal(value: unknown): LearningLessonPr
     'evidence',
     'criteria',
   ];
-  if (Object.keys(v).length !== keys.length || keys.some((k) => !Object.hasOwn(v, k)))
+  const hasIntentAnalysis = Object.hasOwn(v, 'intentAnalysis');
+  if (
+    Object.keys(v).length !== keys.length + Number(hasIntentAnalysis) ||
+    keys.some((k) => !Object.hasOwn(v, k))
+  )
     return fail();
   if (!['READY', 'NEEDS_CONTEXT', 'OUT_OF_SCOPE'].includes(String(v.status))) return fail();
   for (const key of ['reason', 'outcome', 'explanation', 'example']) {
@@ -83,7 +92,10 @@ export function validateLearningLessonProposal(value: unknown): LearningLessonPr
     return fail();
   if (v.status === 'NEEDS_CONTEXT' && !(v.questions as string[]).length) return fail();
   if (v.status === 'OUT_OF_SCOPE' && (v.questions as string[]).length) return fail();
-  return structuredClone(v) as unknown as LearningLessonProposal;
+  const proposal = structuredClone(v) as unknown as LearningLessonProposal;
+  if (hasIntentAnalysis)
+    proposal.intentAnalysis = validateLearningIntentAnalysis(v['intentAnalysis']);
+  return proposal;
 }
 export interface LearningCandidateRepository {
   readCandidate(actor: PersonalLearningActor): Promise<SavedLearningLessonCandidate | null>;

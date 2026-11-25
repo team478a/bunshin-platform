@@ -12,6 +12,7 @@ const f = vi.hoisted(() => ({
   generate: vi.fn(),
   prices: vi.fn(),
   extendedScope: vi.fn(),
+  browserMaterials: vi.fn(),
   persona: vi.fn(),
 }));
 vi.mock('@bunshin/database', () => ({
@@ -49,6 +50,7 @@ vi.mock('../src/services/personal-learning-extended-scope', () => ({
   resolvePersonalLearningExtendedScope: f.extendedScope,
   resolvePersonalLearningOfferContext: async (...args: unknown[]) => ({
     offerPolicy: 'AI_SKILL_V1',
+    browserMaterials: f.browserMaterials(),
     extendedScope: await f.extendedScope(...args),
   }),
 }));
@@ -106,6 +108,7 @@ describe('lesson generation composition', () => {
     f.prior.mockResolvedValue(null);
     f.persona.mockResolvedValue([]);
     f.extendedScope.mockResolvedValue(false);
+    f.browserMaterials.mockReturnValue(false);
     f.resolve.mockResolvedValue({
       provider: 'openai',
       model,
@@ -176,6 +179,67 @@ describe('lesson generation composition', () => {
     );
     expect(f.settle.mock.invocationCallOrder[0]).toBeLessThan(f.save.mock.invocationCallOrder[0]!);
   });
+  it('uses the existing Google call and cost reservation for structured learning intent', async () => {
+    vi.stubEnv('APP_ENV', 'development');
+    f.browserMaterials.mockReturnValue(true);
+    const previousPolicy = JSON.parse(process.env['PERSONAL_LEARNING_LESSON_ADMISSION']!);
+    vi.stubEnv(
+      'PERSONAL_LEARNING_LESSON_ADMISSION',
+      JSON.stringify({ ...previousPolicy, provider: 'google' }),
+    );
+    const prices = f.prices() as object[];
+    f.prices.mockReturnValue(prices.map((price) => ({ ...price, provider: 'google' })));
+    f.reserve.mockResolvedValue({
+      provider: 'google',
+      model,
+      modelCapabilities: ['STRUCTURED_OUTPUT'],
+    });
+    const generated = await f.generate();
+    const intentAnalysis = {
+      kind: 'knowledge',
+      goal: '作りたいホームページの構成を理解する',
+      environment: {
+        device: 'PC',
+        os: null,
+        client: null,
+        plan: null,
+        language: null,
+        experience: null,
+        channel: 'unknown',
+      },
+      prerequisites: [],
+      steps: [
+        {
+          objective: '見出しの役割を説明する',
+          service: null,
+          feature: null,
+          deliverable: null,
+          success: { kind: 'manual', expected: '見出しの役割を自分の言葉で説明できる' },
+        },
+      ],
+      questions: [],
+    };
+    f.generate.mockClear();
+    f.generate.mockResolvedValue({
+      ...generated,
+      value: { ...proposal, intentAnalysis },
+      measurement: { ...generated.measurement, provider: 'google' },
+    });
+
+    await expect(prepareLearningLesson(actor, id, 1, id)).resolves.toEqual({ id: 'candidate' });
+    expect(f.generate).toHaveBeenCalledOnce();
+    const { body } = f.generate.mock.calls[0]![0] as { body: string };
+    const payload = JSON.parse(body);
+    expect(payload.text.format.schema.required).toContain('intentAnalysis');
+    expect(f.record).toHaveBeenCalledOnce();
+    expect(f.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        promptVersion: expect.stringMatching(/-intent-v1$/),
+        proposal: expect.objectContaining({ intentAnalysis }),
+      }),
+    );
+  });
+
   it('reuses a saved candidate without resolving or calling AI', async () => {
     f.prior.mockResolvedValue({ id: 'saved' });
     expect(await prepareLearningLesson(actor, id, 1, id)).toEqual({ id: 'saved' });

@@ -58,8 +58,18 @@ export async function prepareLearningLesson(
     occurredAt: new Date(),
   });
   if (!reservation) throw new ApplicationError('CONFIGURATION_ERROR', 'lesson price unavailable');
-  const { offerPolicy, extendedScope } = await resolvePersonalLearningOfferContext(actor);
+  const { offerPolicy, extendedScope, browserMaterials } =
+    await resolvePersonalLearningOfferContext(actor);
+  const includeIntentAnalysis =
+    provider === 'google' &&
+    process.env['APP_ENV'] === 'development' &&
+    offerPolicy === 'AI_SKILL_V1' &&
+    browserMaterials;
+
   const proposalPolicy = learningProposalPolicy(extendedScope, offerPolicy);
+  const promptVersion = includeIntentAnalysis
+    ? proposalPolicy.version + '-intent-v1'
+    : proposalPolicy.version;
   const personaContext = await new db.PrismaPersonalLearningPersonaRepository(db.prisma).listForAi(
     actor.scope,
   );
@@ -72,6 +82,7 @@ export async function prepareLearningLesson(
     personaContext,
     toolFeatureContext,
     offerPolicy,
+    includeIntentAnalysis,
   ); // Validate byte limit before admission.
   let providerAdmission: LearningAiRuntimeConfiguration | null = null;
   let usageKey = '';
@@ -88,7 +99,7 @@ export async function prepareLearningLesson(
         operationKind: 'LESSON_GENERATION',
         attempt: 1,
         provider,
-        promptVersion: proposalPolicy.version,
+        promptVersion,
         policy,
         pricingRegistry,
       },
@@ -114,13 +125,26 @@ export async function prepareLearningLesson(
         );
         if (providerAdmission.model !== policy.model)
           throw new ApplicationError('CONFIGURATION_ERROR', 'lesson model changed');
-        return generateLearningLesson({
+        const result = await generateLearningLesson({
           apiKey: providerAdmission.apiKey,
           model: providerAdmission.model,
           provider: providerAdmission.provider,
           modelCapabilities: providerAdmission.modelCapabilities,
           body,
         });
+        if (includeIntentAnalysis && result.value && !result.value.intentAnalysis) {
+          return {
+            ...result,
+            value: null,
+            measurement: {
+              ...result.measurement,
+              success: false,
+              errorCategory: 'INVALID_RESPONSE' as const,
+              validationResult: 'FAILED' as const,
+            },
+          };
+        }
+        return result;
       },
     );
   } finally {
@@ -140,7 +164,7 @@ export async function prepareLearningLesson(
     request,
     proposal,
     usageKey,
-    promptVersion: proposalPolicy.version,
+    promptVersion,
     toolFeatureSources: toolFeatureContext.sources.map(({ title, sourceTitle, sourceUrl }) => ({
       title,
       sourceTitle,
