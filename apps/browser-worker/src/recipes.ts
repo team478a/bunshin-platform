@@ -9,10 +9,14 @@ import {
 import { CompleteJob, type UserJob } from '@bunshin/application';
 import { PrismaJobRepository, prisma } from '@bunshin/database';
 import { BrowserRunError } from './browser';
-import { compactPreviewStep, fixturePlan, fixtureVersion } from './fixture';
-import { observedCatalogueGoal } from './observed-catalogue';
+import { compactPreviewStep, fixture, fixturePlan, fixtureVersion } from './fixture';
+import { observedCatalogue, observedCatalogueGoal } from './observed-catalogue';
 
 type RecipeVersion = typeof fixtureVersion | typeof browserObservedFixtureVersion;
+
+export function fixtureForRecipe(version: RecipeVersion) {
+  return version === browserObservedFixtureVersion ? observedCatalogue : fixture;
+}
 
 export const recipeScope = (workspaceId: string, actorId: string) => ({
   workspaceId,

@@ -1,11 +1,12 @@
 import { join } from 'node:path';
 import { CompleteJob, type UserJob } from '@bunshin/application';
+import { browserObservedFixtureVersion } from '@bunshin/capability-browser';
 import { PrismaJobRepository, prisma } from '@bunshin/database';
 import { BrowserRunError, runBrowserPlan } from './browser';
 import { saveEvidence } from './evidence';
-import { fixture } from './fixture';
 import { composeFixtureMaterial, readMaterialProof } from './material-content';
-import { loadVerifiedRecipe, recipeScope } from './recipes';
+import { observedCatalogueMaterial } from './observed-catalogue';
+import { fixtureForRecipe, loadVerifiedRecipe, recipeScope } from './recipes';
 
 const revision = 1;
 
@@ -29,10 +30,11 @@ export async function completeMaterialJob(input: {
     return existing;
   }
 
-  const { plan, sourceJobId, sourceAttempt, verifiedAt } = await loadVerifiedRecipe(
+  const { plan, version, sourceJobId, sourceAttempt, verifiedAt } = await loadVerifiedRecipe(
     recipeId,
     job.workspaceId,
     job.requestedBy,
+    'any',
   );
   const originalProof = { sourceJobId, sourceAttempt, verifiedAt };
   const folder = join(
@@ -41,10 +43,17 @@ export async function completeMaterialJob(input: {
     originalProof.sourceJobId,
     String(originalProof.sourceAttempt),
   );
-  let evidence = await readMaterialProof(folder, plan, originalProof.verifiedAt, signal);
+  const isCatalogue = version === browserObservedFixtureVersion;
+  let evidence = await readMaterialProof(
+    folder,
+    plan,
+    originalProof.verifiedAt,
+    signal,
+    isCatalogue,
+  );
   let proof = originalProof;
   if (!evidence) {
-    const run = await runBrowserPlan(plan, fixture, limits, signal);
+    const run = await runBrowserPlan(plan, fixtureForRecipe(version), limits, signal);
     await saveEvidence(
       join(output, job.workspaceId, job.id),
       String(job.attemptCount),
@@ -58,7 +67,8 @@ export async function completeMaterialJob(input: {
       verifiedAt: new Date(run.verifiedAt),
     };
   }
-  const { steps, ...content } = await composeFixtureMaterial(plan, evidence, signal);
+  const metadata = isCatalogue ? observedCatalogueMaterial : undefined;
+  const { steps, ...content } = await composeFixtureMaterial(plan, evidence, signal, metadata);
   signal.throwIfAborted();
   return prisma.$transaction(async (tx) => {
     await new CompleteJob(new PrismaJobRepository(tx)).execute(job.id, workerId);

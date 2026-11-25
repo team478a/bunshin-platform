@@ -6,12 +6,21 @@ import {
   type BrowserStepEvidence,
 } from '@bunshin/capability-browser';
 import { BrowserRunError } from './browser';
+import { evidenceGeometryVersion } from './evidence';
 import { materialImages } from './material-images';
 
 type ProofStep = Pick<
   BrowserStepEvidence,
   'stepId' | 'action' | 'beforePng' | 'afterPng' | 'target'
 >;
+
+const practiceNoteMaterial = {
+  title: '練習用メモをプレビューする',
+  goal: 'メモのタイトルを入力し、表示結果を確認できる。',
+  preparation: '操作練習ページを開く。入力には練習用の文字を使用する。',
+  practice: '「今日の振り返り」など別のタイトルを入力して、プレビューの表示を確かめる。',
+  checkpoint: '入力したタイトルは、どこに表示されましたか？',
+};
 
 function object(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === 'object' && !Array.isArray(value)
@@ -24,6 +33,7 @@ export async function readMaterialProof(
   plan: BrowserPlan,
   verifiedAt: Date,
   signal: AbortSignal,
+  useCurrentGeometry = false,
 ): Promise<ProofStep[] | null> {
   try {
     const manifest = object(
@@ -39,6 +49,8 @@ export async function readMaterialProof(
       steps.length !== plan.steps.length
     )
       throw new BrowserRunError('INVALID_PLAN');
+    if (useCurrentGeometry && manifest?.['geometryVersion'] !== evidenceGeometryVersion)
+      return null;
 
     const proof: ProofStep[] = [];
     for (const [index, step] of plan.steps.entries()) {
@@ -69,6 +81,7 @@ export async function composeFixtureMaterial(
   plan: BrowserPlan,
   proof: ProofStep[],
   signal: AbortSignal,
+  content = practiceNoteMaterial,
 ) {
   if (proof.length !== plan.steps.length) throw new BrowserRunError('INVALID_PLAN');
   const steps = [];
@@ -84,14 +97,7 @@ export async function composeFixtureMaterial(
       ...(await materialImages(evidence)),
     });
   }
-  return {
-    title: '練習用メモをプレビューする',
-    goal: 'メモのタイトルを入力し、表示結果を確認できる。',
-    preparation: '操作練習ページを開く。入力には練習用の文字を使用する。',
-    practice: '「今日の振り返り」など別のタイトルを入力して、プレビューの表示を確かめる。',
-    checkpoint: '入力したタイトルは、どこに表示されましたか？',
-    steps,
-  };
+  return { ...content, steps };
 }
 
 function describeStep(step: BrowserPlan['steps'][number]) {

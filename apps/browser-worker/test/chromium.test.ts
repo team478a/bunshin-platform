@@ -1,3 +1,7 @@
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import sharp from 'sharp';
 import { describe, expect, it, vi } from 'vitest';
 import {
   discoverBrowserPlan,
@@ -5,9 +9,15 @@ import {
   runBrowserPlan,
   verifyBrowserPlan,
 } from '../src/browser';
+import { saveEvidence } from '../src/evidence';
 import { compactPreviewStep, fixture, fixturePlan } from '../src/fixture';
+import { composeFixtureMaterial, readMaterialProof } from '../src/material-content';
 import { modelObservedSelector, modelPreviewSelector } from '../src/model-selector';
-import { observedCatalogue, observedCatalogueGoal } from '../src/observed-catalogue';
+import {
+  observedCatalogue,
+  observedCatalogueGoal,
+  observedCatalogueMaterial,
+} from '../src/observed-catalogue';
 import { materialSignature } from '../src/material-signature';
 
 describe.skipIf(process.env['BROWSER_WORKER_LIVE_TESTS'] !== '1')('local Chromium', () => {
@@ -64,7 +74,8 @@ describe.skipIf(process.env['BROWSER_WORKER_LIVE_TESTS'] !== '1')('local Chromiu
     ).rejects.toMatchObject({ category: 'STEP_FAILED' });
   }, 40_000);
 
-  it('passes real screen names to the internal model adapter and replays without a second call', async () => {
+  it('creates an illustrated catalogue lesson from replayed screen evidence without another model call', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'bunshin-catalogue-proof-'));
     const model = vi
       .fn()
       .mockResolvedValueOnce(Response.json('observed-1-0'))
@@ -81,7 +92,35 @@ describe.skipIf(process.env['BROWSER_WORKER_LIVE_TESTS'] !== '1')('local Chromiu
         modelObservedSelector('job-id', 'worker-id'),
       );
       expect(result.run.steps).toHaveLength(2);
-      await runBrowserPlan(result.plan, observedCatalogue, limits, signal);
+      const verified = await runBrowserPlan(result.plan, observedCatalogue, limits, signal);
+      const directory = await saveEvidence(root, 'replay', verified, signal, result.plan);
+      const proof = await readMaterialProof(
+        directory,
+        result.plan,
+        new Date(verified.verifiedAt),
+        signal,
+        true,
+      );
+      if (!proof) throw new Error('Verified replay evidence is missing');
+      // The catalogue has no viewport meta tag, so layout width exceeds device width.
+      expect(proof[1]?.target?.viewportWidth).toBeGreaterThan(800);
+      const material = await composeFixtureMaterial(
+        result.plan,
+        proof,
+        signal,
+        observedCatalogueMaterial,
+      );
+      expect(material.title).toBe('研修用カタログで比較結果を確認する');
+      expect(material.steps.map(({ stepId, instruction }) => ({ stepId, instruction }))).toEqual([
+        { stepId: 'observed-1-0', instruction: '「詳細を開く」を押す。' },
+        { stepId: 'observed-2-0', instruction: '「比較を開く」を押す。' },
+      ]);
+      for (const { beforeImage, afterImage, detailImage } of material.steps) {
+        if (!detailImage) throw new Error('Observed step does not have a detail image');
+        for (const image of [beforeImage, afterImage, detailImage]) {
+          expect((await sharp(image).metadata()).format).toBe('webp');
+        }
+      }
       expect(model).toHaveBeenCalledTimes(2);
       const requestBodies = model.mock.calls.map(
         (args) => JSON.parse((args[1] as { body: string }).body) as unknown,
@@ -105,6 +144,7 @@ describe.skipIf(process.env['BROWSER_WORKER_LIVE_TESTS'] !== '1')('local Chromiu
     } finally {
       vi.unstubAllEnvs();
       vi.unstubAllGlobals();
+      await rm(root, { recursive: true, force: true });
     }
   }, 70_000);
 

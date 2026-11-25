@@ -26,3 +26,11 @@ export function observedCatalogueGoal(device: BrowserPlan['device']): Omit<Brows
     success: { page: 'detail', visible: { by: 'role', role: 'status', name: '比較表示中' } },
   };
 }
+
+export const observedCatalogueMaterial = {
+  title: '研修用カタログで比較結果を確認する',
+  goal: 'カタログの詳細画面から比較結果を表示できる。',
+  preparation: '研修用カタログを開く。',
+  practice: 'カタログに戻り、詳細画面からもう一度比較結果を表示する。',
+  checkpoint: '比較結果が表示されたことを、どのメッセージで確認できましたか？',
+};
