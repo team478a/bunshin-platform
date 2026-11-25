@@ -9,11 +9,23 @@ export function classifyLearningIntent(text: string): LearningIntent {
   return research ? 'research' : 'knowledge';
 }
 
-export function browserLearningDevice(request: {
+export function browserLearningTarget(request: {
   originalText: string;
   deviceType: string | null;
-}): 'desktop' | 'mobile' | null {
+}) {
   const text = request.originalText.normalize('NFKC');
+  const device =
+    request.deviceType === 'SMARTPHONE'
+      ? ('mobile' as const)
+      : request.deviceType === 'PC' || request.deviceType === 'BOTH'
+        ? ('desktop' as const)
+        : null;
+  if (!device) return null;
+  if (
+    /研修用カタログ|操作練習用カタログ/.test(text) &&
+    /比較.{0,12}(表示|開[くき]|確認|見たい|手順|操作|したい)/.test(text)
+  )
+    return { kind: 'catalogue' as const, device };
   const intent = classifyLearningIntent(text);
   if (
     (intent !== 'practice' && intent !== 'combined') ||
@@ -21,7 +33,9 @@ export function browserLearningDevice(request: {
     !/プレビュー/.test(text)
   )
     return null;
-  if (request.deviceType === 'SMARTPHONE') return 'mobile';
-  if (request.deviceType === 'PC' || request.deviceType === 'BOTH') return 'desktop';
-  return null;
+  return { kind: 'practice-note' as const, device };
+}
+
+export function browserLearningDevice(request: Parameters<typeof browserLearningTarget>[0]) {
+  return browserLearningTarget(request)?.device ?? null;
 }

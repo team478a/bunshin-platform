@@ -305,4 +305,8 @@ export {
 } from './personal-learning-topics';
 export type { PersonalLearningTopicStatus } from './personal-learning-topics';
 
-export { browserLearningDevice, classifyLearningIntent } from './browser-learning-material';
+export {
+  browserLearningDevice,
+  browserLearningTarget,
+  classifyLearningIntent,
+} from './browser-learning-material';
