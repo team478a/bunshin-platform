@@ -42,8 +42,6 @@ export const openJTalkNarration: NarrateMaterialStep = async ({
       '-m',
       process.env['BROWSER_OPEN_JTALK_VOICE'] ||
         '/usr/share/hts-voice/nitech-jp-atr503-m001/nitech_jp_atr503_m001.htsvoice',
-      '-s',
-      '24000',
       '-ow',
       file,
       input,
