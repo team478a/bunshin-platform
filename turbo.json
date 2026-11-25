@@ -1,5 +1,6 @@
 {
   "$schema": "https://turbo.build/schema.json",
+  "globalPassThroughEnv": ["BUNSHIN_REUSE_CI_PRISMA_CLIENT"],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],

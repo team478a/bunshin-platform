@@ -22,6 +22,7 @@ jobs:
       DIRECT_URL: postgresql://build:build@localhost:5432/build
       SESSION_SECRET: build-only-secret-build-only-secret
       LOG_LEVEL: info
+      BUNSHIN_REUSE_CI_PRISMA_CLIENT: '1'
     steps:
       - uses: actions/checkout@v5
       - uses: pnpm/action-setup@v4
@@ -46,15 +47,28 @@ jobs:
       # Regenerate Prisma Client before consumers typecheck against @prisma/client.
       - run: pnpm db:generate
       - run: pnpm format:check
-      - run: pnpm typecheck
-      - run: pnpm lint
-      - run: pnpm test
-      - run: pnpm test:external-read-poc
+      - name: Run architecture checks and harness tests
+        run: pnpm architecture:check && pnpm test:architecture && pnpm test:external-read-poc
+      - name: Typecheck, lint and test workspace packages
+        run: pnpm exec turbo run typecheck lint test
+      - name: Typecheck and lint learning UI tests
+        run: pnpm typecheck:learning-ui && pnpm lint:learning-ui
       - run: pnpm exec e2e-web install chromium --with-deps
-      - run: pnpm test:learning-ui
+      - name: Run learning UI tests and production build
         env:
           E2E_TELEMETRY_DISABLED: '1'
-      - run: pnpm build
+        run: |
+          pnpm test:learning-ui > "$RUNNER_TEMP/learning-ui.log" 2>&1 &
+          learning_ui_pid=$!
+          build_status=0
+          pnpm build || build_status=$?
+          learning_ui_status=0
+          wait "$learning_ui_pid" || learning_ui_status=$?
+          cat "$RUNNER_TEMP/learning-ui.log"
+          if [ "$build_status" -ne 0 ] || [ "$learning_ui_status" -ne 0 ]; then
+            echo "Production build exit: $build_status, learning UI tests exit: $learning_ui_status"
+            exit 1
+          fi
       - name: Save trusted main CI build cache
         if: >-
           success() &&
@@ -85,6 +99,7 @@ jobs:
           --health-retries 5
     env:
       NODE_ENV: test
+      BUNSHIN_REUSE_CI_PRISMA_CLIENT: '1'
       APP_ENV: development
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/bunshin_platform_test
       DIRECT_URL: postgresql://postgres:postgres@localhost:5432/bunshin_platform_test
