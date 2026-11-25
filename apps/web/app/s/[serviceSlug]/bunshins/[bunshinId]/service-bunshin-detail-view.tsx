@@ -89,14 +89,26 @@ export function ServiceBunshinDetailView({ model }: { model: ServiceBunshinDetai
     activityBarrierQuestion,
     activityBarrierSupport,
     businessPrimaryPurpose,
+    registeredBusinessName,
   } = model;
 
   return (
     <PublicShell showPlatformBrand={false}>
       <article className="service-entry service-member-home" style={style}>
         <header className="service-entry__header">
-          <p className="eyebrow">投稿パートナーホーム</p>
-          <h1>{bunshin.name}</h1>
+          {registeredBusinessName ? (
+            <>
+              <h1>{service.configuration.displayName}の投稿パートナー</h1>
+              <p>
+                <strong>登録した事業名</strong>　{registeredBusinessName}
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="eyebrow">投稿パートナーホーム</p>
+              <h1>{bunshin.name}</h1>
+            </>
+          )}
           <p>迷ったときは「今日やること」だけ進めれば大丈夫です。</p>
         </header>
         {lineResult === 'connected' && (

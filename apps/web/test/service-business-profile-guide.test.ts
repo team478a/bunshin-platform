@@ -22,6 +22,13 @@ const guide = readFileSync(
 );
 
 describe('business SNS profile guide', () => {
+  it('labels the registered business name separately from the service heading', () => {
+    expect(page).toContain('registeredBusinessName = businessProgramProfile?.businessName');
+    expect(page).toContain('<h1>{service.configuration.displayName}の投稿パートナー</h1>');
+    expect(page).toContain('<strong>登録した事業名</strong>　{registeredBusinessName}');
+    expect(page).toContain('<h1>{bunshin.name}</h1>');
+  });
+
   it('shows the latest approved strategy only for business daily services', () => {
     expect(page).toContain('const approvedBusinessStrategy = input.enabled');
     expect(page).toContain(".filter(({ status }) => status === 'APPROVED')");

@@ -81,6 +81,7 @@ export async function loadServiceBunshinDetail({
   let variantPointCost: number | null = null;
   let rewardsPilotActive = false;
   let businessProgramStartedAt: Date | null = null;
+  let registeredBusinessName: string | null = null;
   let businessPrimaryPurpose: ServiceBusinessPurpose | null = null;
   let postPerformances: PostPerformanceView[] = [];
   let activityBarrierQuestion: SocialActivityBarrierQuestion | null = null;
@@ -102,10 +103,11 @@ export async function loadServiceBunshinDetail({
             userId: actor.userId,
             groupMembership: { status: 'ACTIVE' },
           },
-          select: { createdAt: true, primaryPurpose: true },
+          select: { businessName: true, createdAt: true, primaryPurpose: true },
         })
       : null;
     businessProgramStartedAt = businessProgramProfile?.createdAt ?? null;
+    registeredBusinessName = businessProgramProfile?.businessName ?? null;
     businessPrimaryPurpose =
       businessProgramProfile && isServiceBusinessPurpose(businessProgramProfile.primaryPurpose)
         ? businessProgramProfile.primaryPurpose
@@ -563,6 +565,7 @@ export async function loadServiceBunshinDetail({
     activityBarrierQuestion,
     activityBarrierSupport,
     businessPrimaryPurpose,
+    registeredBusinessName,
   };
 }
 
