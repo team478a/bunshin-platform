@@ -4,6 +4,10 @@ import { z } from 'zod';
 export const videoFileQuery = z.object({
   material: z.uuid(),
   variant: z.enum(['mp4', 'captions', 'chapters']),
+  version: z
+    .enum(['1', '2'])
+    .optional()
+    .transform((value) => (value === '2' ? 2 : 1)),
   topicId: z.uuid().optional(),
 });
 

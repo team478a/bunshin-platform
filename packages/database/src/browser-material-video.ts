@@ -10,13 +10,13 @@ import { PrismaJobRepository } from './automation-jobs';
 import { PrismaBrowserLearningMaterials } from './browser-learning-material';
 
 const environment = 'DEVELOPMENT';
-const version = 1;
+const narratedVersion = 2;
 const jobType = BROWSER_FIXTURE_JOB_TYPE;
 const uuid = '[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}';
-const refPattern = new RegExp('^browser-video:(' + uuid + ')(?::(' + uuid + '))?$', 'i');
+const refPattern = new RegExp('^browser-video:(v2:)?(' + uuid + ')(?::(' + uuid + '))?$', 'i');
 const absent = () => new ApplicationError('NOT_FOUND', 'browser lesson video unavailable');
-const keyFor = (materialId: string) => ({ materialId, version });
-const identity = (materialId: string) => 'browser-video:' + version + ':' + materialId;
+const keyFor = (materialId: string, version = narratedVersion) => ({ materialId, version });
+const identity = (materialId: string) => 'browser-video:' + narratedVersion + ':' + materialId;
 
 type Owner = { workspaceId: string; actorId: string };
 type VideoActor =
@@ -78,18 +78,19 @@ export class PrismaBrowserMaterialVideos extends PrismaBrowserLearningMaterials 
 
   state(actor: VideoActor, materialId: string) {
     return this.inScope(actor, materialId, async (tx) => {
-      const asset = await tx.browserFixtureMaterialVideo.findUnique({
-        where: { materialId_version: keyFor(materialId) },
-        select: { durationMs: true },
+      const asset = await tx.browserFixtureMaterialVideo.findFirst({
+        where: { materialId, version: { in: [1, narratedVersion] } },
+        orderBy: { version: 'desc' },
+        select: { version: true },
       });
-      if (asset) return { ready: true, status: null };
+      if (asset?.version === narratedVersion) return { version: narratedVersion, status: null };
       const job = await tx.job.findUnique({
         where: {
           environment_idempotencyKey: { environment, idempotencyKey: identity(materialId) },
         },
         select: { status: true },
       });
-      return { ready: false, status: job?.status ?? null };
+      return { version: asset?.version ?? null, status: job?.status ?? null };
     });
   }
 
@@ -108,7 +109,8 @@ export class PrismaBrowserMaterialVideos extends PrismaBrowserLearningMaterials 
         const requestedBy =
           actor.kind === 'owner' ? actor.owner.actorId : actor.learner.actorUserId;
         const idempotencyKey = identity(materialId);
-        const payloadReference = 'browser-video:' + materialId + (requestId ? ':' + requestId : '');
+        const payloadReference =
+          'browser-video:v2:' + materialId + (requestId ? ':' + requestId : '');
         const job = await tx.job.upsert({
           where: { environment_idempotencyKey: { environment, idempotencyKey } },
           create: {
@@ -144,10 +146,15 @@ export class PrismaBrowserMaterialVideos extends PrismaBrowserLearningMaterials 
     );
   }
 
-  readFile(actor: VideoActor, materialId: string, variant: 'mp4' | 'captions' | 'chapters') {
+  readFile(
+    actor: VideoActor,
+    materialId: string,
+    variant: 'mp4' | 'captions' | 'chapters',
+    version = narratedVersion,
+  ) {
     return this.inScope(actor, materialId, async (tx) => {
       const asset = await tx.browserFixtureMaterialVideo.findUnique({
-        where: { materialId_version: keyFor(materialId) },
+        where: { materialId_version: keyFor(materialId, version) },
         select: {
           mp4: variant === 'mp4',
           captions: variant === 'captions',
@@ -159,7 +166,7 @@ export class PrismaBrowserMaterialVideos extends PrismaBrowserLearningMaterials 
   }
 
   private async videoJob(job: UserJob) {
-    const [, materialId, requestId] = refPattern.exec(job.payloadReference) ?? [];
+    const [, v2, materialId, requestId] = refPattern.exec(job.payloadReference) ?? [];
     if (
       !materialId ||
       job.environment !== environment ||
@@ -176,14 +183,14 @@ export class PrismaBrowserMaterialVideos extends PrismaBrowserLearningMaterials 
           ).actor,
         }
       : { kind: 'owner', owner: { workspaceId: job.workspaceId, actorId: job.requestedBy } };
-    return { materialId, actor };
+    return { materialId, actor, version: v2 ? narratedVersion : 1 };
   }
 
   async renderInput(job: UserJob) {
-    const { actor, materialId } = await this.videoJob(job);
+    const { actor, materialId, version } = await this.videoJob(job);
     const result = await this.inScope(actor, materialId, async (tx) => {
       const existing = await tx.browserFixtureMaterialVideo.findUnique({
-        where: { materialId_version: keyFor(materialId) },
+        where: { materialId_version: keyFor(materialId, version) },
         select: { materialId: true },
       });
       if (existing) return [];
@@ -207,13 +214,13 @@ export class PrismaBrowserMaterialVideos extends PrismaBrowserLearningMaterials 
       durationMs: number;
     },
   ) {
-    const { actor, materialId } = await this.videoJob(job);
+    const { actor, materialId, version } = await this.videoJob(job);
     const completed = await this.inScope(
       actor,
       materialId,
       async (tx) => {
         await new CompleteJob(new PrismaJobRepository(tx)).execute(job.id, workerId);
-        const key = keyFor(materialId);
+        const key = keyFor(materialId, version);
         if (video) {
           await tx.browserFixtureMaterialVideo.upsert({
             where: { materialId_version: key },

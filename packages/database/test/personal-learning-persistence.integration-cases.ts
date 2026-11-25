@@ -446,7 +446,7 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
         await expect(
           videos.readFile({ kind: 'learner', learner: other.actor }, restored.id, 'mp4'),
         ).rejects.toMatchObject({ code: 'NOT_FOUND' });
-        expect(await videos.state(learner, result.id)).toEqual({ ready: false, status: null });
+        expect(await videos.state(learner, result.id)).toEqual({ version: null, status: null });
       } finally {
         await client.job.deleteMany({
           where: { workspaceId: f.scope.workspaceId, jobType: BROWSER_FIXTURE_JOB_TYPE },
