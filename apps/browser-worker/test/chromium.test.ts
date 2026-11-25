@@ -103,7 +103,7 @@ describe.skipIf(process.env['BROWSER_WORKER_LIVE_TESTS'] !== '1')('local Chromiu
       );
       if (!proof) throw new Error('Verified replay evidence is missing');
       // The catalogue has no viewport meta tag, so layout width exceeds device width.
-      expect(proof[1]?.target?.viewportWidth).toBeGreaterThan(800);
+      expect(proof.steps[1]?.target?.viewportWidth).toBeGreaterThan(800);
       const material = await composeFixtureMaterial(
         result.plan,
         proof,
@@ -111,6 +111,11 @@ describe.skipIf(process.env['BROWSER_WORKER_LIVE_TESTS'] !== '1')('local Chromiu
         observedCatalogueMaterial,
       );
       expect(material.title).toBe('研修用カタログで比較結果を確認する');
+      expect(proof.verifiedResultText).toBe('比較結果を表示しました');
+      expect(material.practice).toContain(
+        '画面に「比較結果を表示しました」と表示されることを確認する。',
+      );
+      expect(material.practice).not.toContain('比較表示中');
       expect(material.steps.map(({ stepId, instruction }) => ({ stepId, instruction }))).toEqual([
         { stepId: 'observed-1-0', instruction: '「詳細を開く」を押す。' },
         { stepId: 'observed-2-0', instruction: '「比較を開く」を押す。' },

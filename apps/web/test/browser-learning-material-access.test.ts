@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { ApplicationError } from '@bunshin/shared';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as BrowserLearningMaterialService from '../src/services/browser-learning-material';
+import { learningMaterialPath } from '../src/services/browser-learning-material';
 
 const mocks = vi.hoisted(() => ({
   resolveActor: vi.fn(),
@@ -17,6 +18,7 @@ vi.mock('@bunshin/database', () => ({
   prisma: {},
   PrismaBrowserMaterialVideos: class {
     state = () => null;
+    speechAvailability = () => Promise.resolve({ enabled: false, previews: false });
   },
   PrismaBrowserLearningMaterials: class {
     readMaterial = mocks.readMaterial;
@@ -34,7 +36,7 @@ const params = {
   serviceSlug: 'manaberu',
   programEnrollmentId: '44444444-4444-4444-8444-444444444444',
 };
-const actor = { topicId };
+const actor = { topicId, scope: { workspaceId: '55555555-5555-4555-8555-555555555555' } };
 const image = () =>
   GET(
     new Request(
@@ -64,6 +66,9 @@ describe('illustrated lessons in the personal learning page', () => {
     expect(safeLineAuthReturnPath(path + '?topicId=invalid')).toBeNull();
     expect(safeLineAuthReturnPath(path + '?topicId=' + topicId + '&topicId=' + topicId)).toBeNull();
     expect(safeLineAuthReturnPath(path + '/image')).toBeNull();
+    expect(
+      learningMaterialPath(params.serviceSlug, params.programEnrollmentId, topicId, 'daichi'),
+    ).toBe(path + '?topicId=' + topicId + '&narrator=daichi');
   });
 
   it('reads private image evidence through the currently authorized enrollment and topic', async () => {

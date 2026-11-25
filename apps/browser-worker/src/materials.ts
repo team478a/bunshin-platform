@@ -52,7 +52,7 @@ export async function completeMaterialJob(input: {
     isCatalogue,
   );
   let proof = originalProof;
-  if (!evidence) {
+  if (!evidence?.verifiedResultText) {
     const run = await runBrowserPlan(plan, fixtureForRecipe(version), limits, signal);
     await saveEvidence(
       join(output, job.workspaceId, job.id),
@@ -60,7 +60,7 @@ export async function completeMaterialJob(input: {
       run,
       signal,
     );
-    evidence = run.steps;
+    evidence = run;
     proof = {
       sourceJobId: job.id,
       sourceAttempt: job.attemptCount,

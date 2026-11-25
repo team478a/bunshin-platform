@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   search: vi.fn(),
   material: vi.fn(),
   video: vi.fn(),
+  speech: vi.fn(),
 }));
 vi.mock('@bunshin/config', () => ({ getServerEnvironment: mocks.env }));
 vi.mock('../src/auth/current-user', () => ({
@@ -27,6 +28,7 @@ vi.mock('@bunshin/database', () => ({
   }),
   PrismaBrowserMaterialVideos: class {
     state = mocks.video;
+    speechAvailability = mocks.speech;
   },
   prisma: {
     workspaceMembership: { findFirst: mocks.membership },
@@ -51,6 +53,7 @@ describe('browser material access', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     mocks.env.mockReturnValue({ APP_ENV: 'development' });
+    mocks.speech.mockResolvedValue({ enabled: false, previews: false });
     mocks.user.mockResolvedValue({ userId: actorId });
     mocks.membership.mockResolvedValue({ id: 'fixture-membership' });
   });
@@ -106,6 +109,23 @@ describe('browser material access', () => {
     expect(html).toContain('操作箇所を拡大');
     expect(html).toContain('/2/after');
     expect(html).not.toContain('最初の操作を行う');
+
+    mocks.speech.mockResolvedValue({ enabled: true, previews: true });
+    mocks.video.mockResolvedValue({ version: 4, status: null });
+    try {
+      const comparison = await BrowserMaterialsPage({
+        params: Promise.resolve({ workspaceId }),
+        searchParams: Promise.resolve({ material: materialId, narrator: 'daichi' }),
+      });
+      const markup = renderToStaticMarkup(comparison);
+      expect(markup).toContain('大智（男性）で動画を作る');
+      expect(markup).toContain('志織（女性）（Azure Speech）');
+      expect(markup).toContain('/api/browser-materials/narration-preview?voice=shiori');
+      expect(markup).toContain('/api/browser-materials/narration-preview?voice=daichi');
+      expect(mocks.video).toHaveBeenLastCalledWith(expect.anything(), materialId, 5);
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it('labels an imported recording and displays a single captured screenshot', async () => {

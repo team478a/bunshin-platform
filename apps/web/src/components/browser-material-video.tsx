@@ -1,19 +1,84 @@
+import {
+  browserMaterialAzureProfile,
+  browserMaterialAzureVoices,
+  browserMaterialMeiVoice,
+  browserMaterialNarrationPreviewText,
+  browserMaterialVideoVersion,
+  type BrowserMaterialAzureVoice,
+} from '@bunshin/capability-browser';
+
 export function BrowserMaterialVideo({
   state,
   requestVideo,
   fileHref,
   reloadHref,
+  choice,
 }: {
   state: { version: number | null; status: string | null } | null;
   requestVideo: () => Promise<void>;
   fileHref: (variant: 'mp4' | 'captions' | 'chapters', version: number) => string;
   reloadHref: string;
+  choice?: {
+    voice: BrowserMaterialAzureVoice;
+    href: (voice: BrowserMaterialAzureVoice) => string;
+    showPreviews: boolean;
+  };
 }) {
   if (!state) return null;
   const version = state.version;
+  const targetVersion = choice
+    ? browserMaterialAzureVoices[choice.voice].version
+    : browserMaterialVideoVersion;
+  const recordedVoice = version ? browserMaterialAzureProfile(version) : undefined;
   return (
     <section aria-label="動画教材">
       <h2>動画教材</h2>
+      {choice && (
+        <>
+          <nav aria-label="ナレーションの声">
+            <ul>
+              {(['shiori', 'daichi'] as const).map((voice) => (
+                <li key={voice}>
+                  <a
+                    href={choice.href(voice)}
+                    aria-current={choice.voice === voice ? 'true' : undefined}
+                  >
+                    {browserMaterialAzureVoices[voice].label}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </nav>
+          {choice.showPreviews && (
+            <details>
+              <summary>同じ一節で聞き比べる</summary>
+              <p>{browserMaterialNarrationPreviewText}</p>
+              {(['shiori', 'daichi'] as const).map((voice) => (
+                <div key={voice}>
+                  <p>{browserMaterialAzureVoices[voice].label}</p>
+                  <audio
+                    controls
+                    preload="none"
+                    aria-label={browserMaterialAzureVoices[voice].label}
+                    src={`/api/browser-materials/narration-preview?voice=${voice}`}
+                  />
+                </div>
+              ))}
+            </details>
+          )}
+        </>
+      )}
+      {recordedVoice && <p>ナレーション {recordedVoice.label}（Azure Speech）</p>}
+      {version === browserMaterialVideoVersion && (
+        <p>
+          音声合成{' '}
+          <a href={browserMaterialMeiVoice.source}>
+            {browserMaterialMeiVoice.name}（{browserMaterialMeiVoice.license}）
+          </a>
+          {' · '}
+          {browserMaterialMeiVoice.attribution}
+        </p>
+      )}
       {version === 2 && (
         <p>
           音声合成{' '}
@@ -47,16 +112,18 @@ export function BrowserMaterialVideo({
           </p>
         </>
       )}
-      {version !== 2 &&
+      {version !== targetVersion &&
         (!state.status || ['DEAD', 'CANCELLED'].includes(state.status) ? (
           <form action={requestVideo}>
             {state.status && <p role="status">動画を準備できませんでした。再試行できます。</p>}
             <button type="submit">
               {state.status
                 ? '動画の生成を再試行する'
-                : version
-                  ? 'ナレーション付き動画を作る'
-                  : 'この教材を動画にする'}
+                : choice
+                  ? browserMaterialAzureVoices[choice.voice].label + 'で動画を作る'
+                  : version
+                    ? '女性ナレーション付き動画を作る'
+                    : 'この教材を動画にする'}
             </button>
           </form>
         ) : (

@@ -1,1 +1,1 @@
-export const LATEST_DATABASE_MIGRATION = '20261125110000_browser_material_video';
+export const LATEST_DATABASE_MIGRATION = '20261126090000_browser_material_speech_configuration';

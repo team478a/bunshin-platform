@@ -18,6 +18,8 @@ import {
 import { MimikMaterialImportForm } from '../../../../../src/components/mimik-material-import-form';
 
 import { BrowserMaterialVideo } from '../../../../../src/components/browser-material-video';
+import { lessonNarrationSelection } from '../../../../../src/services/browser-material-video';
+import type { BrowserMaterialAzureVoice } from '@bunshin/capability-browser';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,6 +29,7 @@ export default async function BrowserMaterialsPage(props: {
     q?: string | string[];
     material?: string | string[];
     step?: string | string[];
+    narrator?: string | string[];
   }>;
 }) {
   const { workspaceId } = await props.params;
@@ -78,17 +81,27 @@ export default async function BrowserMaterialsPage(props: {
   const hasRecordedImage =
     !!material.importedAt &&
     (await hasBrowserMaterialImage(actor, material.id, step.ordinal, 'after'));
+  const materialId = material.id;
+  const lessonHref = (voice: BrowserMaterialAzureVoice | null) =>
+    `${base}?material=${materialId}${voice ? `&narrator=${voice}` : ''}` as const;
+  const db = await import('@bunshin/database');
+  const videos = new db.PrismaBrowserMaterialVideos(db.prisma);
+  const speech =
+    material.verifiedAt && !material.importedAt
+      ? await videos.speechAvailability(workspaceId)
+      : { enabled: false, previews: false };
+  const narrator = lessonNarrationSelection(speech.enabled, material, search.narrator);
+  const narratorPath = lessonHref(narrator.voice);
   const stepHref = (value: number) => ({
     pathname: base,
-    query: { material: material.id, step: value, q: query },
+    query: {
+      material: material.id,
+      step: value,
+      q: query,
+      ...(narrator.voice ? { narrator: narrator.voice } : {}),
+    },
   });
-  const materialId = material.id;
-  const lessonHref = `${base}?material=${materialId}` as const;
-  const db = await import('@bunshin/database');
-  const video = await new db.PrismaBrowserMaterialVideos(db.prisma).state(
-    { kind: 'owner', owner: actor },
-    materialId,
-  );
+  const video = await videos.state({ kind: 'owner', owner: actor }, materialId, narrator.version);
   async function requestVideo() {
     'use server';
     const owner = await browserMaterialActor(workspaceId);
@@ -97,8 +110,9 @@ export default async function BrowserMaterialsPage(props: {
     await new db.PrismaBrowserMaterialVideos(db.prisma).enqueueVideo(
       { kind: 'owner', owner },
       materialId,
+      narrator.version,
     );
-    redirect(lessonHref);
+    redirect(narratorPath);
   }
   const imageBase = `/api/browser-materials/${workspaceId}/${material.id}/${step.ordinal}`;
 
@@ -117,7 +131,16 @@ export default async function BrowserMaterialsPage(props: {
       <BrowserMaterialVideo
         state={video}
         requestVideo={requestVideo}
-        reloadHref={lessonHref}
+        reloadHref={narratorPath}
+        {...(narrator.voice
+          ? {
+              choice: {
+                voice: narrator.voice,
+                showPreviews: speech.previews,
+                href: lessonHref,
+              },
+            }
+          : {})}
         fileHref={(variant, version) =>
           '/api/browser-materials/' +
           workspaceId +

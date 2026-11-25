@@ -458,6 +458,53 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
         ).rejects.toMatchObject({ code: 'NOT_FOUND' });
         expect(await videos.state(learner, result.id)).toEqual({ version: null, status: null });
 
+        await client.browserMaterialSpeechConfiguration.create({
+          data: {
+            environment: 'STAGING',
+            workspaceId: f.scope.workspaceId,
+            region: 'japaneast',
+            encryptedKey: 'fixture',
+            keyMask: '••••test',
+          },
+        });
+        try {
+          for (const version of [4, 5]) {
+            await videos.enqueueVideo(learner, restored.id, version);
+            await videos.enqueueVideo(learner, restored.id, version);
+            const voiceJob = await claimReview();
+            expect(voiceJob.payloadReference).toContain(
+              `browser-video:v${version}:${restored.id}:`,
+            );
+            expect(await videos.renderInput(voiceJob)).toHaveLength(1);
+            expect(await videos.narrationInstruction(voiceJob, 1)).toMatchObject({
+              model: version === 4 ? 'ja-JP-ShioriNeural' : 'ja-JP-DaichiNeural',
+            });
+            await videos.finishVideo(voiceJob, worker, {
+              mp4: image,
+              captions: 'WEBVTT',
+              chapters: 'WEBVTT',
+              durationMs: 4000,
+            });
+            expect(await videos.state(learner, restored.id, version)).toEqual({
+              version,
+              status: null,
+            });
+            expect(await videos.readFile(learner, restored.id, 'mp4', version)).toEqual(image);
+          }
+          await client.browserMaterialSpeechConfiguration.update({
+            where: { environment: 'STAGING' },
+            data: { enabled: false },
+          });
+          await expect(videos.enqueueVideo(learner, restored.id, 5)).rejects.toMatchObject({
+            code: 'NOT_FOUND',
+          });
+          expect(await videos.readFile(learner, restored.id, 'mp4', 5)).toEqual(image);
+        } finally {
+          await client.browserMaterialSpeechConfiguration.deleteMany({
+            where: { environment: 'STAGING', workspaceId: f.scope.workspaceId },
+          });
+        }
+
         await requests.saveRequest({
           ...f.actor,
           content: {

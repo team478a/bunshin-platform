@@ -1,13 +1,33 @@
 import 'server-only';
 import { z } from 'zod';
+import {
+  browserMaterialAzureVoice,
+  browserMaterialAzureVoices,
+  browserMaterialVideoVersion,
+} from '@bunshin/capability-browser';
+
+export function lessonNarrationSelection(
+  enabled: boolean,
+  material: { verifiedAt: Date | null; importedAt?: Date | null } | null,
+  query: unknown,
+) {
+  const voice =
+    material?.verifiedAt && !material.importedAt && enabled
+      ? browserMaterialAzureVoice(query)
+      : null;
+  return {
+    voice,
+    version: voice ? browserMaterialAzureVoices[voice].version : browserMaterialVideoVersion,
+  };
+}
 
 export const videoFileQuery = z.object({
   material: z.uuid(),
   variant: z.enum(['mp4', 'captions', 'chapters']),
   version: z
-    .enum(['1', '2'])
+    .enum(['1', '2', '3', '4', '5'])
     .optional()
-    .transform((value) => (value === '2' ? 2 : 1)),
+    .transform((value) => Number(value ?? '1')),
   topicId: z.uuid().optional(),
 });
 

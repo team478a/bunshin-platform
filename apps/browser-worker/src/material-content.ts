@@ -34,7 +34,7 @@ export async function readMaterialProof(
   verifiedAt: Date,
   signal: AbortSignal,
   useCurrentGeometry = false,
-): Promise<ProofStep[] | null> {
+): Promise<{ steps: ProofStep[]; verifiedResultText?: string } | null> {
   try {
     const manifest = object(
       JSON.parse(await readFile(join(directory, 'evidence.json'), { encoding: 'utf8', signal })),
@@ -69,7 +69,13 @@ export async function readMaterialProof(
         ...(target.success ? { target: target.data } : {}),
       });
     }
-    return proof;
+    const resultText = manifest?.['verifiedResultText'];
+    return {
+      steps: proof,
+      ...(typeof resultText === 'string' && resultText.length > 0 && resultText.length <= 120
+        ? { verifiedResultText: resultText }
+        : {}),
+    };
   } catch (error) {
     if (object(error)?.['code'] === 'ENOENT') return null;
     if (error instanceof SyntaxError) throw new BrowserRunError('INVALID_PLAN');
@@ -79,15 +85,15 @@ export async function readMaterialProof(
 
 export async function composeFixtureMaterial(
   plan: BrowserPlan,
-  proof: ProofStep[],
+  proof: { steps: ProofStep[]; verifiedResultText?: string },
   signal: AbortSignal,
   content = practiceNoteMaterial,
 ) {
-  if (proof.length !== plan.steps.length) throw new BrowserRunError('INVALID_PLAN');
+  if (proof.steps.length !== plan.steps.length) throw new BrowserRunError('INVALID_PLAN');
   const steps = [];
   for (const [index, step] of plan.steps.entries()) {
     signal.throwIfAborted();
-    const evidence = proof[index];
+    const evidence = proof.steps[index];
     if (evidence?.stepId !== step.id || evidence.action !== step.action)
       throw new BrowserRunError('INVALID_PLAN');
     steps.push({
@@ -97,7 +103,10 @@ export async function composeFixtureMaterial(
       ...(await materialImages(evidence)),
     });
   }
-  return { ...content, steps };
+  const practice = proof.verifiedResultText
+    ? `${content.practice} 画面に「${proof.verifiedResultText}」と表示されることを確認する。`
+    : content.practice;
+  return { ...content, practice, steps };
 }
 
 function describeStep(step: BrowserPlan['steps'][number]) {

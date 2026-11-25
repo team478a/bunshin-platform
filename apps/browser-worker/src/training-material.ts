@@ -36,7 +36,7 @@ export async function runTrainingMaterial(input: {
       run,
       signal,
     );
-    const content = await composeFixtureMaterial(plan, run.steps, signal);
+    const content = await composeFixtureMaterial(plan, run, signal);
     signal.throwIfAborted();
     return await materials.finish(job, workerId, {
       ...content,
