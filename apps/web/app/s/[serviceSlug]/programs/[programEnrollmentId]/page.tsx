@@ -174,7 +174,6 @@ export default async function ProgramParticipantPage({
               serviceSlug={serviceSlug}
               enrollmentId={programEnrollmentId}
               initialSnapshot={initialSnapshot}
-              plainLanguage={isDynamicLearning}
             />
             <a
               className="button button--secondary button--full"

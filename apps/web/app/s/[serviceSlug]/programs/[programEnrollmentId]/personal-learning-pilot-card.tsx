@@ -75,12 +75,10 @@ export function PersonalLearningPilotCard({
   serviceSlug,
   enrollmentId,
   initialSnapshot,
-  plainLanguage = false,
 }: {
   serviceSlug: string;
   enrollmentId: string;
   initialSnapshot?: PersonalLearningPilotSnapshot;
-  plainLanguage?: boolean;
 }) {
   const base = `/api/services/${encodeURIComponent(serviceSlug)}/ai-training/enrollments/${encodeURIComponent(enrollmentId)}`;
   const [snapshot, setSnapshot] = useState<PersonalLearningPilotSnapshot | null>(
