@@ -44,17 +44,28 @@ jobs:
       - run: pnpm install --frozen-lockfile
       # Turbo may restore a cached database build into a fresh node_modules tree.
       # Regenerate Prisma Client before consumers typecheck against @prisma/client.
-      - run: pnpm db:generate
+      - run: pnpm db:generate --ci-reuse
       - run: pnpm format:check
       - run: pnpm typecheck
       - run: pnpm lint
       - run: pnpm test
       - run: pnpm test:external-read-poc
       - run: pnpm exec e2e-web install chromium --with-deps
-      - run: pnpm test:learning-ui
+      - name: Run learning UI tests and production build
         env:
           E2E_TELEMETRY_DISABLED: '1'
-      - run: pnpm build
+        run: |
+          pnpm test:learning-ui > "$RUNNER_TEMP/learning-ui.log" 2>&1 &
+          learning_ui_pid=$!
+          build_status=0
+          pnpm build || build_status=$?
+          learning_ui_status=0
+          wait "$learning_ui_pid" || learning_ui_status=$?
+          cat "$RUNNER_TEMP/learning-ui.log"
+          if [ "$build_status" -ne 0 ] || [ "$learning_ui_status" -ne 0 ]; then
+            echo "Production build exit: $build_status, learning UI tests exit: $learning_ui_status"
+            exit 1
+          fi
       - name: Save trusted main CI build cache
         if: >-
           success() &&
@@ -101,6 +112,7 @@ jobs:
       - run: pnpm db:validate
       # Explicit setup of the disposable CI database, never the production build path.
       - run: pnpm db:migrate:deploy
+      - run: pnpm db:generate --ci-reuse
       - run: pnpm db:assert-ready
       - run: pnpm test:integration
       - name: Install native PostgreSQL client for release tests
