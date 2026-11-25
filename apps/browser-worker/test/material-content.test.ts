@@ -19,7 +19,11 @@ describe('verified browser material', () => {
       afterPng: png,
       ...(index === 0 ? { target } : {}),
     }));
-    const material = await composeFixtureMaterial(plan, proof, new AbortController().signal);
+    const material = await composeFixtureMaterial(
+      plan,
+      { steps: proof },
+      new AbortController().signal,
+    );
     expect(material.steps.map((step) => step.stepId)).toEqual(proof.map((step) => step.stepId));
     expect(material.steps[0]?.instruction).toContain('入力画面へ');
     const detail = material.steps[0]?.detailImage;
@@ -37,7 +41,7 @@ describe('verified browser material', () => {
     expect(marked[0]).toBeGreaterThan(180);
     expect(marked[1]).toBeLessThan(100);
     await expect(
-      composeFixtureMaterial(plan, [...proof].reverse(), new AbortController().signal),
+      composeFixtureMaterial(plan, { steps: [...proof].reverse() }, new AbortController().signal),
     ).rejects.toMatchObject({ category: 'INVALID_PLAN' });
   });
 });

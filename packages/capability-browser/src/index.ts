@@ -68,6 +68,7 @@ export interface BrowserRun {
   verifiedAt: string;
   device: BrowserPlan['device'];
   steps: BrowserStepEvidence[];
+  verifiedResultText?: string;
 }
 
 export const BROWSER_FIXTURE_VERSION = 'practice-note-v1';
