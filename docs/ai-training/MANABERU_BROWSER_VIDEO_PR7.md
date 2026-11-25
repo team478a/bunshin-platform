@@ -22,4 +22,4 @@ Mimik Desktop v1.2.0（MIT）の書き出しコードでは、各手順のタイ
 
 動画形式 v2 は、手順説明を Open JTalk で読み上げ、日本語 AAC を MP4 に追加する。字幕とチャプターは読み上げ時間に合わせて延長する。すでに生成済みの v1 は再生を続けられ、同じ教材ページから音声付きの v2 を生成できる。
 
-Docker では Ubuntu 24.04 の Open JTalk と NAIST 辞書（パッケージ版 1.11-5）、NIT ATR503 M001 音声（パッケージ版 1.05-8）を使用する。Open JTalk は修正 BSD ライセンス、音声モデルは CC BY 3.0。音声の出典を教材ページと MP4 メタデータに表示する。Docker 外では必要に応じて `BROWSER_OPEN_JTALK_PATH`、`BROWSER_OPEN_JTALK_DICTIONARY`、`BROWSER_OPEN_JTALK_VOICE` を設定する。合成はワーカー内で完結し、外部 API の原価は0円。 [Open JTalk](https://open-jtalk.sourceforge.net/) · [音声モデルの条件](https://open-jtalk.sourceforge.net/readme_hts_voice_nitech_jp_atr503_m001.php)
+Docker では Ubuntu 24.04 の Open JTalk と NAIST 辞書（パッケージ版 1.11-5）、NIT ATR503 M001 音声（パッケージ版 1.05-8）を使用する。Open JTalk は修正 BSD ライセンス、音声モデルは CC BY 3.0。音声の出典を教材ページと MP4 メタデータに表示する。Docker 外では必要に応じて `BROWSER_OPEN_JTALK_PATH`、`BROWSER_OPEN_JTALK_DICTIONARY`、`BROWSER_OPEN_JTALK_VOICE` を設定する。v3 の Mei 音声を Docker 外で使う場合は `BROWSER_OPEN_JTALK_MEI_VOICE` に `mei_normal.htsvoice` のパスを指定する。合成はワーカー内で完結し、外部 API の原価は0円。 [Open JTalk](https://open-jtalk.sourceforge.net/) · [音声モデルの条件](https://open-jtalk.sourceforge.net/readme_hts_voice_nitech_jp_atr503_m001.php)

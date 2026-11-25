@@ -70,6 +70,15 @@ export interface BrowserRun {
   steps: BrowserStepEvidence[];
 }
 
+export const browserMaterialVideoVersion = 3;
+export const browserMaterialMeiVoice = {
+  name: 'HTS Voice “Mei”',
+  attribution: 'Nagoya Institute of Technology, MMDAgent Project Team',
+  license: 'CC BY 3.0',
+  source:
+    'https://github.com/r9y9/pyopenjtalk/blob/v0.4.1/pyopenjtalk/htsvoice/LICENSE_mei_normal.htsvoice',
+} as const;
+
 export const BROWSER_FIXTURE_VERSION = 'practice-note-v1';
 export const browserPreviewChoices = ['preview', 'compact-preview'] as const;
 export const browserPreviewChoiceSchema = z.enum(browserPreviewChoices);

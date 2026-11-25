@@ -26,29 +26,38 @@ export type NarrateMaterialStep = (input: {
   signal: AbortSignal;
 }) => Promise<void>;
 
-export const openJTalkNarration: NarrateMaterialStep = async ({
-  text,
-  directory,
-  file,
-  signal,
-}) => {
-  const input = file + '.txt';
-  await writeFile(join(directory, input), text + '\n', { signal });
-  await videoProcess(
-    process.env['BROWSER_OPEN_JTALK_PATH'] || 'open_jtalk',
-    [
-      '-x',
-      process.env['BROWSER_OPEN_JTALK_DICTIONARY'] || '/var/lib/mecab/dic/open-jtalk/naist-jdic',
-      '-m',
-      process.env['BROWSER_OPEN_JTALK_VOICE'] ||
-        '/usr/share/hts-voice/nitech-jp-atr503-m001/nitech_jp_atr503_m001.htsvoice',
-      '-ow',
-      file,
-      input,
-    ],
-    videoProcessOptions(directory, signal),
-  );
-};
+const openJTalkVoice =
+  (voicePath: string, speed?: string): NarrateMaterialStep =>
+  async ({ text, directory, file, signal }) => {
+    const input = file + '.txt';
+    await writeFile(join(directory, input), text + '\n', { signal });
+    await videoProcess(
+      process.env['BROWSER_OPEN_JTALK_PATH'] || 'open_jtalk',
+      [
+        '-x',
+        process.env['BROWSER_OPEN_JTALK_DICTIONARY'] || '/var/lib/mecab/dic/open-jtalk/naist-jdic',
+        '-m',
+        voicePath,
+        ...(speed ? ['-r', speed] : []),
+        '-ow',
+        file,
+        input,
+      ],
+      videoProcessOptions(directory, signal),
+    );
+  };
+
+export const openJTalkNarration: NarrateMaterialStep = (input) =>
+  openJTalkVoice(
+    process.env['BROWSER_OPEN_JTALK_VOICE'] ||
+      '/usr/share/hts-voice/nitech-jp-atr503-m001/nitech_jp_atr503_m001.htsvoice',
+  )(input);
+
+export const meiNarration: NarrateMaterialStep = (input) =>
+  openJTalkVoice(
+    process.env['BROWSER_OPEN_JTALK_MEI_VOICE'] || '/usr/share/hts-voice/mei/mei_normal.htsvoice',
+    '0.90',
+  )(input);
 
 export async function narrationDurationMs(path: string, signal: AbortSignal) {
   const wav = await readFile(path, { signal });

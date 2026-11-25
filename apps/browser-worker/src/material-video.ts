@@ -43,13 +43,17 @@ function cue(text: string, start: number, end: number) {
   return time(start) + ' --> ' + time(end) + '\n' + escaped + '\n\n';
 }
 
-export function materialVideoTimeline(steps: readonly Step[], narrationMs: readonly number[] = []) {
+export function materialVideoTimeline(
+  steps: readonly Step[],
+  narrationMs: readonly number[] = [],
+  credit = narrationCredit,
+) {
   if (!steps.length || steps.length > 30) throw new RangeError('invalid lesson video step count');
   let durationMs = 0;
   let captions = 'WEBVTT\n\n';
   let chapters = 'WEBVTT\n\n';
   let metadata = ';FFMETADATA1\n';
-  if (narrationMs.length) metadata += 'comment=' + narrationCredit + '\n';
+  if (narrationMs.length) metadata += 'comment=' + credit + '\n';
   const stepDurationsMs: number[] = [];
   const frames: { image: Uint8Array | null; durationMs: number }[] = [];
   for (const [index, step] of steps.entries()) {
@@ -92,6 +96,7 @@ export async function renderMaterialVideo(
   steps: readonly Step[],
   signal: AbortSignal,
   narrate?: NarrateMaterialStep,
+  credit?: string,
 ) {
   if (!steps.length || steps.length > 30) throw new RangeError('invalid lesson video step count');
   const directory = await mkdtemp(join(tmpdir(), 'bunshin-lesson-video-'));
@@ -108,7 +113,7 @@ export async function renderMaterialVideo(
       }
     }
     const { frames, captions, chapters, metadata, durationMs, stepDurationsMs } =
-      materialVideoTimeline(steps, narrationMs);
+      materialVideoTimeline(steps, narrationMs, credit);
     const concat = ['ffconcat version 1.0'];
     for (const [index, frame] of frames.entries()) {
       signal.throwIfAborted();

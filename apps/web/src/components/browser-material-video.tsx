@@ -1,3 +1,5 @@
+import { browserMaterialMeiVoice, browserMaterialVideoVersion } from '@bunshin/capability-browser';
+
 export function BrowserMaterialVideo({
   state,
   requestVideo,
@@ -14,6 +16,16 @@ export function BrowserMaterialVideo({
   return (
     <section aria-label="動画教材">
       <h2>動画教材</h2>
+      {version === browserMaterialVideoVersion && (
+        <p>
+          音声合成{' '}
+          <a href={browserMaterialMeiVoice.source}>
+            {browserMaterialMeiVoice.name}（{browserMaterialMeiVoice.license}）
+          </a>
+          {' · '}
+          {browserMaterialMeiVoice.attribution}
+        </p>
+      )}
       {version === 2 && (
         <p>
           音声合成{' '}
@@ -47,7 +59,7 @@ export function BrowserMaterialVideo({
           </p>
         </>
       )}
-      {version !== 2 &&
+      {version !== browserMaterialVideoVersion &&
         (!state.status || ['DEAD', 'CANCELLED'].includes(state.status) ? (
           <form action={requestVideo}>
             {state.status && <p role="status">動画を準備できませんでした。再試行できます。</p>}
@@ -55,7 +67,7 @@ export function BrowserMaterialVideo({
               {state.status
                 ? '動画の生成を再試行する'
                 : version
-                  ? 'ナレーション付き動画を作る'
+                  ? '女性ナレーション付き動画を作る'
                   : 'この教材を動画にする'}
             </button>
           </form>

@@ -4,16 +4,21 @@ import {
   type PersonalLearningActor,
   type UserJob,
 } from '@bunshin/application';
-import { browserPilotEnvironment } from '@bunshin/capability-browser';
+import {
+  browserMaterialVideoVersion as narratedVersion,
+  browserPilotEnvironment,
+} from '@bunshin/capability-browser';
 import { ApplicationError } from '@bunshin/shared';
 import type { Prisma, PrismaClient } from '@prisma/client';
 import { PrismaJobRepository } from './automation-jobs';
 import { PrismaBrowserLearningMaterials } from './browser-learning-material';
 
-const narratedVersion = 2;
 const jobType = BROWSER_FIXTURE_JOB_TYPE;
 const uuid = '[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}';
-const refPattern = new RegExp('^browser-video:(v2:)?(' + uuid + ')(?::(' + uuid + '))?$', 'i');
+const refPattern = new RegExp(
+  '^browser-video:(?:v([23]):)?(' + uuid + ')(?::(' + uuid + '))?$',
+  'i',
+);
 const absent = () => new ApplicationError('NOT_FOUND', 'browser lesson video unavailable');
 const keyFor = (materialId: string, version = narratedVersion) => ({ materialId, version });
 const identity = (materialId: string) => 'browser-video:' + narratedVersion + ':' + materialId;
@@ -86,7 +91,7 @@ export class PrismaBrowserMaterialVideos extends PrismaBrowserLearningMaterials 
   state(actor: VideoActor, materialId: string) {
     return this.inScope(actor, materialId, async (tx, environment) => {
       const asset = await tx.browserFixtureMaterialVideo.findFirst({
-        where: { materialId, version: { in: [1, narratedVersion] } },
+        where: { materialId, version: { in: [1, 2, narratedVersion] } },
         orderBy: { version: 'desc' },
         select: { version: true },
       });
@@ -117,7 +122,11 @@ export class PrismaBrowserMaterialVideos extends PrismaBrowserLearningMaterials 
           actor.kind === 'owner' ? actor.owner.actorId : actor.learner.actorUserId;
         const idempotencyKey = identity(materialId);
         const payloadReference =
-          'browser-video:v2:' + materialId + (requestId ? ':' + requestId : '');
+          'browser-video:v' +
+          narratedVersion +
+          ':' +
+          materialId +
+          (requestId ? ':' + requestId : '');
         const now = new Date();
         const job = await tx.job.upsert({
           where: { environment_idempotencyKey: { environment, idempotencyKey } },
@@ -175,7 +184,7 @@ export class PrismaBrowserMaterialVideos extends PrismaBrowserLearningMaterials 
   }
 
   private async videoJob(job: UserJob) {
-    const [, v2, materialId, requestId] = refPattern.exec(job.payloadReference) ?? [];
+    const [, voiceVersion, materialId, requestId] = refPattern.exec(job.payloadReference) ?? [];
     const environment = browserPilotEnvironment(process.env['APP_ENV']);
     if (
       !materialId ||
@@ -194,7 +203,7 @@ export class PrismaBrowserMaterialVideos extends PrismaBrowserLearningMaterials 
           ).actor,
         }
       : { kind: 'owner', owner: { workspaceId: job.workspaceId, actorId: job.requestedBy } };
-    return { materialId, actor, version: v2 ? narratedVersion : 1 };
+    return { materialId, actor, version: voiceVersion ? Number(voiceVersion) : 1 };
   }
 
   async renderInput(job: UserJob) {

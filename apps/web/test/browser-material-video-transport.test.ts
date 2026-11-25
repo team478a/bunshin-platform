@@ -19,11 +19,12 @@ it('returns private byte ranges for in-browser MP4 playback', async () => {
   );
 });
 
-it('keeps old file URLs on version 1 and accepts explicit version 2', () => {
+it('keeps old file URLs on version 1 and accepts explicit versions 2 and 3', () => {
   const material = '50000000-1111-4111-8111-111111111111';
   expect(videoFileQuery.parse({ material, variant: 'mp4' }).version).toBe(1);
   expect(videoFileQuery.parse({ material, variant: 'captions', version: '2' }).version).toBe(2);
-  expect(videoFileQuery.safeParse({ material, variant: 'chapters', version: '3' }).success).toBe(
+  expect(videoFileQuery.parse({ material, variant: 'captions', version: '3' }).version).toBe(3);
+  expect(videoFileQuery.safeParse({ material, variant: 'chapters', version: '4' }).success).toBe(
     false,
   );
 });
