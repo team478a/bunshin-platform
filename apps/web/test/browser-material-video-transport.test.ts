@@ -38,25 +38,17 @@ it('keeps old file URLs on version 1 and accepts explicit narration versions', (
 });
 
 it('defaults to Shiori and accepts Daichi only on eligible pilot materials', () => {
-  vi.stubEnv('BROWSER_AZURE_SPEECH_WORKSPACE_ID', 'pilot');
-  try {
-    const material = { verifiedAt: new Date(), importedAt: null };
-    expect(lessonNarrationSelection('pilot', material, undefined)).toEqual({
-      voice: 'shiori',
-      version: 4,
-    });
-    expect(lessonNarrationSelection('pilot', material, 'daichi')).toEqual({
-      voice: 'daichi',
-      version: 5,
-    });
-    expect(lessonNarrationSelection('other', material, 'daichi')).toEqual({
-      voice: null,
-      version: 3,
-    });
-    expect(
-      lessonNarrationSelection('pilot', { ...material, importedAt: new Date() }, 'daichi'),
-    ).toEqual({ voice: null, version: 3 });
-  } finally {
-    vi.unstubAllEnvs();
-  }
+  const material = { verifiedAt: new Date(), importedAt: null };
+  expect(lessonNarrationSelection(true, material, undefined)).toEqual({
+    voice: 'shiori',
+    version: 4,
+  });
+  expect(lessonNarrationSelection(true, material, 'daichi')).toEqual({
+    voice: 'daichi',
+    version: 5,
+  });
+  expect(lessonNarrationSelection(false, material, 'daichi')).toEqual({ voice: null, version: 3 });
+  expect(lessonNarrationSelection(true, { ...material, importedAt: new Date() }, 'daichi')).toEqual(
+    { voice: null, version: 3 },
+  );
 });

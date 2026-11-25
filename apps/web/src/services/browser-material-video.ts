@@ -7,14 +7,12 @@ import {
 } from '@bunshin/capability-browser';
 
 export function lessonNarrationSelection(
-  workspaceId: string,
+  enabled: boolean,
   material: { verifiedAt: Date | null; importedAt?: Date | null } | null,
   query: unknown,
 ) {
   const voice =
-    material?.verifiedAt &&
-    !material.importedAt &&
-    workspaceId === process.env['BROWSER_AZURE_SPEECH_WORKSPACE_ID']
+    material?.verifiedAt && !material.importedAt && enabled
       ? browserMaterialAzureVoice(query)
       : null;
   return {

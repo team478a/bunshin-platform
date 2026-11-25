@@ -45,6 +45,14 @@ export default async function AiProviderConfigurationPage() {
           </p>
           <p>ここで登録した設定は、ほかの環境では使われません。</p>
         </section>
+        {environment !== 'PRODUCTION' && (
+          <section className="settings-card">
+            <h2>教材のナレーション</h2>
+            <Link href="/admin/ai/speech" className="button button--secondary">
+              Azure Speechの設定
+            </Link>
+          </section>
+        )}
         <AiProviderConfigurationEditor
           environment={environment}
           initialConfigurations={configurations.map((value) => ({

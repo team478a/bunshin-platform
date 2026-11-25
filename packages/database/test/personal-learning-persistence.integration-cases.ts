@@ -458,9 +458,16 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
         ).rejects.toMatchObject({ code: 'NOT_FOUND' });
         expect(await videos.state(learner, result.id)).toEqual({ version: null, status: null });
 
-        const speechWorkspace = process.env['BROWSER_AZURE_SPEECH_WORKSPACE_ID'];
+        await client.browserMaterialSpeechConfiguration.create({
+          data: {
+            environment: 'STAGING',
+            workspaceId: f.scope.workspaceId,
+            region: 'japaneast',
+            encryptedKey: 'fixture',
+            keyMask: '••••test',
+          },
+        });
         try {
-          process.env['BROWSER_AZURE_SPEECH_WORKSPACE_ID'] = f.scope.workspaceId;
           for (const version of [4, 5]) {
             await videos.enqueueVideo(learner, restored.id, version);
             await videos.enqueueVideo(learner, restored.id, version);
@@ -469,6 +476,9 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
               `browser-video:v${version}:${restored.id}:`,
             );
             expect(await videos.renderInput(voiceJob)).toHaveLength(1);
+            expect(await videos.narrationInstruction(voiceJob, 1)).toMatchObject({
+              model: version === 4 ? 'ja-JP-ShioriNeural' : 'ja-JP-DaichiNeural',
+            });
             await videos.finishVideo(voiceJob, worker, {
               mp4: image,
               captions: 'WEBVTT',
@@ -481,10 +491,18 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
             });
             expect(await videos.readFile(learner, restored.id, 'mp4', version)).toEqual(image);
           }
+          await client.browserMaterialSpeechConfiguration.update({
+            where: { environment: 'STAGING' },
+            data: { enabled: false },
+          });
+          await expect(videos.enqueueVideo(learner, restored.id, 5)).rejects.toMatchObject({
+            code: 'NOT_FOUND',
+          });
+          expect(await videos.readFile(learner, restored.id, 'mp4', 5)).toEqual(image);
         } finally {
-          if (speechWorkspace === undefined)
-            delete process.env['BROWSER_AZURE_SPEECH_WORKSPACE_ID'];
-          else process.env['BROWSER_AZURE_SPEECH_WORKSPACE_ID'] = speechWorkspace;
+          await client.browserMaterialSpeechConfiguration.deleteMany({
+            where: { environment: 'STAGING', workspaceId: f.scope.workspaceId },
+          });
         }
 
         await requests.saveRequest({

@@ -18,7 +18,11 @@ export function BrowserMaterialVideo({
   requestVideo: () => Promise<void>;
   fileHref: (variant: 'mp4' | 'captions' | 'chapters', version: number) => string;
   reloadHref: string;
-  choice?: { voice: BrowserMaterialAzureVoice; href: (voice: BrowserMaterialAzureVoice) => string };
+  choice?: {
+    voice: BrowserMaterialAzureVoice;
+    href: (voice: BrowserMaterialAzureVoice) => string;
+    showPreviews: boolean;
+  };
 }) {
   if (!state) return null;
   const version = state.version;
@@ -45,21 +49,23 @@ export function BrowserMaterialVideo({
               ))}
             </ul>
           </nav>
-          <details>
-            <summary>同じ一節で聞き比べる</summary>
-            <p>{browserMaterialNarrationPreviewText}</p>
-            {(['shiori', 'daichi'] as const).map((voice) => (
-              <div key={voice}>
-                <p>{browserMaterialAzureVoices[voice].label}</p>
-                <audio
-                  controls
-                  preload="none"
-                  aria-label={browserMaterialAzureVoices[voice].label}
-                  src={`/browser-narration-preview/${voice}.wav`}
-                />
-              </div>
-            ))}
-          </details>
+          {choice.showPreviews && (
+            <details>
+              <summary>同じ一節で聞き比べる</summary>
+              <p>{browserMaterialNarrationPreviewText}</p>
+              {(['shiori', 'daichi'] as const).map((voice) => (
+                <div key={voice}>
+                  <p>{browserMaterialAzureVoices[voice].label}</p>
+                  <audio
+                    controls
+                    preload="none"
+                    aria-label={browserMaterialAzureVoices[voice].label}
+                    src={`/api/browser-materials/narration-preview?voice=${voice}`}
+                  />
+                </div>
+              ))}
+            </details>
+          )}
         </>
       )}
       {recordedVoice && <p>ナレーション {recordedVoice.label}（Azure Speech）</p>}

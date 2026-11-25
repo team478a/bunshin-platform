@@ -1,10 +1,5 @@
-import { randomUUID } from 'node:crypto';
-import { RecordAiUsage, type UserJob } from '@bunshin/application';
-import {
-  PrismaAiUsageEventRepository,
-  PrismaBrowserMaterialVideos,
-  prisma,
-} from '@bunshin/database';
+import type { UserJob } from '@bunshin/application';
+import { PrismaBrowserMaterialVideos, prisma } from '@bunshin/database';
 import { BrowserRunError } from './browser';
 import {
   browserMaterialAzureProfile,
@@ -12,7 +7,7 @@ import {
   browserMaterialVideoVersion,
 } from '@bunshin/capability-browser';
 import { meiNarration, openJTalkNarration } from './material-narration';
-import { azureMaterialNarration } from './azure-material-narration';
+import { browserMaterialNarration } from './azure-material-narration';
 import { renderMaterialVideo } from './material-video';
 
 export async function runMaterialVideo(
@@ -30,27 +25,7 @@ export async function runMaterialVideo(
     const useMei = version === browserMaterialVideoVersion;
     const narrate =
       steps.length && azure
-        ? azureMaterialNarration(azure.model, async (usage) => {
-            const key = `browser-azure-narration:${job.id}:${randomUUID()}`;
-            console.log(JSON.stringify({ operation: key, ...usage }));
-            await new RecordAiUsage(new PrismaAiUsageEventRepository(prisma)).execute({
-              workspaceId: job.workspaceId,
-              actorUserId: job.requestedBy,
-              bunshinId: null,
-              taskType: 'BROWSER_MATERIAL_NARRATION',
-              provider: 'azure-speech',
-              model: usage.model,
-              promptVersion: 'browser-material-ssml-v1',
-              status: usage.success ? 'SUCCESS' : 'FAILED',
-              inputTokens: null,
-              outputTokens: null,
-              latencyMs: usage.latencyMs,
-              estimatedCostUsdMicros: null,
-              errorCode: usage.success ? null : 'SYNTHESIS_FAILED',
-              idempotencyKey: key,
-              occurredAt: usage.occurredAt,
-            });
-          })
+        ? browserMaterialNarration(job.id, workerId)
         : useMei
           ? meiNarration
           : version === 2
