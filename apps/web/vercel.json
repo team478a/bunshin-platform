@@ -5,32 +5,11 @@
   "git": {
     "deploymentEnabled": {
       "**": false,
-      "production": true
+      "manaberu-staging": true
     }
   },
   "ignoreCommand": "exit 1",
-  "buildCommand": "cd ../.. && pnpm db:assert-ready && pnpm turbo run build --filter=web --force",
-  "crons": [
-    { "path": "/api/internal/jobs/schedule", "schedule": "* * * * *" },
-    { "path": "/api/internal/jobs/run", "schedule": "* * * * *" },
-    { "path": "/api/internal/line/monitor", "schedule": "0 * * * *" },
-    { "path": "/api/internal/account-deletions/run", "schedule": "15 18 * * *" },
-    { "path": "/api/internal/points/release-expired", "schedule": "*/5 * * * *" },
-    { "path": "/api/internal/assets/purge-expired", "schedule": "30 17 * * *" },
-    { "path": "/api/internal/fortune/purge-expired", "schedule": "45 17 * * *" },
-    { "path": "/api/internal/support-cases/purge-expired", "schedule": "30 18 * * *" },
-    { "path": "/api/internal/fortune/recover-generating", "schedule": "*/5 * * * *" },
-    { "path": "/api/internal/payments/expire-programs", "schedule": "10 17 * * *" },
-    { "path": "/api/internal/commercial-billing/reminders", "schedule": "0 0 * * *" },
-    { "path": "/api/internal/commercial-billing/collect", "schedule": "30 0 * * *" },
-    { "path": "/api/internal/service-registration-emails/run", "schedule": "*/5 * * * *" },
-    { "path": "/api/internal/oem-support-candidate-emails/run", "schedule": "*/5 * * * *" },
-    { "path": "/api/internal/oem-support-candidate-lines/run", "schedule": "*/5 * * * *" },
-    { "path": "/api/internal/commercial-usage/finalize", "schedule": "15 16 1 * *" },
-    { "path": "/api/internal/ai-training/retention-cron", "schedule": "0 18 * * *" },
-    { "path": "/api/internal/ai-training/learning-nudges", "schedule": "0 0 * * *" },
-    { "path": "/api/internal/ops/morning-digest", "schedule": "30 22 * * *" }
-  ],
+  "buildCommand": "cd ../.. && pnpm turbo run build --filter=web",
   "functions": {
     "app/api/workspaces/[workspaceId]/bunshins/[bunshinId]/daily-missions/generate/route.ts": {
       "maxDuration": 60
