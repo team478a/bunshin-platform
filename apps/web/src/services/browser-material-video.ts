@@ -25,8 +25,9 @@ export function lessonNarrationSelection(
   };
 }
 
-export function lessonNarratorHref(path: Route, voice: BrowserMaterialAzureVoice | null): Route {
-  return voice ? (`${path}${path.includes('?') ? '&' : '?'}narrator=${voice}` as Route) : path;
+export function lessonNarratorHref(path: string, voice: BrowserMaterialAzureVoice | null): Route {
+  const href = voice ? `${path}${path.includes('?') ? '&' : '?'}narrator=${voice}` : path;
+  return href as Route;
 }
 
 export const videoFileQuery = z.object({
