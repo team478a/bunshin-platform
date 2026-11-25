@@ -37,25 +37,35 @@ export class PrismaLineConnectionRepository implements LineConnectionRepository 
       select: { id: true },
     });
     if (!identity) return null;
+    const scope = {
+      environment: input.environment,
+      workspaceId: input.workspaceId,
+      userId: input.actorUserId,
+    };
+    const where = { environment_workspaceId_userId: scope };
+    if (!input.consentGranted) {
+      // Login and friendship checks may prepare a connection, but only explicit
+      // opt-in can change an existing connection or re-enable it after disconnect.
+      await this.client.lineConnection.createMany({
+        data: { ...scope, providerUserId: input.providerUserId },
+        skipDuplicates: true,
+      });
+      const existing = await this.client.lineConnection.findUnique({ where });
+      return existing ? lineConnection(existing) : null;
+    }
+
+    const notificationConsentAt = new Date();
     const row = await this.client.lineConnection.upsert({
-      where: {
-        environment_workspaceId_userId: {
-          environment: input.environment,
-          workspaceId: input.workspaceId,
-          userId: input.actorUserId,
-        },
-      },
+      where,
       create: {
-        environment: input.environment,
-        workspaceId: input.workspaceId,
-        userId: input.actorUserId,
+        ...scope,
         providerUserId: input.providerUserId,
-        notificationConsentAt: input.consentGranted ? new Date() : null,
+        notificationConsentAt,
       },
       update: {
         providerUserId: input.providerUserId,
         status: 'ACTIVE',
-        notificationConsentAt: input.consentGranted ? new Date() : null,
+        notificationConsentAt,
       },
     });
     return lineConnection(row);
