@@ -42,9 +42,9 @@ describe.skipIf(process.env['BROWSER_WORKER_LIVE_TESTS'] !== '1')('local Chromiu
       catalogue,
       limits,
       signal,
-      async (candidates) => {
+      (candidates) => {
         offered.push(candidates.map((item) => (item.target.by === 'role' ? item.target.name : '')));
-        return candidates[0]!.id;
+        return Promise.resolve(candidates[0]!.id);
       },
     );
     expect(offered).toEqual([['詳細へ進む'], ['比較を開く']]);
@@ -57,12 +57,8 @@ describe.skipIf(process.env['BROWSER_WORKER_LIVE_TESTS'] !== '1')('local Chromiu
 
   it('fails when the selector returns a candidate outside its current screen', async () => {
     await expect(
-      discoverObservedBrowserPlan(
-        observedGoal,
-        catalogue,
-        limits,
-        signal,
-        async () => 'observed-2-0',
+      discoverObservedBrowserPlan(observedGoal, catalogue, limits, signal, () =>
+        Promise.resolve('observed-2-0'),
       ),
     ).rejects.toMatchObject({ category: 'STEP_FAILED' });
   }, 40_000);
