@@ -1,12 +1,13 @@
 import { mkdir, mkdtemp, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { BrowserRun } from '@bunshin/capability-browser';
+import type { BrowserPlan, BrowserRun } from '@bunshin/capability-browser';
 
 export async function saveEvidence(
   parent: string,
   directory: string,
   run: BrowserRun,
   signal: AbortSignal,
+  plan?: BrowserPlan,
 ) {
   await mkdir(parent, { recursive: true, mode: 0o700 });
   const staging = await mkdtemp(join(parent, '.pending-'));
@@ -24,6 +25,12 @@ export async function saveEvidence(
       signal,
       mode: 0o600,
     });
+    if (plan) {
+      await writeFile(join(staging, 'recipe.json'), JSON.stringify(plan, null, 2), {
+        signal,
+        mode: 0o600,
+      });
+    }
     signal.throwIfAborted();
     await rename(staging, output);
     return output;

@@ -6,7 +6,8 @@ import {
   verifyBrowserPlan,
 } from '../src/browser';
 import { compactPreviewStep, fixture, fixturePlan } from '../src/fixture';
-import { modelPreviewSelector } from '../src/model-selector';
+import { modelObservedSelector, modelPreviewSelector } from '../src/model-selector';
+import { observedCatalogue, observedCatalogueGoal } from '../src/observed-catalogue';
 import { materialSignature } from '../src/material-signature';
 
 describe.skipIf(process.env['BROWSER_WORKER_LIVE_TESTS'] !== '1')('local Chromium', () => {
@@ -62,6 +63,50 @@ describe.skipIf(process.env['BROWSER_WORKER_LIVE_TESTS'] !== '1')('local Chromiu
       ),
     ).rejects.toMatchObject({ category: 'STEP_FAILED' });
   }, 40_000);
+
+  it('passes real screen names to the internal model adapter and replays without a second call', async () => {
+    const model = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json('observed-1-0'))
+      .mockResolvedValueOnce(Response.json('observed-2-0'));
+    vi.stubGlobal('fetch', model);
+    vi.stubEnv('BROWSER_FIXTURE_MODEL_ORIGIN', 'http://127.0.0.1:3000');
+    vi.stubEnv('BROWSER_FIXTURE_MODEL_SECRET', 'fixture-secret');
+    try {
+      const result = await discoverObservedBrowserPlan(
+        observedCatalogueGoal('mobile'),
+        observedCatalogue,
+        limits,
+        signal,
+        modelObservedSelector('job-id', 'worker-id'),
+      );
+      expect(result.run.steps).toHaveLength(2);
+      await runBrowserPlan(result.plan, observedCatalogue, limits, signal);
+      expect(model).toHaveBeenCalledTimes(2);
+      const requestBodies = model.mock.calls.map(
+        (args) => JSON.parse((args[1] as { body: string }).body) as unknown,
+      );
+      expect(requestBodies).toEqual([
+        {
+          ordinal: 1,
+          choices: [
+            { id: 'observed-1-0', role: 'link', name: '詳細を開く' },
+            { id: 'observed-1-1', role: 'link', name: '利用案内を開く' },
+          ],
+        },
+        {
+          ordinal: 2,
+          choices: [
+            { id: 'observed-2-0', role: 'button', name: '比較を開く' },
+            { id: 'observed-2-1', role: 'link', name: 'カタログに戻る' },
+          ],
+        },
+      ]);
+    } finally {
+      vi.unstubAllEnvs();
+      vi.unstubAllGlobals();
+    }
+  }, 70_000);
 
   it.each(['desktop', 'mobile'] as const)(
     'replays %s steps with matching image evidence',

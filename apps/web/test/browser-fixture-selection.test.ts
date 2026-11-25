@@ -139,6 +139,56 @@ describe('browser fixture model selection', () => {
     expect(mocks.settle).toHaveBeenCalledWith(admission);
   });
 
+  it('uses only the current candidates and records a distinct operation key per step', async () => {
+    mocks.job.mockResolvedValue({
+      id: jobId,
+      workspaceId,
+      requestedBy: actorId,
+      payloadReference: 'discover-observed-model:observed-catalogue-v1:mobile',
+      leaseExpiresAt: new Date(Date.now() + 30_000),
+    });
+    mocks.fetcher.mockImplementationOnce(() =>
+      output('observed-2-0', {
+        promptTokenCount: 100,
+        candidatesTokenCount: 6,
+      }),
+    );
+    const input = {
+      ordinal: 2,
+      choices: [{ id: 'observed-2-0', role: 'button', name: '比較を開く' }],
+    };
+    const send = (data: unknown) =>
+      browserFixtureSelectionResponse(
+        new Request(request(), {
+          headers: { ...Object.fromEntries(request().headers), 'content-type': 'application/json' },
+          body: JSON.stringify(data),
+        }),
+      );
+    const result = await send(input);
+    expect(result.status).toBe(200);
+    expect(await result.json()).toBe('observed-2-0');
+    expect(mocks.reserve).toHaveBeenCalledWith(
+      `browser-fixture-selection:${jobId}:step-2`,
+      'google',
+      'LEARNING_LESSON',
+      0,
+      1,
+    );
+    expect(mocks.record).toHaveBeenCalledWith(
+      expect.objectContaining({ promptVersion: 'browser-observed-choice-v1' }),
+    );
+
+    expect((await send({ ...input, ordinal: 4 })).status).toBe(400);
+    expect((await send({ ...input, choices: [...input.choices, ...input.choices] })).status).toBe(
+      400,
+    );
+    expect(mocks.reserve).toHaveBeenCalledTimes(1);
+
+    mocks.fetcher.mockImplementationOnce(() => output('observed-2-99', {}));
+    expect((await send(input)).ok).toBe(false);
+    expect(mocks.record).toHaveBeenLastCalledWith(expect.objectContaining({ status: 'FAILED' }));
+  });
+
   it('skips model admission for an unauthorized or disabled worker', async () => {
     mocks.job.mockResolvedValue(null);
     expect((await browserFixtureSelectionResponse(request())).status).toBe(404);

@@ -48,7 +48,7 @@ export type BrowserStepSelector = (
 ) => Promise<string>;
 
 type ObservedChoice = Extract<PlanStep, { action: 'click' }>;
-type ObservedStepSelector = (
+export type ObservedStepSelector = (
   candidates: readonly Readonly<ObservedChoice>[],
   signal: AbortSignal,
 ) => Promise<string>;
