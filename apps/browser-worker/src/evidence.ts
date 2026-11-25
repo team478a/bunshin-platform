@@ -2,6 +2,8 @@ import { mkdir, mkdtemp, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { BrowserPlan, BrowserRun } from '@bunshin/capability-browser';
 
+export const evidenceGeometryVersion = 2;
+
 export async function saveEvidence(
   parent: string,
   directory: string,
@@ -21,10 +23,11 @@ export async function saveEvidence(
       await writeFile(join(staging, afterImage), afterPng, { signal, mode: 0o600 });
       steps.push({ stepId, action, target, before, after, beforeImage, afterImage });
     }
-    await writeFile(join(staging, 'evidence.json'), JSON.stringify({ ...run, steps }, null, 2), {
-      signal,
-      mode: 0o600,
-    });
+    await writeFile(
+      join(staging, 'evidence.json'),
+      JSON.stringify({ ...run, steps, geometryVersion: evidenceGeometryVersion }, null, 2),
+      { signal, mode: 0o600 },
+    );
     if (plan) {
       await writeFile(join(staging, 'recipe.json'), JSON.stringify(plan, null, 2), {
         signal,

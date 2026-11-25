@@ -28,6 +28,7 @@ import {
   completeRecipeReplay,
   completeWithRecipe,
   findRecipeId,
+  fixtureForRecipe,
   loadRecipe,
   loadVerifiedRecipe,
 } from './recipes';
@@ -66,12 +67,7 @@ export async function enqueueFixture(
   let payloadReference;
   if (mode === 'replay' || mode === 'material') {
     if (!uuid.test(deviceName)) throw new BrowserRunError('INVALID_PLAN');
-    await loadVerifiedRecipe(
-      deviceName,
-      workspaceId,
-      actorId,
-      mode === 'replay' ? 'any' : undefined,
-    );
+    await loadVerifiedRecipe(deviceName, workspaceId, actorId, 'any');
     payloadReference = `${mode}:${deviceName.toLowerCase()}`;
   } else {
     const device = deviceFrom(deviceName);
@@ -272,9 +268,8 @@ export async function runQueue(input: {
           } else {
             throw new BrowserRunError('INVALID_PLAN');
           }
-          const content = version === browserObservedFixtureVersion ? observedCatalogue : fixture;
           if (version === browserObservedFixtureVersion) evidencePlan = plan;
-          run = await runBrowserPlan(plan, content, input.limits, input.signal);
+          run = await runBrowserPlan(plan, fixtureForRecipe(version), input.limits, input.signal);
         }
         await saveEvidence(
           join(input.output, job.workspaceId, job.id),
