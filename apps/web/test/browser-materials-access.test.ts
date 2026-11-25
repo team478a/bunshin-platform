@@ -9,12 +9,25 @@ const mocks = vi.hoisted(() => ({
   image: vi.fn(),
   search: vi.fn(),
   material: vi.fn(),
+  video: vi.fn(),
 }));
 vi.mock('@bunshin/config', () => ({ getServerEnvironment: mocks.env }));
 vi.mock('../src/auth/current-user', () => ({
   currentUserProvider: () => Promise.resolve({ getCurrentUser: mocks.user }),
 }));
 vi.mock('@bunshin/database', () => ({
+  privateBrowserMaterialScope: ({
+    workspaceId,
+    actorId,
+  }: {
+    workspaceId: string;
+    actorId: string;
+  }) => ({
+    OR: [{ recipe: { workspaceId, actorId } }, { workspaceId, importedBy: actorId }],
+  }),
+  PrismaBrowserMaterialVideos: class {
+    state = mocks.video;
+  },
   prisma: {
     workspaceMembership: { findFirst: mocks.membership },
     browserFixtureMaterial: { findMany: mocks.search, findFirst: mocks.material },
@@ -96,6 +109,7 @@ describe('browser material access', () => {
   });
 
   it('labels an imported recording and displays a single captured screenshot', async () => {
+    mocks.video.mockResolvedValue({ ready: true, status: null });
     mocks.material.mockResolvedValue({
       id: materialId,
       title: '操作記録',
@@ -118,6 +132,9 @@ describe('browser material access', () => {
     expect(html).toContain('記録画面');
     expect(html).toContain('/1/after');
     expect(html).not.toContain('/1/before');
+    expect(html).toContain('kind="captions"');
+    expect(html).toContain('kind="chapters"');
+    expect(html).toContain('MP4 を保存する');
   });
 
   it('returns no image for an unavailable material or an untrusted session', async () => {

@@ -28,20 +28,6 @@ export async function browserMaterialActor(workspaceId: string) {
 
 type Actor = NonNullable<Awaited<ReturnType<typeof browserMaterialActor>>>;
 
-function materialScope(actor: Actor) {
-  const membership = {
-    status: 'ACTIVE' as const,
-    workspace: { status: 'ACTIVE' as const },
-    user: { status: 'ACTIVE' as const },
-  };
-  return {
-    OR: [
-      { recipe: { ...actor, membership } },
-      { workspaceId: actor.workspaceId, importedBy: actor.actorId, importer: membership },
-    ],
-  };
-}
-
 export async function saveMimikMaterial(
   actor: Actor,
   device: 'desktop' | 'mobile',
@@ -52,10 +38,10 @@ export async function saveMimikMaterial(
 }
 
 export async function searchBrowserMaterials(actor: Actor, query: string) {
-  const { prisma } = await import('@bunshin/database');
+  const { prisma, privateBrowserMaterialScope } = await import('@bunshin/database');
   return prisma.browserFixtureMaterial.findMany({
     where: {
-      ...materialScope(actor),
+      ...privateBrowserMaterialScope(actor),
       ...(query ? { title: { contains: query, mode: 'insensitive' } } : {}),
     },
     select: {
@@ -76,9 +62,9 @@ export async function searchBrowserMaterials(actor: Actor, query: string) {
 }
 
 export async function readBrowserMaterial(actor: Actor, id: string) {
-  const { prisma } = await import('@bunshin/database');
+  const { prisma, privateBrowserMaterialScope } = await import('@bunshin/database');
   return prisma.browserFixtureMaterial.findFirst({
-    where: { id, ...materialScope(actor) },
+    where: { id, ...privateBrowserMaterialScope(actor) },
     select: {
       id: true,
       title: true,
@@ -104,9 +90,9 @@ export async function readBrowserMaterialImage(
   ordinal: number,
   variant: z.infer<typeof materialImageVariantSchema>,
 ) {
-  const { prisma } = await import('@bunshin/database');
+  const { prisma, privateBrowserMaterialScope } = await import('@bunshin/database');
   const step = await prisma.browserFixtureMaterialStep.findFirst({
-    where: { materialId, ordinal, material: { ...materialScope(actor) } },
+    where: { materialId, ordinal, material: { ...privateBrowserMaterialScope(actor) } },
     select: {
       beforeImage: variant === 'before',
       afterImage: variant === 'after',
@@ -128,14 +114,14 @@ export async function hasBrowserMaterialImage(
   ordinal: number,
   variant: 'after' | 'detail',
 ) {
-  const { prisma } = await import('@bunshin/database');
+  const { prisma, privateBrowserMaterialScope } = await import('@bunshin/database');
   return (
     (await prisma.browserFixtureMaterialStep.findFirst({
       where: {
         materialId,
         ordinal,
         ...(variant === 'detail' ? { detailImage: { not: null } } : { afterImage: { not: null } }),
-        material: { ...materialScope(actor) },
+        material: { ...privateBrowserMaterialScope(actor) },
       },
       select: { ordinal: true },
     })) !== null

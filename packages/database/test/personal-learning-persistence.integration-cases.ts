@@ -1,3 +1,4 @@
+import { PrismaBrowserMaterialVideos } from '../src/browser-material-video';
 import { BROWSER_FIXTURE_JOB_TYPE, ClaimJob, FailJob, assertUserJob } from '@bunshin/application';
 import { PrismaBrowserLearningMaterials } from '../src/browser-learning-material';
 import { PrismaJobRepository } from '../src/automation-jobs';
@@ -430,6 +431,22 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
         await expect(
           materials.rollback({ ...rollback, actorId: f.owner.id }),
         ).rejects.toMatchObject({ code: 'CONFLICT' });
+        const videos = new PrismaBrowserMaterialVideos(client);
+        const learner = { kind: 'learner' as const, learner: f.actor };
+        await videos.enqueueVideo(learner, restored.id);
+        const videoJob = await claimReview();
+        expect(await videos.renderInput(videoJob)).toHaveLength(1);
+        await videos.finishVideo(videoJob, worker, {
+          mp4: image,
+          captions: 'WEBVTT',
+          chapters: 'WEBVTT',
+          durationMs: 4000,
+        });
+        expect(await videos.readFile(learner, restored.id, 'mp4')).toEqual(image);
+        await expect(
+          videos.readFile({ kind: 'learner', learner: other.actor }, restored.id, 'mp4'),
+        ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+        expect(await videos.state(learner, result.id)).toEqual({ ready: false, status: null });
       } finally {
         await client.job.deleteMany({
           where: { workspaceId: f.scope.workspaceId, jobType: BROWSER_FIXTURE_JOB_TYPE },

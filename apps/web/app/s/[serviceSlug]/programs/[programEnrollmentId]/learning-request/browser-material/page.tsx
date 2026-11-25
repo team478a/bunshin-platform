@@ -9,6 +9,8 @@ import {
   learningMaterialPath,
 } from '../../../../../../../src/services/browser-learning-material';
 
+import { BrowserMaterialVideo } from '../../../../../../../src/components/browser-material-video';
+
 export const dynamic = 'force-dynamic';
 
 export default async function BrowserLearningMaterialPage({
@@ -60,6 +62,29 @@ export default async function BrowserLearningMaterialPage({
     }
 
     const materialId = material?.id;
+    const video = materialId
+      ? await new db.PrismaBrowserMaterialVideos(db.prisma).state(
+          { kind: 'learner', learner: actor },
+          materialId,
+        )
+      : null;
+
+    async function requestVideo() {
+      'use server';
+      if (!materialId) return;
+      const learner = await browserLearningMaterialActor(
+        serviceSlug,
+        programEnrollmentId,
+        query.topicId,
+        true,
+      );
+      const db = await import('@bunshin/database');
+      await new db.PrismaBrowserMaterialVideos(db.prisma).enqueueVideo(
+        { kind: 'learner', learner },
+        materialId,
+      );
+      redirect(learningMaterialPath(serviceSlug, programEnrollmentId, learner.topicId));
+    }
     async function reportDifference() {
       'use server';
       if (!materialId) return;
@@ -100,6 +125,16 @@ export default async function BrowserLearningMaterialPage({
                 state.device === 'mobile'
                   ? 'スマートフォンのブラウザで、ボタンをタップして進めましょう。'
                   : 'パソコンのブラウザで、ボタンをクリックして進めましょう。'
+              }
+            />
+            <BrowserMaterialVideo
+              state={video}
+              requestVideo={requestVideo}
+              reloadHref={path}
+              fileHref={(variant) =>
+                pathname +
+                '/video?' +
+                new URLSearchParams({ ...topic, material: material.id, variant }).toString()
               }
             />
             <section aria-label="画面の違い">

@@ -1,3 +1,4 @@
+import { ClaimJob, assertUserJob } from '@bunshin/application';
 import { registerExternalReadGrantIntegrationCases } from './external-read-grants.integration-cases';
 import { registerManaberuPublicTrainingMigrationIntegrationCases } from './manaberu-public-training-migration.integration-cases';
 import { registerBroadcastConfirmationIntegrationCases } from './service-line-broadcast-confirmation.integration-cases';
@@ -156,6 +157,7 @@ import {
   PrismaServiceNotificationPreferenceRepository,
   lockTrainingEnrollmentData,
   saveImportedBrowserMaterial,
+  PrismaBrowserMaterialVideos,
 } from '../src';
 
 const integrationTarget = integrationDatabaseTarget(process.env);
@@ -331,14 +333,43 @@ describe('database ownership boundaries', () => {
         [null, null],
         [null, new Uint8Array([1])],
       ]);
+      const videos = new PrismaBrowserMaterialVideos(client);
+      const owner = { kind: 'owner' as const, owner: actor };
+      const stranger = { kind: 'owner' as const, owner: { ...actor, actorId: other.id } };
+      expect(await videos.enqueueVideo(stranger, saved.id)).toBeNull();
+      await videos.enqueueVideo(owner, saved.id);
+      await videos.enqueueVideo(owner, saved.id);
+      expect(await videos.state(owner, saved.id)).toEqual({ ready: false, status: 'PENDING' });
+      const worker = randomUUID();
+      const job = await new ClaimJob(new PrismaJobRepository(client, 'browser-fixture')).execute(
+        'DEVELOPMENT',
+        worker,
+      );
+      if (!job) throw new Error('video job missing');
+      assertUserJob(job);
+      expect(await videos.renderInput(job)).toHaveLength(2);
+      const mp4 = new Uint8Array([1, 2]);
+      await videos.finishVideo(job, worker, {
+        mp4,
+        captions: 'WEBVTT',
+        chapters: 'WEBVTT',
+        durationMs: 8000,
+      });
+      expect(await videos.state(owner, saved.id)).toEqual({ ready: true, status: null });
+      expect(await videos.readFile(owner, saved.id, 'mp4')).toEqual(mp4);
+      expect(await videos.readFile(stranger, saved.id, 'mp4')).toBeNull();
+      await videos.enqueueVideo(owner, saved.id);
+      expect(await client.job.count({ where: { workspaceId: workspace.id } })).toBe(1);
       await client.workspaceMembership.update({
         where: { id: membership.id },
         data: { status: 'REVOKED' },
       });
+      expect(await videos.readFile(owner, saved.id, 'mp4')).toBeNull();
       await expect(
         saveImportedBrowserMaterial(client, actor, 'mobile', material),
       ).rejects.toMatchObject({ code: 'NOT_FOUND' });
     } finally {
+      await client.job.deleteMany({ where: { workspaceId: workspace.id } });
       await client.workspace.delete({ where: { id: workspace.id } });
       await client.user.deleteMany({ where: { id: { in: [member.id, other.id] } } });
     }

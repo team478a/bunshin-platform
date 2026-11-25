@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import {
   browserMaterialActor,
   hasBrowserMaterialDetail,
@@ -16,6 +16,8 @@ import {
 } from '../../../../../src/components/browser-material-view';
 
 import { MimikMaterialImportForm } from '../../../../../src/components/mimik-material-import-form';
+
+import { BrowserMaterialVideo } from '../../../../../src/components/browser-material-video';
 
 export const dynamic = 'force-dynamic';
 
@@ -80,6 +82,24 @@ export default async function BrowserMaterialsPage(props: {
     pathname: base,
     query: { material: material.id, step: value, q: query },
   });
+  const materialId = material.id;
+  const lessonHref = `${base}?material=${materialId}` as const;
+  const db = await import('@bunshin/database');
+  const video = await new db.PrismaBrowserMaterialVideos(db.prisma).state(
+    { kind: 'owner', owner: actor },
+    materialId,
+  );
+  async function requestVideo() {
+    'use server';
+    const owner = await browserMaterialActor(workspaceId);
+    if (!owner) notFound();
+    const db = await import('@bunshin/database');
+    await new db.PrismaBrowserMaterialVideos(db.prisma).enqueueVideo(
+      { kind: 'owner', owner },
+      materialId,
+    );
+    redirect(lessonHref);
+  }
   const imageBase = `/api/browser-materials/${workspaceId}/${material.id}/${step.ordinal}`;
 
   return (
@@ -93,6 +113,17 @@ export default async function BrowserMaterialsPage(props: {
         showDetail={showDetail}
         stepHref={stepHref}
         imageHref={(variant) => imageBase + '/' + variant}
+      />
+      <BrowserMaterialVideo
+        state={video}
+        requestVideo={requestVideo}
+        reloadHref={lessonHref}
+        fileHref={(variant) =>
+          '/api/browser-materials/' +
+          workspaceId +
+          '/video?' +
+          new URLSearchParams({ material: materialId, variant }).toString()
+        }
       />
     </main>
   );

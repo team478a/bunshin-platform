@@ -97,7 +97,7 @@ export class PrismaBrowserLearningMaterials extends PrismaPersonalLearningPersis
     );
   }
 
-  private async use<T>(
+  protected async use<T>(
     actor: PersonalLearningActor,
     work: (tx: Prisma.TransactionClient, key: MaterialKey, requestId: string) => Promise<T>,
     lockEnrollment = true,
@@ -400,7 +400,7 @@ export class PrismaBrowserLearningMaterials extends PrismaPersonalLearningPersis
     });
   }
 
-  private async jobActor(
+  protected async jobActor(
     job: Pick<
       UserJob,
       | 'requestedBy'
