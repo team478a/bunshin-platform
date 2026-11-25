@@ -107,7 +107,9 @@ export const browserObservedFixtureObjective = '研修用カタログの詳細�
 export const browserObservedStepLimit = 3;
 export const trainingCatalogueDiscoveryPrefix = 'training-catalogue-discovery';
 
-export function browserPilotEnvironment(appEnvironment: string | undefined) {
+export function browserPilotEnvironment(
+  appEnvironment: string | undefined,
+): 'DEVELOPMENT' | 'STAGING' | null {
   if (appEnvironment === 'development') return 'DEVELOPMENT';
   if (appEnvironment === 'staging') return 'STAGING';
   return null;

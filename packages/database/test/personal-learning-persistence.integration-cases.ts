@@ -460,7 +460,7 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
 
         await client.browserMaterialSpeechConfiguration.create({
           data: {
-            environment: 'DEVELOPMENT',
+            environment: 'STAGING',
             workspaceId: f.scope.workspaceId,
             region: 'japaneast',
             encryptedKey: 'fixture',
@@ -492,7 +492,7 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
             expect(await videos.readFile(learner, restored.id, 'mp4', version)).toEqual(image);
           }
           await client.browserMaterialSpeechConfiguration.update({
-            where: { environment: 'DEVELOPMENT' },
+            where: { environment: 'STAGING' },
             data: { enabled: false },
           });
           await expect(videos.enqueueVideo(learner, restored.id, 5)).rejects.toMatchObject({
@@ -501,7 +501,7 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
           expect(await videos.readFile(learner, restored.id, 'mp4', 5)).toEqual(image);
         } finally {
           await client.browserMaterialSpeechConfiguration.deleteMany({
-            where: { environment: 'DEVELOPMENT', workspaceId: f.scope.workspaceId },
+            where: { environment: 'STAGING', workspaceId: f.scope.workspaceId },
           });
         }
 
