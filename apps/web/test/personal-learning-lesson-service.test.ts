@@ -187,7 +187,8 @@ describe('lesson generation composition', () => {
       'PERSONAL_LEARNING_LESSON_ADMISSION',
       JSON.stringify({ ...previousPolicy, provider: 'google' }),
     );
-    f.prices.mockReturnValue(f.prices().map((price: object) => ({ ...price, provider: 'google' })));
+    const prices = f.prices() as object[];
+    f.prices.mockReturnValue(prices.map((price) => ({ ...price, provider: 'google' })));
     f.reserve.mockResolvedValue({
       provider: 'google',
       model,
@@ -227,7 +228,8 @@ describe('lesson generation composition', () => {
 
     await expect(prepareLearningLesson(actor, id, 1, id)).resolves.toEqual({ id: 'candidate' });
     expect(f.generate).toHaveBeenCalledOnce();
-    const payload = JSON.parse(f.generate.mock.calls[0]![0].body);
+    const { body } = f.generate.mock.calls[0]![0] as { body: string };
+    const payload = JSON.parse(body);
     expect(payload.text.format.schema.required).toContain('intentAnalysis');
     expect(f.record).toHaveBeenCalledOnce();
     expect(f.save).toHaveBeenCalledWith(
