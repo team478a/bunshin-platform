@@ -388,11 +388,11 @@ export function PersonalLearningPilotCard({
         </button>
       ) : null}
       {snapshot && !snapshot.readiness.profileReady ? (
-        <p className="notice" role="status">
-          {plainLanguage
-            ? '学習の準備を進めています。まだ答えていないことを、できないこととして判断しません。'
-            : 'Pilotの学習設定を準備中です。運営者へ確認してください。未回答の経験を初心者とは扱いません。'}
-        </p>
+        <div className="notice" role="status">
+          <p>この研修を始めるには、本人の学習プロフィールの登録が必要です。</p>
+          <p>登録画面が表示されない場合は、運営者に研修名を伝えてください。</p>
+          <a href={`/s/${encodeURIComponent(serviceSlug)}/training`}>参加できるAI研修を確認する</a>
+        </div>
       ) : null}
       {snapshot?.readiness.profileReady && snapshot.assignment && !planCompleted ? (
         <section className="service-entry__card training-card" aria-labelledby="personal-line-menu">

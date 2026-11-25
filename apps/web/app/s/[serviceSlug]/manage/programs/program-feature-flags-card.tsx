@@ -62,7 +62,7 @@ const featureRows: { key: keyof Features; label: string; description: string }[]
   },
   {
     key: 'browserMaterials',
-    label: '操作教材（開発環境）',
+    label: '画像付き操作教材',
     description: '操作練習ページから取得した画像を使った教材を受講者に案内します。',
   },
   {
@@ -78,15 +78,25 @@ const isFeatures = (value: unknown): value is Features =>
     (key) => typeof (value as Record<string, unknown>)[key] === 'boolean',
   );
 
+function defaultProgramId(programs: ProgramOption[]) {
+  const activeDynamic = programs.find(
+    (program) => program.learningMode === 'DYNAMIC_V1' && program.enabled,
+  );
+  const dynamic = programs.find((program) => program.learningMode === 'DYNAMIC_V1');
+  return activeDynamic?.id ?? dynamic?.id ?? programs[0]?.id ?? '';
+}
+
 export function ProgramFeatureFlagsCard({
   serviceSlug,
   initialPrograms,
+  browserMaterialsAvailable,
 }: {
   serviceSlug: string;
   initialPrograms: ProgramOption[];
+  browserMaterialsAvailable: boolean;
 }) {
   const [programs, setPrograms] = useState(initialPrograms);
-  const [selectedId, setSelectedId] = useState(initialPrograms[0]?.id ?? '');
+  const [selectedId, setSelectedId] = useState(() => defaultProgramId(initialPrograms));
   const selected = programs.find((program) => program.id === selectedId) ?? null;
   const [learningMode, setLearningMode] = useState<LearningMode>(
     selected?.learningMode ?? 'FIXED_DEFINITIONS_V1',
@@ -137,7 +147,7 @@ export function ProgramFeatureFlagsCard({
       setPrograms(next);
       const id = next.some((program) => program.id === selectedId)
         ? selectedId
-        : (next[0]?.id ?? '');
+        : defaultProgramId(next);
       chooseProgramFrom(next, id);
       setMessage('Programの最新状態を読み込みました。');
     } catch (error) {
@@ -301,7 +311,14 @@ export function ProgramFeatureFlagsCard({
                     >
                       <span className="program-feature-flags__toggle-copy">
                         <strong>{label}</strong>
-                        <span>{description}</span>
+                        <span>
+                          {key === 'browserMaterials' && !browserMaterialsAvailable
+                            ? '開発・ステージングで検証できます。この環境では教材を生成できません。'
+                            : key === 'browserMaterials' &&
+                                (learningMode !== 'DYNAMIC_V1' || offerPolicy !== 'AI_SKILL_V1')
+                              ? '動的学習方式のAI研修で使えます。'
+                              : description}
+                        </span>
                       </span>
                       <span
                         className={`program-feature-flags__state${features[key] ? ' is-on' : ''}`}
@@ -318,6 +335,10 @@ export function ProgramFeatureFlagsCard({
                       disabled={
                         !canEdit ||
                         busy ||
+                        (key === 'browserMaterials' &&
+                          (!browserMaterialsAvailable ||
+                            (!features[key] &&
+                              (learningMode !== 'DYNAMIC_V1' || offerPolicy !== 'AI_SKILL_V1')))) ||
                         (key === 'multiTopic' &&
                           offerPolicy === 'SIDE_HUSTLE_V1' &&
                           features.multiTopic)

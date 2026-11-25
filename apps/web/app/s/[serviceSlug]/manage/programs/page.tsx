@@ -4,6 +4,7 @@ import { parseAiResaleOfferTerms, parseAiResaleRuntimeSettings } from '@bunshin/
 import { currentUserProvider } from '../../../../../src/auth/current-user';
 import { currentPaymentEnvironment } from '../../../../../src/payments/secure-configuration';
 import { resolveManagedServiceContext } from '../../../../../src/services/public-service';
+import { browserLearningPilotAvailable } from '../../../../../src/services/browser-learning-material';
 import { programPreparationTarget } from '../../../../../src/services/personal-learning-program-preparation';
 import { PublicShell } from '../../../../ui/public-shell';
 import { ProgramManagementEditor } from './program-management-editor';
@@ -397,6 +398,7 @@ export default async function ServiceProgramsPage({
         <ProgramFeatureFlagsCard
           serviceSlug={serviceSlug}
           initialPrograms={programFeatureFlagPrograms}
+          browserMaterialsAvailable={browserLearningPilotAvailable()}
         />
         <ProgramProductAdmin
           serviceSlug={serviceSlug}

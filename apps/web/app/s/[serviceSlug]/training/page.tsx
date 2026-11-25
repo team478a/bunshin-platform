@@ -71,6 +71,11 @@ export default async function AiTrainingConfirmationPage({
             return (
               <article className="settings-card" key={enrollment.enrollmentId}>
                 <h3>{enrollment.programName}</h3>
+                <p>
+                  {enrollment.isDynamicLearning
+                    ? '要望から進める個別学習'
+                    : '決まった課題で進める研修'}
+                </p>
                 {enrollment.state === 'CONSENT_REQUIRED' && enrollment.consentText ? (
                   <>
                     <p>AI利用について</p>
