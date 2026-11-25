@@ -5,11 +5,12 @@ import {
   type UserJob,
 } from '@bunshin/application';
 import {
-  browserLearningDevice,
+  browserLearningTarget,
   personalLearningDynamicProgramAllows,
   personalLearningFeatureEnabled,
   personalLearningOfferPolicy,
 } from '@bunshin/capability-training';
+import { browserObservedFixtureVersion } from '@bunshin/capability-browser';
 import { ApplicationError } from '@bunshin/shared';
 import type { Prisma, PrismaClient } from '@prisma/client';
 import { PrismaJobRepository } from './automation-jobs';
@@ -21,6 +22,7 @@ const reviewInterval = 7 * 24 * 60 * 60 * 1000;
 const reportCooldown = 60 * 60 * 1000;
 const prefix = 'training-material';
 const identity = (id: string) => `${prefix}:${id}`;
+const catalogueIdentity = (recipeId: string) => `training-catalogue-material:${recipeId}`;
 const jobPattern =
   /^training-material:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?::([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}))?$/i;
 const denied = () => new ApplicationError('NOT_FOUND', 'training browser material unavailable');
@@ -30,6 +32,13 @@ type MaterialKey = {
   programId: string;
   fixtureDevice: 'desktop' | 'mobile';
 };
+type MaterialTarget = { kind: 'practice-note' } | { kind: 'catalogue'; recipeId: string | null };
+type MaterialWork<T> = (
+  tx: Prisma.TransactionClient,
+  key: MaterialKey,
+  requestId: string,
+  target: MaterialTarget,
+) => Promise<T>;
 const selection = {
   id: true,
   title: true,
@@ -54,7 +63,7 @@ export class PrismaBrowserLearningMaterials extends PrismaPersonalLearningPersis
 
   private async authorizedMaterial<T>(
     actor: PersonalLearningActor,
-    work: (tx: Prisma.TransactionClient, key: MaterialKey, requestId: string) => Promise<T>,
+    work: MaterialWork<T>,
     lockEnrollment = true,
   ) {
     if (process.env['APP_ENV'] !== 'development') return null;
@@ -82,15 +91,36 @@ export class PrismaBrowserLearningMaterials extends PrismaPersonalLearningPersis
           orderBy: { revision: 'desc' },
           select: { id: true, originalText: true, deviceType: true },
         });
-        const fixtureDevice = request && browserLearningDevice(request);
-        if (!request || !fixtureDevice) return null;
+        const target = request && browserLearningTarget(request);
+        if (!request || !target) return null;
         const key = {
           workspaceId: scope.workspaceId,
           groupId: scope.groupId,
           programId: program.id,
-          fixtureDevice,
+          fixtureDevice: target.device,
         };
-        return work(tx, key, request.id);
+        if (target.kind === 'practice-note') return work(tx, key, request.id, target);
+        const recipeQuery = {
+          where: {
+            workspaceId: scope.workspaceId,
+            actorId: actor.actorUserId,
+            device: target.device,
+            fixtureVersion: browserObservedFixtureVersion,
+            membership: {
+              status: 'ACTIVE',
+              workspace: { status: 'ACTIVE' },
+              user: { status: 'ACTIVE' },
+            },
+          },
+          orderBy: [{ verifiedAt: 'desc' }, { id: 'asc' }],
+          select: { id: true },
+        } as const satisfies Prisma.BrowserFixtureRecipeFindFirstArgs;
+        const recipe =
+          (await tx.browserFixtureRecipe.findFirst({
+            ...recipeQuery,
+            where: { ...recipeQuery.where, materials: { some: { verifiedAt: { not: null } } } },
+          })) ?? (await tx.browserFixtureRecipe.findFirst(recipeQuery));
+        return work(tx, key, request.id, { kind: 'catalogue', recipeId: recipe?.id ?? null });
       },
       false,
       lockEnrollment,
@@ -99,7 +129,7 @@ export class PrismaBrowserLearningMaterials extends PrismaPersonalLearningPersis
 
   protected async use<T>(
     actor: PersonalLearningActor,
-    work: (tx: Prisma.TransactionClient, key: MaterialKey, requestId: string) => Promise<T>,
+    work: MaterialWork<T>,
     lockEnrollment = true,
   ) {
     for (let attempt = 1; ; attempt += 1) {
@@ -111,41 +141,58 @@ export class PrismaBrowserLearningMaterials extends PrismaPersonalLearningPersis
       }
     }
   }
+
+  protected materialWhere(key: MaterialKey, target: MaterialTarget) {
+    if (target.kind === 'practice-note') return key;
+    return target.recipeId ? { recipeId: target.recipeId, verifiedAt: { not: null } } : null;
+  }
+
   readMaterial(actor: PersonalLearningActor) {
     return this.use(
       actor,
-      async (tx, key, requestId) => {
-        const material = await tx.browserFixtureMaterial.findFirst({
-          where: key,
-          orderBy: { revision: 'desc' },
-          select: selection,
-        });
-        const job = material
-          ? null
-          : await tx.job.findFirst({
-              where: {
-                environment,
-                jobType,
-                workspaceId: key.workspaceId,
-                requestedBy: actor.actorUserId,
-                idempotencyKey: identity(requestId),
-              },
-              select: { status: true },
-            });
-        const review = material?.reviewRequestedAt
-          ? await tx.job.findFirst({
-              where: {
-                environment,
-                jobType,
-                workspaceId: key.workspaceId,
-                correlationId: material.id,
-              },
-              orderBy: { createdAt: 'desc' },
-              select: { status: true },
+      async (tx, key, requestId, target) => {
+        const where = this.materialWhere(key, target);
+        const material = where
+          ? await tx.browserFixtureMaterial.findFirst({
+              where,
+              orderBy: { revision: 'desc' },
+              select: selection,
             })
           : null;
+        const reference =
+          target.kind === 'practice-note'
+            ? identity(requestId)
+            : target.recipeId && catalogueIdentity(target.recipeId);
+        const job =
+          material || !reference
+            ? null
+            : await tx.job.findFirst({
+                where: {
+                  environment,
+                  jobType,
+                  workspaceId: key.workspaceId,
+                  requestedBy: actor.actorUserId,
+                  idempotencyKey: reference,
+                },
+                select: { status: true },
+              });
+        const review =
+          target.kind === 'practice-note' && material?.reviewRequestedAt
+            ? await tx.job.findFirst({
+                where: {
+                  environment,
+                  jobType,
+                  workspaceId: key.workspaceId,
+                  correlationId: material.id,
+                },
+                orderBy: { createdAt: 'desc' },
+                select: { status: true },
+              })
+            : null;
         return {
           device: key.fixtureDevice,
+          canGenerate: !!where,
+          canReview: target.kind === 'practice-note',
           material,
           status: job?.status ?? null,
           reviewStatus: review?.status ?? null,
@@ -156,9 +203,12 @@ export class PrismaBrowserLearningMaterials extends PrismaPersonalLearningPersis
   }
 
   enqueue(actor: PersonalLearningActor) {
-    return this.use(actor, async (tx, key, requestId) => {
-      if (await tx.browserFixtureMaterial.findFirst({ where: key, select: { id: true } })) return;
-      const reference = identity(requestId);
+    return this.use(actor, async (tx, key, requestId, target) => {
+      const where = this.materialWhere(key, target);
+      if (!where || (await tx.browserFixtureMaterial.findFirst({ where, select: { id: true } })))
+        return;
+      const recipeId = target.kind === 'catalogue' ? target.recipeId : null;
+      const reference = recipeId ? catalogueIdentity(recipeId) : identity(requestId);
       await tx.job.upsert({
         where: { environment_idempotencyKey: { environment, idempotencyKey: reference } },
         create: {
@@ -167,7 +217,7 @@ export class PrismaBrowserLearningMaterials extends PrismaPersonalLearningPersis
           workspaceId: key.workspaceId,
           requestedBy: actor.actorUserId,
           idempotencyKey: reference,
-          payloadReference: reference,
+          payloadReference: recipeId ? `material:${recipeId}` : reference,
           correlationId: requestId,
           maxAttempts: 3,
         },
@@ -188,9 +238,11 @@ export class PrismaBrowserLearningMaterials extends PrismaPersonalLearningPersis
     ];
     return this.use(
       actor,
-      async (tx, key) => {
+      async (tx, key, _requestId, target) => {
+        const where = this.materialWhere(key, target);
+        if (!where) return null;
         const step = await tx.browserFixtureMaterialStep.findFirst({
-          where: { materialId, ordinal, material: key },
+          where: { materialId, ordinal, material: where },
           select: { [column]: true },
         });
         return step?.[column] ?? null;
@@ -200,7 +252,8 @@ export class PrismaBrowserLearningMaterials extends PrismaPersonalLearningPersis
   }
 
   enqueueReview(actor: PersonalLearningActor, materialId: string, periodic = false) {
-    return this.use(actor, async (tx, key, requestId) => {
+    return this.use(actor, async (tx, key, requestId, target) => {
+      if (target.kind !== 'practice-note') return false;
       const material = await tx.browserFixtureMaterial.findFirst({
         where: key,
         orderBy: { revision: 'desc' },
@@ -444,7 +497,8 @@ export class PrismaBrowserLearningMaterials extends PrismaPersonalLearningPersis
 
   async jobMaterial(job: UserJob) {
     const { id, actor, reviewId } = await this.jobActor(job);
-    const target = await this.use(actor, async (tx, key, currentId) => {
+    const target = await this.use(actor, async (tx, key, currentId, target) => {
+      if (target.kind !== 'practice-note') throw denied();
       if (!reviewId && id !== currentId) throw denied();
       const existing = await tx.browserFixtureMaterial.findFirst({
         where: key,
@@ -473,7 +527,8 @@ export class PrismaBrowserLearningMaterials extends PrismaPersonalLearningPersis
     },
   ) {
     const { id, actor, reviewId } = await this.jobActor(job);
-    const material = await this.use(actor, async (tx, key, currentId) => {
+    const material = await this.use(actor, async (tx, key, currentId, target) => {
+      if (target.kind !== 'practice-note') throw denied();
       if (!reviewId && id !== currentId) throw denied();
       const current = await tx.browserFixtureMaterial.findFirst({
         where: key,

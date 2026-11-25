@@ -144,9 +144,11 @@ export default async function BrowserLearningMaterialPage({
             />
             <section aria-label="画面の違い">
               <small>教材 第{material.revision}版</small>
-              <form action={reportDifference}>
-                <button type="submit">教材と画面が違う</button>
-              </form>
+              {state.canReview && (
+                <form action={reportDifference}>
+                  <button type="submit">教材と画面が違う</button>
+                </form>
+              )}
               {state.reviewStatus === 'DEAD' ? (
                 <p role="status">再検証で操作を確認できなかったため、前の教材を表示しています。</p>
               ) : state.reviewStatus &&
@@ -160,7 +162,11 @@ export default async function BrowserLearningMaterialPage({
           </>
         ) : (
           <section aria-label="教材の準備">
-            {state.status === null ? (
+            {!state.canGenerate ? (
+              <p>
+                この端末向けの検証済みレシピは準備中です。個別学習から質問や実践を続けられます。
+              </p>
+            ) : state.status === null ? (
               <form action={requestMaterial}>
                 <button type="submit">画像付き教材を作る</button>
               </form>

@@ -47,9 +47,11 @@ export class PrismaBrowserMaterialVideos extends PrismaBrowserLearningMaterials 
     if (actor.kind === 'learner') {
       return this.use(
         actor.learner,
-        async (tx, key, requestId) => {
+        async (tx, key, requestId, target) => {
+          const where = this.materialWhere(key, target);
+          if (!where) return null;
           const material = await tx.browserFixtureMaterial.findFirst({
-            where: { ...key, id: materialId },
+            where: { ...where, id: materialId },
             select: { id: true },
           });
           return material ? work(tx, requestId) : null;

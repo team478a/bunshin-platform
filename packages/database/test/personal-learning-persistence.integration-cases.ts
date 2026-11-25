@@ -1,4 +1,5 @@
 import { PrismaBrowserMaterialVideos } from '../src/browser-material-video';
+import { browserObservedFixtureVersion } from '@bunshin/capability-browser';
 import { BROWSER_FIXTURE_JOB_TYPE, ClaimJob, FailJob, assertUserJob } from '@bunshin/application';
 import { PrismaBrowserLearningMaterials } from '../src/browser-learning-material';
 import { PrismaJobRepository } from '../src/automation-jobs';
@@ -447,6 +448,94 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
           videos.readFile({ kind: 'learner', learner: other.actor }, restored.id, 'mp4'),
         ).rejects.toMatchObject({ code: 'NOT_FOUND' });
         expect(await videos.state(learner, result.id)).toEqual({ version: null, status: null });
+
+        await requests.saveRequest({
+          ...f.actor,
+          content: {
+            ...requestContent,
+            originalText: 'スマホで研修用カタログの比較結果を見たい',
+            deviceType: 'SMARTPHONE',
+          },
+          expectedRevision: 1,
+          idempotencyKey: randomUUID(),
+        });
+        const workspaceId = f.scope.workspaceId;
+        await client.workspaceMembership.createMany({
+          data: [
+            { workspaceId, userId: f.owner.id, role: 'OWNER' },
+            { workspaceId, userId: f.actor.actorUserId, role: 'MEMBER' },
+          ],
+          skipDuplicates: true,
+        });
+        const catalogueRecipe = (
+          actorId: string,
+          device: 'mobile' | 'desktop' = 'mobile',
+          planHash = 'c'.repeat(64),
+        ) =>
+          client.browserFixtureRecipe.create({
+            data: {
+              workspaceId,
+              actorId,
+              device,
+              fixtureVersion: browserObservedFixtureVersion,
+              planHash,
+              plan: {},
+              verifiedAt: new Date(),
+              sourceJobId: job.id,
+              sourceAttempt: 1,
+            },
+          });
+        const saveCatalogueMaterial = (recipeId: string) => {
+          const { semanticDigest, steps, ...content } = proof;
+          return client.browserFixtureMaterial.create({
+            data: {
+              ...content,
+              semanticDigest,
+              recipeId,
+              revision: 1,
+              sourceJobId: job.id,
+              sourceAttempt: 1,
+              steps: { create: steps },
+            },
+          });
+        };
+        const otherRecipe = await catalogueRecipe(f.owner.id);
+        const otherMaterial = await saveCatalogueMaterial(otherRecipe.id);
+        await catalogueRecipe(f.actor.actorUserId, 'desktop');
+        expect(await materials.readMaterial(f.actor)).toMatchObject({
+          canGenerate: false,
+          material: null,
+          status: null,
+        });
+        expect(await materials.readImage(f.actor, otherMaterial.id, 1, 'before')).toBeNull();
+        await materials.enqueue(f.actor);
+        expect(await client.job.count({ where: { workspaceId, status: 'PENDING' } })).toBe(0);
+        const ownRecipe = await catalogueRecipe(f.actor.actorUserId);
+        await materials.enqueue(f.actor);
+        await materials.enqueue(f.actor);
+        expect(
+          await client.job.count({
+            where: { workspaceId, payloadReference: `material:${ownRecipe.id}` },
+          }),
+        ).toBe(1);
+        expect(await materials.readMaterial(f.actor)).toMatchObject({
+          canGenerate: true,
+          canReview: false,
+          material: null,
+          status: 'PENDING',
+        });
+        const ownMaterial = await saveCatalogueMaterial(ownRecipe.id);
+        await catalogueRecipe(f.actor.actorUserId, 'mobile', 'd'.repeat(64));
+        expect(await materials.readMaterial(f.actor)).toMatchObject({
+          material: { id: ownMaterial.id },
+        });
+        expect(await materials.readImage(f.actor, ownMaterial.id, 1, 'before')).toEqual(image);
+        expect(await videos.state(learner, ownMaterial.id)).toEqual({
+          version: null,
+          status: null,
+        });
+        expect(await videos.state(learner, otherMaterial.id)).toBeNull();
+        expect(await materials.enqueueReview(f.actor, ownMaterial.id)).toBe(false);
       } finally {
         await client.job.deleteMany({
           where: { workspaceId: f.scope.workspaceId, jobType: BROWSER_FIXTURE_JOB_TYPE },
