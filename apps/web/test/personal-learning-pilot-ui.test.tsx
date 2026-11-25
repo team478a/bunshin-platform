@@ -158,7 +158,7 @@ describe('Personal Learning pilot presentation', () => {
     expect(html).toContain('button--full');
     expect(html).toContain('業務秘密や個人情報');
   });
-  it('never initializes an unknown learner as a beginner', () => {
+  it('guides a learner without a profile back to their available courses', () => {
     const html = renderToStaticMarkup(
       <PersonalLearningPilotCard
         serviceSlug="synthetic"
@@ -170,7 +170,8 @@ describe('Personal Learning pilot presentation', () => {
         }}
       />,
     );
-    expect(html).toContain('学習設定を準備中');
+    expect(html).toContain('本人の学習プロフィールの登録が必要です');
+    expect(html).toContain('href="/s/synthetic/training"');
     expect(html).not.toContain('textarea');
   });
   it('restores Plan completion from a version-scoped Router audit, without repeating the last Mission', () => {
