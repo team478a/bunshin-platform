@@ -17,11 +17,13 @@ describe('CI build cache trust boundary', () => {
   });
 
   it('regenerates Prisma Client after restoring Turbo cache', () => {
+    const restoreIndex = workflow.indexOf('uses: actions/cache/restore@v4');
     const installIndex = workflow.indexOf('- run: pnpm install --frozen-lockfile');
     const generateIndex = workflow.indexOf('- run: pnpm db:generate');
-    const typecheckIndex = workflow.indexOf('- run: pnpm typecheck');
+    const typecheckIndex = workflow.indexOf('run: pnpm exec turbo run typecheck lint test');
 
-    expect(installIndex).toBeGreaterThan(-1);
+    expect(restoreIndex).toBeGreaterThan(-1);
+    expect(installIndex).toBeGreaterThan(restoreIndex);
     expect(generateIndex).toBeGreaterThan(installIndex);
     expect(typecheckIndex).toBeGreaterThan(generateIndex);
   });
