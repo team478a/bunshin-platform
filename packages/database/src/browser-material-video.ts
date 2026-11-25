@@ -25,6 +25,17 @@ const absent = () => new ApplicationError('NOT_FOUND', 'browser lesson video una
 const keyFor = (materialId: string, version = narratedVersion) => ({ materialId, version });
 const identity = (materialId: string, version: number) => `browser-video:${version}:${materialId}`;
 
+type SpeechJob = Pick<
+  UserJob,
+  | 'requestedBy'
+  | 'workspaceId'
+  | 'environment'
+  | 'jobType'
+  | 'bunshinId'
+  | 'capabilityType'
+  | 'payloadReference'
+>;
+
 type Owner = { workspaceId: string; actorId: string };
 type VideoActor =
   { kind: 'owner'; owner: Owner } | { kind: 'learner'; learner: PersonalLearningActor };
@@ -96,14 +107,12 @@ export class PrismaBrowserMaterialVideos extends PrismaBrowserLearningMaterials 
         where: {
           materialId,
           version: {
-            in: browserMaterialAzureProfile(version)
-              ? [
-                  1,
-                  2,
-                  narratedVersion,
-                  ...Object.values(browserMaterialAzureVoices).map((voice) => voice.version),
-                ]
-              : [1, 2, narratedVersion],
+            in: [
+              1,
+              2,
+              narratedVersion,
+              ...Object.values(browserMaterialAzureVoices).map((voice) => voice.version),
+            ],
           },
         },
         orderBy: { version: 'desc' },
@@ -199,7 +208,7 @@ export class PrismaBrowserMaterialVideos extends PrismaBrowserLearningMaterials 
     });
   }
 
-  private async videoJob(job: UserJob) {
+  private async videoJob(job: SpeechJob) {
     const [, voiceVersion, materialId, requestId] = refPattern.exec(job.payloadReference) ?? [];
     const environment = browserPilotEnvironment(process.env['APP_ENV']);
     if (
@@ -229,12 +238,56 @@ export class PrismaBrowserMaterialVideos extends PrismaBrowserLearningMaterials 
   ) {
     const workspaceId =
       actor.kind === 'owner' ? actor.owner.workspaceId : actor.learner.scope.workspaceId;
-    if (workspaceId !== process.env['BROWSER_AZURE_SPEECH_WORKSPACE_ID']) throw absent();
+    const environment = browserPilotEnvironment(process.env['APP_ENV']);
+    if (!environment) throw absent();
+    const connection = await tx.browserMaterialSpeechConfiguration.findFirst({
+      where: { environment, workspaceId, enabled: true },
+      select: { region: true, encryptedKey: true },
+    });
+    if (!connection) throw absent();
     const verified = await tx.browserFixtureMaterial.findFirst({
       where: { id: materialId, verifiedAt: { not: null }, importedAt: null },
       select: { id: true },
     });
     if (!verified) throw absent();
+    return connection;
+  }
+
+  async speechAvailability(workspaceId: string) {
+    const environment = browserPilotEnvironment(process.env['APP_ENV']);
+    if (!environment) return { enabled: false, previews: false };
+    const where: Prisma.BrowserMaterialSpeechConfigurationWhereInput = {
+      environment,
+      workspaceId,
+      enabled: true,
+    };
+    const [enabled, previews] = await Promise.all([
+      this.videoDb.browserMaterialSpeechConfiguration.count({ where }),
+      this.videoDb.browserMaterialSpeechConfiguration.count({
+        where: { ...where, shioriPreview: { not: null }, daichiPreview: { not: null } },
+      }),
+    ]);
+    return { enabled: enabled > 0, previews: previews > 0 };
+  }
+
+  async narrationInstruction(job: SpeechJob, ordinal: number) {
+    const { actor, materialId, version } = await this.videoJob(job);
+    const voice = browserMaterialAzureProfile(version);
+    if (!voice) throw absent();
+    return this.inScope(actor, materialId, async (tx) => {
+      const connection = await this.requireAzureScope(tx, actor, materialId);
+      const step = await tx.browserFixtureMaterialStep.findUnique({
+        where: { materialId_ordinal: { materialId, ordinal } },
+        select: { instruction: true },
+      });
+      return step
+        ? {
+            ...connection,
+            model: voice.model,
+            instruction: step.instruction.replace(/\s+/g, ' ').trim() || '手順 ' + ordinal,
+          }
+        : null;
+    });
   }
 
   async renderInput(job: UserJob) {

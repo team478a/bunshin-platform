@@ -84,7 +84,13 @@ export default async function BrowserMaterialsPage(props: {
   const materialId = material.id;
   const lessonHref = (voice: BrowserMaterialAzureVoice | null) =>
     `${base}?material=${materialId}${voice ? `&narrator=${voice}` : ''}` as const;
-  const narrator = lessonNarrationSelection(workspaceId, material, search.narrator);
+  const db = await import('@bunshin/database');
+  const videos = new db.PrismaBrowserMaterialVideos(db.prisma);
+  const speech =
+    material.verifiedAt && !material.importedAt
+      ? await videos.speechAvailability(workspaceId)
+      : { enabled: false, previews: false };
+  const narrator = lessonNarrationSelection(speech.enabled, material, search.narrator);
   const narratorPath = lessonHref(narrator.voice);
   const stepHref = (value: number) => ({
     pathname: base,
@@ -95,12 +101,7 @@ export default async function BrowserMaterialsPage(props: {
       ...(narrator.voice ? { narrator: narrator.voice } : {}),
     },
   });
-  const db = await import('@bunshin/database');
-  const video = await new db.PrismaBrowserMaterialVideos(db.prisma).state(
-    { kind: 'owner', owner: actor },
-    materialId,
-    narrator.version,
-  );
+  const video = await videos.state({ kind: 'owner', owner: actor }, materialId, narrator.version);
   async function requestVideo() {
     'use server';
     const owner = await browserMaterialActor(workspaceId);
@@ -135,6 +136,7 @@ export default async function BrowserMaterialsPage(props: {
           ? {
               choice: {
                 voice: narrator.voice,
+                showPreviews: speech.previews,
                 href: lessonHref,
               },
             }

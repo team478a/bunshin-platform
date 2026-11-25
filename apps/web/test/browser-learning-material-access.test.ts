@@ -18,6 +18,7 @@ vi.mock('@bunshin/database', () => ({
   prisma: {},
   PrismaBrowserMaterialVideos: class {
     state = () => null;
+    speechAvailability = () => Promise.resolve({ enabled: false, previews: false });
   },
   PrismaBrowserLearningMaterials: class {
     readMaterial = mocks.readMaterial;

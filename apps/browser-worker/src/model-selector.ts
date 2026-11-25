@@ -23,11 +23,8 @@ export function modelPreviewSelector(jobId: string, workerId: string): BrowserSt
   };
 }
 
-async function requestModelSelection(
-  jobId: string,
-  workerId: string,
-  signal: AbortSignal,
-  observed?: BrowserObservedSelection,
+export function browserFixtureWorkerEndpoint(
+  path: '/api/internal/browser-fixture/select' | '/api/internal/browser-fixture/narration',
 ) {
   const base = process.env['BROWSER_FIXTURE_MODEL_ORIGIN'];
   const secret = process.env['BROWSER_FIXTURE_MODEL_SECRET'];
@@ -45,7 +42,17 @@ async function requestModelSelection(
       ))
   )
     throw new BrowserRunError('MODEL_SELECTION_FAILED');
-  const response = await fetch(new URL('/api/internal/browser-fixture/select', origin), {
+  return { url: new URL(path, origin), secret };
+}
+
+async function requestModelSelection(
+  jobId: string,
+  workerId: string,
+  signal: AbortSignal,
+  observed?: BrowserObservedSelection,
+) {
+  const { url, secret } = browserFixtureWorkerEndpoint('/api/internal/browser-fixture/select');
+  const response = await fetch(url, {
     method: 'POST',
     headers: {
       authorization: `Bearer ${secret}`,

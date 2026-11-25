@@ -2784,6 +2784,7 @@ model AuthIdentity {
 }
 
 model Workspace {
+  browserMaterialSpeechConfigurations BrowserMaterialSpeechConfiguration[]
   oemBillingPolicy OemBillingPolicy?
   oemContractPeriods OemContractPeriod[]
   id                              String                                @id @default(uuid()) @db.Uuid
@@ -9292,4 +9293,19 @@ model BrowserFixtureMaterialVideo {
 
   @@id([materialId, version], map: "browser_fixture_material_videos_pkey")
   @@map("browser_fixture_material_videos")
+}
+
+model BrowserMaterialSpeechConfiguration {
+  environment   LineConfigurationEnvironment @id
+  workspaceId   String                       @map("workspace_id") @db.Uuid
+  region        String                       @db.VarChar(40)
+  encryptedKey  String                       @map("encrypted_key") @db.Text
+  keyMask       String                       @map("key_mask") @db.VarChar(12)
+  shioriPreview Bytes?                       @map("shiori_preview") @db.ByteA
+  daichiPreview Bytes?                       @map("daichi_preview") @db.ByteA
+  enabled       Boolean                      @default(true)
+  updatedAt     DateTime                     @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace     Workspace                    @relation(fields: [workspaceId], references: [id], onDelete: Cascade, map: "browser_material_speech_workspace_fkey")
+
+  @@map("browser_material_speech_configurations")
 }

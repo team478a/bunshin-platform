@@ -26,12 +26,6 @@ Docker では Ubuntu 24.04 の Open JTalk と NAIST 辞書（パッケージ版 
 
 ## ステージングで志織・大智を使う
 
-Azure Speech のテスト用 Free (F0) リソースを使う。ワーカーに `BROWSER_AZURE_SPEECH_REGION` と `BROWSER_AZURE_SPEECH_KEY` を設定する。キーはワーカーの秘密設定にだけ保管する。設定したリソースの F0 プランは Azure 側で確認する。
+ステージングの管理者は「AIと検索サービスの設定 → Azure Speechの設定」で、対象ワークスペース、Azureリージョン、テスト用 Free (F0) リソースの接続キーを登録する。接続確認では音声一覧だけを取得する。F0 の契約は Azure 側で確認する。「試聴音声を作る」で固定文を志織・大智で1回ずつ合成し、保存した音声を教材画面で再利用する。
 
-ワーカーと Web を更新したあと、公開教材に含まれない固定文の試聴 WAV を 2 本生成する。ワーカーの設定を読み込んだ端末で、リポジトリのルートから実行する。
-
-```sh
-pnpm --filter @bunshin/browser-worker exec tsx src/generate-narration-previews.ts ../../apps/web/public/browser-narration-preview
-```
-
-2 本の WAV をステージング Web の静的アセットに含め、再生を確認する。Web とワーカーの `BROWSER_AZURE_SPEECH_WORKSPACE_ID` に同じテスト用 Workspace ID を設定すると、対象の検証済み教材に声の選択肢が現れる。試聴は保存済みの WAV を再生し、アクセスごとの合成は発生しない。実教材を生成するときは手順文だけを Azure に送る。利用台帳にモデル・処理時間・成否を記録し、送信文字数はワーカーの実行ログで確認できる。円換算の請求額は Azure 側で確認する。 [Azure Speech料金](https://azure.microsoft.com/ja-jp/pricing/details/speech/)
+ブラウザワーカーの既存の `BROWSER_FIXTURE_MODEL_ORIGIN` と `BROWSER_FIXTURE_MODEL_SECRET` を使う。以前の Azure 用環境変数は管理画面の設定に移す。接続キーは既存の `ENCRYPTION_KEY` で暗号化し、Web と Azure 間だけで使う。実教材では有効なジョブの手順文を合成する。利用台帳にモデル・処理時間・成否を記録し、送信文字数は実行ログで確認できる。 [Azure Speech料金](https://azure.microsoft.com/ja-jp/pricing/details/speech/)

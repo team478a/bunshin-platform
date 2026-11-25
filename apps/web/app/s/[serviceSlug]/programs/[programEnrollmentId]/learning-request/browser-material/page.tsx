@@ -63,11 +63,11 @@ export default async function BrowserLearningMaterialPage({
     }
 
     const materialId = material?.id;
-    const narrator = lessonNarrationSelection(
-      actor.scope.workspaceId,
-      material ?? null,
-      query.narrator,
-    );
+    const videos = new db.PrismaBrowserMaterialVideos(db.prisma);
+    const speech = material?.verifiedAt
+      ? await videos.speechAvailability(actor.scope.workspaceId)
+      : { enabled: false, previews: false };
+    const narrator = lessonNarrationSelection(speech.enabled, material ?? null, query.narrator);
     const narratorPath = learningMaterialPath(
       serviceSlug,
       programEnrollmentId,
@@ -75,11 +75,7 @@ export default async function BrowserLearningMaterialPage({
       narrator.voice,
     );
     const video = materialId
-      ? await new db.PrismaBrowserMaterialVideos(db.prisma).state(
-          { kind: 'learner', learner: actor },
-          materialId,
-          narrator.version,
-        )
+      ? await videos.state({ kind: 'learner', learner: actor }, materialId, narrator.version)
       : null;
 
     async function requestVideo() {
@@ -158,6 +154,7 @@ export default async function BrowserLearningMaterialPage({
                 ? {
                     choice: {
                       voice: narrator.voice,
+                      showPreviews: speech.previews,
                       href: (voice) =>
                         learningMaterialPath(
                           serviceSlug,
