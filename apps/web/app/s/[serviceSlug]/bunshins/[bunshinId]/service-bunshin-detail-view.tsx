@@ -100,7 +100,7 @@ export function ServiceBunshinDetailView({ model }: { model: ServiceBunshinDetai
             <>
               <h1>{service.configuration.displayName}の投稿パートナー</h1>
               <p>
-                <strong>登録した事業名</strong>　{registeredBusinessName}
+                <strong>登録した事業名</strong> {registeredBusinessName}
               </p>
             </>
           ) : (

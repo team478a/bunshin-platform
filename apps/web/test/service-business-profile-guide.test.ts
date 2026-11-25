@@ -25,7 +25,7 @@ describe('business SNS profile guide', () => {
   it('labels the registered business name separately from the service heading', () => {
     expect(page).toContain('registeredBusinessName = businessProgramProfile?.businessName');
     expect(page).toContain('<h1>{service.configuration.displayName}の投稿パートナー</h1>');
-    expect(page).toContain('<strong>登録した事業名</strong>　{registeredBusinessName}');
+    expect(page).toContain('<strong>登録した事業名</strong> {registeredBusinessName}');
     expect(page).toContain('<h1>{bunshin.name}</h1>');
   });
 
