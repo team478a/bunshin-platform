@@ -1,3 +1,4 @@
+import design from '../../../../../src/components/manaberu-learner.module.css';
 import {
   AiResaleOfferService,
   AiResaleParticipantService,
@@ -130,7 +131,10 @@ export default async function ProgramParticipantPage({
         }
         return (
           <PublicShell showPlatformBrand={false}>
-            <main className="service-entry resale-action-page training-page" style={style}>
+            <main
+              className={`service-entry resale-action-page training-page ${design.frame}`}
+              style={style}
+            >
               <header className="service-entry__header">
                 <p className="eyebrow">
                   {isDynamicLearning ? '先行研修' : 'マナベルスタイル 限定Pilot'}
@@ -186,7 +190,10 @@ export default async function ProgramParticipantPage({
       };
       return (
         <PublicShell showPlatformBrand={false}>
-          <main className="service-entry resale-action-page training-page" style={style}>
+          <main
+            className={`service-entry resale-action-page training-page ${design.frame}`}
+            style={style}
+          >
             <header className="service-entry__header">
               <p className="eyebrow">{isDynamicLearning ? '先行研修' : '限定学習Pilot'}</p>
               <h1>あなたのAI学習</h1>
@@ -228,7 +235,10 @@ export default async function ProgramParticipantPage({
           : null);
       return (
         <PublicShell showPlatformBrand={false}>
-          <main className="service-entry resale-action-page training-page" style={style}>
+          <main
+            className={`service-entry resale-action-page training-page ${design.frame}`}
+            style={style}
+          >
             <AiTrainingEndedCard
               serviceSlug={serviceSlug}
               programEnrollmentId={programEnrollmentId}
@@ -243,7 +253,10 @@ export default async function ProgramParticipantPage({
     if (!enrollment.startsAt || enrollment.startsAt > now) {
       return (
         <PublicShell showPlatformBrand={false}>
-          <main className="service-entry resale-action-page training-page" style={style}>
+          <main
+            className={`service-entry resale-action-page training-page ${design.frame}`}
+            style={style}
+          >
             <header className="service-entry__header">
               <h1>AI研修の開始前です</h1>
             </header>
@@ -273,7 +286,10 @@ export default async function ProgramParticipantPage({
     }
     return (
       <PublicShell showPlatformBrand={false}>
-        <main className="service-entry resale-action-page training-page" style={style}>
+        <main
+          className={`service-entry resale-action-page training-page ${design.frame}`}
+          style={style}
+        >
           <header className="service-entry__header">
             <p className="eyebrow">{trainingState.programName}</p>
             <h1>今日のAIトレーニング</h1>
