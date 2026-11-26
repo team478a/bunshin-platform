@@ -20,7 +20,13 @@ export default async function BrowserLearningMaterialPage({
   searchParams,
 }: {
   params: Promise<{ serviceSlug: string; programEnrollmentId: string }>;
-  searchParams: Promise<{ topicId?: string; step?: string; narrator?: string; print?: string }>;
+  searchParams: Promise<{
+    topicId?: string;
+    step?: string;
+    narrator?: string;
+    print?: string;
+    format?: string | string[];
+  }>;
 }) {
   const { serviceSlug, programEnrollmentId } = await params;
   const query = await searchParams;
@@ -67,6 +73,7 @@ export default async function BrowserLearningMaterialPage({
           imageHref={(ordinal, variant) => imageHref(material.id, ordinal, variant)}
           backHref={{ pathname, query: topic }}
           reviewFailed={state.reviewStatus === 'DEAD'}
+          requestedStyle={query.format}
         />
       );
     }
@@ -78,7 +85,7 @@ export default async function BrowserLearningMaterialPage({
         ? !!(await materials.readImage(actor, material.id, ordinal, 'detail'))
         : false;
 
-    async function requestMaterial() {
+    async function requestMaterial(failedJobId: string | null) {
       'use server';
       const current = await browserLearningMaterialActor(
         serviceSlug,
@@ -86,7 +93,7 @@ export default async function BrowserLearningMaterialPage({
         query.topicId,
         true,
       );
-      await enqueueBrowserLearningMaterial(current);
+      await enqueueBrowserLearningMaterial(current, failedJobId ?? undefined);
       redirect(learningMaterialPath(serviceSlug, programEnrollmentId, current.topicId));
     }
 
@@ -145,7 +152,9 @@ export default async function BrowserLearningMaterialPage({
         <h1>画像付き操作教材</h1>
         {material ? (
           <>
-            <Link href={{ pathname, query: { ...topic, print: '1' } }}>PDF・印刷用に表示</Link>
+            <Link href={{ pathname, query: { ...topic, print: '1' } }}>
+              マニュアルの形式を選ぶ（PDF・印刷）
+            </Link>
             <BrowserMaterialView
               material={{ ...material, verifiedAt: material.reviewedAt ?? material.verifiedAt }}
               device={state.device}
@@ -221,8 +230,13 @@ export default async function BrowserLearningMaterialPage({
                 この端末向けの検証済みレシピは準備中です。個別学習から質問や実践を続けられます。
               </p>
             ) : state.status === null ? (
-              <form action={requestMaterial}>
+              <form action={requestMaterial.bind(null, null)}>
                 <button type="submit">画像付き教材を作る</button>
+              </form>
+            ) : state.failedJobId ? (
+              <form action={requestMaterial.bind(null, state.failedJobId)}>
+                <p role="status">教材を準備できませんでした。</p>
+                <button type="submit">教材の生成を再試行する</button>
               </form>
             ) : ['DEAD', 'CANCELLED', 'SUCCEEDED'].includes(state.status) ? (
               <p>教材を準備できませんでした。個別学習から質問や実践を続けられます。</p>
