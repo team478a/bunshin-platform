@@ -118,16 +118,47 @@
   gap: 0.25rem 1rem;
 }
 
-.learnerLinks a {
+.learnerPage a:is(.primaryAction, .secondaryAction) {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  justify-self: start;
   min-block-size: 44px;
+  padding: 0.55rem 0.9rem;
+  border: 1px solid transparent;
+  border-radius: 0.65rem;
   font-weight: 650;
+  text-align: center;
+  text-decoration: none;
+}
+
+.learnerPage a.primaryAction {
+  border-color: var(--learning-accent);
+  background: var(--learning-accent);
+  color: #fff;
+}
+
+.learnerPage a.primaryAction:hover {
+  border-color: var(--learning-accent-hover);
+  background: var(--learning-accent-hover);
+}
+
+.learnerPage a.secondaryAction {
+  border-color: #c4d6ef;
+  background: var(--learning-accent-soft);
+  color: var(--learning-accent);
+}
+
+.learnerPage a.secondaryAction:hover {
+  background: #ddeaff;
 }
 
 .learnerHeader {
   display: grid;
   gap: 0.6rem;
+  padding: 0.8rem 0 0.75rem;
+  border: 0;
+  background: none;
 }
 
 .learnerPreparation {

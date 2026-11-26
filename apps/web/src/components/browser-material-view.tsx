@@ -1,4 +1,3 @@
-import design from './manaberu-learner.module.css';
 import type { UrlObject } from 'node:url';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -85,7 +84,7 @@ export function BrowserMaterialView({
 
   return (
     <>
-      <header className={learner ? [styles.learnerHeader, design.hero].join(' ') : undefined}>
+      <header className={learner ? styles.learnerHeader : undefined}>
         {learner ? <h1>{material.title}</h1> : <h2>{material.title}</h2>}
         {material.goal && <p>{material.goal}</p>}
         <small>
@@ -133,7 +132,11 @@ export function BrowserMaterialView({
           {guidance && <p>{guidance}</p>}
           <CheckpointHeading>理解度確認</CheckpointHeading>
           <p>{material.checkpoint}</p>
-          {learner && <Link href={learner.practiceHref}>個別学習で実践する</Link>}
+          {learner && (
+            <Link className={styles.primaryAction} href={learner.practiceHref}>
+              個別学習で実践する
+            </Link>
+          )}
         </section>
       )}
     </>

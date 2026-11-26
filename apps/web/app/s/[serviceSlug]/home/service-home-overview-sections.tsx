@@ -1,3 +1,4 @@
+import design from '../../../../src/components/manaberu-learner.module.css';
 import type { BusinessGrowthProgramStatus } from '@bunshin/application';
 import type { Route } from 'next';
 import Link from 'next/link';
@@ -9,11 +10,21 @@ interface ServiceHomeHeaderProps {
   displayName: string;
   logoUrl: string | null;
   memberName: string | null;
+  learnerHome?: boolean;
 }
 
-export function ServiceHomeHeader({ displayName, logoUrl, memberName }: ServiceHomeHeaderProps) {
+export function ServiceHomeHeader({
+  displayName,
+  logoUrl,
+  memberName,
+  learnerHome = false,
+}: ServiceHomeHeaderProps) {
   return (
-    <header className="service-entry__header">
+    <header
+      className={
+        learnerHome ? `service-entry__header ${design.homeHeading}` : 'service-entry__header'
+      }
+    >
       {logoUrl && (
         <div
           className="service-entry__logo"
@@ -22,9 +33,13 @@ export function ServiceHomeHeader({ displayName, logoUrl, memberName }: ServiceH
           style={{ backgroundImage: `url(${JSON.stringify(logoUrl)})` }}
         />
       )}
-      <p className="eyebrow">あなたのサービスホーム</p>
+      {!learnerHome && <p className="eyebrow">あなたのサービスホーム</p>}
       <h1>{displayName}</h1>
-      <p>{memberName?.trim() ? `${memberName.trim()}さん、` : ''}今日も一緒に進めましょう。</p>
+      {learnerHome ? (
+        memberName?.trim() && <p>{memberName.trim()}さん</p>
+      ) : (
+        <p>{memberName?.trim() ? `${memberName.trim()}さん、` : ''}今日も一緒に進めましょう。</p>
+      )}
     </header>
   );
 }
@@ -123,7 +138,11 @@ export function WeeklyActivitySection({
   serviceSlug: string;
 }) {
   return (
-    <section className="service-entry__card">
+    <section
+      className={
+        isPersonalLearningService ? `service-entry__card ${design.daily}` : 'service-entry__card'
+      }
+    >
       <h2>{isPersonalLearningService ? '今日の学習' : '今週の進み具合'}</h2>
       {isPersonalLearningService && isDynamicLearning ? (
         !isPersonalLearningReady ? (
@@ -132,7 +151,7 @@ export function WeeklyActivitySection({
           </div>
         ) : (
           <div className="empty-state">
-            <p>希望・現在の実践・前回の続きから、今日の学習を進められます。</p>
+            <p>前回の続きや、取り組み中の実践を開けます。</p>
             {personalLearningPathHref ? (
               <Link className="button button--primary button--full" href={personalLearningPathHref}>
                 今日の学習を続ける
@@ -154,7 +173,7 @@ export function WeeklyActivitySection({
           </div>
         ) : (
           <div className="empty-state">
-            <p>希望・現在の実践・前回の続きから、今日の学習を進められます。</p>
+            <p>前回の続きや、取り組み中の実践を開けます。</p>
             <Link
               className="button button--primary button--full"
               href={personalLearningPathHref ?? (`/s/${serviceSlug}/programs` as Route)}

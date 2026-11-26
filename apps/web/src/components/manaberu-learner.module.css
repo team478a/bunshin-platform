@@ -1,12 +1,13 @@
 .frame {
   --learning-ink: #172944;
   --learning-muted: #4e6178;
-  --learning-accent: #1f4e90;
-  --learning-accent-soft: #edf4fc;
+  --learning-accent: #174a89;
+  --learning-accent-hover: #103766;
+  --learning-accent-soft: #eaf2ff;
   --learning-surface: #ffffff;
-  --learning-bg: #f6f9fd;
+  --learning-bg: #f4f7fb;
   --learning-border: #d6e1ee;
-  --learning-radius: 1rem;
+  --learning-radius: 0.8rem;
   color: var(--learning-ink);
   line-height: 1.65;
   overflow-wrap: anywhere;
@@ -17,6 +18,7 @@
   font-size: clamp(1.65rem, 5vw, 2.4rem);
   line-height: 1.2;
   letter-spacing: -0.02em;
+  text-wrap: balance;
 }
 
 .frame h2 {
@@ -61,9 +63,9 @@
 }
 
 .frame form button[type='submit']:disabled {
-  border-color: var(--learning-border);
-  background: var(--learning-bg);
-  color: var(--learning-muted);
+  border-color: #c4d6ef;
+  background: #e1ecfd;
+  color: #325d92;
   cursor: not-allowed;
 }
 
@@ -71,7 +73,6 @@
 .hero {
   padding: clamp(1.2rem, 4vw, 2rem);
   border: 1px solid var(--learning-border);
-  border-inline-start: 4px solid var(--learning-accent);
   border-radius: var(--learning-radius);
   background: var(--learning-accent-soft);
   text-align: start;
@@ -85,7 +86,6 @@
   border-radius: var(--learning-radius);
   background: var(--learning-surface);
   color: var(--learning-ink);
-  box-shadow: 0 3px 12px rgb(23 41 68 / 5%);
 }
 
 .flow {
@@ -162,4 +162,115 @@
 
 .panel p[role='status']:empty {
   margin: 0;
+}
+
+.frame .homeHeading {
+  margin-bottom: 0.65rem;
+  padding: 1.65rem 0.25rem 0.8rem;
+  border: 0;
+  background: none;
+}
+
+.frame .homeHeading h1 {
+  font-size: clamp(2rem, 7vw, 3.1rem);
+}
+
+.frame .homeHeading p {
+  margin: 0;
+  color: var(--learning-muted);
+}
+
+.frame .daily {
+  display: grid;
+  gap: 0.75rem;
+  padding: clamp(1.25rem, 5vw, 2rem);
+  border-color: #193e70;
+  background: #193e70;
+  color: #fff;
+  text-align: start;
+  box-shadow: none;
+}
+
+.frame .daily h2 {
+  margin: 0;
+  color: #fff;
+  text-align: start;
+}
+
+.frame .daily p {
+  color: #e6efff;
+}
+
+.frame .daily :global(.empty-state) {
+  display: grid;
+  gap: 0.85rem;
+  padding: 0;
+  text-align: start;
+}
+
+.frame .daily :global(.button--primary) {
+  justify-self: start;
+  min-block-size: 44px;
+  border-color: #fff;
+  background: #fff;
+  color: #174a89;
+}
+
+.frame .daily :global(.button--primary):hover {
+  background: #eaf2ff;
+}
+
+.requestPanel {
+  padding: 0.3rem 0 0;
+  border: 0;
+  background: none;
+}
+
+.requestPanel h1 {
+  margin-block: 0 0.55rem;
+}
+
+.requestPanel > p:not([role='status']) {
+  margin-block: 0 0.85rem;
+  color: var(--learning-muted);
+}
+
+.requestPanel :global(.settings-form) {
+  display: grid;
+  gap: 1rem;
+  margin-block: 1.2rem 0.5rem;
+  padding: clamp(1rem, 3vw, 1.5rem);
+  border: 1px solid var(--learning-border);
+  border-radius: var(--learning-radius);
+  background: var(--learning-surface);
+}
+
+.requestPanel :global(.settings-form) label {
+  color: var(--learning-ink);
+  font-weight: 600;
+}
+
+.requestPanel :global(.settings-form) :is(textarea, select) {
+  background: var(--learning-bg);
+  color: var(--learning-ink);
+  font-weight: 400;
+}
+
+.requestPanel :global(.settings-form) details {
+  border-block-start: 1px solid var(--learning-border);
+}
+
+.requestPanel :global(.settings-form) summary {
+  padding-block: 0.6rem;
+  color: var(--learning-accent);
+  font-weight: 650;
+}
+
+.requestPanel :global(.settings-form) button[type='submit'] {
+  inline-size: 100%;
+}
+
+.frame form button[type='submit']:not(:disabled):hover {
+  border-color: var(--learning-accent-hover);
+  background: var(--learning-accent-hover);
 }

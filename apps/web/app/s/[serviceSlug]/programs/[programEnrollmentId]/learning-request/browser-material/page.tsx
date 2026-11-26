@@ -156,8 +156,14 @@ export default async function BrowserLearningMaterialPage({
     return (
       <main className={`${design.frame} ${styles.page} ${styles.learnerPage}`}>
         <nav className={styles.learnerLinks} aria-label="教材ナビゲーション">
-          <Link href={home}>個別学習に戻る</Link>
-          {material && <a href="#pdf-manual-title">PDFを使う</a>}
+          <Link className={styles.secondaryAction} href={home}>
+            個別学習に戻る
+          </Link>
+          {material && (
+            <a className={styles.primaryAction} href="#pdf-manual-title">
+              PDFを使う
+            </a>
+          )}
         </nav>
         {material ? (
           <>
@@ -230,7 +236,7 @@ export default async function BrowserLearningMaterialPage({
                 ['PENDING', 'LEASED', 'RETRY_SCHEDULED'].includes(state.reviewStatus) ? (
                 <p role="status">教材の画面を再検証しています。</p>
               ) : null}
-              <Link href={{ ...home, hash: 'practice-record' }}>
+              <Link className={styles.secondaryAction} href={{ ...home, hash: 'practice-record' }}>
                 分からない操作を個別学習で相談する
               </Link>
             </section>

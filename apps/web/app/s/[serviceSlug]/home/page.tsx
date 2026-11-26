@@ -406,6 +406,7 @@ export default async function ServiceMemberHome({
           displayName={service.configuration.displayName}
           logoUrl={service.configuration.brand.logoUrl}
           memberName={membership.user.displayName}
+          learnerHome={isPersonalLearningService}
         />
         {needsLegalConsent && (
           <section className="service-entry__card" aria-labelledby="legal-consent-title">
