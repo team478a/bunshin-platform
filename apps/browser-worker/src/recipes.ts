@@ -1,8 +1,9 @@
 import { createHash } from 'node:crypto';
 import {
-  browserObservedChoiceSchema,
+  browserFormFixtureVersion,
+  browserFormResponseSchema,
   browserObservedFixtureVersion,
-  browserObservedStepLimit,
+  browserObservedResponseSchema,
   browserPlanSchema,
   type BrowserPlan,
 } from '@bunshin/capability-browser';
@@ -10,12 +11,12 @@ import { CompleteJob, type UserJob } from '@bunshin/application';
 import { enqueueCatalogueMaterial, PrismaJobRepository, prisma } from '@bunshin/database';
 import { BrowserRunError } from './browser';
 import { compactPreviewStep, fixture, fixturePlan, fixtureVersion } from './fixture';
-import { observedCatalogue, observedCatalogueGoal } from './observed-catalogue';
+import { isObservedVersion, observedScenario, type ObservedVersion } from './observed-scenarios';
 
-type RecipeVersion = typeof fixtureVersion | typeof browserObservedFixtureVersion;
+export type RecipeVersion = typeof fixtureVersion | ObservedVersion;
 
 export function fixtureForRecipe(version: RecipeVersion) {
-  return version === browserObservedFixtureVersion ? observedCatalogue : fixture;
+  return isObservedVersion(version) ? observedScenario(version).fixture : fixture;
 }
 
 export const recipeScope = (workspaceId: string, actorId: string) => ({
@@ -56,7 +57,9 @@ export async function loadVerifiedRecipe(
     where: {
       id: recipeId,
       fixtureVersion:
-        version === 'any' ? { in: [fixtureVersion, browserObservedFixtureVersion] } : version,
+        version === 'any'
+          ? { in: [fixtureVersion, browserObservedFixtureVersion, browserFormFixtureVersion] }
+          : version,
       ...recipeScope(workspaceId, actorId),
     },
     select: {
@@ -74,8 +77,7 @@ export async function loadVerifiedRecipe(
     !recipe ||
     !parsed.success ||
     parsed.data.device !== recipe.device ||
-    (recipe.fixtureVersion !== fixtureVersion &&
-      recipe.fixtureVersion !== browserObservedFixtureVersion)
+    (recipe.fixtureVersion !== fixtureVersion && !isObservedVersion(recipe.fixtureVersion))
   ) {
     throw new BrowserRunError('INVALID_PLAN');
   }
@@ -89,26 +91,28 @@ export async function loadVerifiedRecipe(
     verifiedAt: recipe.verifiedAt,
     sourceJobId: recipe.sourceJobId,
     sourceAttempt: recipe.sourceAttempt,
-  };
+  } as const;
 }
 
 function canonicalRecipePlan(plan: BrowserPlan, version: RecipeVersion) {
-  if (version === browserObservedFixtureVersion) {
+  if (isObservedVersion(version)) {
+    const scenario = observedScenario(version);
+    const id = (scenario.form ? browserFormResponseSchema : browserObservedResponseSchema).shape.id;
     const { steps, ...goal } = plan;
     if (
-      JSON.stringify(goal) !== JSON.stringify(observedCatalogueGoal(plan.device)) ||
-      steps.length > browserObservedStepLimit ||
-      !steps.every(
-        (step, index) =>
-          step.action === 'click' &&
-          step.target.by === 'role' &&
-          step.id.startsWith(`observed-${index + 1}-`) &&
-          browserObservedChoiceSchema.safeParse({
-            id: step.id,
-            role: step.target.role,
-            name: step.target.name,
-          }).success,
-      )
+      JSON.stringify(goal) !== JSON.stringify(scenario.goal(plan.device)) ||
+      steps.length > scenario.maxSteps ||
+      !steps.every((step, index) => {
+        if (!step.id.startsWith(`observed-${index + 1}-`) || !id.safeParse(step.id).success)
+          return false;
+        if ((step.action !== 'click' && step.action !== 'fill') || step.target.by !== 'role')
+          return false;
+        const { name, role } = step.target;
+        if (!name.trim()) return false;
+        return step.action === 'fill'
+          ? scenario.form && role === 'textbox' && step.sample === scenario.fixture.observedSample
+          : role === 'button' || role === 'link' || (scenario.form && role === 'checkbox');
+      })
     ) {
       throw new BrowserRunError('INVALID_PLAN');
     }

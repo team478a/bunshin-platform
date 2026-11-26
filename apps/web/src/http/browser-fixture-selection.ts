@@ -6,6 +6,8 @@ import {
   browserFixtureSelectionRequestSchema,
   browserObservedFixtureVersion,
   browserObservedSelectionSchema,
+  browserFormFixtureVersion,
+  browserFormSelectionSchema,
   browserPilotEnvironment,
   trainingCatalogueDiscoveryPrefix,
 } from '@bunshin/capability-browser';
@@ -44,9 +46,10 @@ export async function browserFixtureSelectionResponse(request: Request) {
               in: ['mobile', 'desktop']
                 .map((device) => `discover-model:${BROWSER_FIXTURE_VERSION}:${device}`)
                 .concat(
-                  ['mobile', 'desktop'].map(
-                    (device) =>
-                      `discover-observed-model:${browserObservedFixtureVersion}:${device}`,
+                  [browserObservedFixtureVersion, browserFormFixtureVersion].flatMap((version) =>
+                    ['mobile', 'desktop'].map(
+                      (device) => `discover-observed-model:${version}:${device}`,
+                    ),
                   ),
                 ),
             },
@@ -85,6 +88,9 @@ export async function browserFixtureSelectionResponse(request: Request) {
     const trainingCatalogue = job.payloadReference.startsWith(
       trainingCatalogueDiscoveryPrefix + ':',
     );
+    const form = job.payloadReference.startsWith(
+      `discover-observed-model:${browserFormFixtureVersion}:`,
+    );
     const device = trainingCatalogue
       ? await new PrismaBrowserLearningMaterials(prisma).catalogueDiscovery({
           workspaceId: job.workspaceId,
@@ -100,9 +106,8 @@ export async function browserFixtureSelectionResponse(request: Request) {
         : 'desktop';
     let observed;
     if (trainingCatalogue || job.payloadReference.startsWith('discover-observed-model:')) {
-      const parsed = browserObservedSelectionSchema.safeParse(
-        await boundedLearningJson(request, 32_000),
-      );
+      const schema = form ? browserFormSelectionSchema : browserObservedSelectionSchema;
+      const parsed = schema.safeParse(await boundedLearningJson(request, 32_000));
       if (!parsed.success)
         throw new ApplicationError('VALIDATION_ERROR', 'invalid observed browser candidates');
       observed = parsed.data;
@@ -115,6 +120,7 @@ export async function browserFixtureSelectionResponse(request: Request) {
       actorId: job.requestedBy,
       device,
       ...(observed ? { observed } : {}),
+      form,
       signal: AbortSignal.any([
         request.signal,
         AbortSignal.timeout(Math.min(remainingLeaseMs, 2_147_483_647)),

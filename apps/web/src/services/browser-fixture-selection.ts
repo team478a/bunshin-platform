@@ -2,11 +2,14 @@ import 'server-only';
 import { estimateAiCallCost, type AiCallMeasurement } from '@bunshin/application';
 import {
   browserObservedFixtureObjective,
+  browserFormFixtureObjective,
+  browserFormResponseSchema,
   browserObservedModelOperationKey,
   browserObservedResponseSchema,
   browserPreviewChoices,
   browserPreviewResponseSchema,
   type BrowserObservedSelection,
+  type BrowserFormSelection,
 } from '@bunshin/capability-browser';
 import { ApplicationError } from '@bunshin/shared';
 import { reserveLearningProviderRuntimeConfiguration } from '../ai/learning-provider-runtime';
@@ -23,7 +26,8 @@ export async function selectBrowserFixturePreview(input: {
   actorId: string;
   device: 'mobile' | 'desktop';
   signal: AbortSignal;
-  observed?: BrowserObservedSelection;
+  observed?: BrowserObservedSelection | BrowserFormSelection;
+  form?: boolean;
 }) {
   const observed = input.observed;
   const key = observed
@@ -88,7 +92,23 @@ export async function selectBrowserFixturePreview(input: {
                   preview: 'Full-width preview',
                   'compact-preview': 'Compact preview',
                 },
-                ...(observed ? { goal: browserObservedFixtureObjective } : {}),
+                ...(observed
+                  ? {
+                      goal: input.form
+                        ? browserFormFixtureObjective
+                        : browserObservedFixtureObjective,
+                      ...(input.form
+                        ? {
+                            actions: {
+                              textbox: '空欄に検証用の文字を入力する',
+                              checkbox: '未確認の項目にチェックする',
+                              button: 'ボタンを押す',
+                              link: 'リンクを開く',
+                            },
+                          }
+                        : {}),
+                    }
+                  : {}),
               }),
             },
           ],
@@ -107,7 +127,9 @@ export async function selectBrowserFixturePreview(input: {
       },
       (output) => {
         if (!observed) return browserPreviewResponseSchema.parse(output).id;
-        const { id } = browserObservedResponseSchema.parse(output);
+        const { id } = (
+          input.form ? browserFormResponseSchema : browserObservedResponseSchema
+        ).parse(output);
         if (!choices.includes(id))
           throw new ApplicationError('VALIDATION_ERROR', 'unknown browser selection');
         return id;
@@ -139,7 +161,11 @@ export async function selectBrowserFixturePreview(input: {
     taskType: 'BROWSER_FIXTURE_SELECTION',
     provider: 'google',
     model: measurement.model,
-    promptVersion: observed ? 'browser-observed-choice-v1' : promptVersion,
+    promptVersion: input.form
+      ? 'browser-observed-form-choice-v1'
+      : observed
+        ? 'browser-observed-choice-v1'
+        : promptVersion,
     status: measurement.success ? 'SUCCESS' : 'FAILED',
     inputTokens: measurement.inputTokens,
     outputTokens: measurement.outputTokens,

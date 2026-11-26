@@ -105,6 +105,11 @@ export const browserFixtureSelectionRequestSchema = z.strictObject({
 export const browserObservedFixtureVersion = 'observed-catalogue-v1';
 export const browserObservedFixtureObjective = '研修用カタログの詳細から比較結果を開く。';
 export const browserObservedStepLimit = 3;
+export const browserFormFixtureVersion = 'observed-form-v1';
+export const browserFormStepLimit = 8;
+export const browserFormFixtureObjective =
+  '研修申請フォームに進み、件名と理由に練習用の文字を入力し、確認欄をチェックする。プレビューを開き、表示内容を確認する。';
+export const browserFormSampleId = 'training-example';
 export const trainingCatalogueDiscoveryPrefix = 'training-catalogue-discovery';
 
 export function browserPilotEnvironment(
@@ -122,6 +127,10 @@ export const browserObservedChoiceSchema = z.strictObject({
   role: z.enum(['button', 'link']),
   name: z.string().trim().min(1).max(120),
 });
+const browserFormChoiceSchema = browserObservedChoiceSchema.extend({
+  id: z.string().regex(/^observed-[1-8]-\d{1,2}$/),
+  role: z.enum(['button', 'link', 'textbox', 'checkbox']),
+});
 export const browserObservedSelectionSchema = z
   .strictObject({
     ordinal: z.int().min(1).max(browserObservedStepLimit),
@@ -133,6 +142,18 @@ export const browserObservedSelectionSchema = z
       new Set(choices.map(({ id }) => id)).size === choices.length,
   );
 export type BrowserObservedSelection = z.infer<typeof browserObservedSelectionSchema>;
+export const browserFormSelectionSchema = z
+  .strictObject({
+    ordinal: z.int().min(1).max(browserFormStepLimit),
+    choices: z.array(browserFormChoiceSchema).min(1).max(60),
+  })
+  .refine(
+    ({ ordinal, choices }) =>
+      choices.every(({ id }) => id.startsWith('observed-' + ordinal + '-')) &&
+      new Set(choices.map(({ id }) => id)).size === choices.length,
+  );
+export type BrowserFormSelection = z.infer<typeof browserFormSelectionSchema>;
+export const browserFormResponseSchema = z.strictObject({ id: browserFormChoiceSchema.shape.id });
 export const browserObservedResponseSchema = z.strictObject({
   id: browserObservedChoiceSchema.shape.id,
 });
