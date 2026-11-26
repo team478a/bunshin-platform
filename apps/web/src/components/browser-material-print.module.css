@@ -11,6 +11,11 @@
   padding-bottom: 0.75rem;
 }
 
+.header a {
+  color: #204d94;
+  text-decoration: underline;
+}
+
 .document h1,
 .document h2,
 .document p,
@@ -42,6 +47,7 @@
   margin-bottom: 1rem;
 }
 
+.controls > a,
 .controls button {
   min-height: 44px;
   padding: 0.5rem 0.75rem;
@@ -50,6 +56,79 @@
   border: 0;
   border-radius: 0.5rem;
   font: inherit;
+}
+
+.controls > a {
+  display: inline-flex;
+  align-items: center;
+  background: #eaf2ff;
+  color: #174a89;
+  text-decoration: none;
+}
+
+.picker {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr));
+  gap: 0.5rem;
+  margin-block: 0.35rem 0;
+}
+
+.picker a {
+  display: grid;
+  align-content: center;
+  gap: 0.1rem;
+  min-block-size: 52px;
+  padding: 0.6rem 0.85rem;
+  border: 1px solid #bfd1e7;
+  border-radius: 0.65rem;
+  background: #eaf2ff;
+  color: #174a89;
+  text-decoration: none;
+}
+
+.picker a:hover {
+  background: #ddeaff;
+}
+
+.picker a[aria-current='page'] {
+  border-color: #174a89;
+  background: #174a89;
+  color: #fff;
+}
+
+.picker a span {
+  display: block;
+  font-size: 0.875em;
+}
+
+.format {
+  color: #204d94;
+  font-weight: 700;
+}
+
+.steps {
+  margin: 0.5rem 0 0;
+  padding-inline-start: 1.75em;
+}
+
+.steps li {
+  padding: 0.35em 0;
+  border-bottom: 1px solid #dbe3ed;
+  white-space: pre-line;
+  break-inside: avoid;
+}
+
+.check {
+  display: inline-block;
+  width: 0.8em;
+  height: 0.8em;
+  margin-inline-end: 0.55em;
+  border: 1px solid currentColor;
+}
+
+.notes > div {
+  min-height: 2em;
+  border-bottom: 1px solid #8a9db4;
 }
 
 .section {
@@ -103,7 +182,8 @@
   }
 
   body:has(.document) :global(.site-footer),
-  .controls {
+  .controls,
+  .picker {
     display: none;
   }
 
@@ -119,11 +199,19 @@
     break-inside: avoid;
   }
 
+  .section:has(.steps) {
+    break-inside: auto;
+  }
+
+  .section h2 {
+    break-after: avoid;
+  }
+
   .figures img {
-    max-height: 58mm;
+    max-height: 50mm;
   }
 
   .figures .detail img {
-    max-height: 34mm;
+    max-height: 26mm;
   }
 }

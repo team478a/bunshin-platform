@@ -31,6 +31,34 @@ const identity = (id: string) => `${prefix}:${id}`;
 const catalogueIdentity = (recipeId: string) => `training-catalogue-material:${recipeId}`;
 const discoveryIdentity = (kind: 'catalogue' | 'form', requestId: string) =>
   `${kind === 'form' ? trainingFormDiscoveryPrefix : trainingCatalogueDiscoveryPrefix}:${requestId}`;
+function materialJobReference(target: MaterialTarget, requestId: string) {
+  if (target.kind === 'practice-note') return identity(requestId);
+  return target.recipeId
+    ? catalogueIdentity(target.recipeId)
+    : discoveryIdentity(target.kind, requestId);
+}
+
+function materialJobQuery(
+  environment: NonNullable<ReturnType<typeof browserPilotEnvironment>>,
+  workspaceId: string,
+  requestedBy: string,
+  reference: string,
+) {
+  return {
+    where: {
+      environment,
+      workspaceId,
+      requestedBy,
+      jobType,
+      OR: [
+        { idempotencyKey: reference },
+        { idempotencyKey: { startsWith: reference + ':retry:' } },
+      ],
+    },
+    orderBy: { createdAt: 'desc' },
+  } as const satisfies Prisma.JobFindFirstArgs;
+}
+
 const jobPattern =
   /^(training-material|training-catalogue-discovery|training-form-discovery):([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})(?::([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}))?$/i;
 const denied = () => new ApplicationError('NOT_FOUND', 'training browser material unavailable');
@@ -208,23 +236,12 @@ export class PrismaBrowserLearningMaterials extends PrismaPersonalLearningPersis
               select: selection,
             })
           : null;
-        const reference =
-          target.kind === 'practice-note'
-            ? identity(requestId)
-            : target.recipeId
-              ? catalogueIdentity(target.recipeId)
-              : discoveryIdentity(target.kind, requestId);
+        const reference = materialJobReference(target, requestId);
         const job = material
           ? null
           : await tx.job.findFirst({
-              where: {
-                environment,
-                jobType,
-                workspaceId: key.workspaceId,
-                requestedBy: actor.actorUserId,
-                idempotencyKey: reference,
-              },
-              select: { status: true },
+              ...materialJobQuery(environment, key.workspaceId, actor.actorUserId, reference),
+              select: { id: true, status: true },
             });
         const review =
           target.kind === 'practice-note' && material?.reviewRequestedAt
@@ -257,6 +274,7 @@ export class PrismaBrowserLearningMaterials extends PrismaPersonalLearningPersis
           material,
           printImages,
           status: job?.status ?? null,
+          failedJobId: job?.status === 'DEAD' ? job.id : null,
           reviewStatus: review?.status ?? null,
         };
       },
@@ -264,12 +282,40 @@ export class PrismaBrowserLearningMaterials extends PrismaPersonalLearningPersis
     );
   }
 
-  enqueue(actor: PersonalLearningActor) {
+  enqueue(actor: PersonalLearningActor, retryFailedJobId?: string) {
     return this.use(actor, async (tx, key, requestId, target, environment) => {
       const where = this.materialWhere(key, target);
       if (where && (await tx.browserFixtureMaterial.findFirst({ where, select: { id: true } })))
         return;
       const recipeId = target.kind === 'practice-note' ? null : target.recipeId;
+      const discovery = target.kind !== 'practice-note' && !recipeId;
+      if (discovery && !discoveryConfigured(key.workspaceId)) return;
+      const reference = materialJobReference(target, requestId);
+      if (retryFailedJobId) {
+        const previous = await tx.job.findFirst({
+          ...materialJobQuery(environment, key.workspaceId, actor.actorUserId, reference),
+          select: { id: true, status: true, payloadReference: true, maxAttempts: true },
+        });
+        if (previous?.id !== retryFailedJobId || previous.status !== 'DEAD') return;
+        // Discovery admissions are keyed by job ID, so each explicit retry gets its own accounting.
+        const idempotencyKey = reference + ':retry:' + previous.id;
+        await tx.job.upsert({
+          where: { environment_idempotencyKey: { environment, idempotencyKey } },
+          create: {
+            environment,
+            jobType,
+            workspaceId: key.workspaceId,
+            requestedBy: actor.actorUserId,
+            idempotencyKey,
+            payloadReference: previous.payloadReference,
+            correlationId: requestId,
+            scheduledAt: new Date(),
+            maxAttempts: previous.maxAttempts,
+          },
+          update: {},
+        });
+        return true;
+      }
       if (recipeId) {
         await enqueueCatalogueMaterial(
           tx,
@@ -283,9 +329,6 @@ export class PrismaBrowserLearningMaterials extends PrismaPersonalLearningPersis
         );
         return true;
       }
-      const discovery = target.kind !== 'practice-note';
-      if (discovery && !discoveryConfigured(key.workspaceId)) return;
-      const reference = discovery ? discoveryIdentity(target.kind, requestId) : identity(requestId);
       await tx.job.upsert({
         where: { environment_idempotencyKey: { environment, idempotencyKey: reference } },
         create: {

@@ -1,3 +1,4 @@
+import design from '../../../../../../src/components/manaberu-learner.module.css';
 import type { CSSProperties } from 'react';
 import { notFound } from 'next/navigation';
 import { resolveAuthenticatedMemberServicePage } from '../../../../../../src/services/member-service-page';
@@ -33,7 +34,10 @@ export default async function TrainingToolkitPage({
 
   return (
     <PublicShell showPlatformBrand={false}>
-      <main className="service-entry resale-action-page training-page" style={style}>
+      <main
+        className={`service-entry resale-action-page training-page ${design.frame}`}
+        style={style}
+      >
         <header className="service-entry__header">
           <p className="eyebrow">研修で作った、あなた専用の実務資産</p>
           <h1>My AI Toolkit</h1>

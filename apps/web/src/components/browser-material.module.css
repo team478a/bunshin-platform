@@ -106,3 +106,150 @@
 .importForm button {
   justify-self: start;
 }
+
+.learnerPage {
+  width: min(100% - 2rem, 46rem);
+}
+
+.learnerLinks {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.25rem 1rem;
+}
+
+.learnerPage a:is(.primaryAction, .secondaryAction) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  justify-self: start;
+  min-block-size: 44px;
+  padding: 0.55rem 0.9rem;
+  border: 1px solid transparent;
+  border-radius: 0.65rem;
+  font-weight: 650;
+  text-align: center;
+  text-decoration: none;
+}
+
+.learnerPage a.primaryAction {
+  border-color: var(--learning-accent);
+  background: var(--learning-accent);
+  color: #fff;
+}
+
+.learnerPage a.primaryAction:hover {
+  border-color: var(--learning-accent-hover);
+  background: var(--learning-accent-hover);
+}
+
+.learnerPage a.secondaryAction {
+  border-color: #c4d6ef;
+  background: var(--learning-accent-soft);
+  color: var(--learning-accent);
+}
+
+.learnerPage a.secondaryAction:hover {
+  background: #ddeaff;
+}
+
+.learnerHeader {
+  display: grid;
+  gap: 0.6rem;
+  padding: 0.8rem 0 0.75rem;
+  border: 0;
+  background: none;
+}
+
+.learnerPreparation {
+  border: 1px solid var(--learning-border);
+  border-radius: 0.9rem;
+  padding: 0.75rem 1rem;
+  background: var(--learning-surface);
+}
+
+.learnerPreparation p {
+  padding-block-start: 0.55rem;
+  white-space: pre-line;
+}
+
+.learnerPage > section {
+  display: grid;
+  gap: 0.75rem;
+  padding: clamp(1rem, 3vw, 1.4rem);
+  border: 1px solid var(--learning-border);
+  border-radius: var(--learning-radius);
+  background: var(--learning-surface);
+}
+
+.learnerPage > section > form {
+  display: grid;
+  justify-items: start;
+  gap: 0.75rem;
+}
+
+.learnerPage .navigation {
+  gap: 0.6rem;
+}
+
+.learnerPage .navigation a {
+  color: var(--learning-accent);
+  background: var(--learning-accent-soft);
+}
+
+.learnerPage .navigation .nextStep {
+  margin-inline-start: auto;
+  border-color: var(--learning-accent);
+  color: white;
+  background: var(--learning-accent);
+}
+
+.learnerInstruction {
+  font-size: 1.125rem;
+  font-weight: 650;
+  white-space: pre-line;
+}
+
+.learnerPage figcaption {
+  padding-block: 0.35rem;
+  color: var(--learning-muted);
+  font-size: 0.875rem;
+}
+
+.learnerPage .images img {
+  max-block-size: 28rem;
+  object-fit: contain;
+  background: var(--learning-bg);
+}
+
+.learnerPage [id='pdf-manual-title'] {
+  scroll-margin-block-start: 1rem;
+}
+
+.learnerPage .detail {
+  display: grid;
+  padding: 0.45rem 0.8rem;
+  border: 1px solid var(--learning-border);
+  border-radius: 0.75rem;
+  background: var(--learning-bg);
+}
+
+.learnerPage .detail img {
+  inline-size: auto;
+  max-inline-size: 100%;
+  max-block-size: 11rem;
+  margin: 0 auto;
+  object-fit: contain;
+  background: var(--learning-surface);
+}
+
+@media (max-width: 36rem) {
+  .learnerPage .images:has(figure + figure) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.55rem;
+  }
+
+  .learnerPage .images img {
+    max-block-size: 18rem;
+  }
+}

@@ -685,6 +685,45 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
               where: { workspaceId, payloadReference: { startsWith: 'training-form-discovery:' } },
             }),
           ).toBe(1);
+          await client.job.update({ where: { id: discovery.id }, data: { status: 'DEAD' } });
+          expect(await materials.readMaterial(f.actor)).toMatchObject({
+            status: 'DEAD',
+            failedJobId: discovery.id,
+          });
+          await materials.enqueue(f.actor);
+          await materials.enqueue(f.actor, randomUUID());
+          await Promise.all([
+            materials.enqueue(f.actor, discovery.id),
+            materials.enqueue(f.actor, discovery.id),
+          ]);
+          const retries = await client.job.findMany({
+            where: {
+              workspaceId,
+              payloadReference: discovery.payloadReference,
+              id: { not: discovery.id },
+            },
+          });
+          expect(retries).toHaveLength(1);
+          const retry = retries[0]!;
+          expect(retry).toMatchObject({ status: 'PENDING', maxAttempts: 1 });
+          expect(await materials.readMaterial(f.actor)).toMatchObject({
+            status: 'PENDING',
+            failedJobId: null,
+          });
+          expect(
+            await materials.observedDiscovery({ ...retry, requestedBy: f.actor.actorUserId }),
+          ).toEqual({ device: 'mobile', version: browserFormFixtureVersion });
+          await client.job.update({ where: { id: retry.id }, data: { status: 'DEAD' } });
+          await materials.enqueue(f.actor, discovery.id);
+          expect(await materials.readMaterial(f.actor)).toMatchObject({
+            status: 'DEAD',
+            failedJobId: retry.id,
+          });
+          expect(
+            await client.job.count({
+              where: { workspaceId, payloadReference: discovery.payloadReference },
+            }),
+          ).toBe(2);
         } finally {
           if (configuredWorkspace === undefined)
             delete process.env['BROWSER_FIXTURE_MODEL_WORKSPACE_ID'];

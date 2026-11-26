@@ -69,7 +69,10 @@ export async function browserLearningMaterialActor(
   );
 }
 
-export async function enqueueBrowserLearningMaterial(actor: PersonalLearningActor) {
+export async function enqueueBrowserLearningMaterial(
+  actor: PersonalLearningActor,
+  retryFailedJobId?: string,
+) {
   const db = await import('@bunshin/database');
-  return new db.PrismaBrowserLearningMaterials(db.prisma).enqueue(actor);
+  return new db.PrismaBrowserLearningMaterials(db.prisma).enqueue(actor, retryFailedJobId);
 }

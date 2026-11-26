@@ -1,3 +1,4 @@
+import design from '../../../../../../src/components/manaberu-learner.module.css';
 import {
   browserLearningProgram,
   learningMaterialPath,
@@ -75,7 +76,7 @@ export default async function Page({
     if (sideHustleProgram && !sideHustle?.started) {
       const candidate = sideHustle?.selection?.candidate as { name?: unknown } | undefined;
       return (
-        <main style={{ maxWidth: 560, margin: '0 auto', padding: 20 }}>
+        <main className={`${design.frame} ${design.flow}`}>
           <section className="service-entry__card" aria-label="副業の選択">
             {typeof candidate?.name === 'string' ? (
               <>
@@ -220,9 +221,21 @@ export default async function Page({
           )}
         </section>
       ) : null;
+    const nudgeCard = dynamicProgram ? (
+      <LearningNudgePreferenceCard
+        endpoint={`/api/services/${serviceSlug}/ai-training/enrollments/${programEnrollmentId}/personal-learning/nudge-preference`}
+        initial={{
+          enabled: nudgePreference?.enabled ?? true,
+          consented: true,
+          pausedUntil: nudgePreference?.pausedUntil?.toISOString() ?? null,
+          stoppedAt: nudgePreference?.stoppedAt?.toISOString() ?? null,
+          featureEnabled: nudgeFeatureEnabled,
+        }}
+      />
+    ) : null;
     if (multiTopic && !input.topicId) {
       return (
-        <main style={{ maxWidth: 560, margin: '0 auto', padding: 20 }}>
+        <main className={`${design.frame} ${design.flow}`}>
           {sideHustleEntry}
           <LearningTopicSelector
             endpoint={topicEndpoint}
@@ -230,25 +243,12 @@ export default async function Page({
             topics={topics}
             allowCreate={!sideHustleProgram}
           />
-          {dynamicProgram && (
-            <LearningNudgePreferenceCard
-              endpoint={`/api/services/${serviceSlug}/ai-training/enrollments/${programEnrollmentId}/personal-learning/nudge-preference`}
-              initial={{
-                enabled: nudgePreference?.enabled ?? true,
-                consented: true,
-                pausedUntil: nudgePreference?.pausedUntil?.toISOString() ?? null,
-                stoppedAt: nudgePreference?.stoppedAt?.toISOString() ?? null,
-                featureEnabled: nudgeFeatureEnabled,
-              }}
-            />
-          )}
+          {nudgeCard}
           {personaInvitation}
-          <p>
+          <nav className={design.tools} aria-label="学習の設定と記録">
             <a href={personaPath}>AIが理解していることを確認・修正する</a>
-          </p>
-          <p>
             <a href={examplesPath}>保存した活用例・手本を見る</a>
-          </p>
+          </nav>
         </main>
       );
     }
@@ -257,22 +257,10 @@ export default async function Page({
       input,
     );
     return (
-      <main style={{ maxWidth: 560, margin: '0 auto', padding: 20 }}>
+      <main className={`${design.frame} ${design.flow}`}>
         {sideHustleEntry}
         {roadmapCard}
         {personaInvitation}
-        {dynamicProgram && (
-          <LearningNudgePreferenceCard
-            endpoint={`/api/services/${serviceSlug}/ai-training/enrollments/${programEnrollmentId}/personal-learning/nudge-preference`}
-            initial={{
-              enabled: nudgePreference?.enabled ?? true,
-              consented: true,
-              pausedUntil: nudgePreference?.pausedUntil?.toISOString() ?? null,
-              stoppedAt: nudgePreference?.stoppedAt?.toISOString() ?? null,
-              featureEnabled: nudgeFeatureEnabled,
-            }}
-          />
-        )}
         {multiTopic && (
           <LearningTopicSelector
             endpoint={topicEndpoint}
@@ -281,21 +269,6 @@ export default async function Page({
             selectedTopicId={input.topicId}
             allowCreate={!sideHustleProgram}
           />
-        )}
-        {multiTopic && (
-          <>
-            <p>
-              <a href={personaPath}>AIが理解していることを確認・修正する</a>
-            </p>
-            <p>
-              <a href={examplesPath}>保存した活用例・手本を見る</a>
-            </p>
-          </>
-        )}
-        {dynamicProgram && !multiTopic && (
-          <p>
-            <a href={personaPath}>学び方に合わせたサポートを確認する</a>
-          </p>
         )}
         <PersonalLearningRequestCard
           browserMaterialHref={
@@ -335,8 +308,19 @@ export default async function Page({
               : null
           }
         />
+        {nudgeCard}
+        {(multiTopic || dynamicProgram) && (
+          <nav className={design.tools} aria-label="学習の設定と記録">
+            <a href={personaPath}>
+              {multiTopic
+                ? 'AIが理解していることを確認・修正する'
+                : '学び方に合わせたサポートを確認する'}
+            </a>
+            {multiTopic && <a href={examplesPath}>保存した活用例・手本を見る</a>}
+          </nav>
+        )}
         {dynamicProgram && (
-          <div className="mt-8">
+          <div>
             <AiTrainingDataExportCard
               serviceSlug={serviceSlug}
               programEnrollmentId={programEnrollmentId}

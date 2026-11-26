@@ -1,4 +1,6 @@
 'use client';
+
+import design from '../../../../../../src/components/manaberu-learner.module.css';
 import { useState } from 'react';
 import { browserLearningDevice } from '@bunshin/capability-training';
 import { LearningCandidateCard } from './candidate-card';
@@ -132,9 +134,9 @@ export function PersonalLearningRequestCard({
     }
   }
   return (
-    <section>
+    <section className={design.panels}>
       {practiceEndpoint && (
-        <div id="practice-record">
+        <div className={design.panel} id="practice-record">
           <LearningPracticeCard
             endpoint={practiceEndpoint}
             state={practice}
@@ -148,7 +150,7 @@ export function PersonalLearningRequestCard({
           />
         </div>
       )}
-      <div id="learning-request-record">
+      <div className={`${design.panel} ${design.requestPanel}`} id="learning-request-record">
         <h1>
           {dynamicMode
             ? 'AIでできるようになりたいこと'
@@ -156,7 +158,7 @@ export function PersonalLearningRequestCard({
         </h1>
         <p>
           {dynamicMode
-            ? '書いてくれた希望をもとに、あなたに合った小さな練習を一緒に考えます。今進めている練習は、新しい練習を始めるまでそのまま残ります。'
+            ? 'AIで試したいことを一つ書いてください。新しい実践を始めるまで、今の実践は続けられます。'
             : 'あなたの希望を元のまま保存します。未回答の経験や能力は推測しません。'}
         </p>
         {!dynamicMode && (
@@ -216,11 +218,14 @@ export function PersonalLearningRequestCard({
       </div>
       {browserMaterialHref && saved && matchesSaved && browserLearningDevice(saved) && (
         <section className="service-entry__card" aria-label="操作教材">
-          <a href={browserMaterialHref}>画像付き操作教材を確認する</a>
+          <h2>画像付き操作教材</h2>
+          <a className="button button--secondary" href={browserMaterialHref}>
+            画像付き操作教材を確認する
+          </a>
         </section>
       )}
       {conversationEndpoint && saved && matchesSaved && (
-        <div id="conversation-record">
+        <div className={design.panel} id="conversation-record">
           <LearningConversationCard
             key={saved.id}
             endpoint={conversationEndpoint}
