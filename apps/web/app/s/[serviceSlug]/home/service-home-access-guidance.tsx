@@ -16,6 +16,7 @@ export function ServiceHomeAccessGuidance({
   serviceLogoUrl = null,
   poweredBy = false,
   brand = null,
+  returnTo = `/s/${serviceSlug}/home`,
 }: {
   state: ServiceHomeAccessState;
   serviceName?: string;
@@ -23,8 +24,8 @@ export function ServiceHomeAccessGuidance({
   serviceLogoUrl?: string | null;
   poweredBy?: boolean;
   brand?: ServiceAuthBrand | null;
+  returnTo?: string;
 }) {
-  const returnTo = `/s/${serviceSlug}/home`;
   const displayServiceName = brand?.serviceName ?? serviceName;
   const serviceEntry = `/s/${serviceSlug}` as const;
   const copy = {
@@ -80,10 +81,7 @@ export function ServiceHomeAccessGuidance({
           </Link>
         )}
         {state === 'MANAGEMENT_REQUIRED' && serviceName && (
-          <Link
-            className="button button--primary button--full"
-            href={`/s/${serviceSlug}/home` as Route}
-          >
+          <Link className="button button--primary button--full" href={returnTo as Route}>
             {serviceName}の利用画面へ
           </Link>
         )}

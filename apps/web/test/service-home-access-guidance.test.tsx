@@ -2,9 +2,23 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { ServiceHomeAccessGuidance } from '../app/s/[serviceSlug]/home/service-home-access-guidance';
+import { safeLineAuthReturnPath } from '../src/auth/line-return';
 import { serviceAuthBrandForSlug } from '../src/services/service-auth-brand';
 
 describe('service home access guidance', () => {
+  it('preserves the Manaberu record destination after sign-in', () => {
+    const returnTo = '/s/manaberu-style/home?learning=record';
+    const html = renderToStaticMarkup(
+      createElement(ServiceHomeAccessGuidance, {
+        state: 'LOGIN_REQUIRED',
+        serviceSlug: 'manaberu-style',
+        returnTo,
+      }),
+    );
+    expect(html).toContain(encodeURIComponent(returnTo));
+    expect(safeLineAuthReturnPath(returnTo)).toBe(returnTo);
+    expect(safeLineAuthReturnPath(returnTo + '&learning=record')).toBeNull();
+  });
   it('explains why LINE users may need to log in and preserves the home return path', () => {
     const html = renderToStaticMarkup(
       createElement(ServiceHomeAccessGuidance, {

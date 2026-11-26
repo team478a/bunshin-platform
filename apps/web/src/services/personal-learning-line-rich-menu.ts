@@ -1,3 +1,4 @@
+import { MANABERU_SERVICE_SLUG } from './service-auth-brand';
 import 'server-only';
 import { createHash } from 'node:crypto';
 import type { PersonalLearningActor } from '@bunshin/application';
@@ -7,7 +8,10 @@ import { createLogger } from '@bunshin/observability';
 import { PrismaPersonalLearningPilotRepository, prisma } from '@bunshin/database';
 import { getServerEnvironment } from '@bunshin/config';
 import { AesGcmLineSecretCrypto, currentLineEnvironment } from '../line/secure-configuration';
-import { renderPersonalLearningLineRichMenu } from '../line/default-rich-menu';
+import {
+  renderDefaultLineRichMenu,
+  renderPersonalLearningLineRichMenu,
+} from '../line/default-rich-menu';
 import {
   createPersonalLearningGroupRichMenu,
   deleteGroupRichMenu,
@@ -15,7 +19,10 @@ import {
   uploadPersonalLearningGroupRichMenuImage,
 } from '../line/group-rich-menu-provider';
 
-const contentHash = (title: string) => createHash('sha256').update(title, 'utf8').digest('hex');
+const contentHash = (title: string, serviceSlug?: string) =>
+  createHash('sha256')
+    .update(serviceSlug === MANABERU_SERVICE_SLUG ? 'manaberu-learning-menu-v2' : title, 'utf8')
+    .digest('hex');
 
 /** Dynamic Programs use the learner's current confirmed practice, never a fixed Pilot assignment. */
 export async function dynamicPersonalLearningPracticeTitle(
@@ -35,6 +42,7 @@ export async function dynamicPersonalLearningPracticeTitle(
 export async function personalLearningLineMenuStatus(
   actor: PersonalLearningActor,
   practiceTitle: string | null,
+  serviceSlug?: string,
 ) {
   const connection = await prisma.groupLineConnection.findFirst({
     where: {
@@ -75,7 +83,7 @@ export async function personalLearningLineMenuStatus(
     needsRefresh:
       connection !== null &&
       practiceTitle !== null &&
-      connection.personalLearningRichMenuContentHash !== contentHash(practiceTitle),
+      connection.personalLearningRichMenuContentHash !== contentHash(practiceTitle, serviceSlug),
   };
 }
 
@@ -141,7 +149,7 @@ export async function activatePersonalLearningLineMenu(input: {
     practiceTitle = assignment?.display?.title.trim() || null;
   }
   if (!practiceTitle) throw new ApplicationError('CONFLICT', 'current practice is required');
-  const nextContentHash = contentHash(practiceTitle);
+  const nextContentHash = contentHash(practiceTitle, input.serviceSlug);
   if (
     connection.personalLearningRichMenuId &&
     connection.personalLearningRichMenuLinkedAt &&
@@ -156,7 +164,10 @@ export async function activatePersonalLearningLineMenu(input: {
     actorUserId: input.actor.actorUserId,
     route: 'personal-learning-line-rich-menu',
   });
-  const image = await renderPersonalLearningLineRichMenu(practiceTitle);
+  const image =
+    input.serviceSlug === MANABERU_SERVICE_SLUG
+      ? await renderDefaultLineRichMenu('MANABERU')
+      : await renderPersonalLearningLineRichMenu(practiceTitle);
   const accessToken = new AesGcmLineSecretCrypto().decrypt(
     connection.configuration.encryptedAccessToken,
   );

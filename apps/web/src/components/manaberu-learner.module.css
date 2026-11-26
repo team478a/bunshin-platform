@@ -274,3 +274,11 @@
   border-color: var(--learning-accent-hover);
   background: var(--learning-accent-hover);
 }
+
+.practiceEntryHint {
+  display: none;
+}
+
+.panel:target .practiceEntryHint {
+  display: block;
+}

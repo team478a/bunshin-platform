@@ -1,4 +1,11 @@
 'use client';
+
+import {
+  MANABERU_LINE_MENU_IMAGE_PATH,
+  MANABERU_LINE_MENU_ITEMS,
+  MANABERU_LINE_MENU_SIZE,
+} from '../../../../../../src/line/manaberu-line-menu';
+import Image from 'next/image';
 import { useRef, useState } from 'react';
 import {
   FORTUNE_LINE_MENU_ITEMS,
@@ -45,6 +52,7 @@ export function GroupLineEditor(props: {
   initialConfigurations: Item[];
   endpoint?: string;
   scopeLabel?: string;
+  manaberuMenu?: boolean;
   fortuneMenu?: 'ORACLE' | 'FORTUNE';
   targetName: string;
 }) {
@@ -55,7 +63,11 @@ export function GroupLineEditor(props: {
   const [busy, setBusy] = useState(false);
   const endpoint = props.endpoint ?? `/api/admin/groups/${props.groupId}/line-configurations`;
   const scopeLabel = props.scopeLabel ?? 'グループ';
-  const menuName = props.fortuneMenu ? '占いリッチメニュー' : '標準リッチメニュー';
+  const menuName = props.manaberuMenu
+    ? 'マナベル学習メニュー'
+    : props.fortuneMenu
+      ? '占いリッチメニュー'
+      : '標準リッチメニュー';
   async function call(url: string, method: string, data: unknown) {
     setBusy(true);
     setMessage('処理しています…');
@@ -400,7 +412,20 @@ export function GroupLineEditor(props: {
       </section>
       <section className="settings-card line-settings-card" hidden={mode !== 'DEDICATED'}>
         <p className="eyebrow">4. LINEのメニューを公開する</p>
-        {props.fortuneMenu ? (
+        {props.manaberuMenu ? (
+          <>
+            <h2>{menuName}</h2>
+            <p>{MANABERU_LINE_MENU_ITEMS.map(({ title }) => title).join('・')}</p>
+            <Image
+              src={MANABERU_LINE_MENU_IMAGE_PATH}
+              alt="マナベルのLINE学習メニュー"
+              width={MANABERU_LINE_MENU_SIZE.width}
+              height={MANABERU_LINE_MENU_SIZE.height}
+              unoptimized
+              style={{ width: '100%', height: 'auto', maxWidth: '36rem' }}
+            />
+          </>
+        ) : props.fortuneMenu ? (
           <>
             <h2>占いリッチメニュー</h2>
             <p>
