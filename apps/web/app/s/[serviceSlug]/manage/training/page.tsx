@@ -1,3 +1,4 @@
+import { PERSONAL_LEARNING_PRACTICE_MISSION } from '@bunshin/application';
 import { notFound, redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import {
@@ -9,6 +10,7 @@ import { buildAiTrainingAdminDashboard } from '../../../../../src/services/ai-tr
 import { trainingEnrollmentDisplayStatus } from '../../../../../src/services/ai-training-enrollment-display';
 import { buildAiTrainingEvaluationOperations } from '../../../../../src/services/ai-training-evaluation-operations';
 import { buildAiTrainingPilotAnalytics } from '../../../../../src/services/ai-training-pilot-analytics';
+import { MANABERU_SERVICE_SLUG } from '../../../../../src/services/service-auth-brand';
 import { resolveManagedServiceContext } from '../../../../../src/services/public-service';
 import { TrainingAdminDashboard } from './training-admin-dashboard';
 
@@ -223,6 +225,7 @@ export default async function AiTrainingAdminPage({
             },
             select: {
               programEnrollmentId: true,
+              id: true,
               missionDefinitionKey: true,
               displaySnapshot: true,
             },
@@ -296,6 +299,56 @@ export default async function AiTrainingAdminPage({
     if (!assignmentByEnrollment.has(assignment.programEnrollmentId))
       assignmentByEnrollment.set(assignment.programEnrollmentId, assignment);
   }
+  const dynamicAssignmentIds =
+    serviceSlug === MANABERU_SERVICE_SLUG
+      ? [...assignmentByEnrollment.values()]
+          .filter(
+            (assignment) => assignment.missionDefinitionKey === PERSONAL_LEARNING_PRACTICE_MISSION,
+          )
+          .map((assignment) => assignment.id)
+      : [];
+  const dynamicPracticeEvents =
+    dynamicAssignmentIds.length === 0
+      ? []
+      : await db.prisma.programActionEvent.groupBy({
+          by: ['missionAssignmentId', 'eventType'],
+          where: {
+            workspaceId: service.workspaceId,
+            groupId: service.serviceId,
+            programEnrollmentId: { in: enrollmentIds },
+            missionAssignmentId: { in: dynamicAssignmentIds },
+            eventType: {
+              in: [
+                'PERSONAL_LEARNING_PRACTICE_STARTED',
+                'PERSONAL_LEARNING_NEXT_TASK_STARTED',
+                'PERSONAL_LEARNING_PRACTICE_NOTE',
+                'PERSONAL_LEARNING_SUPPORT_REQUEST',
+                'ANSWER_SUBMITTED',
+              ],
+            },
+          },
+          _count: { _all: true },
+          _max: { occurredAt: true },
+        });
+  const dynamicPracticeByAssignment = new Map<
+    string,
+    { aiConsultations: number; submissions: number; lastActivityAt: Date | null }
+  >();
+  for (const row of dynamicPracticeEvents) {
+    if (!row.missionAssignmentId) continue;
+    const activity = dynamicPracticeByAssignment.get(row.missionAssignmentId) ?? {
+      aiConsultations: 0,
+      submissions: 0,
+      lastActivityAt: null,
+    };
+    if (row.eventType === 'PERSONAL_LEARNING_SUPPORT_REQUEST')
+      activity.aiConsultations = row._count._all;
+    if (row.eventType === 'ANSWER_SUBMITTED') activity.submissions = row._count._all;
+    const occurredAt = row._max.occurredAt;
+    if (occurredAt && (!activity.lastActivityAt || occurredAt > activity.lastActivityAt))
+      activity.lastActivityAt = occurredAt;
+    dynamicPracticeByAssignment.set(row.missionAssignmentId, activity);
+  }
   const answerByEnrollment = new Map<string, (typeof answers)[number]>();
   for (const answer of answers) {
     if (!answerByEnrollment.has(answer.programEnrollmentId))
@@ -342,6 +395,7 @@ export default async function AiTrainingAdminPage({
       if (!member || !program) return [];
       const profile = profileByEnrollment.get(enrollment.id) ?? null;
       const answer = answerByEnrollment.get(enrollment.id) ?? null;
+      const assignment = assignmentByEnrollment.get(enrollment.id) ?? null;
       return [
         {
           enrollmentId: enrollment.id,
@@ -353,7 +407,8 @@ export default async function AiTrainingAdminPage({
           participantEmail: member.user.email,
           profile,
           progress: snapshotByEnrollment.get(enrollment.id) ?? null,
-          assignment: assignmentByEnrollment.get(enrollment.id) ?? null,
+          assignment,
+          dynamicPractice: assignment ? dynamicPracticeByAssignment.get(assignment.id) : undefined,
           evaluationUpdatedAt: answer?.updatedAt ?? null,
           profileUpdatedAt: profile?.updatedAt ?? null,
           workResults: workResultsByEnrollment.get(enrollment.id) ?? [],
