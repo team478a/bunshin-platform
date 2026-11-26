@@ -9,7 +9,8 @@ import {
   browserFormFixtureVersion,
   browserFormSelectionSchema,
   browserPilotEnvironment,
-  trainingCatalogueDiscoveryPrefix,
+  trainingObservedDiscoveryPrefixes,
+  trainingObservedFixtureVersion,
 } from '@bunshin/capability-browser';
 import { getServerEnvironment } from '@bunshin/config';
 import { ApplicationError, toApiError } from '@bunshin/shared';
@@ -54,7 +55,9 @@ export async function browserFixtureSelectionResponse(request: Request) {
                 ),
             },
           },
-          { payloadReference: { startsWith: trainingCatalogueDiscoveryPrefix + ':' } },
+          ...trainingObservedDiscoveryPrefixes.map((prefix) => ({
+            payloadReference: { startsWith: prefix + ':' },
+          })),
         ],
         status: 'LEASED',
         leaseOwner: identity.data.workerId,
@@ -85,27 +88,27 @@ export async function browserFixtureSelectionResponse(request: Request) {
     if (!job?.requestedBy || !member)
       throw new ApplicationError('NOT_FOUND', 'browser job unavailable');
 
-    const trainingCatalogue = job.payloadReference.startsWith(
-      trainingCatalogueDiscoveryPrefix + ':',
-    );
-    const form = job.payloadReference.startsWith(
-      `discover-observed-model:${browserFormFixtureVersion}:`,
-    );
-    const device = trainingCatalogue
-      ? await new PrismaBrowserLearningMaterials(prisma).catalogueDiscovery({
-          workspaceId: job.workspaceId,
-          requestedBy: job.requestedBy,
-          payloadReference: job.payloadReference,
-          environment,
-          jobType: BROWSER_FIXTURE_JOB_TYPE,
-          bunshinId: null,
-          capabilityType: null,
-        })
+    const trainingVersion = trainingObservedFixtureVersion(job.payloadReference.split(':', 1)[0]);
+    const form =
+      trainingVersion === browserFormFixtureVersion ||
+      job.payloadReference.startsWith(`discover-observed-model:${browserFormFixtureVersion}:`);
+    const device = trainingVersion
+      ? (
+          await new PrismaBrowserLearningMaterials(prisma).observedDiscovery({
+            workspaceId: job.workspaceId,
+            requestedBy: job.requestedBy,
+            payloadReference: job.payloadReference,
+            environment,
+            jobType: BROWSER_FIXTURE_JOB_TYPE,
+            bunshinId: null,
+            capabilityType: null,
+          })
+        ).device
       : job.payloadReference.endsWith(':mobile')
         ? 'mobile'
         : 'desktop';
     let observed;
-    if (trainingCatalogue || job.payloadReference.startsWith('discover-observed-model:')) {
+    if (trainingVersion || job.payloadReference.startsWith('discover-observed-model:')) {
       const schema = form ? browserFormSelectionSchema : browserObservedSelectionSchema;
       const parsed = schema.safeParse(await boundedLearningJson(request, 32_000));
       if (!parsed.success)

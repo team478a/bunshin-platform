@@ -111,6 +111,16 @@ export const browserFormFixtureObjective =
   '研修申請フォームに進み、件名と理由に練習用の文字を入力し、確認欄をチェックする。プレビューを開き、表示内容を確認する。';
 export const browserFormSampleId = 'training-example';
 export const trainingCatalogueDiscoveryPrefix = 'training-catalogue-discovery';
+export const trainingFormDiscoveryPrefix = 'training-form-discovery';
+export const trainingObservedDiscoveryPrefixes = [
+  trainingCatalogueDiscoveryPrefix,
+  trainingFormDiscoveryPrefix,
+] as const;
+
+export function trainingObservedFixtureVersion(prefix: string | undefined) {
+  if (prefix === trainingCatalogueDiscoveryPrefix) return browserObservedFixtureVersion;
+  return prefix === trainingFormDiscoveryPrefix ? browserFormFixtureVersion : null;
+}
 
 export function browserPilotEnvironment(
   appEnvironment: string | undefined,

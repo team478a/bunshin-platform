@@ -14,7 +14,7 @@ import {
   browserObservedFixtureVersion,
   browserFormFixtureVersion,
   browserPilotEnvironment,
-  trainingCatalogueDiscoveryPrefix,
+  trainingObservedFixtureVersion,
   type BrowserPlan,
 } from '@bunshin/capability-browser';
 import { PrismaBrowserLearningMaterials, PrismaJobRepository, prisma } from '@bunshin/database';
@@ -195,7 +195,7 @@ export async function runQueue(input: {
         }
         assertUserJob(job);
         const [kind, value, device, extra] = job.payloadReference.split(':');
-        const trainingCatalogue = kind === trainingCatalogueDiscoveryPrefix;
+        const trainingVersion = trainingObservedFixtureVersion(kind);
         if (kind === 'material' && value && uuid.test(value) && device === undefined) {
           const material = await completeMaterialJob({
             recipeId: value,
@@ -220,11 +220,11 @@ export async function runQueue(input: {
         let evidencePlan: BrowserPlan | undefined;
         let version: RecipeVersion = fixtureVersion;
         let run;
-        const observedVersion = trainingCatalogue
-          ? browserObservedFixtureVersion
-          : kind === 'discover-observed-model' && extra === undefined && isObservedVersion(value)
+        const observedVersion =
+          trainingVersion ??
+          (kind === 'discover-observed-model' && extra === undefined && isObservedVersion(value)
             ? value
-            : null;
+            : null);
         if (observedVersion) {
           const scenario = observedScenario(observedVersion);
           const limits = {
@@ -235,8 +235,8 @@ export async function runQueue(input: {
             input.signal,
             AbortSignal.timeout(limits.timeoutMs),
           ]);
-          const requestedDevice = trainingCatalogue
-            ? await new PrismaBrowserLearningMaterials(prisma).catalogueDiscovery(job)
+          const requestedDevice = trainingVersion
+            ? (await new PrismaBrowserLearningMaterials(prisma).observedDiscovery(job)).device
             : deviceFrom(device);
           version = observedVersion;
           recipeId = await findRecipeId(job.workspaceId, job.requestedBy, requestedDevice, version);
@@ -313,7 +313,7 @@ export async function runQueue(input: {
               discovery,
               run.verifiedAt,
               version,
-              trainingCatalogue,
+              trainingVersion !== null,
             )
           ).id;
           completedWithRecipe = true;
@@ -325,7 +325,7 @@ export async function runQueue(input: {
             recipeId,
             run.verifiedAt,
             version,
-            trainingCatalogue,
+            trainingVersion !== null,
           );
           completedWithRecipe = true;
         }

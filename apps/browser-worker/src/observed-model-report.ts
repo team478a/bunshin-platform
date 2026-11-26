@@ -7,7 +7,8 @@ import {
   browserObservedModelOperationKey,
   browserObservedStepLimit,
   browserPilotEnvironment,
-  trainingCatalogueDiscoveryPrefix,
+  trainingObservedDiscoveryPrefixes,
+  trainingObservedFixtureVersion,
 } from '@bunshin/capability-browser';
 import { prisma } from '@bunshin/database';
 import { BrowserRunError } from './browser';
@@ -41,7 +42,9 @@ export async function reportObservedModelJob(workspaceId: string, actorId: strin
                 ),
               },
             },
-            { payloadReference: { startsWith: trainingCatalogueDiscoveryPrefix + ':' } },
+            ...trainingObservedDiscoveryPrefixes.map((prefix) => ({
+              payloadReference: { startsWith: prefix + ':' },
+            })),
           ],
           workspace: {
             status: 'ACTIVE',
@@ -62,11 +65,11 @@ export async function reportObservedModelJob(workspaceId: string, actorId: strin
       });
       if (!job) throw new BrowserRunError('INVALID_PLAN');
 
-      const stepLimit = job.payloadReference.startsWith(
-        `discover-observed-model:${browserFormFixtureVersion}:`,
-      )
-        ? browserFormStepLimit
-        : browserObservedStepLimit;
+      const form =
+        trainingObservedFixtureVersion(job.payloadReference.split(':', 1)[0]) ===
+          browserFormFixtureVersion ||
+        job.payloadReference.startsWith(`discover-observed-model:${browserFormFixtureVersion}:`);
+      const stepLimit = form ? browserFormStepLimit : browserObservedStepLimit;
       const operations = Array.from({ length: stepLimit }, (_, index) => {
         const ordinal = index + 1;
         const key = browserObservedModelOperationKey(job.id, ordinal);
