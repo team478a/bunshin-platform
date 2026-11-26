@@ -1,4 +1,5 @@
 import { renderToStaticMarkup } from 'react-dom/server';
+import type * as BunshinConfig from '@bunshin/config';
 import { ApplicationError } from '@bunshin/shared';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as BrowserLearningMaterialService from '../src/services/browser-learning-material';
@@ -11,7 +12,7 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock('server-only', () => ({}));
 vi.mock('@bunshin/config', async (original) => ({
-  ...(await original<typeof import('@bunshin/config')>()),
+  ...(await original<typeof BunshinConfig>()),
   getServerEnvironment: () => ({ APP_URL: 'https://manaberu.example.test' }),
 }));
 vi.mock('../src/services/browser-learning-material', async (original) => ({
