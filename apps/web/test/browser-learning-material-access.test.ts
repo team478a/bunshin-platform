@@ -50,8 +50,11 @@ const image = () =>
       params: Promise.resolve(params),
     },
   );
-const page = () =>
-  MaterialPage({ params: Promise.resolve(params), searchParams: Promise.resolve({ topicId }) });
+const page = (print?: string) =>
+  MaterialPage({
+    params: Promise.resolve(params),
+    searchParams: Promise.resolve(print ? { topicId, print } : { topicId }),
+  });
 
 describe('illustrated lessons in the personal learning page', () => {
   beforeEach(() => {
@@ -116,6 +119,46 @@ describe('illustrated lessons in the personal learning page', () => {
     expect(html).toContain('前の教材を表示しています');
     expect(html).toContain('variant=after');
     expect(html).toContain(topicId);
+    expect(html).toContain('print=1');
+  });
+
+  it('prints every authorized step and links only to recorded images', async () => {
+    mocks.readMaterial.mockResolvedValue({
+      device: 'desktop',
+      printImages: [
+        { ordinal: 1, before: true, after: true, detail: false },
+        { ordinal: 2, before: false, after: true, detail: true },
+      ],
+      material: {
+        id: material,
+        revision: 1,
+        title: '担当窓口を探す',
+        goal: '問い合わせ先を確認する',
+        preparation: '案内を開く',
+        practice: '別の案内も確認する',
+        checkpoint: '担当名を説明する',
+        steps: [
+          { ordinal: 1, instruction: '一覧を開く' },
+          { ordinal: 2, instruction: '担当窓口を表示' },
+        ],
+      },
+    });
+
+    const html = renderToStaticMarkup(await page('1'));
+    expect(mocks.readMaterial).toHaveBeenCalledWith(actor, { print: true });
+    expect(mocks.readImage).not.toHaveBeenCalled();
+    expect(html).toContain('印刷・PDFとして保存');
+    expect(html).toContain('一覧を開く');
+    expect(html).toContain('担当窓口を表示');
+    expect(html).toContain('別の案内も確認する');
+    expect(html).toContain('step=2&amp;variant=detail');
+    expect(html).not.toContain('step=1&amp;variant=detail');
+    expect(html).not.toContain('step=2&amp;variant=before');
+
+    mocks.readMaterial.mockClear();
+    mocks.resolveActor.mockRejectedValue(new ApplicationError('NOT_FOUND', 'unavailable'));
+    await expect(page('1')).rejects.toThrow('NEXT_HTTP_ERROR_FALLBACK;404');
+    expect(mocks.readMaterial).not.toHaveBeenCalled();
   });
 
   it('shows preparation status while the browser job is queued', async () => {

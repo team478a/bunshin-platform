@@ -2,6 +2,7 @@ import { notFound, redirect } from 'next/navigation';
 import Link from 'next/link';
 import { ApplicationError } from '@bunshin/shared';
 import { BrowserMaterialView } from '../../../../../../../src/components/browser-material-view';
+import { BrowserMaterialPrint } from '../../../../../../../src/components/browser-material-print';
 import styles from '../../../../../../../src/components/browser-material.module.css';
 import {
   browserLearningMaterialActor,
@@ -19,7 +20,7 @@ export default async function BrowserLearningMaterialPage({
   searchParams,
 }: {
   params: Promise<{ serviceSlug: string; programEnrollmentId: string }>;
-  searchParams: Promise<{ topicId?: string; step?: string; narrator?: string }>;
+  searchParams: Promise<{ topicId?: string; step?: string; narrator?: string; print?: string }>;
 }) {
   const { serviceSlug, programEnrollmentId } = await params;
   const query = await searchParams;
@@ -32,7 +33,8 @@ export default async function BrowserLearningMaterialPage({
     );
     const db = await import('@bunshin/database');
     const materials = new db.PrismaBrowserLearningMaterials(db.prisma);
-    const state = await materials.readMaterial(actor);
+    const print = query.print === '1';
+    const state = await materials.readMaterial(actor, { print });
     if (!state) notFound();
     const path = learningMaterialPath(serviceSlug, programEnrollmentId, actor.topicId);
     const pathname = learningMaterialPath(serviceSlug, programEnrollmentId);
@@ -42,6 +44,32 @@ export default async function BrowserLearningMaterialPage({
       query: topic,
     };
     const material = state.material;
+    const imageHref = (
+      materialId: string,
+      ordinal: number,
+      variant: 'before' | 'after' | 'detail',
+    ) =>
+      pathname +
+      '/image?' +
+      new URLSearchParams({
+        ...topic,
+        material: materialId,
+        step: String(ordinal),
+        variant,
+      }).toString();
+    if (print) {
+      if (!material) notFound();
+      return (
+        <BrowserMaterialPrint
+          material={{ ...material, verifiedAt: material.reviewedAt ?? material.verifiedAt }}
+          device={state.device}
+          images={state.printImages}
+          imageHref={(ordinal, variant) => imageHref(material.id, ordinal, variant)}
+          backHref={{ pathname, query: topic }}
+          reviewFailed={state.reviewStatus === 'DEAD'}
+        />
+      );
+    }
     const ordinal = query.step === undefined ? 1 : Number(query.step);
     const step = material?.steps[ordinal - 1];
     if (material && (!Number.isSafeInteger(ordinal) || !step)) notFound();
@@ -117,6 +145,7 @@ export default async function BrowserLearningMaterialPage({
         <h1>画像付き操作教材</h1>
         {material ? (
           <>
+            <Link href={{ pathname, query: { ...topic, print: '1' } }}>PDF・印刷用に表示</Link>
             <BrowserMaterialView
               material={{ ...material, verifiedAt: material.reviewedAt ?? material.verifiedAt }}
               device={state.device}
@@ -130,16 +159,7 @@ export default async function BrowserLearningMaterialPage({
                   ...(narrator.voice ? { narrator: narrator.voice } : {}),
                 },
               })}
-              imageHref={(variant) =>
-                pathname +
-                '/image?' +
-                new URLSearchParams({
-                  ...topic,
-                  material: material.id,
-                  step: String(ordinal),
-                  variant,
-                }).toString()
-              }
+              imageHref={(variant) => imageHref(material.id, ordinal, variant)}
               guidance={
                 state.device === 'mobile'
                   ? 'スマートフォンのブラウザで、ボタンをタップして進めましょう。'

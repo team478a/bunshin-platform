@@ -2,6 +2,8 @@
 
 [設計判断](../adr/MANABERU_BROWSER_MATERIALS_PR3.md)
 
+個別学習で教材を開き、「PDF・印刷用に表示」から全手順と実践課題を確認できます。「印刷・PDFとして保存」を押し、ブラウザの印刷画面で保存先に PDF を選びます。
+
 - `material` ジョブは同じレシピ・教材版の既存教材を再利用する。新規生成では、DB が参照する検証証拠とレシピの手順・日時・端末を照合する。証拠ファイルが欠けている場合は Playwright で再実行して成功を確認する。
 - 手順 ID ごとに命令から日本語の説明を作り、操作前後の画像を付ける。実画面の操作対象を観測できた場合は枠と拡大画像を生成する。PR-2 で保存した座標のない証拠も前後画像として再利用できる。
 - 既存アプリと同じ Sharp 0.35.4（Apache-2.0／libvips）を使う。対象を中心にクロップし、端で切り取る範囲を画面に戻す考え方を Mimik Desktop v1.2.0（MIT、Copyright 2026 Westpoint）から取り入れた。 [Sharp の合成 API](https://sharp.pixelplumbing.com/api-composite/) · [Mimik の座標処理](https://raw.githubusercontent.com/westpoint-io/mimik/desktop-v1.2.0/packages/core/src/screenshot/geometry.ts)
