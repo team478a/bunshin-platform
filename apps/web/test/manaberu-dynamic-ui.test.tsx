@@ -80,7 +80,7 @@ describe('Manaberu dynamic learning UI', () => {
     const fixed = render(false);
 
     expect(dynamic).toContain(
-      '書いてくれた希望をもとに、あなたに合った小さな練習を一緒に考えます。今進めている練習は、新しい練習を始めるまでそのまま残ります。',
+      'AIで試したいことを一つ書いてください。新しい実践を始めるまで、今の実践は続けられます。',
     );
     expect(dynamic).toContain('<summary>くわしく伝える（任意）</summary>');
     expect(dynamic).not.toContain('<details open');

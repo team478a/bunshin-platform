@@ -8,6 +8,13 @@ describe('verified browser material', () => {
     const png = await sharp({
       create: { width: 200, height: 120, channels: 3, background: 'white' },
     })
+      .composite([
+        {
+          input: { create: { width: 20, height: 10, channels: 3, background: 'green' } },
+          left: 55,
+          top: 40,
+        },
+      ])
       .png()
       .toBuffer();
     const plan = fixturePlan('mobile');
@@ -31,9 +38,21 @@ describe('verified browser material', () => {
     expect(material.steps[1]?.detailImage).toBeNull();
     expect(await sharp(detail!).metadata()).toMatchObject({
       format: 'webp',
-      width: 100,
-      height: 90,
+      width: 60,
+      height: 50,
     });
+    const closeUp = await sharp(detail!).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+    const pixel = (x: number, y: number) => {
+      const offset = (y * closeUp.info.width + x) * closeUp.info.channels;
+      return [...closeUp.data.subarray(offset, offset + 3)];
+    };
+    const frame = pixel(13, 25);
+    expect(frame[0]).toBeGreaterThan(180);
+    expect(frame[1]).toBeLessThan(110);
+    // The crop leaves white space between the target, its outline, and the image edge.
+    expect(pixel(17, 25).every((channel) => channel > 220)).toBe(true);
+    expect(pixel(43, 25).every((channel) => channel > 220)).toBe(true);
+    expect(pixel(3, 25).every((channel) => channel > 220)).toBe(true);
     const marked = await sharp(material.steps[0]!.beforeImage)
       .extract({ left: 37, top: 42, width: 1, height: 1 })
       .raw()

@@ -1,3 +1,4 @@
+import design from '../../../src/components/manaberu-learner.module.css';
 import { cache, type CSSProperties } from 'react';
 import type { Metadata, Route } from 'next';
 import Link from 'next/link';
@@ -13,6 +14,7 @@ import { ParticipationForm } from './participation-form';
 import { PendingSubmitButton } from '../../ui/pending-submit-button';
 import { ServiceHomeAccessGuidance } from './home/service-home-access-guidance';
 import {
+  MANABERU_SERVICE_SLUG,
   ORACLE_SERVICE_SLUG,
   serviceAuthBrandForSlug,
 } from '../../../src/services/service-auth-brand';
@@ -144,7 +146,10 @@ export default async function ServiceEntryPage({
   const content = (
     <PublicShell showPlatformBrand={false}>
       {(isOracle || appearance) && <FortuneVisit serviceSlug={serviceSlug} />}
-      <article className="service-entry" style={style}>
+      <article
+        className={`service-entry ${serviceSlug === MANABERU_SERVICE_SLUG ? design.frame : ''}`}
+        style={style}
+      >
         <header className="service-entry__header">
           {configuration.brand.logoUrl && (!appearance?.enabled || appearance.showLogo) && (
             <div
