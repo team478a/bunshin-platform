@@ -1,8 +1,12 @@
 import { notFound, redirect } from 'next/navigation';
 import Link from 'next/link';
+import { getServerEnvironment } from '@bunshin/config';
 import { ApplicationError } from '@bunshin/shared';
 import { BrowserMaterialView } from '../../../../../../../src/components/browser-material-view';
-import { BrowserMaterialPrint } from '../../../../../../../src/components/browser-material-print';
+import {
+  BrowserMaterialManualLinks,
+  BrowserMaterialPrint,
+} from '../../../../../../../src/components/browser-material-print';
 import styles from '../../../../../../../src/components/browser-material.module.css';
 import {
   browserLearningMaterialActor,
@@ -45,6 +49,7 @@ export default async function BrowserLearningMaterialPage({
     const path = learningMaterialPath(serviceSlug, programEnrollmentId, actor.topicId);
     const pathname = learningMaterialPath(serviceSlug, programEnrollmentId);
     const topic = actor.topicId ? { topicId: actor.topicId } : {};
+    const materialHref = { pathname, query: topic };
     const home = {
       pathname: pathname.replace('/learning-request/browser-material', '/learning-request'),
       query: topic,
@@ -71,7 +76,8 @@ export default async function BrowserLearningMaterialPage({
           device={state.device}
           images={state.printImages}
           imageHref={(ordinal, variant) => imageHref(material.id, ordinal, variant)}
-          backHref={{ pathname, query: topic }}
+          backHref={materialHref}
+          webMaterialUrl={new URL(path, getServerEnvironment().APP_URL).toString()}
           reviewFailed={state.reviewStatus === 'DEAD'}
           requestedStyle={query.format}
         />
@@ -152,9 +158,10 @@ export default async function BrowserLearningMaterialPage({
         <h1>画像付き操作教材</h1>
         {material ? (
           <>
-            <Link href={{ pathname, query: { ...topic, print: '1' } }}>
-              マニュアルの形式を選ぶ（PDF・印刷）
-            </Link>
+            <section aria-labelledby="pdf-manual-title">
+              <h2 id="pdf-manual-title">PDFマニュアル</h2>
+              <BrowserMaterialManualLinks materialHref={materialHref} />
+            </section>
             <BrowserMaterialView
               material={{ ...material, verifiedAt: material.reviewedAt ?? material.verifiedAt }}
               device={state.device}
