@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import sharp from 'sharp';
 import { describe, expect, it, vi } from 'vitest';
+import { browserFormSelectionSchema } from '@bunshin/capability-browser';
 import {
   discoverBrowserPlan,
   discoverObservedBrowserPlan,
@@ -19,6 +20,7 @@ import {
   observedCatalogueMaterial,
 } from '../src/observed-catalogue';
 import { materialSignature } from '../src/material-signature';
+import { observedForm, observedFormGoal, observedFormMaterial } from '../src/observed-form';
 
 describe.skipIf(process.env['BROWSER_WORKER_LIVE_TESTS'] !== '1')('local Chromium', () => {
   const limits = { timeoutMs: 30_000, maxSteps: 20 };
@@ -73,6 +75,76 @@ describe.skipIf(process.env['BROWSER_WORKER_LIVE_TESTS'] !== '1')('local Chromiu
       ),
     ).rejects.toMatchObject({ category: 'STEP_FAILED' });
   }, 40_000);
+
+  it('discovers a multi-screen form, replays it and builds a lesson without new model calls', async () => {
+    const pages = new Map(observedForm.pages);
+    pages.set(
+      'form',
+      (pages.get('form') ?? '').replace(
+        '</main>',
+        '<label>パスワード<input type="password"></label><label>閲覧専用<input readonly></label><label>入力済み<input value="既存データ"></label></main>',
+      ),
+    );
+    const formFixture = { ...observedForm, pages };
+    const sequence = [
+      '申請の案内へ',
+      '申請テンプレートへ',
+      '研修申請フォームを開く',
+      '件名',
+      '理由',
+      '入力内容を確認した',
+      'プレビューを開く',
+      '表示内容を確認する',
+    ];
+    const model = vi.fn((...args: Parameters<typeof fetch>) => {
+      const payload = args[1]?.body;
+      if (typeof payload !== 'string') throw new Error('Expected a JSON request body');
+      const body = browserFormSelectionSchema.parse(JSON.parse(payload));
+      expect(body.choices.map(({ name }) => name)).not.toContain('入力済み');
+      expect(body.choices.map(({ name }) => name)).not.toContain('閲覧専用');
+      expect(body.choices.map(({ name }) => name)).not.toContain('パスワード');
+      expect(JSON.stringify(body)).not.toContain('練習用データ');
+      const choice = body.choices.find(({ name }) => name === sequence[body.ordinal - 1]);
+      if (!choice) throw new Error('Expected observed form target is missing');
+      return Promise.resolve(Response.json(choice.id));
+    });
+    vi.stubGlobal('fetch', model);
+    vi.stubEnv('BROWSER_FIXTURE_MODEL_ORIGIN', 'http://127.0.0.1:3000');
+    vi.stubEnv('BROWSER_FIXTURE_MODEL_SECRET', 'fixture-secret');
+    try {
+      const { plan } = await discoverObservedBrowserPlan(
+        observedFormGoal('mobile'),
+        formFixture,
+        { ...limits, maxSteps: 8 },
+        signal,
+        modelObservedSelector('job-id', 'worker-id', true),
+      );
+      expect(plan.steps.map(({ action }) => action)).toEqual([
+        'click',
+        'click',
+        'click',
+        'fill',
+        'fill',
+        'click',
+        'click',
+        'click',
+      ]);
+      const replay = await runBrowserPlan(plan, formFixture, limits, signal);
+      const lesson = await composeFixtureMaterial(plan, replay, signal, observedFormMaterial);
+      expect(lesson.steps).toHaveLength(8);
+      expect(
+        lesson.steps.every(
+          ({ beforeImage, afterImage, detailImage }) =>
+            !!beforeImage.length && !!afterImage.length && !!detailImage?.length,
+        ),
+      ).toBe(true);
+      expect(lesson.practice).toContain('研修申請のプレビューを確認しました');
+      expect(model).toHaveBeenCalledTimes(8);
+    } finally {
+      vi.unstubAllGlobals();
+      vi.unstubAllEnvs();
+    }
+  }, 70_000);
 
   it('creates an illustrated catalogue lesson from replayed screen evidence without another model call', async () => {
     const root = await mkdtemp(join(tmpdir(), 'bunshin-catalogue-proof-'));

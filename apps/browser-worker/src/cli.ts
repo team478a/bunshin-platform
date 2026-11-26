@@ -49,6 +49,7 @@ async function main() {
     command !== 'discover' &&
     command !== 'discover-model' &&
     command !== 'discover-observed-model' &&
+    command !== 'discover-observed-form-model' &&
     command !== 'report-observed-model' &&
     command !== 'replay' &&
     command !== 'material' &&
@@ -59,7 +60,7 @@ async function main() {
     command !== 'rollback-training-material'
   ) {
     throw new Error(
-      'Usage: smoke [mobile|desktop] | enqueue WORKSPACE_ID ACTOR_ID DEVICE REQUEST_ID | discover|discover-model|discover-observed-model WORKSPACE_ID ACTOR_ID DEVICE REQUEST_ID | replay|material WORKSPACE_ID ACTOR_ID RECIPE_ID REQUEST_ID | cancel|report-observed-model WORKSPACE_ID ACTOR_ID JOB_ID | serve | once | schedule-training-rechecks | rollback-training-material WORKSPACE_ID ACTOR_ID OLD_MATERIAL_ID CURRENT_MATERIAL_ID',
+      'Usage: smoke [mobile|desktop] | enqueue WORKSPACE_ID ACTOR_ID DEVICE REQUEST_ID | discover|discover-model|discover-observed-model|discover-observed-form-model WORKSPACE_ID ACTOR_ID DEVICE REQUEST_ID | replay|material WORKSPACE_ID ACTOR_ID RECIPE_ID REQUEST_ID | cancel|report-observed-model WORKSPACE_ID ACTOR_ID JOB_ID | serve | once | schedule-training-rechecks | rollback-training-material WORKSPACE_ID ACTOR_ID OLD_MATERIAL_ID CURRENT_MATERIAL_ID',
     );
   }
   const databaseUrl = process.env['BROWSER_FIXTURE_DATABASE_URL'];
@@ -72,6 +73,7 @@ async function main() {
       command === 'discover' ||
       command === 'discover-model' ||
       command === 'discover-observed-model' ||
+      command === 'discover-observed-form-model' ||
       command === 'replay' ||
       command === 'material'
     ) {

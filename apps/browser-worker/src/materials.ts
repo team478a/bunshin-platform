@@ -1,11 +1,10 @@
 import { join } from 'node:path';
 import { CompleteJob, type UserJob } from '@bunshin/application';
-import { browserObservedFixtureVersion } from '@bunshin/capability-browser';
 import { PrismaJobRepository, prisma } from '@bunshin/database';
 import { BrowserRunError, runBrowserPlan } from './browser';
 import { saveEvidence } from './evidence';
 import { composeFixtureMaterial, readMaterialProof } from './material-content';
-import { observedCatalogueMaterial } from './observed-catalogue';
+import { isObservedVersion, observedScenario } from './observed-scenarios';
 import { fixtureForRecipe, loadVerifiedRecipe, recipeScope } from './recipes';
 
 const revision = 1;
@@ -43,13 +42,13 @@ export async function completeMaterialJob(input: {
     originalProof.sourceJobId,
     String(originalProof.sourceAttempt),
   );
-  const isCatalogue = version === browserObservedFixtureVersion;
+  const observed = isObservedVersion(version) ? observedScenario(version) : null;
   let evidence = await readMaterialProof(
     folder,
     plan,
     originalProof.verifiedAt,
     signal,
-    isCatalogue,
+    !!observed,
   );
   let proof = originalProof;
   if (!evidence?.verifiedResultText) {
@@ -67,8 +66,12 @@ export async function completeMaterialJob(input: {
       verifiedAt: new Date(run.verifiedAt),
     };
   }
-  const metadata = isCatalogue ? observedCatalogueMaterial : undefined;
-  const { steps, ...content } = await composeFixtureMaterial(plan, evidence, signal, metadata);
+  const { steps, ...content } = await composeFixtureMaterial(
+    plan,
+    evidence,
+    signal,
+    observed?.material,
+  );
   signal.throwIfAborted();
   return prisma.$transaction(async (tx) => {
     await new CompleteJob(new PrismaJobRepository(tx)).execute(job.id, workerId);

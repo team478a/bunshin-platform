@@ -12,9 +12,9 @@ import {
 } from '@bunshin/application';
 import {
   browserObservedFixtureVersion,
-  browserObservedStepLimit,
+  browserFormFixtureVersion,
   browserPilotEnvironment,
-  trainingCatalogueDiscoveryPrefix,
+  trainingObservedFixtureVersion,
   type BrowserPlan,
 } from '@bunshin/capability-browser';
 import { PrismaBrowserLearningMaterials, PrismaJobRepository, prisma } from '@bunshin/database';
@@ -33,8 +33,9 @@ import {
   fixtureForRecipe,
   loadRecipe,
   loadVerifiedRecipe,
+  type RecipeVersion,
 } from './recipes';
-import { observedCatalogue, observedCatalogueGoal } from './observed-catalogue';
+import { isObservedVersion, observedScenario } from './observed-scenarios';
 import { modelObservedSelector, modelPreviewSelector } from './model-selector';
 import { completeMaterialJob } from './materials';
 import { runTrainingMaterial } from './training-material';
@@ -65,6 +66,7 @@ export async function enqueueFixture(
     | 'discover'
     | 'discover-model'
     | 'discover-observed-model'
+    | 'discover-observed-form-model'
     | 'replay'
     | 'material' = 'fixture',
 ) {
@@ -79,8 +81,13 @@ export async function enqueueFixture(
   } else {
     const device = deviceFrom(deviceName);
     const version =
-      mode === 'discover-observed-model' ? browserObservedFixtureVersion : fixtureVersion;
-    payloadReference = `${mode === 'fixture' ? '' : mode + ':'}${version}:${device}`;
+      mode === 'discover-observed-form-model'
+        ? browserFormFixtureVersion
+        : mode === 'discover-observed-model'
+          ? browserObservedFixtureVersion
+          : fixtureVersion;
+    const kind = isObservedVersion(version) ? 'discover-observed-model' : mode;
+    payloadReference = `${kind === 'fixture' ? '' : kind + ':'}${version}:${device}`;
   }
   return new EnqueueJob(jobs).enqueue({
     environment: queueEnvironment(),
@@ -90,7 +97,8 @@ export async function enqueueFixture(
     jobType: BROWSER_FIXTURE_JOB_TYPE,
     payloadReference,
     idempotencyKey: `browser-fixture:${workspaceId.toLowerCase()}:${actorId.toLowerCase()}:${payloadReference}:${requestId.toLowerCase()}`,
-    maxAttempts: mode === 'discover-observed-model' ? 1 : 3,
+    maxAttempts:
+      mode === 'discover-observed-model' || mode === 'discover-observed-form-model' ? 1 : 3,
   });
 }
 
@@ -187,7 +195,7 @@ export async function runQueue(input: {
         }
         assertUserJob(job);
         const [kind, value, device, extra] = job.payloadReference.split(':');
-        const trainingCatalogue = kind === trainingCatalogueDiscoveryPrefix;
+        const trainingVersion = trainingObservedFixtureVersion(kind);
         if (kind === 'material' && value && uuid.test(value) && device === undefined) {
           const material = await completeMaterialJob({
             recipeId: value,
@@ -210,26 +218,27 @@ export async function runQueue(input: {
         }
         let discovery: BrowserPlan | undefined;
         let evidencePlan: BrowserPlan | undefined;
-        let version: typeof fixtureVersion | typeof browserObservedFixtureVersion = fixtureVersion;
+        let version: RecipeVersion = fixtureVersion;
         let run;
-        if (
-          trainingCatalogue ||
-          (kind === 'discover-observed-model' &&
-            value === browserObservedFixtureVersion &&
-            extra === undefined)
-        ) {
+        const observedVersion =
+          trainingVersion ??
+          (kind === 'discover-observed-model' && extra === undefined && isObservedVersion(value)
+            ? value
+            : null);
+        if (observedVersion) {
+          const scenario = observedScenario(observedVersion);
           const limits = {
             ...input.limits,
-            maxSteps: Math.min(input.limits.maxSteps, browserObservedStepLimit),
+            maxSteps: Math.min(input.limits.maxSteps, scenario.maxSteps),
           };
           const catalogueSignal = AbortSignal.any([
             input.signal,
             AbortSignal.timeout(limits.timeoutMs),
           ]);
-          const requestedDevice = trainingCatalogue
-            ? await new PrismaBrowserLearningMaterials(prisma).catalogueDiscovery(job)
+          const requestedDevice = trainingVersion
+            ? (await new PrismaBrowserLearningMaterials(prisma).observedDiscovery(job)).device
             : deviceFrom(device);
-          version = browserObservedFixtureVersion;
+          version = observedVersion;
           recipeId = await findRecipeId(job.workspaceId, job.requestedBy, requestedDevice, version);
           if (recipeId) {
             ({ plan: evidencePlan } = await loadVerifiedRecipe(
@@ -240,15 +249,15 @@ export async function runQueue(input: {
             ));
           } else {
             ({ plan: discovery } = await discoverObservedBrowserPlan(
-              observedCatalogueGoal(requestedDevice),
-              observedCatalogue,
+              scenario.goal(requestedDevice),
+              scenario.fixture,
               limits,
               catalogueSignal,
-              modelObservedSelector(job.id, workerId),
+              modelObservedSelector(job.id, workerId, scenario.form),
             ));
             evidencePlan = discovery;
           }
-          run = await runBrowserPlan(evidencePlan, observedCatalogue, limits, catalogueSignal);
+          run = await runBrowserPlan(evidencePlan, scenario.fixture, limits, catalogueSignal);
         } else if (
           (kind === 'discover' || kind === 'discover-model') &&
           value === fixtureVersion &&
@@ -285,7 +294,7 @@ export async function runQueue(input: {
           } else {
             throw new BrowserRunError('INVALID_PLAN');
           }
-          if (version === browserObservedFixtureVersion) evidencePlan = plan;
+          if (isObservedVersion(version)) evidencePlan = plan;
           run = await runBrowserPlan(plan, fixtureForRecipe(version), input.limits, input.signal);
         }
         await saveEvidence(
@@ -304,7 +313,7 @@ export async function runQueue(input: {
               discovery,
               run.verifiedAt,
               version,
-              trainingCatalogue,
+              trainingVersion !== null,
             )
           ).id;
           completedWithRecipe = true;
@@ -316,7 +325,7 @@ export async function runQueue(input: {
             recipeId,
             run.verifiedAt,
             version,
-            trainingCatalogue,
+            trainingVersion !== null,
           );
           completedWithRecipe = true;
         }
