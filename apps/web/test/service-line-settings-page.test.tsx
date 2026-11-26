@@ -82,6 +82,18 @@ describe('LINE connection entry page', () => {
     );
     expect(mocks.settings).not.toHaveBeenCalled();
   });
+  it('keeps the Manaberu connection screen in learning mode before program setup', async () => {
+    mocks.settings.mockResolvedValue({
+      ...(await mocks.settings()),
+      service: { configuration: { slug: 'manaberu-style', displayName: 'マナベルスタイル' } },
+      learningService: false,
+    });
+    const html = await render('manaberu-style');
+    expect(html).toContain('学習用LINEの接続');
+    expect(html).toContain('現在、学習用LINEへ接続できません');
+    expect(html).not.toContain('投稿パートナー');
+    expect(html).not.toContain('name="linkTarget"');
+  });
   it('offers explicit learner consent without a posting partner', async () => {
     mocks.settings.mockResolvedValue({
       ...(await mocks.settings()),

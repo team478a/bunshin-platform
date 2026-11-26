@@ -42,9 +42,9 @@ export default async function ServiceLineSettingsPage({
   );
   const { service, mode, partners, available, connected, consented } = settings;
   const slug = service.configuration.slug;
-  if (settings.learningService) {
+  if (slug === MANABERU_SERVICE_SLUG || settings.learningService) {
     const result = lineResult;
-    const ready = mode === 'DEDICATED' && available && consented;
+    const ready = settings.learningService && mode === 'DEDICATED' && available && consented;
     return (
       <PublicShell showPlatformBrand={false}>
         <main className="app-page line-link-page">
