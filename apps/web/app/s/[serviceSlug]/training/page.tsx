@@ -1,3 +1,4 @@
+import design from '../../../../src/components/manaberu-learner.module.css';
 import type { Route } from 'next';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
@@ -55,7 +56,7 @@ export default async function AiTrainingConfirmationPage({
 
   return (
     <PublicShell showPlatformBrand={false}>
-      <main className="app-page">
+      <main className={`app-page ${design.frame}`}>
         <header className="app-page__heading">
           <p className="eyebrow">{participation.serviceName}</p>
           <h1>{mixedPolicies ? 'AIを使った支援への参加' : pagePolicy.copy.pageTitle}</h1>

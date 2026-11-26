@@ -1,5 +1,6 @@
 import type { ServiceFoundationRecord } from '@bunshin/application';
 
+export const MANABERU_SERVICE_SLUG = 'manaberu-style';
 export const ORACLE_SERVICE_SLUG = 'watashi-fortune';
 export const ORACLE_SERVICE_NAME = '月と星のオラクル';
 
@@ -10,7 +11,7 @@ export interface ServiceAuthBrand {
 }
 
 const INDEPENDENT_SERVICE_BRANDS: Record<string, string> = {
-  'manaberu-style': 'マナベルスタイル',
+  [MANABERU_SERVICE_SLUG]: 'マナベルスタイル',
   hassy: 'ハッシー',
 };
 
