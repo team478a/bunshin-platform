@@ -53,7 +53,7 @@ const image = () =>
 const page = (print?: string) =>
   MaterialPage({
     params: Promise.resolve(params),
-    searchParams: Promise.resolve({ topicId, print }),
+    searchParams: Promise.resolve(print ? { topicId, print } : { topicId }),
   });
 
 describe('illustrated lessons in the personal learning page', () => {
