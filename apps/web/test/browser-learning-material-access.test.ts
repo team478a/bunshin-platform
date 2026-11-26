@@ -10,6 +10,10 @@ const mocks = vi.hoisted(() => ({
   readImage: vi.fn(),
 }));
 vi.mock('server-only', () => ({}));
+vi.mock('@bunshin/config', async (original) => ({
+  ...(await original<typeof import('@bunshin/config')>()),
+  getServerEnvironment: () => ({ APP_URL: 'https://manaberu.example.test' }),
+}));
 vi.mock('../src/services/browser-learning-material', async (original) => ({
   ...(await original<typeof BrowserLearningMaterialService>()),
   browserLearningMaterialActor: mocks.resolveActor,
@@ -119,7 +123,13 @@ describe('illustrated lessons in the personal learning page', () => {
     expect(html).toContain('前の教材を表示しています');
     expect(html).toContain('variant=after');
     expect(html).toContain(topicId);
-    expect(html).toContain('print=1');
+    for (const format of ['guide', 'quick', 'compare', 'practice']) {
+      expect(html).toContain(
+        learningMaterialPath(params.serviceSlug, params.programEnrollmentId, topicId) +
+          '&amp;print=1&amp;format=' +
+          format,
+      );
+    }
   });
 
   it('prints every authorized step and links only to recorded images', async () => {
@@ -148,6 +158,11 @@ describe('illustrated lessons in the personal learning page', () => {
     expect(mocks.readMaterial).toHaveBeenCalledWith(actor, { print: true });
     expect(mocks.readImage).not.toHaveBeenCalled();
     expect(html).toContain('印刷・PDFとして保存');
+    expect(html).toContain(
+      'href="https://manaberu.example.test' +
+        learningMaterialPath(params.serviceSlug, params.programEnrollmentId, topicId) +
+        '"',
+    );
     expect(html).toContain('一覧を開く');
     expect(html).toContain('担当窓口を表示');
     expect(html).toContain('別の案内も確認する');
