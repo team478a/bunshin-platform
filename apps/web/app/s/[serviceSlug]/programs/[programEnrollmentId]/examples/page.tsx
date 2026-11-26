@@ -1,3 +1,4 @@
+import design from '../../../../../../src/components/manaberu-learner.module.css';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { ApplicationError } from '@bunshin/shared';
@@ -30,8 +31,8 @@ export default async function PersonalLearningExamplesPage({
     );
     const items = await new PrismaPersonalLearningSavedExamplesRepository(prisma).list(actor.scope);
     return (
-      <main className="mx-auto max-w-3xl space-y-6 px-4 py-8">
-        <header className="space-y-2">
+      <main className={`${design.frame} ${design.flow}`}>
+        <header className={design.hero}>
           <p className="text-sm text-slate-600">マナベルスタイル</p>
           <h1 className="text-2xl font-bold">保存した活用例・手本</h1>
           <p>

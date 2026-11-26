@@ -1,3 +1,4 @@
+import design from '../../../../../../../src/components/manaberu-learner.module.css';
 import { notFound, redirect } from 'next/navigation';
 import Link from 'next/link';
 import { getServerEnvironment } from '@bunshin/config';
@@ -153,20 +154,19 @@ export default async function BrowserLearningMaterialPage({
     }
 
     return (
-      <main className={styles.page}>
-        <Link href={home}>個別学習に戻る</Link>
-        <h1>画像付き操作教材</h1>
+      <main className={`${design.frame} ${styles.page} ${styles.learnerPage}`}>
+        <nav className={styles.learnerLinks} aria-label="教材ナビゲーション">
+          <Link href={home}>個別学習に戻る</Link>
+          {material && <a href="#pdf-manual-title">PDFを使う</a>}
+        </nav>
         {material ? (
           <>
-            <section aria-labelledby="pdf-manual-title">
-              <h2 id="pdf-manual-title">PDFマニュアル</h2>
-              <BrowserMaterialManualLinks materialHref={materialHref} />
-            </section>
             <BrowserMaterialView
               material={{ ...material, verifiedAt: material.reviewedAt ?? material.verifiedAt }}
               device={state.device}
               ordinal={ordinal}
               showDetail={showDetail}
+              learner={{ practiceHref: { ...home, hash: 'practice-record' } }}
               stepHref={(value) => ({
                 pathname,
                 query: {
@@ -182,6 +182,10 @@ export default async function BrowserLearningMaterialPage({
                   : 'パソコンのブラウザで、ボタンをクリックして進めましょう。'
               }
             />
+            <section aria-labelledby="pdf-manual-title">
+              <h2 id="pdf-manual-title">PDFマニュアル</h2>
+              <BrowserMaterialManualLinks materialHref={materialHref} />
+            </section>
             <BrowserMaterialVideo
               state={video}
               requestVideo={requestVideo}
@@ -212,7 +216,8 @@ export default async function BrowserLearningMaterialPage({
                 }).toString()
               }
             />
-            <section aria-label="画面の違い">
+            <section aria-labelledby="material-help-title">
+              <h2 id="material-help-title">操作に困ったとき</h2>
               <small>教材 第{material.revision}版</small>
               {state.canReview && (
                 <form action={reportDifference}>
@@ -231,7 +236,8 @@ export default async function BrowserLearningMaterialPage({
             </section>
           </>
         ) : (
-          <section aria-label="教材の準備">
+          <section aria-labelledby="material-preparation-title">
+            <h1 id="material-preparation-title">画像付き操作教材</h1>
             {!state.canGenerate ? (
               <p>
                 この端末向けの検証済みレシピは準備中です。個別学習から質問や実践を続けられます。

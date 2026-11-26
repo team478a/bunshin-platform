@@ -1,0 +1,165 @@
+.frame {
+  --learning-ink: #172944;
+  --learning-muted: #4e6178;
+  --learning-accent: #1f4e90;
+  --learning-accent-soft: #edf4fc;
+  --learning-surface: #ffffff;
+  --learning-bg: #f6f9fd;
+  --learning-border: #d6e1ee;
+  --learning-radius: 1rem;
+  color: var(--learning-ink);
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+
+.frame h1 {
+  color: var(--learning-ink);
+  font-size: clamp(1.65rem, 5vw, 2.4rem);
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+
+.frame h2 {
+  color: var(--learning-ink);
+  font-size: clamp(1.2rem, 3vw, 1.45rem);
+  line-height: 1.4;
+}
+
+.frame small {
+  color: var(--learning-muted);
+}
+
+.frame a:not(:global(.button)) {
+  color: var(--learning-accent);
+  text-underline-offset: 0.2em;
+}
+
+.frame :is(a, button, input, textarea, select, summary):focus-visible {
+  outline: 2px solid var(--learning-accent);
+  outline-offset: 3px;
+}
+
+.frame :is(button, summary) {
+  min-block-size: 44px;
+}
+
+.frame :is(textarea, input, select, video, audio) {
+  max-inline-size: 100%;
+}
+
+.frame :global(.button--primary),
+.frame form button[type='submit'] {
+  border: 1px solid var(--learning-accent);
+  border-radius: 0.7rem;
+  background: var(--learning-accent);
+  color: white;
+  font-weight: 650;
+}
+
+.frame form button[type='submit'] {
+  padding: 0.65rem 1rem;
+}
+
+.frame form button[type='submit']:disabled {
+  border-color: var(--learning-border);
+  background: var(--learning-bg);
+  color: var(--learning-muted);
+  cursor: not-allowed;
+}
+
+.frame :global(.service-entry__header),
+.hero {
+  padding: clamp(1.2rem, 4vw, 2rem);
+  border: 1px solid var(--learning-border);
+  border-inline-start: 4px solid var(--learning-accent);
+  border-radius: var(--learning-radius);
+  background: var(--learning-accent-soft);
+  text-align: start;
+}
+
+.frame :global(.service-entry__card),
+.frame :global(.settings-card),
+.panel {
+  padding: clamp(1rem, 3vw, 1.5rem);
+  border: 1px solid var(--learning-border);
+  border-radius: var(--learning-radius);
+  background: var(--learning-surface);
+  color: var(--learning-ink);
+  box-shadow: 0 3px 12px rgb(23 41 68 / 5%);
+}
+
+.flow {
+  width: min(100% - 2rem, 46rem);
+  margin: clamp(1.25rem, 4vw, 2.5rem) auto 3rem;
+  display: grid;
+  gap: 1rem;
+}
+
+.flow > *,
+.panels > * {
+  min-inline-size: 0;
+}
+
+.panels {
+  display: grid;
+  gap: 1rem;
+}
+
+.panel h1,
+.panel h2,
+.hero h1 {
+  margin-block-start: 0;
+}
+
+.panel :global(.settings-form) {
+  margin-block-start: 1rem;
+}
+
+.panel textarea {
+  min-block-size: 7rem;
+}
+
+.panel form input:not([type='checkbox'], [type='radio']),
+.panel form :is(textarea, select) {
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--learning-border);
+  border-radius: 0.65rem;
+}
+
+.tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem 1rem;
+  margin: 0;
+}
+
+.tools a {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 44px;
+}
+
+.frame :global(.service-entry__header) > :global(.eyebrow) {
+  text-align: start;
+}
+
+.panel :global(.settings-form) label {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.panel :global(.settings-form) details label + label {
+  margin-block-start: 0.8rem;
+}
+
+.panel :global(.settings-form) :is(textarea, select) {
+  inline-size: 100%;
+}
+
+.panel :global(.settings-form) details textarea {
+  min-block-size: 5rem;
+}
+
+.panel p[role='status']:empty {
+  margin: 0;
+}

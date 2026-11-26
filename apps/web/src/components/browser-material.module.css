@@ -106,3 +106,116 @@
 .importForm button {
   justify-self: start;
 }
+
+.learnerPage {
+  width: min(100% - 2rem, 46rem);
+}
+
+.learnerLinks {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.25rem 1rem;
+}
+
+.learnerLinks a {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 44px;
+  font-weight: 650;
+}
+
+.learnerHeader {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.learnerPreparation {
+  border: 1px solid var(--learning-border);
+  border-radius: 0.9rem;
+  padding: 0.75rem 1rem;
+  background: var(--learning-surface);
+}
+
+.learnerPreparation p {
+  padding-block-start: 0.55rem;
+  white-space: pre-line;
+}
+
+.learnerPage > section {
+  display: grid;
+  gap: 0.75rem;
+  padding: clamp(1rem, 3vw, 1.4rem);
+  border: 1px solid var(--learning-border);
+  border-radius: var(--learning-radius);
+  background: var(--learning-surface);
+}
+
+.learnerPage > section > form {
+  display: grid;
+  justify-items: start;
+  gap: 0.75rem;
+}
+
+.learnerPage .navigation {
+  gap: 0.6rem;
+}
+
+.learnerPage .navigation a {
+  color: var(--learning-accent);
+  background: var(--learning-accent-soft);
+}
+
+.learnerPage .navigation .nextStep {
+  margin-inline-start: auto;
+  border-color: var(--learning-accent);
+  color: white;
+  background: var(--learning-accent);
+}
+
+.learnerInstruction {
+  font-size: 1.125rem;
+  font-weight: 650;
+  white-space: pre-line;
+}
+
+.learnerPage figcaption {
+  padding-block: 0.35rem;
+  color: var(--learning-muted);
+  font-size: 0.875rem;
+}
+
+.learnerPage .images img {
+  max-block-size: 28rem;
+  object-fit: contain;
+  background: var(--learning-bg);
+}
+
+.learnerPage [id='pdf-manual-title'] {
+  scroll-margin-block-start: 1rem;
+}
+
+.learnerPage .detail {
+  display: grid;
+  padding: 0.45rem 0.8rem;
+  border: 1px solid var(--learning-border);
+  border-radius: 0.75rem;
+  background: var(--learning-bg);
+}
+
+.learnerPage .detail img {
+  max-block-size: 11rem;
+  object-fit: contain;
+  background: var(--learning-surface);
+}
+
+@media (max-width: 36rem) {
+  .learnerPage .images:has(figure + figure) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.55rem;
+  }
+
+  .learnerPage .images img {
+    max-block-size: 18rem;
+  }
+}

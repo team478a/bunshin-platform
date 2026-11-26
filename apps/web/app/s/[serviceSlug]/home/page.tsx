@@ -1,3 +1,4 @@
+import design from '../../../../src/components/manaberu-learner.module.css';
 import {
   ListServiceBunshins,
   ServiceParticipationService,
@@ -397,7 +398,10 @@ export default async function ServiceMemberHome({
   const isServiceOperator = ['SERVICE_OWNER', 'SERVICE_ADMIN'].includes(membership.serviceRole);
   return (
     <PublicShell showPlatformBrand={false}>
-      <article className="service-entry service-member-home" style={style}>
+      <article
+        className={`service-entry service-member-home ${isPersonalLearningService ? design.frame : ''}`}
+        style={style}
+      >
         <ServiceHomeHeader
           displayName={service.configuration.displayName}
           logoUrl={service.configuration.brand.logoUrl}

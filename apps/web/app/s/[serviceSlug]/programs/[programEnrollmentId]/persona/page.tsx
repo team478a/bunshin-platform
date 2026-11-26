@@ -1,3 +1,4 @@
+import design from '../../../../../../src/components/manaberu-learner.module.css';
 import { notFound } from 'next/navigation';
 import type { PrismaClient } from '@bunshin/database';
 import { ApplicationError } from '@bunshin/shared';
@@ -132,7 +133,10 @@ export default async function PersonalLearningPersonaPage({
       })),
     );
     return (
-      <main className="service-entry resale-action-page training-page" style={{ maxWidth: 640 }}>
+      <main
+        className={`service-entry resale-action-page training-page ${design.frame}`}
+        style={{ maxWidth: 640 }}
+      >
         <header className="service-entry__header">
           <p className="eyebrow">マナベルスタイル</p>
           <h1>あなたについてのAIの理解</h1>
