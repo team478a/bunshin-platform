@@ -112,7 +112,10 @@ export async function composeFixtureMaterial(
 function describeStep(step: BrowserPlan['steps'][number]) {
   if (step.action === 'navigate') return `「${step.page}」ページを開く。`;
   const label = step.target.by === 'role' ? step.target.name : step.target.text;
-  if (step.action === 'click') return `「${label}」を押す。`;
+  if (step.action === 'click')
+    return step.target.by === 'role' && step.target.role === 'checkbox'
+      ? `「${label}」のチェック欄を操作する。`
+      : `「${label}」を押す。`;
   if (step.action === 'fill') return `「${label}」に練習用の文字を入力する。`;
   return `「${label}」が見えるまでスクロールする。`;
 }

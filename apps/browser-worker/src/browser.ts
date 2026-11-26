@@ -8,13 +8,14 @@ import {
   type BrowserStepEvidence,
 } from '@bunshin/capability-browser';
 
-import { observedClickTargets } from './dynamic-targets';
+import { observedTargets, type ObservedAction } from './dynamic-targets';
 
 const origin = 'https://browser-fixture.invalid';
 
 export interface Fixture {
   pages: ReadonlyMap<string, string>;
   samples: ReadonlyMap<string, string>;
+  observedSample?: string;
 }
 
 export class BrowserRunError extends Error {
@@ -47,9 +48,8 @@ export type BrowserStepSelector = (
   signal: AbortSignal,
 ) => Promise<string>;
 
-type ObservedChoice = Extract<PlanStep, { action: 'click' }>;
 export type ObservedStepSelector = (
-  candidates: readonly Readonly<ObservedChoice>[],
+  candidates: readonly Readonly<ObservedAction>[],
   signal: AbortSignal,
 ) => Promise<string>;
 
@@ -134,6 +134,7 @@ async function executePlan(
   if (
     !pages.has(pageUrl(plan.startPage)) ||
     !pages.has(pageUrl(plan.success.page)) ||
+    (fixture.observedSample !== undefined && !fixture.samples.has(fixture.observedSample)) ||
     plan.steps.some(
       (step) =>
         (step.action === 'navigate' && !pages.has(pageUrl(step.page))) ||
@@ -245,16 +246,48 @@ async function executePlan(
       }
       if (session && selectObserved) {
         currentPage();
-        const visible: ObservedChoice[] = [];
-        for (const step of await observedClickTargets(session, executed.length + 1)) {
+        const visible: ObservedAction[] = [];
+        for (const step of await observedTargets(
+          session,
+          executed.length + 1,
+          fixture.observedSample,
+        )) {
           signal.throwIfAborted();
           const target = locate(page, step.target);
           if (
-            (await target.count()) === 1 &&
-            (await target.isVisible()) &&
-            (await target.isEnabled({ timeout: remaining() }))
+            (await target.count()) !== 1 ||
+            !(await target.isVisible()) ||
+            !(await target.isEnabled({ timeout: remaining() }))
           )
-            visible.push(step);
+            continue;
+          if (
+            step.action === 'fill' &&
+            (!(await target.isEditable({ timeout: remaining() })) ||
+              !(await target.evaluate(
+                (element) =>
+                  ((element instanceof HTMLInputElement &&
+                    ['text', 'search'].includes(element.type)) ||
+                    element instanceof HTMLTextAreaElement) &&
+                  element.value.length === 0,
+                undefined,
+                { timeout: remaining() },
+              )))
+          )
+            continue;
+          if (
+            step.target.by === 'role' &&
+            step.target.role === 'checkbox' &&
+            !(await target.evaluate(
+              (element) =>
+                element instanceof HTMLInputElement &&
+                element.type === 'checkbox' &&
+                !element.checked,
+              undefined,
+              { timeout: remaining() },
+            ))
+          )
+            continue;
+          visible.push(step);
         }
         if (!visible.length) throw new BrowserRunError('STEP_FAILED', stepId);
         const selectedId = await selectBeforeAbort(

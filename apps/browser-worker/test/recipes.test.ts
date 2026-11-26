@@ -3,11 +3,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { BROWSER_FIXTURE_JOB_TYPE, type UserJob } from '@bunshin/application';
 import {
   browserObservedFixtureVersion,
+  browserFormFixtureVersion,
+  browserFormSampleId,
   browserPlanSchema,
   type BrowserPlan,
 } from '@bunshin/capability-browser';
 import { fixtureVersion } from '../src/fixture';
 import { observedCatalogueGoal } from '../src/observed-catalogue';
+import { observedFormGoal } from '../src/observed-form';
 import { completeWithRecipe, findRecipeId, loadVerifiedRecipe } from '../src/recipes';
 
 const findFirst = vi.hoisted(() => vi.fn());
@@ -52,10 +55,10 @@ const plan = browserPlanSchema.parse({
   ],
 });
 
-function record(savedPlan: BrowserPlan) {
+function record(savedPlan: BrowserPlan, version: string = browserObservedFixtureVersion) {
   return {
     plan: savedPlan,
-    fixtureVersion: browserObservedFixtureVersion,
+    fixtureVersion: version,
     device: savedPlan.device,
     planHash: createHash('sha256').update(JSON.stringify(savedPlan)).digest('hex'),
     verifiedAt: new Date('2026-11-25T00:00:00Z'),
@@ -110,6 +113,33 @@ describe('observed recipe persistence', () => {
     await expect(
       loadVerifiedRecipe('recipe', 'workspace', 'actor', browserObservedFixtureVersion),
     ).rejects.toMatchObject({ category: 'INVALID_PLAN' });
+  });
+
+  it('only accepts the fixture-owned sample for a saved form fill step', async () => {
+    const samplePlan = browserPlanSchema.parse({
+      ...observedFormGoal('mobile'),
+      steps: [
+        {
+          id: 'observed-1-0',
+          action: 'fill',
+          target: { by: 'role', role: 'textbox', name: '件名' },
+          sample: browserFormSampleId,
+        },
+      ],
+    });
+    findFirst.mockResolvedValueOnce(record(samplePlan, browserFormFixtureVersion));
+    await expect(loadVerifiedRecipe('recipe', 'workspace', 'actor', 'any')).resolves.toMatchObject({
+      version: browserFormFixtureVersion,
+      plan: samplePlan,
+    });
+    const forged = browserPlanSchema.parse({
+      ...samplePlan,
+      steps: [{ ...samplePlan.steps[0], sample: 'unauthorized' }],
+    });
+    findFirst.mockResolvedValueOnce(record(forged, browserFormFixtureVersion));
+    await expect(loadVerifiedRecipe('recipe', 'workspace', 'actor', 'any')).rejects.toMatchObject({
+      category: 'INVALID_PLAN',
+    });
   });
 
   it('enqueues material inside the transaction only after a verified recipe is saved', async () => {

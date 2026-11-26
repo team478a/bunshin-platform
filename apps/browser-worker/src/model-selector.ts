@@ -1,8 +1,11 @@
 import {
   browserObservedChoiceSchema,
   browserObservedSelectionSchema,
+  browserFormResponseSchema,
+  browserFormSelectionSchema,
   browserPreviewChoices,
   browserPreviewChoiceSchema,
+  type BrowserFormSelection,
   type BrowserObservedSelection,
 } from '@bunshin/capability-browser';
 import { BrowserRunError, type BrowserStepSelector, type ObservedStepSelector } from './browser';
@@ -49,7 +52,7 @@ async function requestModelSelection(
   jobId: string,
   workerId: string,
   signal: AbortSignal,
-  observed?: BrowserObservedSelection,
+  observed?: BrowserObservedSelection | BrowserFormSelection,
 ) {
   const { url, secret } = browserFixtureWorkerEndpoint('/api/internal/browser-fixture/select');
   const response = await fetch(url, {
@@ -68,10 +71,15 @@ async function requestModelSelection(
   return response;
 }
 
-export function modelObservedSelector(jobId: string, workerId: string): ObservedStepSelector {
+export function modelObservedSelector(
+  jobId: string,
+  workerId: string,
+  form = false,
+): ObservedStepSelector {
   let ordinal = 0;
   return async (candidates, signal) => {
-    const body = browserObservedSelectionSchema.safeParse({
+    const schema = form ? browserFormSelectionSchema : browserObservedSelectionSchema;
+    const body = schema.safeParse({
       ordinal: ++ordinal,
       choices: candidates.map(({ id, target }) =>
         target.by === 'role' ? { id, role: target.role, name: target.name } : null,
@@ -79,7 +87,9 @@ export function modelObservedSelector(jobId: string, workerId: string): Observed
     });
     if (!body.success) throw new BrowserRunError('INVALID_PLAN');
     const response = await requestModelSelection(jobId, workerId, signal, body.data);
-    const selected = browserObservedChoiceSchema.shape.id.safeParse(await response.json());
+    const selected = (
+      form ? browserFormResponseSchema.shape.id : browserObservedChoiceSchema.shape.id
+    ).safeParse(await response.json());
     if (!selected.success || !body.data.choices.some(({ id }) => id === selected.data))
       throw new BrowserRunError('MODEL_SELECTION_FAILED');
     return selected.data;

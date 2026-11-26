@@ -2,6 +2,8 @@ import { createHash } from 'node:crypto';
 import { BROWSER_FIXTURE_JOB_TYPE } from '@bunshin/application';
 import {
   browserObservedFixtureVersion,
+  browserFormFixtureVersion,
+  browserFormStepLimit,
   browserObservedModelOperationKey,
   browserObservedStepLimit,
   browserPilotEnvironment,
@@ -32,8 +34,10 @@ export async function reportObservedModelJob(workspaceId: string, actorId: strin
           OR: [
             {
               payloadReference: {
-                in: ['desktop', 'mobile'].map(
-                  (device) => `discover-observed-model:${browserObservedFixtureVersion}:${device}`,
+                in: [browserObservedFixtureVersion, browserFormFixtureVersion].flatMap((version) =>
+                  ['desktop', 'mobile'].map(
+                    (device) => `discover-observed-model:${version}:${device}`,
+                  ),
                 ),
               },
             },
@@ -48,6 +52,7 @@ export async function reportObservedModelJob(workspaceId: string, actorId: strin
         },
         select: {
           id: true,
+          payloadReference: true,
           status: true,
           attemptCount: true,
           lastErrorCategory: true,
@@ -57,7 +62,12 @@ export async function reportObservedModelJob(workspaceId: string, actorId: strin
       });
       if (!job) throw new BrowserRunError('INVALID_PLAN');
 
-      const operations = Array.from({ length: browserObservedStepLimit }, (_, index) => {
+      const stepLimit = job.payloadReference.startsWith(
+        `discover-observed-model:${browserFormFixtureVersion}:`,
+      )
+        ? browserFormStepLimit
+        : browserObservedStepLimit;
+      const operations = Array.from({ length: stepLimit }, (_, index) => {
         const ordinal = index + 1;
         const key = browserObservedModelOperationKey(job.id, ordinal);
         return { ordinal, key, hash: createHash('sha256').update(key).digest('hex') };

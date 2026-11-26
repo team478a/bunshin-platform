@@ -16,6 +16,7 @@ const actor = '22222222-2222-4222-8222-222222222222';
 const id = '33333333-3333-4333-8333-333333333333';
 const job = {
   id,
+  payloadReference: 'discover-observed-model:observed-catalogue-v1:mobile',
   status: 'SUCCEEDED',
   attemptCount: 1,
   lastErrorCategory: null,
@@ -97,6 +98,30 @@ describe('observed model run reporting', () => {
       status: 'LEASED',
       estimatedCostUsdMicros: null,
     });
+  });
+
+  it('includes the eighth selection only for the form fixture', async () => {
+    const finalKey = `browser-fixture-selection:${id}:step-8`;
+    await reportObservedModelJob(workspace, actor, id);
+    expect(tx.aiUsageEvent.findMany).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          idempotencyKey: { in: expect.arrayContaining([finalKey]) },
+        }),
+      }),
+    );
+    tx.job.findFirst.mockResolvedValueOnce({
+      ...job,
+      payloadReference: 'discover-observed-model:observed-form-v1:mobile',
+    });
+    await reportObservedModelJob(workspace, actor, id);
+    expect(tx.aiUsageEvent.findMany).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          idempotencyKey: { in: expect.arrayContaining([finalKey]) },
+        }),
+      }),
+    );
   });
 
   it('does not read costs when the job is outside the active owner scope', async () => {
