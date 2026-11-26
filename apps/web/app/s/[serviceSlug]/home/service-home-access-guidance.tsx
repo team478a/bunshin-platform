@@ -1,6 +1,5 @@
 import type { CSSProperties } from 'react';
 import Link from 'next/link';
-import type { Route } from 'next';
 import { PublicShell } from '../../../ui/public-shell';
 import { ServiceAuthBranding } from '../../../ui/service-auth-branding';
 import type { ServiceAuthBrand } from '../../../../src/services/service-auth-brand';
@@ -81,7 +80,7 @@ export function ServiceHomeAccessGuidance({
           </Link>
         )}
         {state === 'MANAGEMENT_REQUIRED' && serviceName && (
-          <Link className="button button--primary button--full" href={returnTo as Route}>
+          <Link className="button button--primary button--full" href={returnTo}>
             {serviceName}の利用画面へ
           </Link>
         )}
