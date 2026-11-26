@@ -17,6 +17,8 @@ import {
 
 import { MimikMaterialImportForm } from '../../../../../src/components/mimik-material-import-form';
 
+import { ManaberuDialogueEditor } from '../../../../../src/components/manaberu-dialogue-editor';
+import { dialogueEditorEnabled } from '../../../../../src/services/manaberu-dialogue-production';
 import { BrowserMaterialVideo } from '../../../../../src/components/browser-material-video';
 import { lessonNarrationSelection } from '../../../../../src/services/browser-material-video';
 import type { BrowserMaterialAzureVoice } from '@bunshin/capability-browser';
@@ -128,6 +130,14 @@ export default async function BrowserMaterialsPage(props: {
         stepHref={stepHref}
         imageHref={(variant) => imageBase + '/' + variant}
       />
+      {dialogueEditorEnabled() && (
+        <ManaberuDialogueEditor
+          key={step.stepId}
+          endpoint={`/api/browser-materials/${workspaceId}/dialogue?material=${materialId}&step=${step.ordinal}`}
+          materialTitle={material.title}
+          instruction={step.instruction}
+        />
+      )}
       <BrowserMaterialVideo
         state={video}
         requestVideo={requestVideo}

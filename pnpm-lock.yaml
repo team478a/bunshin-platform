@@ -134,6 +134,9 @@ importers:
       '@supabase/supabase-js':
         specifier: 2.112.3
         version: 2.112.3
+      ai-video-engine:
+        specifier: file:vendor/ai-video-engine-0.1.0.tgz
+        version: file:apps/web/vendor/ai-video-engine-0.1.0.tgz
       next:
         specifier: 16.3.3
         version: 16.3.3(@types/node@24.13.3)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
@@ -1453,6 +1456,11 @@ packages:
     resolution: {integrity: sha512-lGq+9yr1/GuAWaVYIHRjvvySG5/4VfKIvC8EWxStPdcDh/Ka7FG3twP6v4d5BkravUilhIAsG4Qj83t02LWUPQ==}
     engines: {node: '>=0.4.0'}
     hasBin: true
+
+  ai-video-engine@file:apps/web/vendor/ai-video-engine-0.1.0.tgz:
+    resolution: {integrity: sha512-Ie56v2vrwL3dozl0D+qhjrEXEkj6DM45SxiH0mZa/7OheD4qaBk8qpqgIuhpBnt/wPo7itoaEWnHKFJz6USxGw==, tarball: file:apps/web/vendor/ai-video-engine-0.1.0.tgz}
+    version: 0.1.0
+    engines: {node: '>=22'}
 
   ajv@6.15.0:
     resolution: {integrity: sha512-fgFx7Hfoq60ytK2c7DhnF8jIvzYgOMxfugjLOSMHjLIPgenqa7S7oaagATUq99mV6IYvN2tRmC0wnTYX6iPbMw==}
@@ -3319,6 +3327,8 @@ snapshots:
       acorn: 8.18.0
 
   acorn@8.18.0: {}
+
+  ai-video-engine@file:apps/web/vendor/ai-video-engine-0.1.0.tgz: {}
 
   ajv@6.15.0:
     dependencies:

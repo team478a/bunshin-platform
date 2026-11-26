@@ -1,0 +1,92 @@
+.editor {
+  display: grid;
+  gap: 0.8rem;
+  margin-block: 1.8rem;
+  padding: clamp(1rem, 3vw, 1.5rem);
+  border: 1px solid #bfd6da;
+  border-radius: 16px;
+  background: #f4fbfb;
+  color: #172f3a;
+}
+.editor h2,
+.editor h3,
+.editor p {
+  margin: 0;
+}
+.form,
+.line,
+.roles > fieldset {
+  min-width: 0;
+  display: grid;
+  gap: 0.8rem;
+  padding: 0.9rem;
+  border: 1px solid #cadcdd;
+  border-radius: 12px;
+}
+.form > legend,
+.line > legend,
+.roles legend {
+  font-weight: 700;
+}
+.editor label {
+  display: grid;
+  gap: 0.3rem;
+  min-width: 0;
+  font-weight: 600;
+}
+.editor input,
+.editor select,
+.editor textarea {
+  width: 100%;
+  min-width: 0;
+  padding: 0.58rem;
+  border: 1px solid #a6bfc3;
+  border-radius: 7px;
+  background: #fff;
+  font: inherit;
+  font-weight: 400;
+}
+.roles,
+.diagram {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem 1rem;
+  align-items: center;
+}
+.editor button {
+  padding: 0.62rem 1rem;
+  border: 1px solid #146570;
+  border-radius: 8px;
+  background: #146570;
+  color: white;
+  font: inherit;
+  font-weight: 700;
+}
+.editor button.secondary {
+  background: white;
+  color: #125965;
+}
+.editor button:disabled {
+  opacity: 0.55;
+}
+.help {
+  color: #385760;
+  font-size: 0.9rem;
+}
+.results {
+  display: grid;
+  gap: 0.7rem;
+}
+.results audio {
+  width: min(100%, 25rem);
+}
+.results video {
+  width: min(100%, 22rem);
+  max-height: 75vh;
+  background: #172f3a;
+}
