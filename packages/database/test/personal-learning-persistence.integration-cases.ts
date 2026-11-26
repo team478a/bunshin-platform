@@ -1,5 +1,8 @@
 import { PrismaBrowserMaterialVideos } from '../src/browser-material-video';
-import { browserObservedFixtureVersion } from '@bunshin/capability-browser';
+import {
+  browserFormFixtureVersion,
+  browserObservedFixtureVersion,
+} from '@bunshin/capability-browser';
 import { BROWSER_FIXTURE_JOB_TYPE, ClaimJob, FailJob, assertUserJob } from '@bunshin/application';
 import { PrismaBrowserLearningMaterials } from '../src/browser-learning-material';
 import { PrismaJobRepository } from '../src/automation-jobs';
@@ -527,13 +530,14 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
           actorId: string,
           device: 'mobile' | 'desktop' = 'mobile',
           planHash = 'c'.repeat(64),
+          fixtureVersion: string = browserObservedFixtureVersion,
         ) =>
           client.browserFixtureRecipe.create({
             data: {
               workspaceId,
               actorId,
               device,
-              fixtureVersion: browserObservedFixtureVersion,
+              fixtureVersion,
               planHash,
               plan: {},
               verifiedAt: new Date(),
@@ -581,9 +585,12 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
           });
           const discovery = await claimReview();
           expect(discovery.maxAttempts).toBe(1);
-          expect(await materials.catalogueDiscovery(discovery)).toBe('mobile');
+          expect(await materials.observedDiscovery(discovery)).toEqual({
+            device: 'mobile',
+            version: browserObservedFixtureVersion,
+          });
           await expect(
-            materials.catalogueDiscovery({
+            materials.observedDiscovery({
               ...discovery,
               payloadReference: `training-catalogue-discovery:${job.correlationId}`,
             }),
@@ -626,6 +633,77 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
         });
         expect(await videos.state(learner, otherMaterial.id)).toBeNull();
         expect(await materials.enqueueReview(f.actor, ownMaterial.id)).toBe(false);
+
+        await requests.saveRequest({
+          ...f.actor,
+          content: {
+            ...requestContent,
+            originalText: '検証用の研修申請フォームに入力して、プレビューを確認したい',
+            deviceType: 'SMARTPHONE',
+          },
+          expectedRevision: 2,
+          idempotencyKey: randomUUID(),
+        });
+        expect(await materials.readMaterial(f.actor)).toMatchObject({
+          canGenerate: false,
+          material: null,
+        });
+        expect(await materials.readImage(f.actor, ownMaterial.id, 1, 'before')).toBeNull();
+        const foreignForm = await catalogueRecipe(
+          f.owner.id,
+          'mobile',
+          'c'.repeat(64),
+          browserFormFixtureVersion,
+        );
+        const foreignFormMaterial = await saveCatalogueMaterial(foreignForm.id);
+        try {
+          process.env['BROWSER_FIXTURE_MODEL_WORKSPACE_ID'] = workspaceId;
+          process.env['BROWSER_FIXTURE_MODEL_SECRET'] = 'fixture-test-secret';
+          await Promise.all([materials.enqueue(f.actor), materials.enqueue(f.actor)]);
+          const discovery = await client.job.findFirstOrThrow({
+            where: { workspaceId, payloadReference: { startsWith: 'training-form-discovery:' } },
+          });
+          expect(discovery.maxAttempts).toBe(1);
+          expect(
+            await materials.observedDiscovery({ ...discovery, requestedBy: f.actor.actorUserId }),
+          ).toEqual({
+            device: 'mobile',
+            version: browserFormFixtureVersion,
+          });
+          await expect(
+            materials.observedDiscovery({
+              ...discovery,
+              requestedBy: f.actor.actorUserId,
+              payloadReference: discovery.payloadReference.replace(
+                'training-form-discovery:',
+                'training-catalogue-discovery:',
+              ),
+            }),
+          ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+          expect(
+            await client.job.count({
+              where: { workspaceId, payloadReference: { startsWith: 'training-form-discovery:' } },
+            }),
+          ).toBe(1);
+        } finally {
+          if (configuredWorkspace === undefined)
+            delete process.env['BROWSER_FIXTURE_MODEL_WORKSPACE_ID'];
+          else process.env['BROWSER_FIXTURE_MODEL_WORKSPACE_ID'] = configuredWorkspace;
+          if (configuredSecret === undefined) delete process.env['BROWSER_FIXTURE_MODEL_SECRET'];
+          else process.env['BROWSER_FIXTURE_MODEL_SECRET'] = configuredSecret;
+        }
+        const formRecipe = await catalogueRecipe(
+          f.actor.actorUserId,
+          'mobile',
+          'c'.repeat(64),
+          browserFormFixtureVersion,
+        );
+        const formMaterial = await saveCatalogueMaterial(formRecipe.id);
+        expect(await materials.readMaterial(f.actor)).toMatchObject({
+          material: { id: formMaterial.id },
+        });
+        expect(await materials.readImage(f.actor, formMaterial.id, 1, 'before')).toEqual(image);
+        expect(await materials.readImage(f.actor, foreignFormMaterial.id, 1, 'before')).toBeNull();
         process.env['APP_ENV'] = 'production';
         expect(await materials.readMaterial(f.actor)).toBeNull();
         expect(await materials.enqueue(f.actor)).toBeNull();

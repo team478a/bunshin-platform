@@ -10,4 +10,10 @@
 
 開発またはステージングで既存の候補選択APIを設定し、`discover-observed-form-model WORKSPACE_ID ACTOR_ID DEVICE REQUEST_ID` をブラウザワーカーに登録する。ワーカーの `once` または `serve` で処理し、`report-observed-model WORKSPACE_ID ACTOR_ID JOB_ID` で登録済みの利用量・原価を確認する。
 
-同じWorkspace・実行者・端末で検証済みのレシピがある場合は再実行する。教材化には同じワーカーの `material WORKSPACE_ID ACTOR_ID RECIPE_ID REQUEST_ID` を使う。初回の検証対象は社内研修申請のプレビューで、受講者画面から対象を選ぶUIは後続とする。
+同じWorkspace・実行者・端末で検証済みのレシピがある場合は再実行する。開発者が教材化だけを行うときは、同じワーカーの `material WORKSPACE_ID ACTOR_ID RECIPE_ID REQUEST_ID` を使う。
+
+## 個別学習から依頼する
+
+操作教材が有効な開発・ステージングのプログラムで、受講者が端末と検証用の研修申請の操作要望を保存すると、既存の画像付き操作教材の画面から作成を依頼できる。例は「検証用の研修申請フォームに入力して、プレビューを確認したい」。分類結果は現在の要望と照合し、探索ジョブの種類、端末、レシピ版をサーバー側で決める。要望本文を候補選択モデルに送らない。
+
+フォームとカタログのレシピは版で識別し、対象・受講者・Workspace・端末が一致する検証済みの教材を再利用する。探索が必要なときは既存のWorkspace設定・費用枠を使い、完了時に既存の画像付き教材ジョブを登録する。

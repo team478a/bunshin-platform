@@ -100,7 +100,10 @@ describe('observed model run reporting', () => {
     });
   });
 
-  it('includes the eighth selection only for the form fixture', async () => {
+  it.each([
+    'discover-observed-model:observed-form-v1:mobile',
+    'training-form-discovery:55555555-5555-4555-8555-555555555555',
+  ])('includes the eighth selection for %s', async (payloadReference) => {
     const finalKey = `browser-fixture-selection:${id}:step-8`;
     await reportObservedModelJob(workspace, actor, id);
     expect(tx.aiUsageEvent.findMany).not.toHaveBeenCalledWith(
@@ -112,7 +115,7 @@ describe('observed model run reporting', () => {
     );
     tx.job.findFirst.mockResolvedValueOnce({
       ...job,
-      payloadReference: 'discover-observed-model:observed-form-v1:mobile',
+      payloadReference,
     });
     await reportObservedModelJob(workspace, actor, id);
     expect(tx.aiUsageEvent.findMany).toHaveBeenLastCalledWith(
