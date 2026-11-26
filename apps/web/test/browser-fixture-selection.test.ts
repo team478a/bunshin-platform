@@ -15,7 +15,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@bunshin/config', () => ({ getServerEnvironment: mocks.environment }));
 vi.mock('@bunshin/database', () => ({
   PrismaBrowserLearningMaterials: class {
-    catalogueDiscovery = mocks.trainingDiscovery;
+    observedDiscovery = mocks.trainingDiscovery;
   },
   prisma: {
     job: { findFirst: mocks.job },
@@ -170,7 +170,10 @@ describe('browser fixture model selection', () => {
       payloadReference,
       leaseExpiresAt: new Date(Date.now() + 30_000),
     });
-    mocks.trainingDiscovery.mockResolvedValue('mobile');
+    mocks.trainingDiscovery.mockResolvedValue({
+      device: 'mobile',
+      version: 'observed-catalogue-v1',
+    });
     mocks.fetcher.mockImplementationOnce(() =>
       output('observed-2-0', {
         promptTokenCount: 100,
@@ -221,48 +224,58 @@ describe('browser fixture model selection', () => {
     expect(mocks.reserve).not.toHaveBeenCalled();
   });
 
-  it('accepts form targets only for the scoped form fixture job and enforces its action limit', async () => {
-    const formJob = {
-      id: jobId,
-      workspaceId,
-      requestedBy: actorId,
-      payloadReference: 'discover-observed-model:observed-form-v1:mobile',
-      leaseExpiresAt: new Date(Date.now() + 30_000),
-    };
-    const send = (ordinal: number) =>
-      browserFixtureSelectionResponse(
-        new Request(request(), {
-          headers: { ...Object.fromEntries(request().headers), 'content-type': 'application/json' },
-          body: JSON.stringify({
-            ordinal,
-            choices: [{ id: `observed-${ordinal}-0`, role: 'textbox', name: '件名' }],
+  it.each([
+    'discover-observed-model:observed-form-v1:mobile',
+    'training-form-discovery:55555555-5555-4555-8555-555555555555',
+  ])(
+    'selects scoped form targets and enforces the action limit for %s',
+    async (payloadReference) => {
+      const formJob = {
+        id: jobId,
+        workspaceId,
+        requestedBy: actorId,
+        payloadReference,
+        leaseExpiresAt: new Date(Date.now() + 30_000),
+      };
+      const send = (ordinal: number) =>
+        browserFixtureSelectionResponse(
+          new Request(request(), {
+            headers: {
+              ...Object.fromEntries(request().headers),
+              'content-type': 'application/json',
+            },
+            body: JSON.stringify({
+              ordinal,
+              choices: [{ id: `observed-${ordinal}-0`, role: 'textbox', name: '件名' }],
+            }),
           }),
+        );
+      mocks.job.mockResolvedValue(formJob);
+      mocks.trainingDiscovery.mockResolvedValue({ device: 'mobile', version: 'observed-form-v1' });
+      mocks.fetcher.mockImplementationOnce(() =>
+        output('observed-8-0', {
+          promptTokenCount: 100,
+          candidatesTokenCount: 6,
         }),
       );
-    mocks.job.mockResolvedValue(formJob);
-    mocks.fetcher.mockImplementationOnce(() =>
-      output('observed-8-0', {
-        promptTokenCount: 100,
-        candidatesTokenCount: 6,
-      }),
-    );
-    const result = await send(8);
-    expect(result.status).toBe(200);
-    expect(await result.json()).toBe('observed-8-0');
-    expect(mocks.record).toHaveBeenCalledWith(
-      expect.objectContaining({
-        promptVersion: 'browser-observed-form-choice-v1',
-        idempotencyKey: `browser-fixture-selection:${jobId}:step-8`,
-      }),
-    );
-    expect((await send(9)).status).toBe(400);
-    mocks.job.mockResolvedValue({
-      ...formJob,
-      payloadReference: 'discover-observed-model:observed-catalogue-v1:mobile',
-    });
-    expect((await send(1)).status).toBe(400);
-    expect(mocks.reserve).toHaveBeenCalledTimes(1);
-  });
+      const result = await send(8);
+      expect(result.status).toBe(200);
+      expect(await result.json()).toBe('observed-8-0');
+      expect(mocks.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          promptVersion: 'browser-observed-form-choice-v1',
+          idempotencyKey: `browser-fixture-selection:${jobId}:step-8`,
+        }),
+      );
+      expect((await send(9)).status).toBe(400);
+      mocks.job.mockResolvedValue({
+        ...formJob,
+        payloadReference: 'discover-observed-model:observed-catalogue-v1:mobile',
+      });
+      expect((await send(1)).status).toBe(400);
+      expect(mocks.reserve).toHaveBeenCalledTimes(1);
+    },
+  );
 
   it('checks the current worker lease in STAGING for staging requests', async () => {
     mocks.environment.mockReturnValue({ APP_ENV: 'staging' });

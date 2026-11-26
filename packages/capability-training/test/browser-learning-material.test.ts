@@ -35,4 +35,25 @@ describe('browser learning materials', () => {
       }),
     ).toBeNull();
   });
+
+  it('offers the form lesson only for an explicit practice form request', () => {
+    const originalText = '検証用の研修申請フォームに入力して、プレビューを確認したい';
+    expect(browserLearningTarget({ originalText, deviceType: 'SMARTPHONE' })).toEqual({
+      kind: 'form',
+      device: 'mobile',
+    });
+    expect(browserLearningDevice({ originalText, deviceType: null })).toBeNull();
+    expect(
+      browserLearningTarget({
+        originalText: '会社の研修申請フォームに入力して、申請を送信したい',
+        deviceType: 'PC',
+      }),
+    ).toBeNull();
+    expect(
+      browserLearningTarget({
+        originalText: '検証用の研修申請フォームの設計の理由を知りたい',
+        deviceType: 'PC',
+      }),
+    ).toBeNull();
+  });
 });

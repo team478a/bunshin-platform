@@ -22,6 +22,11 @@ export function browserLearningTarget(request: {
         : null;
   if (!device) return null;
   if (
+    /(?:検証用|練習用)(?:の)?研修申請フォーム/.test(text) &&
+    /入力|チェック|確認|プレビュー|操作|手順|使い方/.test(text)
+  )
+    return { kind: 'form' as const, device };
+  if (
     /研修用カタログ|操作練習用カタログ/.test(text) &&
     /比較.{0,12}(表示|開[くき]|確認|見たい|手順|操作|したい)/.test(text)
   )

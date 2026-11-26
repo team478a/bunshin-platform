@@ -12,8 +12,11 @@ import {
 } from '@bunshin/capability-training';
 import {
   browserObservedFixtureVersion,
+  browserFormFixtureVersion,
   browserPilotEnvironment,
   trainingCatalogueDiscoveryPrefix,
+  trainingFormDiscoveryPrefix,
+  trainingObservedFixtureVersion,
 } from '@bunshin/capability-browser';
 import { ApplicationError } from '@bunshin/shared';
 import type { Prisma, PrismaClient } from '@prisma/client';
@@ -26,10 +29,10 @@ const reportCooldown = 60 * 60 * 1000;
 const prefix = 'training-material';
 const identity = (id: string) => `${prefix}:${id}`;
 const catalogueIdentity = (recipeId: string) => `training-catalogue-material:${recipeId}`;
-const catalogueDiscoveryIdentity = (requestId: string) =>
-  `${trainingCatalogueDiscoveryPrefix}:${requestId}`;
+const discoveryIdentity = (kind: 'catalogue' | 'form', requestId: string) =>
+  `${kind === 'form' ? trainingFormDiscoveryPrefix : trainingCatalogueDiscoveryPrefix}:${requestId}`;
 const jobPattern =
-  /^(training-material|training-catalogue-discovery):([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})(?::([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}))?$/i;
+  /^(training-material|training-catalogue-discovery|training-form-discovery):([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})(?::([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}))?$/i;
 const denied = () => new ApplicationError('NOT_FOUND', 'training browser material unavailable');
 
 function discoveryConfigured(workspaceId: string) {
@@ -68,7 +71,8 @@ type MaterialKey = {
   programId: string;
   fixtureDevice: 'desktop' | 'mobile';
 };
-type MaterialTarget = { kind: 'practice-note' } | { kind: 'catalogue'; recipeId: string | null };
+type MaterialTarget =
+  { kind: 'practice-note' } | { kind: 'catalogue' | 'form'; recipeId: string | null };
 type MaterialWork<T> = (
   tx: Prisma.TransactionClient,
   key: MaterialKey,
@@ -143,7 +147,8 @@ export class PrismaBrowserLearningMaterials extends PrismaPersonalLearningPersis
             workspaceId: scope.workspaceId,
             actorId: actor.actorUserId,
             device: target.device,
-            fixtureVersion: browserObservedFixtureVersion,
+            fixtureVersion:
+              target.kind === 'form' ? browserFormFixtureVersion : browserObservedFixtureVersion,
             membership: {
               status: 'ACTIVE',
               workspace: { status: 'ACTIVE' },
@@ -162,7 +167,7 @@ export class PrismaBrowserLearningMaterials extends PrismaPersonalLearningPersis
           tx,
           key,
           request.id,
-          { kind: 'catalogue', recipeId: recipe?.id ?? null },
+          { kind: target.kind, recipeId: recipe?.id ?? null },
           environment,
         );
       },
@@ -208,7 +213,7 @@ export class PrismaBrowserLearningMaterials extends PrismaPersonalLearningPersis
             ? identity(requestId)
             : target.recipeId
               ? catalogueIdentity(target.recipeId)
-              : catalogueDiscoveryIdentity(requestId);
+              : discoveryIdentity(target.kind, requestId);
         const job = material
           ? null
           : await tx.job.findFirst({
@@ -264,7 +269,7 @@ export class PrismaBrowserLearningMaterials extends PrismaPersonalLearningPersis
       const where = this.materialWhere(key, target);
       if (where && (await tx.browserFixtureMaterial.findFirst({ where, select: { id: true } })))
         return;
-      const recipeId = target.kind === 'catalogue' ? target.recipeId : null;
+      const recipeId = target.kind === 'practice-note' ? null : target.recipeId;
       if (recipeId) {
         await enqueueCatalogueMaterial(
           tx,
@@ -278,9 +283,9 @@ export class PrismaBrowserLearningMaterials extends PrismaPersonalLearningPersis
         );
         return true;
       }
-      const discovery = target.kind === 'catalogue';
+      const discovery = target.kind !== 'practice-note';
       if (discovery && !discoveryConfigured(key.workspaceId)) return;
-      const reference = discovery ? catalogueDiscoveryIdentity(requestId) : identity(requestId);
+      const reference = discovery ? discoveryIdentity(target.kind, requestId) : identity(requestId);
       await tx.job.upsert({
         where: { environment_idempotencyKey: { environment, idempotencyKey: reference } },
         create: {
@@ -545,7 +550,7 @@ export class PrismaBrowserLearningMaterials extends PrismaPersonalLearningPersis
     if (
       !environment ||
       !id ||
-      (kind === 'training-catalogue-discovery' && !!reviewId) ||
+      (kind !== prefix && !!reviewId) ||
       job.environment !== environment ||
       job.jobType !== jobType ||
       job.bunshinId ||
@@ -573,23 +578,30 @@ export class PrismaBrowserLearningMaterials extends PrismaPersonalLearningPersis
     };
   }
 
-  async catalogueDiscovery(job: Parameters<PrismaBrowserLearningMaterials['jobActor']>[0]) {
+  async observedDiscovery(job: Parameters<PrismaBrowserLearningMaterials['jobActor']>[0]) {
     const { id, kind, actor } = await this.jobActor(job);
-    if (kind !== 'training-catalogue-discovery') throw denied();
+    const version = trainingObservedFixtureVersion(kind);
+    if (!version) throw denied();
     const device = await this.use(
       actor,
       (_tx, key, currentId, target) => {
-        if (target.kind !== 'catalogue' || currentId !== id) throw denied();
+        if (
+          target.kind === 'practice-note' ||
+          currentId !== id ||
+          job.payloadReference !== discoveryIdentity(target.kind, id)
+        )
+          throw denied();
         return Promise.resolve(key.fixtureDevice);
       },
       false,
     );
     if (!device) throw denied();
-    return device;
+    return { device, version };
   }
 
   async jobMaterial(job: UserJob) {
-    const { id, actor, reviewId } = await this.jobActor(job);
+    const { id, actor, reviewId, kind } = await this.jobActor(job);
+    if (kind !== prefix) throw denied();
     const target = await this.use(actor, async (tx, key, currentId, target) => {
       if (target.kind !== 'practice-note') throw denied();
       if (!reviewId && id !== currentId) throw denied();
@@ -619,7 +631,8 @@ export class PrismaBrowserLearningMaterials extends PrismaPersonalLearningPersis
       steps: Omit<Prisma.BrowserFixtureMaterialStepCreateManyInput, 'materialId'>[];
     },
   ) {
-    const { id, actor, reviewId } = await this.jobActor(job);
+    const { id, actor, reviewId, kind } = await this.jobActor(job);
+    if (kind !== prefix) throw denied();
     const material = await this.use(actor, async (tx, key, currentId, target) => {
       if (target.kind !== 'practice-note') throw denied();
       if (!reviewId && id !== currentId) throw denied();
