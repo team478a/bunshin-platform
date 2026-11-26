@@ -191,7 +191,7 @@ export class PrismaBrowserLearningMaterials extends PrismaPersonalLearningPersis
     return target.recipeId ? { recipeId: target.recipeId, verifiedAt: { not: null } } : null;
   }
 
-  readMaterial(actor: PersonalLearningActor) {
+  readMaterial(actor: PersonalLearningActor, options?: { print?: boolean }) {
     return this.use(
       actor,
       async (tx, key, requestId, target, environment) => {
@@ -234,11 +234,23 @@ export class PrismaBrowserLearningMaterials extends PrismaPersonalLearningPersis
                 select: { status: true },
               })
             : null;
+        const printImages =
+          options?.print && material
+            ? await tx.$queryRaw<
+                { ordinal: number; before: boolean; after: boolean; detail: boolean }[]
+              >`
+                SELECT ordinal, before_image IS NOT NULL AS "before",
+                  after_image IS NOT NULL AS "after", detail_image IS NOT NULL AS "detail"
+                FROM browser_fixture_material_steps
+                WHERE material_id = ${material.id}::uuid
+              `
+            : [];
         return {
           device: key.fixtureDevice,
           canGenerate: !!where || discoveryConfigured(key.workspaceId),
           canReview: target.kind === 'practice-note',
           material,
+          printImages,
           status: job?.status ?? null,
           reviewStatus: review?.status ?? null,
         };

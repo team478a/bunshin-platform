@@ -1,0 +1,129 @@
+.document {
+  width: min(100% - 2rem, 52rem);
+  margin: 1.5rem auto 3rem;
+  color: #18283f;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.header {
+  border-bottom: 1px solid #8a9db4;
+  padding-bottom: 0.75rem;
+}
+
+.document h1,
+.document h2,
+.document p,
+.document figure {
+  margin: 0;
+}
+
+.document h1 {
+  font-size: 1.65em;
+}
+
+.document h2 {
+  font-size: 1.12em;
+}
+
+.document p,
+.document small {
+  display: block;
+  margin-top: 0.25em;
+  white-space: pre-line;
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.controls button {
+  min-height: 44px;
+  padding: 0.5rem 0.75rem;
+  background: #204d94;
+  color: #fff;
+  border: 0;
+  border-radius: 0.5rem;
+  font: inherit;
+}
+
+.section {
+  margin-top: 1rem;
+}
+
+.section p + h2 {
+  margin-top: 0.75rem;
+}
+
+.figures {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 0.75rem;
+  row-gap: 0.5rem;
+}
+
+.figures:not(:empty) {
+  margin-top: 0.5rem;
+}
+
+.figures img {
+  display: block;
+  max-width: 100%;
+  width: auto;
+  height: auto;
+  max-height: 19rem;
+  border: 1px solid #dbe3ed;
+}
+
+.figures .detail {
+  grid-column: 1 / -1;
+}
+
+.figures .detail img {
+  max-height: 9rem;
+}
+
+.figures figcaption {
+  font-size: 0.875em;
+}
+
+@media print {
+  @page browser-material {
+    size: A4;
+    margin: 13mm;
+  }
+
+  body:has(.document) {
+    background: #fff;
+  }
+
+  body:has(.document) :global(.site-footer),
+  .controls {
+    display: none;
+  }
+
+  .document {
+    page: browser-material;
+    width: 100%;
+    margin: 0;
+    font-size: 10.5pt;
+  }
+
+  .header,
+  .section {
+    break-inside: avoid;
+  }
+
+  .figures img {
+    max-height: 58mm;
+  }
+
+  .figures .detail img {
+    max-height: 34mm;
+  }
+}
