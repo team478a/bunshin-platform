@@ -235,7 +235,10 @@
 }
 
 .learnerPage .detail img {
+  inline-size: auto;
+  max-inline-size: 100%;
   max-block-size: 11rem;
+  margin: 0 auto;
   object-fit: contain;
   background: var(--learning-surface);
 }

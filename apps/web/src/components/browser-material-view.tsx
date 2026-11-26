@@ -63,7 +63,7 @@ export function BrowserMaterialView({
       <a href={imageHref('detail')} target="_blank" rel="noopener noreferrer">
         <Image
           src={imageHref('detail')}
-          alt="操作箇所の拡大画像"
+          alt="操作箇所を赤い枠で示した拡大画像"
           width={480}
           height={260}
           unoptimized
