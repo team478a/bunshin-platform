@@ -25,29 +25,10 @@ export async function materialImages(
     };
   }
 
-  const overlay = Buffer.alloc(rect.width * rect.height * 4);
-  const thickness = Math.min(5, rect.height, rect.width);
-  for (let y = 0; y < rect.height; y++) {
-    for (let x = 0; x < rect.width; x++) {
-      if (
-        y >= thickness &&
-        y < rect.height - thickness &&
-        x >= thickness &&
-        x < rect.width - thickness
-      )
-        continue;
-      const offset = (y * rect.width + x) * 4;
-      overlay[offset] = 220;
-      overlay[offset + 1] = 38;
-      overlay[offset + 2] = 38;
-      overlay[offset + 3] = 255;
-    }
-  }
-
   const marked = await before
     .composite([
       {
-        input: overlay,
+        input: targetOutline(rect.width, rect.height, Math.min(5, rect.height, rect.width)),
         raw: { width: rect.width, height: rect.height, channels: 4 },
         top: rect.top,
         left: rect.left,
@@ -55,21 +36,57 @@ export async function materialImages(
     ])
     .png()
     .toBuffer();
-  const padding = 40;
-  const detailWidth = Math.min(width, rect.width + 2 * padding);
-  const detailHeight = Math.min(height, rect.height + 2 * padding);
-  // Keep the crop centred on the target, and move the entire crop inside the frame.
-  const left = Math.max(0, Math.min(width - detailWidth, rect.left - padding));
-  const top = Math.max(0, Math.min(height - detailHeight, rect.top - padding));
-  const detailImage = await sharp(marked)
-    .extract({ left, top, width: detailWidth, height: detailHeight })
-    .webp({ quality: 90 })
-    .toBuffer();
+
   const beforeImage = await sharp(marked)
     .resize({ width: 1440, withoutEnlargement: true })
     .webp({ quality: 85 })
     .toBuffer();
+
+  // The close-up isolates the recorded target so nearby controls never appear half cut off.
+  const targetImage = await sharp(step.beforePng, { limitInputPixels: maxFixturePixels })
+    .extract(rect)
+    .png()
+    .toBuffer();
+  const padding = 20;
+  const clearance = 8;
+  const outlineWidth = rect.width + clearance * 2;
+  const outlineHeight = rect.height + clearance * 2;
+  const detailImage = await sharp({
+    create: {
+      width: rect.width + padding * 2,
+      height: rect.height + padding * 2,
+      channels: 3,
+      background: 'white',
+    },
+  })
+    .composite([
+      { input: targetImage, top: padding, left: padding },
+      {
+        input: targetOutline(outlineWidth, outlineHeight, 3),
+        raw: { width: outlineWidth, height: outlineHeight, channels: 4 },
+        top: padding - clearance,
+        left: padding - clearance,
+      },
+    ])
+    .webp({ quality: 90 })
+    .toBuffer();
   return { beforeImage, afterImage, detailImage };
+}
+
+function targetOutline(width: number, height: number, thickness: number) {
+  const overlay = Buffer.alloc(width * height * 4);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if (y >= thickness && y < height - thickness && x >= thickness && x < width - thickness)
+        continue;
+      const offset = (y * width + x) * 4;
+      overlay[offset] = 220;
+      overlay[offset + 1] = 38;
+      overlay[offset + 2] = 38;
+      overlay[offset + 3] = 255;
+    }
+  }
+  return overlay;
 }
 
 function visiblePixels(

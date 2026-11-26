@@ -1,4 +1,3 @@
-import type { UrlObject } from 'node:url';
 import Image from 'next/image';
 import Link from 'next/link';
 import { deviceLabel, materialSourceLabel } from './browser-material-view';
@@ -25,12 +24,39 @@ const manualStyles = [
   { id: 'practice', label: '実践ワークシート', purpose: '自分で試して振り返る', figures: [] },
 ] as const;
 
+type MaterialHref = { pathname: string; query: { topicId?: string } };
+
+export function BrowserMaterialManualLinks({
+  materialHref,
+  selectedFormat,
+}: {
+  materialHref: MaterialHref;
+  selectedFormat?: (typeof manualStyles)[number]['id'];
+}) {
+  return (
+    <nav aria-label="PDFマニュアルの形式" className={styles.picker}>
+      {manualStyles.map(({ id, label, purpose }) => (
+        <Link
+          key={id}
+          prefetch={false}
+          href={{ ...materialHref, query: { ...materialHref.query, print: '1', format: id } }}
+          aria-current={selectedFormat === id ? 'page' : undefined}
+        >
+          <strong>{purpose}</strong>
+          <span>{label}</span>
+        </Link>
+      ))}
+    </nav>
+  );
+}
+
 export function BrowserMaterialPrint({
   material,
   device,
   images,
   imageHref,
   backHref,
+  webMaterialUrl,
   reviewFailed,
   requestedStyle,
 }: {
@@ -47,7 +73,8 @@ export function BrowserMaterialPrint({
   device: string;
   images: readonly ({ ordinal: number } & Record<Variant, boolean>)[];
   imageHref: (ordinal: number, variant: Variant) => string;
-  backHref: UrlObject;
+  backHref: MaterialHref;
+  webMaterialUrl: string;
   reviewFailed: boolean;
   requestedStyle: string | string[] | undefined;
 }) {
@@ -61,31 +88,14 @@ export function BrowserMaterialPrint({
         <Link href={backHref}>教材に戻る</Link>
         <BrowserMaterialPrintButton />
       </div>
-      <nav aria-label="PDFのスタイル" className={styles.picker}>
-        {manualStyles.map(({ id, label, purpose }) => (
-          <Link
-            key={id}
-            href={{
-              ...backHref,
-              query: {
-                ...(typeof backHref.query === 'object' ? backHref.query : {}),
-                print: '1',
-                format: id,
-              },
-            }}
-            aria-current={selected.id === id ? 'page' : undefined}
-          >
-            <strong>{label}</strong>
-            <span>{purpose}</span>
-          </Link>
-        ))}
-      </nav>
+      <BrowserMaterialManualLinks materialHref={backHref} selectedFormat={selected.id} />
       <header className={styles.header}>
         <span className={styles.format}>{selected.label}</span>
         <h1>{material.title}</h1>
         <p>{material.goal}</p>
         <small>
-          {deviceLabel(device)} · {materialSourceLabel(material)} · 第{material.revision}版
+          {deviceLabel(device)} · {materialSourceLabel(material)} · 第{material.revision}版 ·{' '}
+          <a href={webMaterialUrl}>Web教材で最新版を確認する</a>（要ログイン）
         </small>
         {reviewFailed && <p>再検証で操作を確認できなかったため、前の教材を表示しています。</p>}
       </header>

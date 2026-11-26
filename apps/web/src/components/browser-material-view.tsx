@@ -26,6 +26,7 @@ export function BrowserMaterialView({
   stepHref,
   imageHref,
   guidance,
+  learner,
 }: {
   material: {
     title: string;
@@ -44,6 +45,7 @@ export function BrowserMaterialView({
   stepHref: (value: number) => UrlObject;
   imageHref: (variant: 'before' | 'after' | 'detail') => string;
   guidance?: string;
+  learner?: { practiceHref: UrlObject };
 }) {
   const step = material.steps[ordinal - 1];
   if (!step) return null;
@@ -53,24 +55,55 @@ export function BrowserMaterialView({
       : []
     : ['before', 'after'];
 
+  const StepHeading = learner ? 'h2' : 'h3';
+  const CheckpointHeading = learner ? 'h3' : 'h4';
+  const detail = showDetail && (
+    <details className={styles.detail} open={learner ? true : undefined}>
+      <summary>操作箇所を拡大</summary>
+      <a href={imageHref('detail')} target="_blank" rel="noopener noreferrer">
+        <Image
+          src={imageHref('detail')}
+          alt="操作箇所を赤い枠で示した拡大画像"
+          width={480}
+          height={260}
+          unoptimized
+        />
+      </a>
+    </details>
+  );
+  const navigation = (ordinal > 1 || ordinal < material.steps.length) && (
+    <nav className={styles.navigation} aria-label="教材の手順">
+      {ordinal > 1 && <Link href={stepHref(ordinal - 1)}>{learner ? '前の手順' : '前へ'}</Link>}
+      {ordinal < material.steps.length && (
+        <Link className={styles.nextStep} href={stepHref(ordinal + 1)}>
+          {learner ? '次の手順' : '次へ'}
+        </Link>
+      )}
+    </nav>
+  );
+
   return (
     <>
-      <header>
-        <h2>{material.title}</h2>
+      <header className={learner ? styles.learnerHeader : undefined}>
+        {learner ? <h1>{material.title}</h1> : <h2>{material.title}</h2>}
         {material.goal && <p>{material.goal}</p>}
         <small>
           {deviceLabel(device)} · {materialSourceLabel(material)}
         </small>
       </header>
-      <details>
-        <summary>準備</summary>
-        <p>{material.preparation}</p>
-      </details>
+      {material.preparation && (
+        <details className={learner ? styles.learnerPreparation : undefined}>
+          <summary>{learner ? '始める前に' : '準備'}</summary>
+          <p>{material.preparation}</p>
+        </details>
+      )}
       <section className={styles.step} aria-labelledby="material-step">
-        <h3 id="material-step">
+        <StepHeading id="material-step">
           手順 {ordinal} / {material.steps.length}
-        </h3>
-        <p>{step.instruction}</p>
+        </StepHeading>
+        <p className={learner ? styles.learnerInstruction : undefined}>{step.instruction}</p>
+        {learner && navigation}
+        {learner && detail}
         <div className={styles.images}>
           {images.map((variant) => {
             const label = material.importedAt
@@ -89,32 +122,21 @@ export function BrowserMaterialView({
             );
           })}
         </div>
-        {showDetail && (
-          <details className={styles.detail}>
-            <summary>操作箇所を拡大</summary>
-            <a href={imageHref('detail')} target="_blank" rel="noopener noreferrer">
-              <Image
-                src={imageHref('detail')}
-                alt="操作箇所の拡大画像"
-                width={480}
-                height={260}
-                unoptimized
-              />
-            </a>
-          </details>
-        )}
-        <nav className={styles.navigation} aria-label="教材の手順">
-          {ordinal > 1 ? <Link href={stepHref(ordinal - 1)}>前へ</Link> : <span />}
-          {ordinal < material.steps.length && <Link href={stepHref(ordinal + 1)}>次へ</Link>}
-        </nav>
+        {!learner && detail}
+        {!learner && navigation}
       </section>
       {ordinal === material.steps.length && (
         <section className={styles.step}>
-          <h3>実践課題</h3>
+          <StepHeading>実践課題</StepHeading>
           <p>{material.practice}</p>
           {guidance && <p>{guidance}</p>}
-          <h4>理解度確認</h4>
+          <CheckpointHeading>理解度確認</CheckpointHeading>
           <p>{material.checkpoint}</p>
+          {learner && (
+            <Link className={styles.primaryAction} href={learner.practiceHref}>
+              個別学習で実践する
+            </Link>
+          )}
         </section>
       )}
     </>

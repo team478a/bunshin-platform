@@ -1,3 +1,4 @@
+import design from '../../../../src/components/manaberu-learner.module.css';
 import { notFound } from 'next/navigation';
 import { parseProgramProductTerms } from '@bunshin/application';
 import { resolveAuthenticatedMemberServicePage } from '../../../../src/services/member-service-page';
@@ -198,10 +199,13 @@ export default async function MemberProgramsPage({
     paymentConfiguration.encryptedWebhookSecret !== null;
   const legalReady = new Set(commerceDocuments.map(({ type }) => type)).size === 3;
   const paymentResult = (await searchParams).payment;
+  const hasTraining =
+    programs.some((program) => isTrainingProgram(program.settings)) ||
+    endedTrainingPrograms.length > 0;
   return (
     <PublicShell showPlatformBrand={false}>
-      <main className="app-page">
-        <header className="app-page__heading">
+      <main className={`app-page ${hasTraining ? design.frame : ''}`}>
+        <header className={`app-page__heading ${hasTraining ? design.hero : ''}`}>
           <p className="eyebrow">あなたの活動</p>
           <h1>参加中のプログラム</h1>
           <p>欲しいサポートと、今の目標を自分で選べます。</p>

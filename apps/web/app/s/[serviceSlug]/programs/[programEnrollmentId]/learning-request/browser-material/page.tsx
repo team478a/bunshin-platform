@@ -1,8 +1,13 @@
+import design from '../../../../../../../src/components/manaberu-learner.module.css';
 import { notFound, redirect } from 'next/navigation';
 import Link from 'next/link';
+import { getServerEnvironment } from '@bunshin/config';
 import { ApplicationError } from '@bunshin/shared';
 import { BrowserMaterialView } from '../../../../../../../src/components/browser-material-view';
-import { BrowserMaterialPrint } from '../../../../../../../src/components/browser-material-print';
+import {
+  BrowserMaterialManualLinks,
+  BrowserMaterialPrint,
+} from '../../../../../../../src/components/browser-material-print';
 import styles from '../../../../../../../src/components/browser-material.module.css';
 import {
   browserLearningMaterialActor,
@@ -45,6 +50,7 @@ export default async function BrowserLearningMaterialPage({
     const path = learningMaterialPath(serviceSlug, programEnrollmentId, actor.topicId);
     const pathname = learningMaterialPath(serviceSlug, programEnrollmentId);
     const topic = actor.topicId ? { topicId: actor.topicId } : {};
+    const materialHref = { pathname, query: topic };
     const home = {
       pathname: pathname.replace('/learning-request/browser-material', '/learning-request'),
       query: topic,
@@ -71,7 +77,8 @@ export default async function BrowserLearningMaterialPage({
           device={state.device}
           images={state.printImages}
           imageHref={(ordinal, variant) => imageHref(material.id, ordinal, variant)}
-          backHref={{ pathname, query: topic }}
+          backHref={materialHref}
+          webMaterialUrl={new URL(path, getServerEnvironment().APP_URL).toString()}
           reviewFailed={state.reviewStatus === 'DEAD'}
           requestedStyle={query.format}
         />
@@ -147,19 +154,25 @@ export default async function BrowserLearningMaterialPage({
     }
 
     return (
-      <main className={styles.page}>
-        <Link href={home}>個別学習に戻る</Link>
-        <h1>画像付き操作教材</h1>
+      <main className={`${design.frame} ${styles.page} ${styles.learnerPage}`}>
+        <nav className={styles.learnerLinks} aria-label="教材ナビゲーション">
+          <Link className={styles.secondaryAction} href={home}>
+            個別学習に戻る
+          </Link>
+          {material && (
+            <a className={styles.primaryAction} href="#pdf-manual-title">
+              PDFを使う
+            </a>
+          )}
+        </nav>
         {material ? (
           <>
-            <Link href={{ pathname, query: { ...topic, print: '1' } }}>
-              マニュアルの形式を選ぶ（PDF・印刷）
-            </Link>
             <BrowserMaterialView
               material={{ ...material, verifiedAt: material.reviewedAt ?? material.verifiedAt }}
               device={state.device}
               ordinal={ordinal}
               showDetail={showDetail}
+              learner={{ practiceHref: { ...home, hash: 'practice-record' } }}
               stepHref={(value) => ({
                 pathname,
                 query: {
@@ -175,6 +188,10 @@ export default async function BrowserLearningMaterialPage({
                   : 'パソコンのブラウザで、ボタンをクリックして進めましょう。'
               }
             />
+            <section aria-labelledby="pdf-manual-title">
+              <h2 id="pdf-manual-title">PDFマニュアル</h2>
+              <BrowserMaterialManualLinks materialHref={materialHref} />
+            </section>
             <BrowserMaterialVideo
               state={video}
               requestVideo={requestVideo}
@@ -205,7 +222,8 @@ export default async function BrowserLearningMaterialPage({
                 }).toString()
               }
             />
-            <section aria-label="画面の違い">
+            <section aria-labelledby="material-help-title">
+              <h2 id="material-help-title">操作に困ったとき</h2>
               <small>教材 第{material.revision}版</small>
               {state.canReview && (
                 <form action={reportDifference}>
@@ -218,13 +236,14 @@ export default async function BrowserLearningMaterialPage({
                 ['PENDING', 'LEASED', 'RETRY_SCHEDULED'].includes(state.reviewStatus) ? (
                 <p role="status">教材の画面を再検証しています。</p>
               ) : null}
-              <Link href={{ ...home, hash: 'practice-record' }}>
+              <Link className={styles.secondaryAction} href={{ ...home, hash: 'practice-record' }}>
                 分からない操作を個別学習で相談する
               </Link>
             </section>
           </>
         ) : (
-          <section aria-label="教材の準備">
+          <section aria-labelledby="material-preparation-title">
+            <h1 id="material-preparation-title">画像付き操作教材</h1>
             {!state.canGenerate ? (
               <p>
                 この端末向けの検証済みレシピは準備中です。個別学習から質問や実践を続けられます。
