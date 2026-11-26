@@ -49,7 +49,7 @@ export function BrowserMaterialPrint({
   imageHref: (ordinal: number, variant: Variant) => string;
   backHref: UrlObject;
   reviewFailed: boolean;
-  requestedStyle?: string | string[];
+  requestedStyle: string | string[] | undefined;
 }) {
   const selected = manualStyles.find(({ id }) => id === requestedStyle) ?? manualStyles[0];
   const recorded = new Map(images.map((image) => [image.ordinal, image]));
