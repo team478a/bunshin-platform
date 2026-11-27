@@ -26,7 +26,10 @@ import { PersonalLearningPilotCard } from './personal-learning-pilot-card';
 import { resolvePersonalLearningPilot } from '../../../../../src/services/personal-learning-pilot-access';
 import { readPersonalLearningProfilePreparation } from '../../../../../src/services/personal-learning-profile-preparation-page';
 import { PersonalLearningProfilePreparationCard } from './personal-learning-profile-preparation-card';
-import { personalLearningRequestEnabled } from '../../../../../src/services/personal-learning-request-access';
+import {
+  personalLearningRequestEnabled,
+  resolvePersonalLearningRequestActor,
+} from '../../../../../src/services/personal-learning-request-access';
 import { requireAiTrainingUsageConsent } from '../../../../../src/services/ai-training-consent';
 import { personalLearningProfilePreparationEntryEnabled } from '../../../../../src/services/personal-learning-profile-preparation-entry';
 import {
@@ -107,6 +110,22 @@ export default async function ProgramParticipantPage({
             groupId: service.serviceId,
             groupMembershipId: membership.id,
             currentEnrollmentId: programEnrollmentId,
+            async canContinue(enrollmentId) {
+              try {
+                await resolvePersonalLearningRequestActor(
+                  serviceSlug,
+                  enrollmentId,
+                  actor.userId,
+                  undefined,
+                  undefined,
+                  { allowUnselectedTopic: true },
+                );
+                return true;
+              } catch (error) {
+                if (error instanceof ApplicationError && error.code === 'NOT_FOUND') return false;
+                throw error;
+              }
+            },
           },
         );
         if (currentEnrollmentId) redirect(`/s/${serviceSlug}/programs/${currentEnrollmentId}`);
