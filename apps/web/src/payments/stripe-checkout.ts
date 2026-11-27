@@ -1,9 +1,10 @@
 import 'server-only';
 
 import { ApplicationError } from '@bunshin/shared';
+import { INSTRUCTOR_REVIEW_KIND } from '../services/instructor-review-contract';
 type StripeCheckoutUrl = `https://checkout.stripe.com/${string}`;
 
-function isStripeCheckoutUrl(value: unknown): value is StripeCheckoutUrl {
+export function isStripeCheckoutUrl(value: unknown): value is StripeCheckoutUrl {
   return typeof value === 'string' && value.startsWith('https://checkout.stripe.com/');
 }
 
@@ -25,6 +26,7 @@ export class StripeCheckoutAdapter {
     successUrl: string;
     cancelUrl: string;
     fortune?: { terms: string };
+    instructorReview?: { terms: string };
   }): Promise<StripeCheckoutSession> {
     const body = new URLSearchParams({
       mode: 'payment',
@@ -41,11 +43,13 @@ export class StripeCheckoutAdapter {
       'payment_intent_data[metadata][purchase_id]': input.purchaseId,
       'payment_intent_data[metadata][workspace_id]': input.workspaceId,
     });
-    if (input.fortune) {
+    const supplementalPurchase = input.instructorReview ?? input.fortune;
+    if (supplementalPurchase) {
+      const purchaseKind = input.instructorReview ? INSTRUCTOR_REVIEW_KIND : 'fortune';
       body.set('payment_method_types[0]', 'card');
-      body.set('metadata[purchase_kind]', 'fortune');
-      body.set('payment_intent_data[metadata][purchase_kind]', 'fortune');
-      body.set('custom_text[submit][message]', input.fortune.terms);
+      body.set('metadata[purchase_kind]', purchaseKind);
+      body.set('payment_intent_data[metadata][purchase_kind]', purchaseKind);
+      body.set('custom_text[submit][message]', supplementalPurchase.terms);
     }
     const response = await fetch('https://api.stripe.com/v1/checkout/sessions', {
       method: 'POST',
@@ -83,6 +87,57 @@ export class StripeCheckoutAdapter {
       expiresAt:
         typeof payload.expires_at === 'number' ? new Date(payload.expires_at * 1000) : null,
     };
+  }
+}
+
+export class StripeCheckoutExpirationAdapter {
+  async expire(secretKey: string, sessionId: string, idempotencyKey: string): Promise<void> {
+    if (!/^cs_[A-Za-z0-9_]+$/.test(sessionId)) {
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid Stripe Checkout identifier');
+    }
+    const response = await fetch(
+      `https://api.stripe.com/v1/checkout/sessions/${encodeURIComponent(sessionId)}/expire`,
+      {
+        method: 'POST',
+        headers: { authorization: `Bearer ${secretKey}`, 'idempotency-key': idempotencyKey },
+        signal: AbortSignal.timeout(15_000),
+      },
+    );
+    if (!response.ok) {
+      throw new ApplicationError('CONFLICT', '決済の取消を確認できませんでした');
+    }
+    const payload = (await response.json()) as { id?: unknown; status?: unknown };
+    if (payload.id !== sessionId || payload.status !== 'expired') {
+      throw new ApplicationError('INTERNAL_ERROR', 'Stripe cancellation response is invalid');
+    }
+  }
+}
+
+export class StripeFullRefundAdapter {
+  async request(secretKey: string, paymentIntentId: string, idempotencyKey: string): Promise<void> {
+    if (!/^pi_[A-Za-z0-9]+$/.test(paymentIntentId)) {
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid Stripe payment identifier');
+    }
+    const response = await fetch('https://api.stripe.com/v1/refunds', {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${secretKey}`,
+        'content-type': 'application/x-www-form-urlencoded',
+        'idempotency-key': idempotencyKey,
+      },
+      body: new URLSearchParams({ payment_intent: paymentIntentId }),
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!response.ok) {
+      throw new ApplicationError('CONFLICT', '返金の依頼を受理できませんでした');
+    }
+    const payload = (await response.json()) as { payment_intent?: unknown; status?: unknown };
+    if (
+      payload.payment_intent !== paymentIntentId ||
+      (payload.status !== 'succeeded' && payload.status !== 'pending')
+    ) {
+      throw new ApplicationError('INTERNAL_ERROR', 'Stripe refund response is invalid');
+    }
   }
 }
 

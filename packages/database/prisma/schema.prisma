@@ -410,6 +410,7 @@ model ProgramOffering {
 }
 
 model ProgramEnrollment {
+  instructorReviews InstructorReview[]
   id                String                      @id @default(uuid()) @db.Uuid
   workspaceId       String                      @map("workspace_id") @db.Uuid
   groupId           String                      @map("group_id") @db.Uuid
@@ -3088,6 +3089,7 @@ model OrganizationEntitlementAudit {
 }
 
 model Group {
+  instructorReviewProduct InstructorReviewProduct?
   referralQualificationPolicies ServiceReferralQualificationPolicyVersion[]
   oemOfferingPeriods OemOfferingPeriod[]
   learningDefinitionApprovals     LearningDefinitionApproval[]
@@ -3984,6 +3986,7 @@ model ServiceMemberBusinessProfile {
 }
 
 model GroupMembership {
+  instructorReviews InstructorReview[]
   socialOAuthAttempts SocialOAuthAttempt[]
   socialAccountConnections SocialAccountConnection[]
   externalReadGrants ExternalReadGrant[]
@@ -4341,6 +4344,7 @@ model OrganizationCommercialContract {
 
 /// OEM運営団体が自社売上を受け取る決済接続。秘密値はWeb層で暗号化してから保存する。
 model OrganizationPaymentConfiguration {
+  instructorReviews InstructorReview[]
   id                     String                                  @id @default(uuid()) @db.Uuid
   workspaceId            String                                  @map("workspace_id") @db.Uuid
   environment            LineConfigurationEnvironment
@@ -9309,4 +9313,72 @@ model BrowserMaterialSpeechConfiguration {
   workspace     Workspace                    @relation(fields: [workspaceId], references: [id], onDelete: Cascade, map: "browser_material_speech_workspace_fkey")
 
   @@map("browser_material_speech_configurations")
+}
+
+enum InstructorReviewStatus {
+  PENDING_PAYMENT
+  ACCEPTED
+  IN_PROGRESS
+  REFUND_PENDING
+  ANSWERED
+  CANCELLED
+  REFUNDED
+}
+
+model InstructorReviewProduct {
+  workspaceId String   @map("workspace_id") @db.Uuid
+  groupId     String   @map("group_id") @db.Uuid
+  revision    String   @db.Uuid
+  settings    Json
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  group       Group    @relation(fields: [workspaceId, groupId], references: [workspaceId, id], onDelete: Restrict)
+
+  @@id([workspaceId, groupId])
+  @@map("instructor_review_products")
+}
+
+model InstructorReview {
+  id                     String                 @id @default(uuid()) @db.Uuid
+  workspaceId            String                 @map("workspace_id") @db.Uuid
+  groupId                String                 @map("group_id") @db.Uuid
+  enrollmentId           String                 @map("enrollment_id") @db.Uuid
+  groupMembershipId      String                 @map("group_membership_id") @db.Uuid
+  buyerUserId            String                 @map("buyer_user_id") @db.Uuid
+  assignmentId           String                 @map("assignment_id") @db.Uuid
+  topicId                String?                @map("topic_id") @db.Uuid
+  instructorUserId       String?                @map("instructor_user_id") @db.Uuid
+  paymentConfigurationId String                 @map("payment_configuration_id") @db.Uuid
+  productRevision        String                 @map("product_revision") @db.Uuid
+  requestKey             String                 @map("request_key") @db.Uuid
+  source                 String                 @db.VarChar(32)
+  status                 InstructorReviewStatus @default(PENDING_PAYMENT)
+  title                  String                 @db.Text
+  planRevision           Int                    @map("plan_revision")
+  focus                  String                 @db.VarChar(500)
+  excerpt                String                 @db.Text
+  description            String                 @db.VarChar(1000)
+  amountYen              Int                    @map("amount_yen")
+  responseHours          Int                    @map("response_hours")
+  cancellationTerms      String                 @map("cancellation_terms") @db.VarChar(500)
+  liveMode               Boolean                @map("live_mode")
+  providerCheckoutSessionId String? @unique @map("provider_checkout_session_id") @db.VarChar(200)
+  providerPaymentIntentId   String? @unique @map("provider_payment_intent_id") @db.VarChar(200)
+  checkoutUrl            String?                @map("checkout_url") @db.VarChar(2048)
+  paidAt                 DateTime?              @map("paid_at") @db.Timestamptz(6)
+  dueAt                  DateTime?              @map("due_at") @db.Timestamptz(6)
+  answer                 String?                @db.Text
+  answeredAt             DateTime?              @map("answered_at") @db.Timestamptz(6)
+  notifiedAt             DateTime?              @map("notified_at") @db.Timestamptz(6)
+  contentRedactedAt       DateTime?              @map("content_redacted_at") @db.Timestamptz(6)
+  createdAt              DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime               @updatedAt @map("updated_at") @db.Timestamptz(6)
+  enrollment             ProgramEnrollment      @relation(fields: [workspaceId, groupId, enrollmentId, groupMembershipId], references: [workspaceId, groupId, id, groupMembershipId], onDelete: Restrict)
+  membership             GroupMembership        @relation(fields: [workspaceId, groupId, groupMembershipId, buyerUserId], references: [workspaceId, groupId, id, userId], onDelete: Restrict)
+  paymentConfiguration   OrganizationPaymentConfiguration @relation(fields: [workspaceId, paymentConfigurationId], references: [workspaceId, id], onDelete: Restrict)
+
+  @@unique([workspaceId, groupId, buyerUserId, requestKey], map: "instructor_review_request_key")
+  @@index([workspaceId, groupId, status], map: "instructor_review_service_status")
+  @@index([workspaceId, groupId, buyerUserId, enrollmentId], map: "instructor_review_buyer_enrollment")
+  @@index([workspaceId, groupId, instructorUserId, status], map: "instructor_review_assigned_status")
+  @@map("instructor_reviews")
 }

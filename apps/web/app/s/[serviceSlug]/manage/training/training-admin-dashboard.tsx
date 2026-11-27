@@ -4,6 +4,7 @@ import { parseAiTrainingOperationsSettings } from '@bunshin/capability-training'
 import type { buildAiTrainingAdminDashboard } from '../../../../../src/services/ai-training-admin-dashboard';
 import type { buildAiTrainingEvaluationOperations } from '../../../../../src/services/ai-training-evaluation-operations';
 import type { buildAiTrainingPilotAnalytics } from '../../../../../src/services/ai-training-pilot-analytics';
+import { MANABERU_SERVICE_SLUG } from '../../../../../src/services/service-auth-brand';
 import { PublicShell } from '../../../../ui/public-shell';
 import { TrainingLifecycleCard, type TrainingLifecycleRow } from './training-lifecycle-card';
 
@@ -68,6 +69,16 @@ export function TrainingAdminDashboard({
             （日本時間）。最新の状況は画面を更新して確認してください。
           </p>
           <Link href={`/s/${serviceSlug}/manage` as Route}>← 管理メニューへ戻る</Link>
+          {serviceSlug === MANABERU_SERVICE_SLUG && (
+            <p>
+              <Link
+                href={{ pathname: `/s/${serviceSlug}/manage/training/instructor-reviews` }}
+                prefetch={false}
+              >
+                講師レビューの受付・設定
+              </Link>
+            </p>
+          )}
           <p>
             <Link href={`/s/${serviceSlug}/manage/training/retention` as Route} prefetch={false}>
               研修データの保持期限を確認（読み取り専用）

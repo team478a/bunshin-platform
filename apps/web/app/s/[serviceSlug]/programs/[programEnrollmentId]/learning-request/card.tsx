@@ -24,6 +24,8 @@ export function PersonalLearningRequestCard({
   simpleStart = false,
   firstTopicEndpoint,
   browserMaterialHref,
+  instructorReviewHref,
+  instructorReviewAnswered,
   endpoint,
   initial,
   candidateEndpoint,
@@ -37,6 +39,8 @@ export function PersonalLearningRequestCard({
   simpleStart?: boolean;
   firstTopicEndpoint?: string;
   browserMaterialHref?: string | undefined;
+  instructorReviewHref?: string | undefined;
+  instructorReviewAnswered?: boolean | undefined;
   endpoint: string;
   initial: SavedPersonalLearningRequest | null;
   candidateEndpoint?: string;
@@ -60,6 +64,7 @@ export function PersonalLearningRequestCard({
   const [pending, setPending] = useState(false);
   const busy = useRef(false);
   const firstTopic = useRef<string | null>(null);
+  const conversationDetails = useRef<HTMLDetailsElement>(null);
   const topicUrl = (url: string) =>
     firstTopic.current ? `${url}?topicId=${encodeURIComponent(firstTopic.current)}` : url;
   const [message, setMessage] = useState('');
@@ -315,6 +320,14 @@ export function PersonalLearningRequestCard({
             state={practice}
             plainLanguage={dynamicMode}
             simpleStart={simpleStart}
+            instructorReviewHref={instructorReviewHref ? topicUrl(instructorReviewHref) : undefined}
+            instructorReviewAnswered={instructorReviewAnswered}
+            conversationHref={
+              conversationEndpoint && saved && matchesSaved ? '#conversation-record' : undefined
+            }
+            onOpenConversation={() => {
+              if (conversationDetails.current) conversationDetails.current.open = true;
+            }}
             candidate={
               matchesSaved && confirmedCandidate?.requestId === saved?.id
                 ? confirmedCandidate
@@ -348,7 +361,7 @@ export function PersonalLearningRequestCard({
       {conversationEndpoint && saved && matchesSaved && (
         <div className={design.panel} id="conversation-record">
           {simpleStart ? (
-            <details>
+            <details ref={conversationDetails}>
               <summary>AIに質問する</summary>
               {conversationCard()}
             </details>
