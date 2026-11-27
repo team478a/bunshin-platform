@@ -68,7 +68,9 @@ function toGoogleRequest(request: LearningAiRequest) {
     contents,
     generationConfig: {
       responseMimeType: 'application/json',
-      responseSchema: format['schema'],
+      ...(request.task === 'BROWSER_FIXTURE_SELECTION'
+        ? { responseSchema: format['schema'] }
+        : { responseJsonSchema: format['schema'] }),
       maxOutputTokens:
         typeof body['max_output_tokens'] === 'number' ? body['max_output_tokens'] : undefined,
       candidateCount: 1,
@@ -157,8 +159,7 @@ export class GoogleLearningGenerationAdapter implements LearningAiGenerationPort
         ? browserSelectionOutputTokens(usage)
         : asToken(usage['candidatesTokenCount']),
       cachedInputTokens:
-        forBrowser &&
-        (inputTokens === null || inputTokens > 2_147_483_647 || cachedInputTokens > inputTokens)
+        inputTokens === null || inputTokens > 2_147_483_647 || cachedInputTokens > inputTokens
           ? null
           : cachedInputTokens,
       latencyMs: Math.min(2_147_483_647, Date.now() - start),

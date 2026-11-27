@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 vi.mock('server-only', () => ({}));
-import type { LearningAiRequest } from '@bunshin/application';
+import { validateAiCallMeasurement, type LearningAiRequest } from '@bunshin/application';
 import { GoogleLearningGenerationAdapter } from '../src/providers/google-learning-generation';
 import {
   assertLearningProviderCapabilities,
@@ -27,6 +27,7 @@ const request: LearningAiRequest = {
         strict: true,
         schema: {
           type: 'object',
+          additionalProperties: false,
           properties: { status: { type: 'string' } },
           required: ['status'],
         },
@@ -72,10 +73,35 @@ describe('Google learning evaluation adapter', () => {
       contents: [{ role: 'user', parts: [{ text: 'Fictional learning request.' }] }],
       generationConfig: {
         responseMimeType: 'application/json',
+        responseJsonSchema: {
+          type: 'object',
+          additionalProperties: false,
+          properties: { status: { type: 'string' } },
+          required: ['status'],
+        },
         maxOutputTokens: 400,
         candidateCount: 1,
       },
     });
+  });
+
+  it('keeps the provider rejection category when no usage is reported', async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(Response.json({ error: { status: 'INVALID_ARGUMENT' } }, { status: 400 }));
+    const result = await new GoogleLearningGenerationAdapter(fetcher).generate(
+      request,
+      (value) => value,
+      { apiKey: 'test-key' },
+    );
+    expect(validateAiCallMeasurement(result.measurement)).toMatchObject({
+      inputTokens: null,
+      outputTokens: null,
+      cachedInputTokens: null,
+      errorCategory: 'PROVIDER_ERROR',
+    });
+    expect(result.requestFinished).toBe(true);
+    expect(result.value).toBeNull();
   });
 
   it('fails closed before network access when the configured capability is absent', async () => {
