@@ -425,6 +425,13 @@ export function TrainingAdminDashboard({
                             <dd>{dateTimeLabel(participant.lastActivityAt)}</dd>
                           </div>
                         </dl>
+                        {participant.dynamicPractice && (
+                          <p>
+                            直近の個別課題 · AIへの相談{' '}
+                            {participant.dynamicPractice.aiConsultations}件 · 提出{' '}
+                            {participant.dynamicPractice.submissions}件
+                          </p>
+                        )}
                         {lifecycle && (
                           <TrainingLifecycleCard
                             key={`${lifecycle.updatedAt}:${lifecycle.displayStatus}`}
