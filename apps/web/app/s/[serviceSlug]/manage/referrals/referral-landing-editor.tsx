@@ -117,7 +117,7 @@ export function ReferralLandingEditor({
       <p>
         現在の紹介先 <strong>{active?.name ?? '標準の参加登録ページ'}</strong>
       </p>
-      <form onSubmit={save}>
+      <form onSubmit={(event) => void save(event)}>
         <fieldset disabled={busy}>
           <div className="referral-landings__grid">
             <label>
@@ -210,7 +210,11 @@ export function ReferralLandingEditor({
           申込ボタンのコード
           <textarea readOnly rows={4} value={signupSnippet} />
         </label>
-        <button type="button" className="button button--secondary" onClick={copySignupSnippet}>
+        <button
+          type="button"
+          className="button button--secondary"
+          onClick={() => void copySignupSnippet()}
+        >
           コードをコピー
         </button>
         {copyMessage && <p role="status">{copyMessage}</p>}
