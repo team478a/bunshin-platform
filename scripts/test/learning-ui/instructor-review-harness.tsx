@@ -16,7 +16,8 @@ function Harness() {
           <>
             <InstructorReviewForm
               action={(form) => {
-                setRequested(String(form.get('excerpt')));
+                const excerpt = form.get('excerpt');
+                if (typeof excerpt === 'string') setRequested(excerpt);
               }}
               offer={{
                 priceYen: 1500,
