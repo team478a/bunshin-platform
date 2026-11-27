@@ -10,12 +10,11 @@ import { generateLearningStructured } from './openai-learning-lesson';
 import type { PersonalLearningOfferPolicy } from '@bunshin/capability-training';
 import { personalLearningOfferPromptPolicy } from './personal-learning-offer-policy';
 
-export const LEARNING_EVIDENCE_REVIEW_PROMPT_VERSION = 'learning-evidence-review-v1';
-
 interface LessonMaterial {
   originalWish: string;
   outcome: string;
   criteria: string[];
+  practice?: string[];
 }
 
 interface ProviderReview {
@@ -106,59 +105,69 @@ export function learningEvidenceReviewBody(input: {
   maxOutputTokens: number;
   offerPolicy?: PersonalLearningOfferPolicy;
 }) {
-  const body = serializeOpenAiTaskRequest('TRAINING_ASSESSMENT', {
-    model: input.model,
-    store: false,
-    max_output_tokens: input.maxOutputTokens,
-    input: [
-      {
-        role: 'system',
-        content: personalLearningOfferPromptPolicy(input.offerPolicy).evidenceReviewInstructions,
-      },
-      {
-        role: 'user',
-        content: JSON.stringify({
-          ...input.material,
-          evidenceKind: input.kind,
-          submission: input.content,
-        }),
-      },
-    ],
-    text: {
-      format: {
-        type: 'json_schema',
-        name: 'personal_learning_evidence_review',
-        strict: true,
-        schema: {
-          type: 'object',
-          additionalProperties: false,
-          properties: {
-            matched: {
-              type: 'array',
-              maxItems: input.material.criteria.length,
-              items: {
-                type: 'object',
-                additionalProperties: false,
-                properties: {
-                  criterionIndex: {
-                    type: 'integer',
-                    minimum: 0,
-                    maximum: Math.max(0, input.material.criteria.length - 1),
+  const requestBody = (material: LessonMaterial) =>
+    serializeOpenAiTaskRequest('TRAINING_ASSESSMENT', {
+      model: input.model,
+      store: false,
+      max_output_tokens: input.maxOutputTokens,
+      input: [
+        {
+          role: 'system',
+          content:
+            personalLearningOfferPromptPolicy(input.offerPolicy).evidenceReviewInstructions +
+            (input.offerPolicy === 'SIDE_HUSTLE_V1'
+              ? ''
+              : ' matchedの確認済み項目には、基準に対応する短い原文を正確に引用する。feedbackは提出の具体的な箇所を指し、次の行動を選んだ理由を一文で伝える。本人申告や判断材料が不足する場合は確認できる一箇所の提出を促す。一部だけ確認できた場合は、同じ課題の未確認箇所を一つ選び、試せるヒントを添える。全基準の証拠がある場合は、条件を一つ変えて手がかりを減らす次の練習を短く示す。'),
+        },
+        {
+          role: 'user',
+          content: JSON.stringify({
+            ...material,
+            evidenceKind: input.kind,
+            submission: input.content,
+          }),
+        },
+      ],
+      text: {
+        format: {
+          type: 'json_schema',
+          name: 'personal_learning_evidence_review',
+          strict: true,
+          schema: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              matched: {
+                type: 'array',
+                maxItems: input.material.criteria.length,
+                items: {
+                  type: 'object',
+                  additionalProperties: false,
+                  properties: {
+                    criterionIndex: {
+                      type: 'integer',
+                      minimum: 0,
+                      maximum: Math.max(0, input.material.criteria.length - 1),
+                    },
+                    state: { type: 'string', enum: ['SEEN_IN_TEXT', 'NOT_SHOWN', 'UNCLEAR'] },
+                    evidence: { type: 'string' },
                   },
-                  state: { type: 'string', enum: ['SEEN_IN_TEXT', 'NOT_SHOWN', 'UNCLEAR'] },
-                  evidence: { type: 'string' },
+                  required: ['criterionIndex', 'state', 'evidence'],
                 },
-                required: ['criterionIndex', 'state', 'evidence'],
               },
+              feedback: { type: 'string' },
+              nextAction: { type: 'string' },
             },
-            feedback: { type: 'string' },
-            nextAction: { type: 'string' },
+            required: ['matched', 'feedback', 'nextAction'],
           },
-          required: ['matched', 'feedback', 'nextAction'],
         },
       },
-    },
-  });
+    });
+  let body = requestBody(input.material);
+  if (input.material.practice && Buffer.byteLength(body, 'utf8') > input.maxRequestBytes) {
+    const { originalWish, outcome, criteria } = input.material;
+    body = requestBody({ originalWish, outcome, criteria });
+  }
   if (Buffer.byteLength(body, 'utf8') > input.maxRequestBytes)
     throw new Error('evidence review request limit exceeded');
   return body;
