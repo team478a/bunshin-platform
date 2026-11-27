@@ -33,7 +33,7 @@ export function InstructorReviewProductSettings({
           <input type="checkbox" name="enabled" defaultChecked={product?.enabled} />
           受付を開始する
         </label>
-        <fieldset>
+        <fieldset className="form-stack">
           <legend>対象の研修プログラム</legend>
           {programs.map((program) => (
             <label key={program.id}>
@@ -98,7 +98,7 @@ export function InstructorReviewProductSettings({
             defaultValue={product?.capacity}
           />
         </label>
-        <fieldset>
+        <fieldset className="form-stack">
           <legend>担当可能な講師</legend>
           {instructors.map((instructor) => (
             <label key={instructor.id}>
@@ -123,14 +123,17 @@ export function InstructorReviewProductSettings({
 export function InstructorReviewQueue({
   rows,
   instructors,
+  assignableInstructorIds,
   assign,
   refund,
 }: {
   rows: ReviewRow[];
   instructors: Choice[];
+  assignableInstructorIds: string[];
   assign: ServerAction;
   refund: ServerAction;
 }) {
+  const assignable = instructors.filter(({ id }) => assignableInstructorIds.includes(id));
   return (
     <section className="settings-card">
       <h2>講師レビューの受付一覧</h2>
@@ -143,7 +146,8 @@ export function InstructorReviewQueue({
             <dd>{instructorReviewStatusLabel[review.status]}</dd>
             <dt>担当講師</dt>
             <dd>
-              {instructors.find(({ id }) => id === review.instructorUserId)?.label ?? '未割当'}
+              {instructors.find(({ id }) => id === review.instructorUserId)?.label ??
+                (review.instructorUserId ? '登録解除済みの講師' : '未割当')}
             </dd>
             <dt>回答期限</dt>
             <dd>
@@ -157,38 +161,40 @@ export function InstructorReviewQueue({
             </dd>
           </dl>
           {(review.status === 'ACCEPTED' || review.status === 'IN_PROGRESS') && (
-            <>
-              <form className="form-stack" action={assign}>
+            <form className="form-stack" action={assign}>
+              <input type="hidden" name="reviewId" value={review.id} />
+              <label className="field">
+                担当講師を選ぶ
+                <select
+                  name="instructorUserId"
+                  required
+                  defaultValue={review.instructorUserId ?? ''}
+                >
+                  <option value="">担当講師を選択</option>
+                  {assignable.map(({ id, label }) => (
+                    <option key={id} value={id}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button type="submit" className="button" disabled={assignable.length === 0}>
+                担当を保存
+              </button>
+            </form>
+          )}
+          {['ACCEPTED', 'IN_PROGRESS', 'REFUND_PENDING'].includes(review.status) && (
+            <details>
+              <summary>返金の手続き</summary>
+              <form action={refund}>
                 <input type="hidden" name="reviewId" value={review.id} />
-                <label className="field">
-                  担当講師を選ぶ
-                  <select
-                    name="instructorUserId"
-                    required
-                    defaultValue={review.instructorUserId ?? ''}
-                  >
-                    <option value="">担当講師を選択</option>
-                    {instructors.map(({ id, label }) => (
-                      <option key={id} value={id}>
-                        {label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
                 <button type="submit" className="button">
-                  担当を保存
+                  {review.status === 'REFUND_PENDING'
+                    ? '返金処理を再試行する'
+                    : '全額返金を依頼する'}
                 </button>
               </form>
-              <details>
-                <summary>対応できない場合</summary>
-                <form action={refund}>
-                  <input type="hidden" name="reviewId" value={review.id} />
-                  <button type="submit" className="button">
-                    全額返金を依頼する
-                  </button>
-                </form>
-              </details>
-            </>
+            </details>
           )}
         </article>
       ))}

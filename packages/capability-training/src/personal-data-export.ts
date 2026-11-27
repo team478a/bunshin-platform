@@ -19,6 +19,7 @@ export interface TrainingPersonalDataSnapshot {
   goals: TrainingExportRecord[];
   personalLearning?: TrainingExportRecord[];
   dynamicLearning?: TrainingExportRecord[];
+  instructorReviews?: TrainingExportRecord[];
 }
 
 export interface TrainingPersonalDataScope {

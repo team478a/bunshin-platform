@@ -33,6 +33,10 @@ export function LearningPracticeCard({
   candidate,
   plainLanguage = false,
   simpleStart = false,
+  instructorReviewHref,
+  instructorReviewAnswered = false,
+  conversationHref,
+  onOpenConversation,
   onChange,
 }: {
   endpoint: string;
@@ -40,6 +44,10 @@ export function LearningPracticeCard({
   candidate: SavedLearningLessonCandidate | null;
   plainLanguage?: boolean;
   simpleStart?: boolean;
+  instructorReviewHref?: string | undefined;
+  instructorReviewAnswered?: boolean | undefined;
+  conversationHref?: string | undefined;
+  onOpenConversation?: (() => void) | undefined;
   onChange: (value: PersonalLearningPracticeState) => void;
 }) {
   const [text, setText] = useState(state.current?.note?.text ?? '');
@@ -320,6 +328,18 @@ export function LearningPracticeCard({
             >
               下書きを保存
             </button>
+          )}
+          {instructorReviewHref && (
+            <div className="service-home-actions" aria-label="実践中の相談">
+              {conversationHref && (
+                <a href={conversationHref} onClick={onOpenConversation}>
+                  AIに質問する
+                </a>
+              )}
+              <a href={instructorReviewHref}>
+                {instructorReviewAnswered ? '講師からの回答を見る' : '講師に相談する（有料）'}
+              </a>
+            </div>
           )}
           {current.submissions.length > 0 && (
             <div id="practice-feedback" aria-label="提出と確認結果">

@@ -1,3 +1,4 @@
+import type { PrismaClient } from '@bunshin/database';
 import { ApplicationError } from '@bunshin/shared';
 import { z } from 'zod';
 import {
@@ -88,7 +89,8 @@ export function instructorReviewPaymentChange(
 
   if (event.type === 'charge.refunded') {
     if (
-      event.payment.payment_intent !== order.providerPaymentIntentId ||
+      (order.providerPaymentIntentId &&
+        event.payment.payment_intent !== order.providerPaymentIntentId) ||
       event.payment.amount !== order.amountYen ||
       event.payment.currency !== 'jpy' ||
       event.payment.amount_refunded > order.amountYen ||
@@ -96,7 +98,13 @@ export function instructorReviewPaymentChange(
     ) {
       throw new ApplicationError('CONFLICT', 'Stripe refund mismatch');
     }
-    return event.payment.refunded ? { status: 'REFUNDED' as const } : null;
+    return event.payment.refunded
+      ? {
+          status: 'REFUNDED' as const,
+          providerPaymentIntentId: event.payment.payment_intent,
+          checkoutUrl: null,
+        }
+      : null;
   }
 
   const metadata = event.payment.metadata;
@@ -126,8 +134,70 @@ export function instructorReviewPaymentChange(
   return {
     status: 'ACCEPTED' as const,
     providerCheckoutSessionId: event.payment.id,
+    checkoutUrl: null,
     providerPaymentIntentId: event.payment.payment_intent,
     paidAt: event.at,
     dueAt: instructorReviewResponseDueAt(event.at, order.responseHours),
   };
+}
+
+export async function processInstructorReviewStripeEvent(
+  db: PrismaClient,
+  configuration: { id: string; workspaceId: string },
+  rawEvent: StripeProgramEvent,
+  payloadDigest: string,
+) {
+  const object = rawEvent.data?.object;
+  const tagged = object?.metadata?.['purchase_kind'] === INSTRUCTOR_REVIEW_KIND;
+  if (!object || (!tagged && rawEvent.type !== 'charge.refunded')) return false;
+  const id = tagged ? z.uuid().parse(object.metadata?.['purchase_id']) : null;
+  const providerPaymentIntentId =
+    typeof object.payment_intent === 'string' ? object.payment_intent : null;
+  if (!id && !providerPaymentIntentId) return false;
+
+  const scope = {
+    workspaceId: configuration.workspaceId,
+    paymentConfigurationId: configuration.id,
+  };
+  return db.$transaction(async (tx) => {
+    const found = await tx.instructorReview.findFirst({
+      where: { ...scope, ...(id ? { id } : { providerPaymentIntentId }) },
+      select: { id: true, groupId: true },
+    });
+    if (!found) {
+      if (tagged) throw new ApplicationError('NOT_FOUND', 'instructor review checkout not found');
+      return false;
+    }
+    if (tagged && object.metadata?.['workspace_id'] !== scope.workspaceId)
+      throw new ApplicationError('FORBIDDEN', 'Stripe workspace mismatch');
+    const event = parseInstructorReviewStripeEvent(rawEvent);
+    if (!event) return true;
+    await tx.$queryRaw`SELECT id FROM groups WHERE workspace_id = ${scope.workspaceId}::uuid
+      AND id = ${found.groupId}::uuid FOR UPDATE`;
+    const review = await tx.instructorReview.findFirstOrThrow({
+      where: { ...scope, id: found.id },
+    });
+    const key = { paymentConfigurationId: configuration.id, providerEventId: event.id };
+    const previous = await tx.paymentWebhookEvent.findUnique({
+      where: { paymentConfigurationId_providerEventId: key },
+    });
+    if (previous) {
+      if (previous.payloadDigest !== payloadDigest)
+        throw new ApplicationError('CONFLICT', 'Stripe event digest mismatch');
+      return true;
+    }
+    const change = instructorReviewPaymentChange(event, review);
+    if (change) await tx.instructorReview.update({ where: { id: review.id }, data: change });
+    await tx.paymentWebhookEvent.create({
+      data: {
+        ...key,
+        workspaceId: scope.workspaceId,
+        eventType: event.type,
+        payloadDigest,
+        status: 'PROCESSED',
+        processedAt: new Date(),
+      },
+    });
+    return true;
+  });
 }

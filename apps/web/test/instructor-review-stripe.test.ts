@@ -1,3 +1,4 @@
+import type { PrismaClient } from '@bunshin/database';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   StripeCheckoutAdapter,
@@ -7,6 +8,7 @@ import {
 import {
   instructorReviewPaymentChange,
   parseInstructorReviewStripeEvent,
+  processInstructorReviewStripeEvent,
 } from '../src/payments/instructor-review-stripe-event';
 import type { StripeProgramEvent } from '../src/payments/stripe-program-event';
 
@@ -140,5 +142,98 @@ describe('instructor review Stripe checkout', () => {
     expect(new Headers(refund.headers).get('idempotency-key')).toBe('refund-review');
     if (!(refund.body instanceof URLSearchParams)) throw new Error('expected refund form data');
     expect(refund.body.get('payment_intent')).toBe('pi_test1');
+  });
+});
+
+describe('instructor review signed event persistence', () => {
+  it('records one payment, accepts a repeated event, and rejects a different digest', async () => {
+    const order = {
+      id: purchaseId,
+      workspaceId,
+      groupId: '10000000-0000-4000-8000-000000000008',
+      paymentConfigurationId: '10000000-0000-4000-8000-000000000009',
+      productRevision: offeringId,
+      liveMode: false,
+      status: 'PENDING_PAYMENT',
+      amountYen: 1500,
+      responseHours: 48,
+      providerCheckoutSessionId: null,
+      providerPaymentIntentId: null,
+      paidAt: null,
+    };
+    const tx = {
+      $queryRaw: vi.fn(),
+      instructorReview: {
+        findFirst: vi.fn().mockResolvedValue(order),
+        findFirstOrThrow: vi.fn().mockResolvedValue(order),
+        update: vi.fn(),
+      },
+      paymentWebhookEvent: {
+        findUnique: vi
+          .fn()
+          .mockResolvedValueOnce(null)
+          .mockResolvedValue({ payloadDigest: 'digest' }),
+        create: vi.fn(),
+      },
+    };
+    const fake = { $transaction: (run: (value: typeof tx) => unknown) => run(tx) };
+    const db = fake as unknown as PrismaClient;
+    const scope = { id: order.paymentConfigurationId, workspaceId };
+    const input = event(paidObject);
+
+    await expect(processInstructorReviewStripeEvent(db, scope, input, 'digest')).resolves.toBe(
+      true,
+    );
+    await expect(processInstructorReviewStripeEvent(db, scope, input, 'digest')).resolves.toBe(
+      true,
+    );
+    await expect(processInstructorReviewStripeEvent(db, scope, input, 'changed')).rejects.toThrow(
+      'Stripe event digest mismatch',
+    );
+    expect(tx.instructorReview.update).toHaveBeenCalledTimes(1);
+    expect(tx.instructorReview.update).toHaveBeenCalledWith({
+      where: { id: purchaseId },
+      data: expect.objectContaining({ status: 'ACCEPTED', providerPaymentIntentId: 'pi_test1' }),
+    });
+    expect(tx.paymentWebhookEvent.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('can apply a scoped full refund that arrives before the checkout completion', () => {
+    const parsed = parseInstructorReviewStripeEvent({
+      ...event({
+        amount: 1500,
+        amount_refunded: 1500,
+        refunded: true,
+        payment_intent: 'pi_test1',
+        currency: 'jpy',
+      }),
+      type: 'charge.refunded',
+    });
+    if (parsed?.type !== 'charge.refunded') throw new Error('expected refund event');
+    const order = {
+      id: purchaseId,
+      workspaceId,
+      productRevision: offeringId,
+      liveMode: false,
+      status: 'PENDING_PAYMENT' as const,
+      amountYen: 1500,
+      responseHours: 48,
+      providerCheckoutSessionId: 'cs_test_1',
+      providerPaymentIntentId: null,
+      paidAt: null,
+    };
+    expect(instructorReviewPaymentChange(parsed, order)).toMatchObject({
+      status: 'REFUNDED',
+      providerPaymentIntentId: 'pi_test1',
+    });
+    const paid = parseInstructorReviewStripeEvent(event(paidObject));
+    if (paid?.type !== 'checkout.session.completed') throw new Error('expected paid event');
+    expect(
+      instructorReviewPaymentChange(paid, {
+        ...order,
+        status: 'REFUNDED',
+        providerPaymentIntentId: 'pi_test1',
+      }),
+    ).toBeNull();
   });
 });

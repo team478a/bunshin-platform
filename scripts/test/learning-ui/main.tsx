@@ -93,6 +93,11 @@ createRoot(document.getElementById('root')!).render(
       endpoint="/api/synthetic/simple-wish"
       candidateEndpoint="/api/synthetic/simple-candidate"
       practiceEndpoint="/api/synthetic/simple-practice"
+      instructorReviewHref={
+        new URLSearchParams(window.location.search).has('instructor')
+          ? '/instructor-review.html'
+          : undefined
+      }
       initial={new URLSearchParams(window.location.search).has('resume') ? lessonWish : null}
       initialPractice={{
         allowed: true,

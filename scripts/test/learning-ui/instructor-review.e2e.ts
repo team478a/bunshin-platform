@@ -33,3 +33,18 @@ test('submits only the reviewed excerpt on a desktop viewport', async ({
   await screen.getByRole('button', '申し込んで決済へ進む').tap();
   await expect(screen.getByRole('status')).toContainText('確認済みの一文');
 });
+
+test('keeps the same real learner-card draft on return from the optional review route', async ({
+  app,
+  screen,
+}) => {
+  const practice = '/?simple-start&resume&instructor#practice-evidence';
+  await app.open(practice);
+  const draft = screen.getByLabel('練習の下書き');
+  await draft.fill('この課題の未保存の下書き');
+  await expect(screen.getByRole('button', 'フィードバックを見る')).toBeEnabled();
+  await screen.getByRole('link', '講師に相談する（有料）').tap();
+  await expect(screen.getByRole('heading', { name: '営業週報を書く' })).toBeVisible();
+  await app.open(practice);
+  await expect(draft).toHaveValue('この課題の未保存の下書き');
+});

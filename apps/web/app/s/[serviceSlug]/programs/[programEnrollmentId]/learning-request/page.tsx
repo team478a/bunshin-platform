@@ -3,8 +3,8 @@ import {
   browserLearningProgram,
   learningMaterialPath,
 } from '../../../../../../src/services/browser-learning-material';
-import { MANABERU_SERVICE_SLUG } from '../../../../../../src/services/service-auth-brand';
 import { notFound } from 'next/navigation';
+import { MANABERU_SERVICE_SLUG } from '../../../../../../src/services/service-auth-brand';
 import { ApplicationError } from '@bunshin/shared';
 import { LEARNING_CANDIDATE_POLICY } from '@bunshin/application';
 import { resolveAuthenticatedMemberServicePage } from '../../../../../../src/services/member-service-page';
@@ -36,7 +36,7 @@ export default async function Page({
   const { topicId: selectedTopicId } = await searchParams;
   const { actor } = await resolveAuthenticatedMemberServicePage(
     serviceSlug,
-    `/s/${serviceSlug}/programs/${programEnrollmentId}/learning-request`,
+    `/s/${serviceSlug}/programs/${programEnrollmentId}/learning-request${selectedTopicId ? `?topicId=${encodeURIComponent(selectedTopicId)}` : ''}`,
   );
   try {
     let input = await resolvePersonalLearningRequestActor(
@@ -249,6 +249,7 @@ export default async function Page({
             dynamicMode
             simpleStart
             firstTopicEndpoint={topicEndpoint}
+            instructorReviewHref={`${pagePath}/instructor-review`}
             initial={null}
             endpoint={intake}
             candidateEndpoint={`${intake}/candidate`}
@@ -289,6 +290,31 @@ export default async function Page({
     const initial = await new db.PrismaPersonalLearningRequestRepository(db.prisma).readRequest(
       input,
     );
+    const initialPractice = await new db.PrismaPersonalLearningPracticeRepository(
+      db.prisma,
+    ).readPractice(input);
+    const answeredReview =
+      simpleStart && initialPractice.current
+        ? await db.prisma.instructorReview.findFirst({
+            where: {
+              workspaceId: input.scope.workspaceId,
+              groupId: input.scope.groupId,
+              enrollmentId: input.scope.programEnrollmentId,
+              groupMembershipId: input.scope.groupMembershipId,
+              buyerUserId: input.actorUserId,
+              assignmentId: initialPractice.current.assignmentId,
+              status: 'ANSWERED',
+            },
+            select: { id: true },
+            orderBy: { answeredAt: 'desc' },
+          })
+        : null;
+    const reviewQuery = new URLSearchParams(topicQuery);
+    if (answeredReview) reviewQuery.set('reviewId', answeredReview.id);
+    const instructorReviewHref = simpleStart
+      ? `${pagePath}/instructor-review${reviewQuery.size ? `?${reviewQuery}` : ''}`
+      : undefined;
+
     return (
       <main className={`${design.frame} ${design.flow}`}>
         {sideHustleEntry}
@@ -311,12 +337,12 @@ export default async function Page({
           }
           dynamicMode={dynamicProgram}
           simpleStart={simpleStart}
+          instructorReviewHref={instructorReviewHref}
+          instructorReviewAnswered={answeredReview !== null}
           endpoint={`/api/services/${serviceSlug}/ai-training/enrollments/${programEnrollmentId}/learning-request${topicQuery}`}
           initial={initial}
           practiceEndpoint={`/api/services/${serviceSlug}/ai-training/enrollments/${programEnrollmentId}/learning-request/practice${topicQuery}`}
-          initialPractice={await new db.PrismaPersonalLearningPracticeRepository(
-            db.prisma,
-          ).readPractice(input)}
+          initialPractice={initialPractice}
           candidateEndpoint={`/api/services/${serviceSlug}/ai-training/enrollments/${programEnrollmentId}/learning-request/candidate${topicQuery}`}
           initialCandidate={await new db.PrismaLearningCandidateRepository(db.prisma).readCandidate(
             input,
