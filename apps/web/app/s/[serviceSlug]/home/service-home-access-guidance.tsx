@@ -1,4 +1,5 @@
 import type { CSSProperties } from 'react';
+import type { Route } from 'next';
 import Link from 'next/link';
 import { PublicShell } from '../../../ui/public-shell';
 import { ServiceAuthBranding } from '../../../ui/service-auth-branding';
