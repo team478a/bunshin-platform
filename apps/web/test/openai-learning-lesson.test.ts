@@ -65,6 +65,59 @@ describe('lesson Provider', () => {
       experienceDescription: null,
     });
   });
+  it.each([
+    [
+      'AIで営業週報を作りたい',
+      '報告の経験がない',
+      '商談メモが1件ある',
+      'チームを管理している',
+      '5人の進捗表がある',
+    ],
+    [
+      'メール返信を自動化したい',
+      '初めて返信案を書く',
+      '問い合わせの例がある',
+      '定型返信を使っている',
+      '例外対応を整理したい',
+    ],
+    [
+      'Instagramの投稿画像を作りたい',
+      '画像制作が初めて',
+      '店の写真が1枚ある',
+      '毎週投稿している',
+      '訴求の異なる画像を比較したい',
+    ],
+    [
+      'ホームページを作りたい',
+      '制作経験がない',
+      '店舗写真がある',
+      'AIで試作した',
+      'スマホで崩れる箇所がある',
+    ],
+  ])(
+    'passes different task context with the same wish %s',
+    (originalText, firstExperience, firstPosition, secondExperience, secondPosition) => {
+      for (const [experienceDescription, currentPosition] of [
+        [firstExperience, firstPosition],
+        [secondExperience, secondPosition],
+      ]) {
+        const payload = JSON.parse(
+          learningLessonBody(
+            { ...wish, originalText, experienceDescription, currentPosition },
+            'gpt-5.6-terra',
+            { maxRequestBytes: 16000, maxOutputTokens: 2000 },
+          ),
+        ) as { input: { content: string }[] };
+        expect(payload.input[0]?.content).toContain('今回の作業を選んだ理由');
+        expect(payload.input[0]?.content).toContain('条件を一つ変えて手がかりを減らす');
+        expect(JSON.parse(payload.input[1]!.content)).toMatchObject({
+          originalText,
+          experienceDescription,
+          currentPosition,
+        });
+      }
+    },
+  );
   it('passes only bounded caller-selected persona context and preserves its confidence label', () => {
     const v = JSON.parse(
       learningLessonBody(
