@@ -140,7 +140,7 @@ export class PrismaPersonalLearningPracticeRepository
         latest.evidenceLevel !== 'SELF_REPORT'
       )
         return conflict();
-      validatePersonalLearningPracticeNote(latest.text, latest.revision - 1);
+      validatePersonalLearningPracticeNote(latest.text, latest.revision - 1, latest.draft === true);
       note = {
         revision: latest.revision,
         text: latest.text,
@@ -858,7 +858,7 @@ export class PrismaPersonalLearningPracticeRepository
   recordPracticeNote(
     input: Parameters<PersonalLearningPracticeRepository['recordPracticeNote']>[0],
   ) {
-    validatePersonalLearningPracticeNote(input.text, input.expectedRevision);
+    validatePersonalLearningPracticeNote(input.text, input.expectedRevision, input.draft);
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(input.operationId))
       throw new ApplicationError('VALIDATION_ERROR', 'invalid operation');
     return this.authorized(input.actor, true, async (tx, now) => {
@@ -878,6 +878,7 @@ export class PrismaPersonalLearningPracticeRepository
             assignmentId: row.id,
             text: input.text,
             expectedRevision: input.expectedRevision,
+            ...(input.draft ? { draft: true } : {}),
           }),
         )
         .digest('hex');
@@ -919,6 +920,7 @@ export class PrismaPersonalLearningPracticeRepository
             text: input.text,
             reportedAt: now.toISOString(),
             evidenceLevel: 'SELF_REPORT',
+            ...(input.draft ? { draft: true } : {}),
           },
         },
       });

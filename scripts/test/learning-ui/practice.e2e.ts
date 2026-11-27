@@ -286,7 +286,7 @@ test('Manaberu opens the first practice in two actions and saves a separate draf
           },
         },
       });
-    } else if (action === 'NOTE') {
+    } else if (action === 'DRAFT') {
       expect(body.text).toBe(draft);
       await route.fulfill({
         json: { data: { ...practiceFixture, note: { ...practiceFixture.note, text: draft } } },
@@ -306,7 +306,7 @@ test('Manaberu opens the first practice in two actions and saves a separate draf
   await screen.getByRole('button', '下書きを保存').tap();
   await expect(screen.getByRole('status', '実践の状態')).toContainText('下書きを保存しました');
   expect(mutatingRequests).toBe(5);
-  expect(calls).toEqual(['SAVE', 'GENERATE', 'CONFIRM', 'START', 'NOTE']);
+  expect(calls).toEqual(['SAVE', 'GENERATE', 'CONFIRM', 'START', 'DRAFT']);
 });
 
 test('Manaberu resumes the saved draft without any mutation', async ({ app, screen }) => {

@@ -21,7 +21,7 @@ const body = z.discriminatedUnion('action', [
     .strict(),
   z
     .object({
-      action: z.literal('NOTE'),
+      action: z.enum(['NOTE', 'DRAFT']),
       assignmentId: z.string().uuid(),
       operationId: z.string().uuid(),
       expectedRevision: z.number().int().min(0).max(999),
@@ -85,7 +85,10 @@ export async function learningPracticeResponse(
       return Response.json({ data: await repo.readPractice(actor) }, { headers });
     const simpleStart = slug === MANABERU_SERVICE_SLUG;
     const input = body.parse(await boundedLearningJson(request, simpleStart ? 64_000 : undefined));
-    if (input.action === 'NOTE' && !simpleStart && input.text.length > 500)
+    if (
+      (input.action === 'DRAFT' && !simpleStart) ||
+      (input.action === 'NOTE' && input.text.length > 500)
+    )
       throw new ApplicationError('VALIDATION_ERROR', 'invalid practice note');
     if (input.action === 'NEXT_PROPOSAL') {
       const nextRequest = await repo.createNextPracticeRequest({
@@ -161,6 +164,7 @@ export async function learningPracticeResponse(
             operationId: input.operationId,
             expectedRevision: input.expectedRevision,
             text: input.text,
+            ...(input.action === 'DRAFT' ? { draft: true } : {}),
           });
     return Response.json({ data }, { headers });
   } catch (error) {

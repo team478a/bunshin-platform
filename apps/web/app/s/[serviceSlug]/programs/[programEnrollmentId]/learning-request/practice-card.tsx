@@ -100,7 +100,7 @@ export function LearningPracticeCard({
                 candidateId: candidate?.id,
               }
             : {
-                action,
+                action: simpleStart ? 'DRAFT' : action,
                 ...note,
                 operationId: noteOperation.key,
               },
