@@ -75,10 +75,10 @@ describe('LINE connection entry page', () => {
     await expect(render()).rejects.toThrow('REDIRECT:/login?returnTo=%2Fs%2Fservice-a%2Fline');
     expect(mocks.settings).not.toHaveBeenCalled();
   });
-  it('uses the branded sign-in screen for the Manaberu connection page', async () => {
+  it('preserves the Manaberu connection page as the sign-in return destination', async () => {
     mocks.actor.mockResolvedValue(null);
     await expect(render('manaberu-style')).rejects.toThrow(
-      'REDIRECT:/s/manaberu-style/login?returnTo=%2Fs%2Fmanaberu-style%2Fline',
+      'REDIRECT:/login?returnTo=%2Fs%2Fmanaberu-style%2Fline',
     );
     expect(mocks.settings).not.toHaveBeenCalled();
   });
