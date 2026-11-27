@@ -1,6 +1,5 @@
 import type { CSSProperties } from 'react';
 import Link from 'next/link';
-import type { Route } from 'next';
 import { PublicShell } from '../../../ui/public-shell';
 import { ServiceAuthBranding } from '../../../ui/service-auth-branding';
 import type { ServiceAuthBrand } from '../../../../src/services/service-auth-brand';
@@ -16,6 +15,7 @@ export function ServiceHomeAccessGuidance({
   serviceLogoUrl = null,
   poweredBy = false,
   brand = null,
+  returnTo = `/s/${serviceSlug}/home`,
 }: {
   state: ServiceHomeAccessState;
   serviceName?: string;
@@ -23,8 +23,8 @@ export function ServiceHomeAccessGuidance({
   serviceLogoUrl?: string | null;
   poweredBy?: boolean;
   brand?: ServiceAuthBrand | null;
+  returnTo?: string;
 }) {
-  const returnTo = `/s/${serviceSlug}/home`;
   const displayServiceName = brand?.serviceName ?? serviceName;
   const serviceEntry = `/s/${serviceSlug}` as const;
   const copy = {
@@ -82,7 +82,7 @@ export function ServiceHomeAccessGuidance({
         {state === 'MANAGEMENT_REQUIRED' && serviceName && (
           <Link
             className="button button--primary button--full"
-            href={`/s/${serviceSlug}/home` as Route}
+            href={{ pathname: `/s/${serviceSlug}/home` }}
           >
             {serviceName}の利用画面へ
           </Link>

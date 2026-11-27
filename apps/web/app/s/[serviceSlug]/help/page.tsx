@@ -1,3 +1,4 @@
+import design from '../../../../src/components/manaberu-learner.module.css';
 import type { CSSProperties } from 'react';
 import type { Metadata, Route } from 'next';
 import Link from 'next/link';
@@ -5,7 +6,10 @@ import { notFound, redirect } from 'next/navigation';
 import { currentUserProvider } from '../../../../src/auth/current-user';
 import { isRouteNotFound } from '../../../../src/navigation/route-not-found';
 import { resolveVisitorServiceContext } from '../../../../src/services/public-service';
-import { ORACLE_SERVICE_SLUG } from '../../../../src/services/service-auth-brand';
+import {
+  MANABERU_SERVICE_SLUG,
+  ORACLE_SERVICE_SLUG,
+} from '../../../../src/services/service-auth-brand';
 import { isFortuneServicePackage } from '../../../../src/services/service-creation-templates';
 import { readServiceOnboardingSettings } from '../../../../src/services/service-onboarding-settings';
 import { isPromptOnlyImageService } from '../../../../src/services/service-image-policy';
@@ -28,6 +32,11 @@ export async function generateMetadata({
   params: Promise<{ serviceSlug: string }>;
 }): Promise<Metadata> {
   const { serviceSlug } = await params;
+  if (serviceSlug === MANABERU_SERVICE_SLUG)
+    return {
+      title: 'マナベルスタイル｜困ったとき',
+      description: 'AI研修のログイン、参加、実践記録の使い方。',
+    };
   const user = await (await currentUserProvider()).getCurrentUser();
   const service = await serviceContext(serviceSlug, user?.userId ?? null);
   return { title: service ? `${service.configuration.displayName}｜ヘルプ` : 'サービスヘルプ' };
@@ -52,6 +61,39 @@ export default async function ServiceHelpPage({
   params: Promise<{ serviceSlug: string }>;
 }) {
   const { serviceSlug } = await params;
+  if (serviceSlug === MANABERU_SERVICE_SLUG) {
+    return (
+      <PublicShell showPlatformBrand={false}>
+        <article className={`${design.frame} ${design.flow}`}>
+          <header className={design.hero}>
+            <h1>マナベルで困ったとき</h1>
+          </header>
+          <section className={design.panel}>
+            <h2>ログインや参加ができない</h2>
+            <p>
+              参加登録したときと同じ方法でログインしてください。参加登録が見つからない場合は、研修の案内を受け取った運営者に確認してください。
+            </p>
+            <Link href="/s/manaberu-style/home">学習ホームを開く</Link>
+          </section>
+          <section className={design.panel}>
+            <h2>学習を始めたい・続けたい</h2>
+            <p>
+              学習ホームから研修を開き、AIで試したいことを書きます。取り組み中の実践は個別学習で確認できます。
+            </p>
+          </section>
+          <section className={design.panel}>
+            <h2>実践で試したことを残したい</h2>
+            <p>実践を始めたら、試したことやつまずいた箇所を記録できます。</p>
+            <Link href="/s/manaberu-style/home?learning=record">実践を記録する</Link>
+          </section>
+          <div className={design.tools}>
+            <Link href="/s/manaberu-style/line">学習用LINEの接続</Link>
+            <Link href="/account?service=manaberu-style">アカウントの設定</Link>
+          </div>
+        </article>
+      </PublicShell>
+    );
+  }
   const user = await (await currentUserProvider()).getCurrentUser();
   const service = await serviceContext(serviceSlug, user?.userId ?? null);
   if (

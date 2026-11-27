@@ -128,7 +128,11 @@ export async function personalLearningPilotResponse(
     const dynamicPracticeTitle = await dynamicPersonalLearningPracticeTitle(input);
     if (dynamicPracticeTitle !== undefined) {
       if (request.method === 'GET') {
-        const lineMenu = await personalLearningLineMenuStatus(input, dynamicPracticeTitle);
+        const lineMenu = await personalLearningLineMenuStatus(
+          input,
+          dynamicPracticeTitle,
+          serviceSlug,
+        );
         return respond({ practiceTitle: dynamicPracticeTitle, lineMenu });
       }
       const dynamicCommand = body.parse(await request.json());
@@ -151,6 +155,7 @@ export async function personalLearningPilotResponse(
       const lineMenu = await personalLearningLineMenuStatus(
         input,
         assignment?.display?.title ?? null,
+        serviceSlug,
       );
       return respond({
         state,

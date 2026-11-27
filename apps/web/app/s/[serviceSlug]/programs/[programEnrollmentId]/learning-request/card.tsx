@@ -137,6 +137,11 @@ export function PersonalLearningRequestCard({
     <section className={design.panels}>
       {practiceEndpoint && (
         <div className={design.panel} id="practice-record">
+          {!practice.current && (
+            <p className={design.practiceEntryHint}>
+              記録するには、学習したいことを伝え、実践を始めてください。
+            </p>
+          )}
           <LearningPracticeCard
             endpoint={practiceEndpoint}
             state={practice}

@@ -1,3 +1,4 @@
+import { MANABERU_SERVICE_SLUG } from '../services/service-auth-brand';
 import 'server-only';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -300,11 +301,14 @@ export function publishDefaultGroupRichMenuResponse(request: Request, groupIdVal
     const service = stored.group.serviceConfiguration;
     const serviceSlug = service?.slug ?? null;
     const fortune = fortuneLineMenuKind(serviceSlug, service?.registration?.onboardingConfig);
-    const layout = fortune
-      ? 'FORTUNE'
-      : serviceSlug
-        ? await richMenuLayoutForService(db, input.workspaceId, groupId)
-        : 'DEFAULT';
+    const layout =
+      serviceSlug === MANABERU_SERVICE_SLUG
+        ? 'MANABERU'
+        : fortune
+          ? 'FORTUNE'
+          : serviceSlug
+            ? await richMenuLayoutForService(db, input.workspaceId, groupId)
+            : 'DEFAULT';
     const oracle = fortune === 'ORACLE';
     const image = oracle
       ? await readFile(join(process.cwd(), 'public', ORACLE_LINE_MENU_IMAGE_PATH.slice(1)))

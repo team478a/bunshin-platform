@@ -2,9 +2,23 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { ServiceHomeAccessGuidance } from '../app/s/[serviceSlug]/home/service-home-access-guidance';
+import { safeLineAuthReturnPath } from '../src/auth/line-return';
 import { serviceAuthBrandForSlug } from '../src/services/service-auth-brand';
 
 describe('service home access guidance', () => {
+  it('preserves the Manaberu record destination after sign-in', () => {
+    const returnTo = '/s/manaberu-style/home?learning=record';
+    const html = renderToStaticMarkup(
+      createElement(ServiceHomeAccessGuidance, {
+        state: 'LOGIN_REQUIRED',
+        serviceSlug: 'manaberu-style',
+        returnTo,
+      }),
+    );
+    expect(html).toContain(encodeURIComponent(returnTo));
+    expect(safeLineAuthReturnPath(returnTo)).toBe(returnTo);
+    expect(safeLineAuthReturnPath(returnTo + '&learning=record')).toBeNull();
+  });
   it('explains why LINE users may need to log in and preserves the home return path', () => {
     const html = renderToStaticMarkup(
       createElement(ServiceHomeAccessGuidance, {
@@ -44,13 +58,15 @@ describe('service home access guidance', () => {
         state: 'MANAGEMENT_REQUIRED',
         serviceName: 'ハッシー',
         serviceSlug: 'hassy',
+        returnTo: '/s/manaberu-style/home?learning=record',
       }),
     );
 
     expect(html).toContain('ハッシーの管理画面を利用できません');
     expect(html).toContain('サービス管理者として登録されたアカウント');
     expect(html).toContain('ハッシーの利用画面へ');
-    expect(html).toContain('/s/hassy/home');
+    expect(html).toContain('href="/s/hassy/home"');
+    expect(html).not.toContain('learning=record');
   });
 
   it('keeps a login action available without exposing a private service entry', () => {

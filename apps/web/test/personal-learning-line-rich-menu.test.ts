@@ -44,6 +44,7 @@ vi.mock('../src/line/secure-configuration', () => ({
 }));
 vi.mock('../src/line/default-rich-menu', () => ({
   renderPersonalLearningLineRichMenu: f.render,
+  renderDefaultLineRichMenu: f.render,
 }));
 vi.mock('../src/line/group-rich-menu-provider', () => ({
   createPersonalLearningGroupRichMenu: f.createMenu,
@@ -217,7 +218,7 @@ describe('personal learning LINE menu service', () => {
     await expect(
       activatePersonalLearningLineMenu({ actor: dynamicActor, serviceSlug: 'manaberu-style' }),
     ).resolves.toEqual({ linked: true });
-    expect(f.render).toHaveBeenCalledWith('自分の作業に合う練習');
+    expect(f.render).toHaveBeenCalledWith('MANABERU');
     expect(f.readiness).not.toHaveBeenCalled();
     expect(f.currentAssignment).not.toHaveBeenCalled();
   });
@@ -230,7 +231,7 @@ describe('personal learning LINE menu service', () => {
       personalLearningRichMenuLinkedAt: new Date(),
       personalLearningRichMenuContentHash: digest
         .createHash('sha256')
-        .update('今回の実践', 'utf8')
+        .update('manaberu-learning-menu-v2', 'utf8')
         .digest('hex'),
     });
     await expect(

@@ -1,3 +1,5 @@
+import { MANABERU_SERVICE_SLUG } from '../services/service-auth-brand';
+import { MANABERU_LINE_MENU_ITEMS, MANABERU_LINE_MENU_SIZE } from './manaberu-line-menu';
 import 'server-only';
 import { randomUUID } from 'node:crypto';
 import type { LineRichMenuAction } from '@bunshin/application';
@@ -78,6 +80,17 @@ export async function isGroupRichMenuPublicationActive(input: {
   return detail.name === defaultMenuName(input.groupId, input.operationId);
 }
 
+function manaberuMenuAreas(appUrl: string) {
+  return MANABERU_LINE_MENU_ITEMS.map(({ bounds, title, path }) => ({
+    bounds,
+    action: {
+      type: 'uri',
+      label: title,
+      uri: new URL(`/s/${MANABERU_SERVICE_SLUG}/${path}`, appUrl).toString(),
+    },
+  }));
+}
+
 export async function publishDefaultGroupRichMenu(input: {
   request?: typeof fetch;
   accessToken: string;
@@ -90,6 +103,9 @@ export async function publishDefaultGroupRichMenu(input: {
   layout?: GroupLineRichMenuLayout;
 }) {
   const oracle = input.layout === 'ORACLE';
+  const manaberu = input.layout === 'MANABERU';
+  if (manaberu && input.serviceSlug !== MANABERU_SERVICE_SLUG)
+    throw new ApplicationError('VALIDATION_ERROR', 'マナベルスタイルを確認できませんでした');
   if (
     (input.layout === 'FORTUNE' && !input.serviceSlug) ||
     (oracle && !isOracleLineService(input.serviceSlug))
@@ -99,8 +115,9 @@ export async function publishDefaultGroupRichMenu(input: {
   const headers = { authorization: `Bearer ${input.accessToken}` };
   const providerNamePrefix = `bunshin-group:${input.groupId}:default:`;
   const providerName = defaultMenuName(input.groupId, input.operationId ?? randomUUID());
-  const chatBarText =
-    oracle || input.layout === 'FORTUNE'
+  const chatBarText = manaberu
+    ? '学習メニュー'
+    : oracle || input.layout === 'FORTUNE'
       ? '占いメニュー'
       : `${input.groupName.replace(/公式$/, '').trim()}メニュー`.slice(0, 14);
   const oracleAreas = oracle
@@ -132,14 +149,16 @@ export async function publishDefaultGroupRichMenu(input: {
     method: 'POST',
     headers: { ...headers, 'content-type': 'application/json' },
     body: JSON.stringify({
-      size: oracle
-        ? ORACLE_LINE_MENU_SIZE
-        : { width: DEFAULT_LINE_RICH_MENU.width, height: DEFAULT_LINE_RICH_MENU.height },
+      size: manaberu
+        ? MANABERU_LINE_MENU_SIZE
+        : oracle
+          ? ORACLE_LINE_MENU_SIZE
+          : { width: DEFAULT_LINE_RICH_MENU.width, height: DEFAULT_LINE_RICH_MENU.height },
       selected: true,
       name: providerName,
       chatBarText,
       areas:
-        oracleAreas ??
+        (manaberu ? manaberuMenuAreas(input.appUrl) : oracleAreas) ??
         DEFAULT_LINE_RICH_MENU.areas.map((area, index) => ({
           bounds: { x: area.x, y: area.y, width: area.width, height: area.height },
           action: {
@@ -246,25 +265,30 @@ export async function createPersonalLearningGroupRichMenu(input: {
   if (!/^[0-9a-f-]{36}$/i.test(input.enrollmentId) || !/^[a-z0-9-]{1,80}$/i.test(input.serviceSlug))
     throw new ApplicationError('VALIDATION_ERROR', 'personal learning LINE scope is invalid');
   const headers = { authorization: `Bearer ${input.accessToken}` };
+  const manaberu = input.serviceSlug === MANABERU_SERVICE_SLUG;
   const learningPath = `/s/${encodeURIComponent(input.serviceSlug)}/programs/${encodeURIComponent(input.enrollmentId)}`;
   const created = await request(`${endpoint}/v2/bot/richmenu`, {
     method: 'POST',
     headers: { ...headers, 'content-type': 'application/json' },
     body: JSON.stringify({
-      size: { width: DEFAULT_LINE_RICH_MENU.width, height: DEFAULT_LINE_RICH_MENU.height },
+      size: manaberu
+        ? MANABERU_LINE_MENU_SIZE
+        : { width: DEFAULT_LINE_RICH_MENU.width, height: DEFAULT_LINE_RICH_MENU.height },
       selected: true,
       name: `bunshin-learning:${input.groupId}:${randomUUID()}`.slice(0, 100),
       chatBarText: '学習メニュー',
-      areas: DEFAULT_LINE_RICH_MENU.areas.map((area, index) => ({
-        bounds: { x: area.x, y: area.y, width: area.width, height: area.height },
-        action: {
-          type: 'uri',
-          uri: new URL(
-            `${learningPath}#${['personal-learning-practice', 'personal-learning-support', 'personal-learning-result', 'personal-learning-plan'][index]}`,
-            input.appUrl,
-          ).toString(),
-        },
-      })),
+      areas: manaberu
+        ? manaberuMenuAreas(input.appUrl)
+        : DEFAULT_LINE_RICH_MENU.areas.map((area, index) => ({
+            bounds: { x: area.x, y: area.y, width: area.width, height: area.height },
+            action: {
+              type: 'uri',
+              uri: new URL(
+                `${learningPath}#${['personal-learning-practice', 'personal-learning-support', 'personal-learning-result', 'personal-learning-plan'][index]}`,
+                input.appUrl,
+              ).toString(),
+            },
+          })),
     }),
     signal: AbortSignal.timeout(10_000),
   });
