@@ -6,6 +6,9 @@ import {
   MANABERU_SIMPLE_LESSON_PROMPT_SUFFIX,
   PERSONAL_LEARNING_PRACTICE_VERSION,
   PERSONAL_LEARNING_PRACTICE_MISSION,
+  PERSONAL_LEARNING_PRACTICE_FEEDBACK,
+  isPracticeFeedbackCategory,
+  practiceFeedbackLabel,
   validatePersonalLearningPracticeNote,
   parseStoredPersonalLearningEvidenceSubmission,
   validatePersonalLearningEvidenceReview,
@@ -227,6 +230,18 @@ export class PrismaPersonalLearningPracticeRepository
     const nextCandidate = proposalRequest?.lessonCandidate
       ? this.project(proposalRequest.lessonCandidate, proposalRequest.candidateConfirmedAt)
       : null;
+    const feedback = await tx.programActionEvent.findMany({
+      where: {
+        workspaceId: row.workspaceId,
+        groupId: row.groupId,
+        programEnrollmentId: row.programEnrollmentId,
+        missionAssignmentId: row.id,
+        actorUserId: actor.actorUserId,
+        eventType: PERSONAL_LEARNING_PRACTICE_FEEDBACK,
+      },
+      select: { metadata: true },
+      orderBy: { occurredAt: 'desc' },
+    });
     return {
       assignmentId: row.id,
       goalId: data.goalId,
@@ -244,6 +259,9 @@ export class PrismaPersonalLearningPracticeRepository
       support: await readPracticeSupportHistory(tx, actor, row.id, candidate.id),
       submissions,
       nextCandidate,
+      feedback: feedback
+        .map((entry) => object(entry.metadata).category)
+        .filter(isPracticeFeedbackCategory),
     };
   }
   createNextPracticeRequest(
@@ -320,6 +338,14 @@ export class PrismaPersonalLearningPracticeRepository
       if (!review) return conflict();
       const progress = [
         `前の実践で確認できた点: ${review.observed.join('／').slice(0, 140)}`,
+        ...(practice.feedback?.length
+          ? [
+              `本人の練習への要望（資料は未添付）: ${practice.feedback
+                .slice(0, 3)
+                .map((category) => practiceFeedbackLabel[category])
+                .join('／')}`,
+            ]
+          : []),
         `まだ確認できていない点: ${review.notEstablished.join('／').slice(0, 100)}`,
         `次の小さな行動の参考: ${review.nextAction.slice(0, 120)}`,
         previousRequest.currentPosition
@@ -390,6 +416,39 @@ export class PrismaPersonalLearningPracticeRepository
         allowed: policy.allowed,
         current: row ? await this.projectPractice(tx, actor, row) : null,
       };
+    });
+  }
+  recordPracticeFeedback(
+    input: Parameters<PersonalLearningPracticeRepository['recordPracticeFeedback']>[0],
+  ) {
+    if (!isPracticeFeedbackCategory(input.category))
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid practice feedback');
+    return this.authorized(input.actor, true, async (tx, now) => {
+      const { actor, assignmentId, category } = input;
+      const { workspaceId, groupId, programEnrollmentId } = actor.scope;
+      await this.normalLearner(tx, actor);
+      const policy = await this.policy(tx, actor);
+      if (!policy.allowed)
+        throw new ApplicationError('CONFIGURATION_ERROR', 'practice policy unavailable');
+      const row = await this.current(tx, actor);
+      if (!row || row.id !== assignmentId || row.status !== 'STARTED') return conflict();
+      const idempotencyKey = `practice-feedback:${assignmentId}:${category}`;
+      await tx.programActionEvent.upsert({
+        where: { workspaceId_groupId_idempotencyKey: { workspaceId, groupId, idempotencyKey } },
+        update: {},
+        create: {
+          workspaceId,
+          groupId,
+          programEnrollmentId,
+          missionAssignmentId: assignmentId,
+          eventType: PERSONAL_LEARNING_PRACTICE_FEEDBACK,
+          idempotencyKey,
+          metadata: { category, ...(actor.topicId ? { topicId: actor.topicId } : {}) },
+          actorUserId: actor.actorUserId,
+          occurredAt: now,
+        },
+      });
+      return { allowed: true, current: await this.projectPractice(tx, actor, row) };
     });
   }
   startPractice(input: Parameters<PersonalLearningPracticeRepository['startPractice']>[0]) {

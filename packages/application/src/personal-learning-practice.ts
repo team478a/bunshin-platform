@@ -6,6 +6,29 @@ import type { PracticeSupportState } from './personal-learning-practice-support'
 
 export const PERSONAL_LEARNING_PRACTICE_VERSION = 'PERSONAL_LEARNING_PRACTICE_V1';
 export const PERSONAL_LEARNING_PRACTICE_MISSION = 'PERSONAL_LEARNING_DYNAMIC_PRACTICE';
+export const PERSONAL_LEARNING_PRACTICE_FEEDBACK = 'PERSONAL_LEARNING_PRACTICE_FEEDBACK';
+export const PRACTICE_FEEDBACK_CATEGORIES = [
+  'INSTRUCTIONS_UNCLEAR',
+  'PRACTICE_TOO_DIFFICULT',
+  'USE_SPREADSHEET',
+  'USE_EMAIL',
+  'USE_IMAGE',
+  'USE_WEBSITE',
+  'USE_OTHER_MATERIAL',
+] as const;
+export type PracticeFeedbackCategory = (typeof PRACTICE_FEEDBACK_CATEGORIES)[number];
+export const practiceFeedbackLabel: Record<PracticeFeedbackCategory, string> = {
+  INSTRUCTIONS_UNCLEAR: '何から始めるか分からない',
+  PRACTICE_TOO_DIFFICULT: '練習が難しい',
+  USE_SPREADSHEET: '表やスプレッドシートを使いたい',
+  USE_EMAIL: 'メールを使いたい',
+  USE_IMAGE: '写真や画像を使いたい',
+  USE_WEBSITE: 'ホームページを使いたい',
+  USE_OTHER_MATERIAL: 'その他の資料を使いたい',
+};
+export function isPracticeFeedbackCategory(value: unknown): value is PracticeFeedbackCategory {
+  return PRACTICE_FEEDBACK_CATEGORIES.some((category) => category === value);
+}
 export const PERSONAL_LEARNING_EVIDENCE_SUBMISSION_VERSION = 'PERSONAL_LEARNING_EVIDENCE_V1';
 export type PersonalLearningEvidenceKind = 'TEXT' | 'SELF_REPORT';
 export type PersonalLearningEvidenceReviewState =
@@ -49,6 +72,7 @@ export interface PersonalLearningPractice {
   support: PracticeSupportState;
   submissions: PersonalLearningPracticeSubmission[];
   nextCandidate: SavedLearningLessonCandidate | null;
+  feedback?: PracticeFeedbackCategory[];
 }
 
 export function validatePersonalLearningEvidenceSubmission(input: {
@@ -142,6 +166,11 @@ export interface PersonalLearningPracticeRepository {
     assignmentId: string;
     operationId: string;
   }): Promise<SavedPersonalLearningRequest>;
+  recordPracticeFeedback(input: {
+    actor: PersonalLearningActor;
+    assignmentId: string;
+    category: PracticeFeedbackCategory;
+  }): Promise<PersonalLearningPracticeState>;
   recordPracticeNote(input: {
     actor: PersonalLearningActor;
     assignmentId: string;

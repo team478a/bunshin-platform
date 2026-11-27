@@ -1469,6 +1469,19 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
       const f = await dynamicPracticeFixture(true);
       const first = await f.practice.startPractice(f.start);
       const answers = new PrismaTrainingAnswerRepository(client, () => now);
+      const feedback = {
+        actor: f.actor,
+        assignmentId: first.assignmentId,
+        category: 'USE_SPREADSHEET' as const,
+      };
+      await expect(
+        f.practice.recordPracticeFeedback({ ...feedback, assignmentId: randomUUID() }),
+      ).rejects.toMatchObject({ code: 'CONFLICT' });
+      await f.practice.recordPracticeFeedback(feedback);
+      await f.practice.recordPracticeFeedback(feedback);
+      expect((await f.practice.readPractice(f.actor)).current?.feedback).toEqual([
+        'USE_SPREADSHEET',
+      ]);
       const text = '見出しを一か所、自分で直しました。';
       const submitted = await answers.submit({
         workspaceId: f.scope.workspaceId,
@@ -1519,6 +1532,7 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
         revision: first.candidate.requestRevision + 1,
       });
       expect(nextRequestContext.currentPosition).toContain('前の実践で確認できた点');
+      expect(nextRequestContext.currentPosition).toContain('本人の練習への要望');
       const nextRequest = await client.personalLearningRequest.findFirstOrThrow({
         where: f.scope,
         orderBy: { revision: 'desc' },
