@@ -5,6 +5,7 @@ import InstructorReviewPage from '../app/s/[serviceSlug]/programs/[programEnroll
 const f = vi.hoisted(() => ({
   getCurrentUser: vi.fn(),
   read: vi.fn(),
+  individualOffer: vi.fn(),
   begin: vi.fn(),
   cancel: vi.fn(),
   resume: vi.fn(),
@@ -21,6 +22,7 @@ vi.mock('../src/auth/current-user', () => ({
 }));
 vi.mock('../src/services/instructor-review-runtime', () => ({
   getInstructorReviewLearner: f.read,
+  getIndividualInstructorReviewOffer: f.individualOffer,
   beginInstructorReview: f.begin,
   cancelInstructorReview: f.cancel,
   resumeInstructorReview: f.resume,
@@ -123,5 +125,27 @@ describe('learner instructor review route', () => {
     await expect(readPage({ reviewId: [reviewId, reviewId] })).rejects.toThrow('not found');
     await expect(readPage({ reviewId }, 'outside-service')).rejects.toThrow('not found');
     expect(f.read).not.toHaveBeenCalled();
+  });
+
+  it('opens the existing application with the offered focus and rejects a stale offer', async () => {
+    const individualOfferId = '55555555-5555-4555-8555-555555555555';
+    f.read.mockResolvedValue({
+      current: { assignmentId, title: review.title, topicId, draft: review.excerpt },
+      review: null,
+      offer: { ...review, revision: reviewId },
+      unavailable: null,
+    });
+    f.individualOffer.mockResolvedValueOnce({
+      kind: 'offer',
+      id: individualOfferId,
+      focus: 'CLARITY',
+    });
+    const html = renderToStaticMarkup(await readPage({ individualOfferId, topicId }));
+    expect(html).toContain('読み手に伝わる表現に整える');
+    expect(html).toContain('申込内容を確認');
+    f.individualOffer.mockResolvedValueOnce(null);
+    const stale = renderToStaticMarkup(await readPage({ individualOfferId, topicId }));
+    expect(stale).toContain('この提案からは申し込めません');
+    expect(stale).not.toContain('申込内容を確認');
   });
 });

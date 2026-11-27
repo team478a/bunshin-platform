@@ -2,6 +2,13 @@ import { z } from 'zod';
 
 export const INSTRUCTOR_REVIEW_KIND = 'instructor_review';
 
+export const instructorReviewOfferFocus = z.enum(['STRUCTURE', 'CLARITY', 'NEXT_ACTION']);
+export const instructorReviewOfferFocusLabel = {
+  STRUCTURE: '文章の構成を整理する',
+  CLARITY: '読み手に伝わる表現に整える',
+  NEXT_ACTION: '相手に求める次の行動を明確にする',
+} as const;
+
 export const instructorReviewProduct = z
   .object({
     enabled: z.boolean(),

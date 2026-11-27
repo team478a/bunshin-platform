@@ -1,12 +1,14 @@
 import 'server-only';
 
 import { randomUUID } from 'node:crypto';
+import { PERSONAL_LEARNING_PRACTICE_MISSION } from '@bunshin/application';
 import { getServerEnvironment } from '@bunshin/config';
 import { prisma, type Prisma } from '@bunshin/database';
 import { ApplicationError } from '@bunshin/shared';
 import { z } from 'zod';
 import {
   instructorReviewApplication,
+  instructorReviewOfferFocus,
   instructorReviewOccupiesSlot,
   instructorReviewProduct,
   instructorReviewReply,
@@ -42,6 +44,10 @@ const missing = () => new ApplicationError('NOT_FOUND', '講師レビューを�
 const conflict = (message: string) => new ApplicationError('CONFLICT', message);
 const openStatuses = [...instructorReviewOccupiesSlot];
 const assignedStatuses = ['IN_PROGRESS', 'ANSWERED'] as const;
+const offerCreated = 'INSTRUCTOR_REVIEW_OFFER_CREATED';
+const offerDismissed = 'INSTRUCTOR_REVIEW_OFFER_DISMISSED';
+const offerKey = (assignmentId: string) => `instructor-review-offer:${assignmentId}`;
+const dismissalKey = (offerId: string) => `instructor-review-offer-dismissed:${offerId}`;
 
 export function instructorReviewPath(
   enrollmentId: string,
@@ -112,6 +118,166 @@ const occupied = (tx: Tx, scope: Scope) =>
   tx.instructorReview.count({
     where: { ...scope, status: { in: openStatuses } },
   });
+
+async function activeIndividualOffer(
+  tx: Tx,
+  key: Scope & { programEnrollmentId: string; missionAssignmentId: string },
+  offerId?: string,
+) {
+  const event = await tx.programActionEvent.findFirst({
+    where: { ...key, ...(offerId ? { id: offerId } : {}), eventType: offerCreated },
+    select: { id: true, metadata: true },
+  });
+  if (!event) return null;
+  const parsed = z.object({ focus: instructorReviewOfferFocus }).safeParse(event.metadata);
+  if (!parsed.success) return null;
+  const dismissed = await tx.programActionEvent.findFirst({
+    where: { ...key, sourceResourceId: event.id, eventType: offerDismissed },
+    select: { id: true },
+  });
+  return dismissed ? null : { id: event.id, focus: parsed.data.focus };
+}
+
+export async function proposeIndividualInstructorReview(
+  input: LearnerKey & { assignmentId: string; focus: z.output<typeof instructorReviewOfferFocus> },
+) {
+  const scope = await serviceScope(input.serviceSlug, input.userId, true);
+  const key = {
+    ...scope,
+    programEnrollmentId: uuid.parse(input.enrollmentId),
+    missionAssignmentId: uuid.parse(input.assignmentId),
+  };
+  const focus = instructorReviewOfferFocus.parse(input.focus);
+  return prisma.$transaction(async (tx) => {
+    await lockScope(tx, scope);
+    await managerInside(tx, scope, input.userId);
+    const now = new Date();
+    const [target, assignment, product, payment, used, review] = await Promise.all([
+      tx.programEnrollment.findFirst({
+        where: {
+          ...scope,
+          id: key.programEnrollmentId,
+          status: 'ACTIVE',
+          startsAt: { lte: now },
+          OR: [{ endsAt: null }, { endsAt: { gt: now } }],
+        },
+        select: { serviceProgramId: true, groupMembershipId: true },
+      }),
+      tx.programMissionAssignment.findFirst({
+        where: {
+          ...scope,
+          id: key.missionAssignmentId,
+          programEnrollmentId: key.programEnrollmentId,
+          missionDefinitionKey: PERSONAL_LEARNING_PRACTICE_MISSION,
+          status: 'STARTED',
+        },
+        select: { id: true },
+      }),
+      productInfo(tx, scope),
+      tx.organizationPaymentConfiguration.findFirst({
+        where: paymentWhere(scope.workspaceId),
+        select: { id: true },
+      }),
+      occupied(tx, scope),
+      tx.instructorReview.findFirst({
+        where: {
+          ...scope,
+          enrollmentId: key.programEnrollmentId,
+          assignmentId: key.missionAssignmentId,
+          status: { in: [...openStatuses, 'ANSWERED'] },
+        },
+        select: { id: true },
+      }),
+    ]);
+    if (
+      !target ||
+      !assignment ||
+      !(await tx.groupMembership.findFirst({
+        where: {
+          ...scope,
+          id: target.groupMembershipId,
+          status: 'ACTIVE',
+          serviceRole: 'PARTICIPANT',
+          user: { status: 'ACTIVE' },
+        },
+        select: { id: true },
+      }))
+    )
+      throw missing();
+    if (review) return 'existing-review' as const;
+    if (
+      !product?.enabled ||
+      !payment ||
+      !product.programIds.includes(target.serviceProgramId) ||
+      used >= product.capacity ||
+      !(await tx.serviceProgram.findFirst({
+        where: { ...programWhere(scope), id: target.serviceProgramId },
+        select: { id: true },
+      }))
+    )
+      throw conflict('現在、対象の課題で講師レビューを新規受付できません。');
+    const idempotencyKey = offerKey(key.missionAssignmentId);
+    const created = await tx.programActionEvent.createMany({
+      data: {
+        ...key,
+        eventType: offerCreated,
+        idempotencyKey,
+        metadata: { focus },
+        actorUserId: input.userId,
+        occurredAt: new Date(),
+      },
+      skipDuplicates: true,
+    });
+    return created.count === 1 ? ('proposed' as const) : ('existing-offer' as const);
+  });
+}
+
+export async function getIndividualInstructorReviewOffer(
+  input: LearnerKey & { assignmentId: string; topicId: string | null },
+) {
+  const scope = await serviceScope(input.serviceSlug, input.userId);
+  const event = await activeIndividualOffer(prisma, {
+    ...scope,
+    programEnrollmentId: input.enrollmentId,
+    missionAssignmentId: input.assignmentId,
+  });
+  if (!event) return null;
+  const state = await getInstructorReviewLearner({ ...input, reviewId: null });
+  if (state.current?.assignmentId !== input.assignmentId) return null;
+  if (state.review) return { kind: 'review' as const, review: state.review };
+  return state.offer ? { kind: 'offer' as const, ...event } : null;
+}
+
+export async function dismissIndividualInstructorReviewOffer(
+  input: LearnerKey & { offerId: string; topicId: string | null },
+) {
+  const practice = await currentInstructorReviewPractice(input);
+  const { workspaceId, groupId } = practice.actor.scope;
+  const key = {
+    workspaceId,
+    groupId,
+    programEnrollmentId: input.enrollmentId,
+    missionAssignmentId: practice.assignmentId,
+  };
+  await prisma.$transaction(async (tx) => {
+    await lockScope(tx, { workspaceId, groupId });
+    const event = await activeIndividualOffer(tx, key, uuid.parse(input.offerId));
+    if (!event) return;
+    await tx.programActionEvent.createMany({
+      data: {
+        ...key,
+        eventType: offerDismissed,
+        sourceResourceType: 'PROGRAM_ACTION_EVENT',
+        sourceResourceId: event.id,
+        idempotencyKey: dismissalKey(event.id),
+        metadata: {},
+        actorUserId: input.userId,
+        occurredAt: new Date(),
+      },
+      skipDuplicates: true,
+    });
+  });
+}
 
 function learnerReview(row: Review) {
   return {
@@ -252,7 +418,10 @@ async function ensureCheckout(review: Review, secret: string) {
 }
 
 export async function beginInstructorReview(
-  input: LearnerKey & { submission: InstructorReviewApplication },
+  input: LearnerKey & {
+    submission: InstructorReviewApplication;
+    individualOfferId?: string | undefined;
+  },
 ) {
   const submission = instructorReviewApplication.parse(input.submission);
   const practice = await currentInstructorReviewPractice({ ...input, topicId: submission.topicId });
@@ -326,6 +495,19 @@ export async function beginInstructorReview(
       throw conflict('料金や受付条件が変わりました。申込内容を確認し直してください。');
     if ((await occupied(tx, scope)) >= offer.capacity)
       throw conflict('現在、受付枠が埋まっています。');
+    if (
+      input.individualOfferId &&
+      !(await activeIndividualOffer(
+        tx,
+        {
+          ...scope,
+          programEnrollmentId: input.enrollmentId,
+          missionAssignmentId: assignment.id,
+        },
+        uuid.parse(input.individualOfferId),
+      ))
+    )
+      throw conflict('提案の受付状況が変わりました。申込内容を確認し直してください。');
     return tx.instructorReview.create({
       data: {
         ...buyer,
@@ -334,7 +516,7 @@ export async function beginInstructorReview(
         paymentConfigurationId: payment.id,
         productRevision: offer.revision,
         requestKey: submission.idempotencyKey,
-        source: 'LEARNER',
+        source: input.individualOfferId ? 'OPERATOR_OFFER' : 'LEARNER',
         title: practice.title,
         planRevision: practice.planRevision,
         focus: submission.focus,

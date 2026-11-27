@@ -6,6 +6,7 @@ import { browserLearningDevice } from '@bunshin/capability-training';
 import { LearningCandidateCard } from './candidate-card';
 import { LearningPracticeCard } from './practice-card';
 import { LearningConversationCard } from './conversation-card';
+import type { InstructorReviewStatus } from '../../../../../../src/services/instructor-review-contract';
 import type {
   SavedPersonalLearningRequest,
   PersonalLearningRequestContent,
@@ -25,7 +26,7 @@ export function PersonalLearningRequestCard({
   firstTopicEndpoint,
   browserMaterialHref,
   instructorReviewHref,
-  instructorReviewAnswered,
+  instructorReviewStatus,
   endpoint,
   initial,
   candidateEndpoint,
@@ -40,7 +41,7 @@ export function PersonalLearningRequestCard({
   firstTopicEndpoint?: string;
   browserMaterialHref?: string | undefined;
   instructorReviewHref?: string | undefined;
-  instructorReviewAnswered?: boolean | undefined;
+  instructorReviewStatus?: InstructorReviewStatus | undefined;
   endpoint: string;
   initial: SavedPersonalLearningRequest | null;
   candidateEndpoint?: string;
@@ -321,7 +322,7 @@ export function PersonalLearningRequestCard({
             plainLanguage={dynamicMode}
             simpleStart={simpleStart}
             instructorReviewHref={instructorReviewHref ? topicUrl(instructorReviewHref) : undefined}
-            instructorReviewAnswered={instructorReviewAnswered}
+            instructorReviewStatus={instructorReviewStatus}
             conversationHref={
               conversationEndpoint && saved && matchesSaved ? '#conversation-record' : undefined
             }

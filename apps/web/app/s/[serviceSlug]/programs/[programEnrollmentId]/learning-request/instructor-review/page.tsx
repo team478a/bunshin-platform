@@ -7,12 +7,14 @@ import { serviceAuthLoginPath } from '../../../../../../../src/auth/line-return'
 import design from '../../../../../../../src/components/manaberu-learner.module.css';
 import {
   instructorReviewApplication,
+  instructorReviewOfferFocusLabel,
   instructorReviewStatusLabel,
 } from '../../../../../../../src/services/instructor-review-contract';
 import {
   beginInstructorReview,
   cancelInstructorReview,
   getInstructorReviewLearner,
+  getIndividualInstructorReviewOffer,
   resumeInstructorReview,
 } from '../../../../../../../src/services/instructor-review-runtime';
 import { MANABERU_SERVICE_SLUG } from '../../../../../../../src/services/service-auth-brand';
@@ -24,6 +26,7 @@ const locationSchema = z
   .object({
     topicId: z.uuid().optional(),
     reviewId: z.uuid().optional(),
+    individualOfferId: z.uuid().optional(),
     result: z
       .enum(['payment-return', 'payment-cancel', 'request-error', 'cancel-error'])
       .optional(),
@@ -39,6 +42,7 @@ function reviewPath(
   const query = new URLSearchParams();
   if (location.topicId) query.set('topicId', location.topicId);
   if (location.reviewId) query.set('reviewId', location.reviewId);
+  if (location.individualOfferId) query.set('individualOfferId', location.individualOfferId);
   if (location.result) query.set('result', location.result);
   const path = `${learningPath}/instructor-review` as const;
   return query.size ? (`${path}?${query.toString()}` as const) : path;
@@ -67,7 +71,7 @@ export default async function InstructorReviewPage({
     !parsed.success
   )
     notFound();
-  const { topicId, reviewId, result } = parsed.data;
+  const { topicId, reviewId, result, individualOfferId } = parsed.data;
   const learningPath = `/s/${serviceSlug}/programs/${enrollmentId}/learning-request` as const;
   const returnTo = reviewPath(learningPath, parsed.data);
   const actor = await (await currentUserProvider()).getCurrentUser();
@@ -87,6 +91,21 @@ export default async function InstructorReviewPage({
 
   const reviewIdentity = review?.id;
   const currentTopic = current?.topicId ?? topicId ?? undefined;
+  const individualOffer =
+    individualOfferId && current && !review
+      ? await getIndividualInstructorReviewOffer({
+          serviceSlug,
+          enrollmentId,
+          userId: actor.userId,
+          assignmentId: current.assignmentId,
+          topicId: currentTopic ?? null,
+        })
+      : null;
+  const selectedOffer =
+    individualOffer?.kind === 'offer' && individualOffer.id === individualOfferId
+      ? individualOffer
+      : null;
+  const staleOffer = individualOfferId && !selectedOffer;
   const samePractice = current && (!review || current.assignmentId === review.assignmentId);
   const practiceHref = `${learningPath}${currentTopic ? `?topicId=${currentTopic}` : ''}#practice-evidence`;
   const homeHref = `/s/${serviceSlug}/home`;
@@ -104,7 +123,13 @@ export default async function InstructorReviewPage({
       excerpt: formData.get('excerpt'),
     });
     if (!input.success)
-      redirect(reviewPath(learningPath, { topicId: currentTopic, result: 'request-error' }));
+      redirect(
+        reviewPath(learningPath, {
+          topicId: currentTopic,
+          individualOfferId,
+          result: 'request-error',
+        }),
+      );
     let checkout: Awaited<ReturnType<typeof beginInstructorReview>>;
     try {
       checkout = await beginInstructorReview({
@@ -112,11 +137,18 @@ export default async function InstructorReviewPage({
         enrollmentId,
         userId: learner.userId,
         submission: input.data,
+        ...(individualOfferId ? { individualOfferId } : {}),
       });
     } catch (error) {
       if (!(error instanceof ApplicationError)) throw error;
       if (error.code === 'NOT_FOUND' || error.code === 'FORBIDDEN') notFound();
-      redirect(reviewPath(learningPath, { topicId: currentTopic, result: 'request-error' }));
+      redirect(
+        reviewPath(learningPath, {
+          topicId: currentTopic,
+          individualOfferId,
+          result: 'request-error',
+        }),
+      );
     }
     redirect(checkout.url);
   }
@@ -242,7 +274,7 @@ export default async function InstructorReviewPage({
               </article>
             )}
           </>
-        ) : current && offer && !unavailable ? (
+        ) : current && offer && !unavailable && !staleOffer ? (
           <InstructorReviewForm
             action={begin}
             offer={offer}
@@ -251,9 +283,17 @@ export default async function InstructorReviewPage({
             idempotencyKey={randomUUID()}
             topicId={current.topicId ?? topicId ?? null}
             initialExcerpt={current.draft}
+            initialFocus={
+              selectedOffer ? instructorReviewOfferFocusLabel[selectedOffer.focus] : undefined
+            }
           />
         ) : (
-          <p role="status">{unavailable ?? '現在、講師レビューを申し込めません。'}</p>
+          <p role="status">
+            {unavailable ??
+              (staleOffer
+                ? 'この提案からは申し込めません。'
+                : '現在、講師レビューを申し込めません。')}
+          </p>
         )}
         <p>
           <a href={samePractice ? practiceHref : homeHref}>
