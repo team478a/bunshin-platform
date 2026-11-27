@@ -100,7 +100,7 @@ describe('lesson Provider', () => {
       for (const [experienceDescription, currentPosition] of [
         [firstExperience, firstPosition],
         [secondExperience, secondPosition],
-      ]) {
+      ] as const) {
         const payload = JSON.parse(
           learningLessonBody(
             { ...wish, originalText, experienceDescription, currentPosition },
