@@ -21,6 +21,7 @@ import {
   currentPaymentEnvironment,
 } from '../payments/secure-configuration';
 import {
+  isStripeCheckoutUrl,
   StripeCheckoutAdapter,
   StripeCheckoutExpirationAdapter,
   StripeFullRefundAdapter,
@@ -49,7 +50,7 @@ export function instructorReviewPath(
 ) {
   const params = new URLSearchParams({ reviewId });
   if (topicId) params.set('topicId', topicId);
-  return `/s/${MANABERU_SERVICE_SLUG}/programs/${enrollmentId}/learning-request/instructor-review?${params.toString()}`;
+  return `/s/${MANABERU_SERVICE_SLUG}/programs/${enrollmentId}/learning-request/instructor-review?${params.toString()}` as const;
 }
 
 async function serviceScope(slug: string, userId: string, operator = false): Promise<Scope> {
@@ -227,7 +228,7 @@ async function paymentSecret(review: Review) {
 }
 
 async function ensureCheckout(review: Review, secret: string) {
-  if (review.providerCheckoutSessionId && review.checkoutUrl)
+  if (review.providerCheckoutSessionId && isStripeCheckoutUrl(review.checkoutUrl))
     return { id: review.providerCheckoutSessionId, url: review.checkoutUrl };
   const path = instructorReviewPath(review.enrollmentId, review.id, review.topicId);
   const url = new URL(path, getServerEnvironment().APP_URL);

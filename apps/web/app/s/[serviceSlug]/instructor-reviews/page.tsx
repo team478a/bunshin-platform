@@ -15,7 +15,7 @@ import { PublicShell } from '../../../ui/public-shell';
 export const dynamic = 'force-dynamic';
 
 function instructorPath(slug: string) {
-  return `/s/${slug}/instructor-reviews`;
+  return `/s/${slug}/instructor-reviews` as const;
 }
 
 async function requireActor(serviceSlug: string) {

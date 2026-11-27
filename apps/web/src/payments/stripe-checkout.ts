@@ -4,7 +4,7 @@ import { ApplicationError } from '@bunshin/shared';
 import { INSTRUCTOR_REVIEW_KIND } from '../services/instructor-review-contract';
 type StripeCheckoutUrl = `https://checkout.stripe.com/${string}`;
 
-function isStripeCheckoutUrl(value: unknown): value is StripeCheckoutUrl {
+export function isStripeCheckoutUrl(value: unknown): value is StripeCheckoutUrl {
   return typeof value === 'string' && value.startsWith('https://checkout.stripe.com/');
 }
 

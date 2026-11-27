@@ -32,12 +32,16 @@ const locationSchema = z
 
 type ReviewLocation = z.output<typeof locationSchema>;
 
-function reviewPath(learningPath: string, location: ReviewLocation) {
+function reviewPath(
+  learningPath: `/s/${string}/programs/${string}/learning-request`,
+  location: ReviewLocation,
+) {
   const query = new URLSearchParams();
   if (location.topicId) query.set('topicId', location.topicId);
   if (location.reviewId) query.set('reviewId', location.reviewId);
   if (location.result) query.set('result', location.result);
-  return `${learningPath}/instructor-review${query.size ? `?${query}` : ''}`;
+  const path = `${learningPath}/instructor-review` as const;
+  return query.size ? (`${path}?${query.toString()}` as const) : path;
 }
 
 const deadline = new Intl.DateTimeFormat('ja-JP', {
@@ -64,7 +68,7 @@ export default async function InstructorReviewPage({
   )
     notFound();
   const { topicId, reviewId, result } = parsed.data;
-  const learningPath = `/s/${serviceSlug}/programs/${enrollmentId}/learning-request`;
+  const learningPath = `/s/${serviceSlug}/programs/${enrollmentId}/learning-request` as const;
   const returnTo = reviewPath(learningPath, parsed.data);
   const actor = await (await currentUserProvider()).getCurrentUser();
   if (!actor) redirect(serviceAuthLoginPath(returnTo));
@@ -101,7 +105,7 @@ export default async function InstructorReviewPage({
     });
     if (!input.success)
       redirect(reviewPath(learningPath, { topicId: currentTopic, result: 'request-error' }));
-    let checkout: { url: string };
+    let checkout: Awaited<ReturnType<typeof beginInstructorReview>>;
     try {
       checkout = await beginInstructorReview({
         serviceSlug,
@@ -142,7 +146,7 @@ export default async function InstructorReviewPage({
     const learner = await (await currentUserProvider()).getCurrentUser();
     if (!learner) redirect(serviceAuthLoginPath(returnTo));
     if (!reviewIdentity) notFound();
-    let checkout: { url: string };
+    let checkout: Awaited<ReturnType<typeof resumeInstructorReview>>;
     try {
       checkout = await resumeInstructorReview({
         serviceSlug,

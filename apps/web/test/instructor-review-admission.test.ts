@@ -47,7 +47,8 @@ vi.mock('../src/payments/secure-configuration', () => ({
     }
   },
 }));
-vi.mock('../src/payments/stripe-checkout', () => ({
+vi.mock('../src/payments/stripe-checkout', async (load) => ({
+  ...(await load<typeof import('../src/payments/stripe-checkout')>()),
   StripeCheckoutAdapter: class {
     create = f.checkout;
   },

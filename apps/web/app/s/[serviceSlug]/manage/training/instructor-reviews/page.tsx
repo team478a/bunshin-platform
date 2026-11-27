@@ -38,7 +38,7 @@ const notices = {
 type Result = keyof typeof notices;
 
 function adminPath(slug: string) {
-  return `/s/${slug}/manage/training/instructor-reviews`;
+  return `/s/${slug}/manage/training/instructor-reviews` as const;
 }
 
 async function requireActor(serviceSlug: string) {
