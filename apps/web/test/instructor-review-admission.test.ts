@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type * as StripeCheckoutModule from '../src/payments/stripe-checkout';
 import {
   beginInstructorReview,
   getAssignedInstructorReviews,
@@ -48,7 +49,7 @@ vi.mock('../src/payments/secure-configuration', () => ({
   },
 }));
 vi.mock('../src/payments/stripe-checkout', async (load) => ({
-  ...(await load<typeof import('../src/payments/stripe-checkout')>()),
+  ...(await load<typeof StripeCheckoutModule>()),
   StripeCheckoutAdapter: class {
     create = f.checkout;
   },
