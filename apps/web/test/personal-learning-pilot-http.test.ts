@@ -116,7 +116,11 @@ describe('Personal Learning pilot HTTP composition', () => {
     expect(result.headers.get('cache-control')).toBe('private, no-store');
     expect(f.bridge).not.toHaveBeenCalled();
     expect(f.goal).not.toHaveBeenCalled();
-    expect(f.lineMenuStatus).toHaveBeenCalledWith({ scope, actorUserId: scope.userId }, null);
+    expect(f.lineMenuStatus).toHaveBeenCalledWith(
+      { scope, actorUserId: scope.userId },
+      null,
+      'synthetic',
+    );
   });
   it('activates the personal menu only through the authorized learner endpoint', async () => {
     const result = await call({ operation: 'ACTIVATE_LINE_MENU' });

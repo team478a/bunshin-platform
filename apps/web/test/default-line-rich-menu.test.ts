@@ -27,6 +27,16 @@ describe('default LINE rich menu', () => {
     expect(image.byteLength).toBeLessThanOrEqual(1_000_000);
   }, 20_000);
 
+  it('renders the approved compact Manaberu artwork', async () => {
+    const image = await renderDefaultLineRichMenu('MANABERU');
+    expect(await sharp(image).metadata()).toMatchObject({
+      format: 'png',
+      width: 2500,
+      height: 843,
+    });
+    expect(image.byteLength).toBeLessThanOrEqual(1_000_000);
+  });
+
   it('占い用の汎用画像とオラクルの正式画像をLINE仕様内で用意する', async () => {
     for (const image of [
       await renderDefaultLineRichMenu('FORTUNE'),

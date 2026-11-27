@@ -1,3 +1,4 @@
+import { MANABERU_SERVICE_SLUG } from '../../../../../../src/services/service-auth-brand';
 import { notFound, redirect } from 'next/navigation';
 import Link from 'next/link';
 import { ListGroupLineConfigurations } from '@bunshin/application';
@@ -98,6 +99,7 @@ export default async function GroupLinePage({ params }: { params: Promise<{ grou
         environment={currentLineEnvironment()}
         webhookOrigin={new URL(base.webhookUrl).origin}
         initialMode={result.mode}
+        manaberuMenu={group.serviceConfiguration?.slug === MANABERU_SERVICE_SLUG}
         {...(fortuneMenu ? { fortuneMenu } : {})}
         initialConfigurations={result.configurations.map((item) => ({
           ...item,

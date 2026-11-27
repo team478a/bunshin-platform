@@ -1,3 +1,4 @@
+import { MANABERU_SERVICE_SLUG } from '../../../../../src/services/service-auth-brand';
 import { LINE_ADMIN_RETRYABLE_FAILURES, ListGroupLineConfigurations } from '@bunshin/application';
 import { notFound, redirect } from 'next/navigation';
 import { GroupLineEditor } from '../../../../(app)/admin/groups/[groupId]/line/group-line-editor';
@@ -134,6 +135,7 @@ export default async function ServiceLinePage({
           }))}
           endpoint={endpoint}
           scopeLabel="サービス"
+          manaberuMenu={service.configuration.slug === MANABERU_SERVICE_SLUG}
           {...(fortuneMenu ? { fortuneMenu } : {})}
         />
         <ServiceLineBroadcastEditor

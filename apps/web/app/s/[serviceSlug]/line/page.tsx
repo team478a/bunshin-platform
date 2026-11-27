@@ -2,7 +2,9 @@ import type { Route } from 'next';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { currentUserProvider } from '../../../../src/auth/current-user';
+import { serviceAuthLoginPath } from '../../../../src/auth/line-return';
 import { isRouteNotFound } from '../../../../src/navigation/route-not-found';
+import { MANABERU_SERVICE_SLUG } from '../../../../src/services/service-auth-brand';
 import { loadServiceLineSettings } from '../../../../src/services/service-line-settings';
 import {
   fortuneEntryAppearance,
@@ -24,7 +26,14 @@ export default async function ServiceLineSettingsPage({
   const { serviceSlug } = await params;
   const lineResult = (await searchParams).lineResult;
   const actor = await (await currentUserProvider()).getCurrentUser();
-  if (!actor) redirect(`/login?returnTo=${encodeURIComponent(`/s/${serviceSlug}/line`)}` as Route);
+  if (!actor) {
+    const returnTo = `/s/${serviceSlug}/line`;
+    redirect(
+      serviceSlug === MANABERU_SERVICE_SLUG
+        ? serviceAuthLoginPath(returnTo)
+        : `/login?returnTo=${encodeURIComponent(returnTo)}`,
+    );
+  }
   const settings = await loadServiceLineSettings(serviceSlug, actor.userId).catch(
     (error: unknown) => {
       if (isRouteNotFound(error)) notFound();
@@ -33,18 +42,16 @@ export default async function ServiceLineSettingsPage({
   );
   const { service, mode, partners, available, connected, consented } = settings;
   const slug = service.configuration.slug;
-  if (settings.learningService) {
+  if (slug === MANABERU_SERVICE_SLUG || settings.learningService) {
     const result = lineResult;
-    const ready = mode === 'DEDICATED' && available && consented;
+    const ready = settings.learningService && mode === 'DEDICATED' && available && consented;
     return (
       <PublicShell showPlatformBrand={false}>
         <main className="app-page line-link-page">
           <header className="app-page__heading">
             <p className="eyebrow">{service.configuration.displayName}</p>
             <h1>学習用LINEの接続</h1>
-            <p>
-              現在のアカウントに、このサービスの公式LINEを接続します。投稿パートナーの作成は不要です。
-            </p>
+            <p>現在のアカウントに、研修の公式LINEを接続します。</p>
           </header>
           <section className="settings-card form-stack">
             {result === 'follow-required' ? (
@@ -80,7 +87,7 @@ export default async function ServiceLineSettingsPage({
           </section>
           <Link
             className="button button--primary button--full"
-            href={`/s/${slug}/programs` as Route}
+            href={`/s/${slug}/${slug === MANABERU_SERVICE_SLUG ? 'home' : 'programs'}` as Route}
           >
             学習を始める・続ける
           </Link>
