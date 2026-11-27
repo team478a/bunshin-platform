@@ -86,6 +86,24 @@ createRoot(document.getElementById('root')!).render(
     <ReferralManagementHarness />
   ) : new URLSearchParams(window.location.search).has('member-growth') ? (
     <GrowthHarness />
+  ) : new URLSearchParams(window.location.search).has('simple-start') ? (
+    <PersonalLearningRequestCard
+      simpleStart
+      dynamicMode
+      endpoint="/api/synthetic/simple-wish"
+      candidateEndpoint="/api/synthetic/simple-candidate"
+      practiceEndpoint="/api/synthetic/simple-practice"
+      instructorReviewHref={
+        new URLSearchParams(window.location.search).has('instructor')
+          ? '/instructor-review.html'
+          : undefined
+      }
+      initial={new URLSearchParams(window.location.search).has('resume') ? lessonWish : null}
+      initialPractice={{
+        allowed: true,
+        current: new URLSearchParams(window.location.search).has('resume') ? practiceFixture : null,
+      }}
+    />
   ) : new URLSearchParams(window.location.search).has('practice') ? (
     <PersonalLearningRequestCard
       endpoint="/api/synthetic/wish"

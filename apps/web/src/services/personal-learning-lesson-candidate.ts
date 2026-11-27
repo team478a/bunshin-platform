@@ -3,6 +3,7 @@ import { ApplicationError } from '@bunshin/shared';
 import { browserPilotEnvironment } from '@bunshin/capability-browser';
 import {
   executePersonalLearningTextOperation,
+  MANABERU_SIMPLE_LESSON_PROMPT_SUFFIX,
   parsePersonalLearningCallAdmissionPolicy,
   reservePersonalLearningCallCost,
   type PersonalLearningActor,
@@ -24,6 +25,7 @@ export async function prepareLearningLesson(
   requestId: string,
   requestRevision: number,
   operationId: string,
+  allowSimpleStart = false,
 ) {
   const db = await import('@bunshin/database');
   const candidates = new db.PrismaLearningCandidateRepository(db.prisma);
@@ -33,7 +35,8 @@ export async function prepareLearningLesson(
   if (request?.id !== requestId || request.revision !== requestRevision)
     throw new ApplicationError('CONFLICT', 'learning wish changed');
   const prior = await candidates.readCandidate(actor);
-  if (prior) return prior; // Retry and revisit do not create another AI call.
+  if (prior?.requestId === requestId && prior.requestRevision === requestRevision) return prior;
+  if (prior) throw new ApplicationError('CONFLICT', 'learning wish changed');
   let configuration: unknown;
   try {
     configuration = JSON.parse(process.env['PERSONAL_LEARNING_LESSON_ADMISSION'] ?? 'null');
@@ -68,9 +71,11 @@ export async function prepareLearningLesson(
     browserMaterials;
 
   const proposalPolicy = learningProposalPolicy(extendedScope, offerPolicy);
-  const promptVersion = includeIntentAnalysis
-    ? proposalPolicy.version + '-intent-v1'
-    : proposalPolicy.version;
+  const simpleStart = allowSimpleStart && offerPolicy === 'AI_SKILL_V1' && !includeIntentAnalysis;
+  const promptVersion =
+    proposalPolicy.version +
+    (includeIntentAnalysis ? '-intent-v1' : '') +
+    (simpleStart ? MANABERU_SIMPLE_LESSON_PROMPT_SUFFIX : '');
   const personaContext = await new db.PrismaPersonalLearningPersonaRepository(db.prisma).listForAi(
     actor.scope,
   );
@@ -84,6 +89,7 @@ export async function prepareLearningLesson(
     toolFeatureContext,
     offerPolicy,
     includeIntentAnalysis,
+    simpleStart,
   ); // Validate byte limit before admission.
   let providerAdmission: LearningAiRuntimeConfiguration | null = null;
   let usageKey = '';
@@ -96,7 +102,7 @@ export async function prepareLearningLesson(
         actor,
         requestId,
         expectedRequestRevision: requestRevision,
-        operationId,
+        operationId: allowSimpleStart ? request.id : operationId,
         operationKind: 'LESSON_GENERATION',
         attempt: 1,
         provider,

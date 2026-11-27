@@ -42,6 +42,7 @@ function fixture() {
     },
     serviceProgram: { findFirst: vi.fn().mockResolvedValue({ id: 'program-a' }) },
     trainingParticipantProfile: { findFirst: vi.fn().mockResolvedValue(null) },
+    instructorReview: { findMany: vi.fn().mockResolvedValue([]) },
     programProgressSnapshot: { findFirst: vi.fn().mockResolvedValue(null) },
     programMissionAssignment: { findMany: vi.fn().mockResolvedValue([]) },
     trainingMissionAnswer: {
@@ -76,6 +77,17 @@ describe('training personal data export isolation', () => {
     const { tx, client, repository } = fixture();
     const result = await repository.read(input);
     expect(result.outcome).toBe('FOUND');
+    expect(tx.instructorReview.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          enrollmentId: input.programEnrollmentId,
+          buyerUserId: input.actorUserId,
+          contentRedactedAt: null,
+        },
+      }),
+    );
     expect(client.$transaction).toHaveBeenCalledWith(expect.any(Function), {
       isolationLevel: 'RepeatableRead',
     });

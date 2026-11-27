@@ -51,6 +51,7 @@ function fixture() {
       findMany: vi.fn().mockResolvedValue([{ id: 'toolkit-a', createdAt: now }]),
     },
     trainingParticipantProfile: table(),
+    instructorReview: table(),
     programProgressSnapshot: table(),
     programMissionAssignment: table(),
     programActionEvent: table(),
@@ -143,6 +144,16 @@ describe('personal training data deletion', () => {
       await repository.delete({ ...all, revision: preview.preview.revision, now }),
     ).toMatchObject({ outcome: 'DELETED' });
     expect(tx.$queryRaw).toHaveBeenCalledOnce();
+    expect(tx.instructorReview.updateMany).toHaveBeenCalledWith({
+      where: {
+        workspaceId: scope.workspaceId,
+        groupId: scope.groupId,
+        enrollmentId: scope.programEnrollmentId,
+        buyerUserId: scope.actorUserId,
+        contentRedactedAt: null,
+      },
+      data: expect.objectContaining({ excerpt: '', answer: null }),
+    });
     expect(tx.personalLearningPilotSeat.updateMany).toHaveBeenCalledWith({
       where: {
         workspaceId: scope.workspaceId,

@@ -20,6 +20,12 @@ const learningRequestPagePattern = new RegExp(
 const learningMaterialPagePattern = new RegExp(
   `^/s/${serviceSlugPattern}/programs/${uuidPattern}/learning-request/browser-material$`,
 );
+const learnerInstructorReviewPagePattern = new RegExp(
+  `^/s/manaberu-style/programs/${uuidPattern}/learning-request/instructor-review$`,
+);
+const providerInstructorReviewPagePattern = new RegExp(
+  `^/s/${serviceSlugPattern}/(?:manage/training/)?instructor-reviews$`,
+);
 const topicIdentifierPattern = new RegExp(`^${uuidPattern}$`);
 const fortuneWeeklyLinePagePattern = new RegExp(`^/s/${serviceSlugPattern}/today/from-line$`);
 const serviceOverviewAdminPagePattern = new RegExp(
@@ -113,13 +119,34 @@ export function safeLineAuthReturnPath(value: string | null | undefined): string
     if (
       (servicePagePattern.test(url.pathname) ||
         learningRequestPagePattern.test(url.pathname) ||
+        providerInstructorReviewPagePattern.test(url.pathname) ||
         learningProgramAdminPagePattern.test(url.pathname) ||
         serviceOverviewAdminPagePattern.test(url.pathname)) &&
       url.search === ''
     ) {
       return url.pathname;
     }
-    if (learningMaterialPagePattern.test(url.pathname)) {
+    if (learnerInstructorReviewPagePattern.test(url.pathname)) {
+      const params = [...url.searchParams.entries()];
+      for (const [name, param] of params) {
+        if (url.searchParams.getAll(name).length !== 1) return null;
+        if (name === 'topicId' || name === 'reviewId') {
+          if (!topicIdentifierPattern.test(param)) return null;
+        } else if (name === 'result') {
+          if (
+            !['payment-return', 'payment-cancel', 'request-error', 'cancel-error'].includes(param)
+          )
+            return null;
+        } else {
+          return null;
+        }
+      }
+      return params.length ? `${url.pathname}?${url.searchParams.toString()}` : url.pathname;
+    }
+    if (
+      learningMaterialPagePattern.test(url.pathname) ||
+      learningRequestPagePattern.test(url.pathname)
+    ) {
       if (!url.search) return url.pathname;
       const params = [...url.searchParams.entries()];
       const [name, topic] = params[0] ?? [];

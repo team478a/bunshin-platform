@@ -117,7 +117,7 @@ export class PrismaPersonalLearningTopicRepository {
     });
   }
 
-  async create(scope: DynamicLearningScope, input: { title: string }) {
+  async create(scope: DynamicLearningScope, input: { title: string; first?: true }) {
     const title = input.title.trim();
     if (!title || title.length > 160) return { outcome: 'INVALID' as const };
     return this.client.$transaction(
@@ -136,6 +136,14 @@ export class PrismaPersonalLearningTopicRepository {
         if (!personalLearningFeatureEnabled(program?.settings, 'multiTopic'))
           return { outcome: 'NOT_FOUND' as const };
         const topicLimit = 3;
+        if (input.first) {
+          const existing = await tx.personalLearningTopic.findMany({
+            where: { ...scope, status: 'ACTIVE' },
+            take: 2,
+          });
+          if (existing.length === 1) return { outcome: 'CREATED' as const, topic: existing[0]! };
+          if (existing.length > 1) return { outcome: 'INVALID' as const };
+        }
         const activeCount = await tx.personalLearningTopic.count({
           where: {
             workspaceId: scope.workspaceId,
