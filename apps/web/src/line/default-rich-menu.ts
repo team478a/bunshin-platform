@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import type { LineRichMenuArea } from '@bunshin/application';
 import { Resvg } from '@resvg/resvg-js';
 import sharp from 'sharp';
+import { MANABERU_LINE_MENU_IMAGE_PATH } from './manaberu-line-menu';
 import { renderFortuneLineRichMenu } from './fortune-rich-menu-art';
 
 export const DEFAULT_LINE_RICH_MENU = {
@@ -51,12 +52,14 @@ const partnerItems: readonly RichMenuItem[] = [
   { title: 'マイページ', subtitle: '登録情報・通知設定', symbol: '○', color: '#059669' },
 ];
 
-export type LineRichMenuLayout = 'DEFAULT' | 'PARTNER' | 'FORTUNE';
+export type LineRichMenuLayout = 'DEFAULT' | 'PARTNER' | 'FORTUNE' | 'MANABERU';
 export type GroupLineRichMenuLayout = LineRichMenuLayout | 'ORACLE';
 
 export async function renderDefaultLineRichMenu(
   layout: LineRichMenuLayout = 'DEFAULT',
 ): Promise<Buffer> {
+  if (layout === 'MANABERU')
+    return readFile(join(process.cwd(), 'public', MANABERU_LINE_MENU_IMAGE_PATH.slice(1)));
   if (layout === 'FORTUNE') return renderFortuneLineRichMenu();
   const fontDirectory = join(process.cwd(), 'assets/fonts/noto-sans-jp');
   const regularFont = join(fontDirectory, 'NotoSansCJKjp-Regular.otf');

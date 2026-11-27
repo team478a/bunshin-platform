@@ -35,6 +35,46 @@ describe('dedicated group LINE rich menu', () => {
     ]);
   });
 
+  it('publishes the three Manaberu tiles with matching bounds and destinations', async () => {
+    const request = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(Response.json({ richmenus: [] }))
+      .mockResolvedValueOnce(Response.json({ richMenuId: 'richmenu-manaberu' }))
+      .mockResolvedValueOnce(new Response(null, { status: 200 }))
+      .mockResolvedValueOnce(new Response(null, { status: 200 }));
+    await publishDefaultGroupRichMenu({
+      request,
+      accessToken: 'synthetic',
+      groupId: 'group-1',
+      groupName: 'マナベルスタイル',
+      appUrl: 'https://app.example.com',
+      serviceSlug: 'manaberu-style',
+      image: Buffer.from([1]),
+      layout: 'MANABERU',
+    });
+    expect(JSON.parse(request.mock.calls[1]?.[1]?.body as string)).toMatchObject({
+      size: { width: 2500, height: 843 },
+      chatBarText: '学習メニュー',
+      areas: [
+        {
+          bounds: { x: 0, y: 0, width: 1400, height: 843 },
+          action: { label: '学習を開く', uri: 'https://app.example.com/s/manaberu-style/home' },
+        },
+        {
+          bounds: { x: 1400, y: 0, width: 1100, height: 421 },
+          action: {
+            label: '実践を記録',
+            uri: 'https://app.example.com/s/manaberu-style/home?learning=record',
+          },
+        },
+        {
+          bounds: { x: 1400, y: 421, width: 1100, height: 422 },
+          action: { label: '困ったとき', uri: 'https://app.example.com/s/manaberu-style/help' },
+        },
+      ],
+    });
+  });
+
   it('publishes the six Oracle tiles in artwork order with matching bounds and destinations', async () => {
     const request = vi
       .fn<typeof fetch>()
@@ -305,7 +345,7 @@ describe('per-user group LINE rich menu links', () => {
     ).rejects.toThrow('LINEの利用上限に達しています');
   });
 
-  it('creates an image-less learner menu with enrollment-scoped links', async () => {
+  it('creates the three Manaberu links for an individual learner', async () => {
     const request = vi
       .fn<typeof fetch>()
       .mockResolvedValueOnce(Response.json({ richMenuId: 'richmenu-learner' }));
@@ -323,14 +363,10 @@ describe('per-user group LINE rich menu links', () => {
     const definition = JSON.parse(request.mock.calls[0]?.[1]?.body as string) as {
       areas: Array<{ action: { uri: string } }>;
     };
-    expect(definition.areas[0]?.action.uri).toBe(
-      'https://app.example.com/s/manaberu-style/programs/11111111-1111-4111-8111-111111111111#personal-learning-practice',
-    );
     expect(definition.areas.map((area) => area.action.uri)).toEqual([
-      'https://app.example.com/s/manaberu-style/programs/11111111-1111-4111-8111-111111111111#personal-learning-practice',
-      'https://app.example.com/s/manaberu-style/programs/11111111-1111-4111-8111-111111111111#personal-learning-support',
-      'https://app.example.com/s/manaberu-style/programs/11111111-1111-4111-8111-111111111111#personal-learning-result',
-      'https://app.example.com/s/manaberu-style/programs/11111111-1111-4111-8111-111111111111#personal-learning-plan',
+      'https://app.example.com/s/manaberu-style/home',
+      'https://app.example.com/s/manaberu-style/home?learning=record',
+      'https://app.example.com/s/manaberu-style/help',
     ]);
   });
 

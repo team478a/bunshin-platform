@@ -93,6 +93,7 @@ export function safeLineAuthReturnPath(value: string | null | undefined): string
     // Reject encoded separators, dot segments and other normalization aliases.
     if (value.split('?')[0] !== url.pathname || url.pathname.includes('%')) return null;
     if (url.pathname === '/admin' && url.search === '') return '/admin';
+    if (value === '/s/manaberu-style/home?learning=record') return value;
     const oauth = safeOAuthConsentReturn(value);
     if (oauth) return oauth;
     if (url.pathname === '/account') {

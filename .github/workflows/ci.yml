@@ -115,8 +115,10 @@ jobs:
       - run: pnpm db:generate --ci-reuse
       - run: pnpm db:assert-ready
       - run: pnpm test:integration
-      - name: Install native PostgreSQL client for release tests
-        run: sudo apt-get update && sudo apt-get install -y postgresql-client-16
+      - name: Use the runner's PostgreSQL 16 client for release tests
+        run: |
+          /usr/lib/postgresql/16/bin/psql --version
+          echo "/usr/lib/postgresql/16/bin" >> "$GITHUB_PATH"
       - name: Verify native release transactions and Prisma history on disposable PostgreSQL
         run: pnpm --filter @bunshin/database exec node --test scripts/test-native-release-psql.mjs
       - name: Verify TLS trust and hostname checks with disposable PostgreSQL
