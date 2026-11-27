@@ -22,6 +22,13 @@ function browserSelectionOutputTokens(usage: Record<string, unknown>) {
   return total - input <= 2_147_483_647 ? total - input : null;
 }
 
+function lessonOutputTokens(usage: Record<string, unknown>) {
+  const measured = asToken(usage['candidatesTokenCount']);
+  const thinking = asToken(usage['thoughtsTokenCount']) ?? 0;
+  if (measured === null || measured + thinking > 2_147_483_647) return null;
+  return measured + thinking;
+}
+
 function toGoogleRequest(request: LearningAiRequest) {
   let body: unknown;
   try {
@@ -157,7 +164,9 @@ export class GoogleLearningGenerationAdapter implements LearningAiGenerationPort
       inputTokens: forBrowser && (inputTokens ?? 0) > 2_147_483_647 ? null : inputTokens,
       outputTokens: forBrowser
         ? browserSelectionOutputTokens(usage)
-        : asToken(usage['candidatesTokenCount']),
+        : request.task === 'LESSON'
+          ? lessonOutputTokens(usage)
+          : asToken(usage['candidatesTokenCount']),
       cachedInputTokens:
         inputTokens === null || inputTokens > 2_147_483_647 || cachedInputTokens > inputTokens
           ? null

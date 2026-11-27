@@ -37,13 +37,13 @@ const request: LearningAiRequest = {
 };
 
 describe('Google learning evaluation adapter', () => {
-  it('translates the purpose request from capabilities and records measured output', async () => {
+  it('translates the purpose request from capabilities and records billable output including thinking tokens', async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
       new Response(
         JSON.stringify({
           modelVersion: 'gemini-eval-model',
           candidates: [{ content: { parts: [{ text: '{"status":"READY"}' }] } }],
-          usageMetadata: { promptTokenCount: 24, candidatesTokenCount: 8 },
+          usageMetadata: { promptTokenCount: 24, candidatesTokenCount: 8, thoughtsTokenCount: 4 },
         }),
         { status: 200 },
       ),
@@ -59,7 +59,7 @@ describe('Google learning evaluation adapter', () => {
       provider: 'google',
       model: 'gemini-eval-model',
       inputTokens: 24,
-      outputTokens: 8,
+      outputTokens: 12,
       success: true,
     });
     expect(result.requestFinished).toBe(true);

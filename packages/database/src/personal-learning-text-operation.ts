@@ -60,7 +60,7 @@ interface Context {
   reservedAtAdmission: number;
   measurement: AiCallMeasurement | null;
   requestFinished: boolean | null;
-  costStatus: 'ESTIMATED' | 'UNKNOWN' | null;
+  costStatus: 'ESTIMATED' | 'RESERVED_ESTIMATE' | 'UNKNOWN' | null;
 }
 function context(value: Prisma.JsonValue): Context {
   if (
@@ -72,6 +72,85 @@ function context(value: Prisma.JsonValue): Context {
     throw new ApplicationError('CONFLICT', 'learning operation context unavailable');
   return value as unknown as Context;
 }
+function googleLessonCostEstimate(c: Context): bigint | null {
+  if (
+    c.operationKind !== 'LESSON_GENERATION' ||
+    c.provider !== 'google' ||
+    !Number.isSafeInteger(c.reservedAtAdmission) ||
+    c.reservedAtAdmission <= 0
+  )
+    return null;
+  const [pricing] = parseAiTokenPricingRegistry([c.pricing]);
+  return pricing?.provider === c.provider && pricing.model === c.model
+    ? BigInt(c.reservedAtAdmission)
+    : null;
+}
+
+/** Reconcile only completed local receipts with their original price and budget reservation. */
+async function reconcileGoogleLessonCosts(
+  tx: Prisma.TransactionClient,
+  scope: { workspaceId: string; groupId: string; serviceProgramId: string },
+) {
+  const existing = await tx.personalLearningCallAdmission.findMany({
+    where: {
+      ...scope,
+      settledAt: null,
+      operationContext: { path: ['costStatus'], equals: 'UNKNOWN' },
+    },
+  });
+  for (const row of existing) {
+    const c = context(row.operationContext);
+    const estimate = googleLessonCostEstimate(c);
+    if (estimate === null || !c.measurement || c.measurement.provider !== 'google') continue;
+    const usageKey = `personal-learning-operation:${row.operationHash}`;
+    const providerHash = createHash('sha256').update(usageKey).digest('hex');
+    const calls = await tx.aiProviderCallAdmission.findMany({
+      where: { provider: 'GOOGLE', operationHash: providerHash, reservedCostUsdMicros: estimate },
+      select: { id: true, environment: true },
+    });
+    const [call] = calls;
+    if (!call || calls.length !== 1 || call.environment === 'PRODUCTION') continue;
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`ai-provider-call:${call.environment}:GOOGLE`}, 0))`;
+    const usages = await tx.aiUsageEvent.findMany({
+      where: {
+        workspaceId: scope.workspaceId,
+        idempotencyKey: usageKey,
+        provider: 'google',
+        model: c.model,
+        taskType: 'PERSONAL_LEARNING_LESSON_GENERATION',
+        pricingVersion: row.pricingVersion,
+      },
+      select: { id: true, estimatedCostUsdMicros: true },
+      take: 2,
+    });
+    const [usage] = usages;
+    if (!usage || usages.length !== 1) continue;
+    const charged = usage.estimatedCostUsdMicros ?? estimate;
+    if (usage.estimatedCostUsdMicros === null)
+      await tx.aiUsageEvent.update({
+        where: { id: usage.id },
+        data: { estimatedCostUsdMicros: estimate },
+      });
+    const [clock] = await tx.$queryRaw<{ now: Date }[]>`SELECT clock_timestamp() AS now`;
+    if (!clock) throw new ApplicationError('DATABASE_UNAVAILABLE', 'learning clock unavailable');
+    await tx.aiProviderCallAdmission.updateMany({
+      where: { id: call.id, settledAt: null },
+      data: { settledAt: clock.now },
+    });
+    await tx.personalLearningCallAdmission.update({
+      where: { id: row.id },
+      data: {
+        reservedCostUsdMicros: charged > estimate ? charged : estimate,
+        operationContext: {
+          ...c,
+          costStatus: 'RESERVED_ESTIMATE',
+        } as unknown as Prisma.InputJsonValue,
+        settledAt: clock.now,
+      },
+    });
+  }
+}
+
 /** Internal server port only. Does not publish/apply a lesson or permit learner-supplied prices. */
 export class PrismaPersonalLearningTextOperationRepository
   extends PrismaPracticeSupportRepository
@@ -413,10 +492,13 @@ export class PrismaPersonalLearningTextOperationRepository
           if (
             !prior?.settledAt ||
             c?.bodyHash !== bodyHash(input) ||
+            (c.costStatus === 'RESERVED_ESTIMATE' && c.requestFinished !== true) ||
             c.measurement?.success !== false
           )
             throw new ApplicationError('CONFLICT', 'learning attempt is not retryable');
         }
+        if (input.provider === 'google' && input.operationKind === 'LESSON_GENERATION')
+          await reconcileGoogleLessonCosts(tx, scope);
         // Unpriced/uncertain new-operation calls remain blocking, including across UTC days.
         if (
           await tx.personalLearningCallAdmission.count({
@@ -543,6 +625,8 @@ export class PrismaPersonalLearningTextOperationRepository
           return;
         }
         const cost = estimateAiCallCost(m, [c.pricing]);
+        const fallback = cost.totalCostUsdMicros === null ? googleLessonCostEstimate(c) : null;
+        const costStatus = fallback === null ? cost.costStatus : 'RESERVED_ESTIMATE';
         await tx.aiUsageEvent.create({
           data: {
             workspaceId: row.workspaceId,
@@ -557,7 +641,7 @@ export class PrismaPersonalLearningTextOperationRepository
             outputTokens: m.outputTokens,
             latencyMs: m.latencyMs,
             estimatedCostUsdMicros:
-              cost.totalCostUsdMicros === null ? null : BigInt(cost.totalCostUsdMicros),
+              cost.totalCostUsdMicros === null ? fallback : BigInt(cost.totalCostUsdMicros),
             pricingVersion: c.pricing.pricingVersion,
             errorCode: m.errorCategory,
             idempotencyKey: `personal-learning-operation:${row.operationHash}`,
@@ -571,18 +655,18 @@ export class PrismaPersonalLearningTextOperationRepository
               ...c,
               measurement: { ...m },
               requestFinished: input.requestFinished,
-              costStatus: cost.costStatus,
+              costStatus,
             } as unknown as Prisma.InputJsonValue,
             // Preserve the conservative reservation; actual overspend increases future budget use.
             reservedCostUsdMicros:
               cost.totalCostUsdMicros === null
-                ? null
+                ? fallback
                 : BigInt(
                     op.operationKind === 'NUDGE_COPY'
                       ? cost.totalCostUsdMicros
                       : Math.max(c.reservedAtAdmission, cost.totalCostUsdMicros),
                   ),
-            ...(input.requestFinished && cost.costStatus === 'ESTIMATED'
+            ...(fallback !== null || (input.requestFinished && cost.costStatus === 'ESTIMATED')
               ? { settledAt: new Date() }
               : {}),
           },
