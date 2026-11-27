@@ -236,7 +236,7 @@ export class PrismaPersonalLearningPracticeRepository
       candidate: { ...candidate, confirmedAt: saved.confirmedAt },
       environment: {
         deviceType: environment.deviceType as PersonalLearningPractice['environment']['deviceType'],
-        toolDescription: environment.toolDescription as string | null,
+        toolDescription: environment.toolDescription,
         experienceDescription: environment.experienceDescription as string | null,
         currentPosition: environment.currentPosition as string | null,
       },
