@@ -57,3 +57,69 @@
 .referral-management button:disabled {
   opacity: 0.55;
 }
+
+.referral-landings {
+  margin-block-end: 1.5rem;
+}
+
+.referral-landings fieldset {
+  display: grid;
+  gap: 1rem;
+  min-inline-size: 0;
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.referral-landings__grid,
+.referral-landings__fields {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.referral-landings__grid > div {
+  display: flex;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.referral-landings__grid > div > label {
+  flex: 1 1 10rem;
+}
+
+.referral-landings label {
+  display: grid;
+  gap: 0.375rem;
+  min-width: 0;
+}
+
+.referral-landings input,
+.referral-landings select,
+.referral-landings textarea {
+  width: 100%;
+  min-width: 0;
+  min-height: 2.75rem;
+  box-sizing: border-box;
+  border: 1px solid #a5afbc;
+  border-radius: 0.5rem;
+  padding: 0.5rem;
+  background: #fff;
+  color: #182235;
+  font: inherit;
+}
+
+.referral-landings button {
+  justify-self: start;
+}
+
+.referral-landings details {
+  margin-block-start: 1rem;
+}
+
+@media (min-width: 640px) {
+  .referral-landings__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
