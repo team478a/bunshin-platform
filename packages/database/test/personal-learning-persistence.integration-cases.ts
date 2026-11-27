@@ -2418,6 +2418,128 @@ export function registerPersonalLearningPersistenceIntegrationCases(client: Pris
         }),
       ).rejects.toThrow();
     });
+    it('text operation: charges a Gemini lesson reservation when usage is missing and reconciles the old format', async () => {
+      const f = await textOperationFixture();
+      const provider = 'google';
+      const model = 'gemini-3.1-flash-lite';
+      const operation = {
+        ...f.input,
+        provider,
+        policy: { ...f.input.policy, model },
+        pricingRegistry: [
+          {
+            ...f.input.pricingRegistry[0]!,
+            provider,
+            model,
+            inputPriceMicrosPerMillion: 250_000,
+            outputPriceMicrosPerMillion: 1_500_000,
+            cachedInputPriceMicrosPerMillion: 25_000,
+          },
+        ],
+      };
+      const permit = await f.repo.admit(operation);
+      const usageKey = `personal-learning-operation:${permit.operationHash}`;
+      const measurement: AiCallMeasurement = {
+        ...f.measurement,
+        occurredAt: new Date().toISOString(),
+        provider,
+        model,
+        success: false,
+        validationResult: 'NOT_RUN',
+        errorCategory: 'TIMEOUT',
+        inputTokens: null,
+        outputTokens: null,
+        cachedInputTokens: null,
+      };
+      const receipt = { operation, permit, measurement, requestFinished: false };
+      await f.repo.record(receipt);
+      await f.repo.record(receipt);
+      const row = await client.personalLearningCallAdmission.findUniqueOrThrow({
+        where: { id: permit.id },
+      });
+      expect(row.settledAt).toBeInstanceOf(Date);
+      expect(row.reservedCostUsdMicros).toBe(400n);
+      expect(row.operationContext).toMatchObject({
+        requestFinished: false,
+        costStatus: 'RESERVED_ESTIMATE',
+      });
+      const usage = await client.aiUsageEvent.findFirstOrThrow({
+        where: { idempotencyKey: usageKey },
+      });
+      expect(usage).toMatchObject({
+        status: 'FAILED',
+        estimatedCostUsdMicros: 400n,
+        inputTokens: null,
+      });
+      await expect(f.repo.admit({ ...operation, attempt: 2 })).rejects.toMatchObject({
+        code: 'CONFLICT',
+      });
+      expect(await client.aiUsageEvent.count({ where: { idempotencyKey: usageKey } })).toBe(1);
+
+      const config = await client.aiProviderConfiguration.create({
+        data: {
+          provider: 'GOOGLE',
+          environment: 'STAGING',
+          model,
+          version: 999,
+          dailyBudgetUsdMicros: 10_000,
+          monthlyBudgetUsdMicros: 10_000,
+        },
+      });
+      try {
+        const runtime = await client.aiProviderCallAdmission.create({
+          data: {
+            provider: 'GOOGLE',
+            environment: 'STAGING',
+            configurationId: config.id,
+            operationHash: createHash('sha256').update(usageKey).digest('hex'),
+            reservedCostUsdMicros: 400n,
+          },
+        });
+        await client.aiUsageEvent.update({
+          where: { id: usage.id },
+          data: { estimatedCostUsdMicros: null },
+        });
+        await client.personalLearningCallAdmission.update({
+          where: { id: permit.id },
+          data: {
+            settledAt: null,
+            reservedCostUsdMicros: null,
+            operationContext: {
+              ...(row.operationContext as Prisma.JsonObject),
+              costStatus: 'UNKNOWN',
+            },
+          },
+        });
+
+        const next = { ...operation, operationId: randomUUID() };
+        await expect(
+          f.repo.admit({
+            ...next,
+            policy: { ...next.policy, dailyCostLimitUsdMicros: 799 },
+          }),
+        ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+        await f.repo.admit({ ...next, policy: { ...next.policy, dailyCostLimitUsdMicros: 800 } });
+        expect(
+          await client.aiUsageEvent.findUniqueOrThrow({ where: { id: usage.id } }),
+        ).toMatchObject({ status: 'FAILED', estimatedCostUsdMicros: 400n });
+        const reconciled = await client.personalLearningCallAdmission.findUniqueOrThrow({
+          where: { id: permit.id },
+        });
+        expect(reconciled).toMatchObject({
+          reservedCostUsdMicros: 400n,
+          operationContext: { costStatus: 'RESERVED_ESTIMATE' },
+        });
+        expect(reconciled.settledAt).toBeInstanceOf(Date);
+        expect(
+          (await client.aiProviderCallAdmission.findUniqueOrThrow({ where: { id: runtime.id } }))
+            .settledAt,
+        ).toBeInstanceOf(Date);
+      } finally {
+        await client.aiProviderCallAdmission.deleteMany({ where: { configurationId: config.id } });
+        await client.aiProviderConfiguration.delete({ where: { id: config.id } });
+      }
+    });
     it('text operation: costs settle after personal data deletion without restoring learner content', async () => {
       const f = await textOperationFixture();
       const permit = await f.repo.admit(f.input);
