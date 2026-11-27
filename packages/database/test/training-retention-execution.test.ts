@@ -60,6 +60,7 @@ function fixture() {
       ...table(),
       findMany: vi.fn().mockResolvedValue([{ id: 'assignment', updatedAt: now }]),
     },
+    instructorReview: table(),
     programProgressSnapshot: table(),
     programMemberGoal: table(),
     programMemberPreference: table(),
