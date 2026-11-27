@@ -4,6 +4,7 @@ import { ApplicationError, toApiError } from '@bunshin/shared';
 import { currentUserProvider } from '../auth/current-user';
 import { requireSameOrigin } from '../auth/request-security';
 import { resolvePersonalLearningRequestActor } from '../services/personal-learning-request-access';
+import { MANABERU_SERVICE_SLUG } from '../services/service-auth-brand';
 import { boundedLearningJson } from './personal-learning-request';
 import { enqueueAiTrainingEvaluation } from '../services/ai-training-evaluation-queue';
 import { prepareLearningLesson } from '../services/personal-learning-lesson-candidate';
@@ -24,7 +25,7 @@ const body = z.discriminatedUnion('action', [
       assignmentId: z.string().uuid(),
       operationId: z.string().uuid(),
       expectedRevision: z.number().int().min(0).max(999),
-      text: z.string().trim().min(1).max(500),
+      text: z.string().trim().min(1).max(10_000),
     })
     .strict(),
   z
@@ -82,14 +83,23 @@ export async function learningPracticeResponse(
     const repo = new db.PrismaPersonalLearningPracticeRepository(db.prisma);
     if (request.method === 'GET')
       return Response.json({ data: await repo.readPractice(actor) }, { headers });
-    const input = body.parse(await boundedLearningJson(request));
+    const simpleStart = slug === MANABERU_SERVICE_SLUG;
+    const input = body.parse(await boundedLearningJson(request, simpleStart ? 64_000 : undefined));
+    if (input.action === 'NOTE' && !simpleStart && input.text.length > 500)
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid practice note');
     if (input.action === 'NEXT_PROPOSAL') {
       const nextRequest = await repo.createNextPracticeRequest({
         actor,
         assignmentId: input.assignmentId,
         operationId: input.operationId,
       });
-      await prepareLearningLesson(actor, nextRequest.id, nextRequest.revision, input.operationId);
+      await prepareLearningLesson(
+        actor,
+        nextRequest.id,
+        nextRequest.revision,
+        input.operationId,
+        ...(simpleStart ? ([true] as const) : []),
+      );
       return Response.json({ data: await repo.readPractice(actor) }, { headers });
     }
     if (input.action === 'NEXT_CONFIRM') {

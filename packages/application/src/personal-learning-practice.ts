@@ -155,7 +155,7 @@ export function validatePersonalLearningPracticeNote(text: string, revision: num
     typeof text !== 'string' ||
     !text.trim() ||
     text !== text.trim() ||
-    text.length > 500 ||
+    text.length > 10_000 ||
     !Number.isSafeInteger(revision) ||
     revision < 0 ||
     revision >= 1000

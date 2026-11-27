@@ -177,8 +177,9 @@ describe('lesson generation composition', () => {
     expect(f.settle.mock.invocationCallOrder[0]).toBeLessThan(f.save.mock.invocationCallOrder[0]!);
   });
   it('reuses a saved candidate without resolving or calling AI', async () => {
-    f.prior.mockResolvedValue({ id: 'saved' });
-    expect(await prepareLearningLesson(actor, id, 1, id)).toEqual({ id: 'saved' });
+    const saved = { id: 'saved', requestId: id, requestRevision: 1 };
+    f.prior.mockResolvedValue(saved);
+    expect(await prepareLearningLesson(actor, id, 1, id)).toEqual(saved);
     expect(f.generate).not.toHaveBeenCalled();
     expect(f.resolve).not.toHaveBeenCalled();
   });

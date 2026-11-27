@@ -3,6 +3,8 @@ import type { PersonalLearningActor } from './personal-learning-persistence';
 import type { SavedPersonalLearningRequest } from './personal-learning-request';
 
 export const LEARNING_CANDIDATE_POLICY = 'LEARNER_PRACTICE_TOOL_INDEPENDENT_V1';
+export const MANABERU_SIMPLE_LESSON_PROMPT_SUFFIX = '-simple-start-v1';
+
 export interface LearningLessonProposal {
   status: 'READY' | 'NEEDS_CONTEXT' | 'OUT_OF_SCOPE';
   reason: string;
