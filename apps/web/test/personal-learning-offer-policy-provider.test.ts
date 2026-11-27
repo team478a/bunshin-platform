@@ -16,7 +16,7 @@ const currentConsentText = [
 ].join('\n');
 
 describe('AI_SKILL_V1 offer policy compatibility', () => {
-  it('keeps every existing prompt version and extracted instruction exact', () => {
+  it('uses the recorded policy versions and keeps the base instructions', () => {
     const policy = personalLearningOfferPromptPolicy('AI_SKILL_V1');
     expect(policy.proposal.standard.version).toBe(
       'learning-lesson-tool-independent-v4-approved-tool-updates',
@@ -32,7 +32,7 @@ describe('AI_SKILL_V1 offer policy compatibility', () => {
       standard: 'learning-practice-support-vision-v2',
       extended: 'learning-practice-support-vision-v3',
     });
-    expect(policy.evidenceReviewVersion).toBe('learning-evidence-review-v1');
+    expect(policy.evidenceReviewVersion).toBe('learning-evidence-review-v2');
     expect(policy.nudgeVersion).toBe('manaberu-learning-nudge-v1');
     expect(policy.personaInferenceVersion).toBe('manaberu-persona-inference-v1');
     expect(policy.lessonPersonaScope).toBe('personaContextは本人の研修内に限った補助情報です。');

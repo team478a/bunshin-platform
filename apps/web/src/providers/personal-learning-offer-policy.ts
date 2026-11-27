@@ -88,7 +88,7 @@ export function personalLearningOfferPromptPolicy(
     case 'AI_SKILL_V1':
       return {
         ...AI_SKILL_V1_POLICY,
-        evidenceReviewVersion: 'learning-evidence-review-v1',
+        evidenceReviewVersion: 'learning-evidence-review-v2',
         nudgeVersion: 'manaberu-learning-nudge-v1',
         personaInferenceVersion: 'manaberu-persona-inference-v1',
       } as const;

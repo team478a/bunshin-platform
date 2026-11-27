@@ -390,6 +390,9 @@ export function LearningPracticeCard({
                   <p>元の希望：{current.nextCandidate.originalText}</p>
                   <h4>次の到達点（提案）</h4>
                   <p>{current.nextCandidate.proposal.outcome}</p>
+                  {simpleStart && (
+                    <p>この練習を提案した理由：{current.nextCandidate.proposal.reason}</p>
+                  )}
                   <p>{current.nextCandidate.proposal.explanation}</p>
                   <ol>
                     {current.nextCandidate.proposal.practice.map((step, index) => (
