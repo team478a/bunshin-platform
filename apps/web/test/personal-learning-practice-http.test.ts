@@ -7,6 +7,7 @@ const f = vi.hoisted(() => ({
   read: vi.fn(),
   start: vi.fn(),
   note: vi.fn(),
+  feedback: vi.fn(),
   submit: vi.fn(),
   enqueue: vi.fn(),
   createNext: vi.fn(),
@@ -26,6 +27,7 @@ vi.mock('@bunshin/database', () => ({
     readPractice = f.read;
     startPractice = f.start;
     recordPracticeNote = f.note;
+    recordPracticeFeedback = f.feedback;
     createNextPracticeRequest = f.createNext;
   },
   PrismaLearningCandidateRepository: class {
@@ -77,6 +79,7 @@ describe('dynamic practice HTTP', () => {
     f.read.mockResolvedValue({ allowed: true, current: null });
     f.start.mockResolvedValue({ assignmentId: id });
     f.note.mockResolvedValue({ assignmentId: id });
+    f.feedback.mockResolvedValue({ allowed: true, current: { assignmentId: id } });
     f.submit.mockResolvedValue({ outcome: 'SUBMITTED', answer: { id }, eventId: id });
     f.enqueue.mockResolvedValue(undefined);
     f.createNext.mockResolvedValue({ id, revision: 2 });
@@ -133,6 +136,32 @@ describe('dynamic practice HTTP', () => {
       expect.objectContaining({ text, expectedRevision: 0, draft: true }),
     );
     expect(f.enqueue).not.toHaveBeenCalled();
+  });
+
+  it('records only supported feedback categories in Manaberu without starting AI work', async () => {
+    const feedback = { action: 'FEEDBACK', assignmentId: id, category: 'USE_SPREADSHEET' };
+    expect((await learningPracticeResponse(post(feedback), 's', 'e')).status).toBe(404);
+    expect(
+      (
+        await learningPracticeResponse(
+          post({ ...feedback, category: 'UNKNOWN' }),
+          'manaberu-style',
+          'e',
+        )
+      ).status,
+    ).toBe(400);
+    const response = await learningPracticeResponse(post(feedback), 'manaberu-style', 'e');
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      data: { allowed: true, current: { assignmentId: id } },
+    });
+    expect(f.feedback).toHaveBeenCalledExactlyOnceWith({
+      actor: { actorUserId: 'user', scope: {} },
+      assignmentId: id,
+      category: 'USE_SPREADSHEET',
+    });
+    expect(f.enqueue).not.toHaveBeenCalled();
+    expect(f.prepareLesson).not.toHaveBeenCalled();
   });
 
   it('generates a next-step proposal from a verified result through the existing lesson operation', async () => {

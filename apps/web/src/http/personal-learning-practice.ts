@@ -1,6 +1,7 @@
 import 'server-only';
 import { z } from 'zod';
 import { ApplicationError, toApiError } from '@bunshin/shared';
+import { PRACTICE_FEEDBACK_CATEGORIES } from '@bunshin/application';
 import { currentUserProvider } from '../auth/current-user';
 import { requireSameOrigin } from '../auth/request-security';
 import { resolvePersonalLearningRequestActor } from '../services/personal-learning-request-access';
@@ -10,6 +11,13 @@ import { enqueueAiTrainingEvaluation } from '../services/ai-training-evaluation-
 import { prepareLearningLesson } from '../services/personal-learning-lesson-candidate';
 
 const body = z.discriminatedUnion('action', [
+  z
+    .object({
+      action: z.literal('FEEDBACK'),
+      assignmentId: z.uuid(),
+      category: z.enum(PRACTICE_FEEDBACK_CATEGORIES),
+    })
+    .strict(),
   z
     .object({
       action: z.literal('START'),
@@ -85,6 +93,19 @@ export async function learningPracticeResponse(
       return Response.json({ data: await repo.readPractice(actor) }, { headers });
     const simpleStart = slug === MANABERU_SERVICE_SLUG;
     const input = body.parse(await boundedLearningJson(request, simpleStart ? 64_000 : undefined));
+    if (input.action === 'FEEDBACK') {
+      if (!simpleStart) throw new ApplicationError('NOT_FOUND', 'practice feedback unavailable');
+      return Response.json(
+        {
+          data: await repo.recordPracticeFeedback({
+            actor,
+            assignmentId: input.assignmentId,
+            category: input.category,
+          }),
+        },
+        { headers },
+      );
+    }
     if (
       (input.action === 'DRAFT' && !simpleStart) ||
       (input.action === 'NOTE' && input.text.length > 500)

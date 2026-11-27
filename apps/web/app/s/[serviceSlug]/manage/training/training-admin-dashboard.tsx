@@ -1,4 +1,5 @@
 import type { Route } from 'next';
+import { practiceFeedbackLabel, type PracticeFeedbackCategory } from '@bunshin/application';
 import Link from 'next/link';
 import { parseAiTrainingOperationsSettings } from '@bunshin/capability-training';
 import type { buildAiTrainingAdminDashboard } from '../../../../../src/services/ai-training-admin-dashboard';
@@ -48,6 +49,8 @@ type TrainingAdminDashboardProps = {
   analytics: ReturnType<typeof buildAiTrainingPilotAnalytics>;
   evaluationOperations: ReturnType<typeof buildAiTrainingEvaluationOperations>;
   helpRequests: Array<{ id: string; participantName: string; occurredAt: Date }>;
+  practiceFeedbackSummary?:
+    Array<{ category: PracticeFeedbackCategory; learnerCount: number }> | undefined;
   updateTrainingOperations: (formData: FormData) => Promise<void>;
   resolveTrainingHelp: (formData: FormData) => Promise<void>;
   individualReviewOffers?:
@@ -68,6 +71,7 @@ export function TrainingAdminDashboard({
   analytics,
   evaluationOperations,
   helpRequests,
+  practiceFeedbackSummary,
   updateTrainingOperations,
   resolveTrainingHelp,
   individualReviewOffers,
@@ -398,6 +402,25 @@ export function TrainingAdminDashboard({
               </div>
             </section>
 
+            {practiceFeedbackSummary && (
+              <section className="settings-card">
+                <h2>受講者が練習で困ったこと・使いたい資料</h2>
+                <p>
+                  過去30日間に要望を記録した人数です。同じ人が繰り返し選んだ項目も1人として数えます。
+                </p>
+                {practiceFeedbackSummary.length ? (
+                  <ul>
+                    {practiceFeedbackSummary.map(({ category, learnerCount }) => (
+                      <li key={category}>
+                        {practiceFeedbackLabel[category]} · {learnerCount}人
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p>この期間に記録された要望はありません。</p>
+                )}
+              </section>
+            )}
             <section className="settings-card">
               <h2>受講者ごとの状況</h2>
               <p>回答本文は表示せず、進捗とAI評価で見つかった苦手だけを表示しています。</p>

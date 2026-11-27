@@ -1,4 +1,10 @@
-import { PERSONAL_LEARNING_PRACTICE_MISSION } from '@bunshin/application';
+import {
+  PERSONAL_LEARNING_PRACTICE_MISSION,
+  PERSONAL_LEARNING_PRACTICE_FEEDBACK,
+  PRACTICE_FEEDBACK_CATEGORIES,
+  isPracticeFeedbackCategory,
+  type PracticeFeedbackCategory,
+} from '@bunshin/application';
 import { notFound, redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
@@ -489,6 +495,29 @@ export default async function AiTrainingAdminPage({
           },
           orderBy: { occurredAt: 'desc' },
         });
+  const feedbackByCategory = new Map<PracticeFeedbackCategory, Set<string>>();
+  if (serviceSlug === MANABERU_SERVICE_SLUG && enrollmentIds.length > 0) {
+    const events = await db.prisma.programActionEvent.findMany({
+      where: {
+        workspaceId: service.workspaceId,
+        groupId: service.serviceId,
+        programEnrollmentId: { in: enrollmentIds },
+        eventType: PERSONAL_LEARNING_PRACTICE_FEEDBACK,
+        occurredAt: { gte: new Date(checkedAt.getTime() - 30 * 86_400_000) },
+      },
+      select: { actorUserId: true, metadata: true },
+    });
+    for (const { actorUserId, metadata } of events) {
+      const category =
+        metadata && typeof metadata === 'object' && !Array.isArray(metadata)
+          ? metadata.category
+          : null;
+      if (!actorUserId || !isPracticeFeedbackCategory(category)) continue;
+      const learners = feedbackByCategory.get(category) ?? new Set<string>();
+      learners.add(actorUserId);
+      feedbackByCategory.set(category, learners);
+    }
+  }
   const resolvedHelpIds = new Set(
     helpEvents.flatMap((event) =>
       event.eventType === AI_TRAINING_HELP_RESOLVED_EVENT &&
@@ -517,6 +546,14 @@ export default async function AiTrainingAdminPage({
 
   return (
     <TrainingAdminDashboard
+      practiceFeedbackSummary={
+        serviceSlug === MANABERU_SERVICE_SLUG
+          ? PRACTICE_FEEDBACK_CATEGORIES.flatMap((category) => {
+              const learnerCount = feedbackByCategory.get(category)?.size ?? 0;
+              return learnerCount ? [{ category, learnerCount }] : [];
+            })
+          : undefined
+      }
       individualReviewOffers={
         serviceSlug === MANABERU_SERVICE_SLUG
           ? {
