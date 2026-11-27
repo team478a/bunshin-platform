@@ -126,6 +126,7 @@ export function WeeklyActivitySection({
   isDynamicLearning,
   isPersonalLearningReady,
   personalLearningPathHref,
+  hasCurrentPractice,
   serviceSlug,
 }: {
   activities: ServiceActivity[];
@@ -135,6 +136,7 @@ export function WeeklyActivitySection({
   isDynamicLearning: boolean;
   isPersonalLearningReady: boolean;
   personalLearningPathHref: Route | null;
+  hasCurrentPractice?: boolean | undefined;
   serviceSlug: string;
 }) {
   return (
@@ -154,7 +156,11 @@ export function WeeklyActivitySection({
             <p>前回の続きや、取り組み中の実践を開けます。</p>
             {personalLearningPathHref ? (
               <Link className="button button--primary button--full" href={personalLearningPathHref}>
-                今日の学習を続ける
+                {hasCurrentPractice === undefined
+                  ? '今日の学習を続ける'
+                  : hasCurrentPractice
+                    ? '前回の続きから'
+                    : '学習を始める'}
               </Link>
             ) : (
               <Link

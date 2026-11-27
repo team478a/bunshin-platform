@@ -112,6 +112,29 @@ describe('dynamic practice HTTP', () => {
     );
     expect(f.start).not.toHaveBeenCalled();
   });
+  it('saves submission-sized drafts only in Manaberu without enqueuing evaluation', async () => {
+    const text = 'あ'.repeat(10_000);
+    expect(
+      (await learningPracticeResponse(post({ ...note, action: 'DRAFT', text }), 's', 'e')).status,
+    ).toBe(400);
+    expect(
+      (await learningPracticeResponse(post({ ...note, text }), 'manaberu-style', 'e')).status,
+    ).toBe(400);
+    expect(
+      (
+        await learningPracticeResponse(
+          post({ ...note, action: 'DRAFT', text }),
+          'manaberu-style',
+          'e',
+        )
+      ).status,
+    ).toBe(200);
+    expect(f.note).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ text, expectedRevision: 0, draft: true }),
+    );
+    expect(f.enqueue).not.toHaveBeenCalled();
+  });
+
   it('generates a next-step proposal from a verified result through the existing lesson operation', async () => {
     const operationId = '22222222-2222-4222-8222-222222222222';
     expect(

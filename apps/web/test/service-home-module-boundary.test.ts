@@ -210,14 +210,15 @@ describe('service home module boundary', () => {
     expect(consent.navigation.match(/class="button button--primary/g) ?? []).toHaveLength(0);
     expect(learning.overview).toContain('今日の学習を続ける');
     expect(learning.navigation).toContain('受講の状況を見る');
-    expect(learning.navigation).toContain('学習の記録');
+    expect(learning.navigation).toContain('実践を記録');
+    expect(learning.navigation).toContain('/s/manaberu-style/home?learning=record');
     expect(learning.markup.match(/class="button button--primary/g) ?? []).toHaveLength(1);
   });
 
-  it('classifies only non-archived AI training programs as the current service module', () => {
+  it('keeps Manaberu learning navigation before setup and ignores archived programs', () => {
     expect(pageSource).toContain("status: { not: 'ARCHIVED' }");
     expect(pageSource).toContain(
-      'const isPersonalLearningService = personalLearningPrograms.length > 0',
+      'serviceSlug === MANABERU_SERVICE_SLUG || personalLearningPrograms.length > 0',
     );
     expect(pageSource).toContain("program.status === 'ACTIVE'");
   });

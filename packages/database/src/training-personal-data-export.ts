@@ -418,9 +418,33 @@ export class PrismaTrainingPersonalDataExportRepository implements TrainingPerso
           orderBy: [{ occurredAt: 'asc' }, { id: 'asc' }],
           take,
         });
+        const instructorReviews = await tx.instructorReview.findMany({
+          where: {
+            workspaceId: input.workspaceId,
+            groupId: input.groupId,
+            enrollmentId: input.programEnrollmentId,
+            buyerUserId: input.actorUserId,
+            contentRedactedAt: null,
+          },
+          select: {
+            assignmentId: true,
+            title: true,
+            planRevision: true,
+            focus: true,
+            excerpt: true,
+            answer: true,
+            status: true,
+            amountYen: true,
+            createdAt: true,
+            answeredAt: true,
+          },
+          take,
+          orderBy: { createdAt: 'asc' },
+        });
         if (
           [
             assignments,
+            instructorReviews,
             answers,
             toolkit,
             activities,
@@ -442,6 +466,17 @@ export class PrismaTrainingPersonalDataExportRepository implements TrainingPerso
         return {
           outcome: 'FOUND',
           data: {
+            ...(instructorReviews.length
+              ? {
+                  instructorReviews: instructorReviews.map(
+                    ({ createdAt, answeredAt, ...review }) => ({
+                      ...review,
+                      createdAt: createdAt.toISOString(),
+                      answeredAt: iso(answeredAt),
+                    }),
+                  ),
+                }
+              : {}),
             ...(learningGoals.length +
               learningPlans.length +
               pilotSeats.length +

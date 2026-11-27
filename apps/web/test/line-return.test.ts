@@ -19,6 +19,31 @@ describe('LINE authentication return path', () => {
     expect(serviceAuthLoginPath('/s//evil.example/manage/points')).toBe('/login');
   });
   const id = '11111111-1111-4111-8111-111111111111';
+  it('preserves an owned instructor review destination across service login', () => {
+    const learning = `/s/manaberu-style/programs/${id}/learning-request`;
+    const review = `${learning}/instructor-review`;
+    const target = `${review}?topicId=${id}&reviewId=${id}&result=payment-return`;
+    expect(safeLineAuthReturnPath(target)).toBe(target);
+    expect(serviceAuthLoginPath(target)).toBe(
+      `/s/manaberu-style/login?returnTo=${encodeURIComponent(target)}`,
+    );
+    expect(safeLineAuthReturnPath(`${learning}?topicId=${id}`)).toBe(`${learning}?topicId=${id}`);
+    expect(safeLineAuthReturnPath(`${review}?reviewId=${id}&reviewId=${id}`)).toBeNull();
+    expect(safeLineAuthReturnPath(`${review}?reviewId=//other.example`)).toBeNull();
+    expect(safeLineAuthReturnPath(`${review}?result=paid`)).toBeNull();
+    expect(safeLineAuthReturnPath(review.replace('manaberu-style', 'other-service'))).toBeNull();
+  });
+
+  it('preserves only plain paths for the authorized review queues', () => {
+    for (const path of [
+      '/s/manaberu-style/instructor-reviews',
+      '/s/manaberu-style/manage/training/instructor-reviews',
+    ]) {
+      expect(safeLineAuthReturnPath(path)).toBe(path);
+      expect(safeLineAuthReturnPath(`${path}?redirect=/admin`)).toBeNull();
+    }
+  });
+
   it('preserves the weekly Fortune entry across authentication', () => {
     const path = '/s/fortune/today/from-line';
     expect(safeLineAuthReturnPath(path)).toBe(path);

@@ -242,6 +242,22 @@ export class PrismaTrainingPersonalDataDeletionRepository implements TrainingPer
               where: { ...personal, groupMembershipId: owned.membershipId },
             });
             await tx.programProgressSnapshot.deleteMany({ where: scope });
+            await tx.instructorReview.updateMany({
+              where: {
+                workspaceId: input.workspaceId,
+                groupId: input.groupId,
+                enrollmentId: input.programEnrollmentId,
+                buyerUserId: input.actorUserId,
+                contentRedactedAt: null,
+              },
+              data: {
+                title: '削除済みの課題',
+                focus: '',
+                excerpt: '',
+                answer: null,
+                contentRedactedAt: new Date(),
+              },
+            });
             await tx.programMissionAssignment.deleteMany({ where: scope });
             await tx.programMemberGoal.deleteMany({
               where: { ...scope, groupMembershipId: owned.membershipId },

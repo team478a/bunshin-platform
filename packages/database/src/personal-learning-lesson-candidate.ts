@@ -3,6 +3,7 @@ import type { Prisma } from '@prisma/client';
 import { ApplicationError } from '@bunshin/shared';
 import {
   LEARNING_CANDIDATE_POLICY,
+  MANABERU_SIMPLE_LESSON_PROMPT_SUFFIX,
   validateLearningLessonProposal,
   type LearningCandidateRepository,
   type SavedLearningLessonCandidate,
@@ -85,7 +86,11 @@ export class PrismaLearningCandidateRepository
       if (!usage || usage.promptVersion !== input.promptVersion)
         throw new ApplicationError('CONFLICT', 'durable generation cost required');
       // Unknown prerequisites must not become inferred capability or runnable instructions.
-      if (proposal.status === 'READY' && (!row.deviceType || !row.toolDescription))
+      if (
+        proposal.status === 'READY' &&
+        (!row.deviceType || !row.toolDescription) &&
+        !input.promptVersion.endsWith(MANABERU_SIMPLE_LESSON_PROMPT_SUFFIX)
+      )
         throw new ApplicationError('VALIDATION_ERROR', 'learning environment required');
       const candidate: SavedLearningLessonCandidate = {
         id: randomUUID(),

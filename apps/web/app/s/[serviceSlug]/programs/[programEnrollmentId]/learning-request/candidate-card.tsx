@@ -12,15 +12,22 @@ export function LearningCandidateCard({
   onConfirmed,
   plainLanguage = false,
   onChange,
+  onStart,
+  pendingStart = false,
+  onAnswer,
 }: {
   endpoint: string;
   request: SavedPersonalLearningRequest;
   initial: SavedLearningLessonCandidate | null;
   onConfirmed?: (value: SavedLearningLessonCandidate) => void;
   plainLanguage?: boolean;
+  onStart?: (value: SavedLearningLessonCandidate) => Promise<void>;
+  pendingStart?: boolean;
+  onAnswer?: (answer: string) => Promise<void>;
   onChange?: (value: SavedLearningLessonCandidate) => void;
 }) {
   const [candidate, setCandidate] = useState(initial);
+  const [answer, setAnswer] = useState('');
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState('');
   const [operationId] = useState(() => crypto.randomUUID());
@@ -124,7 +131,15 @@ export function LearningCandidateCard({
                   ? 'この練習の内容を確認してください。ここで目標全体の達成や受講終了が決まることはありません。'
                   : `教材版 ${candidate.materialVersion}。この確認だけで学習目標全体の達成や受講終了にはしません。`}
               </p>
-              {candidate.confirmedAt ? (
+              {onStart ? (
+                <button
+                  type="button"
+                  disabled={pendingStart}
+                  onClick={() => void onStart(candidate)}
+                >
+                  この練習を始める
+                </button>
+              ) : candidate.confirmedAt ? (
                 <p>
                   {onConfirmed
                     ? '確認済みの候補です。現在の実践を確認してください。'
@@ -138,16 +153,41 @@ export function LearningCandidateCard({
             </>
           ) : (
             <>
-              <p>
-                {candidate.proposal.status === 'NEEDS_CONTEXT'
-                  ? '開始に必要な条件だけ確認します。下の相談欄から回答すると、元の希望を保ったまま教材候補を作り直します。'
-                  : '現在の提供範囲外です。本人が学ぶ希望として見直す場合は上の希望を更新してください。'}
-              </p>
-              <ul>
-                {candidate.proposal.questions.map((x, i) => (
-                  <li key={i}>{x}</li>
-                ))}
-              </ul>
+              {candidate.proposal.status === 'NEEDS_CONTEXT' && onAnswer ? (
+                <form
+                  className="settings-form"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    if (answer.trim()) void onAnswer(answer.trim());
+                  }}
+                >
+                  <label>
+                    {candidate.proposal.questions[0]}
+                    <textarea
+                      required
+                      maxLength={250}
+                      value={answer}
+                      onChange={(event) => setAnswer(event.target.value)}
+                    />
+                  </label>
+                  <button type="submit" disabled={pendingStart || !answer.trim()}>
+                    回答して練習を見る
+                  </button>
+                </form>
+              ) : (
+                <>
+                  <p>
+                    {candidate.proposal.status === 'NEEDS_CONTEXT'
+                      ? '開始に必要な条件だけ確認します。下の相談欄から回答すると、元の希望を保ったまま教材候補を作り直します。'
+                      : '現在の提供範囲外です。本人が学ぶ希望として見直す場合は上の希望を更新してください。'}
+                  </p>
+                  <ul>
+                    {candidate.proposal.questions.map((x, i) => (
+                      <li key={i}>{x}</li>
+                    ))}
+                  </ul>
+                </>
+              )}
             </>
           )}
         </>

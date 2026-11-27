@@ -24,6 +24,13 @@ describe('practice self-report note', () => {
   });
 });
 
+describe('practice draft', () => {
+  it('accepts a submission-sized draft while keeping the short-report default', () => {
+    expect(() => validatePersonalLearningPracticeNote('あ'.repeat(10_000), 0, true)).not.toThrow();
+    expect(() => validatePersonalLearningPracticeNote('あ'.repeat(10_001), 0, true)).toThrow();
+  });
+});
+
 describe('personal learning evidence', () => {
   it('keeps submitted text distinct from a self-report and versions each attempt', () => {
     expect(() =>

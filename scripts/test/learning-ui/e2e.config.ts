@@ -13,6 +13,7 @@ export default {
     'lesson-candidate.e2e.ts',
     'practice.e2e.ts',
     'practice-support.e2e.ts',
+    'instructor-review.e2e.ts',
     'member-growth.e2e.ts',
     'referral-management.e2e.ts',
     'activity-support.e2e.ts',

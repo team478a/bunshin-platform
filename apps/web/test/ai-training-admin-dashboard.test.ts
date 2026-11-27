@@ -54,6 +54,20 @@ function participant(
 }
 
 describe('AI training admin dashboard', () => {
+  it('uses dynamic practice activity for the current learner even before a legacy profile is set', () => {
+    const activity = { aiConsultations: 2, submissions: 1, lastActivityAt: now };
+    const result = buildAiTrainingAdminDashboard(
+      [participant({ profile: null, progress: null, dynamicPractice: activity })],
+      now,
+    );
+    expect(result.participants[0]).toMatchObject({
+      engagement: 'ACTIVE',
+      lastActivityAt: now,
+      dynamicPractice: activity,
+    });
+    expect(result.totals).toMatchObject({ continuedWithinSevenDays: 1, needsSupport: 0 });
+  });
+
   it('excludes past expiry, future start, unknown start and invitation from active/support/continuation while keeping history', () => {
     const rows = [
       participant(),

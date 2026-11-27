@@ -4,7 +4,11 @@ import {
   ServiceParticipationService,
   businessGrowthProgramStatus,
 } from '@bunshin/application';
-import { AI_TRAINING_V1_MODULE_KEY, personalLearningMode } from '@bunshin/capability-training';
+import {
+  AI_TRAINING_V1_MODULE_KEY,
+  personalLearningFeatureEnabled,
+  personalLearningMode,
+} from '@bunshin/capability-training';
 import { GetMissionProgress } from '@bunshin/capability-social';
 import type { CSSProperties } from 'react';
 import type { Metadata, Route } from 'next';
@@ -47,7 +51,10 @@ import {
   ServiceOperatorLinks,
 } from './service-home-navigation-sections';
 import { ServiceHomeAccessGuidance } from './service-home-access-guidance';
-import { serviceAuthBrandForSlug } from '../../../../src/services/service-auth-brand';
+import {
+  MANABERU_SERVICE_SLUG,
+  serviceAuthBrandForSlug,
+} from '../../../../src/services/service-auth-brand';
 import { selectServiceMemberRoadmapPolicy } from '../../../../src/services/service-growth-policy';
 import {
   personalLearningRequestEnabled,
@@ -81,15 +88,24 @@ export async function generateMetadata({
   params: Promise<{ serviceSlug: string }>;
 }): Promise<Metadata> {
   const { serviceSlug } = await params;
+  if (serviceSlug === MANABERU_SERVICE_SLUG) {
+    const title = 'マナベルスタイル｜学習ホーム';
+    const description = 'AI研修を始める、または前回の学習の続きへ進めます。';
+    return { title, description, openGraph: { title, description, siteName: 'マナベルスタイル' } };
+  }
   return memberServiceMetadata(serviceSlug, 'ホーム', 'サービスホーム');
 }
 
 export default async function ServiceMemberHome({
   params,
+  searchParams,
 }: {
   params: Promise<{ serviceSlug: string }>;
+  searchParams?: Promise<{ learning?: string | string[] }>;
 }) {
   const { serviceSlug } = await params;
+  const recordRequested =
+    serviceSlug === MANABERU_SERVICE_SLUG && (await searchParams)?.learning === 'record';
   const actor = await (await currentUserProvider()).getCurrentUser();
   if (!actor) {
     const publicService = await publicContext(serviceSlug);
@@ -97,6 +113,9 @@ export default async function ServiceMemberHome({
     return (
       <ServiceHomeAccessGuidance
         state="LOGIN_REQUIRED"
+        returnTo={
+          recordRequested ? '/s/manaberu-style/home?learning=record' : `/s/${serviceSlug}/home`
+        }
         {...(publicService ? { serviceName: publicService.configuration.displayName } : {})}
         {...(publicService
           ? {
@@ -317,9 +336,9 @@ export default async function ServiceMemberHome({
     },
     select: { id: true, status: true, settings: true },
   });
-  // The service identity survives a reserved Pilot being SUSPENDED before Wave 0.
-  // Archived Programs are historical and must not change the current service UX.
-  const isPersonalLearningService = personalLearningPrograms.length > 0;
+  // Manaberu keeps its learning navigation even before its first program is configured.
+  const isPersonalLearningService =
+    serviceSlug === MANABERU_SERVICE_SLUG || personalLearningPrograms.length > 0;
   const isDynamicLearning = personalLearningPrograms.some(
     (program) => personalLearningMode(program.settings) === 'DYNAMIC_V1',
   );
@@ -327,6 +346,8 @@ export default async function ServiceMemberHome({
     (program) => program.status === 'ACTIVE',
   );
   let personalLearningPathHref: Route | null = null;
+  let hasCurrentPractice: boolean | undefined;
+  const simpleStart = serviceSlug === MANABERU_SERVICE_SLUG;
   if (isPersonalLearningReady && personalLearningRequestEnabled()) {
     const dynamicProgramIds = personalLearningPrograms
       .filter(
@@ -346,13 +367,81 @@ export default async function ServiceMemberHome({
           OR: [{ endsAt: null }, { endsAt: { gt: now } }],
         },
         orderBy: { startsAt: 'desc' },
-        select: { id: true },
+        select: { id: true, serviceProgramId: true },
       });
       for (const enrollment of enrollments) {
         try {
-          await resolvePersonalLearningRequestActor(serviceSlug, enrollment.id, actor.userId);
+          let learningActor = await resolvePersonalLearningRequestActor(
+            serviceSlug,
+            enrollment.id,
+            actor.userId,
+            undefined,
+            undefined,
+            { allowUnselectedTopic: simpleStart || recordRequested },
+          );
+          const program = personalLearningPrograms.find(
+            ({ id }) => id === enrollment.serviceProgramId,
+          );
+          const multiTopic = personalLearningFeatureEnabled(program?.settings, 'multiTopic');
+          if (simpleStart && multiTopic && !learningActor.topicId) {
+            const active = await db.prisma.programMissionAssignment.findFirst({
+              where: {
+                workspaceId: service.workspaceId,
+                groupId: service.serviceId,
+                programEnrollmentId: enrollment.id,
+                status: { in: ['PRESENTED', 'STARTED'] },
+                targetResourceType: 'PERSONAL_LEARNING_PLAN',
+              },
+              orderBy: { sequence: 'desc' },
+              select: { targetResourceId: true },
+            });
+            const plan = active?.targetResourceId
+              ? await db.prisma.personalLearningPlanRevision.findFirst({
+                  where: {
+                    ...learningActor.scope,
+                    planId: active.targetResourceId,
+                    status: 'CONFIRMED',
+                  },
+                  select: { topicId: true },
+                })
+              : null;
+            if (plan?.topicId) {
+              const topic = await db.prisma.personalLearningTopic.findFirst({
+                where: { ...learningActor.scope, id: plan.topicId, status: 'ACTIVE' },
+                select: { id: true },
+              });
+              if (topic)
+                learningActor = await resolvePersonalLearningRequestActor(
+                  serviceSlug,
+                  enrollment.id,
+                  actor.userId,
+                  undefined,
+                  topic.id,
+                );
+            }
+          }
+          const current =
+            simpleStart && (!multiTopic || learningActor.topicId)
+              ? (
+                  await new db.PrismaPersonalLearningPracticeRepository(db.prisma).readPractice(
+                    learningActor,
+                  )
+                ).current
+              : null;
+          const topic =
+            simpleStart && learningActor.topicId ? `?topicId=${learningActor.topicId}` : '';
+          const anchor = recordRequested
+            ? simpleStart && !current
+              ? '#learning-request-record'
+              : '#practice-record'
+            : current
+              ? current.submissions.length
+                ? '#practice-feedback'
+                : '#practice-record'
+              : '';
+          hasCurrentPractice = simpleStart ? Boolean(current) : undefined;
           personalLearningPathHref =
-            `/s/${service.configuration.slug}/programs/${enrollment.id}/learning-request` as Route;
+            `/s/${service.configuration.slug}/programs/${enrollment.id}/learning-request${topic}${anchor}` as Route;
           break;
         } catch (error) {
           if (!(error instanceof ApplicationError) || error.code !== 'NOT_FOUND') throw error;
@@ -360,6 +449,7 @@ export default async function ServiceMemberHome({
       }
     }
   }
+  if (recordRequested && personalLearningPathHref) redirect(personalLearningPathHref);
   const currentWeek = weekRange(localDate);
   const activityRule = await currentActivityContinuityRule();
   const assignmentRepository = new db.PrismaBunshinCapabilityAssignmentRepository();
@@ -435,6 +525,11 @@ export default async function ServiceMemberHome({
             serviceSlug={service.configuration.slug}
           />
         )}
+        {recordRequested && (
+          <p className="notice" role="status">
+            実践の記録は学習を始めてから利用できます。
+          </p>
+        )}
         <WeeklyActivitySection
           activities={activities}
           bunshinCount={bunshins.length}
@@ -443,6 +538,7 @@ export default async function ServiceMemberHome({
           isDynamicLearning={isDynamicLearning}
           isPersonalLearningReady={isPersonalLearningReady}
           personalLearningPathHref={personalLearningPathHref}
+          hasCurrentPractice={hasCurrentPractice}
           serviceSlug={service.configuration.slug}
         />
         <MemberFeatureLinks

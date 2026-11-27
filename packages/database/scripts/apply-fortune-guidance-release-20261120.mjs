@@ -42,6 +42,13 @@ const approvedReferralRewardNames = [
 ];
 const releaseSettings = new Map([
   [
+    'referral-landing',
+    {
+      approval: 'APPLY_FORTUNE_REFERRAL_LANDING_SCHEMA_TO',
+      approvedNames: ['20261127120000_service_referral_landings'],
+    },
+  ],
+  [
     'basic-profile',
     {
       approval: 'APPLY_FORTUNE_BASIC_PROFILE_SCHEMA_TO',

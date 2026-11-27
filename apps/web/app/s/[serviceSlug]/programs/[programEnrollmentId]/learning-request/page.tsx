@@ -4,7 +4,9 @@ import {
   learningMaterialPath,
 } from '../../../../../../src/services/browser-learning-material';
 import { notFound } from 'next/navigation';
+import { MANABERU_SERVICE_SLUG } from '../../../../../../src/services/service-auth-brand';
 import { ApplicationError } from '@bunshin/shared';
+import { LEARNING_CANDIDATE_POLICY } from '@bunshin/application';
 import { resolveAuthenticatedMemberServicePage } from '../../../../../../src/services/member-service-page';
 import {
   resolvePersonalLearningRequestActor,
@@ -34,7 +36,7 @@ export default async function Page({
   const { topicId: selectedTopicId } = await searchParams;
   const { actor } = await resolveAuthenticatedMemberServicePage(
     serviceSlug,
-    `/s/${serviceSlug}/programs/${programEnrollmentId}/learning-request`,
+    `/s/${serviceSlug}/programs/${programEnrollmentId}/learning-request${selectedTopicId ? `?topicId=${encodeURIComponent(selectedTopicId)}` : ''}`,
   );
   try {
     let input = await resolvePersonalLearningRequestActor(
@@ -123,6 +125,8 @@ export default async function Page({
         )}
       </section>
     ) : null;
+    const simpleStart =
+      dynamicProgram && !sideHustleProgram && serviceSlug === MANABERU_SERVICE_SLUG;
     const multiTopic = personalLearningFeatureEnabled(program?.settings, 'multiTopic');
     const pagePath = `/s/${serviceSlug}/programs/${programEnrollmentId}/learning-request`;
     const topicEndpoint = `/api/services/${serviceSlug}/ai-training/enrollments/${programEnrollmentId}/topics`;
@@ -233,6 +237,36 @@ export default async function Page({
         }}
       />
     ) : null;
+    if (multiTopic && !input.topicId && simpleStart && topics.length === 0) {
+      const intake = `/api/services/${serviceSlug}/ai-training/enrollments/${programEnrollmentId}/learning-request`;
+      const settings = program?.settings as {
+        personalLearningPracticePolicy?: { enabled?: boolean; version?: string };
+      } | null;
+      const policy = settings?.personalLearningPracticePolicy;
+      return (
+        <main className={`${design.frame} ${design.flow}`}>
+          <PersonalLearningRequestCard
+            dynamicMode
+            simpleStart
+            firstTopicEndpoint={topicEndpoint}
+            instructorReviewHref={`${pagePath}/instructor-review`}
+            initial={null}
+            endpoint={intake}
+            candidateEndpoint={`${intake}/candidate`}
+            practiceEndpoint={`${intake}/practice`}
+            initialPractice={{
+              allowed: policy?.enabled === true && policy.version === LEARNING_CANDIDATE_POLICY,
+              current: null,
+            }}
+            conversationEndpoint={
+              personalLearningFeatureEnabled(program?.settings, 'conversation')
+                ? `${intake}/conversation`
+                : undefined
+            }
+          />
+        </main>
+      );
+    }
     if (multiTopic && !input.topicId) {
       return (
         <main className={`${design.frame} ${design.flow}`}>
@@ -256,6 +290,31 @@ export default async function Page({
     const initial = await new db.PrismaPersonalLearningRequestRepository(db.prisma).readRequest(
       input,
     );
+    const initialPractice = await new db.PrismaPersonalLearningPracticeRepository(
+      db.prisma,
+    ).readPractice(input);
+    const answeredReview =
+      simpleStart && initialPractice.current
+        ? await db.prisma.instructorReview.findFirst({
+            where: {
+              workspaceId: input.scope.workspaceId,
+              groupId: input.scope.groupId,
+              enrollmentId: input.scope.programEnrollmentId,
+              groupMembershipId: input.scope.groupMembershipId,
+              buyerUserId: input.actorUserId,
+              assignmentId: initialPractice.current.assignmentId,
+              status: 'ANSWERED',
+            },
+            select: { id: true },
+            orderBy: { answeredAt: 'desc' },
+          })
+        : null;
+    const reviewQuery = new URLSearchParams(topicQuery);
+    if (answeredReview) reviewQuery.set('reviewId', answeredReview.id);
+    const instructorReviewHref = simpleStart
+      ? `${pagePath}/instructor-review${reviewQuery.size ? `?${reviewQuery}` : ''}`
+      : undefined;
+
     return (
       <main className={`${design.frame} ${design.flow}`}>
         {sideHustleEntry}
@@ -277,12 +336,13 @@ export default async function Page({
               : undefined
           }
           dynamicMode={dynamicProgram}
+          simpleStart={simpleStart}
+          instructorReviewHref={instructorReviewHref}
+          instructorReviewAnswered={answeredReview !== null}
           endpoint={`/api/services/${serviceSlug}/ai-training/enrollments/${programEnrollmentId}/learning-request${topicQuery}`}
           initial={initial}
           practiceEndpoint={`/api/services/${serviceSlug}/ai-training/enrollments/${programEnrollmentId}/learning-request/practice${topicQuery}`}
-          initialPractice={await new db.PrismaPersonalLearningPracticeRepository(
-            db.prisma,
-          ).readPractice(input)}
+          initialPractice={initialPractice}
           candidateEndpoint={`/api/services/${serviceSlug}/ai-training/enrollments/${programEnrollmentId}/learning-request/candidate${topicQuery}`}
           initialCandidate={await new db.PrismaLearningCandidateRepository(db.prisma).readCandidate(
             input,

@@ -243,7 +243,7 @@ export function buildServiceOperationActions(input: {
   if (lineMode === 'DEDICATED' && dedicatedLineReady && dedicatedRichMenuPublishCount === 0) {
     lineOperationActions.push({
       title: '専用LINEの標準メニューが未公開です',
-      detail: '今日やることなど4つのボタンを、公式LINE画面から公開してください。',
+      detail: 'サービスに合ったメニューを、公式LINE画面から公開してください。',
       href: `/s/${serviceSlug}/manage/line`,
       label: '標準メニューを公開する',
     });

@@ -30,6 +30,7 @@
     "@resvg/resvg-js": "2.6.2",
     "@supabase/ssr": "0.12.4",
     "@supabase/supabase-js": "2.112.3",
+    "ai-video-engine": "file:vendor/ai-video-engine-0.1.0.tgz",
     "next": "16.3.3",
     "qrcode": "1.5.4",
     "react": "19.2.0",

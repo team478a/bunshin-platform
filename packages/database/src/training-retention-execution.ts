@@ -231,6 +231,22 @@ export class PrismaTrainingRetentionExecutionRepository implements TrainingReten
                 where: { ...personal, groupMembershipId: owned.membership.id },
               });
               await tx.programProgressSnapshot.deleteMany({ where: scope });
+              await tx.instructorReview.updateMany({
+                where: {
+                  workspaceId: input.workspaceId,
+                  groupId: input.groupId,
+                  enrollmentId: input.programEnrollmentId,
+                  buyerUserId: owned.membership.userId,
+                  contentRedactedAt: null,
+                },
+                data: {
+                  title: '削除済みの課題',
+                  focus: '',
+                  excerpt: '',
+                  answer: null,
+                  contentRedactedAt: input.now,
+                },
+              });
               await tx.programMissionAssignment.deleteMany({ where: scope });
               await tx.programMemberGoal.deleteMany({
                 where: { ...scope, groupMembershipId: owned.membership.id },
@@ -338,6 +354,22 @@ export class PrismaTrainingRetentionExecutionRepository implements TrainingReten
             await tx.programProgressSnapshot.deleteMany({ where: scope });
             await tx.programActionEvent.deleteMany({
               where: { ...scope, eventType: { not: TRAINING_ENROLLMENT_EXPIRED_EVENT } },
+            });
+            await tx.instructorReview.updateMany({
+              where: {
+                workspaceId: input.workspaceId,
+                groupId: input.groupId,
+                enrollmentId: input.programEnrollmentId,
+                buyerUserId: owned.membership.userId,
+                contentRedactedAt: null,
+              },
+              data: {
+                title: '削除済みの課題',
+                focus: '',
+                excerpt: '',
+                answer: null,
+                contentRedactedAt: input.now,
+              },
             });
             await tx.programMissionAssignment.deleteMany({ where: scope });
             await tx.programMemberGoal.deleteMany({
