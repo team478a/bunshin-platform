@@ -11,6 +11,12 @@ import {
 type TrainingRole = 'SALES' | 'OFFICE' | 'MANAGER' | 'OTHER';
 type TrainingAiLevel = 'BEGINNER' | 'INTERMEDIATE';
 
+type DynamicPracticeActivity = {
+  aiConsultations: number;
+  submissions: number;
+  lastActivityAt: Date | null;
+};
+
 export type AiTrainingAdminParticipantInput = {
   enrollmentId: string;
   enrollmentStatus: 'INVITED' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED' | 'EXPIRED';
@@ -37,6 +43,7 @@ export type AiTrainingAdminParticipantInput = {
     missionDefinitionKey: string;
     displaySnapshot: unknown;
   } | null;
+  dynamicPractice?: DynamicPracticeActivity | undefined;
   evaluationUpdatedAt: Date | null;
   profileUpdatedAt: Date | null;
   workResults: Array<'USED_AS_IS' | 'USED_WITH_EDITS' | 'NOT_USED_YET' | 'NOT_APPLICABLE'>;
@@ -55,6 +62,7 @@ export type AiTrainingAdminParticipant = {
   currentTopic: string;
   currentMission: string;
   weakArea: string;
+  dynamicPractice: DynamicPracticeActivity | null;
   lastActivityAt: Date | null;
   engagement:
     | 'NOT_STARTED'
@@ -151,6 +159,7 @@ export function buildAiTrainingAdminDashboard(
       item.progress?.lastActionAt,
       item.evaluationUpdatedAt,
       item.profileUpdatedAt,
+      item.dynamicPractice?.lastActivityAt,
     ]);
     const completedMissionCount = item.progress?.completedMissionCount ?? 0;
     const needsSupport =
@@ -165,8 +174,8 @@ export function buildAiTrainingAdminDashboard(
             : displayStatus === 'START_UNRESOLVED'
               ? 'PERIOD_UNRESOLVED'
               : displayStatus === 'INVITED' ||
-                  !item.profile ||
-                  (!item.assignment && completedMissionCount === 0)
+                  (!item.dynamicPractice &&
+                    (!item.profile || (!item.assignment && completedMissionCount === 0)))
                 ? 'NOT_STARTED'
                 : needsSupport
                   ? 'NEEDS_SUPPORT'
@@ -185,6 +194,7 @@ export function buildAiTrainingAdminDashboard(
       currentTopic: topicLabel(item.profile?.currentTopic) ?? item.progress?.phaseKey ?? '未設定',
       currentMission: currentMissionTitle(item),
       weakArea: latestWeakArea(item),
+      dynamicPractice: item.dynamicPractice ?? null,
       lastActivityAt,
       engagement,
     };
