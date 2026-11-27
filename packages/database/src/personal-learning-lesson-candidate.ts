@@ -3,7 +3,7 @@ import type { Prisma } from '@prisma/client';
 import { ApplicationError } from '@bunshin/shared';
 import {
   LEARNING_CANDIDATE_POLICY,
-  MANABERU_SIMPLE_LESSON_PROMPT_SUFFIX,
+  isManaberuSimpleLessonPrompt,
   validateLearningLessonProposal,
   type LearningCandidateRepository,
   type SavedLearningLessonCandidate,
@@ -89,7 +89,7 @@ export class PrismaLearningCandidateRepository
       if (
         proposal.status === 'READY' &&
         (!row.deviceType || !row.toolDescription) &&
-        !input.promptVersion.endsWith(MANABERU_SIMPLE_LESSON_PROMPT_SUFFIX)
+        !isManaberuSimpleLessonPrompt(input.promptVersion)
       )
         throw new ApplicationError('VALIDATION_ERROR', 'learning environment required');
       const candidate: SavedLearningLessonCandidate = {

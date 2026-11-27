@@ -3,7 +3,7 @@ import type { Prisma } from '@prisma/client';
 import { ApplicationError } from '@bunshin/shared';
 import {
   LEARNING_CANDIDATE_POLICY,
-  MANABERU_SIMPLE_LESSON_PROMPT_SUFFIX,
+  isManaberuSimpleLessonPrompt,
   PERSONAL_LEARNING_PRACTICE_VERSION,
   PERSONAL_LEARNING_PRACTICE_MISSION,
   validatePersonalLearningPracticeNote,
@@ -92,7 +92,7 @@ export class PrismaPersonalLearningPracticeRepository
     if (typeof saved.confirmedAt !== 'string' || candidate.proposal.status !== 'READY')
       return conflict();
     const environment = object(data.environment);
-    const toolIndependent = candidate.promptVersion.endsWith(MANABERU_SIMPLE_LESSON_PROMPT_SUFFIX);
+    const toolIndependent = isManaberuSimpleLessonPrompt(candidate.promptVersion);
     if (
       (!['PC', 'SMARTPHONE', 'BOTH'].includes(String(environment.deviceType)) &&
         !(toolIndependent && environment.deviceType === null)) ||
@@ -676,7 +676,7 @@ export class PrismaPersonalLearningPracticeRepository
       }
       if (
         (!row.deviceType || !row.toolDescription) &&
-        !candidate.promptVersion.endsWith(MANABERU_SIMPLE_LESSON_PROMPT_SUFFIX)
+        !isManaberuSimpleLessonPrompt(candidate.promptVersion)
       )
         return conflict();
       // Never switch an executing plan or unfinished assignment implicitly.
