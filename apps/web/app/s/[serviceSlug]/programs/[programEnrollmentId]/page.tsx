@@ -30,6 +30,7 @@ import {
   personalLearningRequestEnabled,
   resolvePersonalLearningRequestActor,
 } from '../../../../../src/services/personal-learning-request-access';
+import { learnerTrainingProgramName } from '../../../../../src/services/training-program-display-name';
 import { requireAiTrainingUsageConsent } from '../../../../../src/services/ai-training-consent';
 import { personalLearningProfilePreparationEntryEnabled } from '../../../../../src/services/personal-learning-profile-preparation-entry';
 import {
@@ -261,7 +262,7 @@ export default async function ProgramParticipantPage({
             <AiTrainingEndedCard
               serviceSlug={serviceSlug}
               programEnrollmentId={programEnrollmentId}
-              programName={program.displayName}
+              programName={learnerTrainingProgramName(serviceSlug, program.displayName)}
               status={displayStatus}
               endedAt={endedAt}
             />

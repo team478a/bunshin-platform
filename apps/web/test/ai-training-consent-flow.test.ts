@@ -6,6 +6,8 @@ import {
   invitationAcceptedPath,
   resolveAiTrainingParticipationState,
 } from '../src/services/ai-training-consent-policy';
+import { learnerTrainingProgramName } from '../src/services/training-program-display-name';
+
 const consentService = readFileSync(
   new URL('../src/services/ai-training-consent.ts', import.meta.url),
   'utf8',
@@ -44,6 +46,15 @@ describe('Manaberu AI training consent flow', () => {
   it('keeps invitation behavior unchanged for other services and routes training invites to confirmation', () => {
     expect(invitationAcceptedPath('hassy', false)).toBe('/s/hassy/home');
     expect(invitationAcceptedPath('manaberu-style', true)).toBe('/s/manaberu-style/training');
+  });
+
+  it('uses a Japanese learner-facing name for the existing Manaberu personal course', () => {
+    const personalCourse = 'マナベルスタイル Personal Learning';
+    const fixedCourse = 'マナベルスタイル AI研修30日';
+
+    expect(learnerTrainingProgramName('manaberu-style', personalCourse)).toBe('あなたのAI研修');
+    expect(learnerTrainingProgramName('manaberu-style', fixedCourse)).toBe(fixedCourse);
+    expect(learnerTrainingProgramName('other-service', personalCourse)).toBe(personalCourse);
   });
 
   it('waits in order for a program, enrollment, INTERNAL seat, then explicit consent', () => {
