@@ -320,3 +320,39 @@ test('Manaberu resumes the saved draft without any mutation', async ({ app, scre
   await expect(draft).toHaveValue(unsaved);
   await expect(screen.getByRole('button', 'フィードバックを見る')).toBeEnabled();
 });
+
+test('Manaberu records a practice request without discarding the unsaved draft', async ({
+  app,
+  browser,
+  screen,
+}) => {
+  const calls: unknown[] = [];
+  await browser.route('**/api/synthetic/simple-*', async (route) => {
+    calls.push(JSON.parse(route.request.postData ?? '{}'));
+    await route.fulfill({
+      json: {
+        data: { allowed: true, current: { ...practiceFixture, feedback: ['USE_SPREADSHEET'] } },
+      },
+    });
+  });
+
+  await app.open('/?simple-start&resume#practice-record');
+  const draft = screen.getByLabel('練習の下書き');
+  const editedDraft = '停滞している商談と、次に確認することを書き足す';
+  await draft.fill(editedDraft);
+  await screen.getByText('ここで困った・使いたい資料がある', { exact: true }).tap();
+  await expect(screen.getByRole('button', '要望を記録する')).toBeDisabled();
+  await screen.getByLabel('練習への要望').selectOption({ label: '表やスプレッドシートを使いたい' });
+  await screen.getByRole('button', '要望を記録する').tap();
+
+  await expect(screen.getByRole('status', '実践の状態')).toContainText(
+    '練習への要望を記録しました。',
+  );
+  await expect(screen.getByText('記録済み：表やスプレッドシートを使いたい')).toBeVisible();
+  await expect(draft).toHaveValue(editedDraft);
+  await app.open('/?simple-start&resume#practice-record');
+  await expect(draft).toHaveValue(editedDraft);
+  expect(calls).toEqual([
+    { action: 'FEEDBACK', assignmentId: practiceFixture.assignmentId, category: 'USE_SPREADSHEET' },
+  ]);
+});
