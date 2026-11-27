@@ -3,6 +3,7 @@ import type { Prisma } from '@prisma/client';
 import { ApplicationError } from '@bunshin/shared';
 import {
   LEARNING_CANDIDATE_POLICY,
+  MANABERU_SIMPLE_LESSON_PROMPT_SUFFIX,
   PERSONAL_LEARNING_PRACTICE_VERSION,
   PERSONAL_LEARNING_PRACTICE_MISSION,
   validatePersonalLearningPracticeNote,
@@ -91,10 +92,12 @@ export class PrismaPersonalLearningPracticeRepository
     if (typeof saved.confirmedAt !== 'string' || candidate.proposal.status !== 'READY')
       return conflict();
     const environment = object(data.environment);
+    const toolIndependent = candidate.promptVersion.endsWith(MANABERU_SIMPLE_LESSON_PROMPT_SUFFIX);
     if (
-      !['PC', 'SMARTPHONE', 'BOTH'].includes(String(environment.deviceType)) ||
-      typeof environment.toolDescription !== 'string' ||
-      !environment.toolDescription.trim() ||
+      (!['PC', 'SMARTPHONE', 'BOTH'].includes(String(environment.deviceType)) &&
+        !(toolIndependent && environment.deviceType === null)) ||
+      (!(typeof environment.toolDescription === 'string' && environment.toolDescription.trim()) &&
+        !(toolIndependent && environment.toolDescription === null)) ||
       ![environment.experienceDescription, environment.currentPosition].every(
         (v) => v === null || typeof v === 'string',
       )
@@ -233,7 +236,7 @@ export class PrismaPersonalLearningPracticeRepository
       candidate: { ...candidate, confirmedAt: saved.confirmedAt },
       environment: {
         deviceType: environment.deviceType as PersonalLearningPractice['environment']['deviceType'],
-        toolDescription: environment.toolDescription,
+        toolDescription: environment.toolDescription as string | null,
         experienceDescription: environment.experienceDescription as string | null,
         currentPosition: environment.currentPosition as string | null,
       },
@@ -671,7 +674,11 @@ export class PrismaPersonalLearningPracticeRepository
         });
         return this.projectPractice(tx, actor, assignment);
       }
-      if (!row.deviceType || !row.toolDescription) return conflict();
+      if (
+        (!row.deviceType || !row.toolDescription) &&
+        !candidate.promptVersion.endsWith(MANABERU_SIMPLE_LESSON_PROMPT_SUFFIX)
+      )
+        return conflict();
       // Never switch an executing plan or unfinished assignment implicitly.
       if (
         (await tx.programMissionAssignment.count({

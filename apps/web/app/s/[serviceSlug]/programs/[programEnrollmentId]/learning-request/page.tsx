@@ -3,8 +3,10 @@ import {
   browserLearningProgram,
   learningMaterialPath,
 } from '../../../../../../src/services/browser-learning-material';
+import { MANABERU_SERVICE_SLUG } from '../../../../../../src/services/service-auth-brand';
 import { notFound } from 'next/navigation';
 import { ApplicationError } from '@bunshin/shared';
+import { LEARNING_CANDIDATE_POLICY } from '@bunshin/application';
 import { resolveAuthenticatedMemberServicePage } from '../../../../../../src/services/member-service-page';
 import {
   resolvePersonalLearningRequestActor,
@@ -123,6 +125,8 @@ export default async function Page({
         )}
       </section>
     ) : null;
+    const simpleStart =
+      dynamicProgram && !sideHustleProgram && serviceSlug === MANABERU_SERVICE_SLUG;
     const multiTopic = personalLearningFeatureEnabled(program?.settings, 'multiTopic');
     const pagePath = `/s/${serviceSlug}/programs/${programEnrollmentId}/learning-request`;
     const topicEndpoint = `/api/services/${serviceSlug}/ai-training/enrollments/${programEnrollmentId}/topics`;
@@ -233,6 +237,35 @@ export default async function Page({
         }}
       />
     ) : null;
+    if (multiTopic && !input.topicId && simpleStart && topics.length === 0) {
+      const intake = `/api/services/${serviceSlug}/ai-training/enrollments/${programEnrollmentId}/learning-request`;
+      const settings = program?.settings as {
+        personalLearningPracticePolicy?: { enabled?: boolean; version?: string };
+      } | null;
+      const policy = settings?.personalLearningPracticePolicy;
+      return (
+        <main className={`${design.frame} ${design.flow}`}>
+          <PersonalLearningRequestCard
+            dynamicMode
+            simpleStart
+            firstTopicEndpoint={topicEndpoint}
+            initial={null}
+            endpoint={intake}
+            candidateEndpoint={`${intake}/candidate`}
+            practiceEndpoint={`${intake}/practice`}
+            initialPractice={{
+              allowed: policy?.enabled === true && policy.version === LEARNING_CANDIDATE_POLICY,
+              current: null,
+            }}
+            conversationEndpoint={
+              personalLearningFeatureEnabled(program?.settings, 'conversation')
+                ? `${intake}/conversation`
+                : undefined
+            }
+          />
+        </main>
+      );
+    }
     if (multiTopic && !input.topicId) {
       return (
         <main className={`${design.frame} ${design.flow}`}>
@@ -277,6 +310,7 @@ export default async function Page({
               : undefined
           }
           dynamicMode={dynamicProgram}
+          simpleStart={simpleStart}
           endpoint={`/api/services/${serviceSlug}/ai-training/enrollments/${programEnrollmentId}/learning-request${topicQuery}`}
           initial={initial}
           practiceEndpoint={`/api/services/${serviceSlug}/ai-training/enrollments/${programEnrollmentId}/learning-request/practice${topicQuery}`}
