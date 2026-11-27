@@ -7,8 +7,15 @@ const landingUrl = z
   .transform((value, ctx) => {
     try {
       const url = new URL(value);
-      if (/^https:\/\//i.test(value) && url.protocol === 'https:' && !url.username && !url.password)
-        return url.toString();
+      const normalized = url.toString();
+      if (
+        /^https:\/\//i.test(value) &&
+        url.protocol === 'https:' &&
+        !url.username &&
+        !url.password &&
+        normalized.length <= 2048
+      )
+        return normalized;
     } catch {
       // Invalid input is reported below.
     }

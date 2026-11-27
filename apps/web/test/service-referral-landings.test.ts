@@ -87,6 +87,17 @@ describe('referral landing redirect', () => {
     expect(mocked.createClick).not.toHaveBeenCalled();
   });
 
+  it('rejects a URL that becomes too long after percent-encoding', () => {
+    const url = `https://landing.example/${'星'.repeat(250)}`;
+    expect(
+      referralLandingsSchema.safeParse({
+        revision: 0,
+        activeId: null,
+        pages: [{ ...pages[0], url }],
+      }).success,
+    ).toBe(false);
+  });
+
   it.each([
     'http://landing.example',
     'javascript:alert(1)',
