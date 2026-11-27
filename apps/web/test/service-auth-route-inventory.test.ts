@@ -87,7 +87,8 @@ describe('service authentication route inventory', () => {
       .replace(/\/?page\.tsx$/, '')
       .replace('[token]', 'a'.repeat(43))
       .replace(/\[[^\]]+\]/g, '11111111-1111-4111-8111-111111111111');
-    const path = `/s/service-a${suffix ? `/${suffix}` : ''}`;
+    const slug = suffix.endsWith('/instructor-review') ? 'manaberu-style' : 'service-a';
+    const path = `/s/${slug}${suffix ? `/${suffix}` : ''}`;
     expect(safeLineAuthReturnPath(path)).toBe(path);
   });
 

@@ -62,7 +62,6 @@ function readSettings(form: FormData) {
 }
 
 function actionError(error: unknown): Result {
-  if (error instanceof Error && error.message === 'SERVICE_NOT_FOUND') notFound();
   if (!(error instanceof ApplicationError)) throw error;
   if (error.code === 'NOT_FOUND' || error.code === 'FORBIDDEN') notFound();
   if (error.code === 'VALIDATION_ERROR') return 'invalid';
@@ -136,7 +135,6 @@ export default async function InstructorReviewOperationsPage({
   const actor = await requireActor(serviceSlug);
   const data = await getInstructorReviewOperations(serviceSlug, actor.userId).catch(
     (error: unknown) => {
-      if (error instanceof Error && error.message === 'SERVICE_NOT_FOUND') notFound();
       if (error instanceof ApplicationError && ['FORBIDDEN', 'NOT_FOUND'].includes(error.code)) {
         notFound();
       }

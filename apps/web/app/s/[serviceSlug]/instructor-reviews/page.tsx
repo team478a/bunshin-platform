@@ -37,7 +37,6 @@ async function submitReply(serviceSlug: string, form: FormData) {
   try {
     await answerInstructorReview(serviceSlug, actor.userId, reply.data.reviewId, reply.data.answer);
   } catch (error) {
-    if (error instanceof Error && error.message === 'SERVICE_NOT_FOUND') notFound();
     if (error instanceof ApplicationError) {
       if (error.code === 'FORBIDDEN' || error.code === 'NOT_FOUND') notFound();
       if (error.code === 'CONFLICT') redirect(`${path}?result=conflict`);
@@ -64,7 +63,6 @@ export default async function AssignedInstructorReviewsPage({
   const actor = await requireActor(serviceSlug);
   const rows = await getAssignedInstructorReviews(serviceSlug, actor.userId).catch(
     (error: unknown) => {
-      if (error instanceof Error && error.message === 'SERVICE_NOT_FOUND') notFound();
       if (error instanceof ApplicationError && ['FORBIDDEN', 'NOT_FOUND'].includes(error.code)) {
         notFound();
       }

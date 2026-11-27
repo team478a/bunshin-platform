@@ -57,7 +57,10 @@ async function serviceScope(slug: string, userId: string, operator = false): Pro
   const service = await (operator ? resolveManagedServiceContext : resolveMemberServiceContext)(
     slug,
     userId,
-  );
+  ).catch((error: unknown) => {
+    if (error instanceof Error && error.message === 'SERVICE_NOT_FOUND') throw missing();
+    throw error;
+  });
   return { workspaceId: service.workspaceId, groupId: service.serviceId };
 }
 
