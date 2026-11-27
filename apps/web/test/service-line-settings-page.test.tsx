@@ -21,10 +21,10 @@ vi.mock('../app/ui/public-shell', () => ({
   PublicShell: ({ children }: { children: React.ReactNode }) => children,
 }));
 import ServiceLineSettingsPage from '../app/s/[serviceSlug]/line/page';
-const render = async () =>
+const render = async (serviceSlug = 'service-a') =>
   renderToStaticMarkup(
     await ServiceLineSettingsPage({
-      params: Promise.resolve({ serviceSlug: 'service-a' }),
+      params: Promise.resolve({ serviceSlug }),
       searchParams: Promise.resolve({}),
     }),
   );
@@ -75,6 +75,25 @@ describe('LINE connection entry page', () => {
     await expect(render()).rejects.toThrow('REDIRECT:/login?returnTo=%2Fs%2Fservice-a%2Fline');
     expect(mocks.settings).not.toHaveBeenCalled();
   });
+  it('preserves the Manaberu connection page as the sign-in return destination', async () => {
+    mocks.actor.mockResolvedValue(null);
+    await expect(render('manaberu-style')).rejects.toThrow(
+      'REDIRECT:/login?returnTo=%2Fs%2Fmanaberu-style%2Fline',
+    );
+    expect(mocks.settings).not.toHaveBeenCalled();
+  });
+  it('keeps the Manaberu connection screen in learning mode before program setup', async () => {
+    mocks.settings.mockResolvedValue({
+      ...(await mocks.settings()),
+      service: { configuration: { slug: 'manaberu-style', displayName: 'マナベルスタイル' } },
+      learningService: false,
+    });
+    const html = await render('manaberu-style');
+    expect(html).toContain('学習用LINEの接続');
+    expect(html).toContain('現在、学習用LINEへ接続できません');
+    expect(html).not.toContain('投稿パートナー');
+    expect(html).not.toContain('name="linkTarget"');
+  });
   it('offers explicit learner consent without a posting partner', async () => {
     mocks.settings.mockResolvedValue({
       ...(await mocks.settings()),
@@ -86,7 +105,7 @@ describe('LINE connection entry page', () => {
     expect(html).toContain('name="linkTarget" value="LEARNING_MEMBER"');
     expect(html).toContain('name="consent"');
     expect(html).not.toContain('name="bunshinId"');
-    expect(html).not.toContain('投稿パートナーを作る');
+    expect(html).not.toContain('投稿パートナー');
     expect(html).not.toContain('動画');
     expect(html).toContain('学習への参加や通知配信は開始しません');
   });

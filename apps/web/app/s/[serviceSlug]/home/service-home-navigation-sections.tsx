@@ -1,6 +1,8 @@
 import type { Route } from 'next';
 import Link from 'next/link';
 
+import { MANABERU_SERVICE_SLUG } from '../../../../src/services/service-auth-brand';
+
 interface MemberFeatureLinksProps {
   imageAvailable: boolean;
   isBusinessDailyService: boolean;
@@ -31,6 +33,7 @@ export function MemberFeatureLinks(props: MemberFeatureLinksProps) {
     trackingLinkAvailable,
     videoAvailable,
   } = props;
+  const isManaberu = serviceSlug === MANABERU_SERVICE_SLUG;
   if (isPersonalLearningService && isDynamicLearning && !isPersonalLearningReady) {
     return (
       <p>
@@ -61,7 +64,8 @@ export function MemberFeatureLinks(props: MemberFeatureLinksProps) {
             ? '学習を進める'
             : '利用できる機能'}
       </h2>
-      {!isBusinessDailyService &&
+      {!isPersonalLearningService &&
+        !isBusinessDailyService &&
         !promptOnlyImages &&
         !imageAvailable &&
         !videoAvailable &&
@@ -76,7 +80,11 @@ export function MemberFeatureLinks(props: MemberFeatureLinksProps) {
               {isPersonalLearningReady && personalLearningPathHref && (
                 <>
                   <Link href={`/s/${serviceSlug}/training` as Route}>受講の状況を見る</Link>
-                  <Link href={`/s/${serviceSlug}/programs` as Route}>学習の記録</Link>
+                  {isManaberu ? (
+                    <Link href={`/s/${serviceSlug}/home?learning=record` as Route}>実践を記録</Link>
+                  ) : (
+                    <Link href={`/s/${serviceSlug}/programs` as Route}>学習の記録</Link>
+                  )}
                 </>
               )}
               <Link href={`/s/${serviceSlug}/help` as Route}>使い方・困ったとき</Link>
@@ -91,7 +99,7 @@ export function MemberFeatureLinks(props: MemberFeatureLinksProps) {
               </Link>
             </>
           ))}
-        {promptOnlyImages && (
+        {!isManaberu && promptOnlyImages && (
           <div className="notice">
             <strong>画像は、画像用の文章をコピーして作ります</strong>
             <p>
@@ -149,25 +157,27 @@ export function MemberFeatureLinks(props: MemberFeatureLinksProps) {
             投稿パートナーを作る・見る
           </Link>
         )}
-        <Link className="button" href={`/s/${serviceSlug}/help` as Route}>
-          使い方・困ったとき
-        </Link>
+        {!(isManaberu && isPersonalLearningService && isDynamicLearning) && (
+          <Link className="button" href={`/s/${serviceSlug}/help` as Route}>
+            使い方・困ったとき
+          </Link>
+        )}
         {!isBusinessDailyService && !isPersonalLearningService && !promptOnlyImages && (
           <Link className="button" href={`/s/${serviceSlug}/credits` as Route}>
             画像作成回数を見る
           </Link>
         )}
-        {trackingLinkAvailable && (
+        {!isManaberu && trackingLinkAvailable && (
           <Link className="button" href={`/s/${serviceSlug}/tracking-link` as Route}>
             自分の代理店URLを登録する
           </Link>
         )}
-        {imageAvailable && (
+        {!isManaberu && imageAvailable && (
           <Link className="button button--primary" href={`/s/${serviceSlug}/images` as Route}>
             投稿に使う画像を作る
           </Link>
         )}
-        {videoAvailable && (
+        {!isManaberu && videoAvailable && (
           <Link className="button button--primary" href={`/s/${serviceSlug}/videos` as Route}>
             投稿に使う動画を作る
           </Link>

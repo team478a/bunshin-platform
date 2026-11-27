@@ -47,7 +47,10 @@ import {
   ServiceOperatorLinks,
 } from './service-home-navigation-sections';
 import { ServiceHomeAccessGuidance } from './service-home-access-guidance';
-import { serviceAuthBrandForSlug } from '../../../../src/services/service-auth-brand';
+import {
+  MANABERU_SERVICE_SLUG,
+  serviceAuthBrandForSlug,
+} from '../../../../src/services/service-auth-brand';
 import {
   personalLearningRequestEnabled,
   resolvePersonalLearningRequestActor,
@@ -80,15 +83,24 @@ export async function generateMetadata({
   params: Promise<{ serviceSlug: string }>;
 }): Promise<Metadata> {
   const { serviceSlug } = await params;
+  if (serviceSlug === MANABERU_SERVICE_SLUG) {
+    const title = 'マナベルスタイル｜学習ホーム';
+    const description = 'AI研修を始める、または前回の学習の続きへ進めます。';
+    return { title, description, openGraph: { title, description, siteName: 'マナベルスタイル' } };
+  }
   return memberServiceMetadata(serviceSlug, 'ホーム', 'サービスホーム');
 }
 
 export default async function ServiceMemberHome({
   params,
+  searchParams,
 }: {
   params: Promise<{ serviceSlug: string }>;
+  searchParams?: Promise<{ learning?: string | string[] }>;
 }) {
   const { serviceSlug } = await params;
+  const recordRequested =
+    serviceSlug === MANABERU_SERVICE_SLUG && (await searchParams)?.learning === 'record';
   const actor = await (await currentUserProvider()).getCurrentUser();
   if (!actor) {
     const publicService = await publicContext(serviceSlug);
@@ -96,6 +108,9 @@ export default async function ServiceMemberHome({
     return (
       <ServiceHomeAccessGuidance
         state="LOGIN_REQUIRED"
+        returnTo={
+          recordRequested ? '/s/manaberu-style/home?learning=record' : `/s/${serviceSlug}/home`
+        }
         {...(publicService ? { serviceName: publicService.configuration.displayName } : {})}
         {...(publicService
           ? {
@@ -316,9 +331,9 @@ export default async function ServiceMemberHome({
     },
     select: { id: true, status: true, settings: true },
   });
-  // The service identity survives a reserved Pilot being SUSPENDED before Wave 0.
-  // Archived Programs are historical and must not change the current service UX.
-  const isPersonalLearningService = personalLearningPrograms.length > 0;
+  // Manaberu keeps its learning navigation even before its first program is configured.
+  const isPersonalLearningService =
+    serviceSlug === MANABERU_SERVICE_SLUG || personalLearningPrograms.length > 0;
   const isDynamicLearning = personalLearningPrograms.some(
     (program) => personalLearningMode(program.settings) === 'DYNAMIC_V1',
   );
@@ -349,7 +364,14 @@ export default async function ServiceMemberHome({
       });
       for (const enrollment of enrollments) {
         try {
-          await resolvePersonalLearningRequestActor(serviceSlug, enrollment.id, actor.userId);
+          await resolvePersonalLearningRequestActor(
+            serviceSlug,
+            enrollment.id,
+            actor.userId,
+            undefined,
+            undefined,
+            { allowUnselectedTopic: recordRequested },
+          );
           personalLearningPathHref =
             `/s/${service.configuration.slug}/programs/${enrollment.id}/learning-request` as Route;
           break;
@@ -359,6 +381,8 @@ export default async function ServiceMemberHome({
       }
     }
   }
+  if (recordRequested && personalLearningPathHref)
+    redirect(`${personalLearningPathHref}#practice-record`);
   const currentWeek = weekRange(localDate);
   const activityRule = await currentActivityContinuityRule();
   const assignmentRepository = new db.PrismaBunshinCapabilityAssignmentRepository();
@@ -433,6 +457,11 @@ export default async function ServiceMemberHome({
             program={businessProgram}
             serviceSlug={service.configuration.slug}
           />
+        )}
+        {recordRequested && (
+          <p className="notice" role="status">
+            実践の記録は学習を始めてから利用できます。
+          </p>
         )}
         <WeeklyActivitySection
           activities={activities}
