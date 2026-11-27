@@ -247,6 +247,66 @@ export class PrismaServiceReferralManagementRepository implements ServiceReferra
     );
   }
 
+  async readLandingPages(input: ReferralManagementScope) {
+    const s = scopeSnapshot(input);
+    return this.client.$transaction(async (tx) => {
+      await authorize(tx, s, this.now());
+      const row = await tx.serviceRegistrationPolicy.findUnique({
+        where: { workspaceId_groupId: whereScope(s) },
+        select: { referralLandings: true },
+      });
+      return row?.referralLandings;
+    }, transactionOptions);
+  }
+
+  async saveLandingPages(
+    input: ReferralManagementScope,
+    value: {
+      revision: number;
+      activeId: string | null;
+      pages: { id: string; name: string; url: string }[];
+    },
+  ) {
+    const s = scopeSnapshot(input);
+    const { revision, activeId, pages } = structuredClone(value);
+    return this.writeTransaction(async (tx) => {
+      await lockService(tx, s);
+      await authorize(tx, s, this.now());
+      const row = await tx.serviceRegistrationPolicy.findUnique({
+        where: { workspaceId_groupId: whereScope(s) },
+        select: { configurationId: true, referralLandings: true },
+      });
+      if (!row) throw new ApplicationError('NOT_FOUND', 'service registration not found');
+      const before = row.referralLandings;
+      const storedRevision =
+        before &&
+        typeof before === 'object' &&
+        !Array.isArray(before) &&
+        typeof before['revision'] === 'number'
+          ? before['revision']
+          : 0;
+      if (storedRevision !== revision)
+        throw new ApplicationError('CONFLICT', '紹介先LPの設定が更新されています。');
+      const after = { revision: revision + 1, activeId, pages };
+      await tx.serviceRegistrationPolicy.update({
+        where: { workspaceId_groupId: whereScope(s) },
+        data: { referralLandings: after },
+      });
+      await tx.serviceConfigurationAudit.create({
+        data: {
+          ...whereScope(s),
+          configurationId: row.configurationId,
+          action: 'UPDATE_REFERRAL_LANDINGS',
+          reason: '紹介先LPの設定を更新',
+          performedByUserId: s.actorUserId,
+          beforeData: before ?? Prisma.JsonNull,
+          afterData: after,
+        },
+      });
+      return after;
+    });
+  }
+
   async savePolicy(
     input: ReferralManagementScope,
     value: Parameters<ServiceReferralManagementRepository['savePolicy']>[1],

@@ -3,6 +3,7 @@ import {
   normalizeServiceReferralCode,
 } from '@bunshin/application';
 import { NextResponse } from 'next/server';
+import { referralDestination } from '../../../src/services/referral-landings';
 
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
@@ -46,7 +47,13 @@ export async function GET(
           workspaceId: true,
           groupId: true,
           id: true,
-          group: { select: { serviceConfiguration: { select: { slug: true } } } },
+          group: {
+            select: {
+              serviceConfiguration: {
+                select: { slug: true, registration: { select: { referralLandings: true } } },
+              },
+            },
+          },
         },
       });
       const slug = referralCode?.group.serviceConfiguration?.slug;
@@ -61,13 +68,19 @@ export async function GET(
         },
         select: { id: true },
       });
-      return { code, clickId: click.id, slug };
+      return {
+        code,
+        clickId: click.id,
+        slug,
+        settings: referralCode.group.serviceConfiguration?.registration?.referralLandings,
+      };
     });
     if (!landing) return new Response('Not Found', { status: 404 });
-    const destination = new URL(`/s/${landing.slug}`, request.url);
-    destination.searchParams.set('ref', landing.code);
-    destination.searchParams.set('rc', landing.clickId);
-    return NextResponse.redirect(destination, 303);
+    const destination = referralDestination(requestUrl, landing);
+    return NextResponse.redirect(destination, {
+      status: 303,
+      headers: { 'cache-control': 'private, no-store', 'referrer-policy': 'no-referrer' },
+    });
   } catch {
     return new Response('Not Found', { status: 404 });
   }

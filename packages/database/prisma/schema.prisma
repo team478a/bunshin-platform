@@ -3308,6 +3308,7 @@ model ServiceRegistrationPolicy {
   lineEnabled       Boolean                 @default(false) @map("line_enabled")
   inviteCodeEnabled Boolean                 @default(false) @map("invite_code_enabled")
   referralEnabled   Boolean                 @default(false) @map("referral_enabled")
+  referralLandings  Json                    @default("{}") @map("referral_landings")
   onboardingConfig  Json                    @default("{}") @map("onboarding_config")
   surveyConfig      Json                    @default("{}") @map("survey_config")
   createdAt         DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
