@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { validateLearningLessonProposal } from '../src';
+import { isManaberuSimpleLessonPrompt, validateLearningLessonProposal } from '../src';
 const ready = {
   status: 'READY',
   reason: '本人が行う練習',
@@ -12,6 +12,15 @@ const ready = {
   criteria: ['目的に合う変更を説明できる'],
 };
 describe('versioned learning proposal', () => {
+  it.each([
+    ['lesson-simple-start-v1', true],
+    ['lesson-simple-start-v1-adaptive-practice-v1', true],
+    ['lesson-adaptive-practice-v1-simple-start-v1', true],
+    ['lesson-intent-v1-adaptive-practice-v1', false],
+    ['lesson-simple-start-v10', false],
+  ])('recognizes simple start in %s', (version, allowed) => {
+    expect(isManaberuSimpleLessonPrompt(version)).toBe(allowed);
+  });
   it('preserves homepage-specific outcome, without six-skill scores', () =>
     expect(validateLearningLessonProposal(ready)).toEqual(ready));
   it('handles a different wish without theme branches', () =>

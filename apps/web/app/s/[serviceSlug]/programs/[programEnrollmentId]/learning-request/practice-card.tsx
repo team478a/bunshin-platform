@@ -1,6 +1,12 @@
 'use client';
 
 import {
+  PRACTICE_FEEDBACK_CATEGORIES,
+  isPracticeFeedbackCategory,
+  practiceFeedbackLabel,
+  type PracticeFeedbackCategory,
+} from '@bunshin/application';
+import {
   instructorReviewStatusLabel,
   type InstructorReviewStatus,
 } from '../../../../../../src/services/instructor-review-contract';
@@ -61,6 +67,7 @@ export function LearningPracticeCard({
   const [message, setMessage] = useState('');
   const [operationId, setOperationId] = useState(() => crypto.randomUUID());
   const [evidenceKind, setEvidenceKind] = useState<'TEXT' | 'SELF_REPORT'>('TEXT');
+  const [feedbackCategory, setFeedbackCategory] = useState<PracticeFeedbackCategory | ''>('');
   const currentDraft = state.current;
   const note = currentDraft?.note;
   const latest = currentDraft?.submissions.at(-1);
@@ -349,6 +356,53 @@ export function LearningPracticeCard({
                     : '講師に相談する（有料）'}
               </a>
             </div>
+          )}
+          {simpleStart && (
+            <details>
+              <summary>ここで困った・使いたい資料がある</summary>
+              <form
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  if (!feedbackCategory) return;
+                  void practiceAction(
+                    {
+                      action: 'FEEDBACK',
+                      assignmentId: current.assignmentId,
+                      category: feedbackCategory,
+                    },
+                    '練習への要望を記録しました。',
+                  );
+                }}
+              >
+                <p>練習への要望を選ぶと、次の練習案を作る際の参考になります。</p>
+                <label>
+                  練習への要望
+                  <select
+                    value={feedbackCategory}
+                    onChange={(event) => {
+                      const selected = event.target.value;
+                      setFeedbackCategory(isPracticeFeedbackCategory(selected) ? selected : '');
+                    }}
+                  >
+                    <option value="">選択してください</option>
+                    {PRACTICE_FEEDBACK_CATEGORIES.map((category) => (
+                      <option key={category} value={category}>
+                        {practiceFeedbackLabel[category]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <button type="submit" disabled={!state.allowed || pending || !feedbackCategory}>
+                  要望を記録する
+                </button>
+                {!!current.feedback?.length && (
+                  <p>
+                    記録済み：
+                    {current.feedback.map((category) => practiceFeedbackLabel[category]).join('／')}
+                  </p>
+                )}
+              </form>
+            </details>
           )}
           {current.submissions.length > 0 && (
             <div id="practice-feedback" aria-label="提出と確認結果">
