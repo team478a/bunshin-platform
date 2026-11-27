@@ -58,13 +58,15 @@ describe('service home access guidance', () => {
         state: 'MANAGEMENT_REQUIRED',
         serviceName: 'ハッシー',
         serviceSlug: 'hassy',
+        returnTo: '/s/manaberu-style/home?learning=record',
       }),
     );
 
     expect(html).toContain('ハッシーの管理画面を利用できません');
     expect(html).toContain('サービス管理者として登録されたアカウント');
     expect(html).toContain('ハッシーの利用画面へ');
-    expect(html).toContain('/s/hassy/home');
+    expect(html).toContain('href="/s/hassy/home"');
+    expect(html).not.toContain('learning=record');
   });
 
   it('keeps a login action available without exposing a private service entry', () => {

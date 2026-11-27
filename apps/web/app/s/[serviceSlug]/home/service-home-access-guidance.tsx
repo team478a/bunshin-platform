@@ -80,7 +80,10 @@ export function ServiceHomeAccessGuidance({
           </Link>
         )}
         {state === 'MANAGEMENT_REQUIRED' && serviceName && (
-          <Link className="button button--primary button--full" href={returnTo}>
+          <Link
+            className="button button--primary button--full"
+            href={{ pathname: `/s/${serviceSlug}/home` }}
+          >
             {serviceName}の利用画面へ
           </Link>
         )}
