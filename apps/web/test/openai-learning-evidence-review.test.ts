@@ -72,6 +72,44 @@ describe('personal learning evidence review', () => {
     ).toThrow();
   });
 
+  it('grounds the next action in the confirmed task and distinguishes revisions from a new exercise', () => {
+    const body = learningEvidenceReviewBody({
+      material: { ...material, practice: ['自分の紹介文の見出しを一つ直す'] },
+      kind: 'TEXT',
+      content: '修正した見出し',
+      model: 'gpt-5-mini',
+      maxRequestBytes: 20_000,
+      maxOutputTokens: 400,
+    });
+    const request = JSON.parse(body) as { input: { content: string }[] };
+    expect(request.input[0]?.content).toContain('次の行動を選んだ理由');
+    expect(request.input[0]?.content).toContain('同じ課題の未確認箇所を一つ');
+    expect(request.input[0]?.content).toContain('全基準の証拠がある場合');
+    expect(JSON.parse(request.input[1]!.content)).toMatchObject({
+      practice: ['自分の紹介文の見出しを一つ直す'],
+      submission: '修正した見出し',
+    });
+  });
+
+  it('retains the submission and criteria when the optional practice context exceeds the byte limit', () => {
+    const input = {
+      material,
+      kind: 'TEXT' as const,
+      content: '修正した見出し',
+      model: 'gpt-5-mini',
+      maxRequestBytes: 20_000,
+      maxOutputTokens: 400,
+    };
+    const essential = learningEvidenceReviewBody(input);
+    expect(
+      learningEvidenceReviewBody({
+        ...input,
+        material: { ...material, practice: ['自分の紹介文を直す'] },
+        maxRequestBytes: Buffer.byteLength(essential, 'utf8'),
+      }),
+    ).toBe(essential);
+  });
+
   it('reports only criteria visible in submitted text and requests a follow-up for missing evidence', async () => {
     const result = await generateLearningEvidenceReview({
       apiKey: 'test',

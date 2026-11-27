@@ -1,4 +1,9 @@
 'use client';
+
+import {
+  instructorReviewStatusLabel,
+  type InstructorReviewStatus,
+} from '../../../../../../src/services/instructor-review-contract';
 import { useRef, useState, useSyncExternalStore } from 'react';
 import type {
   PersonalLearningPractice,
@@ -34,7 +39,7 @@ export function LearningPracticeCard({
   plainLanguage = false,
   simpleStart = false,
   instructorReviewHref,
-  instructorReviewAnswered = false,
+  instructorReviewStatus,
   conversationHref,
   onOpenConversation,
   onChange,
@@ -45,7 +50,7 @@ export function LearningPracticeCard({
   plainLanguage?: boolean;
   simpleStart?: boolean;
   instructorReviewHref?: string | undefined;
-  instructorReviewAnswered?: boolean | undefined;
+  instructorReviewStatus?: InstructorReviewStatus | undefined;
   conversationHref?: string | undefined;
   onOpenConversation?: (() => void) | undefined;
   onChange: (value: PersonalLearningPracticeState) => void;
@@ -337,7 +342,11 @@ export function LearningPracticeCard({
                 </a>
               )}
               <a href={instructorReviewHref}>
-                {instructorReviewAnswered ? '講師からの回答を見る' : '講師に相談する（有料）'}
+                {instructorReviewStatus === 'ANSWERED'
+                  ? '講師からの回答を見る'
+                  : instructorReviewStatus
+                    ? `講師レビューの状況を見る（${instructorReviewStatusLabel[instructorReviewStatus]}）`
+                    : '講師に相談する（有料）'}
               </a>
             </div>
           )}
@@ -410,6 +419,9 @@ export function LearningPracticeCard({
                   <p>元の希望：{current.nextCandidate.originalText}</p>
                   <h4>次の到達点（提案）</h4>
                   <p>{current.nextCandidate.proposal.outcome}</p>
+                  {simpleStart && (
+                    <p>この練習を提案した理由：{current.nextCandidate.proposal.reason}</p>
+                  )}
                   <p>{current.nextCandidate.proposal.explanation}</p>
                   <ol>
                     {current.nextCandidate.proposal.practice.map((step, index) => (

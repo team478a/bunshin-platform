@@ -3,7 +3,7 @@ import {
   browserLearningProgram,
   learningMaterialPath,
 } from '../../../../../../src/services/browser-learning-material';
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import { MANABERU_SERVICE_SLUG } from '../../../../../../src/services/service-auth-brand';
 import { ApplicationError } from '@bunshin/shared';
 import { LEARNING_CANDIDATE_POLICY } from '@bunshin/application';
@@ -23,6 +23,11 @@ import { LearningTopicSelector } from './topic-selector';
 import { AiTrainingDataExportCard } from '../ai-training-data-export-card';
 import { personalLearningPersonaInvitationAnswerCount } from '../../../../../../src/services/personal-learning-persona-consent';
 import { LearningNudgePreferenceCard } from './nudge-preference-card';
+import {
+  instructorReviewOfferFocusLabel,
+  instructorReviewOccupiesSlot,
+  instructorReviewStatusLabel,
+} from '../../../../../../src/services/instructor-review-contract';
 export const dynamic = 'force-dynamic';
 export default async function Page({
   params,
@@ -293,7 +298,7 @@ export default async function Page({
     const initialPractice = await new db.PrismaPersonalLearningPracticeRepository(
       db.prisma,
     ).readPractice(input);
-    const answeredReview =
+    const currentReview =
       simpleStart && initialPractice.current
         ? await db.prisma.instructorReview.findFirst({
             where: {
@@ -303,17 +308,63 @@ export default async function Page({
               groupMembershipId: input.scope.groupMembershipId,
               buyerUserId: input.actorUserId,
               assignmentId: initialPractice.current.assignmentId,
-              status: 'ANSWERED',
+              status: { in: [...instructorReviewOccupiesSlot, 'ANSWERED'] },
             },
-            select: { id: true },
-            orderBy: { answeredAt: 'desc' },
+            select: { id: true, status: true },
+            orderBy: { createdAt: 'desc' },
           })
         : null;
     const reviewQuery = new URLSearchParams(topicQuery);
-    if (answeredReview) reviewQuery.set('reviewId', answeredReview.id);
+    if (currentReview) reviewQuery.set('reviewId', currentReview.id);
     const instructorReviewHref = simpleStart
       ? `${pagePath}/instructor-review${reviewQuery.size ? `?${reviewQuery}` : ''}`
       : undefined;
+
+    const offerKey = {
+      serviceSlug,
+      enrollmentId: programEnrollmentId,
+      topicId: input.topicId ?? null,
+    };
+    const individualOffer =
+      simpleStart && initialPractice.current && !currentReview
+        ? await (
+            await import('../../../../../../src/services/instructor-review-runtime')
+          ).getIndividualInstructorReviewOffer({
+            ...offerKey,
+            userId: actor.userId,
+            assignmentId: initialPractice.current.assignmentId,
+          })
+        : null;
+    const displayedOfferId = individualOffer?.kind === 'offer' ? individualOffer.id : null;
+    const individualOfferQuery = new URLSearchParams(topicQuery);
+    if (displayedOfferId) individualOfferQuery.set('individualOfferId', displayedOfferId);
+    if (individualOffer?.kind === 'review')
+      individualOfferQuery.set('reviewId', individualOffer.review.id);
+    const learningRoot =
+      `/s/${serviceSlug}/programs/${programEnrollmentId}/learning-request` as const;
+    const returnToLearning = offerKey.topicId
+      ? (`${learningRoot}?topicId=${encodeURIComponent(offerKey.topicId)}` as const)
+      : learningRoot;
+
+    async function dismissOffer() {
+      'use server';
+      const { actor: learner } = await resolveAuthenticatedMemberServicePage(
+        serviceSlug,
+        returnToLearning,
+      );
+      if (!displayedOfferId) notFound();
+      const { dismissIndividualInstructorReviewOffer } =
+        await import('../../../../../../src/services/instructor-review-runtime');
+      await dismissIndividualInstructorReviewOffer({
+        ...offerKey,
+        userId: learner.userId,
+        offerId: displayedOfferId,
+      }).catch((error: unknown) => {
+        if (error instanceof ApplicationError && error.code === 'NOT_FOUND') notFound();
+        throw error;
+      });
+      redirect(`${returnToLearning}#practice-evidence`);
+    }
 
     return (
       <main className={`${design.frame} ${design.flow}`}>
@@ -329,6 +380,32 @@ export default async function Page({
             allowCreate={!sideHustleProgram}
           />
         )}
+        {individualOffer && (
+          <section className={design.panel} aria-labelledby="individual-instructor-offer">
+            <h2 id="individual-instructor-offer">講師による文章レビュー</h2>
+            {individualOffer.kind === 'offer' ? (
+              <>
+                <p>運営からの提案 · {instructorReviewOfferFocusLabel[individualOffer.focus]}</p>
+                <a
+                  className="button button--secondary"
+                  href={`${pagePath}/instructor-review?${individualOfferQuery}`}
+                >
+                  内容・料金を見る
+                </a>
+                <form action={dismissOffer}>
+                  <button className="button button--secondary" type="submit">
+                    自分で続ける
+                  </button>
+                </form>
+              </>
+            ) : (
+              <>
+                <p role="status">{instructorReviewStatusLabel[individualOffer.review.status]}</p>
+                <a href={`${pagePath}/instructor-review?${individualOfferQuery}`}>受付状況を見る</a>
+              </>
+            )}
+          </section>
+        )}
         <PersonalLearningRequestCard
           browserMaterialHref={
             browserLearningProgram(program?.settings, programEnrollmentId)
@@ -338,7 +415,7 @@ export default async function Page({
           dynamicMode={dynamicProgram}
           simpleStart={simpleStart}
           instructorReviewHref={instructorReviewHref}
-          instructorReviewAnswered={answeredReview !== null}
+          instructorReviewStatus={currentReview?.status}
           endpoint={`/api/services/${serviceSlug}/ai-training/enrollments/${programEnrollmentId}/learning-request${topicQuery}`}
           initial={initial}
           practiceEndpoint={`/api/services/${serviceSlug}/ai-training/enrollments/${programEnrollmentId}/learning-request/practice${topicQuery}`}

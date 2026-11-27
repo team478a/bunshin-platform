@@ -1,6 +1,8 @@
 import { PERSONAL_LEARNING_PRACTICE_MISSION } from '@bunshin/application';
 import { notFound, redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
+import { z } from 'zod';
+import { ApplicationError } from '@bunshin/shared';
 import {
   AI_TRAINING_HELP_RESOLVED_EVENT,
   AI_TRAINING_V1_MODULE_KEY,
@@ -12,6 +14,7 @@ import { buildAiTrainingEvaluationOperations } from '../../../../../src/services
 import { buildAiTrainingPilotAnalytics } from '../../../../../src/services/ai-training-pilot-analytics';
 import { MANABERU_SERVICE_SLUG } from '../../../../../src/services/service-auth-brand';
 import { resolveManagedServiceContext } from '../../../../../src/services/public-service';
+import { instructorReviewOfferFocus } from '../../../../../src/services/instructor-review-contract';
 import { TrainingAdminDashboard } from './training-admin-dashboard';
 
 export const dynamic = 'force-dynamic';
@@ -20,6 +23,40 @@ const formText = (formData: FormData, key: string) => {
   const value = formData.get(key);
   return typeof value === 'string' ? value.trim() : '';
 };
+
+const individualOfferInput = z.object({
+  enrollmentId: z.uuid(),
+  assignmentId: z.uuid(),
+  focus: instructorReviewOfferFocus,
+});
+const offerPracticeTitle = z.object({
+  dynamicPractice: z.object({
+    candidate: z.object({ proposal: z.object({ outcome: z.string().min(1) }) }),
+  }),
+});
+const offerResult = z.enum(['proposed', 'existing-offer', 'existing-review', 'unavailable']);
+
+async function proposeReview(formData: FormData) {
+  'use server';
+  const serviceSlug = MANABERU_SERVICE_SLUG;
+  const path = `/s/${serviceSlug}/manage/training` as const;
+  const actor = await (await currentUserProvider()).getCurrentUser();
+  if (!actor) redirect(`/login?returnTo=${encodeURIComponent(path)}`);
+  const input = individualOfferInput.safeParse(Object.fromEntries(formData));
+  if (!input.success) redirect(`${path}?offerStatus=unavailable`);
+  const { proposeIndividualInstructorReview } =
+    await import('../../../../../src/services/instructor-review-runtime');
+  const result = await proposeIndividualInstructorReview({
+    ...input.data,
+    serviceSlug,
+    userId: actor.userId,
+  }).catch((error: unknown) => {
+    if (error instanceof ApplicationError && error.code === 'NOT_FOUND') notFound();
+    if (error instanceof ApplicationError && error.code === 'CONFLICT') return 'unavailable';
+    throw error;
+  });
+  redirect(`${path}?offerStatus=${result}`);
+}
 
 async function updateTrainingOperations(formData: FormData) {
   'use server';
@@ -110,8 +147,10 @@ async function resolveTrainingHelp(formData: FormData) {
 
 export default async function AiTrainingAdminPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ serviceSlug: string }>;
+  searchParams?: Promise<{ offerStatus?: string }>;
 }) {
   const { serviceSlug } = await params;
   const actor = await (await currentUserProvider()).getCurrentUser();
@@ -227,6 +266,7 @@ export default async function AiTrainingAdminPage({
               programEnrollmentId: true,
               id: true,
               missionDefinitionKey: true,
+              status: true,
               displaySnapshot: true,
             },
             orderBy: [{ programEnrollmentId: 'asc' }, { sequence: 'desc' }],
@@ -477,6 +517,31 @@ export default async function AiTrainingAdminPage({
 
   return (
     <TrainingAdminDashboard
+      individualReviewOffers={
+        serviceSlug === MANABERU_SERVICE_SLUG
+          ? {
+              action: proposeReview,
+              result: offerResult.safeParse((await searchParams)?.offerStatus).data,
+              tasks: assignments.flatMap((assignment) => {
+                if (
+                  assignment.missionDefinitionKey !== PERSONAL_LEARNING_PRACTICE_MISSION ||
+                  assignment.status !== 'STARTED'
+                )
+                  return [];
+                const title = offerPracticeTitle.safeParse(assignment.displaySnapshot);
+                return title.success
+                  ? [
+                      {
+                        enrollmentId: assignment.programEnrollmentId,
+                        id: assignment.id,
+                        title: title.data.dynamicPractice.candidate.proposal.outcome,
+                      },
+                    ]
+                  : [];
+              }),
+            }
+          : undefined
+      }
       lifecycleRows={enrollments.map((row) => ({
         enrollmentId: row.id,
         status: row.status,

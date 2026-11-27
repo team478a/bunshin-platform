@@ -2,13 +2,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as StripeCheckoutModule from '../src/payments/stripe-checkout';
 import {
   beginInstructorReview,
+  dismissIndividualInstructorReviewOffer,
   getAssignedInstructorReviews,
+  proposeIndividualInstructorReview,
 } from '../src/services/instructor-review-runtime';
 
 const f = vi.hoisted(() => {
   const tx = {
     $queryRaw: vi.fn(),
     groupMembership: { findFirst: vi.fn() },
+    programActionEvent: { findFirst: vi.fn(), createMany: vi.fn() },
     instructorReview: {
       count: vi.fn(),
       findFirst: vi.fn(),
@@ -20,6 +23,7 @@ const f = vi.hoisted(() => {
     organizationPaymentConfiguration: { findFirst: vi.fn() },
     programEnrollment: { findFirst: vi.fn() },
     programMissionAssignment: { findFirst: vi.fn() },
+    serviceProgram: { findFirst: vi.fn() },
   };
   return { tx, current: vi.fn(), member: vi.fn(), checkout: vi.fn() };
 });
@@ -173,5 +177,102 @@ describe('instructor review admission', () => {
         }),
       }),
     );
+  });
+
+  it('creates one proposal only for an eligible current task and reuses the assignment key', async () => {
+    f.tx.groupMembership.findFirst.mockResolvedValue({ id: groupMembershipId });
+    f.tx.programEnrollment.findFirst.mockResolvedValue({
+      serviceProgramId: programId,
+      groupMembershipId,
+    });
+    f.tx.serviceProgram.findFirst.mockResolvedValue({ id: programId });
+    f.tx.programActionEvent.createMany
+      .mockResolvedValueOnce({ count: 1 })
+      .mockResolvedValueOnce({ count: 0 });
+    const input = {
+      serviceSlug: request.serviceSlug,
+      enrollmentId,
+      userId,
+      assignmentId,
+      focus: 'STRUCTURE' as const,
+    };
+    await expect(proposeIndividualInstructorReview(input)).resolves.toBe('proposed');
+    await expect(proposeIndividualInstructorReview(input)).resolves.toBe('existing-offer');
+    expect(f.tx.programActionEvent.createMany).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        workspaceId,
+        groupId,
+        programEnrollmentId: enrollmentId,
+        missionAssignmentId: assignmentId,
+        idempotencyKey: `instructor-review-offer:${assignmentId}`,
+        metadata: { focus: 'STRUCTURE' },
+      }),
+      skipDuplicates: true,
+    });
+    f.tx.instructorReview.findFirst.mockResolvedValue({ id: id(12) });
+    await expect(proposeIndividualInstructorReview(input)).resolves.toBe('existing-review');
+    f.tx.programMissionAssignment.findFirst.mockResolvedValue(null);
+    await expect(proposeIndividualInstructorReview(input)).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+    });
+    expect(f.tx.programActionEvent.createMany).toHaveBeenCalledTimes(2);
+  });
+
+  it('records the operator source only for an active offer on the buyer’s assignment', async () => {
+    const offerId = id(14);
+    const input = { ...request, individualOfferId: offerId };
+    f.tx.programActionEvent.findFirst.mockResolvedValueOnce(null);
+    await expect(beginInstructorReview(input)).rejects.toMatchObject({ code: 'CONFLICT' });
+    expect(f.checkout).not.toHaveBeenCalled();
+    f.tx.programActionEvent.findFirst
+      .mockResolvedValueOnce({ id: offerId, metadata: { focus: 'CLARITY' } })
+      .mockResolvedValueOnce(null);
+    await expect(beginInstructorReview(input)).resolves.toEqual({
+      url: 'https://checkout.stripe.com/example',
+    });
+    expect(f.tx.programActionEvent.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          id: offerId,
+          workspaceId,
+          groupId,
+          programEnrollmentId: enrollmentId,
+          missionAssignmentId: assignmentId,
+        }),
+      }),
+    );
+    expect(f.tx.instructorReview.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ source: 'OPERATOR_OFFER' }),
+      }),
+    );
+  });
+
+  it('does not re-show or overwrite a dismissal when the action is retried', async () => {
+    const offerId = id(14);
+    const input = {
+      serviceSlug: request.serviceSlug,
+      enrollmentId,
+      userId,
+      offerId,
+      topicId: null,
+    };
+    f.tx.programActionEvent.findFirst.mockResolvedValue({
+      id: offerId,
+      metadata: { focus: 'STRUCTURE' },
+    });
+    f.tx.programActionEvent.findFirst
+      .mockResolvedValueOnce({ id: offerId, metadata: { focus: 'STRUCTURE' } })
+      .mockResolvedValueOnce(null);
+    await dismissIndividualInstructorReviewOffer(input);
+    await dismissIndividualInstructorReviewOffer(input);
+    expect(f.tx.programActionEvent.createMany).toHaveBeenCalledTimes(1);
+    expect(f.tx.programActionEvent.createMany).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        idempotencyKey: `instructor-review-offer-dismissed:${offerId}`,
+        sourceResourceId: offerId,
+      }),
+      skipDuplicates: true,
+    });
   });
 });

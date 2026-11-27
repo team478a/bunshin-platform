@@ -234,7 +234,7 @@ describe('lesson generation composition', () => {
     expect(f.record).toHaveBeenCalledOnce();
     expect(f.save).toHaveBeenCalledWith(
       expect.objectContaining({
-        promptVersion: expect.stringMatching(/-intent-v1$/),
+        promptVersion: expect.stringMatching(/-intent-v1-adaptive-practice-v1$/),
         proposal: expect.objectContaining({ intentAnalysis }),
       }),
     );

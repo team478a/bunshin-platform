@@ -16,7 +16,10 @@ import {
 } from '../ai/learning-provider-runtime';
 import { personalLearningPricingRegistry } from '../observability/personal-learning-ai-call';
 import { generateLearningLesson, learningLessonBody } from '../providers/openai-learning-lesson';
-import { learningProposalPolicy } from '../providers/learning-proposal-policy';
+import {
+  ADAPTIVE_LEARNING_PROMPT_SUFFIX,
+  learningProposalPolicy,
+} from '../providers/learning-proposal-policy';
 import { resolvePersonalLearningOfferContext } from './personal-learning-extended-scope';
 import { loadPersonalLearningToolFeatureContext } from './personal-learning-tool-feature-context';
 
@@ -75,7 +78,8 @@ export async function prepareLearningLesson(
   const promptVersion =
     proposalPolicy.version +
     (includeIntentAnalysis ? '-intent-v1' : '') +
-    (simpleStart ? MANABERU_SIMPLE_LESSON_PROMPT_SUFFIX : '');
+    (simpleStart ? MANABERU_SIMPLE_LESSON_PROMPT_SUFFIX : '') +
+    (offerPolicy === 'AI_SKILL_V1' ? ADAPTIVE_LEARNING_PROMPT_SUFFIX : '');
   const personaContext = await new db.PrismaPersonalLearningPersonaRepository(db.prisma).listForAi(
     actor.scope,
   );
