@@ -8,6 +8,16 @@ import type { SavedPersonalLearningRequest } from './personal-learning-request';
 
 export const LEARNING_CANDIDATE_POLICY = 'LEARNER_PRACTICE_TOOL_INDEPENDENT_V1';
 export const MANABERU_SIMPLE_LESSON_PROMPT_SUFFIX = '-simple-start-v1';
+export const ADAPTIVE_LEARNING_PROMPT_SUFFIX = '-adaptive-practice-v1';
+
+export function isManaberuSimpleLessonPrompt(promptVersion: string): boolean {
+  return (
+    promptVersion.endsWith(MANABERU_SIMPLE_LESSON_PROMPT_SUFFIX) ||
+    promptVersion.endsWith(
+      `${MANABERU_SIMPLE_LESSON_PROMPT_SUFFIX}${ADAPTIVE_LEARNING_PROMPT_SUFFIX}`,
+    )
+  );
+}
 
 export interface LearningLessonProposal {
   status: 'READY' | 'NEEDS_CONTEXT' | 'OUT_OF_SCOPE';
