@@ -8,6 +8,7 @@ const m = vi.hoisted(() => ({
   target: vi.fn(),
   overview: vi.fn(),
   save: vi.fn(),
+  saveLandings: vi.fn(),
   execute: vi.fn(),
   reserve: vi.fn(),
   release: vi.fn(),
@@ -23,6 +24,7 @@ vi.mock('@bunshin/database', () => ({
   PrismaServiceReferralManagementRepository: class {
     overview = m.overview;
     savePolicy = m.save;
+    saveLandingPages = m.saveLandings;
     execute = m.execute;
   },
 }));
@@ -52,6 +54,24 @@ beforeEach(() => {
   m.execute.mockResolvedValue({ state: 'UNASSESSED', review: 'CLEAR' });
 });
 describe('referral management HTTP authorization and input boundary', () => {
+  it('saves landing pages against only the resolved service and rejects forged fields', async () => {
+    const settings = {
+      revision: 0,
+      activeId: id(6),
+      pages: [{ id: id(6), name: '紹介LP', url: 'https://landing.example/oracle' }],
+    };
+    m.saveLandings.mockResolvedValue({ ...settings, revision: 1 });
+    expect((await POST(request({ kind: 'LANDINGS', settings }), context)).status).toBe(200);
+    expect(m.saveLandings).toHaveBeenCalledWith(
+      { workspaceId: id(4), serviceId: id(5), actorUserId: id(3) },
+      settings,
+    );
+    expect(
+      (await POST(request({ kind: 'LANDINGS', settings, groupId: id(9) }), context)).status,
+    ).toBe(400);
+    expect(m.saveLandings).toHaveBeenCalledOnce();
+  });
+
   it('accepts a Fortune policy with an optional registration window', async () => {
     const value = {
       kind: 'POLICY',

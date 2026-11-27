@@ -274,7 +274,9 @@ export default async function FortuneManagementPage({
                   商品仮説と販売実証
                 </Link>{' '}
                 <Link href={`/s/${serviceSlug}/manage/settings` as Route}>友だち紹介の設定</Link>{' '}
-                <Link href={`/s/${serviceSlug}/manage/referrals` as Route}>紹介の条件・審査</Link>{' '}
+                <Link href={`/s/${serviceSlug}/manage/referrals` as Route}>
+                  紹介先LP・紹介の条件・審査
+                </Link>{' '}
                 <Link href={`/s/${serviceSlug}/manage/referral-rewards` as Route}>紹介特典</Link>
               </div>
             )}

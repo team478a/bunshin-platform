@@ -18,6 +18,7 @@ export function registerReferralManagementIntegrationCases(client: PrismaClient)
       await client.serviceReferralReward.deleteMany({ where });
       await client.serviceCreditLedger.deleteMany({ where });
       await client.serviceCreditAccount.deleteMany({ where });
+      await client.serviceConfigurationAudit.deleteMany({ where });
       await client.serviceReferralQualificationAudit.deleteMany({ where });
       await client.serviceReferral.deleteMany({ where });
       await client.serviceReferralQualificationPolicyVersion.deleteMany({ where });
@@ -88,6 +89,53 @@ export function registerReferralManagementIntegrationCases(client: PrismaClient)
           now,
         ),
       );
+    it('keeps landing settings service-scoped, rejects concurrent stale changes and audits switches', async () => {
+      const f = await fixture();
+      const other = await fixture();
+      await client.platformAdmin.deleteMany({ where: { userId: f.referrer.id } });
+      const registration = { workspaceId: f.workspace.id, groupId: f.group.id };
+      const config = await client.serviceConfiguration.findUniqueOrThrow({
+        where: { groupId: f.group.id },
+      });
+      await client.serviceRegistrationPolicy.create({
+        data: { ...registration, configurationId: config.id },
+      });
+      expect(await f.repo.readLandingPages(f.scope)).toEqual({});
+      const first = { id: randomUUID(), name: '通常LP', url: 'https://landing.example/first' };
+      const second = { id: randomUUID(), name: '特集LP', url: 'https://landing.example/second' };
+      const initial = { revision: 0, activeId: first.id, pages: [first, second] };
+      await expect(
+        f.repo.saveLandingPages({ ...f.scope, actorUserId: other.owner.id }, initial),
+      ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+      expect(await f.repo.saveLandingPages(f.scope, initial)).toEqual({ ...initial, revision: 1 });
+      await expect(f.repo.saveLandingPages(f.scope, initial)).rejects.toMatchObject({
+        code: 'CONFLICT',
+      });
+      const switched = await f.repo.saveLandingPages(f.scope, {
+        ...initial,
+        revision: 1,
+        activeId: second.id,
+      });
+      const deleted = await f.repo.saveLandingPages(f.scope, {
+        ...switched,
+        activeId: null,
+        pages: [first],
+      });
+      expect(await f.repo.readLandingPages(f.scope)).toEqual(deleted);
+      expect(await f.repo.readLandingPages(other.scope)).toBeUndefined();
+      const audits = await client.serviceConfigurationAudit.findMany({
+        where: { ...registration, action: 'UPDATE_REFERRAL_LANDINGS' },
+      });
+      expect(audits).toHaveLength(3);
+      expect(audits).toContainEqual(
+        expect.objectContaining({
+          performedByUserId: f.scope.actorUserId,
+          beforeData: switched,
+          afterData: deleted,
+        }),
+      );
+    });
+
     it('requires viewed free results and real purchase evidence, grants both sides once and revokes unused credit on refund', async () => {
       const f = await fixture();
       const scope = { workspaceId: f.workspace.id, groupId: f.group.id };

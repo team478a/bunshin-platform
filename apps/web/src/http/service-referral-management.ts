@@ -5,6 +5,7 @@ import { ApplicationError, toApiError } from '@bunshin/shared';
 import { currentUserProvider } from '../auth/current-user';
 import { requireSameOrigin } from '../auth/request-security';
 import { memberUsageReadLimit } from './member-usage-read-limit';
+import { referralLandingsSchema } from '../services/referral-landings';
 
 const reason = z.string().trim().min(1).max(1000);
 const conditions = z
@@ -16,6 +17,7 @@ const conditions = z
   })
   .strict();
 export const referralManagementInput = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('LANDINGS'), settings: referralLandingsSchema }).strict(),
   z
     .object({
       kind: z.literal('POLICY'),
@@ -120,7 +122,7 @@ export async function serviceReferralManagementResponse(request: Request, slug: 
     if (request.method === 'GET') data = await repository.overview(scope, after);
     else {
       const body = await request.text();
-      if (body.length > 8192) throw new ApplicationError('VALIDATION_ERROR', 'request too large');
+      if (body.length > 131072) throw new ApplicationError('VALIDATION_ERROR', 'request too large');
       let parsed: unknown;
       try {
         parsed = JSON.parse(body);
@@ -131,10 +133,12 @@ export async function serviceReferralManagementResponse(request: Request, slug: 
       if (!result.success)
         throw new ApplicationError('VALIDATION_ERROR', 'invalid referral request');
       const value = result.data;
-      data =
-        value.kind === 'POLICY'
-          ? await repository.savePolicy(scope, value)
-          : await repository.execute(scope, value);
+      if (value.kind !== 'LANDINGS' && body.length > 8192)
+        throw new ApplicationError('VALIDATION_ERROR', 'request too large');
+      if (value.kind === 'LANDINGS')
+        data = await repository.saveLandingPages(scope, value.settings);
+      else if (value.kind === 'POLICY') data = await repository.savePolicy(scope, value);
+      else data = await repository.execute(scope, value);
     }
     return Response.json({ data, requestId }, { headers });
   } catch (error) {
