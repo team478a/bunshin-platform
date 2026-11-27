@@ -26,6 +26,7 @@ export function InstructorReviewForm({
   idempotencyKey,
   topicId,
   initialExcerpt,
+  initialFocus = '',
 }: {
   action: (data: FormData) => void | Promise<void>;
   offer: ReviewOffer;
@@ -34,8 +35,9 @@ export function InstructorReviewForm({
   idempotencyKey: string;
   topicId: string | null;
   initialExcerpt: string;
+  initialFocus?: string | undefined;
 }) {
-  const [focus, setFocus] = useState('');
+  const [focus, setFocus] = useState(initialFocus);
   const [excerpt, setExcerpt] = useState(initialExcerpt);
   const [confirming, setConfirming] = useState(false);
   return (

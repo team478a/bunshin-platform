@@ -130,7 +130,7 @@ export function safeLineAuthReturnPath(value: string | null | undefined): string
       const params = [...url.searchParams.entries()];
       for (const [name, param] of params) {
         if (url.searchParams.getAll(name).length !== 1) return null;
-        if (name === 'topicId' || name === 'reviewId') {
+        if (name === 'topicId' || name === 'reviewId' || name === 'individualOfferId') {
           if (!topicIdentifierPattern.test(param)) return null;
         } else if (name === 'result') {
           if (

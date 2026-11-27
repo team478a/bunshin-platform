@@ -1,4 +1,9 @@
 'use client';
+
+import {
+  instructorReviewStatusLabel,
+  type InstructorReviewStatus,
+} from '../../../../../../src/services/instructor-review-contract';
 import { useRef, useState, useSyncExternalStore } from 'react';
 import type {
   PersonalLearningPractice,
@@ -34,7 +39,7 @@ export function LearningPracticeCard({
   plainLanguage = false,
   simpleStart = false,
   instructorReviewHref,
-  instructorReviewAnswered = false,
+  instructorReviewStatus,
   conversationHref,
   onOpenConversation,
   onChange,
@@ -45,7 +50,7 @@ export function LearningPracticeCard({
   plainLanguage?: boolean;
   simpleStart?: boolean;
   instructorReviewHref?: string | undefined;
-  instructorReviewAnswered?: boolean | undefined;
+  instructorReviewStatus?: InstructorReviewStatus | undefined;
   conversationHref?: string | undefined;
   onOpenConversation?: (() => void) | undefined;
   onChange: (value: PersonalLearningPracticeState) => void;
@@ -337,7 +342,11 @@ export function LearningPracticeCard({
                 </a>
               )}
               <a href={instructorReviewHref}>
-                {instructorReviewAnswered ? '講師からの回答を見る' : '講師に相談する（有料）'}
+                {instructorReviewStatus === 'ANSWERED'
+                  ? '講師からの回答を見る'
+                  : instructorReviewStatus
+                    ? `講師レビューの状況を見る（${instructorReviewStatusLabel[instructorReviewStatus]}）`
+                    : '講師に相談する（有料）'}
               </a>
             </div>
           )}

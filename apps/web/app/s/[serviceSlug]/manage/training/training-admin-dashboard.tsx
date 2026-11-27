@@ -5,6 +5,7 @@ import type { buildAiTrainingAdminDashboard } from '../../../../../src/services/
 import type { buildAiTrainingEvaluationOperations } from '../../../../../src/services/ai-training-evaluation-operations';
 import type { buildAiTrainingPilotAnalytics } from '../../../../../src/services/ai-training-pilot-analytics';
 import { MANABERU_SERVICE_SLUG } from '../../../../../src/services/service-auth-brand';
+import { instructorReviewOfferFocusLabel } from '../../../../../src/services/instructor-review-contract';
 import { PublicShell } from '../../../../ui/public-shell';
 import { TrainingLifecycleCard, type TrainingLifecycleRow } from './training-lifecycle-card';
 
@@ -31,6 +32,12 @@ const engagementLabel = {
 } as const;
 
 type TrainingOperationsSettingsSource = Parameters<typeof parseAiTrainingOperationsSettings>[0];
+const offerResultMessage = {
+  proposed: '受講者の課題画面に提案を表示しました。',
+  'existing-offer': 'この課題への提案はすでに登録されています。',
+  'existing-review': 'この課題の講師レビューは受付一覧で確認できます。',
+  unavailable: '現在、この課題の講師レビューを新規受付できません。',
+} as const;
 
 type TrainingAdminDashboardProps = {
   checkedAt: Date;
@@ -43,6 +50,13 @@ type TrainingAdminDashboardProps = {
   helpRequests: Array<{ id: string; participantName: string; occurredAt: Date }>;
   updateTrainingOperations: (formData: FormData) => Promise<void>;
   resolveTrainingHelp: (formData: FormData) => Promise<void>;
+  individualReviewOffers?:
+    | {
+        action: (formData: FormData) => Promise<void>;
+        result: keyof typeof offerResultMessage | undefined;
+        tasks: Array<{ enrollmentId: string; id: string; title: string }>;
+      }
+    | undefined;
 };
 
 export function TrainingAdminDashboard({
@@ -56,6 +70,7 @@ export function TrainingAdminDashboard({
   helpRequests,
   updateTrainingOperations,
   resolveTrainingHelp,
+  individualReviewOffers,
 }: TrainingAdminDashboardProps) {
   return (
     <PublicShell showPlatformBrand={false}>
@@ -386,6 +401,9 @@ export function TrainingAdminDashboard({
             <section className="settings-card">
               <h2>受講者ごとの状況</h2>
               <p>回答本文は表示せず、進捗とAI評価で見つかった苦手だけを表示しています。</p>
+              {individualReviewOffers?.result && (
+                <p role="status">{offerResultMessage[individualReviewOffers.result]}</p>
+              )}
               {dashboard.participants.length === 0 ? (
                 <p>AI研修へ登録された受講者はまだいません。</p>
               ) : (
@@ -394,6 +412,10 @@ export function TrainingAdminDashboard({
                     const lifecycle = lifecycleRows.find(
                       (row) => row.enrollmentId === participant.enrollmentId,
                     );
+                    const reviewTasks =
+                      individualReviewOffers?.tasks.filter(
+                        (task) => task.enrollmentId === participant.enrollmentId,
+                      ) ?? [];
                     return (
                       <article
                         className="training-admin__participant"
@@ -443,6 +465,43 @@ export function TrainingAdminDashboard({
                             {participant.dynamicPractice.submissions}件
                           </p>
                         )}
+                        {individualReviewOffers &&
+                          lifecycle?.displayStatus === 'ACTIVE' &&
+                          reviewTasks.length > 0 && (
+                            <details>
+                              <summary>講師レビューを提案</summary>
+                              <form action={individualReviewOffers.action}>
+                                <input
+                                  type="hidden"
+                                  name="enrollmentId"
+                                  value={participant.enrollmentId}
+                                />
+                                <label>
+                                  対象課題
+                                  <select name="assignmentId" required>
+                                    {reviewTasks.map((task) => (
+                                      <option key={task.id} value={task.id}>
+                                        {task.title}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </label>
+                                <label>
+                                  支援内容
+                                  <select name="focus" required>
+                                    {Object.entries(instructorReviewOfferFocusLabel).map(
+                                      ([value, label]) => (
+                                        <option key={value} value={value}>
+                                          {label}
+                                        </option>
+                                      ),
+                                    )}
+                                  </select>
+                                </label>
+                                <button type="submit">提案を表示する</button>
+                              </form>
+                            </details>
+                          )}
                         {lifecycle && (
                           <TrainingLifecycleCard
                             key={`${lifecycle.updatedAt}:${lifecycle.displayStatus}`}
