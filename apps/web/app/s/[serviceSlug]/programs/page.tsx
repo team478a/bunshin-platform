@@ -16,7 +16,7 @@ import {
   selectableTrainingModes,
 } from '../../../../src/services/training-support-mode';
 
-import { learnerTrainingProgramName } from '../../../../src/services/training-program-display-name';
+import { learnerTrainingProgramCopy } from '../../../../src/services/training-program-copy';
 
 export const dynamic = 'force-dynamic';
 export default async function MemberProgramsPage({
@@ -245,7 +245,7 @@ export default async function MemberProgramsPage({
             const isProgramActive = program.status === 'ACTIVE';
             return {
               enrollmentId: enrollment.id,
-              name: learnerTrainingProgramName(serviceSlug, program.displayName),
+              name: learnerTrainingProgramCopy(serviceSlug, program.displayName).name,
               guidance: policy?.guidance ?? '',
               modes: selectableTrainingModes(
                 (policy?.allowedSupportModes as string[] | undefined) ?? [enrollment.supportMode],
@@ -298,7 +298,7 @@ export default async function MemberProgramsPage({
             (item) => item.id === enrollment.serviceProgramId,
           );
           if (!program) return null;
-          const programName = learnerTrainingProgramName(serviceSlug, program.displayName);
+          const programName = learnerTrainingProgramCopy(serviceSlug, program.displayName).name;
           return (
             <section className="settings-card" key={enrollment.id}>
               <h2>{programName}</h2>

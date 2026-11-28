@@ -9,7 +9,7 @@ import {
   recordAiTrainingUsageConsent,
 } from '../../../../src/services/ai-training-consent';
 import { aiTrainingConsentPolicy } from '../../../../src/services/ai-training-consent-policy';
-import { learnerTrainingProgramName } from '../../../../src/services/training-program-display-name';
+import { learnerTrainingProgramCopy } from '../../../../src/services/training-program-copy';
 import { PublicShell } from '../../../ui/public-shell';
 import { PendingSubmitButton } from '../../../ui/pending-submit-button';
 
@@ -82,7 +82,7 @@ export default async function AiTrainingConfirmationPage({
             const enrollmentCopy = (
               enrollment.isDynamicLearning ? policyCopy.dynamicStates : policyCopy.states
             )[enrollment.state];
-            const programName = learnerTrainingProgramName(serviceSlug, enrollment.programName);
+            const program = learnerTrainingProgramCopy(serviceSlug, enrollment.programName);
             const shortConsent =
               enrollment.isDynamicLearning && enrollment.offerPolicy === 'AI_SKILL_V1';
             const consentDetails = enrollment.consentText && (
@@ -95,10 +95,8 @@ export default async function AiTrainingConfirmationPage({
 
             return (
               <article className="settings-card" key={enrollment.enrollmentId}>
-                <ProgramHeading>{programName}</ProgramHeading>
-                {programName !== enrollment.programName && (
-                  <p>やりたいことに合わせて、AIの使い方を練習します。</p>
-                )}
+                <ProgramHeading>{program.name}</ProgramHeading>
+                {program.description && <p>{program.description}</p>}
                 {enrollment.state === 'CONSENT_REQUIRED' && enrollment.consentText ? (
                   <>
                     {shortConsent ? (

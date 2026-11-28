@@ -6,7 +6,7 @@ import {
   invitationAcceptedPath,
   resolveAiTrainingParticipationState,
 } from '../src/services/ai-training-consent-policy';
-import { learnerTrainingProgramName } from '../src/services/training-program-display-name';
+import { learnerTrainingProgramCopy } from '../src/services/training-program-copy';
 
 const consentService = readFileSync(
   new URL('../src/services/ai-training-consent.ts', import.meta.url),
@@ -48,13 +48,22 @@ describe('Manaberu AI training consent flow', () => {
     expect(invitationAcceptedPath('manaberu-style', true)).toBe('/s/manaberu-style/training');
   });
 
-  it('uses a Japanese learner-facing name for the existing Manaberu personal course', () => {
+  it('distinguishes the fixed and personalized Manaberu courses in learner-facing copy', () => {
     const personalCourse = 'マナベルスタイル Personal Learning';
     const fixedCourse = 'マナベルスタイル AI研修30日';
 
-    expect(learnerTrainingProgramName('manaberu-style', personalCourse)).toBe('あなたのAI研修');
-    expect(learnerTrainingProgramName('manaberu-style', fixedCourse)).toBe(fixedCourse);
-    expect(learnerTrainingProgramName('other-service', personalCourse)).toBe(personalCourse);
+    expect(learnerTrainingProgramCopy('manaberu-style', fixedCourse)).toEqual({
+      name: fixedCourse,
+      description: '用意された課題に沿って、AIの使い方を30日間練習します。',
+    });
+    expect(learnerTrainingProgramCopy('manaberu-style', personalCourse)).toEqual({
+      name: 'あなた専用学習プログラム',
+      description: 'やりたいことや経験に合わせて、AIがあなた向けの練習を提案します。',
+    });
+    expect(learnerTrainingProgramCopy('other-service', personalCourse)).toEqual({
+      name: personalCourse,
+      description: null,
+    });
   });
 
   it('waits in order for a program, enrollment, INTERNAL seat, then explicit consent', () => {
