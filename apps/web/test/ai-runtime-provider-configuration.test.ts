@@ -115,11 +115,14 @@ describe('OpenAI runtime configuration', () => {
         monthlyUnknownCostEvents: 2,
       };
       const crypto = { encrypt: vi.fn(), decrypt: vi.fn().mockReturnValue('synthetic-key') };
-      const repo = repository(configSnapshot);
+      const getActiveForRuntime = vi
+        .fn<AiProviderConfigurationRepository['getActiveForRuntime']>()
+        .mockResolvedValue(configSnapshot);
+      const repo = { ...repository(null), getActiveForRuntime };
       await expect(
         resolveOpenAiRuntimeConfiguration({ repository: repo, crypto }, task),
       ).resolves.toMatchObject({ source: 'ADMIN_CONFIGURATION' });
-      expect(repo.getActiveForRuntime).toHaveBeenCalledWith(
+      expect(getActiveForRuntime).toHaveBeenCalledWith(
         expect.objectContaining({
           estimateUnknownCosts: true,
         }),
