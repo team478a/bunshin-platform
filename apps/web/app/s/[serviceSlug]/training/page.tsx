@@ -46,8 +46,8 @@ export default async function AiTrainingConfirmationPage({
   if (!actor)
     redirect(`/login?returnTo=${encodeURIComponent(`/s/${serviceSlug}/training`)}` as Route);
   const participation = await readAiTrainingParticipation(serviceSlug, actor.userId);
-  const isManaberu = serviceSlug === 'manaberu-style';
-  const showStatus = !isManaberu || participation.enrollments.length === 0;
+  const compactStatus = participation.isDynamicLearning;
+  const showStatus = !compactStatus || participation.enrollments.length === 0;
   const ProgramHeading = showStatus ? 'h3' : 'h2';
   const policies = [...new Set(participation.enrollments.map(({ offerPolicy }) => offerPolicy))];
   const mixedPolicies = policies.length > 1;
@@ -83,7 +83,8 @@ export default async function AiTrainingConfirmationPage({
               enrollment.isDynamicLearning ? policyCopy.dynamicStates : policyCopy.states
             )[enrollment.state];
             const programName = learnerTrainingProgramName(serviceSlug, enrollment.programName);
-            const shortConsent = isManaberu && enrollment.offerPolicy === 'AI_SKILL_V1';
+            const shortConsent =
+              enrollment.isDynamicLearning && enrollment.offerPolicy === 'AI_SKILL_V1';
             const consentDetails = enrollment.consentText && (
               <ul>
                 {enrollment.consentText.split('\n').map((line) => (
@@ -133,7 +134,7 @@ export default async function AiTrainingConfirmationPage({
                   </>
                 ) : (
                   <>
-                    {(!isManaberu || enrollment.state !== 'READY') && (
+                    {(!compactStatus || enrollment.state !== 'READY') && (
                       <p>{enrollmentCopy.message}</p>
                     )}
                     {enrollment.state === 'READY' && (
