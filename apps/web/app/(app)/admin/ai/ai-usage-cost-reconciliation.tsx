@@ -77,6 +77,9 @@ export function AiUsageCostReconciliation({ initialRows }: { initialRows: Row[] 
     <section className="settings-card">
       <h2>原価未確定の精算（SUPER_ADMIN）</h2>
       <p>
+        通常の予算管理には日次・月次の概算を使います。個別精算は、証跡を確認する必要がある場合に利用できます。
+      </p>
+      <p>
         課金証跡または承認済み価格表で確認できた行だけ入力してください。原価を推測して一括入力したり、失敗記録を自動で0円にしたりしません。
         0円は、Providerの請求証跡で請求なしを確認できた場合に限り入力してください。
       </p>

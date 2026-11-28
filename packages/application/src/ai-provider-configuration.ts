@@ -360,15 +360,16 @@ export class ResolveAiProviderRuntimeConfiguration {
     const now = input.now ?? new Date();
     const dailyFrom = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
     const monthlyFrom = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+    const budgetInput = { ...input, estimateUnknownCosts: input.estimateUnknownCosts ?? true };
     const value = await this.repository.getActiveForRuntime({
-      ...input,
+      ...budgetInput,
       now,
       dailyFrom,
       monthlyFrom,
     });
     if (value === null)
       throw new ApplicationError('CONFIGURATION_ERROR', 'active provider configuration required');
-    return assertAiProviderRuntimeConfiguration(input, value);
+    return assertAiProviderRuntimeConfiguration(budgetInput, value);
   }
 }
 
@@ -399,7 +400,10 @@ export class ReserveAiProviderRuntimeCall {
       throw new ApplicationError('VALIDATION_ERROR', 'invalid provider request count');
     if (input.reservedCostUsdMicros !== undefined && input.requestCount !== undefined)
       throw new ApplicationError('VALIDATION_ERROR', 'ambiguous provider reservation');
-    const value = await this.repository.reserveActiveForRuntime(input);
+    const value = await this.repository.reserveActiveForRuntime({
+      ...input,
+      estimateUnknownCosts: input.estimateUnknownCosts ?? true,
+    });
     if (value === null)
       throw new ApplicationError('CONFIGURATION_ERROR', 'active provider configuration required');
     return value;

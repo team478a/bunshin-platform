@@ -30,6 +30,10 @@
 
 旧設定を直接上書きしない。APIキーをチャット、Issue、ログへ貼らない。
 
+### AI原価の月次確認
+
+月1回、`/admin/ai` の「Provider別の概算AI原価」で前月（UTC）の総額と概算に含まれない件数を確認し、同じAPIプロジェクト・期間・通貨のProvider請求総額と見比べる。差が大きければ、価格版、未計上の呼び出し、キャッシュ等の割引、トークン以外の課金、集計期間を確認する。通常は呼び出し1件ずつの照合を行わず、個別精算は例外調査に利用する。標準単価の根拠は [GPT-5 mini](https://developers.openai.com/api/docs/models/gpt-5-mini)、[GPT-5.2](https://developers.openai.com/api/docs/models/gpt-5.2)、[GPT-5.6 Terra](https://developers.openai.com/api/docs/models/gpt-5.6-terra)。その他のトークン単価は既存の価格レジストリに公式単価と適用日を登録する。
+
 ## 3. LINE通知障害
 
 1. `/admin/line`で使用中設定と接続確認を確認する
