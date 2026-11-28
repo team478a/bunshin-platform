@@ -5,12 +5,88 @@ import type {
   AiProviderConfigurationRepository,
   AiProviderKey,
   AiProviderRuntimeAdmissionAdminRepository,
+  AiTokenPricing,
   VideoAiProviderCostPolicyRepository,
 } from '@bunshin/application';
-import { assertAiProviderRuntimeConfiguration } from '@bunshin/application';
+import {
+  assertAiProviderRuntimeConfiguration,
+  estimateRecordedAiUsageCost,
+} from '@bunshin/application';
 import { ApplicationError } from '@bunshin/shared';
 import { createHash } from 'node:crypto';
 import { type Prisma, type PrismaClient, prisma } from './client';
+
+const safeCostNumber = (value: bigint) =>
+  Number(value > BigInt(Number.MAX_SAFE_INTEGER) ? Number.MAX_SAFE_INTEGER : value);
+
+const usageCostFields = {
+  provider: true,
+  model: true,
+  inputTokens: true,
+  outputTokens: true,
+  occurredAt: true,
+} as const;
+
+async function runtimeUsageTotals(
+  client: Pick<PrismaClient, 'aiUsageEvent'>,
+  provider: string,
+  input: { dailyFrom: Date; monthlyFrom: Date; now: Date; estimateUnknownCosts?: boolean },
+  pricing: readonly AiTokenPricing[],
+) {
+  const dailyWhere = { provider, occurredAt: { gte: input.dailyFrom, lt: input.now } };
+  const monthlyWhere = { provider, occurredAt: { gte: input.monthlyFrom, lt: input.now } };
+  const unknownWhere = { ...monthlyWhere, estimatedCostUsdMicros: null };
+  const [daily, monthly] = await Promise.all([
+    client.aiUsageEvent.aggregate({
+      where: dailyWhere,
+      _sum: { estimatedCostUsdMicros: true },
+    }),
+    client.aiUsageEvent.aggregate({
+      where: monthlyWhere,
+      _sum: { estimatedCostUsdMicros: true },
+    }),
+  ]);
+  let dailySpent = daily._sum.estimatedCostUsdMicros ?? 0n;
+  let monthlySpent = monthly._sum.estimatedCostUsdMicros ?? 0n;
+  if (!input.estimateUnknownCosts) {
+    return {
+      dailySpent,
+      monthlySpent,
+      monthlyUnknownCostEvents: await client.aiUsageEvent.count({ where: unknownWhere }),
+    };
+  }
+  // Rows without token counts need only be counted, rather than loaded during every admission.
+  const [rows, missingToday, missingThisMonth] = await Promise.all([
+    client.aiUsageEvent.findMany({
+      where: { ...unknownWhere, inputTokens: { not: null }, outputTokens: { not: null } },
+      select: usageCostFields,
+    }),
+    client.aiUsageEvent.count({
+      where: {
+        ...dailyWhere,
+        estimatedCostUsdMicros: null,
+        OR: [{ inputTokens: null }, { outputTokens: null }],
+      },
+    }),
+    client.aiUsageEvent.count({
+      where: { ...unknownWhere, OR: [{ inputTokens: null }, { outputTokens: null }] },
+    }),
+  ]);
+  let dailyUnknownCostEvents = missingToday;
+  let monthlyUnknownCostEvents = missingThisMonth;
+  for (const item of rows) {
+    const estimate = estimateRecordedAiUsageCost(item, pricing);
+    const isToday = item.occurredAt >= input.dailyFrom;
+    if (estimate === null) {
+      monthlyUnknownCostEvents += 1;
+      if (isToday) dailyUnknownCostEvents += 1;
+    } else {
+      monthlySpent += BigInt(estimate);
+      if (isToday) dailySpent += BigInt(estimate);
+    }
+  }
+  return { dailySpent, monthlySpent, dailyUnknownCostEvents, monthlyUnknownCostEvents };
+}
 
 function aiProviderConfiguration(
   row: Prisma.AiProviderConfigurationGetPayload<object>,
@@ -62,7 +138,10 @@ function adminEmailConfiguration(
 export class PrismaAiProviderConfigurationRepository
   implements AiProviderConfigurationRepository, AiProviderRuntimeAdmissionAdminRepository
 {
-  constructor(private readonly client: PrismaClient = prisma) {}
+  constructor(
+    private readonly client: PrismaClient = prisma,
+    private readonly pricing: readonly AiTokenPricing[] = [],
+  ) {}
 
   private admin(actorUserId: string) {
     return this.client.platformAdmin.findFirst({
@@ -80,6 +159,61 @@ export class PrismaAiProviderConfigurationRepository
     return rows.map((row) =>
       aiProviderConfiguration(row, ['SUPER_ADMIN', 'OPERATOR'].includes(admin.role)),
     );
+  }
+
+  async listUsageCostEstimatesForAdmin(actorUserId: string, from: Date, until: Date) {
+    const admin = await this.admin(actorUserId);
+    if (!admin || !['SUPER_ADMIN', 'OPERATOR'].includes(admin.role)) return null;
+    const where = {
+      occurredAt: { gte: from, lt: until },
+      taskType: { not: 'DAILY_MISSION_PIPELINE' },
+    };
+    const [recorded, unknown] = await Promise.all([
+      this.client.aiUsageEvent.groupBy({
+        by: ['provider'],
+        where: { ...where, estimatedCostUsdMicros: { not: null } },
+        _sum: { estimatedCostUsdMicros: true },
+      }),
+      this.client.aiUsageEvent.findMany({
+        where: { ...where, estimatedCostUsdMicros: null },
+        select: usageCostFields,
+      }),
+    ]);
+    const totals = new Map<
+      string,
+      {
+        recordedUsdMicros: bigint | null;
+        tokenEstimateUsdMicros: bigint | null;
+        excludedCalls: number;
+      }
+    >();
+    const forProvider = (provider: string) => {
+      const key = provider.toLowerCase();
+      const value = totals.get(key) ?? {
+        recordedUsdMicros: null,
+        tokenEstimateUsdMicros: null,
+        excludedCalls: 0,
+      };
+      totals.set(key, value);
+      return value;
+    };
+    for (const row of recorded) {
+      const total = forProvider(row.provider);
+      total.recordedUsdMicros =
+        (total.recordedUsdMicros ?? 0n) + (row._sum.estimatedCostUsdMicros ?? 0n);
+    }
+    for (const row of unknown) {
+      const total = forProvider(row.provider);
+      const estimate = estimateRecordedAiUsageCost(row, this.pricing);
+      if (estimate === null) total.excludedCalls += 1;
+      else total.tokenEstimateUsdMicros = (total.tokenEstimateUsdMicros ?? 0n) + BigInt(estimate);
+    }
+    return [...totals]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([provider, value]) => ({
+        provider,
+        ...value,
+      }));
   }
 
   private async recoverableRuntimeAdmissionIds(
@@ -379,44 +513,18 @@ export class PrismaAiProviderConfigurationRepository
       },
     });
     if (row?.encryptedApiKey == null) return null;
-    const provider = input.provider.toLowerCase();
-    const [daily, monthly, monthlyUnknownCostEvents, dailyUnknownCostEvents] = await Promise.all([
-      this.client.aiUsageEvent.aggregate({
-        where: { provider, occurredAt: { gte: input.dailyFrom, lt: input.now } },
-        _sum: { estimatedCostUsdMicros: true },
-      }),
-      this.client.aiUsageEvent.aggregate({
-        where: { provider, occurredAt: { gte: input.monthlyFrom, lt: input.now } },
-        _sum: { estimatedCostUsdMicros: true },
-      }),
-      this.client.aiUsageEvent.count({
-        where: {
-          provider,
-          estimatedCostUsdMicros: null,
-          occurredAt: { gte: input.monthlyFrom, lt: input.now },
-        },
-      }),
-      input.estimateUnknownCosts
-        ? this.client.aiUsageEvent.count({
-            where: {
-              provider,
-              estimatedCostUsdMicros: null,
-              occurredAt: { gte: input.dailyFrom, lt: input.now },
-            },
-          })
-        : undefined,
-    ]);
-    const safeNumber = (value: bigint | null) =>
-      value === null
-        ? 0
-        : Number(value > BigInt(Number.MAX_SAFE_INTEGER) ? Number.MAX_SAFE_INTEGER : value);
+    const { dailySpent, monthlySpent, ...unknown } = await runtimeUsageTotals(
+      this.client,
+      input.provider.toLowerCase(),
+      input,
+      this.pricing,
+    );
     return {
       configuration: aiProviderConfiguration(row),
       encryptedApiKey: row.encryptedApiKey,
-      dailySpentUsdMicros: safeNumber(daily._sum.estimatedCostUsdMicros),
-      monthlySpentUsdMicros: safeNumber(monthly._sum.estimatedCostUsdMicros),
-      monthlyUnknownCostEvents,
-      ...(dailyUnknownCostEvents === undefined ? {} : { dailyUnknownCostEvents }),
+      dailySpentUsdMicros: safeCostNumber(dailySpent),
+      monthlySpentUsdMicros: safeCostNumber(monthlySpent),
+      ...unknown,
     };
   }
 
@@ -460,39 +568,18 @@ export class PrismaAiProviderConfigurationRepository
       const monthlyFrom = new Date(
         Date.UTC(clock.now.getUTCFullYear(), clock.now.getUTCMonth(), 1),
       );
-      const provider = input.provider.toLowerCase();
-      const [
-        daily,
-        monthly,
-        monthlyUnknownCostEvents,
-        dailyUnknownCostEvents,
-        dailyOpen,
-        monthlyOpen,
-      ] = await Promise.all([
-        tx.aiUsageEvent.aggregate({
-          where: { provider, occurredAt: { gte: dailyFrom, lt: clock.now } },
-          _sum: { estimatedCostUsdMicros: true },
-        }),
-        tx.aiUsageEvent.aggregate({
-          where: { provider, occurredAt: { gte: monthlyFrom, lt: clock.now } },
-          _sum: { estimatedCostUsdMicros: true },
-        }),
-        tx.aiUsageEvent.count({
-          where: {
-            provider,
-            estimatedCostUsdMicros: null,
-            occurredAt: { gte: monthlyFrom, lt: clock.now },
+      const [{ dailySpent, monthlySpent, ...unknown }, dailyOpen, monthlyOpen] = await Promise.all([
+        runtimeUsageTotals(
+          tx,
+          input.provider.toLowerCase(),
+          {
+            ...input,
+            dailyFrom,
+            monthlyFrom,
+            now: clock.now,
           },
-        }),
-        input.estimateUnknownCosts
-          ? tx.aiUsageEvent.count({
-              where: {
-                provider,
-                estimatedCostUsdMicros: null,
-                occurredAt: { gte: dailyFrom, lt: clock.now },
-              },
-            })
-          : undefined,
+          this.pricing,
+        ),
         tx.aiProviderCallAdmission.aggregate({
           where: {
             environment: input.environment,
@@ -512,20 +599,16 @@ export class PrismaAiProviderConfigurationRepository
           _sum: { reservedCostUsdMicros: true },
         }),
       ]);
-      const safeNumber = (value: bigint) =>
-        Number(value > BigInt(Number.MAX_SAFE_INTEGER) ? Number.MAX_SAFE_INTEGER : value);
       const snapshot = assertAiProviderRuntimeConfiguration(input, {
         configuration: aiProviderConfiguration(row),
         encryptedApiKey: row.encryptedApiKey,
-        dailySpentUsdMicros: safeNumber(
-          (daily._sum.estimatedCostUsdMicros ?? 0n) + (dailyOpen._sum.reservedCostUsdMicros ?? 0n),
+        dailySpentUsdMicros: safeCostNumber(
+          dailySpent + (dailyOpen._sum.reservedCostUsdMicros ?? 0n),
         ),
-        monthlySpentUsdMicros: safeNumber(
-          (monthly._sum.estimatedCostUsdMicros ?? 0n) +
-            (monthlyOpen._sum.reservedCostUsdMicros ?? 0n),
+        monthlySpentUsdMicros: safeCostNumber(
+          monthlySpent + (monthlyOpen._sum.reservedCostUsdMicros ?? 0n),
         ),
-        monthlyUnknownCostEvents,
-        ...(dailyUnknownCostEvents === undefined ? {} : { dailyUnknownCostEvents }),
+        ...unknown,
       });
       const admission = await tx.aiProviderCallAdmission.create({
         data: {

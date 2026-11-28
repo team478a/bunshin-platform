@@ -101,6 +101,55 @@ describe('OpenAI runtime configuration', () => {
       });
     },
   );
+  it.each(['SOCIAL_PLANNER', 'TRAINING_ASSESSMENT', undefined] as const)(
+    'uses estimates for %s, including strategy generation without a task argument',
+    async (task) => {
+      const configSnapshot = {
+        configuration: { ...active, dailyBudgetUsdMicros: 750, monthlyBudgetUsdMicros: 1_000 },
+        encryptedApiKey: 'sealed',
+        dailySpentUsdMicros: 250,
+        monthlySpentUsdMicros: 250,
+        dailyUnknownCostEvents: 1,
+        monthlyUnknownCostEvents: 2,
+      };
+      const crypto = { encrypt: vi.fn(), decrypt: vi.fn().mockReturnValue('synthetic-key') };
+      const getActiveForRuntime = vi
+        .fn<AiProviderConfigurationRepository['getActiveForRuntime']>()
+        .mockResolvedValue(configSnapshot);
+      const repo = { ...repository(null), getActiveForRuntime };
+      await expect(
+        resolveOpenAiRuntimeConfiguration({ repository: repo, crypto }, task),
+      ).resolves.toMatchObject({ source: 'ADMIN_CONFIGURATION' });
+      expect(getActiveForRuntime).toHaveBeenCalledWith(
+        expect.objectContaining({
+          estimateUnknownCosts: true,
+        }),
+      );
+      const reservationRepo = admissionRepository({
+        ...configSnapshot,
+        admission: {
+          id: 'admission',
+          environment: 'DEVELOPMENT',
+          provider: 'OPENAI',
+          operationHash: 'hash',
+        },
+      });
+      await expect(
+        reserveOpenAiRuntimeConfiguration(
+          'strategy:1',
+          { repository: reservationRepo, crypto },
+          task,
+        ),
+      ).resolves.toMatchObject({ admission: { id: 'admission' } });
+      expect(reservationRepo.reserveActiveForRuntime).toHaveBeenCalledWith(
+        expect.objectContaining({
+          operationKey: 'strategy:1',
+          estimateUnknownCosts: true,
+        }),
+      );
+    },
+  );
+
   it('does not decrypt or fallback when the admin model is incompatible', async () => {
     const decrypt = vi.fn();
     await expect(
@@ -155,12 +204,6 @@ describe('OpenAI runtime configuration', () => {
       dailySpentUsdMicros: 0,
       monthlySpentUsdMicros: active.monthlyBudgetUsdMicros,
       monthlyUnknownCostEvents: 0,
-    },
-    {
-      configuration: active,
-      dailySpentUsdMicros: 0,
-      monthlySpentUsdMicros: 0,
-      monthlyUnknownCostEvents: 1,
     },
     {
       configuration: { ...active, requestCostUsdMicros: 0 },
@@ -341,6 +384,7 @@ describe('OpenAI runtime configuration', () => {
       provider: 'OPENAI',
       operationKey: 'personal-learning:terra:1',
       reservedCostUsdMicros: 57_344,
+      estimateUnknownCosts: true,
     });
   });
 

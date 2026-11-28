@@ -11,6 +11,7 @@ import {
   type AiProviderSecretCryptoPort,
   type LineConfigurationEnvironment,
 } from '@bunshin/application';
+import { personalLearningPricingRegistry } from '../observability/personal-learning-ai-call';
 import { ApplicationError } from '@bunshin/shared';
 import { assertOpenAiTaskModel, type OpenAiCompatibilityTask } from './openai-task-compatibility';
 import {
@@ -86,7 +87,10 @@ export async function resolveLearningProviderRuntimeConfiguration(
     throw new ApplicationError('FORBIDDEN', 'Google learning provider is evaluation-only');
   const repository =
     dependencies.repository ??
-    new (await import('@bunshin/database')).PrismaAiProviderConfigurationRepository();
+    new (await import('@bunshin/database')).PrismaAiProviderConfigurationRepository(
+      undefined,
+      personalLearningPricingRegistry(),
+    );
   const crypto = dependencies.crypto ?? new AesGcmAiProviderSecretCrypto();
   try {
     const resolved = await new ResolveAiProviderRuntimeConfiguration(repository).execute({
@@ -131,7 +135,10 @@ export async function reserveLearningProviderRuntimeConfiguration(
     throw new ApplicationError('FORBIDDEN', 'Google learning provider is evaluation-only');
   const repository =
     dependencies.repository ??
-    new (await import('@bunshin/database')).PrismaAiProviderConfigurationRepository();
+    new (await import('@bunshin/database')).PrismaAiProviderConfigurationRepository(
+      undefined,
+      personalLearningPricingRegistry(),
+    );
   const crypto = dependencies.crypto ?? new AesGcmAiProviderSecretCrypto();
   if (!('reserveActiveForRuntime' in repository))
     throw new ApplicationError('CONFIGURATION_ERROR', 'provider reservation is unavailable');
