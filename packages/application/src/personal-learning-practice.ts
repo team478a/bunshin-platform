@@ -148,14 +148,19 @@ export interface PersonalLearningPracticeRepository {
     operationId: string;
     expectedRevision: number;
     text: string;
+    draft?: true;
   }): Promise<PersonalLearningPractice>;
 }
-export function validatePersonalLearningPracticeNote(text: string, revision: number): void {
+export function validatePersonalLearningPracticeNote(
+  text: string,
+  revision: number,
+  draft = false,
+): void {
   if (
     typeof text !== 'string' ||
     !text.trim() ||
     text !== text.trim() ||
-    text.length > 500 ||
+    text.length > (draft ? 10_000 : 500) ||
     !Number.isSafeInteger(revision) ||
     revision < 0 ||
     revision >= 1000

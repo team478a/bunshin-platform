@@ -4,10 +4,13 @@ import { ApplicationError, toApiError } from '@bunshin/shared';
 import { currentUserProvider } from '../auth/current-user';
 import { requireSameOrigin } from '../auth/request-security';
 import { resolvePersonalLearningRequestActor } from '../services/personal-learning-request-access';
+import { MANABERU_SERVICE_SLUG } from '../services/service-auth-brand';
 import { boundedLearningJson } from './personal-learning-request';
 import { PrismaPersonalLearningTopicRepository, prisma } from '@bunshin/database';
 
-const body = z.object({ title: z.string().trim().min(1).max(160) }).strict();
+const body = z
+  .object({ title: z.string().trim().min(1).max(160), first: z.literal(true).optional() })
+  .strict();
 
 export async function personalLearningTopicsResponse(
   request: Request,
@@ -37,7 +40,17 @@ export async function personalLearningTopicsResponse(
     if (request.method === 'GET')
       return Response.json({ data: await repo.list(actor.scope) }, { headers });
     const input = body.parse(await boundedLearningJson(request, 2_000));
-    return Response.json({ data: await repo.create(actor.scope, input) }, { headers });
+    if (input.first && slug !== MANABERU_SERVICE_SLUG)
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid learning topic');
+    return Response.json(
+      {
+        data: await repo.create(actor.scope, {
+          title: input.title,
+          ...(input.first ? { first: true } : {}),
+        }),
+      },
+      { headers },
+    );
   } catch (error) {
     const mapped = toApiError(
       error instanceof z.ZodError

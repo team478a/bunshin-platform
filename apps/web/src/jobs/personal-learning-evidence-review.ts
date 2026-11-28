@@ -125,6 +125,13 @@ export async function executePersonalLearningEvidenceReview(input: {
   )
     throw new ApplicationError('CONFLICT', 'practice evidence context changed');
 
+  const material = {
+    originalWish,
+    outcome: proposal.outcome,
+    criteria: proposal.criteria,
+    ...(offerPolicy === 'AI_SKILL_V1' ? { practice: proposal.practice } : {}),
+  };
+
   const operationKey = `training-evaluation:${answer.id}:${input.jobId}:attempt:${input.attemptCount}`;
   let rawAdmission: unknown;
   try {
@@ -199,11 +206,11 @@ export async function executePersonalLearningEvidenceReview(input: {
             model: runtime.model,
             provider: runtime.provider,
             modelCapabilities: runtime.modelCapabilities,
-            material: { originalWish, outcome: proposal.outcome, criteria: proposal.criteria },
+            material,
             kind: submission.kind,
             content: submission.content,
             body: learningEvidenceReviewBody({
-              material: { originalWish, outcome: proposal.outcome, criteria: proposal.criteria },
+              material,
               kind: submission.kind,
               content: submission.content,
               model: runtime.model,

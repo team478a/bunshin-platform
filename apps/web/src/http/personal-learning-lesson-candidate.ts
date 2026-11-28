@@ -5,6 +5,7 @@ import { currentUserProvider } from '../auth/current-user';
 import { requireSameOrigin } from '../auth/request-security';
 import { resolvePersonalLearningRequestActor } from '../services/personal-learning-request-access';
 import { prepareLearningLesson } from '../services/personal-learning-lesson-candidate';
+import { MANABERU_SERVICE_SLUG } from '../services/service-auth-brand';
 import { boundedLearningJson } from './personal-learning-request';
 
 const body = z.discriminatedUnion('action', [
@@ -60,6 +61,7 @@ export async function learningCandidateResponse(
             input.requestId,
             input.requestRevision,
             input.operationId,
+            ...(slug === MANABERU_SERVICE_SLUG ? ([true] as const) : []),
           )
         : await repo.confirm({
             actor,

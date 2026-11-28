@@ -1,38 +1,93 @@
 'use client';
-import { useState } from 'react';
+import { useRef, useState, useSyncExternalStore } from 'react';
 import type {
   PersonalLearningPractice,
   PersonalLearningPracticeState,
   SavedLearningLessonCandidate,
 } from '@bunshin/application';
+// Only the current tab holds edits before the learner explicitly saves.
+const subscribeToNoExternalDrafts = () => () => {};
+const emptyDraft = () => null;
+
+function readTabDraft(key: string | null) {
+  try {
+    return key ? sessionStorage.getItem(key) : null;
+  } catch {
+    return null; // Explicit server-side saving still works in private browser sessions.
+  }
+}
+
+function writeTabDraft(key: string | null, value: string | null) {
+  if (!key) return;
+  try {
+    if (value === null) sessionStorage.removeItem(key);
+    else sessionStorage.setItem(key, value);
+  } catch {
+    // Keep the current edit in React when browser storage is unavailable.
+  }
+}
+
 export function LearningPracticeCard({
   endpoint,
   state,
   candidate,
   plainLanguage = false,
+  simpleStart = false,
   onChange,
 }: {
   endpoint: string;
   state: PersonalLearningPracticeState;
   candidate: SavedLearningLessonCandidate | null;
   plainLanguage?: boolean;
+  simpleStart?: boolean;
   onChange: (value: PersonalLearningPracticeState) => void;
 }) {
   const [text, setText] = useState(state.current?.note?.text ?? '');
   const [pending, setPending] = useState(false);
+  const busy = useRef(false);
   const [message, setMessage] = useState('');
   const [operationId, setOperationId] = useState(() => crypto.randomUUID());
   const [evidenceKind, setEvidenceKind] = useState<'TEXT' | 'SELF_REPORT'>('TEXT');
-  const [evidence, setEvidence] = useState('');
+  const currentDraft = state.current;
+  const note = currentDraft?.note;
+  const latest = currentDraft?.submissions.at(-1);
+  const savedEvidence =
+    note && (!latest || Date.parse(note.reportedAt) > Date.parse(latest.createdAt))
+      ? note.text
+      : (latest?.content ?? '');
+  const draftKey =
+    simpleStart && currentDraft
+      ? `manaberu-practice:${currentDraft.assignmentId}:${note?.revision ?? 0}:${latest?.revision ?? 0}`
+      : null;
+  const tabDraft = useSyncExternalStore(
+    subscribeToNoExternalDrafts,
+    () => readTabDraft(draftKey),
+    emptyDraft,
+  );
+  const [editedEvidence, setEvidence] = useState<string | null>(null);
+  const evidence = editedEvidence ?? tabDraft ?? (simpleStart ? savedEvidence : '');
+  const [noteRetry, setNoteRetry] = useState<{ serialized: string; key: string } | null>(null);
   const [evidenceRetry, setEvidenceRetry] = useState<{ serialized: string; key: string } | null>(
     null,
   );
   async function submit(action: 'START' | 'NOTE') {
-    if (pending) return;
+    if (busy.current) return;
+    busy.current = true;
     setPending(true);
     setMessage('');
     try {
       const current = state.current;
+      const note = {
+        assignmentId: current?.assignmentId,
+        expectedRevision: current?.note?.revision ?? 0,
+        text: (simpleStart ? evidence : text).trim(),
+      };
+      const serialized = JSON.stringify(note);
+      const noteOperation =
+        noteRetry?.serialized === serialized
+          ? noteRetry
+          : { serialized, key: simpleStart ? crypto.randomUUID() : operationId };
+      if (action === 'NOTE') setNoteRetry(noteOperation);
       const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -45,11 +100,9 @@ export function LearningPracticeCard({
                 candidateId: candidate?.id,
               }
             : {
-                action,
-                assignmentId: current?.assignmentId,
-                operationId,
-                expectedRevision: current?.note?.revision ?? 0,
-                text: text.trim(),
+                action: simpleStart ? 'DRAFT' : action,
+                ...note,
+                operationId: noteOperation.key,
               },
         ),
       });
@@ -60,15 +113,22 @@ export function LearningPracticeCard({
       if (!response.ok || !result.data)
         throw new Error(result.error?.message ?? '保存できませんでした。');
       onChange({ ...state, current: result.data });
-      if (action === 'NOTE') setOperationId(crypto.randomUUID());
+      if (action === 'NOTE') {
+        writeTabDraft(draftKey, null);
+        setOperationId(crypto.randomUUID());
+        setNoteRetry(null);
+      }
       setMessage(
         action === 'START'
           ? '同じ教材で実践を始めました。'
-          : '本人の報告として保存しました。達成の評価はまだ行っていません。',
+          : simpleStart
+            ? '下書きを保存しました。'
+            : '本人の報告として保存しました。達成の評価はまだ行っていません。',
       );
     } catch (error) {
       setMessage(error instanceof Error ? error.message : '保存できませんでした。');
     } finally {
+      busy.current = false;
       setPending(false);
     }
   }
@@ -76,7 +136,8 @@ export function LearningPracticeCard({
     payload: Record<string, string | number | undefined>,
     success: string,
   ) {
-    if (pending) return;
+    if (busy.current) return;
+    busy.current = true;
     setPending(true);
     setMessage('');
     try {
@@ -96,12 +157,14 @@ export function LearningPracticeCard({
     } catch (error) {
       setMessage(error instanceof Error ? error.message : '保存できませんでした。');
     } finally {
+      busy.current = false;
       setPending(false);
     }
   }
   async function submitEvidence() {
     const current = state.current;
-    if (!current || pending || !evidence.trim()) return;
+    if (!current || busy.current || !evidence.trim()) return;
+    busy.current = true;
     setPending(true);
     setMessage('');
     const serialized = JSON.stringify({
@@ -135,13 +198,15 @@ export function LearningPracticeCard({
         throw new Error(result.error?.message ?? '提出を保存できませんでした。');
       onChange(result.data);
       setEvidenceRetry(null);
-      setEvidence('');
+      writeTabDraft(draftKey, null);
+      if (!simpleStart) setEvidence('');
       setMessage('提出を保存しました。確認結果はこの画面に表示します。');
     } catch (error) {
       setMessage(
         error instanceof Error ? error.message : '提出を保存できませんでした。入力は残しています。',
       );
     } finally {
+      busy.current = false;
       setPending(false);
     }
   }
@@ -165,7 +230,7 @@ export function LearningPracticeCard({
           </ol>
           <p>結果の確認方法：{current.candidate.proposal.evidence.join('／')}</p>
           <p>今回の評価基準：{current.candidate.proposal.criteria.join('／')}</p>
-          {current.note && (
+          {!simpleStart && current.note && (
             <div>
               <h3>前回の記録</h3>
               <p>{current.note.text}</p>
@@ -176,53 +241,88 @@ export function LearningPracticeCard({
               </p>
             </div>
           )}
-          <label htmlFor="practice-note">進めたこと・止まったこと（短く）</label>
-          <textarea
-            id="practice-note"
-            maxLength={500}
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-          />
-          <button
-            type="button"
-            disabled={!state.allowed || pending || !text.trim()}
-            onClick={() => void submit('NOTE')}
-          >
-            途中の記録を保存
-          </button>
-          <h3>今回の結果を確認する</h3>
-          <label>
-            提出内容の種類
-            <select
-              value={evidenceKind}
-              onChange={(event) => setEvidenceKind(event.target.value as 'TEXT' | 'SELF_REPORT')}
-            >
-              <option value="TEXT">作った文章・結果の一部</option>
-              <option value="SELF_REPORT">本人からの短い報告</option>
-            </select>
+          {!simpleStart && (
+            <>
+              <label htmlFor="practice-note">進めたこと・止まったこと（短く）</label>
+              <textarea
+                id="practice-note"
+                maxLength={500}
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+              />
+              <button
+                type="button"
+                disabled={!state.allowed || pending || !text.trim()}
+                onClick={() => void submit('NOTE')}
+              >
+                途中の記録を保存
+              </button>
+            </>
+          )}
+          <h3>{simpleStart ? '自分で試して、下書きを書く' : '今回の結果を確認する'}</h3>
+          {!simpleStart && (
+            <label>
+              提出内容の種類
+              <select
+                value={evidenceKind}
+                onChange={(event) => setEvidenceKind(event.target.value as 'TEXT' | 'SELF_REPORT')}
+              >
+                <option value="TEXT">作った文章・結果の一部</option>
+                <option value="SELF_REPORT">本人からの短い報告</option>
+              </select>
+            </label>
+          )}
+          <label htmlFor="practice-evidence">
+            {simpleStart ? '練習の下書き' : 'できたこと、または確認してほしい内容'}
           </label>
-          <label htmlFor="practice-evidence">できたこと、または確認してほしい内容</label>
           <textarea
             id="practice-evidence"
             maxLength={10_000}
             value={evidence}
-            onChange={(event) => setEvidence(event.target.value)}
+            onChange={(event) => {
+              setEvidence(event.target.value);
+              writeTabDraft(draftKey, event.target.value);
+            }}
           />
           <button
+            className={simpleStart ? 'button button--primary' : undefined}
             type="button"
             disabled={
               !state.allowed ||
               pending ||
               !evidence.trim() ||
               current.submissions.some((item) => item.status === 'PENDING') ||
-              current.submissions.some((item) => item.review?.state === 'CURRENT_STEP_EVIDENCE')
+              (!simpleStart &&
+                current.submissions.some(
+                  (item) => item.review?.state === 'CURRENT_STEP_EVIDENCE',
+                )) ||
+              (simpleStart && current.submissions.at(-1)?.content === evidence.trim())
             }
             onClick={() => void submitEvidence()}
           >
-            {pending ? '提出中…' : '提出して今回の基準を確認'}
+            {pending
+              ? '処理中…'
+              : simpleStart
+                ? 'フィードバックを見る'
+                : '提出して今回の基準を確認'}
           </button>
+          {simpleStart && (
+            <button
+              className="button button--secondary"
+              type="button"
+              disabled={
+                !state.allowed ||
+                pending ||
+                !evidence.trim() ||
+                current.note?.text === evidence.trim()
+              }
+              onClick={() => void submit('NOTE')}
+            >
+              下書きを保存
+            </button>
+          )}
           {current.submissions.length > 0 && (
-            <div aria-label="提出と確認結果">
+            <div id="practice-feedback" aria-label="提出と確認結果">
               <h4>これまでの提出</h4>
               {current.submissions.slice(-3).map((item) => (
                 <article key={item.answerId}>
@@ -290,6 +390,9 @@ export function LearningPracticeCard({
                   <p>元の希望：{current.nextCandidate.originalText}</p>
                   <h4>次の到達点（提案）</h4>
                   <p>{current.nextCandidate.proposal.outcome}</p>
+                  {simpleStart && (
+                    <p>この練習を提案した理由：{current.nextCandidate.proposal.reason}</p>
+                  )}
                   <p>{current.nextCandidate.proposal.explanation}</p>
                   <ol>
                     {current.nextCandidate.proposal.practice.map((step, index) => (

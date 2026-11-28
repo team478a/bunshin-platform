@@ -252,3 +252,71 @@ test('verified evidence requires review and learner confirmation before the next
     previousAssignmentId: practiceFixture.assignmentId,
   });
 });
+
+test('Manaberu opens the first practice in two actions and saves a separate draft', async ({
+  app,
+  browser,
+  screen,
+}) => {
+  const calls: string[] = [];
+  let mutatingRequests = 0;
+  const originalText = '営業週報をまとめたい';
+  const draft = '今週の商談を要点でまとめ直した';
+  await browser.route('**/api/synthetic/simple-*', async (route) => {
+    const body = JSON.parse(route.request.postData ?? '{}') as {
+      action?: string;
+      content?: { originalText: string };
+      text?: string;
+    };
+    mutatingRequests++;
+    const action = body.action ?? 'SAVE';
+    calls.push(action);
+    if (action === 'SAVE') {
+      expect(body.content?.originalText).toBe(originalText);
+      await route.fulfill({
+        json: { data: { ...lessonWish, originalText, deviceType: null, toolDescription: null } },
+      });
+    } else if (action === 'GENERATE' || action === 'CONFIRM') {
+      await route.fulfill({
+        json: {
+          data: {
+            ...lessonCandidate,
+            originalText,
+            confirmedAt: action === 'CONFIRM' ? lessonWish.createdAt : null,
+          },
+        },
+      });
+    } else if (action === 'DRAFT') {
+      expect(body.text).toBe(draft);
+      await route.fulfill({
+        json: { data: { ...practiceFixture, note: { ...practiceFixture.note, text: draft } } },
+      });
+    } else {
+      await route.fulfill({ json: { data: { ...practiceFixture, note: null } } });
+    }
+  });
+  await app.open('/?simple-start');
+  await expect(screen.getByRole('heading', 'AIで何ができるようになりたいですか？')).toBeVisible();
+  await screen.getByLabel('実現したいこと').fill(originalText);
+  await screen.getByRole('button', '最初の練習を見る').tap();
+  await expect(screen.getByRole('button', 'この練習を始める')).toBeVisible();
+  await screen.getByRole('button', 'この練習を始める').tap();
+  await screen.getByLabel('練習の下書き').fill(draft);
+  await expect(screen.getByRole('button', 'フィードバックを見る')).toBeEnabled();
+  await screen.getByRole('button', '下書きを保存').tap();
+  await expect(screen.getByRole('status', '実践の状態')).toContainText('下書きを保存しました');
+  expect(mutatingRequests).toBe(5);
+  expect(calls).toEqual(['SAVE', 'GENERATE', 'CONFIRM', 'START', 'DRAFT']);
+});
+
+test('Manaberu resumes the saved draft without any mutation', async ({ app, screen }) => {
+  await app.open('/?simple-start&resume#practice-record');
+  const draft = screen.getByLabel('練習の下書き');
+  await expect(draft).toHaveValue(practiceFixture.note.text);
+  const unsaved = '講師への相談を見送っても残したい下書き';
+  await draft.fill(unsaved);
+  await app.open('/?learning-request');
+  await app.open('/?simple-start&resume#practice-record');
+  await expect(draft).toHaveValue(unsaved);
+  await expect(screen.getByRole('button', 'フィードバックを見る')).toBeEnabled();
+});

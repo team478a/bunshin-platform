@@ -4,7 +4,11 @@ import {
   ServiceParticipationService,
   businessGrowthProgramStatus,
 } from '@bunshin/application';
-import { AI_TRAINING_V1_MODULE_KEY, personalLearningMode } from '@bunshin/capability-training';
+import {
+  AI_TRAINING_V1_MODULE_KEY,
+  personalLearningFeatureEnabled,
+  personalLearningMode,
+} from '@bunshin/capability-training';
 import { GetMissionProgress } from '@bunshin/capability-social';
 import type { CSSProperties } from 'react';
 import type { Metadata, Route } from 'next';
@@ -341,6 +345,8 @@ export default async function ServiceMemberHome({
     (program) => program.status === 'ACTIVE',
   );
   let personalLearningPathHref: Route | null = null;
+  let hasCurrentPractice: boolean | undefined;
+  const simpleStart = serviceSlug === MANABERU_SERVICE_SLUG;
   if (isPersonalLearningReady && personalLearningRequestEnabled()) {
     const dynamicProgramIds = personalLearningPrograms
       .filter(
@@ -360,20 +366,81 @@ export default async function ServiceMemberHome({
           OR: [{ endsAt: null }, { endsAt: { gt: now } }],
         },
         orderBy: { startsAt: 'desc' },
-        select: { id: true },
+        select: { id: true, serviceProgramId: true },
       });
       for (const enrollment of enrollments) {
         try {
-          await resolvePersonalLearningRequestActor(
+          let learningActor = await resolvePersonalLearningRequestActor(
             serviceSlug,
             enrollment.id,
             actor.userId,
             undefined,
             undefined,
-            { allowUnselectedTopic: recordRequested },
+            { allowUnselectedTopic: simpleStart || recordRequested },
           );
+          const program = personalLearningPrograms.find(
+            ({ id }) => id === enrollment.serviceProgramId,
+          );
+          const multiTopic = personalLearningFeatureEnabled(program?.settings, 'multiTopic');
+          if (simpleStart && multiTopic && !learningActor.topicId) {
+            const active = await db.prisma.programMissionAssignment.findFirst({
+              where: {
+                workspaceId: service.workspaceId,
+                groupId: service.serviceId,
+                programEnrollmentId: enrollment.id,
+                status: { in: ['PRESENTED', 'STARTED'] },
+                targetResourceType: 'PERSONAL_LEARNING_PLAN',
+              },
+              orderBy: { sequence: 'desc' },
+              select: { targetResourceId: true },
+            });
+            const plan = active?.targetResourceId
+              ? await db.prisma.personalLearningPlanRevision.findFirst({
+                  where: {
+                    ...learningActor.scope,
+                    planId: active.targetResourceId,
+                    status: 'CONFIRMED',
+                  },
+                  select: { topicId: true },
+                })
+              : null;
+            if (plan?.topicId) {
+              const topic = await db.prisma.personalLearningTopic.findFirst({
+                where: { ...learningActor.scope, id: plan.topicId, status: 'ACTIVE' },
+                select: { id: true },
+              });
+              if (topic)
+                learningActor = await resolvePersonalLearningRequestActor(
+                  serviceSlug,
+                  enrollment.id,
+                  actor.userId,
+                  undefined,
+                  topic.id,
+                );
+            }
+          }
+          const current =
+            simpleStart && (!multiTopic || learningActor.topicId)
+              ? (
+                  await new db.PrismaPersonalLearningPracticeRepository(db.prisma).readPractice(
+                    learningActor,
+                  )
+                ).current
+              : null;
+          const topic =
+            simpleStart && learningActor.topicId ? `?topicId=${learningActor.topicId}` : '';
+          const anchor = recordRequested
+            ? simpleStart && !current
+              ? '#learning-request-record'
+              : '#practice-record'
+            : current
+              ? current.submissions.length
+                ? '#practice-feedback'
+                : '#practice-record'
+              : '';
+          hasCurrentPractice = simpleStart ? Boolean(current) : undefined;
           personalLearningPathHref =
-            `/s/${service.configuration.slug}/programs/${enrollment.id}/learning-request` as Route;
+            `/s/${service.configuration.slug}/programs/${enrollment.id}/learning-request${topic}${anchor}` as Route;
           break;
         } catch (error) {
           if (!(error instanceof ApplicationError) || error.code !== 'NOT_FOUND') throw error;
@@ -381,8 +448,7 @@ export default async function ServiceMemberHome({
       }
     }
   }
-  if (recordRequested && personalLearningPathHref)
-    redirect(`${personalLearningPathHref}#practice-record`);
+  if (recordRequested && personalLearningPathHref) redirect(personalLearningPathHref);
   const currentWeek = weekRange(localDate);
   const activityRule = await currentActivityContinuityRule();
   const assignmentRepository = new db.PrismaBunshinCapabilityAssignmentRepository();
@@ -471,6 +537,7 @@ export default async function ServiceMemberHome({
           isDynamicLearning={isDynamicLearning}
           isPersonalLearningReady={isPersonalLearningReady}
           personalLearningPathHref={personalLearningPathHref}
+          hasCurrentPractice={hasCurrentPractice}
           serviceSlug={service.configuration.slug}
         />
         <MemberFeatureLinks
