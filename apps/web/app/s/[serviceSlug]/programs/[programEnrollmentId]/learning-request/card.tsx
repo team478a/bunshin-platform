@@ -252,11 +252,6 @@ export function PersonalLearningRequestCard({
           void save();
         }}
       >
-        {browserMaterialHref && (!saved || !browserLearningDevice(saved)) && (
-          <p>
-            フォームの操作教材を試すなら「検証用の研修申請フォームに入力して、プレビューを確認したい」と書き、使う端末を選んでください。
-          </p>
-        )}
         <label>
           実現したいこと
           <textarea
