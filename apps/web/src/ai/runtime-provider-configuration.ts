@@ -9,6 +9,7 @@ import {
   type AiProviderSecretCryptoPort,
   type LineConfigurationEnvironment,
 } from '@bunshin/application';
+import { personalLearningPricingRegistry } from '../observability/personal-learning-ai-call';
 import { ApplicationError } from '@bunshin/shared';
 import { assertOpenAiTaskModel, type OpenAiCompatibilityTask } from './openai-task-compatibility';
 import {
@@ -115,14 +116,17 @@ export async function resolveOpenAiRuntimeConfiguration(
   if (dependencies) repository = dependencies.repository;
   else {
     const db = await import('@bunshin/database');
-    repository = new db.PrismaAiProviderConfigurationRepository();
+    repository = new db.PrismaAiProviderConfigurationRepository(
+      db.prisma,
+      personalLearningPricingRegistry(),
+    );
   }
   const crypto = dependencies?.crypto ?? new AesGcmAiProviderSecretCrypto();
   try {
     const resolved = await new ResolveAiProviderRuntimeConfiguration(repository).execute({
       environment,
       provider: 'OPENAI',
-      ...(task === 'FORTUNE' ? { estimateUnknownCosts: true } : {}),
+      estimateUnknownCosts: true,
     });
     if (!resolved.configuration.model)
       throw new ApplicationError('CONFIGURATION_ERROR', 'active OpenAI model is required');
@@ -160,14 +164,17 @@ export async function reserveOpenAiRuntimeConfiguration(
   let repository = dependencies?.repository;
   if (!repository) {
     const db = await import('@bunshin/database');
-    repository = new db.PrismaAiProviderConfigurationRepository();
+    repository = new db.PrismaAiProviderConfigurationRepository(
+      db.prisma,
+      personalLearningPricingRegistry(),
+    );
   }
   const crypto = dependencies?.crypto ?? new AesGcmAiProviderSecretCrypto();
   try {
     const reserved = await new ReserveAiProviderRuntimeCall(repository).execute({
       environment,
       provider: 'OPENAI',
-      ...(task === 'FORTUNE' ? { estimateUnknownCosts: true } : {}),
+      estimateUnknownCosts: true,
       operationKey,
       ...(reservedCostUsdMicros === undefined ? {} : { reservedCostUsdMicros }),
       ...(requestCount === undefined ? {} : { requestCount }),
@@ -218,7 +225,10 @@ export async function reserveSocialImageRuntimeConfiguration(
   let repository = dependencies?.repository;
   if (!repository) {
     const db = await import('@bunshin/database');
-    repository = new db.PrismaAiProviderConfigurationRepository();
+    repository = new db.PrismaAiProviderConfigurationRepository(
+      db.prisma,
+      personalLearningPricingRegistry(),
+    );
   }
   const environment = dependencies?.environment ?? currentAiProviderEnvironment();
   const capabilities =
@@ -266,7 +276,10 @@ export async function resolveTrendRuntimeConfiguration(input?: {
   let repository = input?.repository;
   if (!repository) {
     const db = await import('@bunshin/database');
-    repository = new db.PrismaAiProviderConfigurationRepository();
+    repository = new db.PrismaAiProviderConfigurationRepository(
+      db.prisma,
+      personalLearningPricingRegistry(),
+    );
   }
   const crypto = input?.crypto ?? new AesGcmAiProviderSecretCrypto();
   const providers = input?.preferredProviders ?? ['GROK', 'EXA', 'FIRECRAWL'];
@@ -302,7 +315,10 @@ export async function reserveTrendRuntimeConfiguration(
   let repository = input?.repository;
   if (!repository) {
     const db = await import('@bunshin/database');
-    repository = new db.PrismaAiProviderConfigurationRepository();
+    repository = new db.PrismaAiProviderConfigurationRepository(
+      db.prisma,
+      personalLearningPricingRegistry(),
+    );
   }
   const crypto = input?.crypto ?? new AesGcmAiProviderSecretCrypto();
   const providers = input?.preferredProviders ?? ['GROK', 'EXA', 'FIRECRAWL'];
@@ -354,7 +370,10 @@ export async function resolveCreatomateRuntimeConfiguration(input?: {
   let repository = input?.repository;
   if (!repository) {
     const db = await import('@bunshin/database');
-    repository = new db.PrismaAiProviderConfigurationRepository();
+    repository = new db.PrismaAiProviderConfigurationRepository(
+      db.prisma,
+      personalLearningPricingRegistry(),
+    );
   }
   const resolved = await new ResolveAiProviderRuntimeConfiguration(repository).execute({
     environment: currentAiProviderEnvironment(),
@@ -379,7 +398,10 @@ export async function resolveVideoAiRuntimeConfiguration(input: {
   let repository = input.repository;
   if (!repository) {
     const db = await import('@bunshin/database');
-    repository = new db.PrismaAiProviderConfigurationRepository();
+    repository = new db.PrismaAiProviderConfigurationRepository(
+      db.prisma,
+      personalLearningPricingRegistry(),
+    );
   }
   const resolved = await new ResolveAiProviderRuntimeConfiguration(repository).execute({
     environment: currentAiProviderEnvironment(),

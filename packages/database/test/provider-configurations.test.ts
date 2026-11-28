@@ -68,7 +68,11 @@ describe('PrismaAiProviderConfigurationRepository', () => {
         .fn()
         .mockResolvedValueOnce({ _sum: { estimatedCostUsdMicros: 100n } })
         .mockResolvedValueOnce({ _sum: { estimatedCostUsdMicros: 200n } });
-      const count = vi.fn().mockResolvedValueOnce(3).mockResolvedValueOnce(1);
+      const count = vi
+        .fn()
+        .mockResolvedValueOnce(estimateUnknownCosts ? 1 : 3)
+        .mockResolvedValueOnce(3);
+      const findMany = vi.fn().mockResolvedValue([]);
       const client = {
         aiProviderConfiguration: {
           findFirst: vi.fn().mockResolvedValue({
@@ -91,7 +95,7 @@ describe('PrismaAiProviderConfigurationRepository', () => {
             updatedAt: now,
           }),
         },
-        aiUsageEvent: { aggregate, count },
+        aiUsageEvent: { aggregate, count, findMany },
       };
 
       await expect(
@@ -114,6 +118,7 @@ describe('PrismaAiProviderConfigurationRepository', () => {
           provider: 'openai',
           estimatedCostUsdMicros: null,
           occurredAt: { gte: monthlyFrom, lt: now },
+          ...(estimateUnknownCosts ? { OR: [{ inputTokens: null }, { outputTokens: null }] } : {}),
         },
       });
       expect(count).toHaveBeenCalledTimes(estimateUnknownCosts ? 2 : 1);
@@ -123,11 +128,94 @@ describe('PrismaAiProviderConfigurationRepository', () => {
             provider: 'openai',
             estimatedCostUsdMicros: null,
             occurredAt: { gte: dailyFrom, lt: now },
+            OR: [{ inputTokens: null }, { outputTokens: null }],
           },
         });
       }
     },
   );
+
+  it('uses historical price versions and excludes uncovered calls from the admin amount', async () => {
+    const dailyFrom = new Date('2026-11-28T00:00:00Z');
+    const monthlyFrom = new Date('2026-11-01T00:00:00Z');
+    const now = new Date('2026-11-28T12:00:00Z');
+    const recorded = (occurredAt: Date, provider = 'openai', model = 'gpt-5-mini') => ({
+      provider,
+      model,
+      inputTokens: 100,
+      outputTokens: 10,
+      occurredAt,
+    });
+    const rows = [
+      recorded(monthlyFrom),
+      recorded(dailyFrom),
+      recorded(dailyFrom, 'openai', 'no-price'),
+    ];
+    const pricing = [
+      {
+        provider: 'openai',
+        model: 'gpt-5-mini',
+        effectiveFrom: '2026-11-15T00:00:00Z',
+        currency: 'USD' as const,
+        pricingVersion: 'new-version',
+        inputPriceMicrosPerMillion: 1_000_000,
+        outputPriceMicrosPerMillion: 3_000_000,
+        cachedInputPriceMicrosPerMillion: null,
+      },
+    ];
+    const client = {
+      platformAdmin: { findFirst: vi.fn().mockResolvedValue({ role: 'SUPER_ADMIN' }) },
+      aiProviderConfiguration: {
+        findFirst: vi
+          .fn()
+          .mockResolvedValue({ encryptedApiKey: 'sealed', requestCostUsdMicros: 100 }),
+      },
+      aiUsageEvent: {
+        aggregate: vi.fn().mockResolvedValue({ _sum: { estimatedCostUsdMicros: 25n } }),
+        findMany: vi
+          .fn()
+          .mockResolvedValueOnce(rows)
+          .mockResolvedValueOnce([
+            ...rows,
+            { ...recorded(monthlyFrom, 'google', 'no-price'), inputTokens: null },
+          ]),
+        count: vi.fn().mockResolvedValueOnce(1).mockResolvedValueOnce(2),
+        groupBy: vi
+          .fn()
+          .mockResolvedValue([{ provider: 'openai', _sum: { estimatedCostUsdMicros: 25n } }]),
+      },
+    };
+    const repo = new PrismaAiProviderConfigurationRepository(client as never, pricing);
+    await expect(
+      repo.getActiveForRuntime({
+        environment: 'PRODUCTION',
+        provider: 'OPENAI',
+        estimateUnknownCosts: true,
+        dailyFrom,
+        monthlyFrom,
+        now,
+      }),
+    ).resolves.toMatchObject({
+      dailySpentUsdMicros: 155,
+      monthlySpentUsdMicros: 200,
+      dailyUnknownCostEvents: 2,
+      monthlyUnknownCostEvents: 3,
+    });
+    await expect(repo.listUsageCostEstimatesForAdmin('admin', monthlyFrom, now)).resolves.toEqual([
+      {
+        provider: 'google',
+        recordedUsdMicros: null,
+        tokenEstimateUsdMicros: null,
+        excludedCalls: 1,
+      },
+      {
+        provider: 'openai',
+        recordedUsdMicros: 25n,
+        tokenEstimateUsdMicros: 175n,
+        excludedCalls: 1,
+      },
+    ]);
+  });
 
   it('reserves under the shared lock with a monthly estimate for older unknown costs', async () => {
     const now = new Date('2026-10-11T12:00:00.000Z');
@@ -160,7 +248,8 @@ describe('PrismaAiProviderConfigurationRepository', () => {
           .fn()
           .mockResolvedValueOnce({ _sum: { estimatedCostUsdMicros: 100n } })
           .mockResolvedValueOnce({ _sum: { estimatedCostUsdMicros: 500n } }),
-        count: vi.fn().mockResolvedValueOnce(2).mockResolvedValueOnce(0),
+        count: vi.fn().mockResolvedValueOnce(0).mockResolvedValueOnce(2),
+        findMany: vi.fn().mockResolvedValue([]),
       },
       aiProviderCallAdmission: {
         findUnique: vi.fn().mockResolvedValue(null),
