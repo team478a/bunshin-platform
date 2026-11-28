@@ -133,7 +133,7 @@ describe('ResolveAiProviderRuntimeConfiguration', () => {
     });
   });
 
-  it('fails closed when any usage cost in the current UTC month is unknown', async () => {
+  it('can still explicitly request strict cost reconciliation', async () => {
     await expect(
       new ResolveAiProviderRuntimeConfiguration(
         repository({ ...snapshot, monthlyUnknownCostEvents: 1 }),
@@ -141,11 +141,12 @@ describe('ResolveAiProviderRuntimeConfiguration', () => {
         environment: 'PRODUCTION',
         provider: 'OPENAI',
         now: new Date('2026-08-24T12:00:00Z'),
+        estimateUnknownCosts: false,
       }),
     ).rejects.toMatchObject({ code: 'CONFLICT', message: 'provider cost is unknown' });
   });
 
-  it('uses the daily and monthly estimates only when the caller opts in', async () => {
+  it('uses the daily and monthly estimates by default', async () => {
     const atBoundary = {
       ...snapshot,
       dailySpentUsdMicros: 999_500,
@@ -156,7 +157,6 @@ describe('ResolveAiProviderRuntimeConfiguration', () => {
     const input = {
       environment: 'PRODUCTION',
       provider: 'OPENAI',
-      estimateUnknownCosts: true,
     } as const;
     const resolve = (override: Partial<typeof atBoundary>) =>
       new ResolveAiProviderRuntimeConfiguration(repository({ ...atBoundary, ...override })).execute(

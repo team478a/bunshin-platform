@@ -7,6 +7,7 @@ import { ApplicationError } from '@bunshin/shared';
 import { notFound, redirect } from 'next/navigation';
 import Link from 'next/link';
 import { currentAiProviderEnvironment } from '../../../../src/ai/secure-provider-configuration';
+import { personalLearningPricingRegistry } from '../../../../src/observability/personal-learning-ai-call';
 import { currentUserProvider } from '../../../../src/auth/current-user';
 import { AiProviderConfigurationEditor } from './provider-configuration-editor';
 import { AiProviderAdmissionRecovery } from './provider-admission-recovery';
@@ -14,23 +15,41 @@ import { AiUsageCostReconciliation } from './ai-usage-cost-reconciliation';
 
 export const dynamic = 'force-dynamic';
 
+const usd = (micros: bigint | null) =>
+  micros === null
+    ? '—'
+    : new Intl.NumberFormat('ja-JP', {
+        style: 'currency',
+        currency: 'USD',
+        maximumFractionDigits: 6,
+      }).format(Number(micros) / 1_000_000);
+
 export default async function AiProviderConfigurationPage() {
   const user = await (await currentUserProvider()).getCurrentUser();
   if (!user) redirect('/login');
   const db = await import('@bunshin/database');
   try {
     const environment = currentAiProviderEnvironment();
-    const repository = new db.PrismaAiProviderConfigurationRepository();
-    const [configurations, admissions, unknownCosts] = await Promise.all([
-      new ListAiProviderConfigurations(repository).execute(user.userId, environment),
-      new ListOpenAiProviderRuntimeAdmissions(repository).execute(user.userId, environment),
-      new ListUnknownAiUsageCosts(new db.PrismaAiUsageCostReconciliationRepository()).execute({
-        actorUserId: user.userId,
-        environment,
-        provider: 'OPENAI',
-        limit: 100,
-      }),
-    ]);
+    const repository = new db.PrismaAiProviderConfigurationRepository(
+      db.prisma,
+      personalLearningPricingRegistry(),
+    );
+    const now = new Date();
+    const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+    const previousMonthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
+    const [configurations, admissions, unknownCosts, currentEstimates, previousEstimates] =
+      await Promise.all([
+        new ListAiProviderConfigurations(repository).execute(user.userId, environment),
+        new ListOpenAiProviderRuntimeAdmissions(repository).execute(user.userId, environment),
+        new ListUnknownAiUsageCosts(new db.PrismaAiUsageCostReconciliationRepository()).execute({
+          actorUserId: user.userId,
+          environment,
+          provider: 'OPENAI',
+          limit: 100,
+        }),
+        repository.listUsageCostEstimatesForAdmin(user.userId, monthStart, now),
+        repository.listUsageCostEstimatesForAdmin(user.userId, previousMonthStart, monthStart),
+      ]);
     return (
       <main className="app-page">
         <header className="app-page__heading">
@@ -70,6 +89,38 @@ export default async function AiProviderConfigurationPage() {
           recoveryScanTruncated={admissions.recoveryScanTruncated}
           canRecover={admissions.canRecover}
         />
+        <section className="settings-card">
+          <h2>Provider別の概算AI原価</h2>
+          <p>米ドル・UTC月単位。予算判定用の仮計上は概算総額に含めません。</p>
+          {[
+            { label: '今月', estimates: currentEstimates },
+            { label: '前月', estimates: previousEstimates },
+          ].map(({ label, estimates }) => (
+            <div key={label}>
+              <h3>{label}</h3>
+              {estimates?.length ? (
+                <ul>
+                  {estimates.map((row) => {
+                    const total =
+                      row.recordedUsdMicros === null && row.tokenEstimateUsdMicros === null
+                        ? null
+                        : (row.recordedUsdMicros ?? 0n) + (row.tokenEstimateUsdMicros ?? 0n);
+                    return (
+                      <li key={row.provider}>
+                        <strong>{row.provider}</strong> {usd(total)}
+                        {'（'}記録済み {usd(row.recordedUsdMicros)}、トークン概算{' '}
+                        {usd(row.tokenEstimateUsdMicros)}、概算に含まれない {row.excludedCalls}件
+                        {'）'}
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : (
+                <p>利用記録はありません。</p>
+              )}
+            </div>
+          ))}
+        </section>
         <AiUsageCostReconciliation
           initialRows={unknownCosts.rows.map((row) => ({
             ...row,

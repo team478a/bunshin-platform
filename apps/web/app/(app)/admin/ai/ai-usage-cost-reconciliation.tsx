@@ -105,7 +105,7 @@ export function AiUsageCostReconciliation({ initialRows }: { initialRows: Row[] 
     <section className="settings-card">
       <h2>原価未確定の精算（SUPER_ADMIN）</h2>
       <p>
-        通常の予算管理は月額上限で行います。ここは、原価を自動確定できなかった例外だけを、モデルと状態ごとのまとまりで確認する画面です。
+        通常の予算管理には日次・月次の概算を使います。個別精算は、証跡を確認する必要がある場合に利用できます。
       </p>
       <p>
         課金証跡または承認済み価格表で確認できた記録だけ精算してください。0円は、失敗かつトークン記録がなく、Providerへ送信していないことを運用ログなどで確認できた場合だけまとめて入力できます。
