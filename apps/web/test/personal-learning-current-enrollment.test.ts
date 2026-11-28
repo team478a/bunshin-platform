@@ -64,6 +64,7 @@ describe('current Personal Learning enrollment recovery', () => {
         groupId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
         groupMembershipId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
         currentEnrollmentId: current,
+        canContinue: () => Promise.resolve(true),
         now: new Date('2026-11-10T00:00:00.000Z'),
       }),
     ).resolves.toBe(replacement);
@@ -78,6 +79,24 @@ describe('current Personal Learning enrollment recovery', () => {
     );
   });
 
+  it('keeps the selected legacy course when the dynamic enrollment still needs consent', async () => {
+    const { db } = store();
+    const canContinue = vi
+      .fn<(enrollmentId: string) => Promise<boolean>>()
+      .mockResolvedValue(false);
+
+    await expect(
+      resolveCurrentPersonalLearningEnrollment(db, {
+        workspaceId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        groupId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+        groupMembershipId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+        currentEnrollmentId: current,
+        canContinue,
+      }),
+    ).resolves.toBeNull();
+    expect(canContinue).toHaveBeenCalledExactlyOnceWith(replacement);
+  });
+
   it('does not redirect without a current internal seat', async () => {
     await expect(
       resolveCurrentPersonalLearningEnrollment(store({ seat: false }).db, {
@@ -85,6 +104,7 @@ describe('current Personal Learning enrollment recovery', () => {
         groupId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
         groupMembershipId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
         currentEnrollmentId: current,
+        canContinue: () => Promise.resolve(true),
       }),
     ).resolves.toBeNull();
   });
@@ -106,6 +126,7 @@ describe('current Personal Learning enrollment recovery', () => {
           groupId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
           groupMembershipId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
           currentEnrollmentId: current,
+          canContinue: () => Promise.resolve(true),
         },
       ),
     ).resolves.toBeNull();

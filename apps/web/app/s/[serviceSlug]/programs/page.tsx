@@ -16,6 +16,8 @@ import {
   selectableTrainingModes,
 } from '../../../../src/services/training-support-mode';
 
+import { learnerTrainingProgramCopy } from '../../../../src/services/training-program-copy';
+
 export const dynamic = 'force-dynamic';
 export default async function MemberProgramsPage({
   params,
@@ -243,7 +245,7 @@ export default async function MemberProgramsPage({
             const isProgramActive = program.status === 'ACTIVE';
             return {
               enrollmentId: enrollment.id,
-              name: program?.displayName ?? '実践プログラム',
+              name: learnerTrainingProgramCopy(serviceSlug, program.displayName).name,
               guidance: policy?.guidance ?? '',
               modes: selectableTrainingModes(
                 (policy?.allowedSupportModes as string[] | undefined) ?? [enrollment.supportMode],
@@ -295,9 +297,11 @@ export default async function MemberProgramsPage({
           const program = endedTrainingPrograms.find(
             (item) => item.id === enrollment.serviceProgramId,
           );
-          return program ? (
+          if (!program) return null;
+          const programName = learnerTrainingProgramCopy(serviceSlug, program.displayName).name;
+          return (
             <section className="settings-card" key={enrollment.id}>
-              <h2>{program.displayName}</h2>
+              <h2>{programName}</h2>
               <p>受講状態：{TRAINING_ENROLLMENT_STATUS_LABELS[enrollment.status]}</p>
               <a
                 className="button button--secondary"
@@ -309,11 +313,11 @@ export default async function MemberProgramsPage({
                 <AiTrainingDataExportCard
                   serviceSlug={serviceSlug}
                   programEnrollmentId={enrollment.id}
-                  programName={program.displayName}
+                  programName={programName}
                 />
               )}
             </section>
-          ) : null;
+          );
         })}
       </main>
     </PublicShell>

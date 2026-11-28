@@ -9,6 +9,7 @@ import {
   recordAiTrainingUsageConsent,
 } from '../../../../src/services/ai-training-consent';
 import { aiTrainingConsentPolicy } from '../../../../src/services/ai-training-consent-policy';
+import { learnerTrainingProgramCopy } from '../../../../src/services/training-program-copy';
 import { PublicShell } from '../../../ui/public-shell';
 import { PendingSubmitButton } from '../../../ui/pending-submit-button';
 
@@ -45,6 +46,9 @@ export default async function AiTrainingConfirmationPage({
   if (!actor)
     redirect(`/login?returnTo=${encodeURIComponent(`/s/${serviceSlug}/training`)}` as Route);
   const participation = await readAiTrainingParticipation(serviceSlug, actor.userId);
+  const compactStatus = participation.isDynamicLearning;
+  const showStatus = !compactStatus || participation.enrollments.length === 0;
+  const ProgramHeading = showStatus ? 'h3' : 'h2';
   const policies = [...new Set(participation.enrollments.map(({ offerPolicy }) => offerPolicy))];
   const mixedPolicies = policies.length > 1;
   const pagePolicy = mixedPolicies
@@ -59,27 +63,58 @@ export default async function AiTrainingConfirmationPage({
       <main className={`app-page ${design.frame}`}>
         <header className="app-page__heading">
           <p className="eyebrow">{participation.serviceName}</p>
-          <h1>{mixedPolicies ? 'AIを使った支援への参加' : pagePolicy.copy.pageTitle}</h1>
+          <h1 id="ai-training-page-title">
+            {mixedPolicies ? 'AIを使った支援への参加' : pagePolicy.copy.pageTitle}
+          </h1>
         </header>
-        <section className="settings-card" aria-labelledby="ai-training-confirmation-title">
-          <h2 id="ai-training-confirmation-title">{currentCopy.title}</h2>
-          <p>{currentCopy.message}</p>
+        <section
+          className={showStatus ? 'settings-card' : 'form-stack'}
+          aria-labelledby={showStatus ? 'ai-training-confirmation-title' : 'ai-training-page-title'}
+        >
+          {showStatus && (
+            <>
+              <h2 id="ai-training-confirmation-title">{currentCopy.title}</h2>
+              <p>{currentCopy.message}</p>
+            </>
+          )}
           {participation.enrollments.map((enrollment) => {
             const policyCopy = aiTrainingConsentPolicy(enrollment.offerPolicy).copy;
             const enrollmentCopy = (
               enrollment.isDynamicLearning ? policyCopy.dynamicStates : policyCopy.states
             )[enrollment.state];
+            const program = learnerTrainingProgramCopy(serviceSlug, enrollment.programName);
+            const shortConsent =
+              enrollment.isDynamicLearning && enrollment.offerPolicy === 'AI_SKILL_V1';
+            const consentDetails = enrollment.consentText && (
+              <ul>
+                {enrollment.consentText.split('\n').map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
+            );
+
             return (
               <article className="settings-card" key={enrollment.enrollmentId}>
-                <h3>{enrollment.programName}</h3>
+                <ProgramHeading>{program.name}</ProgramHeading>
+                {program.description && <p>{program.description}</p>}
                 {enrollment.state === 'CONSENT_REQUIRED' && enrollment.consentText ? (
                   <>
-                    <p>AI利用について</p>
-                    <ul>
-                      {enrollment.consentText.split('\n').map((line) => (
-                        <li key={line}>{line}</li>
-                      ))}
-                    </ul>
+                    {shortConsent ? (
+                      <>
+                        <p>
+                          課題の提案や評価のため、回答や学習内容を外部AIに送ります。個人情報や社外秘は入力しないでください。
+                        </p>
+                        <details>
+                          <summary>AI利用の詳しい説明</summary>
+                          {consentDetails}
+                        </details>
+                      </>
+                    ) : (
+                      <>
+                        <p>AI利用について</p>
+                        {consentDetails}
+                      </>
+                    )}
                     <form action={acceptAiTrainingConsent} className="form-stack">
                       <input type="hidden" name="serviceSlug" value={serviceSlug} />
                       <input type="hidden" name="enrollmentId" value={enrollment.enrollmentId} />
@@ -97,7 +132,9 @@ export default async function AiTrainingConfirmationPage({
                   </>
                 ) : (
                   <>
-                    <p>{enrollmentCopy.message}</p>
+                    {(!compactStatus || enrollment.state !== 'READY') && (
+                      <p>{enrollmentCopy.message}</p>
+                    )}
                     {enrollment.state === 'READY' && (
                       <Link
                         className="button button--primary"

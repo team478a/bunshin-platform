@@ -27,6 +27,7 @@ export async function resolveCurrentPersonalLearningEnrollment(
     groupId: string;
     groupMembershipId: string;
     currentEnrollmentId: string;
+    canContinue: (enrollmentId: string) => Promise<boolean>;
     now?: Date;
   },
 ): Promise<string | null> {
@@ -78,5 +79,8 @@ export async function resolveCurrentPersonalLearningEnrollment(
     select: { programEnrollmentId: true },
   });
   const seated = new Set(seats.map(({ programEnrollmentId }) => programEnrollmentId));
-  return eligible.find(({ id }) => seated.has(id))?.id ?? null;
+  for (const { id } of eligible) {
+    if (seated.has(id) && (await input.canContinue(id))) return id;
+  }
+  return null;
 }
